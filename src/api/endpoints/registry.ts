@@ -178,8 +178,21 @@ export const billingEndpoints = {
   /** Plan names by key — the subscription carries only the key. Bare `{ plans }`. */
   plans: () => endpoint('/api/billing/plans'),
   changePlan: () => endpoint('/api/billing/subscription/change-plan'),
-  /** Contracted, not yet served: invoices and the card on file. */
-  summary: () => endpoint('/api/billing/summary'),
+  /**
+   * Invoices — and this route was here the whole time.
+   *
+   * The registry used to point at `/api/billing/summary`, annotated
+   * *"contracted, not yet served"*, while the screen said *"We can't show
+   * your invoices yet."* **`/api/billing/invoices` is mounted and serving** —
+   * at bare `/api`, like every billing router, which is why a search for an
+   * `/api/billing` mount finds nothing.
+   *
+   * What that hid was not cosmetic: **four invoices on this tenant, every one
+   * FAILED, $5,996 in total.**
+   *
+   * Answers **`{ invoices }`** — a fifth envelope shape.
+   */
+  invoices: () => endpoint('/api/billing/invoices'),
 } as const;
 
 export const intelligenceReviewEndpoints = {

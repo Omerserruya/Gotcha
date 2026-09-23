@@ -30,11 +30,21 @@
     "ofLimit": "{used} מתוך {limit}"
   },
   "invoices": {
-    "unavailable": "עדיין איננו יכולים להציג את החשבוניות שלכם.",
-    "empty": "אין עדיין חשבוניות.",
-    "card": "{brand} · {last4}",
-    "unknownBrand": "כרטיס",
-    "undated": "טרם הונפקה",
-    "pdf": "PDF"
+    "unavailable": "לא הצלחנו לקרוא את החשבוניות כרגע.",
+    "empty": "עוד אין חשבוניות.",
+    "undated": "בלי תאריך",
+    "receipt": "קבלה",
+    "failedSummary": "{count, plural, one {חיוב אחד לא עבר — {total} {currency}. לא שולם עליו כלום.} other {# חיובים לא עברו — {total} {currency} בסך הכול. לא שולם עליהם כלום.}}",
+    "status": {
+      "DRAFT": "עוד לא הונפקה",
+      "ISSUED": "הונפקה",
+      "PAID": "שולמה",
+      "FAILED": "לא עבר",
+      "VOID": "בוטלה"
+    },
+    "noReceipt": {
+      "not_paid": "אין קבלה — קבלה מונפקת כשחיוב משולם, וזה לא שולם.",
+      "missing": "שולם, אבל הקבלה עוד לא הגיעה מספק התשלומים."
+    }
   }
 }

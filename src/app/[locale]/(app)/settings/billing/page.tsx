@@ -24,7 +24,7 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('billing');
-  const { allowance, subscription, plans, summary, breakdown } = await loadBilling();
+  const { allowance, subscription, plans, invoices, breakdown } = await loadBilling();
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
@@ -42,7 +42,7 @@ export default async function Page() {
 
       <section className={styles.section} data-testid="section-invoices">
         <h2 className={styles.sectionHeading}>{t('heading.invoices')}</h2>
-        <Invoices summary={summary} />
+        <Invoices invoices={invoices} />
       </section>
     </SettingsSection>
   );

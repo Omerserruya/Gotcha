@@ -3,23 +3,22 @@ import 'server-only';
 import { serverApi } from '@/api/client/server-api';
 import {
   allowanceSchema,
-  billingSummarySchema,
   plansResponseSchema,
   subscriptionResponseSchema,
   usageBreakdownSchema,
   type Allowance,
-  type BillingSummary,
   type Plan,
   type Subscription,
   type UsageBreakdown,
 } from '@/api/contracts/billing';
 import { billingEndpoints, usageEndpoints } from '@/api/endpoints/registry';
+import { invoiceListSchema, type Invoice } from '@/api/contracts/invoices';
 import { logger } from '@/observability/logger';
 
 /**
  * What screen 17 shows.
  *
- * Four reads, independent. The billing summary and the usage breakdown are
+ * Four reads, independent. The invoices and the usage breakdown are
  * deliberately separate: they change on completely different cadences — one on
  * invoice issue, the other continuously — and a failure in either must not
  * blank the other.
@@ -39,14 +38,21 @@ export interface BillingData {
    * screen. The list is also where the Hebrew name lives.
    */
   readonly plans: readonly Plan[];
-  readonly summary: BillingSummary | null;
+  /**
+   * The tenant's invoices.
+   *
+   * Replaces the old `summary`, which pointed at `/api/billing/summary` —
+   * annotated "contracted, not yet served" while `/api/billing/invoices` was
+   * mounted and returning four FAILED charges worth $5,996.
+   */
+  readonly invoices: readonly Invoice[] | null;
   readonly breakdown: UsageBreakdown | null;
 }
 
 export async function loadBilling(): Promise<BillingData> {
   const api = serverApi();
 
-  const [allowance, subscription, plans, summary, breakdown] = await Promise.all([
+  const [allowance, subscription, plans, invoices, breakdown] = await Promise.all([
     api
       .get({ endpoint: usageEndpoints.allowance(), payload: allowanceSchema })
       .catch((cause: unknown) => {
@@ -73,9 +79,15 @@ export async function loadBilling(): Promise<BillingData> {
         return null;
       }),
     api
-      .get({ endpoint: billingEndpoints.summary(), payload: billingSummarySchema })
+      .get({
+        endpoint: billingEndpoints.invoices(),
+        payload: invoiceListSchema,
+        // `{ invoices }` — a fifth envelope shape, so the transform needs the
+        // response whole.
+        raw: true,
+      })
       .catch((cause: unknown) => {
-        logger.warn('billing.summary_failed', { cause });
+        logger.warn('billing.invoices_failed', { cause });
         return null;
       }),
     api
@@ -90,7 +102,7 @@ export async function loadBilling(): Promise<BillingData> {
     allowance,
     subscription: subscription?.subscription ?? null,
     plans: plans?.plans ?? [],
-    summary,
+    invoices,
     breakdown,
   };
 }

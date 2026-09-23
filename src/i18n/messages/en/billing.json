@@ -30,11 +30,21 @@
     "ofLimit": "{used} of {limit}"
   },
   "invoices": {
-    "unavailable": "We can't show your invoices yet.",
+    "unavailable": "We couldn't read your invoices just now.",
     "empty": "No invoices yet.",
-    "card": "{brand} · {last4}",
-    "unknownBrand": "Card",
-    "undated": "Not yet issued",
-    "pdf": "PDF"
+    "undated": "No date",
+    "receipt": "Receipt",
+    "failedSummary": "{count, plural, =1 {One charge didn't go through — {total} {currency}. Nothing has been paid for it.} other {# charges didn't go through — {total} {currency} in total. Nothing has been paid for them.}}",
+    "status": {
+      "DRAFT": "Not issued yet",
+      "ISSUED": "Issued",
+      "PAID": "Paid",
+      "FAILED": "Didn't go through",
+      "VOID": "Cancelled"
+    },
+    "noReceipt": {
+      "not_paid": "No receipt — a receipt is issued when a charge is paid, and this one wasn't.",
+      "missing": "Paid, but the receipt hasn't arrived from the payment provider."
+    }
   }
 }

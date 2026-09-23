@@ -2,11 +2,17 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import {
   planNameFor,
-  type BillingSummary,
   type Plan,
   type Subscription,
   type UsageBreakdown,
 } from '@/api/contracts/billing';
+
+import {
+  failedInvoices,
+  receiptAbsence,
+  totalAmount,
+  type Invoice,
+} from '@/api/contracts/invoices';
 
 import styles from './Billing.module.css';
 
@@ -182,22 +188,38 @@ export async function UsageBreakdownSection({
 }
 
 /**
- * Invoices and the card on file.
+ * Invoices.
  *
- * Contracted and not yet served: `Invoice` carries everything the design draws
- * including `providerPdfUrl`, and no tenant-facing list route exists. Four real
- * invoices sit on the demo tenant, unreachable.
+ * ── THE ROUTE WAS HERE ALL ALONG ──
+ * This section used to say *"We can't show your invoices yet"*, beside a
+ * comment reading *"no tenant-facing list route exists. Four real invoices
+ * sit on the demo tenant, unreachable."*
  *
- * **The overage sentence and the spending cap are absent entirely**, not
- * softened. There is no rate field and no cap field, so *"bills ₪0.40 per
- * extra conversation"* would be asserting billing behaviour from a mockup —
- * and a wrong claim about money belongs least of all on the billing screen.
+ * **`GET /api/billing/invoices` is mounted and serving**, and has been. Every
+ * billing router mounts at bare `/api` and declares its own full path, so a
+ * search for an `/api/billing` mount returns nothing — the comment was
+ * precise, confident and wrong, which is the combination that gets believed.
+ *
+ * And what it hid is the point: **four invoices, every one FAILED, $5,996.**
+ * A merchant was being told a feature was missing while four of their
+ * charges had not gone through.
+ *
+ * ── A FAILED INVOICE HAS NO RECEIPT, AND THE SCREEN SAYS WHY ──
+ * `providerPdfUrl` is written in the same update that sets `PAID`. So a
+ * missing link on a failed invoice is the system being consistent, and a
+ * blank where a link belongs would read as a document that went astray.
+ *
+ * ── STILL ABSENT ──
+ * The overage sentence and the spending cap are not softened here: there is
+ * no rate field on this route, so *"bills ₪0.40 per extra conversation"*
+ * would be asserting billing behaviour from a mockup — and **a wrong claim
+ * about money belongs least of all on the billing screen.**
  */
-export async function Invoices({ summary }: { readonly summary: BillingSummary | null }) {
+export async function Invoices({ invoices }: { readonly invoices: readonly Invoice[] | null }) {
   const t = await getTranslations('billing');
   const locale = await getLocale();
 
-  if (!summary) {
+  if (invoices === null) {
     return (
       <p className={styles.unavailable} data-testid="invoices-unavailable">
         {t('invoices.unavailable')}
@@ -205,56 +227,66 @@ export async function Invoices({ summary }: { readonly summary: BillingSummary |
     );
   }
 
+  if (invoices.length === 0) {
+    return (
+      <p className={styles.unavailable} data-testid="invoices-empty">
+        {t('invoices.empty')}
+      </p>
+    );
+  }
+
+  const failed = failedInvoices(invoices);
   const day = new Intl.DateTimeFormat(locale, { dateStyle: 'long' });
 
   return (
     <div className={styles.block} data-testid="invoices">
-      {summary.paymentMethod?.last4 ? (
-        <p className={styles.card} data-testid="payment-method">
-          {t('invoices.card', {
-            brand: summary.paymentMethod.brand ?? t('invoices.unknownBrand'),
-            last4: summary.paymentMethod.last4,
+      {/*
+        The thing a merchant most needs from this screen, above the list.
+        Four charges that did not go through is not a row in a table.
+      */}
+      {failed.length > 0 ? (
+        <p className={styles.invoicesFailed} data-testid="invoices-failed">
+          {t('invoices.failedSummary', {
+            count: failed.length,
+            total: totalAmount(failed),
+            currency: failed[0]!.currency,
           })}
         </p>
       ) : null}
 
-      {summary.invoices.length === 0 ? (
-        <p className={styles.empty} data-testid="invoices-empty">
-          {t('invoices.empty')}
-        </p>
-      ) : (
-        <ul className={styles.rows}>
-          {summary.invoices.map((invoice) => (
-            <li key={invoice.id} className={styles.row} data-testid={`invoice-${invoice.id}`}>
-              <span className={styles.rowLabel}>
-                {invoice.issuedAt ? day.format(new Date(invoice.issuedAt)) : t('invoices.undated')}
+      <ul className={styles.invoiceList}>
+        {invoices.map((invoice) => {
+          const absence = receiptAbsence(invoice);
+          const when = invoice.issuedAt ?? invoice.createdAt;
+          return (
+            <li key={invoice.id} className={styles.invoice} data-testid={`invoice-${invoice.id}`}>
+              <span className={styles.invoiceWhen}>
+                {when ? day.format(new Date(when)) : t('invoices.undated')}
               </span>
-              <span className={styles.rowValue}>
-                {new Intl.NumberFormat(locale, {
-                  style: 'currency',
-                  currency: invoice.currency,
-                  maximumFractionDigits: 0,
-                }).format(Number(invoice.amount))}
+              <span className={styles.invoiceAmount}>
+                {invoice.amount} {invoice.currency}
               </span>
+              <span className={styles.invoiceStatus} data-status={invoice.status}>
+                {t(`invoices.status.${invoice.status}` as 'invoices.status.PAID')}
+              </span>
+
               {/*
-                A link only when there is one to follow. An invoice that has
-                not been issued has no PDF, and a dead "PDF" label is worse
-                than none.
+                Why there is no receipt, rather than a blank that reads as a
+                lost document. `providerPdfUrl` is written with PAID.
               */}
-              {invoice.providerPdfUrl ? (
-                <a
-                  className={styles.pdf}
-                  href={invoice.providerPdfUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {t('invoices.pdf')}
+              {absence === null ? (
+                <a className={styles.invoiceReceipt} href={invoice.providerPdfUrl ?? '#'}>
+                  {t('invoices.receipt')}
                 </a>
-              ) : null}
+              ) : (
+                <span className={styles.invoiceNoReceipt} data-testid={`no-receipt-${invoice.id}`}>
+                  {t(`invoices.noReceipt.${absence}` as 'invoices.noReceipt.not_paid')}
+                </span>
+              )}
             </li>
-          ))}
-        </ul>
-      )}
+          );
+        })}
+      </ul>
     </div>
   );
 }

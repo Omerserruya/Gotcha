@@ -167,4 +167,74 @@
     font-size: var(--font-size-meta);
     color: var(--text-subtle);
   }
+
+  /* ── Invoices ────────────────────────────────────────────────────────── */
+  /*
+   * Four charges that did not go through is not a row in a table. It goes
+   * above the list, because it is the reason a merchant would open this
+   * screen at all — and the screen used to say the feature did not exist.
+   */
+  .invoicesFailed {
+    margin: 0 0 var(--space-12);
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .invoiceList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .invoice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-10);
+    padding-block: var(--space-10);
+  }
+
+  .invoice + .invoice {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .invoiceWhen,
+  .invoiceStatus,
+  .invoiceNoReceipt {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .invoiceAmount {
+    font-size: var(--font-size-meta);
+  }
+
+  .invoiceStatus[data-status='FAILED'] {
+    color: var(--intent-blocked-text);
+    font-weight: 500;
+  }
+
+  .invoiceStatus[data-status='PAID'] {
+    color: var(--intent-calm-text);
+  }
+
+  /*
+   * Why there is no receipt. A blank where a link belongs reads as a
+   * document that went astray; `providerPdfUrl` is written with PAID, so a
+   * failed invoice never had one.
+   */
+  .invoiceNoReceipt {
+    max-inline-size: var(--size-reading);
+    line-height: var(--line-height-snug);
+  }
+
+  .invoiceReceipt {
+    font-size: var(--font-size-caption);
+  }
 }

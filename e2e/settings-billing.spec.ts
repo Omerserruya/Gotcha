@@ -230,5 +230,32 @@ for (const size of SIZES) {
 
       await shoot(page, `${size.name}-6-above-the-fold`);
     });
+    /*
+     * ★ THE SHOT THAT MATTERS NOW.
+     *
+     * This section used to say "We can't show your invoices yet", beside a
+     * comment claiming no tenant-facing route existed. The route was mounted
+     * the whole time — at bare `/api`, like every billing router — and what
+     * it was hiding is four FAILED charges worth $5,996.
+     */
+    test('invoices · the failed charges are surfaced, not hidden', async ({ page }) => {
+      await openBilling(page, 'en');
+
+      // The old message must not come back.
+      await expect(page.locator('main')).not.toHaveText(/can't show your invoices yet/i);
+
+      const failed = page.getByTestId('invoices-failed');
+      await expect(failed).toBeVisible();
+      await expect(failed).toHaveText(/didn't go through/i);
+      await expect(failed).toHaveText(/nothing has been paid/i);
+
+      // And a failed invoice explains its missing receipt rather than
+      // leaving a blank that reads as a lost document.
+      await expect(page.locator('[data-testid^="no-receipt-"]').first()).toHaveText(
+        /a receipt is issued when a charge is paid, and this one wasn't/i,
+      );
+
+      await shoot(page, `${size.name}-invoices-failed`);
+    });
   });
 }
