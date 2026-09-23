@@ -47,7 +47,12 @@ resolve() {
   rel=$(grep -n "import $best_router" "$idx" | sed -n 's/.*from "\.\/\([^"]*\)".*/\1/p' | head -1)
   file="$svc_dir/src/$rel.ts"
 
-  if [ -f "$file" ] && grep -qE "router\.(get|post|put|patch|delete)\(\"$remainder\"" "$file"; then
+  # Slurped, for the same reason `resolve_bare` is: a declaration split across
+  # two lines is invisible to a line-oriented grep. This function kept the bug
+  # for an hour after its sibling was fixed — one guard, two code paths, and
+  # only the path that had already burned us got the repair.
+  if [ -f "$file" ] && perl -0777 -ne \
+       "exit(!m{router\\.(?:get|post|put|patch|delete)\\(\\s*\"\Q$remainder\E\"})" "$file"; then
     printf '  %-42s ok   %s\n' "$path" "$(basename "$rel")"
   else
     printf '  %-42s DEAD %s does not declare "%s"\n' "$path" "$(basename "${rel:-?}")" "$remainder"
@@ -121,5 +126,12 @@ resolve_bare /api/billing/pricing/current         "$BILL"
 resolve_bare /api/billing/pricing/packages        "$BILL"
 resolve_bare /api/billing/pricing/change          "$BILL"
 resolve_bare /api/billing/subscription/change-plan "$BILL"
+
+# Screen 13 — WhatsApp numbers. A DIFFERENT router from /api/channels, at a
+# prefix that contains it: exactly the shape that made /api/knowledge look
+# alive for a whole screen.
+AUTH="$PLATFORM/services/auth"
+resolve /api/channels/whatsapp/numbers      "$AUTH/src/index.ts"  "$AUTH"
+resolve /api/channels/whatsapp/exclusions   "$AUTH/src/index.ts"  "$AUTH"
 
 exit $fail

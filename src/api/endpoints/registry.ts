@@ -387,6 +387,43 @@ export const channelEndpoints = {
   connectEmail: () => endpoint('/api/channels/connect/email'),
   responseMode: (id: string) => endpoint('/api/channels/{id}/response-mode', { id }),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
+
+  /* ── Screen 13 — WhatsApp numbers ──────────────────────────────────────
+   *
+   * Mounted at `/api/channels/whatsapp`, which is a DIFFERENT router from the
+   * `/api/channels` list above — the same prefix relationship that made
+   * `/api/knowledge` look alive for a whole screen. Both are checked by
+   * `scripts/check-routes.sh`.
+   *
+   * The list answers `{ data, unprofiled }`. The second array is WhatsApp
+   * channels connected before per-number health existed: working, and with no
+   * health at all. On this tenant `data` is empty and `unprofiled` has one
+   * entry, so it is the only state the screen can currently show.
+   */
+  whatsappNumbers: () => endpoint('/api/channels/whatsapp/numbers'),
+  /** Deliberate re-read from Meta. The list is built from stored state. */
+  whatsappRefresh: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/refresh', { id }),
+  /**
+   * Run ONE repair we can actually perform.
+   *
+   * Only for `availableRepairs`. Never for `customerActions`, which are
+   * resolved in Meta — "offering one and having it fail is worse than saying
+   * plainly that this one is theirs to fix."
+   */
+  whatsappRepair: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/repair', { id }),
+  /**
+   * Supply what the customer was asked for — the register step for error
+   * 141000, with their two-step PIN. The ONE blocked state clearable here.
+   */
+  whatsappResume: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/resume', { id }),
+  /** The audit trail for one number. Zero rows on this database. */
+  whatsappEvents: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/events', { id }),
+  /**
+   * Inbound exclusions. `value` is what was typed, `normalized` is what it
+   * matches on — both, because showing only the normalised form makes a
+   * person think their rule was rewritten.
+   */
+  whatsappExclusions: () => endpoint('/api/channels/whatsapp/exclusions'),
 } as const;
 
 /**
