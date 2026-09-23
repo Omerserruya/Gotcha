@@ -183,6 +183,140 @@ describe('★ three places a problem can be fixed, and no button that cannot wor
   });
 });
 
+describe('★ templates paused — the state Omer asked to be warned about', () => {
+  const templateBlock = (over = {}) => ({
+    entities: [
+      {
+        entity_type: 'MESSAGE_TEMPLATE',
+        can_send_message: 'BLOCKED',
+        errors: [
+          {
+            error_code: 131049,
+            error_description: 'This WhatsApp Business Account has no payment method attached.',
+            possible_solution: 'Add a payment method in Meta Business Manager.',
+          },
+        ],
+      },
+    ],
+    ...over,
+  });
+
+  it('warns above the list when Meta has blocked templates', async () => {
+    await renderNumbers({
+      data: [number({ receiving: true, sending: true, healthSnapshot: templateBlock() })],
+    });
+    const banner = screen.getByTestId('templates-paused');
+    expect(banner).toHaveTextContent(/templates are paused/i);
+    expect(banner).toHaveTextContent(/reminders, cart recovery or campaigns/i);
+  });
+
+  it('★ says replies still go out, so it does not read as "WhatsApp is down"', async () => {
+    /*
+     * The design's second sentence, and the whole reason the banner is not an
+     * error. Templates paused is `sending` blocked for ONE entity while
+     * ordinary replies inside the 24-hour window keep working.
+     */
+    await renderNumbers({
+      data: [number({ receiving: true, healthSnapshot: templateBlock() })],
+    });
+    expect(screen.getByTestId('templates-paused-replies')).toHaveTextContent(/last 24 hours/i);
+  });
+
+  it('does NOT promise replies still flow for a number that is not receiving', async () => {
+    // Gated on the fact rather than stated as a general truth about WhatsApp.
+    await renderNumbers({
+      data: [number({ receiving: false, sending: false, healthSnapshot: templateBlock() })],
+    });
+    expect(screen.getByTestId('templates-paused')).toBeInTheDocument();
+    expect(screen.queryByTestId('templates-paused-replies')).toBeNull();
+  });
+
+  it("★ quotes Meta's reason instead of asserting the cause itself", async () => {
+    /*
+     * The design's copy says "has no payment method". That is ONE cause —
+     * quality ratings and policy violations pause templates too. We report
+     * the block, which we know, and quote Meta for the cause, which they know.
+     */
+    await renderNumbers({
+      data: [number({ receiving: true, healthSnapshot: templateBlock() })],
+    });
+    expect(screen.getByTestId('templates-paused-reason')).toHaveTextContent(
+      /no payment method attached/i,
+    );
+    expect(screen.getByTestId('templates-paused-solution')).toHaveTextContent(
+      /Meta Business Manager/i,
+    );
+  });
+
+  it('says so when Meta gave no reason, rather than inventing one', async () => {
+    await renderNumbers({
+      data: [
+        number({
+          receiving: true,
+          healthSnapshot: {
+            entities: [
+              { entity_type: 'MESSAGE_TEMPLATE', can_send_message: 'BLOCKED', errors: [] },
+            ],
+          },
+        }),
+      ],
+    });
+    expect(screen.getByTestId('templates-paused-reason')).toHaveTextContent(/did not say why/i);
+  });
+
+  it('badges the number without overwriting its delivery verdict', async () => {
+    /*
+     * A number can be sending and receiving ordinary replies AND have its
+     * templates paused. The badge sits beside the verdict, never instead of
+     * it — the same rule as `ready` not replacing receiving/sending.
+     */
+    await renderNumbers({
+      data: [number({ receiving: true, sending: true, healthSnapshot: templateBlock() })],
+    });
+    expect(screen.getByTestId('whatsapp-number')).toHaveAttribute('data-delivery', 'working');
+    expect(screen.getByTestId('whatsapp-templates-badge')).toHaveTextContent(/templates paused/i);
+  });
+
+  it('does not warn when only a PHONE_NUMBER entity is blocked', async () => {
+    // `healthEntitiesToChecks` flattens every non-registration block to
+    // `id: "MESSAGING"`, so matching on the check would fire here too.
+    await renderNumbers({
+      data: [
+        number({
+          receiving: true,
+          sending: false,
+          healthSnapshot: {
+            entities: [{ entity_type: 'PHONE_NUMBER', can_send_message: 'BLOCKED', errors: [] }],
+          },
+        }),
+      ],
+    });
+    expect(screen.queryByTestId('templates-paused')).toBeNull();
+    expect(screen.queryByTestId('whatsapp-templates-badge')).toBeNull();
+  });
+
+  it('does not warn when templates are merely LIMITED', async () => {
+    await renderNumbers({
+      data: [
+        number({
+          receiving: true,
+          healthSnapshot: {
+            entities: [
+              { entity_type: 'MESSAGE_TEMPLATE', can_send_message: 'LIMITED', errors: [] },
+            ],
+          },
+        }),
+      ],
+    });
+    expect(screen.queryByTestId('templates-paused')).toBeNull();
+  });
+
+  it('says nothing for a healthy number', async () => {
+    await renderNumbers({ data: [number()] });
+    expect(screen.queryByTestId('templates-paused')).toBeNull();
+  });
+});
+
 describe('the card this tenant actually has', () => {
   it('says it is connected AND that nothing is known, without implying either verdict', async () => {
     await renderNumbers({

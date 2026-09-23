@@ -101,6 +101,15 @@
       "status": "Connection status: {status}"
     },
     "lastChecked": "Last checked {date}.",
-    "neverChecked": "This number's health has not been checked yet."
+    "neverChecked": "This number's health has not been checked yet.",
+    "templatesPaused": {
+      "title": "WhatsApp templates are paused",
+      "body": "Meta is not delivering your reminders, cart recovery or campaigns from this number.",
+      "repliesStillFlow": "Replies to customers who messaged you in the last 24 hours still go out.",
+      "reasonLabel": "Meta's reason",
+      "noReason": "Meta did not say why.",
+      "fixInMeta": "This is fixed in your Meta Business account, not here.",
+      "badge": "Templates paused"
+    }
   }
 }

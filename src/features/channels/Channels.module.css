@@ -371,4 +371,67 @@
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
+
+  /*
+   * Templates paused — above the list, because it is about the business.
+   *
+   * `intent-blocked`, which is the amber set — NOT `intent-urgent`, which is
+   * red. The channel is not down and a red block would say it was.
+   *
+   * The token is also semantically right rather than merely the right colour:
+   * Meta has BLOCKED templates. And it matches the design, which uses #8A6A16
+   * on #F6EDD3 against this token's #8a6a16 on #f6efd8.
+   *
+   * (Written first against `--intent-caution-*`, which does not exist. The
+   * `var(x, fallback)` would have rendered plausibly forever and nothing
+   * would have failed — a token name is not checked by anything.)
+   */
+  .templatesPaused {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    background-color: var(--intent-blocked-surface);
+    border: var(--border-width-thin) solid var(--intent-blocked-edge);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    margin-block-end: var(--space-12);
+  }
+
+  .templatesPausedTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--intent-blocked-text);
+  }
+
+  .templatesPausedBody {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* Meta's own words, set apart so they read as a quotation. */
+  .templatesPausedReason {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+    border-inline-start: var(--border-width-thick) solid var(--border-default);
+    padding-inline-start: var(--space-8);
+  }
+
+  /* Beside the delivery verdict, never instead of it. */
+  .templatesBadge {
+    margin-inline-start: var(--space-8);
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-2);
+    padding-inline: var(--space-8);
+  }
 }

@@ -4,6 +4,8 @@ import {
   advisoryChecks,
   blockingChecks,
   deliveryState,
+  repliesStillFlow,
+  templatesPaused,
   fixableHere,
   type HealthCheck,
   type NumbersResponse,
@@ -81,19 +83,80 @@ export async function WhatsAppNumbers({ numbers }: { readonly numbers: NumbersRe
     );
   }
 
+  /*
+    ★ ABOVE THE LIST, BECAUSE IT IS ABOUT THE BUSINESS AND NOT ABOUT A ROW.
+    ════════════════════════════════════════════════════════════════════════
+    Meta reports `can_send_message` per entity, and MESSAGE_TEMPLATE is its
+    own. So a number can be taking customer messages and answering them inside
+    the 24-hour window while every reminder, cart recovery and campaign is
+    refused — `receiving`/`sending` one level finer, and the state Omer asked
+    to be warned about by name.
+
+    Only numbers with a lifecycle row can report it; an unprofiled channel has
+    no health at all, so it contributes nothing here rather than a false all-
+    clear.
+  */
+  const paused = numbers.data
+    .map((n) => ({ number: n, block: templatesPaused(n.health) }))
+    .filter(
+      (
+        x,
+      ): x is { number: WhatsAppNumber; block: NonNullable<ReturnType<typeof templatesPaused>> } =>
+        x.block !== null,
+    );
+
   return (
-    <ul className={styles.numbers} data-testid="whatsapp-numbers">
-      {numbers.data.map((n) => (
-        <li key={n.id}>
-          <NumberCard number={n} t={t} locale={locale} />
-        </li>
-      ))}
-      {numbers.unprofiled.map((u) => (
-        <li key={u.channelAccountId}>
-          <UnprofiledCard number={u} t={t} />
-        </li>
-      ))}
-    </ul>
+    <>
+      {paused.length > 0 ? (
+        <section className={styles.templatesPaused} data-testid="templates-paused">
+          <p className={styles.templatesPausedTitle}>{t('templatesPaused.title')}</p>
+          <p className={styles.templatesPausedBody}>{t('templatesPaused.body')}</p>
+
+          {/*
+            The sentence that stops this reading as "WhatsApp is down", and it
+            is gated on the number actually receiving rather than stated as a
+            general fact about WhatsApp — because it is only true while it is.
+          */}
+          {paused.some((x) => repliesStillFlow(x.number.health)) ? (
+            <p className={styles.templatesPausedBody} data-testid="templates-paused-replies">
+              {t('templatesPaused.repliesStillFlow')}
+            </p>
+          ) : null}
+
+          {/*
+            Meta's words, verbatim. The design's copy asserts "no payment
+            method", which is ONE cause among several — quality ratings and
+            policy violations pause templates too. We report the block, which
+            we know, and quote Meta for the cause, which they know and we do
+            not.
+          */}
+          <p className={styles.templatesPausedReason} data-testid="templates-paused-reason">
+            {paused[0]!.block.reason ?? t('templatesPaused.noReason')}
+          </p>
+          {paused[0]!.block.solution ? (
+            <p className={styles.metaSolution} data-testid="templates-paused-solution">
+              {paused[0]!.block.solution}
+            </p>
+          ) : null}
+
+          {/* No button: this screen connects nothing and repairs nothing. */}
+          <p className={styles.templatesPausedBody}>{t('templatesPaused.fixInMeta')}</p>
+        </section>
+      ) : null}
+
+      <ul className={styles.numbers} data-testid="whatsapp-numbers">
+        {numbers.data.map((n) => (
+          <li key={n.id}>
+            <NumberCard number={n} t={t} locale={locale} />
+          </li>
+        ))}
+        {numbers.unprofiled.map((u) => (
+          <li key={u.channelAccountId}>
+            <UnprofiledCard number={u} t={t} />
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -124,6 +187,16 @@ function NumberCard({
       */}
       <p className={styles.delivery} data-testid="whatsapp-delivery">
         {t(`delivery.${delivery}`)}
+        {/*
+          The per-number badge the design puts on the row. A number can be
+          "sending and receiving" for ordinary replies AND have its templates
+          paused, so this sits beside the verdict rather than replacing it.
+        */}
+        {templatesPaused(number.health) ? (
+          <span className={styles.templatesBadge} data-testid="whatsapp-templates-badge">
+            {t('templatesPaused.badge')}
+          </span>
+        ) : null}
       </p>
       {delivery === 'inbound_only' ? (
         <p className={styles.deliveryDetail} data-testid="whatsapp-delivery-detail">

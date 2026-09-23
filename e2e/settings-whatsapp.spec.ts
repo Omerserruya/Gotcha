@@ -32,6 +32,20 @@ import { missingIds } from './diagnose';
  * a blank one**, so this spec asserts by content what IS here and does not
  * pretend the rest was covered by photographing its absence.
  *
+ * ── AND THAT INCLUDES THE TEMPLATES-PAUSED BANNER ──
+ * The banner Omer asked for by name is built, and it cannot appear here. It
+ * renders from `healthSnapshot.entities[].entity_type === "MESSAGE_TEMPLATE"`
+ * with `can_send_message === "BLOCKED"`, and only a number with a lifecycle
+ * row carries a snapshot — `data` is empty on every tenant on this database.
+ *
+ * So there is NO capture assertion for it, not even an absence one. Absent
+ * here is indistinguishable from absent everywhere, and a green
+ * `not.toHaveText(/templates are paused/i)` would be reporting that a feature
+ * works when it has never once been rendered. Nine component tests cover it,
+ * including the two cases the copy turns on: that Meta's reason is quoted
+ * rather than asserted, and that "replies still go out" is gated on the
+ * number actually receiving.
+ *
  * ── NOTHING IS WRITTEN ──
  * Every verb on this router reconfigures a live messaging channel: `repair`
  * calls Meta, `resume` runs a registration, `DELETE` disconnects a number a

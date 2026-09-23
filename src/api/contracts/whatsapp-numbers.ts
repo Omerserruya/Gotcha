@@ -117,6 +117,37 @@ export const healthReportSchema = z.object({
    */
   customerActions: z.array(healthCheckSchema).default([]),
   lastCheckedAt: z.string().nullable().default(null),
+  /**
+   * Meta's raw health response.
+   *
+   * Carried because the CHECKS flatten the thing screen 13's banner turns on.
+   * `healthEntitiesToChecks` maps every non-registration block to
+   * `id: "MESSAGING"` and puts the entity in `label` as display text
+   * ("Message templates"), so telling a template block from a phone-number
+   * block would mean matching an English string. `entity_type` is in here.
+   */
+  healthSnapshot: z
+    .object({
+      entities: z
+        .array(
+          z.object({
+            entity_type: z.string().nullable().default(null),
+            can_send_message: z.string().nullable().default(null),
+            errors: z
+              .array(
+                z.object({
+                  error_code: z.number().nullable().default(null),
+                  error_description: z.string().nullable().default(null),
+                  possible_solution: z.string().nullable().default(null),
+                }),
+              )
+              .default([]),
+          }),
+        )
+        .default([]),
+    })
+    .nullable()
+    .default(null),
 });
 
 export type HealthReport = z.infer<typeof healthReportSchema>;
@@ -219,4 +250,55 @@ export function fixableHere(health: HealthReport): boolean {
  */
 export function hasAnyAction(health: HealthReport): boolean {
   return health.availableRepairs.length > 0 || health.needsRegistration;
+}
+
+/* ── Templates, which pause without the channel going down ───────────────── */
+
+/**
+ * Why outbound TEMPLATES are blocked, when they are.
+ *
+ * Meta reports `can_send_message` per entity, and `MESSAGE_TEMPLATE` is its
+ * own entity. So a business can be taking customer messages and answering
+ * them inside the 24-hour window while Meta refuses every reminder, cart
+ * recovery and campaign — which is the state Omer asked to be warned about,
+ * and it is `receiving`/`sending` one level finer.
+ *
+ * **The reason is Meta's, verbatim.** The design's copy says *"your WhatsApp
+ * Business account has no payment method"*, and that is one cause among
+ * several — quality rating and policy violations block templates too. We
+ * report the block, which we know, and quote Meta for the cause, which they
+ * know and we do not. Same rule as `metaSolution` on a health check.
+ */
+export interface TemplateBlock {
+  /** Meta's own description of what is wrong. Never paraphrased. */
+  reason: string | null;
+  /** Meta's own remediation text. Never paraphrased. */
+  solution: string | null;
+  errorCode: number | null;
+}
+
+export function templatesPaused(health: HealthReport): TemplateBlock | null {
+  const entity = health.healthSnapshot?.entities.find(
+    (e) => e.entity_type === 'MESSAGE_TEMPLATE' && e.can_send_message === 'BLOCKED',
+  );
+  if (!entity) return null;
+
+  const err = entity.errors[0];
+  return {
+    reason: err?.error_description ?? null,
+    solution: err?.possible_solution ?? null,
+    errorCode: err?.error_code ?? null,
+  };
+}
+
+/**
+ * Does the number still carry ordinary replies while templates are paused?
+ *
+ * The design's second sentence — *"Replies within 24 hours still go out"* — is
+ * the part that stops the banner reading as "WhatsApp is down". It is only
+ * true while the number is actually receiving, so it is gated on that rather
+ * than stated as a general fact about WhatsApp.
+ */
+export function repliesStillFlow(health: HealthReport): boolean {
+  return health.receiving;
 }
