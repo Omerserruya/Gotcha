@@ -178,6 +178,13 @@ export const SETTINGS_SECTIONS: readonly NavigationChild[] = [
   { id: 'notifications', labelKey: 'settings.notifications', href: '/settings/notifications' },
   { id: 'security', labelKey: 'settings.security', href: '/settings/security' },
   { id: 'billing', labelKey: 'settings.billing', href: '/settings/billing' },
+  /*
+   * Screen 17b, its own destination rather than a section of Usage & billing.
+   * The two answer different questions — that one says how long you are good
+   * for, this one says what you are on and what changing it would do — and a
+   * scheduled change belongs beside the plan, not beside the runway.
+   */
+  { id: 'billing-plan', labelKey: 'settings.billingPlan', href: '/settings/billing/plan' },
   { id: 'developer', labelKey: 'settings.developer', href: '/settings/developer' },
 ];
 

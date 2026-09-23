@@ -78,5 +78,49 @@
     "vatId": "Tax ID",
     "address": "Address",
     "absentFields": "GOTCHA holds one invoice email address, not a list — and it has no field for a PO number or a separate language for invoices."
+  },
+  "pricing": {
+    "title": "Plan & pricing",
+    "description": "What you are on, what it costs, and what changing it would do.",
+    "unavailable": "We could not load your plan just now. Nothing has changed.",
+    "heading": {
+      "current": "Your plan",
+      "packages": "Credit packages",
+      "change": "Changing plan"
+    },
+    "listPrice": "{price} per {interval}",
+    "interval": {
+      "MONTH": "month",
+      "YEAR": "year"
+    },
+    "netOfTax": "Prices are before {label}.",
+    "netOfTaxRate": "Prices are before {label} ({rate}%).",
+    "converted": "Shown in {display}. You are charged in {charged}.",
+    "convertedFallback": "Shown in {display}, converted at a fallback rate. You are charged in {charged}, and that amount is the one that will match your statement.",
+    "discount": "{label}: you pay {payable} while it lasts. The plan's price is {list}.",
+    "pending": {
+      "DOWNGRADE": "Changes to {plan} on {date}.",
+      "UPGRADE": "Changes to {plan} on {date}.",
+      "VOLUME_CHANGE": "Your volume changes on {date}.",
+      "CANCEL": "Your subscription ends on {date}.",
+      "nothingChangesYet": "Until then your plan, its features, its limits and its credits all stay exactly as they are."
+    },
+    "change": {
+      "deferred": "A change to a cheaper plan takes effect at the end of your billing period, on {date}. Nothing changes before then.",
+      "needsPermission": "Changing the plan needs the Manage billing permission. Ask whoever administers your workspace.",
+      "noCard": "There is no payment method on file, so an upgrade would be declined before anything changed. Add a card first — the upgrade will work straight afterwards.",
+      "addCard": "Add a payment method"
+    },
+    "packages": {
+      "unavailable": "We could not load credit packages just now.",
+      "ineligible": "Your plan does not include buying extra credit packages.",
+      "none": "There are no credit packages on sale right now.",
+      "credits": "{credits} credits",
+      "expiry": {
+        "NEVER": "These credits do not expire.",
+        "PERIOD_END": "These credits expire at the end of your billing period.",
+        "DAYS_AFTER_PURCHASE": "These credits expire {days} days after you buy them."
+      }
+    }
   }
 }

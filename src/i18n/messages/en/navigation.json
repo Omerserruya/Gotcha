@@ -51,6 +51,7 @@
     "notifications": "Notifications",
     "security": "Security",
     "billing": "Usage & billing",
+    "billingPlan": "Plan & pricing",
     "developer": "Developer"
   },
   "groups": {
