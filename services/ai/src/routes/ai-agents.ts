@@ -1184,26 +1184,26 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
       await tx.tenant.updateMany({ where: { id: tenantId, defaultAgentId: agentId }, data: { defaultAgentId: null } });
       await tx.knowledgeBase.updateMany({ where: { tenantId, scopeAgentId: agentId }, data: { scopeAgentId: null } });
 
-      // ── A connected calendar the employee owned: LEFT DANGLING ─────────
+      // ── A connected calendar the employee owned ─────────────────────────
       //
-      // Omer ruled option A - clear the link, leave the Google account
-      // connected. THAT CANNOT BE DONE HERE. `CalendarAccount.aiAgentId` is
-      // `String`, not `String?`, and it is half of @@unique([aiAgentId,
-      // provider]), so there is no null to write. Making it nullable is a
-      // migration, which is not available.
+      // The link is cleared; the Google account stays connected to the tenant,
+      // owned by nobody, for a human to re-attach. Same choice as the
+      // conversations: leave the external thing intact and unowned rather than
+      // destroy it. Deleting the row would sever a live third-party grant to
+      // tidy a foreign key, and reassigning it would invent an owner nobody
+      // picked.
       //
-      // The two things that ARE possible are worse than doing nothing:
-      // deleting the row disconnects the merchant's calendar, which is the
-      // outcome option A was chosen to avoid; and reassigning it to another
-      // employee invents an owner nobody picked.
-      //
-      // So the id is left dangling, which is the only no-migration way to keep
-      // the account connected - the row survives pointing at an employee that
-      // is gone, exactly as the usage rows do, except that this one is LIVE
-      // rather than history and a human will eventually need to re-attach it.
-      // Raised rather than patched; the fix is `aiAgentId String?` plus this
-      // updateMany, in the same migration that adds the denormalised usage
-      // name.
+      // This needed migration 20260923120000 - the column was NOT NULL, so
+      // until then there was no null to write and the id was left dangling.
+      // Dangling was worse than it sounds: the only admin listing takes
+      // `aiAgentId` as a required parameter, so an orphaned row was not merely
+      // unowned but UNREACHABLE - the merchant kept a live Google grant with no
+      // route to see or disconnect it. `scheduler-admin.ts` now accepts the
+      // parameter as optional so an unowned account can be found.
+      await tx.calendarAccount.updateMany({
+        where: { tenantId, aiAgentId: agentId },
+        data: { aiAgentId: null },
+      });
 
       await tx.aIAgent.delete({ where: { id: agentId } });
       return { removedRules: count, removedToolGrants, releasedConversations };

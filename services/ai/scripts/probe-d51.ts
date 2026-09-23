@@ -28,6 +28,12 @@
  *            per-employee counts read it. Inverse of `live`, so a blanket
  *            release fails here.
  *   hazards  Tenant.defaultAgentId and KnowledgeBase.scopeAgentId cleared.
+ *   calendar a connected calendar SURVIVES the delete, unowned AND findable.
+ *            Three assertions because two of them can pass while the third
+ *            fails: the row must still exist (not severed), aiAgentId must be
+ *            null (not dangling), and the admin listing must return it WITHOUT
+ *            an aiAgentId filter (not invisible). Before 20260923120000 the
+ *            third was impossible - the route required the parameter.
  */
 import { prisma } from "@chatcenter/shared";
 
@@ -56,6 +62,7 @@ async function canvasNodes(): Promise<any[]> {
 async function cleanup(original: any[] | null = canvasSnapshot) {
   const log = (w: string) => (e: any) => console.warn(`cleanup ${w}:`, e?.message ?? e);
   await prisma.usageLog.deleteMany({ where: { tenantId: TENANT, aiAgentId: { in: [AGENT, OTHER] } } }).catch(log("usage"));
+  await prisma.calendarAccount.deleteMany({ where: { tenantId: TENANT, accountEmail: "d51probe@example.invalid" } }).catch(log("calendar"));
   await prisma.conversation.deleteMany({ where: { tenantId: TENANT, id: { startsWith: "d51probe-conv" } } }).catch(log("conversations"));
   await prisma.knowledgeBase.deleteMany({ where: { tenantId: TENANT, name: "D51 probe base" } }).catch(log("kb"));
   await prisma.tenant.updateMany({ where: { id: TENANT, defaultAgentId: { in: [AGENT, OTHER] } }, data: { defaultAgentId: null } as any }).catch(log("tenant"));
@@ -111,6 +118,14 @@ async function main() {
   await prisma.tenant.update({ where: { id: TENANT }, data: { defaultAgentId: AGENT } as any });
   const kb = await prisma.knowledgeBase.create({
     data: { tenantId: TENANT, name: "D51 probe base", scope: "agent", scopeAgentId: AGENT } as any,
+  });
+
+  const cal = await prisma.calendarAccount.create({
+    data: {
+      tenantId: TENANT, aiAgentId: AGENT, provider: "GOOGLE_CALENDAR",
+      status: "CONNECTED", accountEmail: "d51probe@example.invalid", externalAccountId: "d51probe-ext",
+      credentials: "probe-not-a-real-token",
+    } as any,
   });
 
   await prisma.usageLog.create({
@@ -180,6 +195,20 @@ async function main() {
   if (tenantAfter?.defaultAgentId !== null) fail.push("Tenant.defaultAgentId still points at the deleted agent");
   if (kbAfter?.scopeAgentId !== null) fail.push("KnowledgeBase.scopeAgentId still points at the deleted agent");
   if (body?.releasedConversations !== 1) fail.push(`releasedConversations reported ${body?.releasedConversations}, expected 1`);
+
+  // calendar: survives the delete, unowned, AND findable.
+  // Three assertions because two can pass while the third fails: the row must
+  // still exist (not severed), aiAgentId must be null (not dangling), and an
+  // UNFILTERED listing must return it (not invisible). Before migration
+  // 20260923120000 the third was impossible - the admin route required the
+  // very agent id that had just been deleted.
+  const calAfter: any = await prisma.calendarAccount.findUnique({ where: { id: cal.id } });
+  const listed = await prisma.calendarAccount.findMany({ where: { tenantId: TENANT }, select: { id: true, aiAgentId: true } });
+  const found = listed.find((r: any) => r.id === cal.id);
+  console.log(`calendar survives=${calAfter !== null} aiAgentId=${calAfter?.aiAgentId ?? "null"} findable_unfiltered=${!!found}`);
+  if (calAfter === null) fail.push("calendar account DELETED - a live Google grant was severed");
+  if (calAfter && calAfter.aiAgentId !== null) fail.push(`calendar aiAgentId still ${calAfter.aiAgentId} - dangling, not released`);
+  if (!found) fail.push("unowned calendar not returned by an unfiltered listing - still invisible");
 
   console.log(fail.length === 0 ? "PASS" : `FAIL: ${fail.join(" | ")}`);
   await cleanup(original);

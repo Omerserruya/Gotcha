@@ -105,15 +105,26 @@ router.delete("/meeting-types/:id", requireRole("ADMIN"), async (req: Request, r
 // ─── Calendar account status (no credentials returned) ─────
 
 router.get("/calendar-accounts", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  // OPTIONAL since 20260923120000 made `aiAgentId` nullable.
+  //
+  // It used to be required and 400 without it, which meant an account whose
+  // employee had been deleted was not merely unowned but UNREACHABLE: the only
+  // listing was keyed by an agent id that no longer existed, so the merchant
+  // kept a live Google grant with no route to see or disconnect it. Making the
+  // column nullable without this change would have moved the row from "cannot
+  // be null" to "null and invisible".
+  //
+  // Omitted now means "every calendar account this tenant has, owned or not".
+  // Supplied keeps today's behaviour exactly, so no existing caller changes.
   const aiAgentId = String(req.query.aiAgentId || "");
-  if (!aiAgentId) {
-    res.status(400).json({ error: "aiAgentId is required" });
-    return;
-  }
   const rows = await (prisma as any).calendarAccount.findMany({
-    where: { tenantId: req.tenantId, aiAgentId },
+    where: { tenantId: req.tenantId, ...(aiAgentId ? { aiAgentId } : {}) },
     select: {
       id: true,
+      // Returned so a caller listing everything can tell an OWNED account from
+      // an orphaned one. Without it the unfiltered list is a set of rows nobody
+      // can attribute, which is the same invisibility in a different shape.
+      aiAgentId: true,
       provider: true,
       status: true,
       accountEmail: true,

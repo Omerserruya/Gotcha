@@ -4980,7 +4980,19 @@ model CalendarAccount {
   id                String                @id @default(cuid())
   tenantId          String                @map("tenant_id")
   /// The AIAgent that owns this calendar binding.
-  aiAgentId         String                @map("ai_agent_id")
+  /// NULLABLE since 20260923120000. An employee can be deleted while the
+  /// merchant's calendar stays connected - the OAuth grant belongs to the
+  /// tenant, not to the employee that happened to own it, and severing a live
+  /// third-party grant to tidy a foreign key is the wrong trade.
+  ///
+  /// MEASURED, not recalled: Postgres treats NULLs as DISTINCT in a unique
+  /// index, so @@unique([aiAgentId, provider]) below keeps rejecting a
+  /// duplicate owned account and stops preventing duplicate UNOWNED ones.
+  /// Probed directly - three NULL rows with the same provider were accepted,
+  /// a second non-null duplicate was rejected. A tenant can therefore
+  /// accumulate several unowned GOOGLE_CALENDAR rows and nothing objects.
+  /// That is an accepted consequence, not an oversight.
+  aiAgentId         String?               @map("ai_agent_id")
   provider          CalendarProvider
   /// Encrypted JSON: { accessToken, refreshToken, scope, idToken? }
   credentials       String                @db.Text
