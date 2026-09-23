@@ -106,6 +106,6 @@
       "address": "Address",
       "currency": "Currency"
     },
-    "oneLanguage": "GOTCHA holds one reply language. The AI answers in the customer's language where it can, but only this one is stored."
+    "oneLanguage": "The AI replies in each customer's own language — that is a fixed rule, and this setting does not change it. GOTCHA stores one language here, and it is used to tag your knowledge documents."
   }
 }

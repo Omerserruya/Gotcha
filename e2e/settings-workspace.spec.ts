@@ -509,8 +509,8 @@ for (const size of SIZES) {
 
       const note = page.getByTestId('provenance-one-language');
       await expect(note).toBeVisible();
-      await expect(note).toHaveText(/holds one reply language/i);
-      await expect(note).toHaveText(/only this one is stored/i);
+      await expect(note).toHaveText(/replies in each customer's own language/i);
+      await expect(note).toHaveText(/this setting does not change it/i);
 
       await shoot(page, `${size.name}-14-one-language`);
     });

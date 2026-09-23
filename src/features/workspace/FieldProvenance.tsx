@@ -88,12 +88,24 @@ export async function FieldProvenance({ workspace }: { readonly workspace: Works
       </dl>
 
       {/*
-        11d, in one sentence rather than a control.
+        11d, in two facts rather than one alarming one.
 
-        `PATCH /workspace` validates up to SIX languages and then writes
-        `primaryLanguage = languages[0]`. A multi-select would be accepted,
-        answered 200, and silently drop everything after the first — so the
-        screen says what is stored instead of offering what is not.
+        No control, because `PATCH /workspace` validates up to SIX languages
+        and then writes `primaryLanguage = languages[0]`: a multi-select would
+        be accepted, answered 200, and silently drop the rest.
+
+        But the sentence does NOT lead with "GOTCHA holds one reply language",
+        which is true and reads as a problem. Backend confirmed the stored
+        value does not participate in replies at all — the live path decides
+        from the conversation, on a prompt rule marked non-negotiable, and
+        never reads this column. It is used to tag knowledge documents.
+
+        So the honest version says the replies are already right and names
+        what the setting actually does. Not for reassurance: the old sentence
+        invited a merchant to go and fix something that is not broken, and the
+        real risk runs the other way — the day somebody wires this inert
+        setting up and it starts overriding a rule that was working. A
+        merchant cannot act on that. Saying less here is more accurate.
       */}
       <p className={styles.provenanceNote} data-testid="provenance-one-language">
         {t('oneLanguage')}

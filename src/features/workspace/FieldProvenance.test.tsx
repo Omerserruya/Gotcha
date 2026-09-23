@@ -120,16 +120,22 @@ describe('★ “unknown” is not a country', () => {
 });
 
 describe('★ one reply language, said rather than offered', () => {
-  it('states what is stored instead of drawing a control that loses data', async () => {
+  it('says the replies are already right, then what the setting does', async () => {
     /*
-     * `PATCH /workspace` validates up to SIX languages and then writes
-     * `primaryLanguage = languages[0]`. A multi-select would be accepted,
-     * answered 200, and silently drop everything after the first.
+     * The stored value does not participate in replies at all: the live path
+     * decides from the conversation on a non-negotiable prompt rule and never
+     * reads this column.
+     *
+     * So the sentence must NOT lead with "GOTCHA holds one reply language",
+     * which is true and invites a merchant to fix something that is not
+     * broken. Asserted in that order, because the order is the point.
      */
     await renderPanel();
     const note = screen.getByTestId('provenance-one-language');
-    expect(note).toHaveTextContent(/holds one reply language/i);
-    expect(note).toHaveTextContent(/only this one is stored/i);
+    expect(note).toHaveTextContent(/replies in each customer's own language/i);
+    expect(note).toHaveTextContent(/this setting does not change it/i);
+    // And it still says what the setting IS for, rather than only what it is not.
+    expect(note).toHaveTextContent(/tag your knowledge documents/i);
   });
 
   it('renders the stored language as the value for that field', async () => {
