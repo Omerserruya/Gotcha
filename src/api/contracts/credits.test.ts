@@ -6,7 +6,7 @@ import {
   creditSummarySchema,
   expiringAtRenewal,
   ranWithoutMetering,
-  survivesRenewal,
+  purchasedBalance,
 } from './credits';
 
 /** The tenant as measured on 2026-09-23 — every figure from a real row. */
@@ -35,10 +35,10 @@ describe('the two buckets expire oppositely', () => {
       purchasedCredits: { balance: 300 },
       totalAvailableCredits: 1200,
     });
-    // 1,200 today; 300 on renewal day. One total says neither.
+    // 1,200 today; at most 300 on renewal day. One total says neither.
     expect(s.totalAvailableCredits).toBe(1200);
     expect(expiringAtRenewal(s)).toBe(900);
-    expect(survivesRenewal(s)).toBe(300);
+    expect(purchasedBalance(s)).toBe(300);
   });
 });
 

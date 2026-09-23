@@ -15,11 +15,15 @@ import { z } from 'zod';
  * > *"Two buckets: INCLUDED (monthly, **expires at renewal**) and PURCHASED
  * > (**never expires**, FIFO)."*
  *
- * `deriveBalanceFromLots` enforces it — an INCLUDED lot counts only while
- * `lot.periodKey === currentPeriodKey`. A tenant with 900 included and 300
- * purchased has 1,200 today and 300 on renewal day. A single total is
- * arithmetically correct and answers none of the question that makes somebody
- * open this screen.
+ * `deriveBalanceFromLots` enforces half of it structurally — an INCLUDED lot
+ * counts only while `lot.periodKey === currentPeriodKey`. A tenant with 900
+ * included and 300 purchased has 1,200 today and 300 on renewal day. A single
+ * total is arithmetically correct and answers none of the question that makes
+ * somebody open this screen.
+ *
+ * The other half of that comment is a DEFAULT, not a rule: purchased credits
+ * can be sold to expire — see {@link purchasedBalance}. So this screen names
+ * what the plan bucket does and declines to promise anything about the rest.
  *
  * ── 2. "CONSUMED" IS A SUBTRACTION, NOT A MEASUREMENT ──
  * `credits.ts:65`:
@@ -179,8 +183,31 @@ export function expiringAtRenewal(summary: CreditSummary): number {
   return summary.usage.remainingPlanCredits;
 }
 
-/** How much survives it. */
-export function survivesRenewal(summary: CreditSummary): number {
+/**
+ * The PURCHASED balance — which this screen does NOT call permanent.
+ *
+ * The `ai_unit_lots` comment says *"PURCHASED (never expires, FIFO)"* and
+ * that is the **default**, not an invariant. `CreditExpiryPolicy` has three
+ * values, and `purchase.service.ts:87-90` honours all of them:
+ *
+ * | policy | effect on a purchased lot |
+ * |---|---|
+ * | `NEVER` | persists until consumed |
+ * | `DAYS_AFTER_PURCHASE` | expires `expiryDays` after the grant |
+ * | `PERIOD_END` | **expires with the billing period, exactly like INCLUDED** |
+ *
+ * All four packages on sale today are `NEVER`, so purchased credits do not
+ * currently expire. That is a fact about the catalogue rows, not about the
+ * product, and it can change without any code changing.
+ *
+ * The credit-summary response cannot settle it either way: the route selects
+ * `expiresAt` from the lots and uses only `grantType`, so per-lot expiry never
+ * reaches the wire. **So the screen says what expires — the plan bucket, which
+ * `deriveBalanceFromLots` gates on `periodKey` structurally — and says nothing
+ * about the purchased bucket lasting forever.** The expiry a buyer needs is on
+ * the package itself, where `/billing/pricing/packages` does carry it.
+ */
+export function purchasedBalance(summary: CreditSummary): number {
   return summary.purchasedCredits.balance;
 }
 
