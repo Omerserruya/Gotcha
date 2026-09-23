@@ -204,6 +204,42 @@ export const billingEndpoints = {
   profile: () => endpoint('/api/billing/profile'),
   /** What it charges against. Answers `{ paymentMethods }` — a sixth shape. */
   paymentMethods: () => endpoint('/api/billing/payment-methods'),
+  /**
+   * Credits, and what happens to them — screen 17c.
+   *
+   * Carries TWO estimates of what the balance buys: `estimatedRemaining` from
+   * the public commercial ratio, and `observedRemaining` from this tenant's
+   * own measured burn. The route ships both *"each labelled with its basis"*
+   * because *"a screen that silently swapped them would make a pricing claim
+   * out of one customer's behaviour"*.
+   */
+  creditSummary: () => endpoint('/api/billing/credit-summary'),
+
+  /* ── Screen 17b — plan, price and changing it ──────────────────────────── */
+
+  /** The catalogue, the display-currency options and the FX behind an ILS price. */
+  pricing: () => endpoint('/api/billing/pricing'),
+  /** The current subscription from its stored SNAPSHOT, not the live plan. */
+  pricingCurrent: () => endpoint('/api/billing/pricing/current'),
+  /**
+   * Buyable credit packages for THIS plan.
+   *
+   * `{ packages: [], eligible: false }` means the plan cannot buy them at all
+   * — a different fact from an empty catalogue, and not the customer's fault.
+   */
+  pricingPackages: () => endpoint('/api/billing/pricing/packages'),
+  /** Prices a selection from KEYS. Never accepts a price from the client. */
+  pricingQuote: () => endpoint('/api/billing/pricing/quote'),
+  /**
+   * Apply a change. Owner-gated on `settings:billing:manage`.
+   *
+   * `/api/billing/subscription/change-plan` above is the SAME service behind a
+   * second path — identical body, permission and result, differing only in the
+   * error string. Not a dead route this time; a duplicate. This screen uses
+   * one of them and the registry records that they are the same thing, so
+   * nobody later concludes they are two features.
+   */
+  pricingChange: () => endpoint('/api/billing/pricing/change'),
 } as const;
 
 export const intelligenceReviewEndpoints = {

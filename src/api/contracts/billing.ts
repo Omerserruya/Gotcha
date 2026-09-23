@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { pendingChangeSchema } from './pricing';
+
 /**
  * Settings · Usage & billing — screen 17.
  *
@@ -75,11 +77,19 @@ export const subscriptionSchema = z.object({
   currentPeriodEnd: z.string().nullable().optional(),
   cancelAtPeriodEnd: z.boolean().default(false),
   billingInterval: z.string().nullable().optional(),
-  /** A plan change already scheduled for renewal, so the screen can say so. */
-  pendingChange: z
-    .object({ targetPlanKey: z.string().nullable().optional() })
-    .nullable()
-    .optional(),
+  /**
+   * A plan change scheduled for renewal — loaded by `getSubscriptionForTenant`,
+   * whose comment says it is included *"so the Billing page can show 'changes
+   * to X at renewal' honestly"*.
+   *
+   * This used to be `{ targetPlanKey }` alone, which was not enough to say
+   * anything honest with. It omitted **`changeType`**, so a scheduled CANCEL
+   * was indistinguishable from a downgrade; **`effectiveAt`**, so the screen
+   * could name the plan but not the date; and **`appliedAt`**, without which
+   * a change the scheduler ran months ago still reads as pending — the row is
+   * marked, never deleted. See `pricing.ts`.
+   */
+  pendingChange: pendingChangeSchema.nullable().optional(),
 });
 
 export const subscriptionResponseSchema = z.object({
