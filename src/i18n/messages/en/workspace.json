@@ -73,6 +73,8 @@
     "unavailable": "The rules could not be loaded just now.",
     "empty": "No rules yet. These are hard limits GOTCHA will not cross.",
     "add": "Add a rule",
+    "newRule": "New rule",
+    "addAction": "Add",
     "placeholder": "Promise a delivery date the carrier hasn't given",
     "remove": "Remove",
     "removed": "Removed “{claim}”",

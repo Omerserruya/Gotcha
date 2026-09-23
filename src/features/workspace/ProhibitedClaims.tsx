@@ -104,7 +104,7 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
 
         <div className={styles.claimAdd} data-testid="claims-add">
           <Input
-            label={t('add')}
+            label={t('newRule')}
             value={draft}
             placeholder={t('placeholder')}
             maxLength={MAX_CLAIM_LENGTH}
@@ -118,8 +118,19 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
               }
             }}
           />
+          {/*
+            `addAction`, not `add`. The field's label and this button both
+            read `t('add')` and both rendered "Add a rule", one above the
+            other — a label naming the thing and a button naming the verb are
+            not the same string, and using one key for both guarantees they
+            can never differ.
+
+            It survived three rebuilds because nothing asserted it. A
+            duplicate label is invisible to a type checker, to a test that
+            queries by role, and to a reader who knows what it meant to say.
+          */}
           <Button size="sm" onClick={add} disabled={isPending || isFull || !draft.trim()}>
-            {t('add')}
+            {t('addAction')}
           </Button>
         </div>
       </div>

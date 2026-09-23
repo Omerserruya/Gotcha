@@ -165,14 +165,34 @@ export const workspaceVoiceSchema = z.looseObject({
   source: z.enum(VOICE_SOURCES).catch('none'),
   editedAt: z.string().nullable().optional(),
   /**
-   * Provenance for the guidance. Currently a hardcoded stub server-side
-   * (`{ messagesAnalysed: 0, importedAt: null }`), so the screen renders
-   * `source` and omits these — a provenance claim built from zeroes is worse
-   * than none.
+   * Provenance for the guidance. Still a hardcoded stub server-side —
+   * `workspace.ts:303`, `:336` and `:366` all send
+   * `{ messagesAnalysed: null, importedAt: null }` — so the screen renders
+   * `source` and omits these. A provenance claim built from a placeholder is
+   * worse than none.
+   *
+   * ── WHY THIS BROKE, AND WHY THE BREAK WAS BACKWARDS ──
+   * The stub used to send `0`. Backend's `6a9ffa58` changed it to `null`,
+   * which is **more truthful**: zero messages analysed is a claim, and null
+   * is "we do not know". This schema said `z.number().default(0)`, which
+   * fills `undefined` and REJECTS an explicit null — so the guard refused an
+   * improvement, because the less truthful shape had been encoded as
+   * required.
+   *
+   * The refusal itself was correct behaviour: the whole voice editor
+   * disappeared behind "the voice could not be loaded just now" rather than
+   * rendering against a payload it did not understand. **A contract that
+   * fails closed will sometimes fail on good news.** That is the price, and
+   * it is the right one — but it is worth knowing the direction it can come
+   * from, because a backend making its own payload more honest is not the
+   * change anyone watches for.
+   *
+   * `nullable`, not just optional: the field is PRESENT and null, and those
+   * are different states. `default(null)` covers a payload that omits it.
    */
   basis: z
     .looseObject({
-      messagesAnalysed: z.number().default(0),
+      messagesAnalysed: z.number().nullable().default(null),
       importedAt: z.string().nullable().optional(),
     })
     .optional(),

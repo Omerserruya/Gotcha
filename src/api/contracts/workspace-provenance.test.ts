@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { anyFieldAttributed, fieldOrigin, isUnusableValue, workspaceSchema } from './workspace';
+import {
+  anyFieldAttributed,
+  fieldOrigin,
+  isUnusableValue,
+  workspaceSchema,
+  workspaceVoiceSchema,
+} from './workspace';
 
 const workspace = (fieldSources: Record<string, string | null> = {}) =>
   workspaceSchema.parse({ fieldSources });
@@ -72,5 +78,42 @@ describe('a value of “unknown” is not a value', () => {
     expect(isUnusableValue('IL')).toBe(false);
     // And does not over-reach: a country whose name contains the word.
     expect(isUnusableValue('Unknown Island')).toBe(false);
+  });
+});
+
+describe('the voice basis is a placeholder, and the contract must accept it', () => {
+  it('★ accepts the null the platform actually sends', () => {
+    /*
+     * All three senders hardcode `{ messagesAnalysed: null, importedAt: null }`.
+     * The schema previously required a number, so a live 200 was refused and
+     * the whole voice editor vanished behind "could not be loaded".
+     *
+     * The stub used to send 0. Backend changed it to null, which is MORE
+     * truthful — zero analysed is a claim, null is "we do not know" — and the
+     * guard refused the improvement.
+     */
+    const v = workspaceVoiceSchema.parse({
+      guidance: 'Warm and direct.',
+      source: 'learned',
+      editedAt: null,
+      basis: { messagesAnalysed: null, importedAt: null },
+    });
+    expect(v.basis?.messagesAnalysed).toBeNull();
+    expect(v.source).toBe('learned');
+  });
+
+  it('still accepts a real count, for when the stub becomes real', () => {
+    const v = workspaceVoiceSchema.parse({
+      source: 'learned',
+      basis: { messagesAnalysed: 240, importedAt: '2026-09-01T00:00:00.000Z' },
+    });
+    expect(v.basis?.messagesAnalysed).toBe(240);
+  });
+
+  it('does not invent a zero when the field is absent', () => {
+    // `default(null)` rather than `default(0)`: a provenance claim built from
+    // a placeholder is worse than none.
+    const v = workspaceVoiceSchema.parse({ source: 'none', basis: {} });
+    expect(v.basis?.messagesAnalysed).toBeNull();
   });
 });
