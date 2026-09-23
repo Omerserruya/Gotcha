@@ -75,7 +75,14 @@ export default async function Page() {
         <BillingProfileSection
           profile={profile}
           methods={paymentMethods}
-          failedInvoiceCount={(invoices ?? []).filter((i) => i.status === 'FAILED').length}
+          /*
+            `null` when the invoices read failed, NOT zero. Defaulting to an
+            empty array here is what let a lost fetch silently remove "and 4
+            charges have already failed" from the warning below it.
+          */
+          failedInvoiceCount={
+            invoices === null ? null : invoices.filter((i) => i.status === 'FAILED').length
+          }
         />
       </section>
 

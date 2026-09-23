@@ -81,7 +81,9 @@
     "absentFields": "GOTCHA holds one invoice email address, not a list — and it has no field for a PO number or a separate language for invoices.",
     "noAccount": "This workspace has no billing account, so there is nowhere to put billing details yet. One is created with your first subscription.",
     "neverEntered": "No billing details have been entered yet.",
-    "emptied": "Billing details were entered and have since been cleared. Invoices will be issued without a name, address or tax ID until they are filled in again."
+    "emptied": "Billing details were entered and have since been cleared. Invoices will be issued without a name, address or tax ID until they are filled in again.",
+    "methodsUnknown": "We couldn't check whether you have a payment method just now. If there isn't one, charges will fail — reload to try again.",
+    "failuresUnknown": "There's no payment method on file, so there's nothing for GOTCHA to charge. We couldn't load your invoices just now, so we can't say whether any charges have already failed."
   },
   "pricing": {
     "title": "Plan & pricing",

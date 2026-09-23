@@ -267,10 +267,35 @@ for (const size of SIZES) {
     test('profile · nothing to charge, said beside the failures', async ({ page }) => {
       await openBilling(page, 'en');
 
+      /*
+       * ── WHY THIS IS NOT A BARE `toBeVisible` ANY MORE ──
+       * This block depends on TWO parallel reads, and it failed roughly one
+       * run in six at a random viewport with a clear request budget. The old
+       * assertion could not tell "the fetch lost" from "the warning is gone",
+       * so a real defect — the most consequential sentence on the screen
+       * vanishing silently — presented as a flake for as long as it existed.
+       *
+       * Now BOTH outcomes render something, so the assertion is: the block is
+       * here in one of its forms. A transient read failure gives the
+       * read-failed sentence and this still passes; the warning disappearing
+       * entirely fails, which is what it should always have done.
+       */
       const nothing = page.getByTestId('nothing-to-charge');
-      await expect(nothing).toBeVisible();
-      await expect(nothing).toHaveText(/no payment method on file/i);
-      await expect(nothing).toHaveText(/charges have already failed/i);
+      const unknown = page.getByTestId('methods-unknown');
+      await expect(nothing.or(unknown).first()).toBeVisible();
+
+      if ((await unknown.count()) > 0) {
+        // The payment-methods read lost. Say so, do not silently pass.
+        await expect(unknown).toHaveText(/charges will fail/i);
+        console.warn('payment-methods read failed this run — the warning is the unread form');
+      } else {
+        await expect(nothing).toHaveText(/no payment method on file/i);
+        // Either the count, or an admission that it could not be counted —
+        // never a silent demotion to the reassuring version.
+        await expect(nothing).toHaveText(
+          /charges have already failed|couldn't load your invoices/i,
+        );
+      }
 
       /*
        * FOUR states, not one blank form — and this tenant is the second.

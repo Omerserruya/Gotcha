@@ -39,7 +39,17 @@ export async function BillingProfileSection({
 }: {
   readonly profile: Profile | null;
   readonly methods: readonly PaymentMethod[] | null;
-  readonly failedInvoiceCount: number;
+  /**
+   * How many charges have already failed — **`null` means we could not find
+   * out**, which is not zero.
+   *
+   * It used to be a plain `number`, defaulted from `invoices ?? []`. A failed
+   * invoices read therefore produced 0, and the sentence quietly demoted
+   * itself from *"and 4 charges have already failed"* to *"there's nothing to
+   * charge"* — dropping the half that makes it urgent, with nothing to
+   * indicate anything was missing.
+   */
+  readonly failedInvoiceCount: number | null;
 }) {
   const t = await getTranslations('billing');
   const reading = profileReading(profile);
@@ -49,14 +59,41 @@ export async function BillingProfileSection({
   return (
     <div className={styles.block} data-testid="billing-profile">
       {/*
-        Stated first, and stated together. Four charges failed against an
-        entity with nothing to charge them to.
+        ════════════════════════════════════════════════════════════════════
+        THE MOST CONSEQUENTIAL SENTENCE ON THIS SCREEN, AND IT USED TO
+        VANISH SILENTLY.
+        ════════════════════════════════════════════════════════════════════
+        This block depends on TWO parallel reads, and it failed roughly one
+        capture in six — a different viewport each time, with a clear request
+        budget. The condition was `methods !== null && ...`, so when the
+        payment-methods fetch lost, the whole warning disappeared and the page
+        looked complete.
+
+        A merchant reloading saw "there's no payment method on file, and 4
+        charges have already failed" most of the time, and sometimes saw
+        nothing at all, with no indication anything was missing.
+
+        Both reads now have a sentence. An unread fact and an absent one are
+        different, and on a billing screen the difference is whether somebody
+        knows to look again.
       */}
-      {nothingToCharge ? (
+      {methods === null ? (
+        <p className={styles.noCard} data-testid="methods-unknown">
+          {t('profile.methodsUnknown')}
+        </p>
+      ) : nothingToCharge ? (
         <p className={styles.noCard} data-testid="nothing-to-charge">
-          {failedInvoiceCount > 0
-            ? t('profile.noCardWithFailures', { count: failedInvoiceCount })
-            : t('profile.noCard')}
+          {failedInvoiceCount === null
+            ? /*
+                There IS no payment method — that much we read successfully —
+                but we could not count the failures. Said rather than rounded
+                to zero, because zero is the reassuring answer and it is one
+                we do not have.
+              */
+              t('profile.failuresUnknown')
+            : failedInvoiceCount > 0
+              ? t('profile.noCardWithFailures', { count: failedInvoiceCount })
+              : t('profile.noCard')}
         </p>
       ) : null}
 
