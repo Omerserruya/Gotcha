@@ -10,6 +10,8 @@ import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsag
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
+import { resolveInviteRoleStrict, resolveInviteRoleWithFallback, ensureRoleAssignment }
+  from "../services/invite-role.service";
 import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-ingest";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
@@ -3093,15 +3095,70 @@ router.post("/employee-chat", requireRole("ADMIN"), validate(employeeChatSchema)
 
 const inviteTeamSchema = z.object({
   emails: z.array(z.string().email()).min(1).max(25),
-  role: z.enum(["ADMIN", "AGENT"]).optional().default("AGENT"),
+  // A TenantRole id, or the keywords "ADMIN"/"AGENT".
+  //
+  // It was `z.enum(["ADMIN","AGENT"])`, which meant a tenant could create a
+  // custom role through /api/permissions/roles and then had no way to invite
+  // anybody into it. The keywords still work, so every existing caller is
+  // unaffected; anything else is resolved against THIS tenant's roles and
+  // refused if it names nothing - see invite-role.service.ts.
+  role: z.string().min(1).max(64).optional().default("AGENT"),
 });
+
+/**
+ * Record that somebody joined on a different role from the one they were
+ * offered, because the offered one had been deleted meanwhile.
+ *
+ * Its own audit ACTION rather than metadata on role.assigned: the audit-log
+ * API does not return `metadata`, so a fallback recorded only there would be
+ * invisible in the one place an admin looks. Someone silently joining with
+ * fewer permissions than they were promised is the kind of wrong that nobody
+ * goes looking for, so it has to be legible from the action alone.
+ *
+ * Never throws - an audit failure must not fail an acceptance.
+ */
+async function recordRoleFallback(
+  invite: { tenantId: string; role: string; id: string },
+  userId: string,
+  resolved: { fellBack: boolean; roleName: string | null; tenantRoleId: string | null },
+): Promise<void> {
+  if (!resolved.fellBack) return;
+  try {
+    await writeAudit({
+      tenantId: invite.tenantId,
+      actorType: "system",
+      action: AuditAction.ROLE_ASSIGNED_FALLBACK,
+      targetType: "user",
+      targetId: userId,
+      metadata: {
+        requestedRole: invite.role,
+        requestedRoleExists: false,
+        grantedRole: resolved.roleName,
+        grantedRoleId: resolved.tenantRoleId,
+        inviteId: invite.id,
+      },
+    });
+  } catch (err: unknown) {
+    console.error("[invite] role fallback audit failed:", (err as { message?: string })?.message ?? err);
+  }
+}
 
 const INVITE_LINK_EXPIRY_DAYS = 14;
 
 router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { emails, role } = req.body as { emails: string[]; role: "ADMIN" | "AGENT" };
+    const { emails, role } = req.body as { emails: string[]; role: string };
     const tenantId = req.tenantId!;
+
+    // Resolved ONCE, before any invitation is sent. An unknown or
+    // other-tenant role id is refused outright here rather than downgraded -
+    // an admin who mistypes a role should be told, not discover later that
+    // twenty-five people joined as agents.
+    const resolved = await resolveInviteRoleStrict(tenantId, role);
+    if (!resolved) {
+      res.status(400).json({ error: "unknown_role", role });
+      return;
+    }
     const inviter = await prisma.user.findUnique({
       where: { id: req.user!.userId },
       select: { name: true, email: true },
@@ -3136,9 +3193,15 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
           tenantId,
           email,
           email.split("@")[0] || "Teammate",
-          role,
+          resolved.coarse,
         );
         const user = { id: invited.user.id };
+
+        // BOTH systems, not either. `inviteUser` writes the coarse enum that
+        // `requireRole` reads; this writes the assignment that the permission
+        // system reads. Until now only the first happened, so every invited
+        // user had no entry in the real role system at all.
+        await ensureRoleAssignment(user.id, resolved.tenantRoleId, req.user!.userId);
 
         const inviteToken = crypto.randomBytes(24).toString("hex");
         const expiresAt = new Date(Date.now() + INVITE_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
@@ -3182,7 +3245,16 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
 router.post("/invite-link", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.tenantId!;
-    const role = (req.body?.role as "ADMIN" | "AGENT") === "ADMIN" ? "ADMIN" : "AGENT";
+    // Same resolution as invite-team. This route collapsed anything that was
+    // not the literal string "ADMIN" to "AGENT", so a custom role id pasted
+    // here produced a link that silently granted agent.
+    const requestedRole = String(req.body?.role ?? "AGENT");
+    const resolved = await resolveInviteRoleStrict(tenantId, requestedRole);
+    if (!resolved) {
+      res.status(400).json({ error: "unknown_role", role: requestedRole });
+      return;
+    }
+    const role = requestedRole;
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -3286,6 +3358,21 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
       });
       user = updated;
       setupLink = await resendSetupLink(updated.id);
+
+      // THE BRANCH THAT USED TO IGNORE THE ROLE ENTIRELY. invite-team creates
+      // the user at INVITE time, so this path only confirmed a name - which
+      // meant a fix applied to the open-link branch below would have left
+      // invite-team exactly as broken as it was.
+      //
+      // Re-resolved rather than trusted: if the role was deleted in between,
+      // the assignment made at invite time has already cascaded away, and this
+      // is the last moment anyone can notice.
+      const resolved = await resolveInviteRoleWithFallback(invite.tenantId, invite.role);
+      if (resolved.fellBack) {
+        await prisma.user.update({ where: { id: updated.id }, data: { role: resolved.coarse as any } });
+      }
+      await ensureRoleAssignment(updated.id, resolved.tenantRoleId, invite.invitedBy);
+      await recordRoleFallback(invite, updated.id, resolved);
     } else {
       // Open-link invite - provision identity + account now.
       const existing = await prisma.user.findUnique({
@@ -3296,14 +3383,20 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
         res.status(409).json({ error: "email_already_in_tenant" });
         return;
       }
+      // Fallback rather than strict: a role can be deleted while an invitation
+      // is outstanding, and acceptance is the last step of someone joining a
+      // company. The invitee is the one person who cannot fix it.
+      const resolved = await resolveInviteRoleWithFallback(invite.tenantId, invite.role);
       const invited = await inviteUser(
         invite.tenantId,
         finalEmail,
         name,
-        invite.role === "ADMIN" ? "ADMIN" : "AGENT",
+        resolved.coarse,
       );
       user = { id: invited.user.id, tenantId: invited.user.tenantId };
       setupLink = invited.setupLink;
+      await ensureRoleAssignment(user.id, resolved.tenantRoleId, invite.invitedBy);
+      await recordRoleFallback(invite, user.id, resolved);
     }
 
     await prisma.tenantInvite.update({

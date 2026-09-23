@@ -78,6 +78,16 @@ export const AuditAction = {
   ROLE_DELETED: "role.deleted",
   ROLE_ASSIGNED: "role.assigned",
   ROLE_UNASSIGNED: "role.unassigned",
+  // Someone accepted an invitation to a role that had been deleted while the
+  // invitation was outstanding, and joined on the tenant's agent role instead.
+  //
+  // ITS OWN ACTION RATHER THAN METADATA ON ROLE_ASSIGNED, deliberately.
+  // `GET /api/audit-logs` does not return `metadata` - it can hold customer
+  // phone numbers - so a fallback recorded only there would be invisible in
+  // the one place an admin looks. A person silently joining with fewer
+  // permissions than they were offered is exactly the kind of wrong that
+  // nobody goes looking for, so it has to be legible from the action alone.
+  ROLE_ASSIGNED_FALLBACK: "role.assigned_fallback",
   // ── Permission / feature-grant changes ──
   PERMISSION_GRANTED: "permission.granted",
   PERMISSION_REVOKED: "permission.revoked",

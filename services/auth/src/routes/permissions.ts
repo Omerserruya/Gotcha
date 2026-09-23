@@ -433,12 +433,32 @@ router.delete(
       res.status(403).json({ error: "System roles cannot be deleted" });
       return;
     }
+    // Counted BEFORE the delete, and the delete is NOT blocked by it.
+    //
+    // A pending invitation stores its role as a plain string with no foreign
+    // key, so deleting the role leaves the invite pointing at an id that
+    // resolves to nothing - and the invitee will join as an agent instead.
+    // Refusing the delete was the other option and it recreates a trap this
+    // codebase already learned: blocking a delete on a referencing row made
+    // onboarding-created employees permanently undeletable.
+    //
+    // So the admin is TOLD rather than stopped. They are the only person who
+    // can act on this, and they are here now; the invitee, a week later, is
+    // neither. The count is returned so the screen can say how many people are
+    // affected - what it says is Omer's to design.
+    const pendingInvites = await prisma.tenantInvite.count({
+      where: { tenantId, role: roleId, acceptedAt: null, expiresAt: { gt: new Date() } },
+    });
+
     await prisma.tenantRole.delete({ where: { id: roleId } });
     void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
-      action: AuditAction.ROLE_DELETED, targetType: "role", targetId: roleId });
+      action: AuditAction.ROLE_DELETED, targetType: "role", targetId: roleId,
+      metadata: { pendingInvitesAffected: pendingInvites } });
     // Cascade deletes assignments + role_features; invalidate user caches broadly.
     invalidatePermissionsCache();
-    res.status(204).end();
+    // 200 rather than 204 - a body that says what else this touched is worth
+    // more than the tidier status code.
+    res.status(200).json({ data: { deleted: true, pendingInvitesAffected: pendingInvites } });
   },
 );
 
