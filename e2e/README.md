@@ -84,6 +84,19 @@ straddle both boundaries; four mutations, four failures.
 > **A control that cannot fail is the same failure as a template that is never emitted.** Both
 > look like coverage. Neither can produce a negative result.
 
+**A mocked query is blind to its own WHERE.** A mock returns what it was told to return however
+it is called, so a result-shape assertion **cannot see the filter at all**. Measured: adding
+`detectedLocale: { not: null }` to a grouped query passed every assertion in the test written to
+keep undetected rows in the denominator. **Assert on the query as well as the result, or the
+whole class of output assertions is decoration.**
+
+**And a guard that pins half a rule rejects the right answer.** A source-scanning test asserting
+the literal `isTest: false` **failed the one query in its file that excluded sandbox rehearsals
+correctly**, because that one used the complete shared predicate.
+
+> **It is not passive. It pushes back toward the wrong answer, and the person who hits it is the
+> one doing it right.**
+
 **It is not found by reading.** It is found by changing something you expect to be caught and
 watching it not be. Three other instances this project, all the same shape:
 
