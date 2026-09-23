@@ -282,5 +282,92 @@ for (const size of SIZES) {
 
       await shoot(page, `${size.name}-profile-nothing-to-charge`);
     });
+
+    /*
+     * ★★ Screen 17c · THE BAR THAT IS NOT DRAWN.
+     *
+     * `GET /billing/credit-summary` reports `consumedCredits: 7000` and
+     * `consumedPct: 100` for this tenant. The ledger says otherwise:
+     *
+     *     GRANT    +7,000.00   2026-07-28
+     *     CONSUME    -340.01   2026-07-28 → 2026-08-07   (1,077 rows)
+     *     EXPIRE  -6,659.99    2026-08-28
+     *
+     * `consumedCredits` is `includedAllowance - includedRemaining`, so expiry
+     * lands in it. Five per cent of an allowance, reported as a hundred.
+     *
+     * A bar at 100% would tell an owner his AI burned the year's allowance in
+     * ten days, and a caveat underneath does not undo it — a bar is a picture
+     * and a caveat is a sentence, and people read pictures.
+     *
+     * So the screen withholds the figure AND SAYS SO. Asserted positively by
+     * content: silence would look like a section that failed to load, which
+     * is the failure this test exists to prevent.
+     */
+    test('credits · the usage figure is withheld, and the screen says why', async ({ page }) => {
+      await openBilling(page, 'en');
+
+      const credits = page.getByTestId('credits');
+      await expect(credits).toBeVisible();
+      await expect(credits).toHaveAttribute('data-consumption', 'withheld');
+
+      const withheld = page.getByTestId('credits-consumption-withheld');
+      await expect(withheld).toBeVisible();
+      await expect(withheld).toHaveText(/expired credits as if they had been spent/i);
+
+      // The number that must never appear. This is the whole finding.
+      await expect(credits).not.toHaveText(/100\s?%/);
+
+      await shoot(page, `${size.name}-credits-withheld`);
+    });
+
+    /*
+     * ★ Credits contracted, never granted.
+     *
+     * The subscription is ai_voice, ACTIVE since 2026-09-08, for 7,000
+     * credits. One `ai_unit_lot` has ever existed for this tenant and it
+     * expired on 2026-08-28; `tenant_ai_balances.periodKey` still says
+     * 2026-07.
+     *
+     * "7,000 included" beside "0 available" reads as a loss unless somebody
+     * says which is the contract and which is the holding.
+     */
+    test('credits · zero because none were issued, not because they were spent', async ({
+      page,
+    }) => {
+      await openBilling(page, 'en');
+
+      const notice = page.getByTestId('credits-awaiting-grant');
+      await expect(notice).toBeVisible();
+      await expect(notice).toHaveText(/have been issued/i);
+      await expect(notice).toHaveText(/7,000/);
+      // The sentence that stops a zero being read as overspending.
+      await expect(notice).toHaveText(/not credits you have spent/i);
+
+      await shoot(page, `${size.name}-credits-awaiting-grant`);
+    });
+
+    /*
+     * ★ 88 conversations, nothing metered.
+     *
+     * `observedConversationCost` tests `creditsConsumed <= 0` BEFORE the
+     * sample-size gate, so this tenant gets `no_consumption_recorded` with
+     * `sample.conversations: 88`.
+     *
+     * The reason code is about METERING. Rendered as "no activity" it would
+     * be a flat falsehood sitting beside the 88 that disproves it, so the
+     * screen states the count and says which of the two it means.
+     */
+    test('credits · no metering is not no activity', async ({ page }) => {
+      await openBilling(page, 'en');
+
+      const note = page.getByTestId('credits-no-metering');
+      await expect(note).toBeVisible();
+      await expect(note).toHaveText(/\d+ conversations/);
+      await expect(note).toHaveText(/no credits were recorded/i);
+      await expect(note).toHaveText(/not about how much you have used/i);
+
+      await shoot(page, `${size.name}-credits-no-metering`);
+    });
   });
 }

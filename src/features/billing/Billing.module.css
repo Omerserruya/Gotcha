@@ -441,4 +441,66 @@
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
+
+  /* ── Screen 17c · Credits ────────────────────────────────────────────── */
+
+  .credits {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .creditsBalance {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .creditsNote {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /*
+   * What an estimate rests on, set quieter than the estimate itself — it is a
+   * qualification, not a second number. But it is never absent: the route
+   * ships two estimates from different bases and forbids substituting them,
+   * so an unlabelled figure here would be a pricing claim made out of one
+   * customer's behaviour.
+   */
+  .creditsBasis {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .creditsEstimate {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* Credits contracted but never granted — a state, not a shortfall. */
+  .creditsNotice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    background-color: var(--panel-inset);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .creditsNoticeLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
 }

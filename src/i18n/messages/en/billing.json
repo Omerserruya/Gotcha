@@ -3,6 +3,7 @@
   "description": "What your plan covers, and how far into it you are.",
   "heading": {
     "runway": "Conversations this period",
+    "credits": "Credits",
     "breakdown": "Where the period went",
     "invoices": "Invoices",
     "autoPurchase": "Running low",
@@ -121,6 +122,34 @@
         "PERIOD_END": "These credits expire at the end of your billing period.",
         "DAYS_AFTER_PURCHASE": "These credits expire {days} days after you buy them."
       }
+    }
+  },
+  "credits": {
+    "heading": "Credits",
+    "unavailable": "We could not load your credits just now.",
+    "balance": "{credits} credits available",
+    "split": {
+      "expiring": "{credits} of these come with your plan and expire when it renews on {date}.",
+      "expiringNoDate": "{credits} of these come with your plan and expire when it renews.",
+      "purchased": "{credits} were bought separately."
+    },
+    "awaitingGrant": {
+      "lead": "No credits have been issued for this billing period yet.",
+      "body": "Your plan is contracted for {included} credits a period. The period that began on {date} has not had its credits granted, so the balance is zero — this is not credits you have spent."
+    },
+    "consumption": {
+      "withheld": "We are not showing a usage figure for this period. The number the system reports counts expired credits as if they had been spent, so it would overstate what you actually used."
+    },
+    "estimate": {
+      "plan": "At your plan's rate that is about {chats} more conversations.",
+      "observed": "At the rate you have actually been using credits, that is about {chats} more conversations.",
+      "observedBasis": "Measured from your own usage over the last {days} days.",
+      "planBasis": "Based on your plan's published rate, not on your own usage.",
+      "partiallyAttributed": "Only {pct}% of that usage was tied to a conversation — the rest was other AI work — so a per-conversation figure describes less of it than it looks."
+    },
+    "observed": {
+      "noMetering": "You have had {conversations} conversations in the last {days} days and no credits were recorded against them, so we cannot measure your own rate. That is about what has been metered, not about how much you have used GOTCHA.",
+      "tooFewConversations": "{conversations} conversations in the last {days} days is too few to measure a reliable rate from, so the estimate above uses your plan's published rate instead."
     }
   }
 }

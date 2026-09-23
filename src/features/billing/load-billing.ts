@@ -19,6 +19,7 @@ import {
   type BillingProfile,
   type PaymentMethod,
 } from '@/api/contracts/billing-profile';
+import { creditSummarySchema, type CreditSummary } from '@/api/contracts/credits';
 import { invoiceListSchema, type Invoice } from '@/api/contracts/invoices';
 import { logger } from '@/observability/logger';
 
@@ -68,6 +69,14 @@ export interface BillingData {
   readonly profile: BillingProfile | null;
   /** What it charges against. Empty means there is nothing to charge. */
   readonly paymentMethods: readonly PaymentMethod[] | null;
+  /**
+   * Credits and what they buy — screen 17c.
+   *
+   * Bare, not enveloped. Carries TWO estimates of remaining capacity from
+   * different bases, which the route insists must never be substituted for
+   * one another.
+   */
+  readonly credits: CreditSummary | null;
 }
 
 export async function loadBilling(): Promise<BillingData> {
@@ -82,6 +91,7 @@ export async function loadBilling(): Promise<BillingData> {
     autoPurchase,
     profile,
     paymentMethods,
+    credits,
   ] = await Promise.all([
     api
       .get({ endpoint: usageEndpoints.allowance(), payload: allowanceSchema })
@@ -157,6 +167,18 @@ export async function loadBilling(): Promise<BillingData> {
         logger.warn('billing.payment_methods_failed', { cause });
         return null;
       }),
+    api
+      .get({
+        endpoint: billingEndpoints.creditSummary(),
+        payload: creditSummarySchema,
+        // Bare, like the subscription. A seventh shape would be a stretch —
+        // this one simply has no envelope at all.
+        raw: true,
+      })
+      .catch((cause: unknown) => {
+        logger.warn('billing.credit_summary_failed', { cause });
+        return null;
+      }),
   ]);
 
   return {
@@ -168,5 +190,6 @@ export async function loadBilling(): Promise<BillingData> {
     profile,
     paymentMethods,
     breakdown,
+    credits,
   };
 }

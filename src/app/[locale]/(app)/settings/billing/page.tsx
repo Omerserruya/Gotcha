@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import styles from '@/features/billing/Billing.module.css';
 import { AutoPurchase } from '@/features/billing/AutoPurchase';
 import { BillingProfileSection } from '@/features/billing/BillingProfile';
+import { CreditsSection } from '@/features/billing/Credits';
 import { Invoices, PlanLine, UsageBreakdownSection } from '@/features/billing/BillingSections';
 import { loadBilling } from '@/features/billing/load-billing';
 import { Runway } from '@/features/billing/Runway';
@@ -39,6 +40,7 @@ export default async function Page() {
     autoPurchase,
     profile,
     paymentMethods,
+    credits,
   } = await loadBilling();
 
   return (
@@ -48,6 +50,11 @@ export default async function Page() {
       <section className={styles.section} data-testid="section-runway">
         <h2 className={styles.sectionHeading}>{t('heading.runway')}</h2>
         <Runway allowance={allowance} />
+      </section>
+
+      <section className={styles.section} data-testid="section-credits">
+        <h2 className={styles.sectionHeading}>{t('heading.credits')}</h2>
+        <CreditsSection credits={credits} />
       </section>
 
       <section className={styles.section} data-testid="section-breakdown">
