@@ -81,6 +81,34 @@ thirty-six minutes behind, so a new route 404'd.** Nothing in `src` or `.next` w
 
 ---
 
+## The request budget is 1,000 per fifteen minutes, and it is shared
+
+```ts
+// ChatCenter packages/shared/src/lib/service-app.ts:62 — EVERY service
+rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 })
+```
+
+**Per IP, per service, in a fifteen-minute WINDOW.** `--workers=1` does not help: serialising
+changes the rate, not the budget.
+
+**Count the fan-out, not the tests.** The billing screen calls six endpoints per page load:
+```
+/billing/pricing · /pricing/packages · /plans · /subscription · /payment-methods · /pricing/current
+```
+`settings-billing` (66 tests) plus `settings-billing-plan` (36) is **~600 requests for one pass
+of the pair**, and the budget covers every capture run in the preceding fifteen minutes.
+
+**The symptom is a screen that renders blank sections and a testid that is "absent".** It looks
+exactly like a regression. Check the server log for `"kind":"rate_limited"` before believing one:
+
+```bash
+grep -c rate_limited <server log>
+```
+
+**A page that renders correctly when you open it directly, and fails in the capture, is this.**
+
+---
+
 ## Gate 0b — mutate a control before you trust it
 
 **Reading a test tells you what it says. Mutating tells you what it can detect.** Those come
