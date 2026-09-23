@@ -272,8 +272,23 @@ for (const size of SIZES) {
       await expect(nothing).toHaveText(/no payment method on file/i);
       await expect(nothing).toHaveText(/charges have already failed/i);
 
-      // Absent and blank are different states; this tenant has no row.
+      /*
+       * FOUR states, not one blank form — and this tenant is the second.
+       *
+       * `billingIdentity()` used to return `profile ?? empty`, so a tenant
+       * with no profile row and a tenant whose details were DELETED produced
+       * the same blank fields, a layer below the screen where nothing in the
+       * frontend could tell them apart. Backend now sends
+       * `state: "no_billing_profile"`.
+       *
+       * Asserted by WHICH sentence renders, not merely that one does.
+       */
       await expect(page.getByTestId('profile-none')).toBeVisible();
+      await expect(page.getByTestId('profile-none')).toHaveText(/have been entered yet/i);
+      // Not the emptied sentence: they never had details, they did not lose any.
+      await expect(page.getByTestId('profile-blank')).toHaveCount(0);
+      // And not the no-account sentence: a billable entity DOES exist here.
+      await expect(page.getByTestId('profile-no-account')).toHaveCount(0);
 
       // And the fields the design asks for that do not exist are named.
       await expect(page.getByTestId('profile-absent-fields')).toHaveText(

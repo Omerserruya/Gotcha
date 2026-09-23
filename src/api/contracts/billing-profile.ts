@@ -18,6 +18,24 @@ import { z } from 'zod';
  * quietly overwrote the first would be worse than none.
  */
 
+/**
+ * Which fact the blank fields represent.
+ *
+ * Backend added this after `billingIdentity()` was found returning
+ * `profile ?? empty` — collapsing three states into one blank form, one layer
+ * below the screen, where nothing here could see it.
+ *
+ * The vocabulary is `PUT /billing/profile`'s own refusal codes, deliberately:
+ * *"a fourth convention for the same distinction would be worse than the
+ * collapse it fixes."*
+ */
+export const BILLING_IDENTITY_STATES = [
+  'no_billable_entity',
+  'no_billing_profile',
+  'present',
+] as const;
+export type BillingIdentityState = (typeof BILLING_IDENTITY_STATES)[number];
+
 export const billingProfileSchema = z.object({
   billingName: z.string().nullable().default(null),
   billingEmail: z.string().nullable().default(null),
@@ -26,16 +44,22 @@ export const billingProfileSchema = z.object({
   billingCountry: z.string().nullable().default(null),
   billingAddress: z.string().nullable().default(null),
   currency: z.string().default('ILS'),
+  /**
+   * Defaults to `present` so a response predating the fix still parses — and
+   * `present` is the reading that says least, rather than asserting an absence
+   * the old payload never claimed.
+   */
+  state: z.enum(BILLING_IDENTITY_STATES).default('present'),
 });
 
 export type BillingProfile = z.infer<typeof billingProfileSchema>;
 
 /**
- * `{ data }`, and `data` may be null — **no profile is not an empty profile.**
+ * `{ data }` — and `data` is now always an object, carrying `state`.
  *
- * A tenant that has never entered billing details has no row at all, and a
- * screen rendering blank fields for both states would say "you have not
- * filled this in" to someone whose details were deleted.
+ * It used to be nullable here because `billingIdentity()` returned
+ * `profile ?? empty` and a null was the only signal left. That is fixed
+ * upstream, so the nullability is kept only for a response that predates it.
  */
 export const billingProfileResponseSchema = z
   .object({ data: z.unknown().nullable().default(null) })
@@ -79,4 +103,31 @@ export function isBlank(profile: BillingProfile | null): boolean {
     profile.vatId === null &&
     profile.billingAddress === null
   );
+}
+
+/**
+ * The FOUR things blank billing fields can mean.
+ *
+ * Three come from `state`, and the fourth is named in the route's own comment:
+ * *"`present` with every field null means EMPTIED, which is a different thing
+ * from `no_billing_profile` and must read differently."*
+ *
+ * | reading | what is true | what to say |
+ * |---|---|---|
+ * | `no_account` | no billable entity exists | *"add your billing details"* is not even the right instruction — there is nothing to add them to |
+ * | `never_entered` | an account exists, no profile row | they have not filled it in |
+ * | `emptied` | a profile exists and was cleared | they HAD details and no longer do |
+ * | `filled` | details present | show them |
+ *
+ * Rendering one sentence for the first three is the collapse this replaced:
+ * *"telling somebody whose details were DELETED that they never had any."*
+ */
+export type ProfileReading = 'no_account' | 'never_entered' | 'emptied' | 'filled';
+
+export function profileReading(profile: BillingProfile | null): ProfileReading {
+  // Only a response predating the fix can be null, and it carries no state.
+  if (profile === null) return 'never_entered';
+  if (profile.state === 'no_billable_entity') return 'no_account';
+  if (profile.state === 'no_billing_profile') return 'never_entered';
+  return isBlank(profile) ? 'emptied' : 'filled';
 }

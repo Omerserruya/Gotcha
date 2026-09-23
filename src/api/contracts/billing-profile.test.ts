@@ -6,6 +6,7 @@ import {
   hasSomethingToCharge,
   isBlank,
   paymentMethodListSchema,
+  profileReading,
 } from './billing-profile';
 
 describe('no profile is not an empty profile', () => {
@@ -66,5 +67,38 @@ describe('the profile carries nothing the design invented', () => {
   it('has no PO number and no profile language', () => {
     const surface = Object.keys(billingProfileSchema.parse({}));
     expect(surface.filter((k) => /poNumber|purchaseOrder|language|locale/i.test(k))).toEqual([]);
+  });
+});
+
+describe('four things blank billing fields can mean', () => {
+  const profile = (over: Record<string, unknown> = {}) =>
+    billingProfileSchema.parse({ state: 'present', ...over });
+
+  it('★ no billable entity is not “you have not filled this in”', () => {
+    /*
+     * The sharpest of the four: with no account, "add your billing details"
+     * is not even the right instruction — there is nothing to add them to.
+     */
+    expect(profileReading(profile({ state: 'no_billable_entity' }))).toBe('no_account');
+  });
+
+  it('separates never-entered from emptied', () => {
+    // The route's comment: "`present` with every field null means EMPTIED,
+    // which is a different thing from `no_billing_profile`."
+    expect(profileReading(profile({ state: 'no_billing_profile' }))).toBe('never_entered');
+    expect(profileReading(profile({ state: 'present' }))).toBe('emptied');
+  });
+
+  it('reads a filled profile as filled', () => {
+    expect(profileReading(profile({ billingName: 'GOTCHA Ltd' }))).toBe('filled');
+  });
+
+  it('defaults `state` to present so a pre-fix response still parses', () => {
+    // `present` says least; it asserts no absence the old payload never made.
+    expect(billingProfileSchema.parse({}).state).toBe('present');
+  });
+
+  it('treats a null payload as never-entered rather than guessing', () => {
+    expect(profileReading(null)).toBe('never_entered');
   });
 });

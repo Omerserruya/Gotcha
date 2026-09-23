@@ -78,7 +78,10 @@
     "email": "Invoices go to",
     "vatId": "Tax ID",
     "address": "Address",
-    "absentFields": "GOTCHA holds one invoice email address, not a list — and it has no field for a PO number or a separate language for invoices."
+    "absentFields": "GOTCHA holds one invoice email address, not a list — and it has no field for a PO number or a separate language for invoices.",
+    "noAccount": "This workspace has no billing account, so there is nowhere to put billing details yet. One is created with your first subscription.",
+    "neverEntered": "No billing details have been entered yet.",
+    "emptied": "Billing details were entered and have since been cleared. Invoices will be issued without a name, address or tax ID until they are filled in again."
   },
   "pricing": {
     "title": "Plan & pricing",

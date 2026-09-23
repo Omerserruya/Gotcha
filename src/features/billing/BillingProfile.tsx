@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import {
   hasSomethingToCharge,
-  isBlank,
+  profileReading,
   type BillingProfile as Profile,
   type PaymentMethod,
 } from '@/api/contracts/billing-profile';
@@ -42,6 +42,7 @@ export async function BillingProfileSection({
   readonly failedInvoiceCount: number;
 }) {
   const t = await getTranslations('billing');
+  const reading = profileReading(profile);
 
   const nothingToCharge = methods !== null && !hasSomethingToCharge(methods);
 
@@ -69,22 +70,36 @@ export async function BillingProfileSection({
       ) : null}
 
       {/*
-        Absent and blank are different states and get different sentences.
+        FOUR facts, not one blank form.
+
+        `billingIdentity()` used to return `profile ?? empty`, collapsing all
+        of these a layer below the screen where nothing here could see it.
+        Backend now sends `state`, and the route's own comment names the
+        fourth: "`present` with every field null means EMPTIED, which is a
+        different thing from `no_billing_profile` and must read differently."
+
+        The first one is the sharpest: with no billable entity, "add your
+        billing details" is not even the right instruction — there is nothing
+        to add them to.
       */}
-      {profile === null ? (
-        <p className={styles.profileNone} data-testid="profile-none">
-          {t('profile.none')}
+      {reading === 'no_account' ? (
+        <p className={styles.profileNone} data-testid="profile-no-account">
+          {t('profile.noAccount')}
         </p>
-      ) : isBlank(profile) ? (
+      ) : reading === 'never_entered' ? (
+        <p className={styles.profileNone} data-testid="profile-none">
+          {t('profile.neverEntered')}
+        </p>
+      ) : reading === 'emptied' ? (
         <p className={styles.profileNone} data-testid="profile-blank">
-          {t('profile.blank')}
+          {t('profile.emptied')}
         </p>
       ) : (
         <dl className={styles.profileFields} data-testid="profile-fields">
-          <Field label={t('profile.name')} value={profile.billingName} />
-          <Field label={t('profile.email')} value={profile.billingEmail} />
-          <Field label={t('profile.vatId')} value={profile.vatId} />
-          <Field label={t('profile.address')} value={profile.billingAddress} />
+          <Field label={t('profile.name')} value={profile?.billingName ?? null} />
+          <Field label={t('profile.email')} value={profile?.billingEmail ?? null} />
+          <Field label={t('profile.vatId')} value={profile?.vatId ?? null} />
+          <Field label={t('profile.address')} value={profile?.billingAddress ?? null} />
         </dl>
       )}
 
