@@ -1,12 +1,22 @@
 import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { enableReadToolsForIntegration } from "../services/integration-provisioning.service";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
+
+/** Where the chosen use case lives. A tenant setting, so no migration. */
+const BUSINESS_MODEL_KEY = "businessModel";
 import { executeAdapterTool, getAdapter, clearMissingScopes, capabilityStateFromConfig } from "../services/connectors/integration-framework";
 import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
 import { maskPhone, maskEmail } from "../lib/mask";
 import { tryEmit } from "../services/notifications-emit";
 import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
+import {
+  BUSINESS_ROLES,
+  ROLES_FOR_USE_CASE,
+  candidatesForRole,
+  roleAvailability,
+  isUseCase,
+} from "../services/connectors/business-roles";
 
 const router = Router();
 
@@ -187,6 +197,128 @@ router.get("/commerce/capabilities", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Commerce capabilities error:", err);
     res.status(500).json({ error: "Failed to resolve commerce capabilities" });
+  }
+});
+
+// ─── Business core (screen 14) ───────────────────────────────
+
+/**
+ * GET /business-core - the use case, and which system serves each part.
+ *
+ * The election mechanism this builds on is already capability-honest and already
+ * SEPARATE FROM CONNECTING: a tenant elects by flagging an integration it has
+ * already connected. So this endpoint never connects anything - it reports the
+ * parts, who can serve each, and who currently does. Connecting stays in the
+ * marketplace, which is the duplication the design wanted removed.
+ *
+ * ★ A PART WITH NO POSSIBLE SYSTEM SAYS SO. `shipping` has a category and zero
+ * integrations, so its list is empty for every tenant forever. Reported as
+ * `available: false` with a reason rather than an empty array, because "nothing
+ * exists to choose" and "nothing connected yet" need different sentences and an
+ * empty list reads as the second.
+ *
+ * Storage needs no migration: the use case is a durable tenant setting, and a
+ * role election lives on `TenantIntegration.config.roles` - the same place
+ * `config.useAsCrm` already elects the CRM.
+ */
+router.get("/business-core", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const [rawUseCase, catalogue, connected] = await Promise.all([
+      readDurableSetting(tenantId, BUSINESS_MODEL_KEY),
+      prisma.integrationCatalog.findMany({
+        where: { isPublished: true },
+        select: { slug: true, name: true, category: true, canActAsCrm: true },
+      }),
+      prisma.tenantIntegration.findMany({
+        where: { tenantId },
+        select: { config: true, integration: { select: { slug: true, name: true } } },
+      }),
+    ]);
+
+    const useCase = isUseCase(rawUseCase) ? rawUseCase : null;
+    const catalogueRows = catalogue.map((c) => ({ ...c, category: String(c.category) }));
+    const connectedSlugs = new Set(connected.map((c) => c.integration.slug));
+
+    const roles = (useCase ? ROLES_FOR_USE_CASE[useCase] : BUSINESS_ROLES).map((role) => {
+      const availability = roleAvailability(role);
+      const candidates = candidatesForRole(role, catalogueRows).map((slug) => {
+        const row = catalogueRows.find((c) => c.slug === slug)!;
+        return { slug, name: row.name, connected: connectedSlugs.has(slug) };
+      });
+
+      // Who serves it today. CRM keeps its existing resolver rather than being
+      // re-derived here, so this screen cannot disagree with the system the bot
+      // actually calls.
+      const elected =
+        connected.find((c) => {
+          const cfg = (c.config && typeof c.config === "object" ? c.config : {}) as Record<string, unknown>;
+          if (role === "crm") return cfg.useAsCrm === true;
+          return Array.isArray(cfg.roles) && (cfg.roles as unknown[]).includes(role);
+        })?.integration ?? null;
+
+      return {
+        role,
+        ...availability,
+        elected: elected ? { slug: elected.slug, name: elected.name } : null,
+        candidates,
+      };
+    });
+
+    res.json({
+      data: {
+        useCase,
+        roles,
+        // Named so a screen can show the two facts the catalogue cannot express,
+        // rather than each client rediscovering them. See business-roles.ts.
+        catalogueNotes: [
+          "The shipping category exists and contains no integrations, so that part cannot be offered yet.",
+          "ReturnGo is stored under the ecommerce category but serves returns, and is listed under returns here.",
+        ],
+      },
+    });
+  } catch (err) {
+    console.error("business-core read error:", err);
+    res.status(500).json({ error: "Failed to read the business core" });
+  }
+});
+
+/**
+ * PUT /business-core/use-case - what kind of business this is.
+ *
+ * Decides which parts the screen asks about at all. A durable setting rather
+ * than a column: it is a tenant-level choice, the store is already the one
+ * `businessHours` uses, and it needs no migration.
+ *
+ * Deliberately NOT read from `BusinessDiscovery.business.businessModel`, which
+ * is free text the website scan produced. A scan's guess is not a choice, and
+ * this value decides which questions a merchant is asked.
+ */
+// Gated on the SAME permission as electing a source of truth, because that is
+// what this is: choosing which system serves a part of the business. A new
+// permission key for the same act would be a second answer to one question.
+router.put("/business-core/use-case", canSelectSot, async (req: Request, res: Response) => {
+  const value = (req.body ?? {}).useCase;
+  if (!isUseCase(value)) {
+    res.status(422).json({ error: "useCase must be one of: ecommerce, leads, both" });
+    return;
+  }
+  try {
+    // ★ THE RAW STRING, NOT JSON.stringify. `writeDurableSetting` mirrors
+    // EXACTLY what it is given into the Redis cache, while the database gets
+    // `JSON.parse(value)` when that succeeds. So stringifying a bare string
+    // stores `leads` in Postgres and `"leads"` - with quotes - in the cache:
+    // the value then reads back correctly after an eviction and WRONGLY while
+    // cached, which is the worst shape a bug can have.
+    //
+    // Caught live: the PUT returned 200 and the GET still reported no use case.
+    // `businessHours` passes JSON.stringify because it stores an OBJECT and its
+    // reader parses; a scalar must not.
+    await writeDurableSetting(req.tenantId!, BUSINESS_MODEL_KEY, value, (req as any).user?.userId);
+    res.json({ data: { useCase: value } });
+  } catch (err) {
+    console.error("business-core use-case write error:", err);
+    res.status(500).json({ error: "Failed to save the use case" });
   }
 });
 

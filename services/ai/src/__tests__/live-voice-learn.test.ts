@@ -172,7 +172,10 @@ describe("a successful learn", () => {
 
     expect(result.status).toBe("learned");
     expect(prismaMock.businessProfile.update).toHaveBeenCalledTimes(1);
-    const data = prismaMock.businessProfile.update.mock.calls[0]![0].data;
+    // Cast: the hoisted mock's inferred tuple type makes `tsc` reject the
+    // index even though vitest runs it - a test can pass its suite and fail the
+    // typecheck, so both are run.
+    const data = (prismaMock.businessProfile.update.mock.calls[0] as any[])[0].data;
     expect(data.observedVoice).toContain(VOICE.summary);
     // THE STAMP MUST NOT BE SET. The workspace GET reads it to tell "learned"
     // from "edited", and setting it here would make the next learn refuse
