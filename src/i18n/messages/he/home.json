@@ -258,7 +258,8 @@
     "signals": "{count, plural, one {סימן אחד} two {# סימנים} many {# סימנים} other {# סימנים}}",
     "noSignals": "אין סימנים",
     "signalsUnknown": "מצב ההתראות אינו זמין",
-    "waitingOnYou": "{count, plural, =0 {שום דבר לא ממתין לכם} one {אחת ממתינה לכם} two {# ממתינות לכם} many {# ממתינות לכם} other {# ממתינות לכם}}"
+    "waitingOnYou": "{count, plural, =0 {שום דבר לא ממתין לכם} one {אחת ממתינה לכם} two {# ממתינות לכם} many {# ממתינות לכם} other {# ממתינות לכם}}",
+    "waitingUnknown": "מספר הממתינים אינו זמין"
   },
   "insight": {
     "title": "כדאי לדעת",

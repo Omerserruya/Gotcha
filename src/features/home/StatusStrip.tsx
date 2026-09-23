@@ -57,11 +57,19 @@ export async function StatusStrip({
               : t('noSignals')}
       </span>
 
-      {waiting !== null ? (
-        <span className={styles.statusMeta}>
-          <span>{t('waitingOnYou', { count: waiting })}</span>
-        </span>
-      ) : null}
+      {/*
+        This clause used to vanish when the count failed, and the argument for
+        leaving it was that its absence could not be mistaken for a calm
+        answer — there is a primary count beside it that always renders.
+
+        That is a LAYOUT fact, not a code fact. Reorder the strip, or lose the
+        primary on the same request, and a silently missing clause is a
+        reassuring answer given by nobody again. The property was true and
+        depended on something no test holds still.
+      */}
+      <span className={styles.statusMeta}>
+        {waiting === null ? t('waitingUnknown') : t('waitingOnYou', { count: waiting })}
+      </span>
     </div>
   );
 }

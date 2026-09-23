@@ -49,8 +49,20 @@ describe('quiet is only claimed when something checked', () => {
     expect(screen.getByText(/nothing needs you/i)).toBeInTheDocument();
   });
 
-  it('omits the waiting count when it failed to load', async () => {
+  it('says the waiting count is unavailable rather than dropping the clause', async () => {
+    /*
+     * It used to render nothing. The argument was that a primary count beside
+     * it always renders, so an absence could not read as calm — but that is a
+     * layout fact. Reorder the strip and the silence is a reassuring answer
+     * given by nobody.
+     */
     render(await strip({ waiting: null }));
+    expect(screen.getByText(/waiting count unavailable/i)).toBeInTheDocument();
     expect(screen.queryByText(/waiting on you/i)).toBeNull();
+  });
+
+  it('still counts them when the read succeeded', async () => {
+    render(await strip({ waiting: 3 }));
+    expect(screen.getByText(/3 waiting on you/i)).toBeInTheDocument();
   });
 });
