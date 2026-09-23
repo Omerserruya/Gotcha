@@ -180,6 +180,39 @@ nothing.**
 
 ---
 
+## A green vitest run says nothing about types
+
+`vitest` transforms with esbuild, which **strips types without checking them**. So a file with
+four type errors runs green and stays green.
+
+Measured 2026-09-23: four type errors sat in a committed test file that the suite had passed.
+
+> **Running the suite is not running the typechecker.** `npm run verify` does both; `npm test`
+> does one. A test file is code, and it is the code least likely to be compiled by anything else.
+
+---
+
+## A password-protected store answers 200 to every path
+
+```
+17 requested · 17 returned · 941ms · every one the SAME 188-character page
+"This store is password protected."
+scan still reports  businessType "ecommerce" · platform "shopify"
+```
+
+`fetchPageRaw` rejects a non-200 or a non-HTML body. **A Shopify login wall is neither**, so
+every candidate path "succeeds" and the crawl reads one page seventeen times — and the platform
+markers it keys on are **in the login page's own markup**, so it is most confident about the one
+thing it could not see.
+
+> **`pages.length` is the number of fetches that worked, not the number of pages anybody read.**
+> Use `distinctTextPages` for anything a person will see.
+
+The model itself reported the wall honestly — the prompt's *"NEVER STATE ABSENCE UNLESS YOU
+LOOKED"* held. **It was the count around it that lied.**
+
+---
+
 ## `.` is a wildcard, and four search methods gave four wrong answers
 
 Counting how many notification event types are emitted by nothing, over one unchanged tree:
