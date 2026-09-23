@@ -185,6 +185,63 @@ export async function processEvent(event: SystemEvent): Promise<void> {
   }
 }
 
+/**
+ * The channels this dispatcher can actually deliver.
+ *
+ * EXPORTED because anything that OFFERS a channel has to agree with what can
+ * SEND one. The settings screen and the event catalogue read this rather than
+ * carrying their own list - a second list is a second chance to offer a box
+ * that does nothing, which is the defect this constant exists to prevent.
+ *
+ * Adding a channel means adding an arm in `deliverChannel` AND adding it here.
+ * Adding it to only one is the failure either way round: here but not there
+ * offers an undeliverable box, there but not here hides a working channel.
+ */
+export const DELIVERABLE_CHANNELS = ["in_app", "email"] as const;
+export type DeliverableChannel = (typeof DELIVERABLE_CHANNELS)[number];
+
+export function isDeliverableChannel(channel: string): channel is DeliverableChannel {
+  return (DELIVERABLE_CHANNELS as readonly string[]).includes(channel);
+}
+
+/**
+ * Write the fact that a configured channel could not be delivered.
+ *
+ * Never throws - a bookkeeping failure must not break the delivery of the
+ * OTHER channels on the same preference. The console line is kept as well, at
+ * warn rather than info, so it is visible while tailing.
+ */
+async function recordUndeliverable(opts: {
+  channel: string;
+  user: { id: string; tenantId: string; email?: string | null };
+  event: { type: string; id?: string };
+  tpl: { title: string; body: string };
+}): Promise<void> {
+  const { channel, user, event, tpl } = opts;
+  const reason =
+    `Channel "${channel}" is enabled on a notification preference but this ` +
+    `deployment cannot deliver it, so nothing was sent. Deliverable channels: ` +
+    `${DELIVERABLE_CHANNELS.join(", ")}.`;
+  console.warn(`[notifications] UNDELIVERABLE channel="${channel}" event=${event.type} user=${user.id}: nothing sent`);
+  try {
+    await (prisma as any).notificationLog.create({
+      data: {
+        tenantId: user.tenantId,
+        channel,
+        type: event.type,
+        recipient: user.email ?? user.id,
+        subject: tpl.title,
+        body: tpl.body,
+        status: "failed",
+        error: reason,
+        metadata: { eventId: event.id, undeliverableChannel: true },
+      },
+    });
+  } catch (err: any) {
+    console.warn("[notifications] could not record undeliverable delivery:", err?.message);
+  }
+}
+
 async function deliverChannel(opts: {
   channel: string;
   user: ResolvedUser;
@@ -224,9 +281,26 @@ async function deliverChannel(opts: {
         opts,
       );
     } else {
-      // Unknown channel = forward-compat. Adding "slack"/"sms" later is a
-      // single switch arm here, no schema change. We log and skip.
-      console.info(`[notifications] channel "${channel}" not implemented yet - skipped`);
+      // ── A channel nobody can deliver ────────────────────────────────────
+      //
+      // This used to be `console.info(... not implemented yet - skipped)` and
+      // nothing else, which made an undeliverable channel SUCCEED silently: an
+      // admin ticks a box, the preference saves, the screen shows it on, and
+      // no message is ever sent. No error, no row, nothing they would ever
+      // look at. A control that reports success while the thing it controls
+      // does not happen is the worst shape of defect this codebase has - it is
+      // wrong in the REASSURING direction, so nobody goes looking.
+      //
+      // It is recorded as a FAILED delivery rather than logged, because a log
+      // line rotates and a failed-delivery row is the thing an operator can
+      // find afterwards. Same table the email sender writes to, so
+      // undeliverable channels appear beside real send failures rather than in
+      // a separate place nobody checks.
+      //
+      // Deliberately one row per attempted delivery, exactly as a failed email
+      // produces one: the volume IS the signal. A preference ticking a channel
+      // we cannot send on should look expensive.
+      await recordUndeliverable({ channel, user, event, tpl });
     }
   } catch (err: any) {
     console.warn(`[notifications.deliver] channel=${channel} userId=${user.id} failed:`, err?.message);
