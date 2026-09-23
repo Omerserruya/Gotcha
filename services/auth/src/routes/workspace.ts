@@ -179,8 +179,26 @@ router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
     const v = body.languages;
     if (!Array.isArray(v) || v.some((l) => typeof l !== "string")) {
       errors.push({ field: "languages", message: "languages must be an array of language codes" });
-    } else if (v.length > 6) {
-      errors.push({ field: "languages", message: "languages accepts at most 6 entries" });
+    } else if (v.length > 1) {
+      // ★ REFUSED BECAUSE ONLY ONE CAN BE STORED. The validator used to accept
+      // six and the writer kept `languages[0]`, so a caller adding English
+      // beside Hebrew got a 200 and lost English. The response is a re-read, so
+      // it came back as a one-element array: the loss was visible only to a
+      // caller that diffed the response against what it sent, and invisible to
+      // anything that did the normal thing and trusted the success.
+      //
+      // The ARRAY SHAPE is deliberate and stays - it is the contract for when a
+      // second column exists, and moving to one string now would break every
+      // client twice. What was wrong was not the shape but the promise: an
+      // endpoint that says yes to something it will not do.
+      //
+      // So the shape is forward-compatible and the capacity is honest. Raising
+      // this limit is a migration (a real column for the list), which is a
+      // deliberate decision rather than a validator tweak.
+      errors.push({
+        field: "languages",
+        message: "languages accepts one entry today; additional entries would not be stored",
+      });
     } else {
       languages = v.map((l) => String(l).trim().toLowerCase()).filter(Boolean);
     }
@@ -212,6 +230,11 @@ router.patch("/workspace", WRITE, async (req: Request, res: Response) => {
     if (currency !== undefined) profilePatch.currency = currency;
     // Stored as the single column that exists. The list is the contract; the
     // storage catching up is a later change that will not move the shape.
+    //
+    // Safe to take `[0]` and drop nothing, because a list longer than one is
+    // REFUSED above rather than silently truncated here. Those two lines are one
+    // decision: if the limit moves, this is the line that has to be able to
+    // honour it.
     if (languages !== undefined) profilePatch.primaryLanguage = languages[0] ?? null;
 
     if (Object.keys(profilePatch).length > 0) {
