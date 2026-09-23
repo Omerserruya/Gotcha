@@ -14,6 +14,8 @@ import {
   type Invoice,
 } from '@/api/contracts/invoices';
 
+import { isStillPending } from '@/api/contracts/pricing';
+
 import styles from './Billing.module.css';
 
 /**
@@ -86,7 +88,21 @@ export async function PlanLine({
         ) : null}
       </p>
 
-      {subscription.pendingChange?.targetPlanKey ? (
+      {/*
+        `isStillPending`, not a truthiness check on the object.
+
+        The scheduler MARKS `appliedAt` and never deletes the row
+        (`subscription.service.ts:524`), and `getSubscriptionForTenant` loads
+        the relation unconditionally — so a change applied a year ago arrives
+        on every response looking exactly like one that has not happened.
+
+        This line used to read `pendingChange?.targetPlanKey`, which would
+        have gone on saying "Changes to Foundation at renewal" every day after
+        it already changed to Foundation. Found while reading the same table
+        for 17b; nothing on this screen could have surfaced it, because the
+        field it turns on was not in our contract.
+      */}
+      {isStillPending(subscription.pendingChange) && subscription.pendingChange?.targetPlanKey ? (
         <p className={styles.planNote} data-testid="plan-pending">
           {t('plan.changesAtRenewal', {
             // The scheduled plan gets the same treatment as the current one.
