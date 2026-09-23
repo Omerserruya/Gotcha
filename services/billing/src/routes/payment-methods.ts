@@ -25,16 +25,61 @@ import { getCapabilities } from "../providers";
 import { buildReturnUrl } from "../lib/public-url";
 import { contractedPrice } from "../services/subscription.service";
 
-/** The billing identity a document is issued against. Empty when never set. */
-async function billingIdentity(tenantId: string) {
-  const empty = { billingName: null, vatId: null, billingEmail: null, billingCountry: null, billingAddress: null };
+/**
+ * The billing identity a document is issued against, AND which of three facts
+ * the caller is looking at.
+ *
+ * ★ THREE DIFFERENT FACTS USED TO PRODUCE A BYTE-IDENTICAL RESPONSE:
+ *   no billable entity        - this tenant has no billing account at all
+ *   entity, but no profile    - nobody has ever filled the details in
+ *   a profile with null fields - somebody filled them in and they were emptied
+ *
+ * All three returned the same all-null object, so a screen could only render
+ * one sentence for all of them. Rendering "nothing has been filled in" at
+ * somebody whose details were DELETED tells them they never had any, and the
+ * first state is the one where "add your billing details" is not even the right
+ * instruction - there is no account to add them to.
+ *
+ * `state` is named with the vocabulary `PUT /billing/profile` already refuses
+ * with (`no_billable_entity`, `no_billing_profile`), because a fourth
+ * convention for the same distinction would be worse than the collapse it
+ * fixes.
+ *
+ * The field values keep their existing shape, so the caller that issues
+ * documents against this identity is unaffected - it reads the values and has
+ * no opinion about which state produced them.
+ */
+export type BillingIdentityState = "no_billable_entity" | "no_billing_profile" | "present";
+
+export interface BillingIdentity {
+  billingName: string | null;
+  vatId: string | null;
+  billingEmail: string | null;
+  billingCountry: string | null;
+  billingAddress: string | null;
+  /**
+   * Which fact this is. `present` with every field null means EMPTIED, which is
+   * a different thing from `no_billing_profile` and must read differently.
+   */
+  state: BillingIdentityState;
+}
+
+export async function billingIdentity(tenantId: string): Promise<BillingIdentity> {
+  const blank = {
+    billingName: null,
+    vatId: null,
+    billingEmail: null,
+    billingCountry: null,
+    billingAddress: null,
+  };
   const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId } });
-  if (!link) return empty;
+  if (!link) return { ...blank, state: "no_billable_entity" };
   const profile = await prisma.billingProfile.findUnique({
     where: { billableEntityId: link.billableEntityId },
     select: { billingName: true, vatId: true, billingEmail: true, billingCountry: true, billingAddress: true },
   });
-  return profile ?? empty;
+  if (!profile) return { ...blank, state: "no_billing_profile" };
+  return { ...profile, state: "present" };
 }
 
 const router = Router();
