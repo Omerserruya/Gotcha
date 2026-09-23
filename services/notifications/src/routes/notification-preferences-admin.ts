@@ -15,6 +15,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { buildCatalogue } from "../services/event-catalogue";
 
 const router = Router();
 
@@ -82,6 +83,29 @@ function validateConditions(v: unknown): ValidationError | null {
   }
   return null;
 }
+
+// ─── Catalogue ────────────────────────────────────────────
+//
+// What the settings screen may offer. The frontend used to hardcode 22 events;
+// this makes the backend the source of truth, so a notification added here
+// appears in the UI without a frontend change - which is the whole point of
+// the feature.
+//
+// A SIBLING PATH, deliberately. `/api/notification-preferences` is already in
+// both nginx templates, so `/catalogue` under it is reachable in dev and prod
+// with no gateway change. A new top-level path would have needed one in both,
+// and a route missing from the prod template returns 200 with index.html
+// rather than 404, which is invisible until someone uses it.
+//
+// Registered BEFORE the `/:id` routes. Those are PATCH and DELETE only today,
+// so there is no collision - but a GET "/:id" added later would capture
+// "catalogue" as an id, and ordering is the cheap defence.
+//
+// ADMIN like its siblings: it exposes which notifications exist and which are
+// inert, which is a description of the deployment rather than tenant data.
+router.get("/notification-preferences/catalogue", requireRole("ADMIN"), async (_req: Request, res: Response) => {
+  res.json({ data: buildCatalogue() });
+});
 
 // ─── List ─────────────────────────────────────────────────
 
