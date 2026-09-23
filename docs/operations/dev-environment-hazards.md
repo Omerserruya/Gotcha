@@ -180,6 +180,33 @@ nothing.**
 
 ---
 
+## `.` is a wildcard, and four search methods gave four wrong answers
+
+Counting how many notification event types are emitted by nothing, over one unchanged tree:
+
+```
+literal `type: "x"` grep            8 dead
+templated-minus-emitted diff        5
+emit-call proximity window         11
+per-event hand verification         6     <- the truth
+```
+
+**Four automated methods, four different wrong answers.** The diff counted a union declaration
+as an emit. The proximity window over-matched. And one run matched `subscription_canceled` while
+searching for `subscription.canceled`, **because `.` in a grep pattern matches any character** —
+escape it, or use `-F`.
+
+The events that defeated the literal grep are emitted through a variable:
+`classifyToolForNotification()` returns the type and the emit call passes it on. **No textual
+search can see that.**
+
+> **Whether a thing is reachable is not a property a search can establish.** If a list claims it,
+> the list has to be maintained with its evidence, and a test has to fail when the evidence stops
+> being true — otherwise it decays into a confident wrong answer, in whichever direction happens
+> to be worse.
+
+---
+
 ## Comments that describe intent rather than behaviour
 
 Several comments in this repository state an invariant the code does not enforce, and in
