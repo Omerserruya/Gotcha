@@ -298,47 +298,60 @@ for (const size of SIZES) {
        * writes that same value, so ANY interleaving leaves the field correct.
        * There is nothing to restore, so there is no `finally` to race.
        *
-       * ── AND WHY IT MOVED FROM `description` TO `timezone` ──
-       * All of the above stayed true and stopped being enough.
+       * ── IT WENT TO `timezone` FOR AN HOUR, AND CAME BACK ──
+       * All of the above stayed true and briefly stopped being enough.
        *
        * Backend's `cae1d369` added `stampProvenance` to `PATCH /workspace`.
        * This test had been calling that route all along; the endpoint grew a
-       * side effect underneath it. So a write that changed no value began
-       * recording that a HUMAN had edited the description — on Omer's live
-       * tenant, on every capture run, in the exact store screen 11b reads.
+       * side effect underneath it. A write that changed no value began
+       * recording that a HUMAN had edited the description — on the live
+       * tenant, every capture run, in the exact store screen 11b reads.
        *
        * **A write that is value-neutral is not therefore state-neutral**, and
        * the difference is invisible until somebody adds a side effect to the
        * endpoint. Nothing here was wrong and nothing there was wrong; they
        * were only wrong together, across two repositories.
        *
-       * `timezone` moves the same ETag — `updatedAt` is
-       * `newerOf(profile.updatedAt, hours.updatedAt)`, so the hours write
-       * advances it — and a timezone-only patch leaves `profilePatch` empty,
-       * so the route never reaches `businessProfile.update` and never stamps.
-       * Value-neutral AND provenance-neutral, with the same
-       * every-worker-writes-the-same-value property that made the description
-       * version race-free.
+       * The first fix moved the write to `timezone`, which avoids the stamp
+       * because a timezone-only patch leaves `profilePatch` empty. It worked
+       * and it was the wrong trade: it depended on TWO properties of the
+       * route — that an empty patch skips the profile update, and that the
+       * hours write still advances `updatedAt` — while this version depends
+       * on none. The guard below caught it half-applied within the hour.
+       *
+       * ── AND IT WAS NEVER REALLY THIS TEST'S BUG ──
+       * `3f986b6e` gates the stamp on the value actually differing, and
+       * leaves the write unconditional so this capture keeps working. The
+       * reason is not about tests at all: **a person who opens the settings
+       * screen and presses Save without editing anything was marking every
+       * field as theirs**, after which a rescan would only ever OFFER those
+       * fields instead of refreshing them.
+       *
+       * "A human set this value" is not the same claim as "a human submitted
+       * a form containing this field." The capture was reproducing a real
+       * product bug on every run, and reading it as test pollution nearly
+       * cost the diagnosis.
        */
       const before = await request.get('/api/bff/api/workspace', { headers });
       expect(before.ok(), 'could not read the workspace before the conflicting write').toBe(true);
-      const current = ((await before.json()) as { data?: { timezone?: string } }).data?.timezone;
+      const current = ((await before.json()) as { data?: { description?: string } }).data
+        ?.description;
 
       /*
-       * Guard the premise rather than assume it. If the timezone were absent,
-       * sending `undefined` would build an empty patch, the hours write would
-       * not run, `updatedAt` would not move and the save below would SUCCEED
-       * — and this shot would quietly photograph a successful save while
-       * claiming to prove a conflict.
+       * Guard the premise rather than assume it. If the description were
+       * absent, sending `undefined` would build an empty patch, the route
+       * would skip the update entirely, `updatedAt` would not move and the
+       * save below would SUCCEED — and this shot would quietly photograph a
+       * successful save while claiming to prove a conflict.
        */
       expect(
         typeof current,
-        'the workspace has no timezone to write back, so this test cannot move the ETag',
+        'the workspace has no description to write back, so this test cannot move the ETag',
       ).toBe('string');
 
       const elsewhere = await request.patch('/api/bff/api/workspace', {
         headers,
-        data: { timezone: current },
+        data: { description: current },
       });
       expect(
         elsewhere.ok(),

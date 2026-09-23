@@ -57,9 +57,21 @@ export const workspaceSchema = z.looseObject({
   /**
    * A list by contract, even though storage holds one.
    *
-   * PATCH keeps only `languages[0]`, so a round trip silently drops the rest.
-   * The UI is single-select until the column catches up — deliberately, so no
-   * control accepts two languages and forgets one.
+   * PATCH used to accept up to six and keep `languages[0]`, so a caller adding
+   * English beside Hebrew got a 200 and lost English — and the response is a
+   * re-read, so the loss was visible only to a caller that diffed the reply
+   * against what it sent, and invisible to anything that did the normal thing
+   * and trusted the success.
+   *
+   * **It now refuses a list longer than one with a 422**, so nothing is
+   * dropped silently. The array shape stays, because it is the contract for
+   * when a second column exists.
+   *
+   * The UI is still single-select — one stored language is still one stored
+   * language — but the reason has changed from "a control here would lose
+   * data" to "there is nothing to put in a second slot". That matters for
+   * whoever builds the multi-select later: the blocker is storage now, not a
+   * silent failure, and the endpoint will tell them so.
    */
   languages: z.array(z.string()).default([]),
   /** ISO-4217, for prices the AI quotes. Not the billing currency. */
