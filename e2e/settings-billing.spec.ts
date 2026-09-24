@@ -126,10 +126,19 @@ async function creditsElement(page: Page, testId: string) {
   const unavailable = page.getByTestId('credits-unavailable');
   if ((await unavailable.count()) > 0) throw new Error(readFailed(testId, 'credits-unavailable'));
 
-  // 15s for parity with the page helpers. Not because a longer wait would
-  // have saved the flake — see `readFailed` — but because every other
-  // data-dependent assertion in this file carries one and an inconsistency
-  // invites the wrong diagnosis next time.
+  /*
+   * ⚠ THIS 15s IS PARITY, NOT THE FIX. Do not read it as one.
+   *
+   * The failure that prompted this helper was three 503s on
+   * /api/billing/credit-summary — verified in the server log, with zero 429s
+   * in the whole run. A timeout of any length catches none of that: the
+   * element was never in the HTML.
+   *
+   * It is here only because every other data-dependent assertion in this
+   * file carries an explicit 15s, and that inconsistency is precisely what
+   * attracted a confident wrong diagnosis the first time. The check ABOVE is
+   * the fix.
+   */
   const target = page.getByTestId(testId);
   await expect(target, missingIds(testId)).toBeVisible({ timeout: 15_000 });
   return target;

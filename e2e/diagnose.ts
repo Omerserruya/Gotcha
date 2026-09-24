@@ -33,43 +33,64 @@
  * ★ THE FIFTH CAUSE, AND THE ONE THAT LOOKS MOST LIKE A FLAKE
  * ════════════════════════════════════════════════════════════════════════════
  * `credits · no metering is not no activity` failed once at 390px in a
- * 78-test run and passed alone in 2.1s. The obvious reading was a timeout:
- * the page helpers wait 15s and that assertion used the default 5s.
+ * 78-test run and passed alone in 2.1s.
  *
- * It cannot have been. These screens are SERVER components — by the time the
- * page helper has confirmed its landmark, the whole HTML exists and the
- * element is either in it or it is not. **There is no later fetch for a
- * longer timeout to catch.**
+ * TWO PEOPLE DIAGNOSED IT CONFIDENTLY AND BOTH WERE WRONG.
  *
- * What removes it is the section's own read failing: the loader catches, the
- * value is null, and the section renders its `*-unavailable` branch instead.
- * Against a 1,000-request-per-fifteen-minutes budget, with a settings page
- * costing ~10 reads and 78 tests in flight, a 429 on one endpoint is the
- * likeliest cause by some distance.
+ * The first answer was the timeout: the page helpers wait 15s and that
+ * assertion used the default 5s. The gap is real and cannot be the cause —
+ * these screens are SERVER components, so once the page helper has confirmed
+ * its landmark the whole HTML exists and the element is either in it or it is
+ * not. Nothing arrives later for a longer wait to catch.
  *
- * In that case a longer timeout fails slower rather than passing, and a retry
- * that happens to pass teaches nothing — which is exactly how a real
- * rate-limit signal gets recorded as a flake and thrown away.
+ * The second answer was the rate limit: 78 tests against a
+ * 1,000-request-per-fifteen-minutes window, a billing page costing ~10 reads.
+ * Also real, also not the cause. **The run logged zero 429s.**
+ *
+ * It was three 503s on `/api/billing/credit-summary`. The loader caught, the
+ * value was null, and the section rendered its `*-unavailable` branch.
+ *
+ * ── SO THIS FUNCTION DESCRIBES AND DOES NOT ATTRIBUTE ──
+ * Both wrong answers were a real observation promoted to a cause without
+ * checking the mechanism could operate, while the log naming the answer sat
+ * in `/tmp/claude-1000/next-start.log` throughout. Naming one candidate here
+ * would send the next reader down it with more confidence than the bare
+ * assertion failure they started with — the same mistake `missingIds` below
+ * exists to avoid.
  *
  * ── HOW WIDE THIS IS ──
  * The UI can render 22 distinct "we could not read this" testids. Sixteen of
  * the twenty-one specs mention NONE of them, so they cannot tell a failed
  * read from a missing element and would report the wrong cause for both.
  *
- * Pass the failure branch that belongs to the section under test. It is only
- * consulted when the element is absent, so a branch that is legitimately on
- * screen for this tenant — `breakdown-unavailable` is — costs nothing.
+ * Pass the failure branch belonging to the section under test. It is only
+ * consulted when the element is absent, so a branch legitimately on screen
+ * for this tenant — `breakdown-unavailable` is — costs nothing.
  */
 export function readFailed(testId: string, failureBranch: string): string {
   return (
     `${testId} is absent because THE READ FOR THIS SECTION FAILED — it rendered ` +
-    `\`${failureBranch}\`, so the element was never in the HTML and no timeout ` +
-    'would have helped.\n' +
-    '  Most likely a 429. `rateLimit({ windowMs: 15*60*1000, max: 1000 })` is per\n' +
-    '  IP per service — a window, not a rate — and a settings page costs ~10 reads.\n' +
-    '  ★ Re-running this one test alone WILL pass and will prove nothing. Wait the\n' +
-    '  window out, then run the file once. A retry that passes is not a run that\n' +
-    '  passed.'
+    `\`${failureBranch}\`, so the element was never in the HTML.\n` +
+    '\n' +
+    '  A LONGER TIMEOUT WOULD NOT HAVE HELPED. These screens are server\n' +
+    '  components: the page helper already waited for the landmark, so the HTML\n' +
+    '  is complete and nothing arrives afterwards.\n' +
+    '\n' +
+    '  READ THE SERVER LOG BEFORE GUESSING. It names the cause and nothing here\n' +
+    '  can:\n' +
+    "    grep -nE 'api.request_failed|_failed' /tmp/claude-1000/next-start.log\n" +
+    '  The status and route on that line are the answer. Candidates, none of\n' +
+    '  which this message is claiming:\n' +
+    '    5xx from the service   — what happened on 2026-09-24: three 503s on\n' +
+    '                             /api/billing/credit-summary, zero 429s.\n' +
+    '    429 from the budget    — 1,000 requests per FIFTEEN MINUTES per IP per\n' +
+    '                             service, shared across every run in the window.\n' +
+    '    a contract rejection   — a 200 with a valid body our schema refuses, as\n' +
+    '                             `roles.2.source` did. Look for kind:"contract".\n' +
+    '\n' +
+    '  ★ RE-RUNNING THIS ONE TEST ALONE WILL PASS AND PROVE NOTHING. A retry\n' +
+    '  that passes is not a run that passed, and it discards whichever signal\n' +
+    '  the log is holding.'
   );
 }
 
