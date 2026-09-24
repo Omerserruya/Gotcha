@@ -5,12 +5,16 @@ import { revalidatePath } from 'next/cache';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import {
+  acceptResultSchema,
   prohibitedClaimsSchema,
+  scanResultSchema,
+  type AcceptResult,
+  type ScanResult,
+  type Workspace,
+  type WorkspaceVoice,
   voiceSampleSchema,
   workspaceSchema,
   workspaceVoiceSchema,
-  type Workspace,
-  type WorkspaceVoice,
 } from '@/api/contracts/workspace';
 import { workspaceEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
@@ -157,5 +161,67 @@ export async function saveProhibitedClaims(
   } catch (cause) {
     logger.warn('workspace.claims_save_failed', { cause });
     return classify(cause);
+  }
+}
+
+/**
+ * Scan the website again — screen 11b.
+ *
+ * ★ THIS RE-CRAWLS A LIVE SITE. It is not free and it is not instant, but it
+ * is safe in the one way that matters: `planRescan` writes only fields the
+ * scan already owns, and everything else comes back as a proposal. On a
+ * tenant whose provenance map is empty — which is every tenant on this
+ * database — it therefore writes nothing at all.
+ *
+ * Refusals arrive as `{ ok: false, reason }` with a 200, because "you have not
+ * told us your website yet" and "the site did not answer" are sentences the
+ * screen shows rather than errors it has to decode. The one exception is a
+ * scan already running, which is a 409.
+ */
+export async function runWorkspaceScan(): Promise<ScanResult | null> {
+  try {
+    const data = await serverApi().post({
+      endpoint: workspaceEndpoints.scan(),
+      payload: scanResultSchema,
+      body: {},
+    });
+    revalidatePath('/[locale]/settings/workspace', 'page');
+    return data;
+  } catch (cause) {
+    // A 409 lands here too. Reported as a refusal rather than a crash, since
+    // "try again shortly" is the action either way.
+    logger.warn('workspace.scan_failed', { cause });
+    return null;
+  }
+}
+
+/**
+ * Take the website's value for offered fields.
+ *
+ * ★ STAMPS THEM `scan`-OWNED, NOT `human`. Provenance answers one question —
+ * may a future scan refresh this silently? — so it records what the value
+ * TRACKS rather than who clicked. Accepting the site's wording IS the consent
+ * a silent refresh needs.
+ *
+ * A plain PATCH cannot be used and must not be: PATCH means "a human set
+ * this" and has to keep meaning that, or the distinction is lost in the other
+ * direction. Before this endpoint existed, `scan` ownership was unreachable
+ * and every scan offered everything forever.
+ *
+ * The body carries FIELD NAMES ONLY — values come from the stored proposal,
+ * so a client cannot mark arbitrary text as website-owned.
+ */
+export async function acceptScanFields(fields: readonly string[]): Promise<AcceptResult | null> {
+  try {
+    const data = await serverApi().post({
+      endpoint: workspaceEndpoints.scanAccept(),
+      payload: acceptResultSchema,
+      body: { fields },
+    });
+    revalidatePath('/[locale]/settings/workspace', 'page');
+    return data;
+  } catch (cause) {
+    logger.warn('workspace.scan_accept_failed', { cause });
+    return null;
   }
 }

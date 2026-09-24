@@ -562,4 +562,70 @@
     font-size: var(--font-size-meta);
     color: var(--text-primary);
   }
+
+  /* ── Screen 11b · scan again ─────────────────────────────────────────── */
+
+  .scan {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: var(--space-10);
+  }
+
+  .scanRefusal {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* The login-wall caveat. Amber because it qualifies everything below it. */
+  .scanUnreadable {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+  }
+
+  .scanOffers {
+    list-style: none;
+    margin: var(--space-8) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .scanOffer {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: var(--space-4);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .scanValue {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .scanValueLabel {
+    min-inline-size: var(--size-label-column, 6rem);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
 }

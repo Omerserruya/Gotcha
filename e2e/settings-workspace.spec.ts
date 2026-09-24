@@ -594,6 +594,40 @@ for (const size of SIZES) {
       await shoot(page, `${size.name}-15-languages`);
     });
 
+    /*
+     * ★ 11b · the scan panel, NOT FIRED.
+     *
+     * The button is present and this test does not press it. `runWorkspaceScan`
+     * re-crawls a live website; a capture is not a strange user, and pressing
+     * it here would cost a real fetch on every viewport of every run.
+     *
+     * So this photographs the resting state and asserts the sentence that has
+     * to be read BEFORE the click — that suggestions come back rather than
+     * changes going in. The result states are in ScanPanel.test.tsx.
+     *
+     * Also unreached anywhere: a REAL scan producing a REAL proposal. The
+     * rescan dies at the model call on exhausted AI units, so Backend
+     * verified the accept endpoint against a seeded proposal row. Storage and
+     * endpoint are real; the scan that would produce the proposal is
+     * substituted. That is a gap in the evidence and it is named, not papered.
+     */
+    test('16 · the scan panel, unfired', async ({ page }) => {
+      await openWorkspace(page, 'en');
+
+      await expect(page.getByTestId('scan-run')).toBeVisible();
+
+      const before = page.getByTestId('scan-before');
+      await expect(before).toBeVisible();
+      await expect(before).toHaveText(/come back as suggestions/i);
+      await expect(before).toHaveText(/only fields the website already owns/i);
+
+      // Nothing has run, so no result may be on screen.
+      await expect(page.getByTestId('scan-result')).toHaveCount(0);
+      await expect(page.getByTestId('scan-refusal')).toHaveCount(0);
+
+      await shoot(page, `${size.name}-16-scan-unfired`);
+    });
+
     test('14 · one reply language, and the screen says so', async ({ page }) => {
       await openWorkspace(page, 'en');
 

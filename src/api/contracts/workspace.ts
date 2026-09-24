@@ -226,3 +226,86 @@ export const prohibitedClaimsSchema = z.looseObject({
 });
 
 export type ProhibitedClaims = z.infer<typeof prohibitedClaimsSchema>;
+
+/* ── Screen 11b · scanning the website again ─────────────────────────────── */
+
+/** Why a field was offered rather than applied. Two different admissions. */
+export const OFFER_REASONS = ['human_edited', 'source_unknown'] as const;
+export type OfferReason = (typeof OFFER_REASONS)[number];
+
+export const scanOfferSchema = z.object({
+  field: z.string(),
+  current: z.unknown().nullable().default(null),
+  proposed: z.unknown().nullable().default(null),
+  because: z.enum(OFFER_REASONS),
+});
+
+export type ScanOffer = z.infer<typeof scanOfferSchema>;
+
+/**
+ * What the crawl could SEE, which decides whether its findings mean anything.
+ *
+ * `distinctTextPages === 1` means every path answered with the same page — a
+ * login wall — so the screen says the site could not be read instead of
+ * quoting `pagesRead`. A caveat that appears because a measurement says so is
+ * information; one that is always there is wallpaper.
+ */
+export const crawlReachSchema = z.object({
+  requested: z.number().default(0),
+  pagesRead: z.number().default(0),
+  distinctTextPages: z.number().default(0),
+});
+
+export type CrawlReach = z.infer<typeof crawlReachSchema>;
+
+/** Every way a scan declines, each needing a different sentence. */
+export const SCAN_REFUSALS = [
+  'no_domain',
+  'fetch_failed',
+  'scan_failed',
+  'scan_in_progress',
+  'no_profile',
+] as const;
+export type ScanRefusal = (typeof SCAN_REFUSALS)[number];
+
+export const scanResultSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    /** Written silently, because the scan already owned these fields. */
+    applied: z.array(z.string()).default([]),
+    offer: z.array(scanOfferSchema).default([]),
+    reach: crawlReachSchema.nullable().default(null),
+    fieldSources: z.record(z.string(), z.enum(['scan', 'human']).nullable()).default({}),
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.enum(SCAN_REFUSALS),
+    reach: crawlReachSchema.nullable().default(null),
+  }),
+]);
+
+export type ScanResult = z.infer<typeof scanResultSchema>;
+
+export const acceptResultSchema = z.object({
+  accepted: z.array(z.string()).default([]),
+  /**
+   * Named rather than dropped. A stale screen offering a field the last scan
+   * did not propose must be told, not quietly told it worked.
+   */
+  skipped: z.array(z.object({ field: z.string(), reason: z.string() })).default([]),
+  fieldSources: z.record(z.string(), z.enum(['scan', 'human']).nullable()).default({}),
+});
+
+export type AcceptResult = z.infer<typeof acceptResultSchema>;
+
+/**
+ * Could the site be read at all?
+ *
+ * One distinct page means the crawl fetched many URLs and saw one — the
+ * password-protected case, measured on this very tenant at 17 requested, 17
+ * returned, 1 distinct. Everything the scan proposes from such a crawl is
+ * inferred from a login screen.
+ */
+export function siteWasReadable(reach: CrawlReach | null): boolean {
+  return reach === null || reach.distinctTextPages > 1;
+}

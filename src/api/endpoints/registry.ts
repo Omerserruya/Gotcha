@@ -164,6 +164,19 @@ export const workspaceEndpoints = {
   voice: () => endpoint('/api/workspace/voice'),
   voiceSample: () => endpoint('/api/workspace/voice/sample'),
   prohibitedClaims: () => endpoint('/api/workspace/prohibited-claims'),
+  /**
+   * Screen 11b. Re-crawls the site and writes only what the scan already
+   * owns; everything else returns as a proposal.
+   */
+  scan: () => endpoint('/api/workspace/scan'),
+  /**
+   * Take the site's value for offered fields — stamps them `scan`-owned.
+   *
+   * A plain PATCH cannot do this: PATCH means "a human set this". Without
+   * this endpoint `scan` ownership was unreachable and every scan offered
+   * everything forever.
+   */
+  scanAccept: () => endpoint('/api/workspace/scan/accept'),
 } as const;
 
 /**
