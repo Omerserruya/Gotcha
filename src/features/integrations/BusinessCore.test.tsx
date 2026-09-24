@@ -299,16 +299,62 @@ describe('★ 14e — absent is not unset', () => {
     expect(block).not.toHaveTextContent(/set (this|it) up/i);
   });
 
-  it('names all three things that are fixed, and says where each is fixed', async () => {
+  it('names what cannot be configured, with Monday as an EXAMPLE and not the subject', async () => {
+    /*
+     * ★ Omer has no Monday connected. A page written as a Monday page with a
+     * caveat asks somebody to reason about a system they have never seen —
+     * which is exactly why the design's two-board question could not be
+     * answered when it was put to him.
+     *
+     * So Monday is named as an example and named as absent, and the rule is
+     * stated about connected systems generally.
+     */
     await render14();
     expect(screen.getByTestId('core-writeback-per-rule')).toHaveTextContent(/no per-rule choice/i);
-    expect(screen.getByTestId('core-writeback-one-board')).toHaveTextContent(
-      /single Monday board/i,
-    );
-    // Identity resolution is in CODE — not a rule, not per-workspace.
-    const identity = screen.getByTestId('core-writeback-identity');
-    expect(identity).toHaveTextContent(/fixed in the product's code/i);
-    expect(identity).toHaveTextContent(/same for everyone/i);
+    const board = screen.getByTestId('core-writeback-one-board');
+    expect(board).toHaveTextContent(/boards or lists/i);
+    expect(board).toHaveTextContent(/isn't connected here/i);
+  });
+
+  it('★ says the CRM default nobody chose — with the condition that makes it true', async () => {
+    /*
+     * `crm-adapter-resolver.ts:146-191`. `useAsCrm` absent means a connected
+     * Shopify is the DEFAULT CRM — but only when no dedicated CRM-category
+     * integration is connected, because step 2 finds that one first.
+     *
+     * Stated unconditionally it is FALSE for a tenant with HubSpot connected,
+     * and would tell them their customer records live somewhere they do not.
+     * The condition is the difference between a useful sentence and a
+     * confidently wrong one.
+     */
+    await render14();
+    const crm = screen.getByTestId('core-writeback-crm-default');
+    expect(crm).toHaveTextContent(/nobody chose that/i);
+    expect(crm).toHaveTextContent(/no dedicated CRM is connected/i);
+  });
+
+  it('★★ identity: the ONE-match case is a write, not a lookup', async () => {
+    /*
+     * `crm-identity.service.ts` owns a 0/1/2+ flow. "First match wins, new
+     * contact if none match" loses the half that matters: on exactly one
+     * match GOTCHA ENRICHES the record with missing strong identifiers —
+     * phone, email, PSID, IGSID, username.
+     *
+     * That is a write to a customer's record nobody asked for, and it is the
+     * sentence a merchant would most want before it happens.
+     */
+    await render14();
+    expect(screen.getByTestId('core-identity-none')).toHaveTextContent(/new record is created/i);
+
+    const one = screen.getByTestId('core-identity-one');
+    expect(one).toHaveTextContent(/fills in what's missing/i);
+    // Said plainly, because "resolves identity" would hide it entirely.
+    expect(one).toHaveTextContent(/writes to the record, it doesn't just read it/i);
+
+    // And 2+ is approval-gated because a wrong merge is irreversible.
+    const many = screen.getByTestId('core-identity-many');
+    expect(many).toHaveTextContent(/Approvals queue/i);
+    expect(many).toHaveTextContent(/cannot be undone/i);
   });
 
   it('splits the language claim in two, because the platform does', async () => {

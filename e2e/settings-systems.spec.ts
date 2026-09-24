@@ -428,10 +428,47 @@ for (const size of SIZES) {
 
       // The three that are fixed, each named with where it is fixed.
       await expect(page.getByTestId('core-writeback-per-rule')).toHaveText(/no per-rule choice/i);
-      await expect(page.getByTestId('core-writeback-one-board')).toHaveText(/single Monday board/i);
-      await expect(page.getByTestId('core-writeback-identity')).toHaveText(
-        /fixed in the product's code/i,
-      );
+      /*
+       * ★ MONDAY IS AN EXAMPLE, NOT THE SUBJECT.
+       *
+       * This workspace has no Monday connected. A page written as a Monday
+       * page with a caveat asks somebody to reason about a system they have
+       * never seen, which is why the design's two-board question could not
+       * be answered when it was put to them.
+       */
+      const board = page.getByTestId('core-writeback-one-board');
+      await expect(board).toHaveText(/boards or lists/i);
+      await expect(board).toHaveText(/isn't connected here/i);
+
+      /*
+       * ★ THE CRM DEFAULT NOBODY CHOSE, WITH ITS CONDITION.
+       *
+       * `crm-adapter-resolver.ts:146-191`: an absent `useAsCrm` makes a
+       * connected Shopify the default CRM — but ONLY when no dedicated CRM
+       * is connected, because step 2 finds that one first. Unconditioned, the
+       * sentence is false for a tenant with HubSpot and tells them their
+       * customer records live somewhere they do not.
+       */
+      const crm = page.getByTestId('core-writeback-crm-default');
+      await expect(crm).toHaveText(/nobody chose that/i);
+      await expect(crm).toHaveText(/no dedicated CRM is connected/i);
+
+      /*
+       * ★★ IDENTITY IS A 0/1/2+ FLOW AND THE MIDDLE CASE IS A WRITE.
+       *
+       * `crm-identity.service.ts`. On exactly one match GOTCHA ENRICHES the
+       * record with missing strong identifiers — phone, email, PSID, IGSID,
+       * username. "First match wins" loses precisely that, and it is the
+       * sentence a merchant would most want before it happens.
+       */
+      await expect(page.getByTestId('core-identity-none')).toHaveText(/new record is created/i);
+      const oneMatch = page.getByTestId('core-identity-one');
+      await expect(oneMatch).toHaveText(/fills in what's missing/i);
+      await expect(oneMatch).toHaveText(/writes to the record, it doesn't just read it/i);
+      // 2+ is approval-gated, because a wrong merge cannot be undone.
+      const manyMatch = page.getByTestId('core-identity-many');
+      await expect(manyMatch).toHaveText(/Approvals queue/i);
+      await expect(manyMatch).toHaveText(/cannot be undone/i);
 
       /*
        * The language claim, in BOTH halves. `post-chat-pipeline.service.ts`

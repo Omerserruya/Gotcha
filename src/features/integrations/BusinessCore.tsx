@@ -153,6 +153,37 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
           {t('writeback.sourceOfTruth')}
         </p>
 
+        {/*
+          ══════════════════════════════════════════════════════════════════
+          ★ THE MOST VALUABLE SENTENCE ON THIS PAGE
+          ══════════════════════════════════════════════════════════════════
+          `crm-adapter-resolver.ts:146-191`. `config.useAsCrm` has THREE
+          readings and the third is the one nobody is told about:
+
+            true    Shopify wins over any dedicated CRM — explicitly chosen
+            false   never used as CRM — an explicit opt-out
+            ABSENT  a connected Shopify is the DEFAULT CRM, whenever no
+                    dedicated CRM-category integration is connected
+
+          So this workspace's customer records live in Shopify because a flag
+          was never set, not because anybody decided. The resolver's own
+          comment says the opt-in-only model was abandoned precisely because
+          losing the flag "silently killed identity-link + timeline writeback
+          while Shopify sat there connected as the obvious source of truth" —
+          a fix for one silent failure that produced a quieter one.
+
+          ★ AND IT IS CONDITIONAL. "Absent means Shopify is the CRM" is FALSE
+          for a tenant with HubSpot connected: step 2 finds the dedicated CRM
+          first. Stating it unconditionally would tell those merchants their
+          records are somewhere they are not, so the condition is on screen.
+
+          Not in the list below, because those are things that cannot be
+          configured. This one IS configured — by absence.
+        */}
+        <p className={styles.writebackLead} data-testid="core-writeback-crm-default">
+          {t('writeback.crmDefault')}
+        </p>
+
         <ul className={styles.writebackList}>
           {/*
             Per-rule write-back configuration. What is written is decided by
@@ -162,18 +193,50 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             {t('writeback.perRule')}
           </li>
           {/*
-            One board, not two named by purpose. The design's "send
-            escalations here, send follow-ups there" is not expressible.
+            One board per workspace, not one per purpose.
+
+            ★ NOT WRITTEN AS A MONDAY RULE. Omer has no Monday connected, and
+            a page built around a connector this workspace does not have asks
+            somebody to reason about a system they have never seen — which is
+            why the two-board question in the design could not be answered.
+            Monday is named as an EXAMPLE, and named as absent.
           */}
           <li className={styles.writebackItem} data-testid="core-writeback-one-board">
             {t('writeback.oneBoard')}
           </li>
-          {/*
-            Identity resolution is in code. Not a rule, not per-workspace,
-            and the same for everybody — so it is named rather than hinted at.
-          */}
-          <li className={styles.writebackItem} data-testid="core-writeback-identity">
-            {t('writeback.identity')}
+        </ul>
+
+        {/*
+          ══════════════════════════════════════════════════════════════════
+          ★ IDENTITY IS NOT "FIRST MATCH WINS", AND THE MIDDLE CASE IS A WRITE
+          ══════════════════════════════════════════════════════════════════
+          `crm-identity.service.ts` owns a 0/1/2+ flow, and summarising it as
+          "first match wins, new contact if none match" loses the half a
+          merchant would most want to know:
+
+            0    create a new lead
+            1    ENRICH the existing record with missing strong identifiers —
+                 phone, email, PSID, IGSID, username
+            2+   auto-merge only with a strong signal AND vendor support;
+                 otherwise `needs_approval` with the candidate list
+
+          The one-match case is a WRITE to a customer record that nobody
+          asked for. The 2+ case is approval-gated because a wrong merge is
+          irreversible — the same Approvals queue as 14d and screen 03.
+
+          Three sentences rather than one: they are three different things
+          that happen to somebody, and a merged sentence would hide that the
+          middle one edits their data.
+        */}
+        <ul className={styles.writebackList} data-testid="core-writeback-identity">
+          <li className={styles.writebackItem} data-testid="core-identity-none">
+            {t('writeback.identityNoMatch')}
+          </li>
+          <li className={styles.writebackItem} data-testid="core-identity-one">
+            {t('writeback.identityOneMatch')}
+          </li>
+          <li className={styles.writebackItem} data-testid="core-identity-many">
+            {t('writeback.identityManyMatches')}
           </li>
         </ul>
 

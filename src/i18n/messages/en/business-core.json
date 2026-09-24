@@ -38,9 +38,12 @@
     "heading": "What GOTCHA writes back",
     "sourceOfTruth": "GOTCHA reads your connected systems and writes into them. It does not keep a second copy to reconcile later. So where something below is not offered as a setting, that is not a blank somebody forgot to fill in — it means the system itself decides and GOTCHA follows it.",
     "perRule": "What gets written back is decided by the kind of action, the same way every time. There is no per-rule choice, and nowhere to make one.",
-    "oneBoard": "Work goes to a single Monday board. Sending escalations to one board and follow-ups to another isn't something a workspace can express.",
-    "identity": "Matching a person in one system to the same person in another is fixed in the product's code. It is not a rule, it is not per-workspace, and it is the same for everyone.",
-    "language": "Anything GOTCHA writes in its own words — the summary it leaves after a conversation — is written in the workspace language. The field values it writes are the customer's own data, and they go across exactly as they are."
+    "oneBoard": "Where a connected system has boards or lists — Monday, for example, which isn't connected here — work goes to one of them per workspace. Sending escalations to one board and follow-ups to another isn't something that can be expressed.",
+    "language": "Anything GOTCHA writes in its own words — the summary it leaves after a conversation — is written in the workspace language. The field values it writes are the customer's own data, and they go across exactly as they are.",
+    "crmDefault": "Right now, your customer records live in Shopify — and nobody chose that. When no dedicated CRM is connected, GOTCHA uses a connected Shopify as the source of truth by default. Connecting a CRM changes it; the setting that would override it either way isn't offered on this screen.",
+    "identityNoMatch": "When nobody in your records matches the person writing in, a new record is created for them.",
+    "identityOneMatch": "When exactly one person matches, GOTCHA fills in what's missing on that record — a phone number, an email, a social handle it learned from the conversation. It writes to the record, it doesn't just read it.",
+    "identityManyMatches": "When two or more match, GOTCHA merges them only if your system supports merging and the evidence is strong. Otherwise it stops and waits for a person in your Approvals queue, because merging the wrong two customers cannot be undone."
   },
   "elect": {
     "label": "Which system does this",
