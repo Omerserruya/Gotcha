@@ -15,6 +15,37 @@ import { missingIds } from './diagnose';
  *
  * Shots land in e2e/evidence/s04/.
  *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ⚠ WHAT 04b's EVIDENCE DOES AND DOES NOT SHOW
+ * ════════════════════════════════════════════════════════════════════════════
+ * **The customer page is photographed from a FIXTURE, and the live timeline
+ * read 404s during the run.**
+ *
+ * The fixture list serves synthetic ids, so `GET /api/identity/{id}/timeline`
+ * is called with an id no tenant has and answers 404 — twelve times in the
+ * 2026-09-24 run, logged as `customer.timeline_failed`. The tests pass
+ * because `withDetailFixtures` substitutes over that failure for fixture ids,
+ * which is deliberate: a 404 for an id we invented is not the screen failing.
+ *
+ * So these shots prove **04b renders fixture data correctly.** They do not
+ * show the screen working against the real endpoint: the contract fields, the
+ * cursor, `coverage`, `origin` labelling, handovers and AI actions have all
+ * been photographed from a constant.
+ *
+ * Same shape as 11b's accept path, verified against a seeded proposal rather
+ * than a scan, and it belongs on the same list. Written here so it cannot
+ * soften into "04b is verified against the API" three documents from now.
+ *
+ * ── AND THE ONE TEST THAT DOES EXERCISE THE LIVE READ ──
+ * `E2E_REAL_CONTACT_ID` closes it. A REAL id under the gate takes the live
+ * path — the endpoint is called, the response is parsed by our contract, and
+ * only then is the rendered detail swapped for the fixture. So a 404, a 500
+ * or a contract rejection all surface as the error panel and fail the test,
+ * while the shot itself is still fixture data and safe to keep.
+ *
+ * Set it to a contact id from this tenant and the test runs; leave it unset
+ * and it skips, saying so.
+ *
  * ── THIS SPEC REQUIRES THE CAPTURE FIXTURES ──
  * Start the server with `E2E_SECURITY_FIXTURES=1`. **Without it this run
  * fails and writes nothing**, by design.
@@ -497,6 +528,71 @@ for (const size of SIZES) {
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
       await expect(page.getByTestId('customer-detail')).toBeVisible();
       await shoot(page, `${size.name}-04b-hebrew`);
+    });
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * 04b · THE LIVE READ, WITH A SAFE SHOT
+     * ══════════════════════════════════════════════════════════════════════
+     * Everything else in this file photographs 04b from a fixture, because
+     * the fixture list serves synthetic ids and the timeline endpoint 404s
+     * on them by design.
+     *
+     * ★ A REAL id under the gate takes a different path through
+     * `withDetailFixtures`: the live endpoint IS called and the response IS
+     * parsed by our contract, and the substitution happens only after a
+     * SUCCESSFUL read. So this one test proves the things the others cannot
+     * —
+     *
+     *   the route answers for a real contact          (a 404 → error panel)
+     *   our schema accepts what it returns            (a parse failure → null → error panel)
+     *   the union, coverage and page blocks are real  (missing → parse failure)
+     *
+     * — while the shot is still fixture data, because the swap happens
+     * before rendering. The live response is never photographed.
+     *
+     * Skipped rather than failed when the id is absent: a capture run that
+     * cannot reach a real contact should say so, not go red.
+     */
+    test('04b · the live timeline read, photographed safely', async ({ page }) => {
+      const realId = process.env.E2E_REAL_CONTACT_ID;
+      test.skip(
+        !realId,
+        'E2E_REAL_CONTACT_ID is not set, so 04b is evidenced only against the fixture — ' +
+          'the live timeline read is UNEXERCISED. Set it to a contact id from this tenant.',
+      );
+
+      await page.goto(`/en/customers/${realId}`);
+
+      /*
+       * ★ THE WHOLE ASSERTION. If the live read 404s, if the response fails
+       * our contract, or if the route errors, `timeline` is null and a real
+       * id's failure is NOT substituted — so the error panel renders and
+       * this fails. Reaching the detail block means the live read succeeded
+       * and parsed.
+       */
+      await expect(
+        page.getByTestId('customer-unavailable'),
+        'the LIVE timeline read failed or did not match our contract for a real contact. ' +
+          'This is the one test that exercises it; the rest of this file runs on a fixture.',
+      ).toHaveCount(0);
+      await expect(
+        page.getByTestId('customer-detail'),
+        missingIds('the 04b detail for a REAL contact'),
+      ).toBeVisible({ timeout: 15_000 });
+
+      /*
+       * And the shot is still safe: the substitution ran, so what is on
+       * screen is Avery Stone rather than a real person's messages. If this
+       * fails, the gate did not engage and nothing may be photographed.
+       */
+      await expect(
+        page.locator('main'),
+        'the fixtures did not engage on a REAL contact id, so this page is showing a real ' +
+          "person's messages. Nothing has been written.",
+      ).toContainText('Avery Stone');
+
+      await shoot(page, `${size.name}-04b-live-read`);
     });
   });
 }
