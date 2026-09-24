@@ -68,6 +68,103 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 /** GET /api/historical-imports/:id - status plus the full persisted summary. */
+/**
+ * ★ DECLARED BEFORE `/:id`, AND THAT IS LOAD-BEARING.
+ *
+ * It used to sit 450 lines below `router.get("/:id")`, which matches a single
+ * segment - so express handed `GET /customer-context` to that handler, which
+ * looked up an import with id "customer-context", found none, and answered
+ * 404 "Import not found". The handler below had never run.
+ *
+ * Nothing reported it. A 404 from an enhancement endpoint is indistinguishable
+ * from "this customer has no history", so the panel it was written for showed
+ * nothing and the import went on looking like it had done nothing - the exact
+ * symptom the route's own comment says it exists to fix.
+ *
+ * Any new literal path on this router goes ABOVE `/:id` for the same reason.
+ */
+/**
+ * GET /api/historical-imports/customer-context?externalId=<phone>
+ *
+ * What we learned about THIS person, for the live inbox - keyed by the
+ * customer's own identifier rather than an import-internal id.
+ *
+ * The import already produced this (a summary and durable facts per customer)
+ * but only the AI could see it: the memory went into the bot prompt and
+ * nowhere else, so a human agent opening the same chat saw nothing and the
+ * import looked like it had done nothing. This is the endpoint the
+ * conversation panel reads.
+ */
+router.get("/customer-context", async (req: Request, res: Response) => {
+  try {
+    const raw = String(req.query.externalId ?? "").trim();
+    if (!raw) return res.json({ context: null });
+
+    // Same both-shapes probe as the prompt block: a conversation carries
+    // whatever the channel handed us, the memory row is keyed normalized.
+    const normalized = normalizePhone(raw);
+    const keys = Array.from(new Set([raw, normalized].filter(Boolean) as string[]));
+
+    const memory = await prisma.customerHistoricalMemory.findFirst({
+      where: { tenantId: req.tenantId!, customerExternalId: { in: keys } },
+      select: { summary: true, facts: true, messageCount: true, source: true, updatedAt: true, importId: true },
+    });
+    if (!memory) return res.json({ context: null });
+
+    const facts = Array.isArray(memory.facts) ? (memory.facts as Array<Record<string, unknown>>) : [];
+    const kept = facts.filter((f) => typeof f.text === "string" && String(f.text).trim());
+
+    // ── Per-fact provenance, and why the two timestamps are NOT per fact ──
+    //
+    // The writer stamps every fact with `evidenceConversationIds`, `firstSeenAt`
+    // and `lastSeenAt` (customer-learning.stage.ts:205-227). The ids are real
+    // `Conversation.id` values, so a caller can follow them - see the WARNING
+    // below about what it takes to read one.
+    //
+    // ★ THE TIMESTAMPS ARE THE TRANSCRIPT'S SPAN, NOT THE FACT'S. Both come
+    // from `transcript[0]` and `transcript[last]` of the whole conversation, so
+    // every fact in a row carries IDENTICAL values. Returned per fact they
+    // would read as "this preference was first observed on the 3rd", which the
+    // data does not support and nobody could tell from the shape. So they are
+    // reported ONCE, as the window the evidence was drawn from, which is the
+    // claim that is actually true.
+    const windowSource = kept.find((f) => typeof f.firstSeenAt === "string" || typeof f.lastSeenAt === "string");
+    const evidenceWindow = windowSource
+      ? {
+          from: typeof windowSource.firstSeenAt === "string" ? windowSource.firstSeenAt : null,
+          to: typeof windowSource.lastSeenAt === "string" ? windowSource.lastSeenAt : null,
+        }
+      : null;
+
+    res.json({
+      context: {
+        summary: memory.summary,
+        facts: kept.map((f) => ({
+          text: String(f.text).trim(),
+          category: typeof f.category === "string" ? f.category : null,
+          confidence: typeof f.confidence === "string" ? f.confidence : null,
+          // ⚠️ These conversations were written with `origin: "HISTORICAL_IMPORT"`,
+          // and `applyLiveByDefault` injects `origin: "LIVE"` into bulk
+          // Conversation/Message reads. A consumer that fetches one WITHOUT
+          // naming origin (or `withHistoricalRecords`) gets zero rows - a link
+          // that looks followable and resolves to an empty conversation.
+          evidenceConversationIds: Array.isArray(f.evidenceConversationIds)
+            ? (f.evidenceConversationIds as unknown[]).filter((id): id is string => typeof id === "string" && !!id)
+            : [],
+        })),
+        messageCount: memory.messageCount,
+        source: memory.source,
+        learnedAt: memory.updatedAt,
+        evidenceWindow,
+      },
+    });
+  } catch (err: any) {
+    // Context is an enhancement; never let it break the panel.
+    console.warn("[historical-import] customer-context failed:", err?.message);
+    res.json({ context: null });
+  }
+});
+
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const row = await prisma.historicalImport.findFirst({
@@ -503,56 +600,6 @@ router.post("/:id/rerun-intelligence", writeGuard, async (req: Request, res: Res
   }
 });
 
-/**
- * GET /api/historical-imports/customer-context?externalId=<phone>
- *
- * What we learned about THIS person, for the live inbox - keyed by the
- * customer's own identifier rather than an import-internal id.
- *
- * The import already produced this (a summary and durable facts per customer)
- * but only the AI could see it: the memory went into the bot prompt and
- * nowhere else, so a human agent opening the same chat saw nothing and the
- * import looked like it had done nothing. This is the endpoint the
- * conversation panel reads.
- */
-router.get("/customer-context", async (req: Request, res: Response) => {
-  try {
-    const raw = String(req.query.externalId ?? "").trim();
-    if (!raw) return res.json({ context: null });
-
-    // Same both-shapes probe as the prompt block: a conversation carries
-    // whatever the channel handed us, the memory row is keyed normalized.
-    const normalized = normalizePhone(raw);
-    const keys = Array.from(new Set([raw, normalized].filter(Boolean) as string[]));
-
-    const memory = await prisma.customerHistoricalMemory.findFirst({
-      where: { tenantId: req.tenantId!, customerExternalId: { in: keys } },
-      select: { summary: true, facts: true, messageCount: true, source: true, updatedAt: true, importId: true },
-    });
-    if (!memory) return res.json({ context: null });
-
-    const facts = Array.isArray(memory.facts) ? (memory.facts as Array<Record<string, unknown>>) : [];
-    res.json({
-      context: {
-        summary: memory.summary,
-        facts: facts
-          .filter((f) => typeof f.text === "string" && String(f.text).trim())
-          .map((f) => ({
-            text: String(f.text).trim(),
-            category: typeof f.category === "string" ? f.category : null,
-            confidence: typeof f.confidence === "string" ? f.confidence : null,
-          })),
-        messageCount: memory.messageCount,
-        source: memory.source,
-        learnedAt: memory.updatedAt,
-      },
-    });
-  } catch (err: any) {
-    // Context is an enhancement; never let it break the panel.
-    console.warn("[historical-import] customer-context failed:", err?.message);
-    res.json({ context: null });
-  }
-});
 
 // ─── Imported conversations ──────────────────────────────────
 
