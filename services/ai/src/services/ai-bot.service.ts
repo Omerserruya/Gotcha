@@ -177,6 +177,7 @@ import {
 } from "./schedule-handler.service";
 import { computeCalendarCapability, type CalendarCapabilityDetail } from "./calendar-capability.service";
 import { getCompanyContext, type CompanyContext } from "./company-context.service";
+import { getBusinessCoreMap } from "./connectors/part-systems";
 import {
   detectBookingCommitment,
   detectBookingClaim,
@@ -1697,6 +1698,11 @@ async function generateAIBotReplyInner(
   // Company identity inherited from the tenant BusinessProfile - so the agent
   // always knows who it works for and what the company does/sells.
   const companyContext: CompanyContext | null = await getCompanyContext(opts.tenantId);
+  // The part -> system mapping screen 14 writes. Resolved here because the
+  // prompt builder is sync, exactly as companyContext is. Never throws:
+  // getSystemForPart degrades to "unmapped", which the block states rather than
+  // guessing around.
+  const businessCoreMap = await getBusinessCoreMap(opts.tenantId);
   // Shopify Live Chat wiring. Null on every other channel, which is the
   // common case - the storefront block and the product tools simply do
   // not exist for a WhatsApp or Instagram turn.
@@ -2507,6 +2513,7 @@ async function generateAIBotReplyInner(
     priorGoal,
     wizardFacts,
     company: companyContext ?? undefined,
+    businessCore: businessCoreMap,
   };
   const systemPrompt = buildAgentPrompt(promptOpts);
 

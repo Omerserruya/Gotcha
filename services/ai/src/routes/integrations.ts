@@ -20,6 +20,7 @@ import {
   rolesFor,
   planRoleElection,
 } from "../services/connectors/business-roles";
+import { getBusinessCoreMap } from "../services/connectors/part-systems";
 
 const router = Router();
 
@@ -227,7 +228,7 @@ router.get("/commerce/capabilities", async (req: Request, res: Response) => {
 router.get("/business-core", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
-    const [rawUseCase, catalogue, connected] = await Promise.all([
+    const [rawUseCase, catalogue, connected, partMap] = await Promise.all([
       readDurableSetting(tenantId, BUSINESS_MODEL_KEY),
       prisma.integrationCatalog.findMany({
         where: { isPublished: true },
@@ -237,6 +238,7 @@ router.get("/business-core", async (req: Request, res: Response) => {
         where: { tenantId },
         select: { status: true, config: true, integration: { select: { slug: true, name: true } } },
       }),
+      getBusinessCoreMap(tenantId),
     ]);
 
     const useCase = isUseCase(rawUseCase) ? rawUseCase : null;
@@ -268,20 +270,23 @@ router.get("/business-core", async (req: Request, res: Response) => {
         };
       });
 
-      // Who serves it today. CRM keeps its existing resolver rather than being
-      // re-derived here, so this screen cannot disagree with the system the bot
-      // actually calls.
-      const elected =
-        connected.find((c) => {
-          const cfg = (c.config && typeof c.config === "object" ? c.config : {}) as Record<string, unknown>;
-          if (role === "crm") return cfg.useAsCrm === true;
-          return Array.isArray(cfg.roles) && (cfg.roles as unknown[]).includes(role);
-        })?.integration ?? null;
+      // ★ READ THROUGH THE SAME FACADE THE AI USES, so the screen cannot show a
+      // system the model does not resolve to. Each part delegates to whichever
+      // elector its consumer already reads - the CRM resolver, the returns
+      // resolver, or `config.roles` for the parts that had none.
+      const resolved = partMap.find((m) => m.part === role)!;
+      const electedRow = resolved.slug
+        ? catalogueRows.find((c) => c.slug === resolved.slug) ?? null
+        : null;
 
       return {
         role,
         ...availability,
-        elected: elected ? { slug: elected.slug, name: elected.name } : null,
+        elected: resolved.slug ? { slug: resolved.slug, name: electedRow?.name ?? resolved.slug } : null,
+        // WHY it is that system: chosen by the merchant, inferred by a resolver,
+        // or not set. "Inferred" must not read as a decision somebody made.
+        source: resolved.source,
+        reason: resolved.reason,
         candidates,
       };
     });
@@ -354,6 +359,20 @@ router.put("/business-core/role", canSelectSot, async (req: Request, res: Respon
     res.status(409).json({
       error: "The CRM is elected through PUT /api/integrations/:slug/crm-source, which is the one path for it",
       code: "CRM_ELECTED_ELSEWHERE",
+    });
+    return;
+  }
+  if (role === "returns") {
+    // ★ SAME REASON AS THE CRM, discovered later. `config.returnProvider` is
+    // already the explicit switch for returns and `getReturnProvider` already
+    // reads it in the AI's decision path - "explicit selection wins over
+    // inference", in its own words. Writing `config.roles` here instead would
+    // store the merchant's choice where nothing reads it while the AI kept
+    // resolving returns from capabilities. One elector per part, and for this
+    // part it already exists.
+    res.status(409).json({
+      error: "Returns are elected through config.returnProvider, which the AI already reads. Use that switch.",
+      code: "RETURNS_ELECTED_ELSEWHERE",
     });
     return;
   }

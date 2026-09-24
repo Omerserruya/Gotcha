@@ -35,6 +35,7 @@
  */
 
 import fs from "fs";
+import { renderBusinessCoreBlock } from "./connectors/part-systems";
 import path from "path";
 import { grammaticalAddressPromptBlock } from "@chatcenter/shared";
 import {
@@ -257,6 +258,15 @@ export interface BuildPromptOpts {
    * agent knows who it represents. Absent → no block (no profile configured).
    */
   company?: import("./company-context.service").CompanyContext;
+  /**
+   * Which system serves each part of this business, as the merchant chose on
+   * screen 14 - part -> integration.
+   *
+   * Resolved by the CALLER because it needs the database and this builder is
+   * sync, exactly as `company` is. Absent -> no block, which is right for a
+   * tenant that has never opened that screen.
+   */
+  businessCore?: import("./connectors/part-systems").PartSystem[];
 }
 
 // ─── ESCALATION TOOL ────────────────────────────────────────
@@ -448,6 +458,9 @@ function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): str
     // after the archetype because it is evidence rather than a choice: where the
     // two disagree, what the business has actually written for years wins.
     push(parts, buildObservedVoiceBlock(opts));
+    // Which system serves each part, so the model resolves through the
+    // merchant's choice rather than whichever tool name it reaches for first.
+    push(parts, buildBusinessCoreBlock(opts));
   }
   push(parts, buildAgentPlaybooksStatic(opts));
   // Product Qualification Context (sales-oriented skills) - anchors discovery to
@@ -510,6 +523,29 @@ function buildObservedVoiceBlock(opts: BuildPromptOpts): string | null {
     "",
     voice.trim(),
   ].join("\n");
+}
+
+/**
+ * Which system serves each part of the business.
+ *
+ * ★ THE POINT OF SCREEN 14. A merchant choosing "for returns, use ReturnGo" is
+ * only meaningful if the model resolves systems through that answer, so the
+ * mapping is stated in the prompt rather than left to whichever tool name the
+ * model reaches for first.
+ *
+ * Unmapped parts are STATED, not omitted, and that is the load-bearing half: a
+ * list of only the mapped parts lets the model assume the rest are its choice,
+ * which is the guess the screen exists to replace. `renderBusinessCoreBlock`
+ * writes "no system chosen. Do not assume one" for those.
+ *
+ * Tenant-level and byte-stable across turns, so it costs nothing in prompt cache.
+ */
+function buildBusinessCoreBlock(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode === "generator") return null;
+  const map = opts.businessCore;
+  if (!map || map.length === 0) return null;
+  const block = renderBusinessCoreBlock(map);
+  return block.trim() ? block : null;
 }
 
 /** Sales-oriented skills that benefit from product/offer context. */
