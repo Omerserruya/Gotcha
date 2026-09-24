@@ -199,6 +199,72 @@ router.post("/merge", async (req: Request, res: Response) => {
 });
 
 /**
+ * Every row that belongs to ONE person, and the origin decision.
+ *
+ * Both reads below need the same three things: follow the soft-merge pointer,
+ * gather sibling contacts and preserved aliases, and decide about origin. They
+ * were written inline once; a second copy is how two endpoints start disagreeing
+ * about who a customer is.
+ *
+ * ★ THE ORIGIN CLAUSE IS ALWAYS PRESENT, in both branches. `applyLiveByDefault`
+ * injects `origin: "LIVE"` into bulk Conversation/Message reads unless the
+ * caller mentions origin, so the live-only case must name it too - otherwise the
+ * filter is the guard's rather than ours, and a test on the rows cannot tell.
+ */
+type PersonScope =
+  | { ok: false; status: number; error: string }
+  | {
+      ok: true;
+      effective: any;
+      /** OR clauses matching every channel identity this person is known by. */
+      orClauses: Array<{ channel: any; customerExternalId: string }>;
+      originClause: { origin: any };
+    };
+
+async function resolvePersonScope(
+  tenantId: string,
+  contactId: string,
+  includeImported: boolean,
+): Promise<PersonScope> {
+  const contact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
+  if (!contact) return { ok: false, status: 404, error: "Contact not found" };
+
+  // Follow soft-merge pointer if the entry point itself was merged away
+  const effective = contact.mergedIntoId
+    ? await prisma.contact.findFirst({ where: { id: contact.mergedIntoId, tenantId } })
+    : contact;
+  if (!effective) return { ok: false, status: 404, error: "Contact target not found" };
+
+  // personId-first covers contacts auto-unified via /capture; the email/phone
+  // fallback covers legacy contacts created before the personId column.
+  const { findSiblingContacts } = await import("@chatcenter/shared");
+  const siblings = await findSiblingContacts(tenantId, effective);
+
+  // Aliases preserved from prior merges in target.metadata.aliases
+  const meta = (effective.metadata as Record<string, unknown>) || {};
+  const aliases = Array.isArray((meta as any).aliases)
+    ? ((meta as any).aliases as Array<{ channel: string; externalId: string }>)
+    : [];
+
+  return {
+    ok: true,
+    effective,
+    orClauses: [
+      ...siblings.map((s: any) => ({ channel: s.channel, customerExternalId: s.externalId })),
+      ...aliases.map((a) => ({ channel: a.channel as any, customerExternalId: a.externalId })),
+    ],
+    originClause: includeImported
+      ? { origin: { in: ["LIVE", "HISTORICAL_IMPORT"] as any } }
+      : { origin: "LIVE" as any },
+  };
+}
+
+/** `?includeImported=` - imported history counts unless the caller opts out. */
+function wantsImported(req: Request): boolean {
+  return String(req.query.includeImported ?? "true") !== "false";
+}
+
+/**
  * GET /:id/timeline - one person's events across every channel.
  *
  * ════════════════════════════════════════════════════════════════════════════
@@ -245,44 +311,15 @@ const TIMELINE_CONVERSATION_SCAN_CAP = 500;
 router.get("/:id/timeline", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
-    const contactId = String(req.params.id);
-    const contact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
-    if (!contact) return res.status(404).json({ error: "Contact not found" });
-
-    // Follow soft-merge pointer if the entry point itself was merged away
-    const effective = contact.mergedIntoId
-      ? await prisma.contact.findFirst({ where: { id: contact.mergedIntoId, tenantId } })
-      : contact;
-    if (!effective) return res.status(404).json({ error: "Contact target not found" });
+    const scope = await resolvePersonScope(tenantId, String(req.params.id), wantsImported(req));
+    if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
+    const { effective, orClauses, originClause } = scope;
 
     const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0
       ? Math.min(rawLimit, TIMELINE_MAX_LIMIT)
       : TIMELINE_DEFAULT_LIMIT;
     const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
-    const includeImported = String(req.query.includeImported ?? "true") !== "false";
-
-    // Naming origin at all is what suppresses the live-by-default injection, so
-    // this clause is load-bearing even in the live-only case.
-    const originClause = includeImported
-      ? { origin: { in: ["LIVE", "HISTORICAL_IMPORT"] as any } }
-      : { origin: "LIVE" as any };
-
-    // Pull all rows belonging to the same person - personId-first path
-    // covers contacts auto-unified via /capture, fallback email/phone
-    // covers legacy contacts created before the personId column.
-    const { findSiblingContacts } = await import("@chatcenter/shared");
-    const siblings = await findSiblingContacts(tenantId, effective);
-
-    // Include aliases preserved from prior merges in target.metadata.aliases
-    const meta = (effective.metadata as Record<string, unknown>) || {};
-    const aliases = Array.isArray((meta as any).aliases)
-      ? ((meta as any).aliases as Array<{ channel: string; externalId: string }>)
-      : [];
-    const orClauses = [
-      ...siblings.map((s) => ({ channel: s.channel, customerExternalId: s.externalId })),
-      ...aliases.map((a) => ({ channel: a.channel as any, customerExternalId: a.externalId })),
-    ];
 
     // An empty OR matches nothing in Prisma, and an empty page is the honest
     // answer for a contact with no channel identity - not an error.
@@ -382,6 +419,210 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("identity.timeline error:", err);
     return res.status(500).json({ error: "Failed to load timeline" });
+  }
+});
+
+/**
+ * GET /:id/insights - what this person's conversations were MADE OF, and when.
+ *
+ * Two things 04c asks for that nothing served: what each conversation
+ * contained and who handled it, and the customer's own behaviour - preferred
+ * channel and responsive hours.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * EVERY NUMBER HERE IS COUNTED, AND THE ONE THAT CANNOT BE IS DECLARED ABSENT
+ *
+ * `topics` reports `available: false`. There is no per-customer topic store:
+ * `HistoricalImport.topTopics` is per IMPORT, and the customer brief's
+ * `signals` are LLM prose. Prose resembling a distribution is not a
+ * distribution, and substituting it would be the reassuring kind of defect -
+ * a screen showing a confident breakdown nothing measured.
+ *
+ * ── The hour histogram is in the TENANT'S timezone, and says which ──
+ *
+ * "Responsive between 18:00 and 21:00" is a claim about the customer's day, so
+ * bucketing in UTC would shift an Israeli customer's evening into the previous
+ * afternoon. The tenant's business-hours timezone is used when set, and the
+ * response names the zone it used so a screen never has to guess.
+ *
+ * ── Only INBOUND messages count toward responsiveness ──
+ *
+ * Outbound is us. A tenant that broadcasts at 09:00 would otherwise appear as
+ * a customer who is active at 09:00 - measuring our own behaviour and calling
+ * it theirs.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+const INSIGHTS_CONVERSATION_CAP = 200;
+
+router.get("/:id/insights", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const scope = await resolvePersonScope(tenantId, String(req.params.id), wantsImported(req));
+    if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
+    const { effective, orClauses, originClause } = scope;
+
+    const empty = {
+      contact: effective,
+      timezone: "UTC",
+      conversations: [],
+      channels: [],
+      preferredChannel: null,
+      hours: [],
+      topics: { available: false as const, reason: "no_topic_store" as const },
+      totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+    };
+    if (orClauses.length === 0) return res.json(empty);
+
+    const convWhere = { tenantId, OR: orClauses, ...originClause };
+    const [conversationCount, convos] = await Promise.all([
+      prisma.conversation.count({ where: convWhere }),
+      prisma.conversation.findMany({
+        where: convWhere,
+        orderBy: { updatedAt: "desc" },
+        take: INSIGHTS_CONVERSATION_CAP,
+        select: {
+          id: true, channel: true, origin: true, status: true,
+          createdAt: true, updatedAt: true,
+          assignedAgentId: true, assignedAiAgentId: true,
+        },
+      }),
+    ]);
+    if (convos.length === 0) return res.json(empty);
+
+    const ids = convos.map((c) => c.id);
+    const messages = await prisma.message.findMany({
+      where: { tenantId, conversationId: { in: ids }, ...originClause },
+      select: { conversationId: true, direction: true, messageType: true, createdAt: true, senderName: true },
+    });
+
+    // ── Timezone, named rather than assumed ──
+    let timezone = "UTC";
+    try {
+      const { readDurableSetting } = await import("@chatcenter/shared");
+      const raw = await readDurableSetting(tenantId, "businessHours");
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed.timezone === "string" && parsed.timezone.trim()) {
+        // Reject a zone Intl cannot resolve rather than throwing per message.
+        new Intl.DateTimeFormat("en-US", { timeZone: parsed.timezone });
+        timezone = parsed.timezone;
+      }
+    } catch {
+      timezone = "UTC";
+    }
+    const hourOf = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", hour12: false });
+
+    const perConversation = new Map(
+      convos.map((c) => [c.id, {
+        messages: 0,
+        inbound: 0,
+        outbound: 0,
+        composition: {} as Record<string, number>,
+        firstAt: null as Date | null,
+        lastAt: null as Date | null,
+        humanSenders: new Set<string>(),
+      }]),
+    );
+    const perChannel = new Map<string, { conversations: number; messages: number; inbound: number; outbound: number; lastAt: Date | null }>();
+    const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, inbound: 0 }));
+
+    for (const c of convos) {
+      const ch = String(c.channel);
+      const row = perChannel.get(ch) ?? { conversations: 0, messages: 0, inbound: 0, outbound: 0, lastAt: null };
+      row.conversations += 1;
+      perChannel.set(ch, row);
+    }
+
+    for (const m of messages) {
+      const conv = m.conversationId ? convos.find((c) => c.id === m.conversationId) : undefined;
+      const agg = m.conversationId ? perConversation.get(m.conversationId) : undefined;
+      if (agg) {
+        agg.messages += 1;
+        if (m.direction === "INBOUND") agg.inbound += 1; else agg.outbound += 1;
+        const type = m.messageType || "text";
+        agg.composition[type] = (agg.composition[type] ?? 0) + 1;
+        if (!agg.firstAt || m.createdAt < agg.firstAt) agg.firstAt = m.createdAt;
+        if (!agg.lastAt || m.createdAt > agg.lastAt) agg.lastAt = m.createdAt;
+        // senderName is the ONLY author field we have, and live outbound is
+        // almost entirely "AI Bot". Collecting the non-bot names is what lets a
+        // card say a person answered without inventing an identity.
+        if (m.direction === "OUTBOUND" && m.senderName && !/^(ai bot|system|broadcast)$/i.test(m.senderName)) {
+          agg.humanSenders.add(m.senderName);
+        }
+      }
+      if (conv) {
+        const ch = String(conv.channel);
+        const row = perChannel.get(ch)!;
+        row.messages += 1;
+        if (m.direction === "INBOUND") row.inbound += 1; else row.outbound += 1;
+        if (!row.lastAt || m.createdAt > row.lastAt) row.lastAt = m.createdAt;
+      }
+      if (m.direction === "INBOUND") {
+        const h = Number.parseInt(hourOf.format(m.createdAt), 10);
+        if (Number.isFinite(h) && h >= 0 && h < 24) hours[h]!.inbound += 1;
+      }
+    }
+
+    const conversations = convos.map((c) => {
+      const agg = perConversation.get(c.id)!;
+      const humans = [...agg.humanSenders];
+      return {
+        id: c.id,
+        channel: c.channel,
+        origin: c.origin,
+        status: c.status,
+        startedAt: agg.firstAt ?? c.createdAt,
+        lastAt: agg.lastAt ?? c.updatedAt,
+        messages: agg.messages,
+        inbound: agg.inbound,
+        outbound: agg.outbound,
+        // What it was MADE OF: { text: 40, image: 3, audio: 1 }.
+        composition: agg.composition,
+        handler: {
+          assignedAgentId: c.assignedAgentId,
+          assignedAiAgentId: c.assignedAiAgentId,
+          humanSenders: humans,
+          // Derived from what actually happened, not from the assignment: a
+          // conversation can be assigned to a human nobody ever replied as.
+          handledBy: humans.length > 0
+            ? (agg.outbound > humans.length ? "BOTH" : "HUMAN")
+            : (agg.outbound > 0 ? "AI" : "UNANSWERED"),
+        },
+      };
+    });
+
+    const channels = [...perChannel.entries()]
+      .map(([channel, v]) => ({ channel, ...v }))
+      .sort((a, b) => b.inbound - a.inbound || b.messages - a.messages);
+
+    const top = channels[0];
+    const preferredChannel = top && top.inbound > 0
+      ? {
+          channel: top.channel,
+          // Named so a screen states the basis instead of implying the customer
+          // said so. It is where they write most, not a stated preference.
+          basis: "most_inbound_messages" as const,
+          inbound: top.inbound,
+          share: Number((top.inbound / channels.reduce((n, c) => n + c.inbound, 0)).toFixed(4)),
+        }
+      : null;
+
+    return res.json({
+      contact: effective,
+      timezone,
+      conversations,
+      channels,
+      preferredChannel,
+      hours,
+      topics: { available: false as const, reason: "no_topic_store" as const },
+      totals: {
+        conversations: conversationCount,
+        messages: messages.length,
+        conversationScanTruncated: conversationCount > convos.length,
+      },
+    });
+  } catch (err) {
+    console.error("identity.insights error:", err);
+    return res.status(500).json({ error: "Failed to load insights" });
   }
 });
 
