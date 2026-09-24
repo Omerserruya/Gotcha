@@ -149,11 +149,13 @@ describe("signup session lifecycle", () => {
     // A relaunch is a fresh authorization. The old token belongs to a grant
     // the customer walked away from, and switching paths is exactly when the
     // granted assets change.
-    const first = await startSignupSession("tenant_a", { accessToken: "tok1", path: "new" });
-    const second = await startSignupSession("tenant_a", {
-      accessToken: "tok2",
-      path: "business-app",
-    });
+    // Same person relaunching, which is what the replacement is FOR.
+    const first = await startSignupSession("tenant_a", { accessToken: "tok1", path: "new" }, "user_1");
+    const second = await startSignupSession(
+      "tenant_a",
+      { accessToken: "tok2", path: "business-app" },
+      "user_1",
+    );
 
     expect(second).not.toBe(first);
     expect(await readSignupSession("tenant_a", first)).toBeNull();
@@ -167,12 +169,44 @@ describe("signup session lifecycle", () => {
 
   it("keeps each workspace's session alive independently", async () => {
     // Relaunching in one tenant must not invalidate another's in-flight flow.
-    const a = await startSignupSession("tenant_a", { accessToken: "tokA", path: "new" });
-    const b = await startSignupSession("tenant_b", { accessToken: "tokB", path: "new" });
-    await startSignupSession("tenant_a", { accessToken: "tokA2", path: "business-app" });
+    const a = await startSignupSession("tenant_a", { accessToken: "tokA", path: "new" }, "user_1");
+    const b = await startSignupSession("tenant_b", { accessToken: "tokB", path: "new" }, "user_2");
+    await startSignupSession("tenant_a", { accessToken: "tokA2", path: "business-app" }, "user_1");
 
     expect(await readSignupSession("tenant_a", a)).toBeNull();
     expect((await readSignupSession("tenant_b", b))?.accessToken).toBe("tokB");
+  });
+
+  it("★ lets TWO ADMINS of one workspace connect at the same time", async () => {
+    // The bug this replaces: the pointer was per-tenant, so the second admin's
+    // /inspect destroyed the first admin's session. The first then pressed
+    // Connect and got a failure with nothing to explain it - and because Meta's
+    // authorization codes are single-use, could not retry the same grant either.
+    const alice = await startSignupSession("tenant_a", { accessToken: "tokAlice", path: "new" }, "user_alice");
+    const bob = await startSignupSession("tenant_a", { accessToken: "tokBob", path: "new" }, "user_bob");
+
+    expect((await readSignupSession("tenant_a", alice))?.accessToken).toBe("tokAlice");
+    expect((await readSignupSession("tenant_a", bob))?.accessToken).toBe("tokBob");
+  });
+
+  it("still replaces a person's OWN previous session, even with a colleague mid-flow", async () => {
+    // Both properties at once: one live session per person, and no collateral.
+    const alice1 = await startSignupSession("tenant_a", { accessToken: "a1", path: "new" }, "user_alice");
+    const bob = await startSignupSession("tenant_a", { accessToken: "b1", path: "new" }, "user_bob");
+    const alice2 = await startSignupSession("tenant_a", { accessToken: "a2", path: "business-app" }, "user_alice");
+
+    expect(await readSignupSession("tenant_a", alice1)).toBeNull();
+    expect((await readSignupSession("tenant_a", alice2))?.accessToken).toBe("a2");
+    expect((await readSignupSession("tenant_a", bob))?.accessToken).toBe("b1");
+  });
+
+  it("★ a leaked sessionId still cannot cross workspaces, which the pointer never guaranteed", async () => {
+    // The cross-workspace property lives in the SESSION key, not in the pointer.
+    // Scoping the pointer per user could not weaken it, and this pins that.
+    const id = await startSignupSession("tenant_a", { accessToken: "tok", path: "new" }, "user_1");
+
+    expect(await readSignupSession("tenant_b", id)).toBeNull();
+    expect((await readSignupSession("tenant_a", id))?.accessToken).toBe("tok");
   });
 
   it("returns null for a malformed session rather than throwing", async () => {

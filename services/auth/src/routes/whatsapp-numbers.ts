@@ -167,7 +167,17 @@ const inspectSchema = z.object({
  * Look at what the customer has, and say which flow each number would take.
  *
  * Read-only against Meta: no subscription, no registration, no database write.
- * Safe to call repeatedly, including on a fully healthy workspace.
+ * ⚠ "READ-ONLY" IS NOT "WITHOUT SIDE EFFECTS", and the distinction matters here
+ * because everything around it is careful enough to be believed.
+ *
+ * `inspectMetaAssets` genuinely only GETs against the customer's Meta assets -
+ * nothing there is written. But THIS ROUTE is not repeatable: it SPENDS a
+ * single-use authorization code, and it replaces the caller's in-flight signup
+ * session. Both are true of the call and neither is a property of the Meta reads.
+ *
+ * So: safe to call again in the sense that it will not corrupt the customer's
+ * Meta account, and NOT safe in the sense that the previous `code` is now dead
+ * and the previous session is gone. A second call needs a fresh authorization.
  */
 router.post(
   "/inspect",
@@ -192,16 +202,19 @@ router.post(
         .json({ error: "Meta did not accept the authorization. Try connecting again." });
     }
 
-    // Held server-side, keyed by tenant so one workspace's session can never
-    // be replayed by another. Replacing the tenant's previous session is part
-    // of this call: a relaunch is a new authorization, and the old token is
-    // from a grant the customer walked away from.
-    const sessionId = await startSignupSession(req.tenantId!, {
-      accessToken,
-      path,
-      businessPortfolioId,
-      wabaIds,
-    });
+    // Held server-side, keyed by tenant so one workspace's session can never be
+    // replayed by another. Replacing the previous session is part of this call:
+    // a relaunch is a new authorization, and the old token is from a grant the
+    // customer walked away from.
+    //
+    // The replacement is scoped to THIS PERSON. With a tenant-wide pointer, a
+    // second admin's inspect destroyed the first admin's in-flight session, and
+    // the first learned about it only as an unexplained failure on Connect.
+    const sessionId = await startSignupSession(
+      req.tenantId!,
+      { accessToken, path, businessPortfolioId, wabaIds },
+      req.user?.userId,
+    );
 
     const known = await prisma.whatsAppNumber.findMany({
       select: { phoneNumberId: true, tenantId: true },
