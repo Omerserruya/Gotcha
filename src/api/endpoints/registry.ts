@@ -488,6 +488,14 @@ export const integrationEndpoints = {
   list: () => endpoint('/api/integrations'),
   detail: (slug: string) => endpoint('/api/integrations/{slug}', { slug }),
   tools: (slug: string) => endpoint('/api/integrations/{slug}/tools', { slug }),
+  /**
+   * Screens 14b/14c — the use case, the parts, who CAN serve each and who
+   * DOES. Never connects anything; connecting stays in the marketplace.
+   *
+   * A part nothing could ever serve reports `available: false` with a
+   * reason, which is a different fact from an empty candidate list.
+   */
+  businessCore: () => endpoint('/api/integrations/business-core'),
 } as const;
 
 /**
