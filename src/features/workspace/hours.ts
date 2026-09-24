@@ -90,6 +90,15 @@ export function summariseWeek(week: Record<DayKey, DayHours>): WeekSummary {
 export function hoursPatch(
   week: Record<DayKey, DayHours>,
   existing: Workspace['hours'] | null | undefined,
+  /**
+   * The outside-hours pair, when the form is editing them.
+   *
+   * They live in this same setting and the server REPLACES it, so they have
+   * always had to travel with the week. They used to be carried silently from
+   * `existing`; now the screen can set them, and omitting the argument keeps
+   * the old carry-through exactly.
+   */
+  outside?: { aiOutsideHours?: 'active' | 'silent'; outsideHoursHandoffMessage?: string },
 ): Record<string, unknown> {
   return {
     enabled: DAY_KEYS.some((day) => week[day].enabled),
@@ -104,9 +113,11 @@ export function hoursPatch(
         ];
       }),
     ),
-    // Carried, not defaulted: these belong to the same setting and are not on
-    // this screen, so a write from here must not silently reset them.
-    aiOutsideHours: existing?.aiOutsideHours ?? 'active',
-    outsideHoursHandoffMessage: existing?.outsideHoursHandoffMessage ?? '',
+    // Set when the form supplies them, carried otherwise. Either way they
+    // travel: this setting is REPLACED, so leaving them out of the payload
+    // would silently reset the message to empty and the AI to `active`.
+    aiOutsideHours: outside?.aiOutsideHours ?? existing?.aiOutsideHours ?? 'active',
+    outsideHoursHandoffMessage:
+      outside?.outsideHoursHandoffMessage ?? existing?.outsideHoursHandoffMessage ?? '',
   };
 }

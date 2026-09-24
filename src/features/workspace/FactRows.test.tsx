@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -7,7 +8,8 @@ import messages from '@/i18n/messages/en/workspace.json';
 
 import { FactRows } from './FactRows';
 
-vi.mock('./actions', () => ({ saveWorkspace: vi.fn() }));
+const { saveWorkspace } = vi.hoisted(() => ({ saveWorkspace: vi.fn() }));
+vi.mock('./actions', () => ({ saveWorkspace }));
 
 /**
  * The fact rows, against the design's list.
@@ -158,5 +160,60 @@ describe('the header the badges depend on', () => {
     const intro = screen.getByTestId('facts-intro');
     expect(intro).toHaveTextContent(/filled in when you signed up/i);
     expect(intro).not.toHaveTextContent(/from\s+·/i);
+  });
+});
+
+describe('★ 11c · the week, and what cannot be stored beside it', () => {
+  const openHours = async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-hours'));
+  };
+
+  it('names the split shift it cannot save', async () => {
+    /*
+     * `dayScheduleSchema` is `{ enabled, open?, close? }` — one range per
+     * day. The design draws "+ Split" on every row. A merchant who closes
+     * for lunch needs to know GOTCHA cannot be told that, rather than
+     * hunting for the control.
+     */
+    await openHours();
+    expect(screen.getByTestId('hours-one-range')).toHaveTextContent(/split shift/i);
+    expect(screen.getByTestId('hours-one-range')).toHaveTextContent(/nowhere to be stored/i);
+  });
+
+  it('names the holiday calendar it does not have', async () => {
+    await openHours();
+    const note = screen.getByTestId('hours-no-holidays');
+    expect(note).toHaveTextContent(/no holiday calendar/i);
+    // Including the one-off closure, which is the part people actually need.
+    expect(note).toHaveTextContent(/one-off closure/i);
+  });
+
+  it('copies Sunday across the working week without saving anything', async () => {
+    await openHours();
+    await userEvent.click(screen.getByTestId('hours-copy-sunday'));
+    expect(screen.getByTestId('hours-copied')).toHaveTextContent(/copied to Monday/i);
+    // Local only: nothing is written until Save, so the action is safe to undo
+    // by cancelling.
+    expect(saveWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('★ offers the outside-hours message the design sends to Studio', async () => {
+    /*
+     * The design says it is set in Studio. The line a customer actually
+     * receives comes from THIS setting: `ai-bot.service.ts:868` reads
+     * `biz.cfg?.outsideHoursHandoffMessage`, and `biz.cfg` is
+     * `parseBusinessHours` of the businessHours setting this form writes.
+     */
+    await openHours();
+    expect(screen.getByLabelText(/what customers are told/i)).toBeInTheDocument();
+    expect(screen.getByTestId('hours-ai-outside')).toBeInTheDocument();
+  });
+
+  it('says what happens when the message is left empty', async () => {
+    // GOTCHA computes the next opening from the week above rather than
+    // sending nothing, and that is worth knowing before you leave it blank.
+    await openHours();
+    expect(screen.getByText(/says when you next open/i)).toBeInTheDocument();
   });
 });

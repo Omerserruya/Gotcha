@@ -202,6 +202,9 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
   const [currency, setCurrency] = useState('');
   const [language, setLanguage] = useState('');
   const [week, setWeek] = useState<Record<DayKey, DayHours>>(() => weekOf(workspace));
+  const [aiOutside, setAiOutside] = useState<'active' | 'silent'>('active');
+  const [outsideMsg, setOutsideMsg] = useState('');
+  const [copied, setCopied] = useState(false);
 
   function seed(key: FactKey) {
     if (key === 'name') setText(workspace.name ?? '');
@@ -212,7 +215,12 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
       setCurrency(workspace.currency ?? '');
       setText(workspace.timezone ?? '');
     }
-    if (key === 'hours') setWeek(weekOf(workspace));
+    if (key === 'hours') {
+      setWeek(weekOf(workspace));
+      setAiOutside(workspace.hours?.aiOutsideHours ?? 'active');
+      setOutsideMsg(workspace.hours?.outsideHoursHandoffMessage ?? '');
+      setCopied(false);
+    }
   }
 
   function submit(key: FactKey) {
@@ -233,7 +241,12 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         timezone: text.trim(),
       });
     }
-    return commit(key, { hours: hoursPatch(week, workspace.hours ?? null) });
+    return commit(key, {
+      hours: hoursPatch(week, workspace.hours ?? null, {
+        aiOutsideHours: aiOutside,
+        outsideHoursHandoffMessage: outsideMsg.trim(),
+      }),
+    });
   }
 
   /*
@@ -441,6 +454,93 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
                 />
               </Fragment>
             ))}
+          </div>
+
+          {/*
+            Sunday to Thursday is the Israeli working week, and typing the
+            same two times five times is where a week gets entered wrong.
+            Purely local — it fills the inputs and changes nothing until Save.
+          */}
+          <button
+            type="button"
+            className={styles.hoursCopy}
+            data-testid="hours-copy-sunday"
+            onClick={() => {
+              const sun = week.sunday;
+              setWeek({
+                ...week,
+                monday: { ...sun },
+                tuesday: { ...sun },
+                wednesday: { ...sun },
+                thursday: { ...sun },
+              });
+              setCopied(true);
+            }}
+          >
+            {t('hours.copySunday')}
+          </button>
+          {copied ? (
+            <p className={styles.hoursNote} data-testid="hours-copied">
+              {t('hours.copied')}
+            </p>
+          ) : null}
+
+          {/*
+            ★ TWO THINGS THE DESIGN DRAWS THAT CANNOT BE STORED.
+            ════════════════════════════════════════════════════════════════
+            `+ Split` per day, and a holiday calendar with per-date overrides.
+            `dayScheduleSchema` is `{ enabled, open?, close? }` — one range,
+            one week, and no dates at all.
+
+            Named rather than omitted, the same as the grant expiry on 12e: a
+            missing control is indistinguishable from a control somebody
+            failed to find, and a merchant who closes for lunch needs to know
+            GOTCHA cannot be told that rather than hunting for the setting.
+          */}
+          <p className={styles.hoursAbsent} data-testid="hours-one-range">
+            {t('hours.oneRange')}
+          </p>
+          <p className={styles.hoursAbsent} data-testid="hours-no-holidays">
+            {t('hours.noHolidays')}
+          </p>
+
+          {/*
+            ★ OUTSIDE THESE HOURS — AND THE DESIGN POINTS AT THE WRONG SCREEN.
+            ════════════════════════════════════════════════════════════════
+            The design says "What customers are told outside these hours is
+            set in Studio". There IS an agent-level field
+            (`agents.ts:549`), but the line a customer actually receives comes
+            from THIS setting: `ai-bot.service.ts:868` reads
+            `biz.cfg?.outsideHoursHandoffMessage`, and `biz.cfg` is
+            `parseBusinessHours` of the businessHours setting this form writes.
+
+            So the message belongs here, beside the week it depends on. Both
+            fields have always travelled in this payload — the setting is
+            REPLACED, so omitting them would reset them — they were just
+            carried silently. Now they can be set.
+          */}
+          <p className={styles.hoursSectionHeading}>{t('hours.outsideHeading')}</p>
+          <div className={styles.editFields}>
+            <label className={styles.hoursChoice}>
+              <span className={styles.hoursChoiceLabel}>{t('hours.aiOutsideLabel')}</span>
+              <select
+                className={styles.hoursSelect}
+                data-testid="hours-ai-outside"
+                value={aiOutside}
+                onChange={(e) => setAiOutside(e.target.value === 'silent' ? 'silent' : 'active')}
+              >
+                <option value="active">{t('hours.aiOutside.active')}</option>
+                <option value="silent">{t('hours.aiOutside.silent')}</option>
+              </select>
+            </label>
+            <Input
+              label={t('hours.messageLabel')}
+              value={outsideMsg}
+              maxLength={500}
+              placeholder={t('hours.messagePlaceholder')}
+              hint={t('hours.messageHint')}
+              onChange={(e) => setOutsideMsg(e.target.value)}
+            />
           </div>
         </div>,
       )}

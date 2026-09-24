@@ -29,7 +29,20 @@
     "close": "Closes",
     "openOn": "Open on {day}",
     "never": "Not set",
-    "disabled": "Set, but switched off — GOTCHA answers at any hour"
+    "disabled": "Set, but switched off — GOTCHA answers at any hour",
+    "copySunday": "Copy Sunday to every weekday",
+    "copied": "Sunday's times copied to Monday–Thursday.",
+    "oneRange": "One opening and one closing time per day. A split shift — open, closed for lunch, open again — has nowhere to be stored, so it cannot be set here.",
+    "noHolidays": "There is no holiday calendar. Israeli holidays and eves are not applied automatically, and a one-off closure for a specific date cannot be saved — GOTCHA has a weekly pattern and nothing else.",
+    "outsideHeading": "Outside these hours",
+    "aiOutsideLabel": "What the AI does",
+    "aiOutside": {
+      "active": "Answers as usual",
+      "silent": "Stays quiet"
+    },
+    "messageLabel": "What customers are told",
+    "messagePlaceholder": "We're closed now — someone will reply when we open.",
+    "messageHint": "Left empty, GOTCHA says when you next open, worked out from the week above."
   },
   "day": {
     "sunday": "Sunday",

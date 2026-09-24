@@ -185,6 +185,22 @@ for (const size of SIZES) {
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-hours').click();
       await expect(page.getByTestId('fact-save-hours')).toBeVisible();
+
+      /*
+       * 11c · what the design draws here and the storage cannot hold.
+       *
+       * `dayScheduleSchema` is `{ enabled, open?, close? }` — one range, one
+       * week, no dates. So "+ Split" on every row and the whole holiday
+       * calendar are named rather than omitted: a missing control is
+       * indistinguishable from one somebody failed to find.
+       */
+      await expect(page.getByTestId('hours-one-range')).toHaveText(/split shift/i);
+      await expect(page.getByTestId('hours-no-holidays')).toHaveText(/no holiday calendar/i);
+
+      // And the outside-hours pair, which the design sends to Studio and
+      // which `ai-bot.service.ts` actually reads from THIS setting.
+      await expect(page.getByTestId('hours-ai-outside')).toBeVisible();
+
       await shoot(page, `${size.name}-03-edit-hours-en`);
     });
 

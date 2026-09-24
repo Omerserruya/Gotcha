@@ -477,4 +477,67 @@
     line-height: var(--line-height-snug);
     color: var(--text-body);
   }
+
+  /* ── Screen 11c · opening hours ──────────────────────────────────────── */
+
+  .hoursCopy {
+    align-self: start;
+    margin-block-start: var(--space-8);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-body);
+    background: none;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-12);
+    cursor: pointer;
+  }
+
+  .hoursNote {
+    margin: var(--space-4) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-calm-text);
+  }
+
+  /*
+   * What this screen cannot store, said rather than omitted. A missing
+   * control is indistinguishable from one somebody failed to find.
+   */
+  .hoursAbsent {
+    margin: var(--space-8) 0 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .hoursSectionHeading {
+    margin: var(--space-14) 0 var(--space-6);
+    font-size: var(--font-size-caption);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .hoursChoice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .hoursChoiceLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .hoursSelect {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+  }
 }
