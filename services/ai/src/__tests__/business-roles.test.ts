@@ -225,3 +225,44 @@ describe("electing a system for a part", () => {
     expect(plan.writes).toEqual([{ id: "ti_shopify", roles: ["ecommerce", "crm"] }]);
   });
 });
+
+/**
+ * Two different facts must not share a key.
+ *
+ * `GET /business-core` spread `roleAvailability()` - which carries
+ * `reason: "no_integrations_exist"`, an ENUM - and then set `reason` to the
+ * resolver's user-facing sentence. The prose won, silently, for every part.
+ *
+ * Nothing broke: `available` and `detail` both survived, so the screen still told
+ * "nothing exists to choose" from "nothing connected yet". What was lost is
+ * retrievability - the enum became unobtainable, and a consumer trusting the
+ * documented meaning got prose where a code is specified.
+ *
+ * These pin the two shapes as distinct, at the source. The route composes them
+ * into `unavailableReason` (code) and `reason` (prose); this is the guard that the
+ * availability type keeps carrying an enum for it to compose.
+ */
+describe("the availability code and the resolution prose are different facts", () => {
+  it("★ roleAvailability's reason is the ENUM, not a sentence", () => {
+    const availability = roleAvailability("shipping");
+
+    expect(availability.available).toBe(false);
+    if (availability.available) return;
+    // A code a consumer can branch on. The sentence lives in `detail`.
+    expect(availability.reason).toBe("no_integrations_exist");
+    expect(availability.detail).toMatch(/No shipping integration exists/);
+    // And they are not the same value, which is the whole reason two keys exist.
+    expect(availability.reason).not.toBe(availability.detail);
+  });
+
+  it("an available part carries NO availability code at all", () => {
+    const availability = roleAvailability("ecommerce");
+
+    expect(availability.available).toBe(true);
+    // Not `reason: null`. A part that can be offered has no unavailability
+    // reason, and inventing one would be a value where absence is the fact -
+    // the same distinction as absent-versus-blank elsewhere.
+    expect("reason" in availability).toBe(false);
+    expect("detail" in availability).toBe(false);
+  });
+});

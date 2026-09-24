@@ -279,13 +279,36 @@ router.get("/business-core", async (req: Request, res: Response) => {
         ? catalogueRows.find((c) => c.slug === resolved.slug) ?? null
         : null;
 
+      // ★ TWO DIFFERENT FACTS USED TO SHARE `reason`, AND THE PROSE WON.
+      // `...availability` spread the enum `reason: "no_integrations_exist"`, and
+      // `reason: resolved.reason` then overwrote it with a sentence. Nothing
+      // broke - `available` and `detail` both survived, so the screen still told
+      // "nothing exists to choose" from "nothing connected yet" - but the enum
+      // became unobtainable, and a consumer trusting the documented meaning got
+      // prose where a code is specified.
+      //
+      // So the availability code travels as `unavailableReason` and `reason`
+      // keeps the prose it already carried. ADD-ONLY, deliberately: the
+      // available/detail shape is byte-identical to before, because the
+      // consumer's contract is a strict `z.object` and nulling or removing a key
+      // is what broke the voice screen when `basis.messagesAnalysed` went from
+      // 0 to null. An unexpected key is stripped; a changed type is refused.
+      const availabilityFields = availability.available
+        ? { available: true as const }
+        : {
+            available: false as const,
+            detail: availability.detail,
+            unavailableReason: availability.reason,
+          };
+
       return {
         role,
-        ...availability,
+        ...availabilityFields,
         elected: resolved.slug ? { slug: resolved.slug, name: electedRow?.name ?? resolved.slug } : null,
         // WHY it is that system: chosen by the merchant, inferred by a resolver,
         // or not set. "Inferred" must not read as a decision somebody made.
         source: resolved.source,
+        // Prose, always present. The availability CODE is `unavailableReason`.
         reason: resolved.reason,
         candidates,
       };
