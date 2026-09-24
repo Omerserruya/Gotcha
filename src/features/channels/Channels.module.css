@@ -434,4 +434,12 @@
     padding-block: var(--space-2);
     padding-inline: var(--space-8);
   }
+
+  /* ── Screens 13c/13d · connecting a number ───────────────────────────── */
+
+  .connect {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
 }
