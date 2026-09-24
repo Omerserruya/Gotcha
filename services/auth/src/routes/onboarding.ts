@@ -12,7 +12,7 @@ import {
   extractSignals,
   type DiscoverySignals,
 } from "../services/site-crawl.service";
-import { callDiscoverBusiness } from "../services/business-scan.service";
+import { callDiscoverBusiness, persistCrawlReach } from "../services/business-scan.service";
 import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction, normalizeDiscoveryRecord, normalizeDiscoveryTechnology, projectDiscoveryTopics, projectPages, projectReadinessAnswers } from "@chatcenter/shared";
 import { applyProjection, type SyncReport } from "../services/onboarding-knowledge.service";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
@@ -1922,6 +1922,17 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       return;
     }
     const { home, okPages, pages, signals } = crawl;
+
+    // What the crawl could SEE, recorded alongside what the model concluded.
+    // The review screen reads this row, and without it the screen can only quote
+    // pages.length - which on a password-protected store is 17 for a site nobody
+    // could read. See persistCrawlReach and the schema comment on `crawl`.
+    await persistCrawlReach(req.tenantId!, {
+      requested: crawl.requested.length,
+      pagesRead: crawl.pages.length,
+      distinctTextPages: crawl.distinctTextPages,
+      coverage: crawl.pages.map((p) => p.url),
+    });
 
     const businessType = crawl.businessType;
 

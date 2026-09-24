@@ -1624,6 +1624,22 @@ model BusinessDiscovery {
   // so a reload mid-tune resumes the conversation instead of losing it.
   tuneTranscript Json? @map("tune_transcript")
 
+  /// What the CRAWL could see, as opposed to what the model concluded.
+  ///
+  /// ★ `distinctTextPages` IS THE ONE THAT MATTERS. A password-protected store
+  /// answers 200 to EVERY path, so `pagesRead` can be 17 while the crawl saw the
+  /// same login page seventeen times - measured on this deployment's own demo
+  /// store, where all 17 responses were the same 188-byte "This store is password
+  /// protected". A screen must never say "we read 17 pages" off `pagesRead`; when
+  /// the distinct count is 1 the honest sentence is that the site could not be
+  /// read, and the `ecommerce` industry that comes back with it was inferred from
+  /// Shopify markers in the login page's own markup.
+  ///
+  /// Shape: { requested, pagesRead, distinctTextPages, coverage: string[], at }.
+  /// Written by every scan, so it describes the LATEST one, like the rest of this
+  /// row.
+  crawl     Json?
+
   scannedAt DateTime? @map("scanned_at")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")

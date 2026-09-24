@@ -125,6 +125,24 @@ export interface CrawlReach {
   coverage: string[];
 }
 
+/**
+ * Record what the crawl could see on the tenant's discovery row.
+ *
+ * `updateMany` rather than `update`: a tenant may have no BusinessDiscovery row
+ * yet (a rescan can run before onboarding's scan ever did), and a missing row is
+ * not a reason to fail a scan. Never throws for the same reason.
+ */
+export async function persistCrawlReach(tenantId: string, reach: CrawlReach): Promise<void> {
+  try {
+    await prisma.businessDiscovery.updateMany({
+      where: { tenantId },
+      data: { crawl: { ...reach, at: new Date().toISOString() } as never },
+    });
+  } catch (err: any) {
+    console.error(`[business-scan] could not record crawl reach for ${tenantId}:`, err?.message ?? err);
+  }
+}
+
 export type RescanOutcome =
   | { ok: true; plan: RescanPlan; applied: string[]; reach: CrawlReach }
   | {
@@ -202,6 +220,12 @@ export async function runProfileRescan(args: {
     distinctTextPages: crawl.distinctTextPages,
     coverage: crawl.pages.map((p) => p.url),
   };
+
+  // Persisted so the REVIEW screen can see it too, not just the caller of this
+  // rescan. Written before the model call, because what the crawl saw is a fact
+  // whether or not the analysis afterwards succeeds - and the case that needs it
+  // most is a login wall plus a failed scan.
+  await persistCrawlReach(tenantId, reach);
 
   const report = await callDiscoverBusiness(
     authHeader,

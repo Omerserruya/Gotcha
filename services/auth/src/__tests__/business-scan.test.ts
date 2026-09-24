@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // them, so a test file can pass its suite and fail the typecheck.
 const prismaMock = vi.hoisted(() => ({
   businessProfile: { findUnique: vi.fn<(...a: any[]) => any>(), update: vi.fn<(...a: any[]) => any>() },
-  businessDiscovery: { findUnique: vi.fn<(...a: any[]) => any>() },
+  businessDiscovery: { findUnique: vi.fn<(...a: any[]) => any>(), updateMany: vi.fn<(...a: any[]) => any>() },
 }));
 const crawlMock = vi.hoisted(() => vi.fn<(...a: any[]) => any>());
 const provenanceMock = vi.hoisted(() => ({
@@ -61,6 +61,7 @@ beforeEach(() => {
   prismaMock.businessProfile.findUnique.mockResolvedValue({ ...PROFILE });
   prismaMock.businessProfile.update.mockResolvedValue({});
   prismaMock.businessDiscovery.findUnique.mockResolvedValue(null);
+  prismaMock.businessDiscovery.updateMany.mockResolvedValue({ count: 1 });
   provenanceMock.readProvenance.mockResolvedValue({});
   crawlMock.mockResolvedValue({
     pages: [],
@@ -275,5 +276,61 @@ describe("what the crawl could see is reported to the screen", () => {
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(outcome.reach.distinctTextPages).toBe(2);
+  });
+});
+
+describe("what the crawl saw is PERSISTED, not only returned", () => {
+  it("★ records the reach on the discovery row so the review screen can see it too", async () => {
+    const pages = Array.from({ length: 17 }, (_, i) => ({ url: `https://shop.example.com/p${i}`, text: "password protected" }));
+    crawlMock.mockResolvedValue({
+      pages,
+      signals: {},
+      businessType: "ecommerce",
+      requested: pages.map((p) => p.url),
+      distinctTextPages: 1,
+    });
+
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+
+    expect(prismaMock.businessDiscovery.updateMany).toHaveBeenCalledTimes(1);
+    const written = (prismaMock.businessDiscovery.updateMany.mock.calls[0] as any[])[0];
+    expect(written.where).toEqual({ tenantId: "t1" });
+    expect(written.data.crawl.distinctTextPages).toBe(1);
+    expect(written.data.crawl.pagesRead).toBe(17);
+    expect(typeof written.data.crawl.at).toBe("string");
+  });
+
+  it("records it even when the MODEL fails afterwards", async () => {
+    // The case that needs it most: a login wall AND a failed analysis. What the
+    // crawl saw is a fact whether or not the model succeeded.
+    const pages = [{ url: "https://shop.example.com", text: "password protected" }];
+    crawlMock.mockResolvedValue({ pages, signals: {}, businessType: "ecommerce", requested: ["u"], distinctTextPages: 1 });
+    const failing = vi.fn(async () => ({ ok: false, json: async () => ({}) }) as any);
+
+    const outcome = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: failing });
+
+    expect(outcome.ok).toBe(false);
+    expect(prismaMock.businessDiscovery.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not record anything when the site could not be read at all", async () => {
+    crawlMock.mockResolvedValue(null);
+
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+
+    // Nothing was read, so there is no measurement. Writing zeros would claim
+    // one that never happened - the same reason the column has no default.
+    expect(prismaMock.businessDiscovery.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("a missing discovery row does not fail the scan", async () => {
+    // A rescan can run before onboarding's scan ever did. updateMany matches
+    // nothing and that is fine.
+    prismaMock.businessDiscovery.updateMany.mockResolvedValue({ count: 0 });
+    crawlMock.mockResolvedValue({ pages: [{ url: "u", text: "t" }], signals: {}, businessType: "x", requested: ["u"], distinctTextPages: 1 });
+
+    const outcome = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+
+    expect(outcome.ok).toBe(true);
   });
 });
