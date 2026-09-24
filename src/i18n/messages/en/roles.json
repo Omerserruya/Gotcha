@@ -74,6 +74,10 @@
       "failed": "The role could not be created. Nothing was changed."
     },
     "noLevels": "A permission is held or it is not. GOTCHA has no None / View / Edit / Manage levels — the design shows four and the catalogue stores one bit per permission.",
-    "noLimits": "Money limits cannot be set on a permission. There is no amount stored anywhere, so a role that may issue refunds may issue any refund."
+    "noLimits": "Money limits cannot be set on a permission. There is no amount stored anywhere, so a role that may issue refunds may issue any refund.",
+    "wildcardHeading": "This role grants permissions by pattern",
+    "wildcardBody": "It holds {patterns}. A pattern means “everything under this, including permissions added later” — so it is a standing instruction, not a list. Ticking the boxes it matches today would freeze it, and the role would stop keeping up the next time a permission is added.",
+    "wildcardCannotSeed": "The checkbox list cannot express that, so this role cannot be used as a starting point. Choose one without patterns, or start from nothing.",
+    "wildcardCount": "{count, plural, one {# pattern} other {# patterns}}"
   }
 }

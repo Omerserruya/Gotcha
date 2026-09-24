@@ -486,4 +486,22 @@
     line-height: var(--line-height-snug);
     color: var(--intent-urgent-text);
   }
+
+  /* A role the grid cannot represent. Set apart, because it is a refusal. */
+  .formWildcard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .formWildcardLead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--intent-blocked-text);
+  }
 }

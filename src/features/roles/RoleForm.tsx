@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { groupByDomain, type PermissionDef } from '@/api/contracts/permission-catalog';
-import type { Role } from '@/api/contracts/roles';
+import { gridCanRepresent, wildcardsIn, type Role } from '@/api/contracts/roles';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
 
@@ -63,6 +63,24 @@ export function RoleForm({
   function startFrom(id: string) {
     setSourceId(id);
     const role = roles.find((r) => r.id === id);
+
+    /*
+      ★ REFUSE TO SEED FROM A ROLE THAT GRANTS BY PATTERN.
+
+      A wildcard is a standing instruction — "everything under this,
+      including permissions added later" — so ticking the boxes it matches
+      today produces a role that is identical on the day it is saved and
+      diverges from then on, silently, every time anyone adds a permission.
+
+      Nothing is seeded and nothing is offered to save. The panel below says
+      why, because a merchant who sees no boxes tick will otherwise assume a
+      bug.
+    */
+    if (role && !gridCanRepresent(role.features)) {
+      setSelected([]);
+      return;
+    }
+
     // A copy of the features as they are NOW. Nothing links the two after
     // this, which is what the hint below says out loud.
     setSelected(role ? [...role.features] : []);
@@ -116,7 +134,24 @@ export function RoleForm({
         who later widens the Agent role would reasonably expect this one to
         follow, and it will not.
       */}
-      {source ? (
+      {/*
+        The refusal, in the role's own terms. Department Manager holds
+        `conversation:messages:*` and `customer:commerce:*` beside fourteen
+        explicit keys — so a grid would render fourteen correct ticks and drop
+        two entries, looking RIGHT while being destructive. Owner at least
+        looks odd; this one would not.
+      */}
+      {source && !gridCanRepresent(source.features) ? (
+        <div className={styles.formWildcard} data-testid="role-source-wildcard">
+          <p className={styles.formWildcardLead}>{t('form.wildcardHeading')}</p>
+          <p className={styles.formHint}>
+            {t('form.wildcardBody', { patterns: wildcardsIn(source.features).join(', ') })}
+          </p>
+          <p className={styles.formHint} data-testid="role-source-refused">
+            {t('form.wildcardCannotSeed')}
+          </p>
+        </div>
+      ) : source ? (
         <p className={styles.formHint} data-testid="role-source-hint">
           {t('form.startFromHint', { name: source.name })}
         </p>

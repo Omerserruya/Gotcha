@@ -237,3 +237,47 @@ export function removals(person: Person): readonly Grant[] {
 export function overrideCount(person: Person): number {
   return person.grants.length;
 }
+
+/**
+ * Every pattern key a role holds — screen 12c.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★ A WILDCARD IS A STANDING INSTRUCTION, NOT SHORTHAND FOR TODAY'S LIST
+ * ════════════════════════════════════════════════════════════════════════════
+ * The catalogue states the semantic outright:
+ *
+ *   "*"                       → every permission
+ *   "ai:*"                    → every ai:* permission
+ *   "conversation:messages:*" → every action under conversation:messages
+ *
+ * *"so roles auto-inherit new permissions."* So expanding a wildcard into the
+ * boxes it currently matches does not produce a different role — it produces
+ * one that is **identical on the day it is saved and diverges from then on**,
+ * silently, every time anyone adds a permission key.
+ *
+ * The damage is invisible at the moment it is done and surfaces months later
+ * as a manager who cannot do something their job description says they can.
+ *
+ * ── AND IT IS NOT ONLY THE OWNER ROLE ──
+ * Measured on this database: **Department Manager** — seeded, ordinary,
+ * non-Owner — holds `conversation:messages:*` and `customer:commerce:*`
+ * alongside fourteen explicit keys, on every tenant that has it.
+ *
+ * That is the dangerous shape. Owner is one unmatched string and looks odd.
+ * Department Manager would render fourteen correctly ticked boxes and drop
+ * two entries, so the grid would look RIGHT while being destructive.
+ */
+export function wildcardsIn(features: readonly string[]): readonly string[] {
+  return features.filter((f) => f === WILDCARD_FEATURE || f.endsWith(':*'));
+}
+
+/**
+ * Can a checkbox grid represent this role without changing what it means?
+ *
+ * No, whenever it holds any pattern. **A control that cannot represent a
+ * state the system can be in will be used to destroy that state** — so the
+ * grid must not be the thing that saves one.
+ */
+export function gridCanRepresent(features: readonly string[]): boolean {
+  return wildcardsIn(features).length === 0;
+}

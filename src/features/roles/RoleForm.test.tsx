@@ -42,6 +42,20 @@ const ROLES: readonly Role[] = [
     memberCount: 3,
   },
   {
+    id: 'r3',
+    name: 'Department Manager',
+    description: null,
+    isSystem: true,
+    builtinKey: 'DEPARTMENT_MANAGER',
+    /*
+     * The dangerous shape, measured on this database: two scoped wildcards
+     * beside explicit keys. A grid renders the explicit ones correctly and
+     * drops the patterns — so it looks RIGHT while being destructive.
+     */
+    features: ['conversations:read', 'conversation:messages:*', 'customer:commerce:*'],
+    memberCount: 4,
+  },
+  {
     id: 'r2',
     name: 'Owner',
     description: null,
@@ -173,21 +187,53 @@ describe('the form will not submit nothing', () => {
   });
 });
 
-describe('★ the wildcard role cannot be copied into a checkbox list', () => {
-  it('selects nothing the catalogue can show when starting from Owner', async () => {
+describe('★ a role that grants by pattern is refused, not flattened', () => {
+  it('refuses Owner and says why', async () => {
     /*
-     * Owner holds ONE feature row: `*`. `permissions.ts:37` short-circuits it
-     * to "yes" for every key. So "start from Owner" seeds a selection of one
-     * string that is not in the catalogue and means everything.
-     *
-     * The checkboxes therefore show nothing ticked, which is honest about
-     * what this form can represent — and the count says one, which is what
-     * would be SENT. A form that silently ticked all 63 would be creating a
-     * different role from the one it copied.
+     * A wildcard is a standing instruction — "everything under this,
+     * including permissions added later" — so ticking what it matches today
+     * produces a role identical on the day it is saved and divergent from
+     * then on, every time anyone adds a permission key.
      */
     renderForm();
     await userEvent.selectOptions(screen.getByTestId('role-source'), 'r2');
-    expect(screen.getByTestId('role-permission-billing:refunds')).not.toBeChecked();
-    expect(screen.getByTestId('role-selected')).toHaveTextContent(/1 permission selected/i);
+    const refusal = screen.getByTestId('role-source-wildcard');
+    expect(refusal).toHaveTextContent(/grants permissions by pattern/i);
+    expect(refusal).toHaveTextContent(/including permissions added later/i);
+    expect(screen.getByTestId('role-source-refused')).toHaveTextContent(
+      /cannot be used as a starting point/i,
+    );
+  });
+
+  it('★ refuses Department Manager, which is NOT the Owner case', async () => {
+    /*
+     * Seeded, ordinary, non-Owner, on every tenant that has it: two scoped
+     * wildcards beside fourteen explicit keys. A grid would render the
+     * explicit ones correctly and silently drop the patterns — so unlike
+     * Owner, it would look right.
+     */
+    renderForm();
+    await userEvent.selectOptions(screen.getByTestId('role-source'), 'r3');
+    expect(screen.getByTestId('role-source-wildcard')).toBeInTheDocument();
+    // Names the patterns, so the merchant can see what cannot be expressed.
+    expect(screen.getByTestId('role-source-wildcard')).toHaveTextContent(
+      /conversation:messages:\*/,
+    );
+  });
+
+  it('★ seeds NOTHING from a pattern role, including the keys it could match', async () => {
+    // The explicit `conversations:read` is in the catalogue and would tick.
+    // It must not: a partial seed is the flattening, one box at a time.
+    renderForm();
+    await userEvent.selectOptions(screen.getByTestId('role-source'), 'r3');
+    expect(screen.getByTestId('role-permission-conversations:read')).not.toBeChecked();
+    expect(screen.getByTestId('role-selected')).toHaveTextContent(/no permissions selected/i);
+  });
+
+  it('still seeds normally from a role without patterns', async () => {
+    renderForm();
+    await userEvent.selectOptions(screen.getByTestId('role-source'), 'r1');
+    expect(screen.queryByTestId('role-source-wildcard')).toBeNull();
+    expect(screen.getByTestId('role-permission-conversations:read')).toBeChecked();
   });
 });
