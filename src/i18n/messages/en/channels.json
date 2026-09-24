@@ -110,6 +110,27 @@
       "noReason": "Meta did not say why.",
       "fixInMeta": "This is fixed in your Meta Business account, not here.",
       "badge": "Templates paused"
+    },
+    "connect": {
+      "heading": "Numbers on your WhatsApp account",
+      "intro": "We looked at the numbers on the account you just authorised. Each one says what connecting it would do.",
+      "none": "No numbers were found on that account.",
+      "action": "Connect this number",
+      "resume": "Finish connecting",
+      "reconnect": "Reconnect",
+      "alreadyHere": "Already connected to this workspace.",
+      "pinWarning": "You will be asked for this number's two-step PIN. Have it ready — Meta will not let the connection finish without it.",
+      "blockedHeading": "This one cannot be connected",
+      "scenario": {
+        "NEW_NUMBER": "New number",
+        "COEXISTENCE": "Lives in the WhatsApp Business app",
+        "EXISTING_CLOUD_API": "Already on the Cloud API",
+        "RECONNECT": "Connected here before",
+        "MIGRATION": "Moves between accounts",
+        "BLOCKED": "Blocked"
+      },
+      "coexistHeading": "What happens to a Business app number",
+      "migrationNotPossible": "Moving it off the Business app entirely is not something anyone can do — it is not a step you have missed."
     }
   }
 }

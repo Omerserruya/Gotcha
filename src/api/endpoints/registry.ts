@@ -414,6 +414,15 @@ export const channelEndpoints = {
    * entry, so it is the only state the screen can currently show.
    */
   whatsappNumbers: () => endpoint('/api/channels/whatsapp/numbers'),
+  /**
+   * Pre-flight — screens 13c/13d. Takes a Meta authorization CODE.
+   *
+   * Read-only against the customer's assets, and NOT side-effect-free: it
+   * spends the single-use code and replaces the tenant's signup session.
+   */
+  whatsappInspect: () => endpoint('/api/channels/whatsapp/inspect'),
+  /** ★ WRITES at Meta — subscribeApp + register. Never fired automatically. */
+  whatsappConnect: () => endpoint('/api/channels/whatsapp/connect'),
   /** Deliberate re-read from Meta. The list is built from stored state. */
   whatsappRefresh: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/refresh', { id }),
   /**
