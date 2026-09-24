@@ -295,6 +295,80 @@ function wantsImported(req: Request): boolean {
  * ════════════════════════════════════════════════════════════════════════════
  */
 
+/**
+ * What this timeline can contain, and what it deliberately cannot.
+ *
+ * 04b asks for one stream mixing conversations, orders, returns, AI actions and
+ * notes. Three of those are not local:
+ *
+ *   orders / returns  There is NO Order or Return model in the schema. They live
+ *                     in Shopify, so putting them here would mean a live
+ *                     commerce call per render - which makes the whole history
+ *                     fail when Shopify is slow. They get their own screen.
+ *   notes             External, in the merchant's CRM.
+ *
+ * ★ REPORTED ON THE WIRE, not in a comment. A screen cannot tell "this customer
+ * has no orders" from "this endpoint never had orders" by looking at an empty
+ * list, and the difference decides whether it renders an empty state or a link.
+ * Same shape as `topics: { available: false }` on /insights.
+ */
+const TIMELINE_COVERAGE = {
+  message: { available: true },
+  handover: { available: true },
+  ai_action: {
+    available: true,
+    // Stated because the gap is invisible from the data: the stream looks
+    // complete and simply omits a whole class of action.
+    detail: "ToolExecution records catalog HTTP tools only. An action taken through an adapter, such as a Shopify refund, is not recorded here.",
+  },
+  order: { available: false, reason: "no_local_model", detail: "Orders live in the commerce platform and are served by their own screen." },
+  return: { available: false, reason: "no_local_model", detail: "Returns live in the commerce platform and are served by their own screen." },
+  note: { available: false, reason: "external_crm", detail: "Notes are written to the merchant's CRM and read back as recent_crm_notes." },
+} as const;
+
+const TIMELINE_EVENT_TYPES = ["message", "handover", "ai_action"] as const;
+type TimelineEventType = (typeof TIMELINE_EVENT_TYPES)[number];
+
+/**
+ * A cursor over a MERGED stream cannot be a row id.
+ *
+ * Prisma's `cursor` addresses one table. Three sources interleave here, so the
+ * cursor is the sort key itself - timestamp plus id - and paging is "everything
+ * strictly older than this point". That also survives the cursor row being
+ * deleted between pages, which an id cursor does not.
+ */
+function encodeCursor(at: Date, id: string): string {
+  return `${at.toISOString()}~${id}`;
+}
+
+/**
+ * The keyset predicate for "strictly older than this point".
+ *
+ * ★ PUSHED INTO THE QUERY, not applied after. The first version fetched
+ * `limit + 1` with `lte` and dropped the boundary row afterwards, which left
+ * exactly `limit` rows and made `hasMore` false one page early - the walk
+ * stopped at 100 of 120 and reported itself complete. Filtering after a LIMIT
+ * always risks that: the row you discard was the evidence that more exist.
+ */
+function keysetOlderThan(field: string, c: { at: Date; id: string } | null): Record<string, unknown> {
+  if (!c) return {};
+  return {
+    OR: [
+      { [field]: { lt: c.at } },
+      { AND: [{ [field]: c.at }, { id: { lt: c.id } }] },
+    ],
+  };
+}
+
+function decodeCursor(raw: string): { at: Date; id: string } | null {
+  const sep = raw.indexOf("~");
+  if (sep <= 0) return null;
+  const at = new Date(raw.slice(0, sep));
+  const id = raw.slice(sep + 1);
+  if (Number.isNaN(at.getTime()) || !id) return null;
+  return { at, id };
+}
+
 /** Page size ceiling. A caller asking for more gets this many, not an error. */
 const TIMELINE_MAX_LIMIT = 200;
 const TIMELINE_DEFAULT_LIMIT = 50;
@@ -327,8 +401,9 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       return res.json({
         contact: effective,
         events: [],
-        page: { limit, nextCursor: null, hasMore: false },
-        totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+        page: { limit, types: [...TIMELINE_EVENT_TYPES], nextCursor: null, hasMore: false },
+        coverage: TIMELINE_COVERAGE,
+        totals: { conversations: 0, messages: 0, handovers: 0, aiActions: 0, conversationScanTruncated: false },
       });
     }
 
@@ -347,72 +422,146 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       return res.json({
         contact: effective,
         events: [],
-        page: { limit, nextCursor: null, hasMore: false },
-        totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+        page: { limit, types: [...TIMELINE_EVENT_TYPES], nextCursor: null, hasMore: false },
+        coverage: TIMELINE_COVERAGE,
+        totals: { conversations: 0, messages: 0, handovers: 0, aiActions: 0, conversationScanTruncated: false },
       });
     }
 
     const byConversation = new Map(convos.map((c) => [c.id, c]));
-    const messageWhere = {
-      tenantId,
-      conversationId: { in: convos.map((c) => c.id) },
-      ...originClause,
-    };
+    const conversationIds = convos.map((c) => c.id);
 
-    let rows: Array<{ id: string; conversationId: string; direction: string; body: string | null; createdAt: Date; origin: string | null }>;
-    let messageCount: number;
-    try {
-      [messageCount, rows] = await Promise.all([
-        prisma.message.count({ where: messageWhere }),
-        prisma.message.findMany({
-          where: messageWhere,
-          // id breaks ties so two messages in the same millisecond cannot make
-          // the cursor loop or skip.
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: limit + 1,
-          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-          select: { id: true, conversationId: true, direction: true, body: true, createdAt: true, origin: true },
-        }) as any,
-      ]);
-    } catch (err: any) {
-      // A cursor from a deleted or foreign message: refuse it by name rather
-      // than silently restarting from the top, which would look like the end of
-      // the list wrapping around to the beginning.
-      if (cursor) return res.status(400).json({ error: "invalid_cursor" });
-      throw err;
+    const decoded = cursor ? decodeCursor(cursor) : null;
+    if (cursor && !decoded) {
+      // Refused by name rather than silently restarting from the top, which a
+      // paging UI renders as a history that never ends.
+      return res.status(400).json({ error: "invalid_cursor" });
     }
 
-    const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
+    const requested = typeof req.query.types === "string" && req.query.types.trim()
+      ? req.query.types.split(",").map((t) => t.trim()).filter(Boolean)
+      : [...TIMELINE_EVENT_TYPES];
+    const unknown = requested.filter((t) => !TIMELINE_EVENT_TYPES.includes(t as TimelineEventType));
+    if (unknown.length > 0) {
+      // A typo must not silently return a stream missing what was asked for.
+      return res.status(400).json({ error: "unknown_event_type", unknown, supported: TIMELINE_EVENT_TYPES });
+    }
+    const wanted = new Set(requested as TimelineEventType[]);
 
-    const events = page.map((m) => {
-      const conv = byConversation.get(m.conversationId);
-      return {
-        type: "message" as const,
-        channel: conv?.channel ?? null,
-        conversationId: m.conversationId,
-        direction: m.direction,
-        body: m.body,
+    const messageWhere = { tenantId, conversationId: { in: conversationIds }, ...originClause };
+    const olderMessage = keysetOlderThan("createdAt", decoded);
+    const olderHandover = keysetOlderThan("at", decoded);
+
+    type Event = {
+      type: TimelineEventType;
+      id: string;
+      createdAt: Date;
+      conversationId: string;
+      channel: any;
+      origin: string | null;
+      direction?: string;
+      body?: string | null;
+      handover?: { from: string | null; to: string; actorUserId: string | null; reason: string | null };
+      action?: { tool: string; success: boolean; triggeredBy: string; durationMs: number | null; approvedBy: string | null };
+    };
+
+    const [messageCount, handoverCount, actionCount, messageRows, handoverRows, actionRows] = await Promise.all([
+      wanted.has("message") ? prisma.message.count({ where: messageWhere }) : Promise.resolve(0),
+      wanted.has("handover")
+        ? (prisma as any).conversationHandover.count({ where: { tenantId, conversationId: { in: conversationIds } } })
+        : Promise.resolve(0),
+      wanted.has("ai_action")
+        ? (prisma as any).toolExecution.count({ where: { tenantId, conversationId: { in: conversationIds } } })
+        : Promise.resolve(0),
+      wanted.has("message")
+        ? prisma.message.findMany({
+            where: { ...messageWhere, ...olderMessage },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: limit + 1,
+            select: { id: true, conversationId: true, direction: true, body: true, createdAt: true, origin: true },
+          })
+        : Promise.resolve([] as any[]),
+      wanted.has("handover")
+        ? (prisma as any).conversationHandover.findMany({
+            where: { tenantId, conversationId: { in: conversationIds }, ...olderHandover },
+            orderBy: [{ at: "desc" }, { id: "desc" }],
+            take: limit + 1,
+          })
+        : Promise.resolve([] as any[]),
+      wanted.has("ai_action")
+        ? (prisma as any).toolExecution.findMany({
+            where: { tenantId, conversationId: { in: conversationIds }, ...olderMessage },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: limit + 1,
+            select: { id: true, conversationId: true, toolName: true, success: true, triggeredBy: true, durationMs: true, approvedBy: true, createdAt: true },
+          })
+        : Promise.resolve([] as any[]),
+    ]);
+
+    const merged: Event[] = [
+      ...(messageRows as any[]).map((m): Event => ({
+        type: "message",
+        id: m.id,
         createdAt: m.createdAt,
+        conversationId: m.conversationId,
+        channel: byConversation.get(m.conversationId)?.channel ?? null,
         // So a screen can mark an imported message instead of presenting it as
         // something it watched happen.
-        origin: m.origin ?? conv?.origin ?? null,
-      };
-    });
+        origin: m.origin ?? byConversation.get(m.conversationId)?.origin ?? null,
+        direction: m.direction,
+        body: m.body,
+      })),
+      ...(handoverRows as any[]).map((h): Event => ({
+        type: "handover",
+        id: h.id,
+        createdAt: h.at,
+        conversationId: h.conversationId,
+        channel: byConversation.get(h.conversationId)?.channel ?? null,
+        origin: byConversation.get(h.conversationId)?.origin ?? null,
+        body: null,
+        handover: { from: h.fromHandler ?? null, to: h.toHandler, actorUserId: h.actorUserId ?? null, reason: h.reason ?? null },
+      })),
+      ...(actionRows as any[]).map((t): Event => ({
+        type: "ai_action",
+        id: t.id,
+        createdAt: t.createdAt,
+        conversationId: t.conversationId,
+        channel: byConversation.get(t.conversationId)?.channel ?? null,
+        origin: byConversation.get(t.conversationId)?.origin ?? null,
+        body: null,
+        action: { tool: t.toolName, success: t.success, triggeredBy: t.triggeredBy, durationMs: t.durationMs ?? null, approvedBy: t.approvedBy ?? null },
+      })),
+    ];
+
+    merged.sort((a, b) =>
+      b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+    );
+
+    // Every source already excluded everything at or newer than the cursor
+    // POINT, so nothing is dropped here and `limit + 1` still means "there is
+    // at least one more". Addressing a point rather than a row also survives
+    // the cursor row being deleted between pages.
+    const hasMore = merged.length > limit;
+    const pageRows = merged.slice(0, limit);
+    const last = pageRows[pageRows.length - 1];
 
     return res.json({
       contact: effective,
-      events,
+      events: pageRows,
       page: {
         limit,
-        nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+        types: [...wanted],
+        nextCursor: hasMore && last ? encodeCursor(last.createdAt, last.id) : null,
         hasMore,
       },
+      coverage: TIMELINE_COVERAGE,
       totals: {
         conversations: conversationCount,
         messages: messageCount,
+        handovers: handoverCount,
+        aiActions: actionCount,
         // True when the person has more conversations than one scan covers, so
-        // a caller knows `messages` counts the scanned set and not all of them.
+        // a caller knows the counts cover the scanned set and not all of them.
         conversationScanTruncated: conversationCount > convos.length,
       },
     });

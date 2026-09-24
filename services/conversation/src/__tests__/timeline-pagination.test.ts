@@ -25,9 +25,31 @@ const state = vi.hoisted(() => ({
   conversationCount: 0,
   messages: [] as any[],
   messageCount: 0,
-  seen: { convWhere: null as any, msgArgs: null as any, countWhere: null as any },
-  throwOnFindMany: false,
+  handovers: [] as any[],
+  actions: [] as any[],
+  seen: { convWhere: null as any, msgArgs: null as any, countWhere: null as any, handoverArgs: null as any, actionArgs: null as any },
 }));
+
+/**
+ * The keyset predicate the route builds, applied the way Postgres would.
+ *
+ * The fake has to honour it exactly: a double that is more permissive than the
+ * database lets a broken cursor pass, which is how the first version of this
+ * suite missed a walk that stopped at 100 of 120 and called itself complete.
+ */
+function applyKeyset(rows: any[], args: any, field: string): any[] {
+  const or = args.where?.OR;
+  if (!Array.isArray(or)) return rows;
+  const lt = or[0]?.[field]?.lt;
+  const tie = or[1]?.AND;
+  const tieAt = tie?.[0]?.[field];
+  const tieId = tie?.[1]?.id?.lt;
+  return rows.filter((r) => {
+    if (lt && r[field] < lt) return true;
+    if (tieAt && r[field].getTime() === tieAt.getTime() && r.id < tieId) return true;
+    return false;
+  });
+}
 
 vi.mock("@chatcenter/shared", () => ({
   prisma: {
@@ -37,16 +59,28 @@ vi.mock("@chatcenter/shared", () => ({
       findMany: async (args: any) => { state.seen.convWhere = args.where; return state.conversations.slice(0, args.take); },
     },
     message: {
-      count: async ({ where }: any) => state.messageCount,
+      count: async () => state.messageCount,
       findMany: async (args: any) => {
         state.seen.msgArgs = args;
-        if (state.throwOnFindMany) throw new Error("cursor not found");
-        // Prisma's cursor row is INCLUSIVE; `skip: 1` is what excludes it. A
-        // fake that skips it unconditionally does the code's job for it, and a
-        // dropped `skip: 1` then passes - which it did, until this was fixed.
-        const at = args.cursor ? state.messages.findIndex((m) => m.id === args.cursor.id) : -1;
-        const start = args.cursor ? at + (args.skip ?? 0) : 0;
-        return state.messages.slice(start, start + args.take);
+        // The cursor is a WHERE predicate now, not Prisma's `cursor`, because
+        // three tables interleave and Prisma's addresses one. The fake applies
+        // the same filter the database would, so dropping it from the code
+        // cannot pass here.
+        return applyKeyset(state.messages, args, "createdAt").slice(0, args.take);
+      },
+    },
+    conversationHandover: {
+      count: async () => state.handovers.length,
+      findMany: async (args: any) => {
+        state.seen.handoverArgs = args;
+        return applyKeyset(state.handovers, args, "at").slice(0, args.take);
+      },
+    },
+    toolExecution: {
+      count: async () => state.actions.length,
+      findMany: async (args: any) => {
+        state.seen.actionArgs = args;
+        return applyKeyset(state.actions, args, "createdAt").slice(0, args.take);
       },
     },
     identityLinkSuggestion: { findMany: async () => [], create: async () => ({}) },
@@ -90,8 +124,9 @@ beforeEach(() => {
   state.conversationCount = 1;
   state.messages = makeMessages(120);
   state.messageCount = 120;
-  state.seen = { convWhere: null, msgArgs: null, countWhere: null };
-  state.throwOnFindMany = false;
+  state.handovers = [];
+  state.actions = [];
+  state.seen = { convWhere: null, msgArgs: null, countWhere: null, handoverArgs: null, actionArgs: null };
 });
 
 const get = (q = "") => request(app).get(`/api/identity/c1/timeline${q}`);
@@ -106,15 +141,17 @@ describe("the page is honest about being a page", () => {
     // had no way to know 70 were missing.
     expect(res.body.totals.messages).toBe(120);
     expect(res.body.page.hasMore).toBe(true);
-    expect(res.body.page.nextCursor).toBe("m0049");
+    // `iso~id`, because a cursor over a MERGED stream cannot be one table's
+    // row id.
+    expect(res.body.page.nextCursor).toBe(`${state.messages[49].createdAt.toISOString()}~m0049`);
   });
 
   it("★ paginates MESSAGES, not conversations", async () => {
     await get();
 
     // The old query took 5 messages PER CONVERSATION, so a 300-message thread
-    // contributed five and the stream had undisclosed holes. One cursor over
-    // messages is what removes that.
+    // contributed five and the stream had undisclosed holes. Paging the events
+    // themselves is what removes that.
     expect(state.seen.msgArgs.take).toBe(51);
     expect(state.seen.msgArgs.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
     expect(state.seen.msgArgs.where.conversationId).toEqual({ in: ["cv1"] });
@@ -159,15 +196,25 @@ describe("the page is honest about being a page", () => {
     expect(res.body.page.limit).toBe(50);
   });
 
-  it("★ refuses a bad cursor by name rather than restarting at the top", async () => {
-    state.throwOnFindMany = true;
-
+  it("★ refuses a malformed cursor by name rather than restarting at the top", async () => {
     const res = await get("?cursor=m_deleted");
 
     // Silently restarting would look like the end of the list wrapping around,
     // which a paging UI renders as an infinite history.
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_cursor");
+  });
+
+  it("★ survives a cursor row that was deleted between pages", async () => {
+    const at = state.messages[49]!.createdAt.toISOString();
+    state.messages = state.messages.filter((m) => m.id !== "m0049");
+
+    const res = await get(`?cursor=${encodeURIComponent(`${at}~m0049`)}`);
+
+    // The cursor is a POINT, not a row. Locating the row instead would have
+    // restarted the walk when it vanished.
+    expect(res.status).toBe(200);
+    expect(res.body.events[0].body).toBe("message 50");
   });
 });
 
@@ -253,5 +300,142 @@ describe("what it keeps doing", () => {
     const res = await get();
 
     expect(res.body.totals.conversationScanTruncated).toBe(false);
+  });
+});
+
+/**
+ * One stream, and an honest statement of what it cannot contain.
+ *
+ * 04b asks for conversations, orders, returns, AI actions and notes in one
+ * timeline. Three of those have no local model at all - there is no Order or
+ * Return table, and notes live in the merchant's CRM - so the union is built
+ * from what exists and the rest is DECLARED on the wire.
+ *
+ * ★ An empty list cannot say why it is empty. "This customer has no orders"
+ * and "this endpoint never had orders" are different facts, and the difference
+ * decides whether a screen renders an empty state or a link somewhere else.
+ */
+describe("the union carries what exists and names what does not", () => {
+  const handover = (id: string, iso: string, o: any = {}) => ({
+    id, conversationId: "cv1", at: new Date(iso),
+    fromHandler: "ai", toHandler: "human", actorUserId: "u9", reason: "customer asked", ...o,
+  });
+  const action = (id: string, iso: string, o: any = {}) => ({
+    id, conversationId: "cv1", createdAt: new Date(iso),
+    toolName: "shopify_get_order", success: true, triggeredBy: "ai", durationMs: 120, approvedBy: null, ...o,
+  });
+
+  it("★ interleaves the three sources in one time-ordered stream", async () => {
+    state.messages = [
+      { id: "m1", conversationId: "cv1", direction: "INBOUND", body: "where is it", createdAt: new Date("2026-09-01T10:00:00Z"), origin: "LIVE" },
+      { id: "m2", conversationId: "cv1", direction: "OUTBOUND", body: "checking", createdAt: new Date("2026-09-01T10:02:00Z"), origin: "LIVE" },
+    ];
+    state.messageCount = 2;
+    state.actions = [action("t1", "2026-09-01T10:01:00Z")];
+    state.handovers = [handover("h1", "2026-09-01T10:03:00Z")];
+
+    const res = await get();
+
+    expect(res.body.events.map((e: any) => e.id)).toEqual(["h1", "m2", "t1", "m1"]);
+    expect(res.body.events.map((e: any) => e.type)).toEqual(["handover", "message", "ai_action", "message"]);
+  });
+
+  it("carries the handover's detail, which is the event a history actually wants", async () => {
+    state.messages = [];
+    state.messageCount = 0;
+    state.handovers = [handover("h1", "2026-09-01T10:00:00Z")];
+
+    const res = await get();
+
+    expect(res.body.events[0].handover).toEqual({
+      from: "ai", to: "human", actorUserId: "u9", reason: "customer asked",
+    });
+  });
+
+  it("carries an AI action's tool and outcome, including a failure", async () => {
+    state.messages = [];
+    state.messageCount = 0;
+    state.actions = [action("t1", "2026-09-01T10:00:00Z", { success: false, approvedBy: "u3" })];
+
+    const res = await get();
+
+    expect(res.body.events[0].action).toEqual({
+      tool: "shopify_get_order", success: false, triggeredBy: "ai", durationMs: 120, approvedBy: "u3",
+    });
+  });
+
+  it("★ declares orders, returns and notes ABSENT, with a reason", async () => {
+    const res = await get();
+
+    // Not omitted, not an empty array. An empty array reads as "none yet".
+    expect(res.body.coverage.order).toMatchObject({ available: false, reason: "no_local_model" });
+    expect(res.body.coverage.return).toMatchObject({ available: false, reason: "no_local_model" });
+    expect(res.body.coverage.note).toMatchObject({ available: false, reason: "external_crm" });
+  });
+
+  it("★ states the AI-action COVERAGE, because the gap is invisible from the data", async () => {
+    const res = await get();
+
+    // ToolExecution records catalog HTTP tools only. A Shopify refund through
+    // an adapter is not in it, so the stream looks complete while omitting a
+    // whole class of action.
+    expect(res.body.coverage.ai_action.available).toBe(true);
+    expect(res.body.coverage.ai_action.detail).toContain("catalog HTTP tools only");
+  });
+
+  it("honours ?types= and reports what it used", async () => {
+    state.actions = [action("t1", "2026-09-01T10:00:00Z")];
+    state.handovers = [handover("h1", "2026-09-01T10:05:00Z")];
+
+    const res = await get("?types=message");
+
+    expect(res.body.page.types).toEqual(["message"]);
+    expect(res.body.events.every((e: any) => e.type === "message")).toBe(true);
+    // Not queried at all, rather than queried and filtered out.
+    expect(state.seen.handoverArgs).toBeNull();
+    expect(state.seen.actionArgs).toBeNull();
+  });
+
+  it("★ refuses an unknown type instead of quietly returning less", async () => {
+    const res = await get("?types=message,orders");
+
+    // A typo must not look like "this customer has no orders".
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("unknown_event_type");
+    expect(res.body.unknown).toEqual(["orders"]);
+  });
+
+  it("counts each source separately", async () => {
+    state.actions = [action("t1", "2026-09-01T10:00:00Z")];
+    state.handovers = [handover("h1", "2026-09-01T10:05:00Z"), handover("h2", "2026-09-01T11:00:00Z")];
+
+    const res = await get();
+
+    expect(res.body.totals.messages).toBe(120);
+    expect(res.body.totals.handovers).toBe(2);
+    expect(res.body.totals.aiActions).toBe(1);
+  });
+
+  it("★ pages correctly across a mixed stream", async () => {
+    state.messages = Array.from({ length: 5 }, (_, i) => ({
+      id: `m${i}`, conversationId: "cv1", direction: "INBOUND", body: `m${i}`,
+      createdAt: new Date(Date.parse("2026-09-01T10:00:00Z") - i * 120_000), origin: "LIVE",
+    }));
+    state.messageCount = 5;
+    state.handovers = Array.from({ length: 5 }, (_, i) =>
+      handover(`h${i}`, new Date(Date.parse("2026-09-01T10:01:00Z") - i * 120_000).toISOString()));
+
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let guard = 0; guard < 12; guard++) {
+      const res: any = await get(`?limit=3${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      seen.push(...res.body.events.map((e: any) => e.id));
+      cursor = res.body.page.nextCursor;
+      if (!cursor) break;
+    }
+
+    // Every event once, in one order, across three pages drawn from two tables.
+    expect(seen).toHaveLength(10);
+    expect(new Set(seen).size).toBe(10);
   });
 });
