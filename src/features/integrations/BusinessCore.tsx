@@ -117,6 +117,86 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
           </ul>
         </section>
       ) : null}
+
+      {/*
+        ══════════════════════════════════════════════════════════════════════
+        14e — WHAT GOTCHA WRITES BACK, AS A PARAGRAPH AND NOT AS A FRAME
+        ══════════════════════════════════════════════════════════════════════
+        The design draws a panel of write-back settings. There are none. A
+        panel of empty controls would say "you have not configured this yet",
+        and every one of these is a decision the product has already made and
+        will not offer.
+
+        ★ WHICH IS THE WHOLE POINT, AND IT IS ONE SENTENCE.
+
+        ABSENT IS NOT UNSET. When a thing is not listed here as a setting,
+        that does not mean nobody has filled it in — it means the connected
+        system is the source of truth and GOTCHA follows it. A merchant who
+        reads an absence as an omission goes looking for the screen that
+        turns it on, and there is no such screen, because there is no such
+        choice.
+
+        The three below are stated as absent rather than drawn as disabled.
+        A greyed-out control still promises that somewhere, for somebody, it
+        is not greyed out.
+      */}
+      <section className={styles.writeback} data-testid="core-writeback">
+        <h3 className={styles.notesHeading}>{t('writeback.heading')}</h3>
+
+        <p className={styles.writebackLead} data-testid="core-writeback-source">
+          {t('writeback.sourceOfTruth')}
+        </p>
+
+        <ul className={styles.writebackList}>
+          {/*
+            Per-rule write-back configuration. What is written is decided by
+            the kind of action, identically for every rule.
+          */}
+          <li className={styles.writebackItem} data-testid="core-writeback-per-rule">
+            {t('writeback.perRule')}
+          </li>
+          {/*
+            One board, not two named by purpose. The design's "send
+            escalations here, send follow-ups there" is not expressible.
+          */}
+          <li className={styles.writebackItem} data-testid="core-writeback-one-board">
+            {t('writeback.oneBoard')}
+          </li>
+          {/*
+            Identity resolution is in code. Not a rule, not per-workspace,
+            and the same for everybody — so it is named rather than hinted at.
+          */}
+          <li className={styles.writebackItem} data-testid="core-writeback-identity">
+            {t('writeback.identity')}
+          </li>
+        </ul>
+
+        {/*
+          ★ WHICH LANGUAGE, AND THE ANSWER IS TWO ANSWERS.
+
+          Held back for a day because "everything written back is in the
+          workspace language" was unverified, and it turns out to be half
+          right — which is the half that matters.
+
+          `post-chat-pipeline.service.ts` calls `resolveEffectiveLocale({
+          tenantId })` with NO userId, deliberately: the post-chat summary
+          runs in a background subscriber with no user context, so it takes
+          `Tenant.defaultLocale`. The AI-written summary really is in the
+          workspace system language.
+
+          But `crm-adapter-resolver.ts` and `connector-connection.service.ts`
+          contain no locale reference at all. Names, phone numbers and deal
+          fields are the customer's own data, not copy, and nothing
+          translates them.
+
+          So the design's one sentence is two, and the split is the useful
+          part: it tells a merchant which half they control by changing the
+          workspace language and which half they do not.
+        */}
+        <p className={styles.writebackLead} data-testid="core-writeback-language">
+          {t('writeback.language')}
+        </p>
+      </section>
     </section>
   );
 }

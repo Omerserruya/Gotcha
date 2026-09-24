@@ -343,5 +343,72 @@ for (const size of SIZES) {
 
       await shoot(page, `${size.name}-core-honesty`);
     });
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * 14e · ABSENT IS NOT UNSET
+     * ══════════════════════════════════════════════════════════════════════
+     * The design draws a panel of write-back settings. There are none, and
+     * the whole screen turns on one distinction: a thing not offered as a
+     * setting is not a blank somebody forgot to fill in — it means the
+     * connected system decides and GOTCHA follows it.
+     *
+     * A merchant who reads the absence as an omission goes looking for the
+     * screen that turns it on. There is no such screen, because there is no
+     * such choice, so the paragraph has to do the work a disabled control
+     * would only pretend to do. A greyed-out toggle still promises that
+     * somewhere, for somebody, it is not greyed out.
+     *
+     * Unlike 14d, this renders on this tenant: it is a statement about the
+     * product and needs no connection.
+     */
+    test('core · what is written back, and why an absence is not a gap', async ({ page }) => {
+      await openSystems(page, 'en');
+
+      const block = page.getByTestId('core-writeback');
+      await expect(block, missingIds('the 14e write-back paragraph')).toBeVisible();
+
+      // The load-bearing sentence, by its content.
+      const source = page.getByTestId('core-writeback-source');
+      await expect(source).toHaveText(/not a blank/i);
+      await expect(source).toHaveText(/the system itself decides/i);
+
+      /*
+       * ★ NEVER THE VOCABULARY OF AN UNFINISHED SETUP.
+       *
+       * Each of these is a decision the product has already made. "Not
+       * configured", "coming soon" or "set this up" would turn every one of
+       * them into a promise, which is the exact failure the paragraph exists
+       * to prevent — asserted here as well as in the unit test because a
+       * sentence can arrive from a catalogue the unit test does not read.
+       */
+      await expect(block).not.toHaveText(/not configured|unconfigured/i);
+      await expect(block).not.toHaveText(/coming soon|not yet available/i);
+      await expect(block).not.toHaveText(/set (this|it) up/i);
+
+      // The three that are fixed, each named with where it is fixed.
+      await expect(page.getByTestId('core-writeback-per-rule')).toHaveText(/no per-rule choice/i);
+      await expect(page.getByTestId('core-writeback-one-board')).toHaveText(/single Monday board/i);
+      await expect(page.getByTestId('core-writeback-identity')).toHaveText(
+        /fixed in the product's code/i,
+      );
+
+      /*
+       * The language claim, in BOTH halves. `post-chat-pipeline.service.ts`
+       * resolves the tenant default with no userId, so the AI-written summary
+       * really is in the workspace language; `crm-adapter-resolver.ts` has no
+       * locale reference at all, so field values cross untranslated.
+       *
+       * Asserting only the first half would pass on the design's original
+       * sentence — "everything written back is in the workspace language" —
+       * which is false for the half a merchant cares most about.
+       */
+      const language = page.getByTestId('core-writeback-language');
+      await expect(language).toHaveText(/workspace language/i);
+      await expect(language).toHaveText(/customer's own data/i);
+      await expect(language).toHaveText(/exactly as they are/i);
+
+      await shoot(page, `${size.name}-core-writeback`);
+    });
   });
 }

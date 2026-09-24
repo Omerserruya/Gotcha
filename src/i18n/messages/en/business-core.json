@@ -32,5 +32,13 @@
   "choosing": {
     "notYet": "Choosing which system plays a part is not offered here yet. The way to save it exists and has never once run against a real connection — no system on this workspace is connected and working — so it is not being put in front of you as though it were proven.",
     "crmWorks": "Customer records are the exception: that choice has its own screen and has been in use for a long time."
+  },
+  "writeback": {
+    "heading": "What GOTCHA writes back",
+    "sourceOfTruth": "GOTCHA reads your connected systems and writes into them. It does not keep a second copy to reconcile later. So where something below is not offered as a setting, that is not a blank somebody forgot to fill in — it means the system itself decides and GOTCHA follows it.",
+    "perRule": "What gets written back is decided by the kind of action, the same way every time. There is no per-rule choice, and nowhere to make one.",
+    "oneBoard": "Work goes to a single Monday board. Sending escalations to one board and follow-ups to another isn't something a workspace can express.",
+    "identity": "Matching a person in one system to the same person in another is fixed in the product's code. It is not a rule, it is not per-workspace, and it is the same for everyone.",
+    "language": "Anything GOTCHA writes in its own words — the summary it leaves after a conversation — is written in the workspace language. The field values it writes are the customer's own data, and they go across exactly as they are."
   }
 }

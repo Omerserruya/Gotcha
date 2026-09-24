@@ -125,4 +125,35 @@
     font-size: var(--font-size-meta);
     color: var(--text-body);
   }
+
+  /* ── 14e · what is written back, and what is not a setting ───────────── */
+
+  .writeback {
+    margin-block-start: var(--space-24);
+    border-top: 1px solid var(--border-subtle);
+    padding-block-start: var(--space-16);
+  }
+
+  /*
+    Full contrast, unlike the notes below it. This paragraph is the reason
+    the list reads as a set of facts rather than as a set of blanks, and a
+    reader who skips it draws the opposite conclusion from the same words.
+  */
+  .writebackLead {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-default);
+  }
+
+  .writebackList {
+    margin-block: var(--space-12) 0;
+    padding-inline-start: var(--space-20);
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  .writebackItem {
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
 }

@@ -170,3 +170,70 @@ describe('a failed read is not a business with no parts', () => {
     expect(screen.getByTestId('core-unavailable')).toHaveTextContent(/could not read/i);
   });
 });
+
+describe('★ 14e — absent is not unset', () => {
+  /*
+   * The design draws a panel of write-back settings. There are none, and the
+   * failure this block exists to prevent is a merchant reading that absence
+   * as an omission: going to look for the screen that turns it on, when
+   * there is no such screen because there is no such choice.
+   */
+
+  it('says the connected system decides, not that a field is blank', async () => {
+    await render14();
+    const lead = screen.getByTestId('core-writeback-source');
+    // The load-bearing half: not a blank somebody forgot to fill in.
+    expect(lead).toHaveTextContent(/not a blank/i);
+    expect(lead).toHaveTextContent(/the system itself decides/i);
+  });
+
+  it('never phrases an absence as something not yet configured', async () => {
+    /*
+     * ★ THE ASSERTION THIS WHOLE BLOCK IS FOR.
+     *
+     * Every one of these is a decision the product has already made. The
+     * vocabulary of an unfinished setup — "not configured", "coming soon",
+     * "set this up" — would turn each of them into a promise.
+     *
+     * Asserted over the RENDERED block rather than the catalogue, because a
+     * key can be edited and a sentence can arrive from somewhere else.
+     */
+    await render14();
+    const block = screen.getByTestId('core-writeback');
+    expect(block).not.toHaveTextContent(/not configured|unconfigured/i);
+    expect(block).not.toHaveTextContent(/coming soon|not yet available/i);
+    expect(block).not.toHaveTextContent(/set (this|it) up/i);
+  });
+
+  it('names all three things that are fixed, and says where each is fixed', async () => {
+    await render14();
+    expect(screen.getByTestId('core-writeback-per-rule')).toHaveTextContent(/no per-rule choice/i);
+    expect(screen.getByTestId('core-writeback-one-board')).toHaveTextContent(
+      /single Monday board/i,
+    );
+    // Identity resolution is in CODE — not a rule, not per-workspace.
+    const identity = screen.getByTestId('core-writeback-identity');
+    expect(identity).toHaveTextContent(/fixed in the product's code/i);
+    expect(identity).toHaveTextContent(/same for everyone/i);
+  });
+
+  it('splits the language claim in two, because the platform does', async () => {
+    /*
+     * `post-chat-pipeline.service.ts` calls `resolveEffectiveLocale({ tenantId })`
+     * with no userId, so the AI-written summary takes `Tenant.defaultLocale`.
+     * `crm-adapter-resolver.ts` has no locale reference at all — field values
+     * are the customer's data and nothing translates them.
+     *
+     * "Everything written back is in the workspace language" was the sentence
+     * this screen nearly shipped. It is false for the half a merchant cares
+     * most about, and the split is what tells them which half they control.
+     */
+    await render14();
+    const language = screen.getByTestId('core-writeback-language');
+    expect(language).toHaveTextContent(/in its own words/i);
+    expect(language).toHaveTextContent(/workspace language/i);
+    // And the half that is NOT translated, said explicitly.
+    expect(language).toHaveTextContent(/customer's own data/i);
+    expect(language).toHaveTextContent(/exactly as they are/i);
+  });
+});
