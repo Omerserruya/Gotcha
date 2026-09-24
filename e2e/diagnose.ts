@@ -26,6 +26,53 @@
  * Every candidate this list offered was the same KIND of check, which is how
  * a list of four causes still pointed away from the real one.
  */
+/**
+ * Why an expected element is absent when a SIBLING branch says the read failed.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★ THE FIFTH CAUSE, AND THE ONE THAT LOOKS MOST LIKE A FLAKE
+ * ════════════════════════════════════════════════════════════════════════════
+ * `credits · no metering is not no activity` failed once at 390px in a
+ * 78-test run and passed alone in 2.1s. The obvious reading was a timeout:
+ * the page helpers wait 15s and that assertion used the default 5s.
+ *
+ * It cannot have been. These screens are SERVER components — by the time the
+ * page helper has confirmed its landmark, the whole HTML exists and the
+ * element is either in it or it is not. **There is no later fetch for a
+ * longer timeout to catch.**
+ *
+ * What removes it is the section's own read failing: the loader catches, the
+ * value is null, and the section renders its `*-unavailable` branch instead.
+ * Against a 1,000-request-per-fifteen-minutes budget, with a settings page
+ * costing ~10 reads and 78 tests in flight, a 429 on one endpoint is the
+ * likeliest cause by some distance.
+ *
+ * In that case a longer timeout fails slower rather than passing, and a retry
+ * that happens to pass teaches nothing — which is exactly how a real
+ * rate-limit signal gets recorded as a flake and thrown away.
+ *
+ * ── HOW WIDE THIS IS ──
+ * The UI can render 22 distinct "we could not read this" testids. Sixteen of
+ * the twenty-one specs mention NONE of them, so they cannot tell a failed
+ * read from a missing element and would report the wrong cause for both.
+ *
+ * Pass the failure branch that belongs to the section under test. It is only
+ * consulted when the element is absent, so a branch that is legitimately on
+ * screen for this tenant — `breakdown-unavailable` is — costs nothing.
+ */
+export function readFailed(testId: string, failureBranch: string): string {
+  return (
+    `${testId} is absent because THE READ FOR THIS SECTION FAILED — it rendered ` +
+    `\`${failureBranch}\`, so the element was never in the HTML and no timeout ` +
+    'would have helped.\n' +
+    '  Most likely a 429. `rateLimit({ windowMs: 15*60*1000, max: 1000 })` is per\n' +
+    '  IP per service — a window, not a rate — and a settings page costs ~10 reads.\n' +
+    '  ★ Re-running this one test alone WILL pass and will prove nothing. Wait the\n' +
+    '  window out, then run the file once. A retry that passes is not a run that\n' +
+    '  passed.'
+  );
+}
+
 export function missingIds(what: string): string {
   return (
     `${what} is absent, though the page rendered. Check in this order:\n` +

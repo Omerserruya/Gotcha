@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { missingIds } from './diagnose';
+import { missingIds, readFailed } from './diagnose';
 
 /**
  * Screen 17 · Settings · Usage & billing — acceptance evidence.
@@ -94,6 +94,45 @@ async function openBilling(page: Page, locale: 'en' | 'he') {
   ).toBeVisible({ timeout: 15_000 });
 
   return page;
+}
+
+/**
+ * Wait for a credits element, and say WHICH failure it was.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★ A LONGER TIMEOUT WOULD NOT HAVE FIXED THE FLAKE THAT PROMPTED THIS
+ * ════════════════════════════════════════════════════════════════════════════
+ * `credits · no metering is not no activity` failed once at 390px in a
+ * 78-test parallel run and passed alone in 2.1s. The obvious reading is that
+ * the assertion's default 5s was too short while the helpers use 15s.
+ *
+ * But `Credits` is a SERVER component. By the time `openBilling` returns —
+ * having already waited 15s for `section-runway` — the whole page HTML
+ * exists, and `credits-no-metering` is either in it or it is not. There is no
+ * later fetch for a longer timeout to catch.
+ *
+ * What CAN remove it is the credit-summary read failing: `loadBilling`
+ * catches, `credits` is null, and the section renders `credits-unavailable`
+ * instead. Against a 1,000-request-per-fifteen-minutes budget, with a billing
+ * page costing ~10 reads per load and 78 tests in flight, a 429 on that one
+ * endpoint is the likeliest cause by some distance.
+ *
+ * In that case a 15s timeout fails slower rather than passing, and a retry
+ * that happens to pass teaches us nothing. So the wait is raised to 15s for
+ * parity with every other data-dependent assertion in this file AND the
+ * failure now names the alternative it can actually distinguish.
+ */
+async function creditsElement(page: Page, testId: string) {
+  const unavailable = page.getByTestId('credits-unavailable');
+  if ((await unavailable.count()) > 0) throw new Error(readFailed(testId, 'credits-unavailable'));
+
+  // 15s for parity with the page helpers. Not because a longer wait would
+  // have saved the flake — see `readFailed` — but because every other
+  // data-dependent assertion in this file carries one and an inconsistency
+  // invites the wrong diagnosis next time.
+  const target = page.getByTestId(testId);
+  await expect(target, missingIds(testId)).toBeVisible({ timeout: 15_000 });
+  return target;
 }
 
 async function shoot(page: Page, name: string) {
@@ -351,8 +390,7 @@ for (const size of SIZES) {
       await expect(credits).toBeVisible();
       await expect(credits).toHaveAttribute('data-consumption', 'withheld');
 
-      const withheld = page.getByTestId('credits-consumption-withheld');
-      await expect(withheld).toBeVisible();
+      const withheld = await creditsElement(page, 'credits-consumption-withheld');
       await expect(withheld).toHaveText(/expired credits as if they had been spent/i);
 
       // The number that must never appear. This is the whole finding.
@@ -389,8 +427,7 @@ for (const size of SIZES) {
     }) => {
       await openBilling(page, 'en');
 
-      const notice = page.getByTestId('credits-awaiting-grant');
-      await expect(notice).toBeVisible();
+      const notice = await creditsElement(page, 'credits-awaiting-grant');
       await expect(notice).toHaveText(/have been issued/i);
       await expect(notice).toHaveText(/7,000/);
       // The sentence that stops a zero being read as overspending.
@@ -471,8 +508,7 @@ for (const size of SIZES) {
     test('credits · no metering is not no activity', async ({ page }) => {
       await openBilling(page, 'en');
 
-      const note = page.getByTestId('credits-no-metering');
-      await expect(note).toBeVisible();
+      const note = await creditsElement(page, 'credits-no-metering');
       await expect(note).toHaveText(/\d+ conversations/);
       await expect(note).toHaveText(/no credits were recorded/i);
       await expect(note).toHaveText(/not about how much you have used/i);
