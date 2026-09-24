@@ -98,18 +98,25 @@ export function isStoppable(campaign: Campaign): boolean {
   return campaign.status === 'SENDING' || campaign.status === 'SCHEDULED';
 }
 
-/**
- * Read it and said nothing.
+/*
+ * ★★ `openedWithoutReplying` WAS HERE, AND IT SUBTRACTED TWO ZEROES.
  *
- * `readCount − repliedCount`, and the best line on screen 05b — a segment you
- * can act on, derived from two numbers that genuinely exist, which the design
- * did not think to ask for. Clamped at zero because the two counters are
- * written by different paths and a late reply can arrive before its read
- * receipt.
+ * It computed `readCount - repliedCount` and its comment called them "two
+ * numbers that genuinely exist" and "the best line on screen 05b".
+ *
+ * Neither counter is ever incremented — the only write in the monorepo is
+ * `broadcast.worker.ts:209`, on `sentCount` and `failedCount`. So the
+ * function returned 0 for every campaign that has ever existed and described
+ * it as a segment somebody could act on.
+ *
+ * Its only caller was its own test, whose fixture used `readCount: 904,
+ * repliedCount: 188` — values the platform cannot produce. **A test that
+ * asserts arithmetic on data the system never emits passes forever and says
+ * nothing about the product.**
+ *
+ * And screen 05b, which it existed for, is cancelled. Removed rather than
+ * left as a plan for something that is not going to happen.
  */
-export function openedWithoutReplying(campaign: Campaign): number {
-  return Math.max(0, campaign.readCount - campaign.repliedCount);
-}
 
 /**
  * A share of what was actually sent.

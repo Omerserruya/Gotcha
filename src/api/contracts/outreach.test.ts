@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  campaignSchema,
-  isInFlight,
-  isStoppable,
-  openedWithoutReplying,
-  shareOfSent,
-  type Campaign,
-} from './outreach';
+import { campaignSchema, isInFlight, isStoppable, shareOfSent, type Campaign } from './outreach';
 
 /**
  * The rulings on screens 05 and 05b, as assertions.
@@ -27,9 +20,16 @@ const campaign = (over: Partial<Campaign> = {}): Campaign => ({
   createdAt: '2026-09-20T09:00:00.000Z',
   totalRecipients: 1240,
   sentCount: 1240,
-  deliveredCount: 1228,
-  readCount: 904,
-  repliedCount: 188,
+  /*
+   * ⚠ ZERO, BECAUSE THAT IS WHAT THE PLATFORM PRODUCES.
+   *
+   * These were 1228 / 904 / 188 — a fixture asserting the system can emit
+   * values it cannot. Nothing increments these three counters, so any test
+   * built on them proves arithmetic and nothing about the product.
+   */
+  deliveredCount: 0,
+  readCount: 0,
+  repliedCount: 0,
   failedCount: 12,
   lastError: null,
   ...over,
@@ -81,17 +81,23 @@ describe('isStoppable — only what the route will accept', () => {
   });
 });
 
-describe('openedWithoutReplying — two real numbers beating a fictional one', () => {
-  it('is read minus replied', () => {
-    expect(openedWithoutReplying(campaign({ readCount: 904, repliedCount: 188 }))).toBe(716);
-  });
-
-  it('never goes negative when a reply beats its own read receipt', () => {
-    // The two counters are written by different paths, so a reply can be
-    // recorded before the read that preceded it.
-    expect(openedWithoutReplying(campaign({ readCount: 3, repliedCount: 5 }))).toBe(0);
-  });
-});
+/*
+ * ★★ `openedWithoutReplying` HAD TWO TESTS HERE AND BOTH PASSED FOREVER.
+ *
+ * Its describe block was headed "two real numbers beating a fictional one",
+ * and the fixture used `readCount: 904, repliedCount: 188` — values the
+ * platform cannot produce. `deliveredCount`, `readCount` and `repliedCount`
+ * are initialised to zero and nothing in the monorepo increments them.
+ *
+ * So the tests asserted arithmetic on data the system never emits. They were
+ * correct about subtraction and silent about the product, and they would
+ * have gone on passing for as long as anybody kept them.
+ *
+ * **A fixture is a claim that the system can produce these values.** That
+ * claim is worth checking, and nothing here was checking it.
+ *
+ * Removed with the function and its screen.
+ */
 
 describe('shareOfSent — denominated on what was actually sent', () => {
   it('divides by sentCount, not by the intended audience', () => {

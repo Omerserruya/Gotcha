@@ -4,7 +4,10 @@
   "unavailable": "We couldn't read your campaigns just now.",
   "none": "Nothing has gone out yet.",
   "noneBody": "When you send a campaign it shows up here while it's sending, and stays afterwards with what it did.",
-  "heading": { "inFlight": "Going out now", "finished": "Already sent" },
+  "heading": {
+    "inFlight": "Going out now",
+    "finished": "Already sent"
+  },
   "status": {
     "DRAFT": "Draft",
     "SCHEDULED": "Scheduled",
@@ -15,14 +18,12 @@
   },
   "counter": {
     "sent": "Sent",
-    "delivered": "Delivered",
-    "opened": "Opened",
-    "replied": "Replied",
-    "failed": "Didn't arrive"
+    "failed": "Didn't arrive",
+    "deliveredPending": "Delivered and opened aren't shown yet. The delivery receipts do arrive — they just aren't counted against a campaign yet, so a number here would be wrong rather than incomplete.",
+    "repliedAbsent": "We can't yet tell you who replied. A reply isn't linked back to the campaign that prompted it, so there's nothing to count."
   },
   "card": {
-    "halted": "It stopped: {reason}",
-    "openedNoReply": "{count, plural, =1 {One person opened it and said nothing} other {# people opened it and said nothing}}."
+    "halted": "It stopped: {reason}"
   },
   "action": {
     "stop": "Stop sending",

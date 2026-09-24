@@ -326,4 +326,16 @@
     font-size: var(--font-size-meta);
     color: var(--text-body);
   }
+
+  /*
+    Absent measurements. Deliberately NOT styled as counters — a greyed-out
+    number in a row of real ones reads as a low value, which is the thing
+    these sentences exist to stop.
+  */
+  .counterAbsent {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
 }
