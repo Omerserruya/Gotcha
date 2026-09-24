@@ -26,7 +26,12 @@ const provenanceMock = vi.hoisted(() => ({
   stampProvenance: vi.fn<(...a: any[]) => any>(),
 }));
 
-vi.mock("@chatcenter/shared", () => ({ prisma: prismaMock }));
+const settings = vi.hoisted(() => ({ store: {} as Record<string, string>, writes: [] as string[] }));
+vi.mock("@chatcenter/shared", () => ({
+  prisma: prismaMock,
+  readDurableSetting: async (_t: string, k: string) => settings.store[k] ?? null,
+  writeDurableSetting: async (_t: string, k: string, v: string) => { settings.store[k] = v; settings.writes.push(k); },
+}));
 vi.mock("../services/site-crawl.service", () => ({ crawlSite: crawlMock }));
 vi.mock("../services/field-provenance.service", async () => {
   // The RULE is not mocked - planRescan is the thing under test here, and a
@@ -37,7 +42,7 @@ vi.mock("../services/field-provenance.service", async () => {
   return { ...real, readProvenance: provenanceMock.readProvenance, stampProvenance: provenanceMock.stampProvenance };
 });
 
-import { mapReportToProfileFields, runProfileRescan } from "../services/business-scan.service";
+import { mapReportToProfileFields, runProfileRescan, acceptScanProposal, SCAN_PROPOSAL_KEY } from "../services/business-scan.service";
 
 const PROFILE = {
   websiteDomain: "https://shop.example.com",
@@ -58,6 +63,8 @@ function okFetch(report: unknown = REPORT) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  settings.store = {};
+  settings.writes = [];
   prismaMock.businessProfile.findUnique.mockResolvedValue({ ...PROFILE });
   prismaMock.businessProfile.update.mockResolvedValue({});
   prismaMock.businessDiscovery.findUnique.mockResolvedValue(null);
@@ -332,5 +339,125 @@ describe("what the crawl saw is PERSISTED, not only returned", () => {
     const outcome = await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
 
     expect(outcome.ok).toBe(true);
+  });
+});
+
+/**
+ * The mechanism had a FIXED POINT AT EMPTY and every transition was correct.
+ *
+ * `scan` ownership could only be written for fields that were ALREADY scan-owned,
+ * so the set started empty and nothing could add to it: every scan offered
+ * everything and applied nothing, forever. Accepting a suggestion meant PATCHing
+ * the value, which stamps `human` and guarantees the same field is offered again.
+ *
+ * So these tests are about REACHABILITY, not transitions. The transitions were
+ * never the problem.
+ */
+describe("accepting a proposal is how scan ownership becomes reachable", () => {
+  const PROPOSAL = JSON.stringify({
+    at: "2026-09-24T07:00:00.000Z",
+    offer: [
+      { field: "businessDescription", current: "typed by owner", proposed: "from the site", because: "human_edited" },
+      { field: "industry", current: "Retail", proposed: "Outdoor gear", because: "source_unknown" },
+    ],
+  });
+
+  it("★ stamps scan, not human, because provenance records what the value TRACKS", async () => {
+    settings.store[SCAN_PROPOSAL_KEY] = PROPOSAL;
+
+    const outcome = await acceptScanProposal("t1", ["industry"], "u1");
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.accepted).toEqual(["industry"]);
+    // A person accepting the website's value has said "this field follows my
+    // site". Stamping human would guarantee it is offered again next scan.
+    expect(provenanceMock.stampProvenance).toHaveBeenCalledWith("t1", ["industry"], "scan", "u1");
+  });
+
+  it("★ takes the value from the STORED proposal, never from the caller", async () => {
+    settings.store[SCAN_PROPOSAL_KEY] = PROPOSAL;
+
+    await acceptScanProposal("t1", ["industry"], "u1");
+
+    const data = (prismaMock.businessProfile.update.mock.calls[0] as any[])[0].data;
+    // The caller named a field and got the website's value. It could not have
+    // supplied one - which is what stops a client marking arbitrary text as
+    // website-owned, given a scan may later overwrite a scan-owned field.
+    expect(data).toEqual({ industry: "Outdoor gear" });
+  });
+
+  it("★ refuses a field the last scan never proposed, rather than stamping it", async () => {
+    settings.store[SCAN_PROPOSAL_KEY] = PROPOSAL;
+
+    const outcome = await acceptScanProposal("t1", ["organizationName"], "u1");
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    // The forgery attempt: naming an unproposed field to mark it scan-owned.
+    expect(outcome.accepted).toEqual([]);
+    expect(outcome.skipped).toEqual([{ field: "organizationName", reason: "not_proposed" }]);
+    expect(provenanceMock.stampProvenance).not.toHaveBeenCalled();
+    expect(prismaMock.businessProfile.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts several fields at once and writes them together", async () => {
+    settings.store[SCAN_PROPOSAL_KEY] = PROPOSAL;
+
+    const outcome = await acceptScanProposal("t1", ["industry", "businessDescription"], "u1");
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.accepted.sort()).toEqual(["businessDescription", "industry"]);
+    expect(prismaMock.businessProfile.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("stamps a field that already holds the proposed value", async () => {
+    // The write is a no-op; the STAMP is the point. Accepting is how the field
+    // becomes refreshable, so skipping it as pointless would leave the fixed
+    // point in place for exactly the fields already in agreement.
+    settings.store[SCAN_PROPOSAL_KEY] = JSON.stringify({
+      at: "x",
+      offer: [{ field: "industry", current: "Retail", proposed: "Retail", because: "source_unknown" }],
+    });
+
+    const outcome = await acceptScanProposal("t1", ["industry"], "u1");
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.accepted).toEqual(["industry"]);
+    expect(prismaMock.businessProfile.update).not.toHaveBeenCalled();
+    expect(provenanceMock.stampProvenance).toHaveBeenCalledWith("t1", ["industry"], "scan", "u1");
+  });
+
+  it("says no_proposal when no scan has run, rather than accepting nothing quietly", async () => {
+    const outcome = await acceptScanProposal("t1", ["industry"], "u1");
+
+    expect(outcome).toEqual({ ok: false, reason: "no_proposal" });
+  });
+
+  it("survives a corrupt stored proposal", async () => {
+    settings.store[SCAN_PROPOSAL_KEY] = "{not json";
+
+    const outcome = await acceptScanProposal("t1", ["industry"], "u1");
+
+    expect(outcome).toEqual({ ok: false, reason: "no_proposal" });
+  });
+
+  it("★ the rescan STORES its proposal, or nothing could ever be accepted", async () => {
+    crawlMock.mockResolvedValue({
+      pages: [{ url: "u", text: "t" }],
+      signals: {},
+      businessType: "x",
+      requested: ["u"],
+      distinctTextPages: 1,
+    });
+
+    await runProfileRescan({ tenantId: "t1", authHeader: "Bearer x", fetchWithTimeoutFn: okFetch() });
+
+    expect(settings.writes).toContain(SCAN_PROPOSAL_KEY);
+    const stored = JSON.parse(settings.store[SCAN_PROPOSAL_KEY]!);
+    expect(Array.isArray(stored.offer)).toBe(true);
+    expect(stored.offer.length).toBeGreaterThan(0);
   });
 });

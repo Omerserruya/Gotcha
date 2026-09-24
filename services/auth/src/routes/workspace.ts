@@ -44,7 +44,7 @@ const WRITE = requirePermission("settings:workspace:update");
 
 const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "http://ai:4006").replace(/\/$/, "");
 import { readProvenance, fieldSources, stampProvenance } from "../services/field-provenance.service";
-import { runProfileRescan } from "../services/business-scan.service";
+import { runProfileRescan, acceptScanProposal } from "../services/business-scan.service";
 const VOICE_MIN = 40;
 const VOICE_MAX = 1800;
 
@@ -517,6 +517,58 @@ router.post("/workspace/scan", WRITE, async (req: Request, res: Response) => {
   } catch (err) {
     console.error("workspace scan error:", (err as Error).message);
     res.status(503).json({ error: "Could not scan the website right now", code: "SCAN_UNAVAILABLE" });
+  }
+});
+
+/**
+ * POST /api/workspace/scan/accept - take the website's value for offered fields.
+ *
+ * ★ STAMPS THE FIELD AS `scan`-OWNED, NOT `human`. Provenance answers one
+ * question - may a future scan refresh this silently? - so it records what the
+ * value TRACKS, not who clicked. Accepting the website's wording IS the consent a
+ * silent refresh needs. A plain PATCH cannot be used for this and must not be:
+ * PATCH means "a human set this" and has to keep meaning that, or the distinction
+ * is lost in the other direction.
+ *
+ * Without this endpoint the mechanism had a fixed point at empty - `scan`
+ * ownership was unreachable, so every scan offered everything and applied
+ * nothing, forever. See field-provenance.service.
+ *
+ * The body carries FIELD NAMES ONLY. Values come from the stored proposal of the
+ * last scan, so a client cannot mark arbitrary text as website-owned - which
+ * matters because a scan may overwrite a scan-owned field without asking.
+ */
+router.post("/workspace/scan/accept", WRITE, async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const fields = body.fields;
+  if (!Array.isArray(fields) || fields.length === 0 || fields.some((f) => typeof f !== "string")) {
+    res.status(422).json({
+      error: "Invalid accept request",
+      details: [{ field: "fields", message: "fields must be a non-empty array of field names" }],
+    });
+    return;
+  }
+
+  try {
+    const outcome = await acceptScanProposal(req.tenantId!, fields as string[], (req as any).user?.userId);
+    if (!outcome.ok) {
+      // 409, not 422: the request is well-formed and the state is wrong. "Scan
+      // again first" is the action, and it is not a validation error.
+      res.status(409).json({ error: "Nothing to accept", code: outcome.reason.toUpperCase() });
+      return;
+    }
+    res.json({
+      data: {
+        accepted: outcome.accepted,
+        // Named rather than dropped: a stale screen offering a field the last
+        // scan did not propose must be told, not quietly told it worked.
+        skipped: outcome.skipped,
+        fieldSources: fieldSources(await readProvenance(req.tenantId!)),
+      },
+    });
+  } catch (err) {
+    console.error("workspace scan accept error:", (err as Error).message);
+    res.status(500).json({ error: "Failed to accept the scan proposal" });
   }
 });
 

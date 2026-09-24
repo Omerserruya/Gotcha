@@ -42,6 +42,33 @@
  * `read/writeDurableSetting`, the same store `businessHours` already uses from
  * the same route file. No schema change, and the settings store is already the
  * place admin-configured tenant state lives.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * WHICH STATES ARE REACHABLE - the question every comment above forgot to ask
+ *
+ * The first version of this had a FIXED POINT AT EMPTY, and every transition in
+ * it was correct. There were two stamp sites in the platform: the rescan stamped
+ * `scan` for the fields it APPLIED, and applied only fields that were ALREADY
+ * scan-owned; the workspace PATCH stamped `human`. So the scan-owned set started
+ * empty and nothing could add to it. Every rescan offered everything and applied
+ * nothing, forever, and "after that it refreshes what it wrote itself" - written
+ * confidently in this header - was vacuous.
+ *
+ * Accepting a proposal made it worse: with no accept path, taking a suggestion
+ * meant PATCHing the value, which stamps `human` and guarantees the same field is
+ * offered again next time.
+ *
+ * ★ SO `scan` MUST BE REACHABLE FROM OUTSIDE ITSELF, and that is what
+ * `acceptScanProposal` is for. A mechanism can be fully understood and still not
+ * followed to what it settles at: three readers checked the transitions and none
+ * asked what the loop converges to.
+ *
+ * And the meaning of the stamp is what makes an accept stamp `scan` rather than
+ * `human`: PROVENANCE ANSWERS ONE QUESTION - should a future scan refresh this
+ * silently? - so it records what the value TRACKS, not who last clicked. A person
+ * accepting the website's value has said "this field follows my site". A person
+ * typing their own has said "this field is mine". Neither is a claim about who
+ * pressed the button, which is why `PATCH` must keep meaning "a human set this".
  * ════════════════════════════════════════════════════════════════════════════
  */
 import { readDurableSetting, writeDurableSetting } from "@chatcenter/shared";

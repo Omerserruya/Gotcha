@@ -24,7 +24,7 @@
  * `address` or `currency` either - the scan does not produce them, and a field
  * the scan cannot speak for must never appear in its proposal.
  */
-import { prisma } from "@chatcenter/shared";
+import { prisma, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
 import { crawlSite } from "./site-crawl.service";
 import {
   readProvenance,
@@ -143,6 +143,86 @@ export async function persistCrawlReach(tenantId: string, reach: CrawlReach): Pr
   }
 }
 
+/** Where the last scan's unapplied proposal is kept, for the accept path. */
+export const SCAN_PROPOSAL_KEY = "profileScanProposal";
+
+export type AcceptOutcome =
+  | { ok: true; accepted: string[]; skipped: Array<{ field: string; reason: "not_proposed" | "already_current" }> }
+  | { ok: false; reason: "no_proposal" | "no_profile" };
+
+/**
+ * Take the website's value for fields a scan offered, and record that those
+ * fields now FOLLOW THE SITE.
+ *
+ * ★ STAMPS `scan`, NOT `human`, and that is the whole point. Provenance answers
+ * one question - may a future scan refresh this silently? - so it records what
+ * the value TRACKS rather than who clicked. Somebody accepting the website's
+ * wording has said "this field follows my site", which is exactly the consent a
+ * silent refresh needs. Somebody typing their own has said "this field is mine",
+ * which is what `PATCH /api/workspace` means and must keep meaning.
+ *
+ * ★ UNFORGEABLE BY CONSTRUCTION: the caller names FIELDS, never values. Each
+ * value is read from the stored proposal of the last scan. A client cannot mark
+ * arbitrary text as website-owned, which matters because the next scan is allowed
+ * to overwrite a scan-owned field without asking.
+ *
+ * A field that was not in the last proposal is skipped with a reason rather than
+ * silently ignored, so a stale screen gets told instead of appearing to succeed.
+ */
+export async function acceptScanProposal(
+  tenantId: string,
+  fields: string[],
+  actorId?: string | null,
+): Promise<AcceptOutcome> {
+  const raw = await readDurableSetting(tenantId, SCAN_PROPOSAL_KEY);
+  if (!raw) return { ok: false, reason: "no_proposal" };
+
+  let offer: RescanPlan["offer"] = [];
+  try {
+    const parsed = JSON.parse(raw) as { offer?: RescanPlan["offer"] };
+    offer = Array.isArray(parsed?.offer) ? parsed.offer : [];
+  } catch {
+    return { ok: false, reason: "no_proposal" };
+  }
+  if (offer.length === 0) return { ok: false, reason: "no_proposal" };
+
+  const profile = await prisma.businessProfile.findUnique({
+    where: { tenantId },
+    select: { organizationName: true, businessDescription: true, industry: true, country: true },
+  });
+  if (!profile) return { ok: false, reason: "no_profile" };
+
+  const patch: Record<string, unknown> = {};
+  const accepted: string[] = [];
+  const skipped: Array<{ field: string; reason: "not_proposed" | "already_current" }> = [];
+
+  for (const field of fields) {
+    const proposal = offer.find((o) => o.field === field);
+    if (!proposal) {
+      skipped.push({ field, reason: "not_proposed" });
+      continue;
+    }
+    if (proposal.proposed === (profile as Record<string, unknown>)[field]) {
+      // The field already holds the proposed value. Writing would be a no-op,
+      // but the STAMP still matters: accepting is how a field becomes
+      // scan-owned, so it is recorded rather than skipped as pointless.
+      accepted.push(field);
+      continue;
+    }
+    patch[field] = proposal.proposed;
+    accepted.push(field);
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await prisma.businessProfile.update({ where: { tenantId }, data: patch as never });
+  }
+  if (accepted.length > 0) {
+    await stampProvenance(tenantId, accepted, "scan", actorId);
+  }
+
+  return { ok: true, accepted, skipped };
+}
+
 export type RescanOutcome =
   | { ok: true; plan: RescanPlan; applied: string[]; reach: CrawlReach }
   | {
@@ -247,6 +327,19 @@ export async function runProfileRescan(args: {
     industry: profile.industry,
     country: profile.country,
   });
+
+  // ★ THE PROPOSAL IS STORED SO AN ACCEPT NEVER TAKES A VALUE FROM THE CLIENT.
+  // `acceptScanProposal` looks the value up here by field name, which is what
+  // makes "mark this field as website-owned" unforgeable: a caller can name a
+  // field but cannot choose what the website supposedly said. Without this, an
+  // accept endpoint that took {field, value} would let any client mark any text
+  // as scan-owned, and the NEXT scan would then silently overwrite a human's
+  // words with the website's.
+  await writeDurableSetting(
+    tenantId,
+    SCAN_PROPOSAL_KEY,
+    JSON.stringify({ at: new Date().toISOString(), offer: plan.offer }),
+  ).catch((err: any) => console.error(`[business-scan] could not store the proposal: ${err?.message}`));
 
   const applied = Object.keys(plan.apply);
   if (applied.length > 0) {
