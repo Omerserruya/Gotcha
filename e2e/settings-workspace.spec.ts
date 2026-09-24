@@ -518,7 +518,7 @@ for (const size of SIZES) {
         await expect(notice).toHaveText(/nothing is marked yet/i);
         await expect(notice).toHaveText(/ask you about every change/i);
         // The self-healing half. Without it this is an apology.
-        await expect(notice).toHaveText(/after that it refreshes what it wrote itself/i);
+        await expect(notice).toHaveText(/it will ask again next time/i);
         // And no badge may claim the website wrote anything.
         await expect(panel).not.toHaveText(/from your website/i);
       } else {

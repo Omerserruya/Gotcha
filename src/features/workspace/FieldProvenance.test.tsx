@@ -47,8 +47,16 @@ describe('★ nothing is marked, and the panel says so before the badges', () =>
     const notice = screen.getByTestId('provenance-none');
     expect(notice).toHaveTextContent(/nothing is marked yet/i);
     expect(notice).toHaveTextContent(/ask you about every change/i);
-    // The self-healing half. Without it this is an apology.
-    expect(notice).toHaveTextContent(/after that it refreshes what it wrote itself/i);
+    /*
+     * NOT "after that it refreshes what it wrote itself", which the first
+     * version of this panel promised and which cannot happen: `planRescan`
+     * applies only fields already owned by `scan`, the scan stamps only what
+     * it applied, and accepting a suggestion goes through PATCH, which stamps
+     * `human`. `scan` is unreachable from `unknown`.
+     */
+    expect(notice).toHaveTextContent(/it will ask again next time/i);
+    expect(notice).toHaveTextContent(/none has/i);
+    expect(notice).not.toHaveTextContent(/after that it refreshes/i);
   });
 
   it('switches to the ordinary sentence once anything is marked', async () => {

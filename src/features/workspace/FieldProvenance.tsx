@@ -25,10 +25,24 @@ import styles from './Workspace.module.css';
  * and offers everything.
  *
  * A panel of empty badges with no explanation would read as a broken feature.
- * The true sentence is better than that, because the map is self-healing:
- * *the first scan asks about everything; after that it refreshes what it wrote
- * itself.* That describes a system that improves, and it is the only honest
- * thing to put above a set of badges that are all going to say the same thing.
+ *
+ * ── AND THE FIRST VERSION OF THIS COMMENT WAS WRONG ──
+ * It said the map is self-healing: *"the first scan asks about everything;
+ * after that it refreshes what it wrote itself."* The service's own header
+ * says the same. **It cannot happen.**
+ *
+ * `planRescan` applies a field only when `provenance[field]?.source === "scan"`,
+ * and `runProfileRescan` stamps `"scan"` only for what it applied. So the
+ * scan re-marks fields it already owns and can never take ownership of one it
+ * does not. There are exactly two stamp sites in the platform, verified
+ * repo-wide, and the other one writes `"human"`.
+ *
+ * Accepting a suggestion goes through `PATCH /workspace`, which stamps
+ * `"human"`. So the review flow cannot make a field scan-owned either.
+ *
+ * **`scan` is unreachable from `unknown`.** On an estate whose provenance map
+ * is empty everywhere, no field will ever be silently refreshed, and the
+ * honest sentence is that it will keep asking — not that it will stop.
  *
  * ── THREE STATES, AND THE THIRD IS NOT A MISSING SECOND ──
  * `null` is UNKNOWN, not *"from the website"*. The profile was seeded by an
