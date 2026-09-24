@@ -104,8 +104,21 @@ describe('shareOfSent — denominated on what was actually sent', () => {
     // Nobody can be delivered to among people the campaign never sent to.
     // Dividing by totalRecipients would understate every rate on a campaign
     // that is still sending.
-    const half = campaign({ totalRecipients: 1000, sentCount: 500, deliveredCount: 250 });
-    expect(shareOfSent(half.deliveredCount, half)).toBe(0.5);
+    /*
+     * ★ DENOMINATED WITH `failedCount`, WHICH THE PLATFORM ACTUALLY WRITES.
+     *
+     * This used `deliveredCount: 250` — a value nothing in the monorepo can
+     * produce. It survived the fix that corrected the shared fixture's
+     * defaults twenty minutes earlier, because that fix changed the defaults
+     * and this line is an inline override: **a fix applied to the instance
+     * left the pattern, in the same file.**
+     *
+     * `shareOfSent` is a pure ratio and does not care which counter it is
+     * given. So it is given one that exists — `broadcast.worker.ts:209`
+     * writes `sentCount` and `failedCount` and nothing else.
+     */
+    const half = campaign({ totalRecipients: 1000, sentCount: 500, failedCount: 250 });
+    expect(shareOfSent(half.failedCount, half)).toBe(0.5);
   });
 
   it('is null rather than zero before anything has been sent', () => {

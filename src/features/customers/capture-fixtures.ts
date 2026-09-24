@@ -42,6 +42,12 @@ import { captureFixturesEnabled } from '@/features/security/capture-fixtures';
  * apart.
  *
  * ── EVERY ROW MUST BE A ROW THE PRODUCT COULD HAVE CREATED ──
+ * ★ THIS RULE IS NOT SPECIFIC TO CAPTURES AND IT WAS WRONGLY SCOPED HERE.
+ * It now lives in `api/contracts/README.md` because a UNIT fixture makes the
+ * identical claim — `outreach.test.ts` carried `readCount: 904` on a counter
+ * nothing increments, one directory over, for as long as anybody kept it.
+ * The version below is the capture-specific half.
+ *
  * **If you cannot name the code path that would produce it, it does not go in
  * the evidence.** A fixture stands in for real data and inherits the same
  * obligation: it may hide who someone is, it may **not** manufacture an

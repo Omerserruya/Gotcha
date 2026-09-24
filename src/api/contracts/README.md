@@ -66,3 +66,46 @@ none", and every screen that renders one must render the other differently.
 The cost of getting this wrong is not theoretical: a payment-methods read that
 lost removed the only actionable sentence from the billing screen for about one
 page load in six, and it looked like a flaky test.
+
+## A fixture is a claim that the system can produce these values
+
+A test fixture is not neutral data. Every field it sets asserts that some code
+path in the platform could write that value — and nothing checks that
+assertion, so it passes forever whether or not it is true.
+
+**If you cannot name the code path that would produce a value, it does not go
+in a fixture.**
+
+This rule already existed, in `features/customers/capture-fixtures.ts`, scoped
+to *capture* fixtures because that is where it was first found:
+
+> EVERY ROW MUST BE A ROW THE PRODUCT COULD HAVE CREATED. If you cannot name
+> the code path that would produce it, it does not go in the evidence.
+
+It was written after a capture fixture hand-assigned a `personId` the unifier
+cannot produce — an Instagram contact has `phone: null`, and the unifier
+matches on phone — and photographed it beneath the screen's own sentence
+saying that join is impossible. Green, and demonstrating something the product
+cannot do.
+
+**The scoping to captures was the mistake.** One directory over,
+`outreach.test.ts` carried `readCount: 904, repliedCount: 188` on counters
+that are initialised to zero and never incremented by anything in the
+monorepo. The tests asserted arithmetic correctly and said nothing about the
+product, and they would have gone on passing for as long as anybody kept them.
+
+Two ways to get this wrong, and the second is the common one:
+
+- **an impossible combination** — each field plausible, the row unreachable
+  (the `personId` case)
+- **a value on a field nothing writes** — the field exists, so the fixture
+  type-checks, and the number is fiction (the `readCount` case)
+
+The second is invisible to every tool we have. A schema will accept it, a type
+will accept it, and the test will pass. The only check is naming the writer.
+
+When a field turns out to be never-written, **set the fixture to what the
+platform actually emits** — usually the default — rather than deleting the
+test. A fixture carrying the real zero makes the next person's assertion fail
+honestly instead of passing on fiction.
+
