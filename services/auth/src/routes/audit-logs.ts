@@ -36,6 +36,7 @@ import {
   resolveTenant,
   requirePermissionOrRole,
   assertTenantId,
+  findSiblingContacts,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -116,6 +117,216 @@ router.get("/audit-logs/actions", CAN_READ, async (req: Request, res: Response):
   } catch (err) {
     console.error("audit facet error:", err);
     res.status(500).json({ error: "Failed to summarise the audit log" });
+  }
+});
+
+// ─── One customer · what was done in their name ───────────────
+//
+// Screen 04e. "Actions on her account" - which action, by an AI employee or a
+// person, and whether it worked.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// IT IS A NEW READ, NOT A WHERE-CLAUSE ON THE LIST ABOVE
+//
+// `buildWhere` takes actorType, action, from and to. There is no `targetId`
+// parameter and adding one would not be enough, because the customer is not a
+// column on `AuditLog` - it has to be reached through the conversations that
+// belong to the person, and `conversations` has NO `contact_id`. The join is on
+// an EXTERNAL identifier, which is the risk this endpoint exists to contain:
+//
+// ★ A CONTACT WHOSE external_id DISAGREES WITH ITS CONVERSATIONS GETS A
+// SILENTLY SHORT LOG, and an incomplete audit log looks exactly like a quiet
+// customer. So the person is resolved through the sibling walk and preserved
+// aliases - a merged contact keeps its history rather than reading as new.
+//
+// ── Two of the three target types are NOT attributable, and that is stated ──
+//
+//   targetType "conversation"  reachable. the rich set: ai.responded,
+//                              adapter.ok/err.shopify.*, crm.link.linked
+//   targetType "customer"      targetId is a SHOPIFY customer id
+//                              (`commerce-actions.service.ts:192` writes
+//                              `resolveVerifiedShopifyCustomerId`), not a
+//                              Contact id - so it cannot be derived from the
+//                              contact. Included only when the caller passes
+//                              the key it already holds.
+//   targetType "order"         same id space, and there is no local Order
+//                              table to enumerate a person's orders from.
+//                              NOT attributable. Declared, never silently
+//                              dropped.
+// ════════════════════════════════════════════════════════════════════════════
+const AUDIT_CONVERSATION_SCAN_CAP = 500;
+
+const CUSTOMER_AUDIT_COVERAGE = {
+  conversation: { attributable: true },
+  customer: {
+    attributable: true,
+    requires: "shopifyCustomerId",
+    detail: "Rows are keyed by the commerce platform's customer id, which this endpoint cannot derive from a contact. Pass ?shopifyCustomerId= to include them.",
+  },
+  order: {
+    attributable: false,
+    reason: "no_local_order_table",
+    detail: "Order-keyed rows are keyed by the commerce platform's order id and there is no local Order table to enumerate this person's orders from.",
+  },
+} as const;
+
+/**
+ * The outcome of one row, reported as the two independent facts it actually is.
+ *
+ * `adapter.err.shopify.process_refund` carries an outcome in its NAME while
+ * `metadata.ok` carries the emitter's explicit verdict, on the same row, with
+ * nothing keeping them in agreement.
+ *
+ * ★ THEY ARE NOT MERGED INTO ONE FIELD. `succeeded` stays the explicit verdict
+ * and stays null when none was recorded - "we did not record whether this
+ * worked" is not "it failed", and resolving it from a naming convention would
+ * turn a naming convention into evidence. The prefix is reported separately so
+ * a screen can show it as a weaker signal, and `outcomeDisagrees` marks the row
+ * where the emitter contradicts its own name about whether a refund happened.
+ * That row is a bug worth seeing, not a value worth smoothing.
+ */
+function outcomeOf(action: string, metadata: unknown) {
+  const meta = metadata as Record<string, unknown> | null;
+  const succeeded = meta && typeof meta.ok === "boolean" ? (meta.ok as boolean) : null;
+  const nameImpliesSucceeded = /(^|\.)ok\./.test(action) ? true : /(^|\.)err\./.test(action) ? false : null;
+  return {
+    succeeded,
+    nameImpliesSucceeded,
+    outcomeDisagrees:
+      succeeded !== null && nameImpliesSucceeded !== null && succeeded !== nameImpliesSucceeded,
+  };
+}
+
+router.get("/audit-logs/customer/:contactId", CAN_READ, async (req: Request, res: Response): Promise<void> => {
+  const tenantId = assertTenantId(req);
+  const bad = badDates(req);
+  if (bad.length > 0) {
+    res.status(422).json({ error: "Invalid audit filter", details: bad });
+    return;
+  }
+  const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, MAX_LIMIT) : DEFAULT_LIMIT;
+  const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
+  const shopifyCustomerId =
+    typeof req.query.shopifyCustomerId === "string" && req.query.shopifyCustomerId.trim()
+      ? req.query.shopifyCustomerId.trim()
+      : null;
+
+  try {
+    const contact = await prisma.contact.findFirst({ where: { id: String(req.params.contactId), tenantId } });
+    if (!contact) {
+      res.status(404).json({ error: "Contact not found" });
+      return;
+    }
+    // A merged-away contact is a valid entry point and must resolve to the
+    // surviving person, not to an empty log.
+    const effective = contact.mergedIntoId
+      ? await prisma.contact.findFirst({ where: { id: contact.mergedIntoId, tenantId } })
+      : contact;
+    if (!effective) {
+      res.status(404).json({ error: "Contact target not found" });
+      return;
+    }
+
+    const siblings = await findSiblingContacts(tenantId, effective as never);
+    const meta = ((effective as any).metadata as Record<string, unknown>) || {};
+    const aliases = Array.isArray((meta as any).aliases)
+      ? ((meta as any).aliases as Array<{ channel: string; externalId: string }>)
+      : [];
+    const identities = [
+      ...(siblings as any[]).map((s) => ({ channel: s.channel, customerExternalId: s.externalId })),
+      ...aliases.map((a) => ({ channel: a.channel as any, customerExternalId: a.externalId })),
+    ];
+
+    const empty = {
+      contact: { id: (effective as any).id, displayName: (effective as any).displayName ?? null },
+      data: [],
+      nextCursor: null,
+      coverage: CUSTOMER_AUDIT_COVERAGE,
+      scope: { identities: identities.length, conversations: 0, conversationScanTruncated: false },
+    };
+    if (identities.length === 0) {
+      res.json(empty);
+      return;
+    }
+
+    // Both origins named explicitly: `applyLiveByDefault` injects origin LIVE
+    // into bulk Conversation reads, so a customer whose history was imported
+    // would otherwise have that history excluded from their own audit log.
+    const convWhere = {
+      tenantId,
+      OR: identities,
+      origin: { in: ["LIVE", "HISTORICAL_IMPORT"] } as never,
+    };
+    const [conversationCount, convos] = await Promise.all([
+      prisma.conversation.count({ where: convWhere as never }),
+      prisma.conversation.findMany({
+        where: convWhere as never,
+        orderBy: { updatedAt: "desc" },
+        take: AUDIT_CONVERSATION_SCAN_CAP,
+        select: { id: true },
+      }),
+    ]);
+    const conversationIds = convos.map((c) => c.id);
+
+    const targets: Array<Record<string, unknown>> = [];
+    if (conversationIds.length > 0) {
+      targets.push({ targetType: "conversation", targetId: { in: conversationIds } });
+    }
+    if (shopifyCustomerId) {
+      targets.push({ targetType: "customer", targetId: shopifyCustomerId });
+    }
+    if (targets.length === 0) {
+      res.json({ ...empty, scope: { identities: identities.length, conversations: conversationCount, conversationScanTruncated: conversationCount > convos.length } });
+      return;
+    }
+
+    // The tenant-wide filters apply unchanged, so the two screens cannot
+    // disagree about what `actorType=ai` means.
+    const base = buildWhere(req, tenantId, { includeAction: true });
+    const rows = await prisma.auditLog.findMany({
+      where: { ...base, OR: targets } as never,
+      select: {
+        id: true, actorType: true, actorId: true, action: true,
+        targetType: true, targetId: true, createdAt: true,
+        // Lifted for `succeeded` only, exactly as the tenant-wide list does.
+        // The blob itself is never returned: it holds args, and args hold
+        // customer phone numbers.
+        metadata: true,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+
+    res.json({
+      contact: { id: (effective as any).id, displayName: (effective as any).displayName ?? null },
+      data: page.map((r) => ({
+        id: r.id,
+        actorType: r.actorType,
+        actorId: r.actorId,
+        action: r.action,
+        targetType: r.targetType,
+        targetId: r.targetId,
+        createdAt: r.createdAt,
+        ...outcomeOf(r.action, r.metadata),
+      })),
+      nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+      coverage: CUSTOMER_AUDIT_COVERAGE,
+      scope: {
+        identities: identities.length,
+        conversations: conversationCount,
+        // The conversation id list becomes an IN clause, so it is capped.
+        // Saying so is the difference between a bounded read and a short log.
+        conversationScanTruncated: conversationCount > convos.length,
+      },
+    });
+  } catch (err) {
+    console.error("customer audit error:", err);
+    res.status(500).json({ error: "Failed to read the customer's audit log" });
   }
 });
 
