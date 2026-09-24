@@ -136,6 +136,68 @@ async function openCustomers(page: Page, locale: 'en' | 'he', query = '') {
   return page;
 }
 
+/**
+ * Open ONE customer — screen 04b — with the same refusal to photograph a real
+ * person as the list has.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ 04b WAS BUILT, UNIT-TESTED, COMMITTED AND UNPHOTOGRAPHABLE
+ * ════════════════════════════════════════════════════════════════════════════
+ * The list spec ran 48/48 green with 24 shots and visited this page ZERO
+ * times, so a full pass over screen 04 said nothing whatever about 04b. The
+ * tell was in the evidence directory: **the shot count did not change when a
+ * new screen was added.** A screen that produces no new evidence has not
+ * been photographed.
+ *
+ * And writing this helper is what surfaced the deeper problem. The fixture
+ * list serves synthetic ids; opening one called the timeline endpoint with an
+ * id no tenant has, which 404s — so under the gate every customer page
+ * rendered "we couldn't load this customer". Had this spec been written after
+ * a capture rather than before, the run would have banked a shot of an error
+ * panel as evidence for 04b.
+ */
+async function openCustomer(page: Page, locale: 'en' | 'he') {
+  await openCustomers(page, locale);
+
+  /*
+   * Navigate by CLICKING the row, not by constructing a URL. The defect 04b
+   * exists to fix is that the rows were not links — a spec that types the
+   * path would pass on a list whose rows still do nothing.
+   */
+  const firstRow = page.getByTestId('customer-list').locator('a').first();
+  await expect(
+    firstRow,
+    'no link in the customer list — the rows are not clickable, which is the defect 04b exists to fix',
+  ).toBeVisible({ timeout: 15_000 });
+  await firstRow.click();
+
+  await expect(
+    page.getByTestId('customer-detail'),
+    missingIds('the 04b customer detail'),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // Refuse to photograph a failed read as though it were the screen.
+  await expect(
+    page.getByTestId('customer-unavailable'),
+    'the customer could not be read, so this run would photograph an error panel as 04b',
+  ).toHaveCount(0);
+
+  /*
+   * ── THE GATE, AND IT MATTERS MORE HERE THAN ON THE LIST ──
+   * The list shows a name and a phone number. THIS page shows the BODIES of
+   * a real person's messages, a model-written character study of them, and
+   * the durable facts GOTCHA has learned. Eighteen copies at three viewports.
+   */
+  await expect(
+    page.locator('main'),
+    "the capture fixtures did not engage, so this page is showing a REAL person's " +
+      'messages, brief and remembered facts. Start the server with ' +
+      'E2E_SECURITY_FIXTURES=1 and an APP_ORIGIN on localhost. Nothing has been written.',
+  ).toContainText('Avery Stone');
+
+  return page;
+}
+
 async function shoot(page: Page, name: string) {
   await page.screenshot({ path: join(EVIDENCE, `${name}.png`), fullPage: true });
 }
@@ -334,6 +396,107 @@ for (const size of SIZES) {
       await expect(page.locator('main')).not.toHaveText(/\{[a-zA-Z]+\}/);
 
       await shoot(page, `${size.name}-6-above-the-fold`);
+    });
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * 04b · ONE CUSTOMER
+     * ══════════════════════════════════════════════════════════════════════
+     * Every assertion is by CONTENT. This screen's failure mode is a sentence
+     * that reads well and is not true — a canned string in the serif italic
+     * reserved for a written character study, a stream that omits a class of
+     * action without saying so, a count that describes a page rather than a
+     * history.
+     */
+    test('04b · the person, and what the page will not claim about them', async ({ page }) => {
+      await openCustomer(page, 'en');
+
+      await expect(page.getByTestId('detail-name')).toHaveText(/Avery Stone/);
+
+      /*
+       * ★ THE SUMMARY IS A SUMMARY, AND THE CANNED STRING IS NOT ONE.
+       *
+       * `POST /customer-summary` answers `ok: true` with "New customer with
+       * no recorded prior interactions." for somebody who has never written.
+       * Through the serif italic this screen reserves for a written character
+       * study, that constant would read as a model's conclusion about them.
+       */
+      const brief = page.getByTestId('customer-brief');
+      await expect(brief).toBeVisible();
+      await expect(brief).toHaveText(/\S/);
+      await expect(brief).not.toHaveText(/New customer with no recorded prior interactions/i);
+
+      /*
+       * ★★ THE COUNT NAMES THE WHOLE, NOT THE PAGE.
+       *
+       * The old route thinned rather than truncated — 50 conversations × the
+       * newest 5 messages of each — so the stream looked complete with holes
+       * in the middle of every conversation. "Showing N of M" is the sentence
+       * that could not be said then and can be now.
+       */
+      const count = page.getByTestId('timeline-count');
+      await expect(count).toHaveText(/showing \d/i);
+      await expect(count).toHaveText(/of [\d,]+ messages/i);
+      // Never the sentence that described the shape we replaced.
+      await expect(count).not.toHaveText(/recent activity only/i);
+
+      /*
+       * ★★ COVERAGE, INCLUDING AVAILABLE-AND-INCOMPLETE.
+       *
+       * `ai_action` is `available: true` and still omits any action taken
+       * through an adapter — a Shopify refund the AI performed is not in the
+       * list, and Backend's own note says the gap is invisible from the data.
+       * A screen that renders the events and drops the detail deletes the
+       * only warning there is.
+       */
+      const coverage = page.getByTestId('timeline-coverage');
+      await expect(coverage, 'the coverage caveats are not on screen').toBeVisible();
+      await expect(coverage).toHaveText(/\S/);
+
+      // An imported message says it was imported: told about, not witnessed.
+      await expect(page.getByTestId('event-imported')).toHaveText(/imported/i);
+
+      /*
+       * ★ NOTES — read here, written in the CRM, and anonymous.
+       */
+      const notes = page.getByTestId('customer-notes');
+      await expect(notes).toBeVisible();
+      await expect(page.getByTestId('notes-read-only')).toHaveText(/written in your CRM/i);
+      await expect(page.getByTestId('notes-anonymous')).toHaveText(/doesn.t record who wrote/i);
+
+      /*
+       * ★ AND THE TWO THINGS THAT MUST NOT APPEAR.
+       *
+       * Tenure, because all three fields that look like it undersell a
+       * long-standing customer — "customer since" built from any of them
+       * tells a three-year customer they joined today.
+       *
+       * Money, because it is two live uncached vendor calls per customer and
+       * lives where one person is being decided about.
+       */
+      const main = page.locator('main');
+      await expect(main).not.toHaveText(/customer since/i);
+      await expect(main).not.toHaveText(/lifetime value/i);
+      // No un-substituted ICU placeholder anywhere on the page.
+      await expect(main).not.toHaveText(/\{[a-zA-Z]+\}/);
+
+      // And no write control: the CRM note write files against the wrong
+      // conversation from here, so it is not offered.
+      await expect(main.locator('textarea')).toHaveCount(0);
+
+      await shoot(page, `${size.name}-04b-customer`);
+    });
+
+    /*
+     * 04b · Hebrew. The brief is prose from the platform and the caveats are
+     * prose from the route, so this shot is where a right-to-left reading of
+     * somebody else's sentences is actually checked.
+     */
+    test('04b · Hebrew, right to left', async ({ page }) => {
+      await openCustomer(page, 'he');
+      await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+      await expect(page.getByTestId('customer-detail')).toBeVisible();
+      await shoot(page, `${size.name}-04b-hebrew`);
     });
   });
 }

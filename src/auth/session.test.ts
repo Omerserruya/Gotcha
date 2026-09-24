@@ -54,26 +54,45 @@ describe('sealSession', () => {
 
   it('rejects a tampered cookie rather than trusting it', async () => {
     /*
-     * ★ THE TAMPER IS DERIVED FROM THE SEAL, NOT HARDCODED.
+     * ★★ THE TAMPER IS PROVEN TO TAMPER, BECAUSE TWICE IT DID NOT.
      *
-     * This read `${sealed.slice(0, -2)}xy` — which does not tamper with
-     * anything when the seal already ends in "xy". Roughly one seal in four
-     * thousand, so it failed once in a full-suite run today and passed alone
-     * in 400ms, which is the signature of a flake and was a real defect in
-     * the test.
+     * First version: `${sealed.slice(0, -2)}xy` — a no-op whenever the seal
+     * already ended in "xy". About one in four thousand. It failed once in a
+     * full-suite run and passed alone, the signature of a flake.
      *
-     * A security assertion that silently becomes a no-op is worse than the
-     * odds suggest: the run where it does nothing is also the run where it
-     * reports the cookie was accepted, and the natural reading of that is a
-     * broken seal rather than a broken test.
+     * Second version, my fix: flip the final character A↔B. Also a no-op,
+     * and more often. This is JWE compact —
+     * `header.key.iv.ciphertext.tag` — and a 16-byte GCM tag is 22 base64url
+     * characters carrying 128 bits. 21 × 6 = 126, so the FINAL character
+     * contributes two significant bits and four of padding. 'A' and 'B'
+     * differ only in the lowest bit, which is padding, so the two strings
+     * decode to an identical tag.
      *
-     * Flipping the final character against itself always changes the string.
+     * ★ Both versions assumed the mutation mutated. The lesson is not "pick
+     * a better character" — it is that a test which tampers must PROVE the
+     * tamper, the same way a mutation run proves a guard can fail.
+     *
+     * So: change the first character of the CIPHERTEXT segment, where every
+     * bit is significant, and assert the decoded bytes actually differ
+     * before asserting the seal rejects them.
      */
     const sealed = await sealSession(session());
-    const last = sealed.slice(-1);
-    const tampered = `${sealed.slice(0, -1)}${last === 'A' ? 'B' : 'A'}`;
-    expect(tampered).not.toBe(sealed);
-    expect(await unsealSession(tampered)).toBeNull();
+    const parts = sealed.split('.');
+    expect(parts, 'JWE compact serialization has five segments').toHaveLength(5);
+
+    const ciphertext = parts[3]!;
+    const head = ciphertext[0]!;
+    const swapped = head === 'A' ? 'Z' : 'A';
+    const tamperedCiphertext = `${swapped}${ciphertext.slice(1)}`;
+
+    // The tamper is real at the BYTE level, not merely at the string level.
+    expect(
+      Buffer.from(tamperedCiphertext, 'base64url').equals(Buffer.from(ciphertext, 'base64url')),
+      'the tamper decoded to identical bytes, so this test would assert nothing',
+    ).toBe(false);
+
+    parts[3] = tamperedCiphertext;
+    expect(await unsealSession(parts.join('.'))).toBeNull();
   });
 
   it('rejects a session past its absolute expiry', async () => {

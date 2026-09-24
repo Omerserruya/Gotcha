@@ -201,7 +201,14 @@ export function withCaptureFixtures(
  * timeline, so the capture of an unreachable customer photographs the real
  * error rather than a fixture standing in for it.
  */
-const FIXTURE_DETAIL: CustomerDetail = {
+/**
+ * Exported so a unit test can render THIS through the real component and
+ * assert what the capture spec asserts. The capture is run by somebody else
+ * on a machine this session cannot reach; without that test, a fixture that
+ * disagrees with the spec is discovered during their run rather than before
+ * it — and the fixture's whole job is to be the thing photographed.
+ */
+export const FIXTURE_DETAIL: CustomerDetail = {
   timeline: {
     contact: {
       id: 'fixture-1',
@@ -248,9 +255,88 @@ const FIXTURE_DETAIL: CustomerDetail = {
         handover: null,
         action: null,
       },
+      /*
+       * One of each remaining kind, so the capture photographs them rendering
+       * from `handover` and `action` rather than from `body` — which is null
+       * on both, and which the legacy screen shows as "(no body)".
+       */
+      {
+        type: 'handover',
+        channel: 'WHATSAPP',
+        conversationId: 'fixture-conv-1',
+        direction: null,
+        body: null,
+        createdAt: '2026-09-18T09:15:00.000Z',
+        origin: 'LIVE',
+        id: 'fx-4',
+        handover: {
+          from: 'ai',
+          to: 'Dana',
+          actorUserId: 'fixture-user',
+          reason: 'wholesale pricing',
+        },
+        action: null,
+      },
+      {
+        type: 'ai_action',
+        channel: 'WHATSAPP',
+        conversationId: 'fixture-conv-1',
+        direction: null,
+        body: null,
+        createdAt: '2026-09-18T09:15:30.000Z',
+        origin: 'LIVE',
+        id: 'fx-5',
+        handover: null,
+        action: {
+          tool: 'shopify.get_customer_orders',
+          success: true,
+          triggeredBy: 'ai',
+          durationMs: 412,
+          approvedBy: null,
+        },
+      },
     ],
-    page: { limit: 50, types: ['message'], nextCursor: null, hasMore: true },
-    coverage: {},
+    page: {
+      limit: 50,
+      types: ['message', 'handover', 'ai_action'],
+      nextCursor: null,
+      hasMore: true,
+    },
+    /*
+     * The real coverage map, copied from `identity.ts:315-327`, because the
+     * capture has to photograph the caveats a merchant actually sees.
+     *
+     * ★ `ai_action` is AVAILABLE and carries a detail. That is the entry a
+     * screen is most likely to skip — `available: true` reads as "fine" —
+     * and it is the one saying a Shopify refund the AI performed is not in
+     * this list. An empty coverage map here would have produced a shot with
+     * no caveats at all and a passing spec.
+     */
+    coverage: {
+      message: { available: true, reason: null, detail: null },
+      handover: { available: true, reason: null, detail: null },
+      ai_action: {
+        available: true,
+        reason: null,
+        detail:
+          'ToolExecution records catalog HTTP tools only. An action taken through an adapter, such as a Shopify refund, is not recorded here.',
+      },
+      order: {
+        available: false,
+        reason: 'no_local_model',
+        detail: 'Orders live in the commerce platform and are served by their own screen.',
+      },
+      return: {
+        available: false,
+        reason: 'no_local_model',
+        detail: 'Returns live in the commerce platform and are served by their own screen.',
+      },
+      note: {
+        available: false,
+        reason: 'external_crm',
+        detail: "Notes are written to the merchant's CRM and read back as recent_crm_notes.",
+      },
+    },
     /*
      * More than is shown, deliberately: the capture should photograph the
      * "50 of 1,284" sentence rather than the all-of-it one, because the
@@ -259,8 +345,8 @@ const FIXTURE_DETAIL: CustomerDetail = {
     totals: {
       conversations: 2,
       messages: 1284,
-      handovers: 0,
-      aiActions: 0,
+      handovers: 6,
+      aiActions: 31,
       conversationScanTruncated: false,
     },
   },
@@ -334,10 +420,51 @@ const FIXTURE_DETAIL: CustomerDetail = {
  * Whole rather than per-field: a half-substituted page would put a fixture
  * name above a real person's messages, which is worse than either.
  */
-export function withDetailFixtures(detail: CustomerDetail): CustomerDetail {
+/**
+ * The ids the fixture LIST serves. A detail page can only be opened with one
+ * of these while the gate is on, because they are the only rows on screen.
+ */
+const FIXTURE_CONTACT_IDS: ReadonlySet<string> = new Set(FIXTURE_CONTACTS.map((c) => c.id));
+
+/**
+ * Substitutes the whole detail when the gate allows it, and only then.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ WHY THIS TAKES THE ID, AND WHY IT SUBSTITUTES OVER A FAILED READ
+ * ════════════════════════════════════════════════════════════════════════════
+ * The first version refused to substitute whenever `timeline === null`, on
+ * the rule that a failed read must stay a failed read — fixtures make
+ * evidence safe, they must never make a broken screen look like a working
+ * one. That rule is right and it made this screen **unphotographable.**
+ *
+ * The fixture LIST serves synthetic ids. Opening one calls the real timeline
+ * endpoint with an id no tenant has, which 404s — so under the gate every
+ * customer page rendered "we couldn't load this customer", and the capture
+ * would have banked a shot of an error state as evidence for 04b.
+ *
+ * A 404 for an id WE INVENTED is not the screen failing. It is the expected
+ * answer to a question about somebody who does not exist.
+ *
+ * So the two cases are separated by the id:
+ *
+ *   fixture id + gate open   substitute, even over a failed read — the read
+ *                            was always going to fail and its failure says
+ *                            nothing about the screen
+ *   real id    + gate open   a failure stays a failure. THIS is the case the
+ *                            original rule was protecting, and it is intact:
+ *                            a real customer whose page is broken must never
+ *                            be photographed as healthy
+ *   gate closed              nothing is ever substituted
+ *
+ * Found by writing the capture spec rather than by running it — the screen
+ * was built, unit-tested and committed in a state where no shot of it could
+ * ever have been taken.
+ */
+export function withDetailFixtures(detail: CustomerDetail, contactId: string): CustomerDetail {
   if (!captureFixturesEnabled()) return detail;
-  // A failed read stays a failed read. Fixtures make evidence safe; they must
-  // never make a broken screen look like a working one.
-  if (detail.timeline === null) return detail;
+  if (!FIXTURE_CONTACT_IDS.has(contactId)) {
+    // A real person's page. If it is broken, it is photographed broken.
+    return detail.timeline === null ? detail : FIXTURE_DETAIL;
+  }
   return FIXTURE_DETAIL;
 }

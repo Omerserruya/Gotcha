@@ -68,8 +68,16 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       return null;
     });
 
-  if (!timeline)
-    return { timeline: null, brief: null, memory: null, crm: null, noConversations: false };
+  if (!timeline) {
+    /*
+     * Through the fixture gate too: a synthetic id 404s by construction, and
+     * that failure is not evidence about this screen. See `withDetailFixtures`.
+     */
+    return withDetailFixtures(
+      { timeline: null, brief: null, memory: null, crm: null, noConversations: false },
+      contactId,
+    );
+  }
 
   /*
    * ONE shared helper, so four screens cannot each choose differently. Reads
@@ -139,11 +147,8 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
    *
    * Applied to what the real reads returned, so a failure stays a failure.
    */
-  return withDetailFixtures({
-    timeline,
-    brief,
-    memory,
-    crm,
-    noConversations: conversationId === null,
-  });
+  return withDetailFixtures(
+    { timeline, brief, memory, crm, noConversations: conversationId === null },
+    contactId,
+  );
 }

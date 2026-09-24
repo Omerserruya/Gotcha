@@ -161,7 +161,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
      * silently wrong.
      */
     enabled.mockReturnValue(false);
-    expect(withDetailFixtures(real)).toBe(real);
+    expect(withDetailFixtures(real, 'fixture-1')).toBe(real);
   });
 
   it('★ substitutes EVERY field when the gate is open, never a mixture', () => {
@@ -172,13 +172,13 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
      * into as fields are added.
      */
     enabled.mockReturnValue(true);
-    const shown = withDetailFixtures(real);
+    const shown = withDetailFixtures(real, 'fixture-1');
     expect(shown.timeline?.contact?.displayName).toBe('Avery Stone');
     expect(JSON.stringify(shown)).not.toContain('a real customer actually wrote');
     expect(JSON.stringify(shown)).not.toContain('+972500000000');
   });
 
-  it('★★ a failed read stays a failed read', () => {
+  it("★★ a REAL person's failed page is photographed broken", () => {
     /*
      * Fixtures make evidence safe; they must never make a broken screen look
      * like a working one. A capture that substituted a healthy page over a
@@ -193,14 +193,50 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       crm: null,
       noConversations: false,
     };
-    expect(withDetailFixtures(failed)).toBe(failed);
+    expect(withDetailFixtures(failed, 'real-contact-99')).toBe(failed);
+  });
+
+  it('★★ but a FIXTURE id substitutes even over a failed read', () => {
+    /*
+     * The fixture list serves synthetic ids. Opening one calls the real
+     * timeline endpoint with an id no tenant has, which 404s — so the first
+     * version of this function, which refused to substitute over any failed
+     * read, made the whole screen **unphotographable**: every customer page
+     * under the gate rendered "we couldn't load this customer".
+     *
+     * A 404 for an id WE INVENTED is not the screen failing; it is the
+     * expected answer about somebody who does not exist. The rule that
+     * matters — a real person's broken page is never photographed healthy —
+     * is the test above, and it is intact.
+     *
+     * Found by writing the capture spec, not by running it. The screen was
+     * built, unit-tested and committed in a state where no shot of it could
+     * have been taken.
+     */
+    enabled.mockReturnValue(true);
+    const failed: CustomerDetail = {
+      timeline: null,
+      brief: null,
+      memory: null,
+      crm: null,
+      noConversations: false,
+    };
+    const shown = withDetailFixtures(failed, 'fixture-1');
+    expect(shown.timeline).not.toBeNull();
+    expect(shown.timeline?.contact?.displayName).toBe('Avery Stone');
+  });
+
+  it('substitutes nothing for a fixture id when the gate is closed', () => {
+    // The id is not an escape hatch — the gate still decides.
+    enabled.mockReturnValue(false);
+    expect(withDetailFixtures(real, 'fixture-1')).toBe(real);
   });
 
   it('carries the marker the capture asserts before photographing', () => {
     // The spec checks a fixture is actually in place before it shoots, so a
     // run with the gate misconfigured cannot quietly bank real data.
     enabled.mockReturnValue(true);
-    const shown = withDetailFixtures(real);
+    const shown = withDetailFixtures(real, 'fixture-1');
     expect(shown.timeline?.contact?.externalId).toBe('+447700900123');
   });
 });
