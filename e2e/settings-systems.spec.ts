@@ -336,10 +336,50 @@ for (const size of SIZES) {
         /never disagree with the system the AI actually calls/i,
       );
 
-      // Built and verified are different words.
-      await expect(page.getByTestId('core-choosing-not-yet')).toHaveText(
-        /never once run against a real connection/i,
-      );
+      /*
+       * ★ AND THE CAVEAT IS GONE, WHICH IS WHAT THE ASSERTION WAS FOR.
+       *
+       * This spec asserted, for about twenty minutes, that the screen said
+       * electing "does not change how the AI behaves yet" — true while
+       * `config.roles` was read only by the displacement logic inside its
+       * own write. Backend landed the read at 2d1abf88 and the live bot path
+       * consumes it, so the sentence became false and came out.
+       *
+       * The assertion is inverted rather than deleted. A caveat nobody is
+       * obliged to revisit becomes a lie the day it stops being true, and
+       * the guard against that is a test that fails while it is still on
+       * screen.
+       */
+      const choosing = page.getByTestId('core-choosing');
+      await expect(choosing).toBeVisible();
+      await expect(choosing).not.toHaveText(/does not change how the AI behaves yet/i);
+      await expect(choosing).not.toHaveText(/being built|once it is wired/i);
+
+      /*
+       * ★ AND THE CONTROL ITSELF IS ABSENT HERE — ASSERTED AS AN IMPLICATION.
+       *
+       * `electable()` needs a CONNECTED candidate. Shopify is the only
+       * integration on this deployment and it is in ERROR, so no part has
+       * one and the dropdown renders for nobody. Its success path, its
+       * displacement sentence and all three of its failures live in
+       * ElectPart.test.tsx, where they can be constructed.
+       *
+       * Paired with the sentence that explains it rather than asserted bare:
+       * a lone toHaveCount(0) also passes on a page where the control was
+       * deleted or renamed, which is the inert guard this suite keeps
+       * rediscovering.
+       *
+       * ── AND NOTHING HERE CLICKS SAVE ──
+       * `PUT /business-core/role` writes config.roles on a live tenant and
+       * DISPLACES whatever held the part. There is no `.click()` in this
+       * spec on anything that writes.
+       */
+      await expect(page.getByTestId('core-part-failing')).toBeVisible();
+      await expect(
+        page.getByTestId('core-elect-ecommerce'),
+        'the election dropdown rendered for a part whose only candidate is broken — ' +
+          'the write refuses a system that is not CONNECTED, so every save would fail',
+      ).toHaveCount(0);
 
       await shoot(page, `${size.name}-core-honesty`);
     });

@@ -2,13 +2,16 @@ import { getTranslations } from 'next-intl/server';
 
 import {
   connectedButFailing,
+  electable,
   electedElsewhere,
+  isInferred,
   partState,
   USE_CASES,
   type BusinessCore as Core,
   type RolePart,
 } from '@/api/contracts/business-core';
 
+import { ElectPart } from './ElectPart';
 import styles from './BusinessCore.module.css';
 
 /**
@@ -90,15 +93,18 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
       ) : null}
 
       {/*
-        ★ SAID, NOT IMPLIED.
-        The election endpoint exists. Its success and displacement paths have
-        never run against a real connection — no integration on this
-        deployment is CONNECTED — so the control is not put in front of
-        somebody as though it were proven. Built and verified are different
-        words.
+        The CRM and returns are elected on their own screens, so this page
+        says which parts it does NOT decide. Without it, the two a merchant
+        cannot configure here look identical to the two they can.
+
+        The "takes effect once it is wired" caveat that stood here is GONE:
+        Backend landed the read at 2d1abf88 and the bot path consumes it
+        (`ai-bot.service.ts:1705` → `prompt-builder.service.ts:463`). It was
+        removed because it stopped being true, which is what the assertion
+        on it existed to force.
       */}
-      <p className={styles.hint} data-testid="core-choosing-not-yet">
-        {t('choosing.notYet')} {t('choosing.crmWorks')}
+      <p className={styles.hint} data-testid="core-choosing">
+        {t('choosing.crmWorks')}
       </p>
 
       {/*
@@ -210,6 +216,7 @@ function Part({
 }) {
   const state = partState(part);
   const failing = part.candidates.find((c) => connectedButFailing(c));
+  const elsewhere = electedElsewhere(part);
 
   return (
     <article className={styles.part} data-testid={`core-part-${part.role}`} data-state={state}>
@@ -234,6 +241,23 @@ function Part({
             systems: part.candidates.map((c) => c.name).join(', '),
           })}
         </p>
+      ) : isInferred(part) ? (
+        /*
+          ★ WHAT IT FALLS BACK TO — NOT WHAT ANYBODY CHOSE.
+
+          `returns` resolves to Shopify because the capability resolver found
+          it could serve returns. No merchant said so, and the prompt the
+          model receives says as much in parentheses: "shopify (inferred, not
+          chosen by the business)".
+
+          Drawn as a selection, this would invent consent — the screen would
+          show a decision nobody made, and whoever opened it next would
+          believe a colleague had made it. So it says which it is, and says
+          where a real choice would be made.
+        */
+        <p className={styles.partInferred} data-testid="core-part-inferred">
+          {t('state.inferred', { name: part.elected!.name })}
+        </p>
       ) : state === 'chosen' ? (
         <p className={styles.partState} data-testid="core-part-chosen">
           {t('state.chosen', { name: part.elected!.name })}
@@ -245,13 +269,29 @@ function Part({
       )}
 
       {/*
+        14c — the control, and ONLY where the server would accept it.
+
+        `electable()` is false for the CRM (elected on its own screen), for a
+        part nothing can serve, and for a part with nothing CONNECTED behind
+        it. Each of those already has a sentence above saying which case it
+        is and where the repair lives; a dropdown beside any of them would be
+        a control the write rejects.
+      */}
+      {electable(part) ? <ElectPart part={part} /> : null}
+
+      {/*
         The CRM is chosen elsewhere and the screen has to say where. Left
         unexplained, the one part a merchant cannot configure here looks
         identical to the four they can.
       */}
-      {electedElsewhere(part) ? (
-        <p className={styles.hint} data-testid="core-part-crm-elsewhere">
-          {t('crm.elsewhere')}
+      {elsewhere ? (
+        <p
+          className={styles.hint}
+          data-testid={
+            elsewhere === 'crm' ? 'core-part-crm-elsewhere' : 'core-part-returns-elsewhere'
+          }
+        >
+          {elsewhere === 'crm' ? t('crm.elsewhere') : t('returns.elsewhere')}
         </p>
       ) : null}
     </article>

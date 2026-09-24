@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import { createTranslator } from 'next-intl';
+import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import { businessCoreSchema } from '@/api/contracts/business-core';
@@ -36,8 +36,24 @@ const MEASURED = {
   catalogueNotes: ['ReturnGO is stored under the ecommerce category but serves returns.'],
 };
 
+/*
+ * Wrapped in the client provider, because 14c's election control is a client
+ * component inside this server tree and `useTranslations` needs a context the
+ * server's `getTranslations` mock does not supply.
+ *
+ * Worth naming: the first run after mounting ElectPart failed with "the
+ * context from NextIntlClientProvider was not found", pointing at the
+ * component. It was the harness, not the subject — the fifth time this
+ * session that a test-environment gap has arrived wearing the screen's
+ * clothes. The tell is the same every time: the failure describes the
+ * RENDERER's situation, not the product's.
+ */
 const render14 = async (over: Record<string, unknown> = {}) =>
-  render(await BusinessCore({ core: businessCoreSchema.parse({ ...MEASURED, ...over }) }));
+  render(
+    <NextIntlClientProvider locale="en" messages={{ 'business-core': messages }}>
+      {await BusinessCore({ core: businessCoreSchema.parse({ ...MEASURED, ...over }) })}
+    </NextIntlClientProvider>,
+  );
 
 describe('★ "connect one" is the wrong instruction for a broken connection', () => {
   it('tells the merchant to FIX Shopify, not to connect it', async () => {
@@ -123,8 +139,8 @@ describe('★ the CRM is chosen elsewhere and the screen says where', () => {
   });
 });
 
-describe('★ built and verified are different words', () => {
-  it('says the save has never run against a real connection', async () => {
+describe('★ the caveat came out when it stopped being true', () => {
+  it('no longer claims the election is unwired', async () => {
     /*
      * The election endpoint exists; its success and displacement paths are
      * covered by tests only, because nothing on this deployment is CONNECTED.
@@ -132,8 +148,22 @@ describe('★ built and verified are different words', () => {
      * sentence removes.
      */
     await render14();
-    const note = screen.getByTestId('core-choosing-not-yet');
-    expect(note).toHaveTextContent(/never once run against a real connection/i);
+    const note = screen.getByTestId('core-choosing');
+    /*
+     * ★ AND THE CAVEAT THAT STOOD HERE IS GONE, ON PURPOSE.
+     *
+     * For most of a day this screen said electing "does not change how the
+     * AI behaves yet", because `config.roles` was read only by the
+     * displacement logic inside its own write. Backend landed the read at
+     * 2d1abf88 and the live bot path consumes it, so the sentence became
+     * false and was deleted.
+     *
+     * This assertion is the other half of that: a caveat nobody is obliged
+     * to revisit becomes a lie the day it stops being true, so the screen
+     * must NOT still be carrying it.
+     */
+    expect(note).not.toHaveTextContent(/does not change how the AI behaves yet/i);
+    expect(note).not.toHaveTextContent(/being built|once it is wired/i);
     // And names the exception, so "nothing works" is not the takeaway.
     expect(note).toHaveTextContent(/Customer records are the exception/i);
   });
@@ -168,6 +198,70 @@ describe('a failed read is not a business with no parts', () => {
   it('says we could not read it', async () => {
     render(await BusinessCore({ core: null }));
     expect(screen.getByTestId('core-unavailable')).toHaveTextContent(/could not read/i);
+  });
+});
+
+describe('★ an inferred system is not a chosen one', () => {
+  it('says returns FALLS BACK to Shopify rather than showing it as picked', async () => {
+    /*
+     * ★ THE ONE THAT INVENTS CONSENT IF IT IS WRONG.
+     *
+     * `returns` resolves to Shopify because the capability resolver found it
+     * could serve returns. The prompt the model receives says so in
+     * parentheses — "shopify (inferred, not chosen by the business)".
+     *
+     * Rendered through `state.chosen` it would read "Shopify does this", and
+     * the next person to open this screen would believe a colleague had
+     * decided that. A screen that manufactures a decision is worse than one
+     * that shows nothing, because it is acted on.
+     */
+    await render14({
+      roles: [
+        {
+          role: 'returns',
+          elected: { slug: 'shopify', name: 'Shopify' },
+          source: 'inferred',
+          candidates: [{ slug: 'shopify', name: 'Shopify', connected: true, status: 'CONNECTED' }],
+        },
+      ],
+    });
+
+    const inferred = screen.getByTestId('core-part-inferred');
+    expect(inferred).toHaveTextContent(/nobody chose it/i);
+    expect(inferred).toHaveTextContent(/falls back/i);
+    // NOT the chosen sentence, which would claim a decision.
+    expect(screen.queryByTestId('core-part-chosen')).toBeNull();
+    expect(inferred).not.toHaveTextContent(/Shopify does this/i);
+  });
+
+  it('still calls a genuine election a choice', async () => {
+    // The inferred branch must not swallow the real one: a merchant who DID
+    // choose deserves to see that they did.
+    await render14({
+      roles: [
+        {
+          role: 'ecommerce',
+          elected: { slug: 'shopify', name: 'Shopify' },
+          source: 'elected',
+          candidates: [{ slug: 'shopify', name: 'Shopify', connected: true, status: 'CONNECTED' }],
+        },
+      ],
+    });
+    expect(screen.getByTestId('core-part-chosen')).toHaveTextContent(/Shopify does this/i);
+    expect(screen.queryByTestId('core-part-inferred')).toBeNull();
+  });
+
+  it('points returns at its own switch, and the CRM at its own screen', async () => {
+    // Two refusals, two destinations. One sentence for both would send
+    // somebody to the CRM screen to change returns.
+    await render14({
+      roles: [
+        { role: 'returns', candidates: [] },
+        { role: 'crm', candidates: [] },
+      ],
+    });
+    expect(screen.getByTestId('core-part-returns-elsewhere')).toHaveTextContent(/own switch/i);
+    expect(screen.getByTestId('core-part-crm-elsewhere')).toHaveTextContent(/Integrations screen/i);
   });
 });
 

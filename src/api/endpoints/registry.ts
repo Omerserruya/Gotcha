@@ -496,6 +496,15 @@ export const integrationEndpoints = {
    * reason, which is a different fact from an empty candidate list.
    */
   businessCore: () => endpoint('/api/integrations/business-core'),
+  /**
+   * Screen 14c — elect the system that plays a part.
+   *
+   * DISPLACES rather than refusing when the part is already taken, and
+   * answers with what it replaced so the screen can name it. Refuses a
+   * system that is not CONNECTED, and refuses the CRM outright with
+   * `CRM_ELECTED_ELSEWHERE` — that one is `PUT /:slug/crm-source`.
+   */
+  electRole: () => endpoint('/api/integrations/business-core/role'),
 } as const;
 
 /**

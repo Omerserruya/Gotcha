@@ -23,16 +23,24 @@ import { z } from 'zod';
  * that is beautiful once and useless on day one.
  *
  * ════════════════════════════════════════════════════════════════════════════
- * AND ELECTING A PART IS NOT YET POSSIBLE
+ * ELECTING A PART: THE WRITE EXISTS, THE READ DOES NOT
  * ════════════════════════════════════════════════════════════════════════════
- * `PUT /business-core/use-case` exists. `PUT /:slug/crm-source` elects the
- * CRM. **Nothing writes `config.roles`** — verified repo-wide by both of us —
- * so no other part can be elected at all.
+ * This block used to say electing was impossible. That was true when it was
+ * written and stopped being true when Backend's commit landed:
+ * `PUT /business-core/role` writes `config.roles`, displaces what held the
+ * part, and refuses the CRM with `CRM_ELECTED_ELSEWHERE`.
  *
- * A dropdown that saved for one part and silently did nothing for the other
- * four is the mostly-correct display: four controls that look right, respond
- * to clicks and change nothing, which nobody would find by looking. So 14c
- * ships as a READ, and says so.
+ * ★ BUT "SAVED" IS NARROWER THAN IT SOUNDS, AND THE SCREEN SAYS SO.
+ * `config.roles` is read in exactly ONE place in the monorepo —
+ * `business-roles.ts:188-195`, the displacement logic inside that same write.
+ * **Nothing in the AI's decision path reads it.** So an election is stored,
+ * real, and changes no behaviour until Backend's read path lands.
+ *
+ * The earlier fear — four controls that look right, respond to clicks and
+ * change nothing — is met by saying it rather than by withholding the
+ * control: `core-elect-not-wired` carries the claim, and the e2e assertion
+ * on it fails the day it stops being true, which is what makes its removal a
+ * deliberate act rather than a caveat nobody revisits.
  */
 
 export const USE_CASES = ['ecommerce', 'leads', 'both'] as const;
@@ -75,9 +83,42 @@ export const rolePartSchema = z.object({
    * second."*
    */
   available: z.boolean().default(true),
+  /**
+   * ⚠ TWO DIFFERENT FACTS ARRIVE UNDER THIS ONE KEY, AND THE SECOND WINS.
+   *
+   * `roleAvailability()` returns `{ available: false, reason:
+   * "no_integrations_exist" }` — an ENUM. The route spreads that and then
+   * writes `reason: resolved.reason` after it, so the resolver's free text
+   * ("No system has been chosen for payments.") overwrites the enum for
+   * every part, including the unavailable ones.
+   *
+   * Nothing here reads it, so nothing broke — `partState()` keys on
+   * `available`, not on this. But the availability enum is no longer
+   * retrievable from the response, and a later screen that trusts the
+   * documented meaning would get prose where it expected a code. Reported;
+   * typed as the string it actually is rather than the enum it is
+   * documented as.
+   */
   reason: z.string().nullable().default(null),
   /** Who serves it today. Null when nobody does. */
   elected: z.object({ slug: z.string(), name: z.string() }).nullable().default(null),
+  /**
+   * ★ WHY IT IS THAT SYSTEM — AND "INFERRED" IS NOT A DECISION.
+   *
+   * `elected` alone cannot tell them apart. `returns` resolves to Shopify
+   * because the capability resolver found it could serve returns, NOT
+   * because a merchant said so; the prompt the model receives spells this
+   * out — "shopify (inferred, not chosen by the business)".
+   *
+   * Rendering that as a selected option would invent consent: the screen
+   * would show a choice nobody made, and the next person to open it would
+   * believe they or a colleague had made it.
+   *
+   * The route has served this since 2d1abf88. Our schema is `object`, not
+   * `looseObject`, so until now it was stripped at the boundary and the UI
+   * could not have drawn the distinction even in principle.
+   */
+  source: z.enum(['elected', 'inferred', 'unmapped']).default('unmapped'),
   candidates: z.array(candidateSystemSchema).default([]),
 });
 
@@ -125,6 +166,26 @@ export function partState(part: RolePart): PartState {
 }
 
 /**
+ * The parts whose elector lives somewhere else, and WHERE.
+ *
+ * Backend's design is a facade: a part's storage is wherever its consumer
+ * already looks. The CRM has `config.useAsCrm`; returns has
+ * `config.returnProvider`, an explicit switch whose own header says
+ * "explicit selection wins over inference". `config.roles` carries only the
+ * parts that had no elector — ecommerce and payments.
+ *
+ * So `PUT /business-core/role` refuses both, with a code each, and the
+ * screen must point at two DIFFERENT places. One sentence for both would
+ * send somebody to the wrong screen half the time.
+ */
+export const ELECTED_ELSEWHERE: Partial<Record<BusinessRole, 'crm' | 'returns'>> = {
+  crm: 'crm',
+  returns: 'returns',
+};
+
+export type ElectedElsewhere = 'crm' | 'returns';
+
+/**
  * Can this part be elected through `PUT /business-core/role`?
  *
  * ★ EVERY PART EXCEPT THE CRM. I had this exactly inverted before reading
@@ -141,7 +202,7 @@ export function partState(part: RolePart): PartState {
  * one would be offering a control the server rejects.
  */
 export function electable(part: RolePart): boolean {
-  if (part.role === 'crm' || !part.available) return false;
+  if (ELECTED_ELSEWHERE[part.role] || !part.available) return false;
   return part.candidates.some((c) => c.connected);
 }
 
@@ -151,8 +212,21 @@ export function electable(part: RolePart): boolean {
  * Omitting it would leave the one part a merchant cannot configure here
  * looking identical to the four they can.
  */
-export function electedElsewhere(part: RolePart): boolean {
-  return part.role === 'crm';
+export function electedElsewhere(part: RolePart): ElectedElsewhere | null {
+  return ELECTED_ELSEWHERE[part.role] ?? null;
+}
+
+/**
+ * ★ AND "INFERRED" IS NOT "CHOSEN".
+ *
+ * `returns` resolves to Shopify because a capability resolver found it could
+ * serve returns. No merchant said so. A control showing it as the selected
+ * option would be representing something it did not capture — the same
+ * refusal as the wildcard roles, where a grid that cannot express `*:*` must
+ * not flatten it into a set of ticks nobody chose.
+ */
+export function isInferred(part: RolePart): boolean {
+  return part.source === 'inferred' && part.elected !== null;
 }
 
 /**

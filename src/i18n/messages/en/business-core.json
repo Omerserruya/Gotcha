@@ -22,7 +22,8 @@
     "nothing_connected": "Nothing connected. Connect one in the marketplace and come back — {systems} would work.",
     "connected_but_failing": "{name} is connected and not working, so it cannot be used here yet. Fix it in the marketplace rather than connecting it again.",
     "connected_none_chosen": "Connected and not chosen yet.",
-    "chosen": "{name} does this."
+    "chosen": "{name} does this.",
+    "inferred": "{name} is what GOTCHA falls back to here, because it can do the job — nobody chose it. Choosing one properly is done on the returns screen."
   },
   "crm": {
     "elsewhere": "Customer records are chosen on the Integrations screen, not here — there is one place for it so this screen can never disagree with the system the AI actually calls."
@@ -40,5 +41,21 @@
     "oneBoard": "Work goes to a single Monday board. Sending escalations to one board and follow-ups to another isn't something a workspace can express.",
     "identity": "Matching a person in one system to the same person in another is fixed in the product's code. It is not a rule, it is not per-workspace, and it is the same for everyone.",
     "language": "Anything GOTCHA writes in its own words — the summary it leaves after a conversation — is written in the workspace language. The field values it writes are the customer's own data, and they go across exactly as they are."
+  },
+  "elect": {
+    "label": "Which system does this",
+    "none": "Not chosen",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "replaced": "Saved. It was {name} before.",
+    "connectNew": "Connecting a new system happens in the GOTCHA marketplace, not on this screen. Once it is connected and working it appears in this list.",
+    "error": {
+      "notConnected": "That system stopped being connected while this page was open, so it can't be used here yet. Fix it in the marketplace and come back.",
+      "failed": "That didn't save. Nothing was changed."
+    }
+  },
+  "returns": {
+    "elsewhere": "Returns are chosen on their own switch, not here — an explicit choice there wins over whatever GOTCHA would otherwise fall back to."
   }
 }
