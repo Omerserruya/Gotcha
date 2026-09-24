@@ -58,4 +58,54 @@ if [ -n "$newer" ]; then
   exit 1
 fi
 
-echo "READY      the server booted after the build, and nothing is newer than it."
+# ── AND THE LAYER THE OTHER TWO CHECKS CANNOT SEE: THE GATEWAY ────────────
+#
+# 2026-09-24, after the first honest deploy of the day: a capture failed 72/72
+# with "the customers could not be read", which reads as a total product
+# failure. It was not.
+#
+#   502  POST /api/contacts/segment
+#   502  GET  /api/permissions/me
+#
+# `docker compose up -d` recreated every service container with new IPs and
+# did NOT recreate the gateway — "Up About an hour" while everything behind it
+# was seconds old. nginx resolves its upstreams at config load, so it was
+# still addressing containers that no longer existed.
+#
+# ★ THE ONE-COMMAND TELL, AND IT NEEDS NO SESSION:
+#
+#   401  the request REACHED the service and was refused for lack of auth
+#   502  it never got there
+#
+# An unauthenticated probe distinguishes them perfectly, costs no cookie —
+# `gotcha_session` rotates on every BFF request, so a probe that carried one
+# would spend it — and answers the question the other two checks structurally
+# cannot. They compare artefacts on this machine; this one asks whether the
+# thing in effect one layer out is the thing we think.
+#
+# Same family as the build-versus-process check: what is on disk is not what
+# is running, one layer further out.
+API_BASE="$(sed -n 's/^API_BASE_URL=//p' .env.local 2>/dev/null | tail -1)"
+API_BASE="${API_BASE:-http://localhost}"
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$API_BASE/api/permissions/me" 2>/dev/null)
+
+case "$code" in
+  502|503|504)
+    echo "NOT READY  the gateway answers $code — it is not reaching the services." >&2
+    # Single quotes: backticks inside a double-quoted echo are COMMAND
+    # SUBSTITUTION, and this line would have run `docker compose up -d` on the
+    # failure path — a deploy action fired by a diagnostic.
+    echo '           docker compose up -d recreates service containers with new IPs and' >&2
+    echo "           leaves the gateway addressing the old ones. Every screen will read as" >&2
+    echo "           broken and none of them is." >&2
+    echo "             docker compose restart gateway" >&2
+    echo "             curl -o /dev/null -w '%{http_code}' $API_BASE/api/permissions/me" >&2
+    echo "           401 means it reached the service. 502 means it did not." >&2
+    exit 1 ;;
+  000)
+    echo "NOT READY  nothing answered at $API_BASE — the platform is not up." >&2
+    exit 1 ;;
+esac
+
+echo "READY      the server booted after the build, nothing is newer than it,"
+echo "           and the gateway reaches the services (HTTP $code)."
