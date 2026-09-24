@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { CustomerRow } from '@/api/contracts/customers';
 
-import { FIXTURE_MARKER, withCaptureFixtures } from './capture-fixtures';
+import type { CustomerDetail } from './load-customer';
+
+import { FIXTURE_MARKER, withCaptureFixtures, withDetailFixtures } from './capture-fixtures';
 
 const { enabled } = vi.hoisted(() => ({ enabled: vi.fn() }));
 vi.mock('@/features/security/capture-fixtures', () => ({ captureFixturesEnabled: enabled }));
@@ -108,5 +110,82 @@ describe('withCaptureFixtures', () => {
       // Ofcom drama range, reserved for exactly this.
       if (row.phone) expect(row.phone).toMatch(/^\+447700900\d{3}$/);
     }
+  });
+});
+
+describe('★★ withDetailFixtures — the gate that guards message bodies', () => {
+  const real: CustomerDetail = {
+    timeline: {
+      contact: {
+        id: 'real-1',
+        displayName: 'A Real Person',
+        externalId: '+972500000000',
+        channel: 'WHATSAPP',
+      },
+      events: [
+        {
+          type: 'message',
+          channel: 'WHATSAPP',
+          conversationId: 'real-conv',
+          direction: 'INBOUND',
+          body: 'something a real customer actually wrote',
+          createdAt: '2026-09-01T10:00:00.000Z',
+        },
+      ],
+    },
+    brief: null,
+    memory: null,
+    noConversations: false,
+  };
+
+  it('substitutes nothing when the gate is closed', () => {
+    /*
+     * ★ THE DIRECTION THAT MATTERS ON A SCREEN LIKE THIS ONE is the other
+     * one — a fixture leaking into production would be a screen showing a
+     * merchant somebody else's customer. But this assertion is what proves
+     * the gate is consulted at all, and it is the cheaper of the two to get
+     * silently wrong.
+     */
+    enabled.mockReturnValue(false);
+    expect(withDetailFixtures(real)).toBe(real);
+  });
+
+  it('★ substitutes EVERY field when the gate is open, never a mixture', () => {
+    /*
+     * Whole-object substitution, deliberately. A half-substituted page would
+     * put a fixture name above a real person's messages, which is worse than
+     * either alone — and it is exactly what per-field substitution drifts
+     * into as fields are added.
+     */
+    enabled.mockReturnValue(true);
+    const shown = withDetailFixtures(real);
+    expect(shown.timeline?.contact?.displayName).toBe('Avery Stone');
+    expect(JSON.stringify(shown)).not.toContain('a real customer actually wrote');
+    expect(JSON.stringify(shown)).not.toContain('+972500000000');
+  });
+
+  it('★★ a failed read stays a failed read', () => {
+    /*
+     * Fixtures make evidence safe; they must never make a broken screen look
+     * like a working one. A capture that substituted a healthy page over a
+     * failed timeline would photograph proof of something that did not
+     * happen — which is the one thing acceptance evidence cannot do.
+     */
+    enabled.mockReturnValue(true);
+    const failed: CustomerDetail = {
+      timeline: null,
+      brief: null,
+      memory: null,
+      noConversations: false,
+    };
+    expect(withDetailFixtures(failed)).toBe(failed);
+  });
+
+  it('carries the marker the capture asserts before photographing', () => {
+    // The spec checks a fixture is actually in place before it shoots, so a
+    // run with the gate misconfigured cannot quietly bank real data.
+    enabled.mockReturnValue(true);
+    const shown = withDetailFixtures(real);
+    expect(shown.timeline?.contact?.externalId).toBe('+447700900123');
   });
 });

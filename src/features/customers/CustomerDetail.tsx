@@ -48,6 +48,12 @@ import styles from './Customers.module.css';
  * give the reason — assumes a repair the merchant can perform, and there is
  * none. So the screen says notes are not recorded yet and draws nothing.
  *
+ * ★ WORDED AS ABSENT TODAY, NOT AS IMPOSSIBLE. Omer has ruled that a note
+ * will live either in GOTCHA or in the system elected on screen 14 — the
+ * part→system mapping used for its second purpose, so a note lands in the
+ * CRM the merchant actually works in. The section belongs between the brief
+ * and the timeline when it arrives, and nothing here has to move for it.
+ *
  * **TENURE.** Three fields look like it and all three are wrong in the same
  * direction. `customer-card.ts` names them itself: `Contact.createdAt` is
  * when WE made the row, `CustomerProfile.firstSeenAt` is `new Date()` when

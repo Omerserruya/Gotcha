@@ -57,7 +57,7 @@
       "messagesOnly": "Messages only. Orders, returns and actions GOTCHA took aren't part of this stream yet."
     },
     "absent": {
-      "notes": "Notes aren't recorded yet. There's nowhere to write one that would still be here tomorrow, so this screen doesn't offer it.",
+      "notes": "Notes aren't recorded yet. There's nowhere to write one that would still be here tomorrow, so this screen doesn't offer it yet.",
       "money": "Spend, order count and refunds aren't shown here. Reading them means calling your store live for each customer, so they appear where one person is being decided about — on an approval — rather than on every page."
     }
   }

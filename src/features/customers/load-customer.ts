@@ -11,6 +11,7 @@ import {
   type CustomerTimeline,
 } from '@/api/contracts/customer-detail';
 import { customerEndpoints } from '@/api/endpoints/registry';
+import { withDetailFixtures } from './capture-fixtures';
 import { logger } from '@/observability/logger';
 
 /**
@@ -101,5 +102,19 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       : Promise.resolve(null),
   ]);
 
-  return { timeline, brief, memory, noConversations: conversationId === null };
+  /*
+   * ★ SUBSTITUTED LAST, AND ONLY UNDER THE GATE.
+   *
+   * This page renders the BODIES of a real person's messages, a written
+   * character study of them and the durable facts GOTCHA has learned — far
+   * more exposure than the list, which already justified a fixture.
+   *
+   * Applied to what the real reads returned, so a failure stays a failure.
+   */
+  return withDetailFixtures({
+    timeline,
+    brief,
+    memory,
+    noConversations: conversationId === null,
+  });
 }
