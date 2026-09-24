@@ -261,6 +261,7 @@ const FIXTURE_DETAIL: CustomerDetail = {
       tone: 'brief and direct',
       mood: 'settled',
       recommended_behaviors: ['Lead with the delivery date'],
+      reason: null,
     },
   },
   memory: {
@@ -285,6 +286,28 @@ const FIXTURE_DETAIL: CustomerDetail = {
       learnedAt: '2026-09-14T00:00:00.000Z',
       evidenceWindow: { from: '2026-03-02T00:00:00.000Z', to: '2026-09-14T00:00:00.000Z' },
     },
+  },
+  /*
+   * A CRM that is connected and linked, with two notes — so the capture
+   * photographs the state a merchant with a working CRM sees, rather than
+   * one of the two blocked sentences. Those are unit-tested instead.
+   */
+  crm: {
+    recent_crm_notes: [
+      {
+        id: 'fixture-note-1',
+        kind: 'note',
+        body: 'Prefers the Thursday delivery slot — confirmed twice.',
+        occurred_at: '2026-09-10T08:00:00.000Z',
+      },
+      {
+        id: 'fixture-note-2',
+        kind: 'note',
+        body: 'Asked to be told before any substitution.',
+        occurred_at: '2026-06-21T12:30:00.000Z',
+      },
+    ],
+    link_meta: { outcome: 'linked' },
   },
   noConversations: false,
 };

@@ -3,7 +3,9 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import {
   hasBrief,
   hasMemory,
+  hasNeverWritten,
   isPartialHistory,
+  notesBlockedBy,
   shownOfTotal,
 } from '@/api/contracts/customer-detail';
 import type { CustomerDetail as Detail } from './load-customer';
@@ -36,20 +38,16 @@ import styles from './Customers.module.css';
  * ════════════════════════════════════════════════════════════════════════════
  * WHAT IS DELIBERATELY ABSENT
  * ════════════════════════════════════════════════════════════════════════════
- * **NOTES.** `POST /conversations/:id/notes` is a demo stub that echoes the
- * note back with `Date.now()` as its id and persists nothing; the GET always
- * returns `[]`. A note box here would accept what somebody wrote about a
- * customer, show it saved, and lose it on reload.
+ * **NOTES — CORRECTED.** They are not absent. This screen first shipped
+ * saying so, on the strength of `POST /conversations/:id/notes` being a demo
+ * stub. The stub is real; the capability is somewhere else entirely, in the
+ * merchant's CRM. The section above reads them and does not offer a write.
  *
- * Not even a disabled box. The 14d shape — show the control, disable it,
- * give the reason — assumes a repair the merchant can perform, and there is
- * none. So the screen says notes are not recorded yet and draws nothing.
+ * Worth keeping as the shape: **I read a stub and concluded the capability
+ * was absent, without asking whether it existed elsewhere.** The stub was
+ * evidence about one endpoint and I took it as evidence about the product.
  *
- * ★ WORDED AS ABSENT TODAY, NOT AS IMPOSSIBLE. Omer has ruled that a note
- * will live either in GOTCHA or in the system elected on screen 14 — the
- * part→system mapping used for its second purpose, so a note lands in the
- * CRM the merchant actually works in. The section belongs between the brief
- * and the timeline when it arrives, and nothing here has to move for it.
+
  *
  * **TENURE.** Three fields look like it and all three are wrong in the same
  * direction. `customer-card.ts` names them itself: `Contact.createdAt` is
@@ -85,6 +83,25 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
       <h1 className={styles.detailName} data-testid="detail-name">
         {contact?.displayName?.trim() || contact?.externalId || t('list.unnamed')}
       </h1>
+
+      {/*
+        ★ A PERSON WHO HAS NEVER WRITTEN IS A REAL STATE, NOT AN EDGE CASE.
+
+        Somebody imported from a CRM who has never sent a message. Four of
+        this page's sections are then UNREACHABLE rather than empty — no
+        brief, no orders, no order actions, no CRM notes — and four blank
+        panels would read as a broken page.
+
+        Read from the brief's own `meta.reason`, which Backend kept distinct
+        from `404 contact_not_found` precisely so a screen could say this.
+        NOT inferred from an empty timeline: that can also be empty because
+        the read failed, and those two must not share a sentence.
+      */}
+      {hasNeverWritten(detail.brief) ? (
+        <p className={styles.neverWritten} data-testid="never-written">
+          {t('detail.neverWritten')}
+        </p>
+      ) : null}
 
       {/*
         ── THE WRITTEN SUMMARY ──
@@ -302,6 +319,76 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
       </section>
 
       {/*
+        ══════════════════════════════════════════════════════════════════════
+        NOTES — WHICH LIVE IN THE MERCHANT'S CRM, AND ARE READ-ONLY HERE
+        ══════════════════════════════════════════════════════════════════════
+        This screen first shipped saying notes were not recorded. That was
+        wrong: `POST /conversations/:id/notes` is a demo stub, but
+        `crm-panel.ts:690` calls `adapter.createNote` for real. GOTCHA does
+        not store notes; the merchant's CRM does.
+
+        ★ SO THE 14d SHAPE APPLIES AFTER ALL, because there IS a repair a
+        merchant can perform — connect a CRM, and link this contact to a
+        record in it. Two repairs, two sentences: sending somebody to connect
+        a CRM they already have is the mistake 14d exists to prevent.
+
+        ⚠ AND WRITING IS NOT OFFERED, even where it would succeed. The write
+        sets `source_interaction_id` to whichever conversation this page
+        entered through, so a note taken here would be attached to an
+        unrelated chat **in the merchant's own CRM, where we cannot correct
+        it later.** That is writing a false fact into somebody else's system
+        of record, which is worse than not offering the control.
+
+        ⚠ There is also no author. `CrmActivity` carries no actor, so these
+        are dated and anonymous — said on screen rather than left for
+        somebody to assume the newest note is theirs.
+      */}
+      <section className={styles.notes} data-testid="customer-notes">
+        <h2 className={styles.detailHeading}>{t('detail.notes.heading')}</h2>
+
+        {detail.crm === null ? (
+          <p className={styles.unavailable} data-testid="notes-unavailable">
+            {t('detail.notes.unavailable')}
+          </p>
+        ) : notesBlockedBy(detail.crm) === 'no_crm' ? (
+          <p className={styles.briefNone} data-testid="notes-no-crm">
+            {t('detail.notes.noCrm')}
+          </p>
+        ) : notesBlockedBy(detail.crm) === 'no_link' ? (
+          <p className={styles.briefNone} data-testid="notes-no-link">
+            {t('detail.notes.noLink')}
+          </p>
+        ) : detail.crm.recent_crm_notes.length === 0 ? (
+          <p className={styles.briefNone} data-testid="notes-empty">
+            {t('detail.notes.empty')}
+          </p>
+        ) : (
+          <>
+            <ul className={styles.facts} data-testid="notes-list">
+              {detail.crm.recent_crm_notes.map((note) => (
+                <li key={note.id} className={styles.fact} data-testid="crm-note">
+                  <span>{note.body}</span>
+                  {note.occurred_at ? (
+                    <span className={styles.factTag}>
+                      {format.dateTime(new Date(note.occurred_at), { dateStyle: 'medium' })}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            <p className={styles.memoryLimit} data-testid="notes-anonymous">
+              {t('detail.notes.anonymous')}
+            </p>
+          </>
+        )}
+
+        {/* Said in every state, because it is true in every state. */}
+        <p className={styles.memoryLimit} data-testid="notes-read-only">
+          {t('detail.notes.readOnly')}
+        </p>
+      </section>
+
+      {/*
         ── THE TWO THINGS THIS SCREEN WILL NOT SHOW, AND WHY ──
         Named rather than silently missing, the same as 17e's absent fields
         and 14e's write-back list. A merchant who cannot find notes should
@@ -309,7 +396,6 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         wrong place.
       */}
       <section className={styles.absent} data-testid="customer-absent">
-        <p data-testid="absent-notes">{t('detail.absent.notes')}</p>
         <p data-testid="absent-money">{t('detail.absent.money')}</p>
       </section>
     </div>

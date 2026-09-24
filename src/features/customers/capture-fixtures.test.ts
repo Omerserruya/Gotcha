@@ -138,6 +138,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     },
     brief: null,
     memory: null,
+    crm: null,
     noConversations: false,
   };
 
@@ -179,6 +180,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       timeline: null,
       brief: null,
       memory: null,
+      crm: null,
       noConversations: false,
     };
     expect(withDetailFixtures(failed)).toBe(failed);

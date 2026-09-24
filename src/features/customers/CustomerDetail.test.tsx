@@ -53,6 +53,7 @@ function detail(over: Partial<Detail> = {}): Detail {
     },
     brief: null,
     memory: null,
+    crm: null,
     noConversations: false,
     ...over,
   } as Detail;
@@ -159,20 +160,81 @@ describe('★★ the timeline must never claim to be a history', () => {
 });
 
 describe('★★ nothing here offers a note', () => {
-  it('says notes are not recorded, and draws no control at all', async () => {
+  it('★★ notes are READ-ONLY, and the page says why rather than offering a box', async () => {
     /*
-     * `POST /conversations/:id/notes` echoes the note back with `Date.now()`
-     * as its id and persists nothing. A box here would accept what somebody
-     * wrote about a customer, show it saved, and lose it on reload.
+     * This screen first shipped saying notes were not recorded. That was
+     * wrong — `POST /conversations/:id/notes` is a demo stub, but
+     * `crm-panel.ts:690` calls `adapter.createNote` for real. GOTCHA does not
+     * store notes; the merchant's CRM does.
      *
-     * Not a disabled box either: the 14d shape assumes a repair the merchant
-     * can perform, and there is none.
+     * Writing is still not offered, and for a different reason than before:
+     * the write sets `source_interaction_id` to whichever conversation this
+     * page entered through, so a note taken here would be filed against an
+     * unrelated chat IN THE MERCHANT'S OWN CRM, where we cannot correct it.
+     * Writing a false fact into somebody else's system of record is worse
+     * than withholding the control.
      */
-    const { container } = await show(detail());
-    expect(screen.getByTestId('absent-notes')).toHaveTextContent(/notes aren't recorded yet/i);
+    const { container } = await show(
+      detail({ crm: { recent_crm_notes: [], link_meta: { outcome: 'linked' } } }),
+    );
+    expect(screen.getByTestId('notes-read-only')).toHaveTextContent(/written in your CRM/i);
+    expect(screen.getByTestId('notes-read-only')).toHaveTextContent(/wrong conversation/i);
     expect(container.querySelector('textarea')).toBeNull();
-    expect(container.querySelector('input')).toBeNull();
     expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('★ two blockers, two repairs — never one sentence for both', async () => {
+    /*
+     * The 14d call, and it applies here because there IS a repair a merchant
+     * can perform. Sending somebody to connect a CRM they already have is
+     * the exact mistake 14d exists to prevent, and it is worse here because
+     * the repair lives on a different screen.
+     */
+    await show(detail({ crm: { recent_crm_notes: [], link_meta: { outcome: 'search_only' } } }));
+    const noCrm = screen.getByTestId('notes-no-crm');
+    expect(noCrm).toHaveTextContent(/isn't one connected/i);
+    expect(noCrm).not.toHaveTextContent(/isn't linked/i);
+
+    screen.getByTestId('notes-no-crm').remove();
+    await show(detail({ crm: { recent_crm_notes: [], link_meta: { outcome: 'no_crm_link' } } }));
+    const noLink = screen.getByTestId('notes-no-link');
+    expect(noLink).toHaveTextContent(/isn't linked to a record/i);
+    // And explicitly NOT the connect-one instruction.
+    expect(noLink).not.toHaveTextContent(/Connect one in Business core/i);
+  });
+
+  it('★ says the notes are anonymous, because CrmActivity has no author', async () => {
+    /*
+     * `CrmActivity` is `{ id, kind, body, occurred_at, source_interaction_id }`.
+     * 04f asks for notes that are "attributed and dated"; on this path they
+     * are dated and anonymous, and nothing on the screen can change that.
+     *
+     * Said out loud so nobody assumes the newest note is theirs.
+     */
+    await show(
+      detail({
+        crm: {
+          recent_crm_notes: [
+            {
+              id: 'n1',
+              kind: 'note',
+              body: 'Prefers Thursday.',
+              occurred_at: '2026-09-10T08:00:00.000Z',
+            },
+          ],
+          link_meta: { outcome: 'linked' },
+        },
+      }),
+    );
+    expect(screen.getByTestId('crm-note')).toHaveTextContent(/Prefers Thursday/);
+    expect(screen.getByTestId('notes-anonymous')).toHaveTextContent(/doesn't record who wrote/i);
+  });
+
+  it('distinguishes a failed CRM read from having no CRM', async () => {
+    // One means look again, the other means connect something. They must not
+    // share a sentence.
+    await show(detail({ crm: null }));
+    expect(screen.getByTestId('notes-unavailable')).toHaveTextContent(/couldn't read notes/i);
   });
 
   it('never renders a tenure line', async () => {
@@ -278,6 +340,61 @@ describe('★ what GOTCHA remembers, and what it cannot tell you about it', () =
   });
 });
 
+describe('★★ a person who has never written is a state, not four blank panels', () => {
+  const never = () =>
+    detail({
+      brief: {
+        ok: true,
+        // ★ The route answers a CANNED string here, not a character study.
+        summary: 'New customer with no recorded prior interactions.',
+        signals: [],
+        generated_at: '2026-09-24T00:00:00.000Z',
+        cached: false,
+        meta: {
+          conversation_count: 0,
+          channels: [],
+          tone: null,
+          mood: null,
+          recommended_behaviors: [],
+          reason: 'no_conversations',
+        },
+      },
+      timeline: {
+        contact: null,
+        events: [],
+        page: { limit: 50, nextCursor: null, hasMore: false },
+        totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+      },
+    });
+
+  it('says so once, at the top', async () => {
+    /*
+     * Somebody imported from a CRM who has never sent a message. Four of
+     * this page's sections are then UNREACHABLE rather than empty, and four
+     * blank panels read as a broken page.
+     */
+    await show(never());
+    expect(screen.getByTestId('never-written')).toHaveTextContent(/never written to you/i);
+    expect(screen.getByTestId('never-written')).toHaveTextContent(/not because anything failed/i);
+  });
+
+  it('★★ does NOT italicise the canned string as a character study', async () => {
+    /*
+     * The route returns `ok: true` with "New customer with no recorded prior
+     * interactions." — correct on their side, since a contact with no
+     * history is ordinary rather than an error.
+     *
+     * But rendering it in the serif italic this screen reserves for a written
+     * character study would present a CONSTANT as though a model had read
+     * this person's history and concluded it. `hasBrief` checks `reason`
+     * for exactly this.
+     */
+    await show(never());
+    expect(screen.queryByTestId('customer-brief')).toBeNull();
+    expect(screen.queryByText(/New customer with no recorded prior interactions/)).toBeNull();
+  });
+});
+
 describe('★ the brief has three states, not two', () => {
   it('says there are no conversations to write one from', async () => {
     // Distinct from "we asked and there is none": one is a property of the
@@ -313,6 +430,7 @@ describe('★ the brief has three states, not two', () => {
             tone: null,
             mood: null,
             recommended_behaviors: [],
+            reason: null,
           },
         },
       }),

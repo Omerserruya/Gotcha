@@ -143,6 +143,7 @@ describe('an empty answer is not a failed one', () => {
           tone: null,
           mood: null,
           recommended_behaviors: [],
+          reason: null,
         },
       }),
     ).toBe(false);
@@ -159,6 +160,7 @@ describe('an empty answer is not a failed one', () => {
           tone: null,
           mood: null,
           recommended_behaviors: [],
+          reason: null,
         },
       }),
     ).toBe(false);
@@ -175,6 +177,7 @@ describe('an empty answer is not a failed one', () => {
           tone: null,
           mood: null,
           recommended_behaviors: [],
+          reason: null,
         },
       }),
     ).toBe(true);

@@ -59,8 +59,17 @@
       "scanTruncated": "This person has more conversations than we scan in one go, so the oldest may not be represented here."
     },
     "absent": {
-      "notes": "Notes aren't recorded yet. There's nowhere to write one that would still be here tomorrow, so this screen doesn't offer it yet.",
       "money": "Spend, order count and refunds aren't shown here. Reading them means calling your store live for each customer, so they appear where one person is being decided about — on an approval — rather than on every page."
+    },
+    "neverWritten": "This person has never written to you. There's nothing to summarise, no conversation history, no orders and no notes — not because anything failed, but because nothing has happened yet.",
+    "notes": {
+      "heading": "Notes",
+      "noCrm": "Notes are kept in your CRM, and there isn't one connected. Connect one in Business core and notes about your customers will appear here.",
+      "noLink": "You have a CRM connected, but this person isn't linked to a record in it — so there's nowhere for their notes to live yet.",
+      "empty": "No notes on this person in your CRM.",
+      "unavailable": "We couldn't read notes from your CRM.",
+      "anonymous": "Your CRM doesn't record who wrote a note, so these show a date and no author.",
+      "readOnly": "Notes are read here and written in your CRM. Writing one from this page would file it against the wrong conversation, so it isn't offered yet."
     }
   }
 }

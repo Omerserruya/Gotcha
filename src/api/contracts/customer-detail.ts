@@ -181,6 +181,20 @@ export const briefSchema = z.object({
       tone: z.string().nullable().default(null),
       mood: z.string().nullable().default(null),
       recommended_behaviors: z.array(z.string()).default([]),
+      /**
+       * ★ `no_conversations` COMES BACK AS A SUCCESS WITH A CANNED SUMMARY.
+       *
+       * The route answers `ok: true` and a literal string — "New customer
+       * with no recorded prior interactions." — rather than an error or a
+       * null. That is the right call on their side: a contact with no
+       * history is an ordinary state, not a failure.
+       *
+       * But it is NOT a written character study, and rendering it in the
+       * serif italic this screen reserves for one would present a constant
+       * as though a model had read this person's history and concluded it.
+       * `hasBrief` checks this field for exactly that reason.
+       */
+      reason: z.string().nullable().default(null),
     })
     .default({
       conversation_count: null,
@@ -188,6 +202,7 @@ export const briefSchema = z.object({
       tone: null,
       mood: null,
       recommended_behaviors: [],
+      reason: null,
     }),
 });
 export type CustomerBrief = z.infer<typeof briefSchema>;
@@ -200,7 +215,24 @@ export type CustomerBrief = z.infer<typeof briefSchema>;
  * paragraph, which reads as a summary that says nothing about them.
  */
 export function hasBrief(brief: CustomerBrief | null): boolean {
+  // ★ A canned "new customer" string is not a character study. See `reason`.
+  if (brief?.meta.reason === 'no_conversations') return false;
   return !!brief?.summary?.trim();
+}
+
+/**
+ * Has this person never written to us at all?
+ *
+ * A real, ordinary state — somebody imported from a CRM who has never sent a
+ * message — and NOT an edge case. Four of this page's sections are then
+ * unreachable rather than empty, and the page has to say which.
+ *
+ * Read from the brief's own `reason` rather than inferred from an empty
+ * timeline: the timeline can also be empty because its read failed, and
+ * those must not render the same sentence.
+ */
+export function hasNeverWritten(brief: CustomerBrief | null): boolean {
+  return brief?.meta.reason === 'no_conversations';
 }
 
 /* ── What GOTCHA remembers ───────────────────────────────────────────────── */
@@ -292,4 +324,73 @@ export type CustomerMemory = z.infer<typeof memorySchema>;
 
 export function hasMemory(memory: CustomerMemory | null): boolean {
   return (memory?.context?.facts.length ?? 0) > 0 || !!memory?.context?.summary?.trim();
+}
+
+/* ── Notes, which live in the merchant's CRM ─────────────────────────────── */
+
+/**
+ * ★ "GOTCHA DOES NOT STORE NOTES" IS TRUE. "NOTES ARE NOT RECORDED" IS FALSE.
+ *
+ * This screen shipped saying notes were not recorded, on the strength of
+ * `POST /conversations/:id/notes` being a demo stub that echoes and persists
+ * nothing. The stub is real and so is the capability — it is somewhere else:
+ * `crm-panel.ts:690` calls `adapter.createNote`, a real audited write, and
+ * `recent_crm_notes` is already rendered in the legacy UI.
+ *
+ * So a note lives in the merchant's CRM, and the repair for not having notes
+ * is one a merchant can actually perform: connect a CRM, and link this
+ * contact to a record in it. Two different repairs, hence two sentences —
+ * the 14d shape, which DOES apply here after all.
+ *
+ * ⚠ AND THERE IS NO AUTHOR. `CrmActivity` is
+ * `{ id, kind, body, occurred_at, source_interaction_id }`. So 04f's *"notes
+ * are attributed and dated"* is dated and anonymous on this path, and no
+ * amount of screen work changes that — it is one of four things the CRM
+ * shape cannot hold, alongside a visibility flag, an edit history and pending
+ * AI suggestions.
+ */
+export const crmNoteSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['note', 'task', 'call', 'email', 'meeting']).default('note'),
+  body: z.string(),
+  occurred_at: z.string().nullable().default(null),
+});
+export type CrmNote = z.infer<typeof crmNoteSchema>;
+
+export const crmContextSchema = z.object({
+  recent_crm_notes: z.array(crmNoteSchema).default([]),
+  link_meta: z
+    .object({ outcome: z.string().nullable().default(null) })
+    .nullable()
+    .default(null),
+});
+export type CrmContext = z.infer<typeof crmContextSchema>;
+
+/**
+ * Why notes cannot be written, or `null` when they can.
+ *
+ * The two 409s the write answers with, read back as the two states BEFORE
+ * anybody presses anything — because a control that fails on click teaches a
+ * merchant the page is broken rather than that their CRM is not connected.
+ *
+ *   no_crm        the adapter is a stub: nothing is connected
+ *   no_link       a CRM exists, this contact is not linked to a record in it
+ *
+ * Two, not one. Sending somebody to connect a CRM they already have is the
+ * 14d mistake, and it is worse here because the repair is on a different
+ * screen from the one they would be sent to.
+ */
+export type NotesBlocker = 'no_crm' | 'no_link';
+
+export function notesBlockedBy(context: CrmContext | null): NotesBlocker | null {
+  if (context === null) return null;
+  const outcome = context.link_meta?.outcome ?? null;
+  if (outcome === 'no_crm_link' || outcome === 'not_found') return 'no_link';
+  /*
+   * `search_only` means the adapter cannot write — a read-only or stub
+   * connector. Treated as "no CRM" because the repair is the same: connect
+   * one that can take a note.
+   */
+  if (outcome === 'search_only' || outcome === null) return 'no_crm';
+  return null;
 }

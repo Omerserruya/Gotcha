@@ -689,6 +689,17 @@ export const customerEndpoints = {
    */
   memory: (externalId: string) =>
     endpoint('/api/historical-imports/customer-context?externalId={externalId}', { externalId }),
+  /**
+   * The CRM panel for one conversation — 04b reads `recent_crm_notes` from it.
+   *
+   * ⚠ CONVERSATION-KEYED, so the customer page enters through
+   * `readKeyFor(events)`. READ ONLY from here: the sibling write sets
+   * `source_interaction_id` to whatever conversation we passed, which on a
+   * customer page would attach a note to an unrelated chat in the MERCHANT'S
+   * OWN CRM, where we cannot correct it.
+   */
+  crmContext: (conversationId: string) =>
+    endpoint('/api/crm/conversation/{conversationId}/context', { conversationId }),
 } as const;
 
 /**

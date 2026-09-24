@@ -3,15 +3,17 @@ import 'server-only';
 import { serverApi } from '@/api/client/server-api';
 import {
   briefSchema,
+  crmContextSchema,
   memorySchema,
-  newestConversationId,
   timelineSchema,
   type CustomerBrief,
+  type CrmContext,
   type CustomerMemory,
   type CustomerTimeline,
 } from '@/api/contracts/customer-detail';
 import { customerEndpoints } from '@/api/endpoints/registry';
 import { withDetailFixtures } from './capture-fixtures';
+import { readKeyFor } from './conversation-key';
 import { logger } from '@/observability/logger';
 
 /**
@@ -44,6 +46,8 @@ export interface CustomerDetail {
   readonly timeline: CustomerTimeline | null;
   readonly brief: CustomerBrief | null;
   readonly memory: CustomerMemory | null;
+  /** The merchant's CRM notes for this person. `null` when the read failed. */
+  readonly crm: CrmContext | null;
   /**
    * True when the person has no conversations at all, so the brief was never
    * requested rather than requested and missing.
@@ -64,9 +68,15 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       return null;
     });
 
-  if (!timeline) return { timeline: null, brief: null, memory: null, noConversations: false };
+  if (!timeline)
+    return { timeline: null, brief: null, memory: null, crm: null, noConversations: false };
 
-  const conversationId = newestConversationId(timeline.events);
+  /*
+   * ONE shared helper, so four screens cannot each choose differently. Reads
+   * only — see the note in `conversation-key.ts` for why a write must not
+   * use it.
+   */
+  const conversationId = readKeyFor(timeline.events);
   /*
    * The phone is the memory's key. `identity/:id/timeline` returns the
    * EFFECTIVE contact — the survivor of any merge — so this is the right
@@ -74,29 +84,47 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
    */
   const externalId = timeline.contact?.externalId?.trim() ?? '';
 
-  const [brief, memory] = await Promise.all([
-    conversationId
-      ? api
-          .post({
-            endpoint: customerEndpoints.summary(),
-            /*
-             * ⚠ NO `refresh`. The route falls back to inline generation when
-             * that flag is set, which is a live model call on a page load —
-             * and on a screen somebody opens to read, not to regenerate.
-             */
-            body: { conversationId },
-            payload: briefSchema,
-          })
-          .catch((cause: unknown) => {
-            logger.warn('customer.brief_failed', { cause });
-            return null;
-          })
-      : Promise.resolve(null),
+  const [brief, memory, crm] = await Promise.all([
+    /*
+     * ★ BY CONTACT, NOT BY CONVERSATION — Backend added the entry point
+     * after this screen reported the door problem.
+     *
+     * It resolves the person internally, follows the soft-merge pointer, and
+     * answers `reason: "no_conversations"` for somebody who has never
+     * written rather than erroring. So the brief is no longer one of the
+     * conversation-keyed reads, and this page no longer has to choose a
+     * conversation on its behalf.
+     *
+     * ⚠ STILL NO `refresh`. The route falls back to inline generation when
+     * that flag is set, which is a live model call on a page load — on a
+     * screen somebody opens to read, not to regenerate.
+     */
+    api
+      .post({
+        endpoint: customerEndpoints.summary(),
+        body: { contactId },
+        payload: briefSchema,
+      })
+      .catch((cause: unknown) => {
+        logger.warn('customer.brief_failed', { cause });
+        return null;
+      }),
     externalId
       ? api
           .get({ endpoint: customerEndpoints.memory(externalId), payload: memorySchema })
           .catch((cause: unknown) => {
             logger.warn('customer.memory_failed', { cause });
+            return null;
+          })
+      : Promise.resolve(null),
+    conversationId
+      ? api
+          .get({
+            endpoint: customerEndpoints.crmContext(conversationId),
+            payload: crmContextSchema,
+          })
+          .catch((cause: unknown) => {
+            logger.warn('customer.crm_failed', { cause });
             return null;
           })
       : Promise.resolve(null),
@@ -115,6 +143,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
     timeline,
     brief,
     memory,
+    crm,
     noConversations: conversationId === null,
   });
 }

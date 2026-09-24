@@ -298,4 +298,14 @@
   .absent p {
     margin: 0;
   }
+
+  /*
+    The never-written sentence. Full contrast: it is the explanation for four
+    sections being absent, and a subtle one would be read as a caption.
+  */
+  .neverWritten {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-default);
+  }
 }
