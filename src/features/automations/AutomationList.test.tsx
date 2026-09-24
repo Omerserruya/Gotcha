@@ -35,10 +35,17 @@ import { AutomationList } from './AutomationList';
  * silently uncovered.**
  */
 
+/*
+ * `timeZone` matches `i18n/request.ts`, which sets `Asia/Jerusalem` for every
+ * real request. A formatter without it falls back to the machine's zone (and
+ * warns ENVIRONMENT_FALLBACK); one set to UTC formats a different day for any
+ * timestamp in the evening. Either way the test renders a date the product
+ * never shows, and a date assertion can pass while the screen is a day out.
+ */
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'automations') =>
     createTranslator({ locale: 'en', messages: { automations: messages }, namespace }),
-  getFormatter: async () => createFormatter({ locale: 'en' }),
+  getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
 const automation = (over: Partial<Automation> = {}): Automation => ({

@@ -28,5 +28,37 @@
     "SMS": "SMS",
     "TELEGRAM": "Telegram"
   },
-  "identityLimit": "If the same person writes from WhatsApp and from Instagram, they appear here twice. GOTCHA joins two entries only when it has the same phone number for both — and Instagram never provides one."
+  "identityLimit": "If the same person writes from WhatsApp and from Instagram, they appear here twice. GOTCHA joins two entries only when it has the same phone number for both — and Instagram never provides one.",
+  "detail": {
+    "unavailable": "We couldn't load this customer.",
+    "brief": {
+      "generated": "Written from their history on {when}.",
+      "none": "There's no written summary for this person yet. GOTCHA writes one when a conversation ends.",
+      "noConversations": "No written summary — there are no conversations with this person to write one from."
+    },
+    "memory": {
+      "heading": "What GOTCHA remembers",
+      "source": "Learned from {source}, across {count} messages.",
+      "unknownSource": "an earlier import",
+      "noPerFactTrace": "These can't be traced to the individual conversation each came from — that link isn't available yet. They also can't be corrected or removed from here.",
+      "none": "GOTCHA hasn't learned anything durable about this person yet.",
+      "unavailable": "We couldn't read what GOTCHA remembers about this person."
+    },
+    "timeline": {
+      "heading": "Recent activity",
+      "everyChannel": "Every channel this person reaches you on, in one stream — including numbers and handles that were merged into them.",
+      "empty": "Nothing recorded with this person yet.",
+      "INBOUND": "from them",
+      "OUTBOUND": "to them",
+      "noBody": "(no text)",
+      "limit": "This is not the full history: the most recent {perConversation} messages from each of {conversations, plural, one {# conversation} other {# conversations}}.",
+      "capped": "Only the {cap} most recent conversations are shown. Older ones exist and aren't here.",
+      "truncated": "{count, plural, one {# conversation has} other {# conversations have}} more messages than shown.",
+      "messagesOnly": "Messages only. Orders, returns and actions GOTCHA took aren't part of this stream yet."
+    },
+    "absent": {
+      "notes": "Notes aren't recorded yet. There's nowhere to write one that would still be here tomorrow, so this screen doesn't offer it.",
+      "money": "Spend, order count and refunds aren't shown here. Reading them means calling your store live for each customer, so they appear where one person is being decided about — on an approval — rather than on every page."
+    }
+  }
 }

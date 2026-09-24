@@ -169,4 +169,133 @@
     padding-inline: var(--space-16);
     cursor: pointer;
   }
+
+  /* ── Screen 04b · one customer ────────────────────────────────────────── */
+
+  .detail {
+    display: grid;
+    gap: var(--space-24);
+  }
+
+  .detailName {
+    margin: 0;
+    font-size: var(--font-size-title);
+  }
+
+  .detailHeading {
+    margin: 0 0 var(--space-8);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  /*
+    The one place the design asks for serif italic, and the only block on
+    this screen written ABOUT the person rather than listing what they did.
+  */
+  .briefProse {
+    margin: 0;
+    font-family: var(--font-family-serif, Georgia, 'Times New Roman', serif);
+    font-style: italic;
+    font-size: var(--font-size-lead, var(--font-size-body));
+    line-height: 1.6;
+    color: var(--text-default);
+  }
+
+  .signals {
+    margin-block: var(--space-12) 0;
+    padding-inline-start: var(--space-20);
+    display: grid;
+    gap: var(--space-4);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .briefWhen,
+  .briefNone {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .facts {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  .fact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: baseline;
+    font-size: var(--font-size-meta);
+  }
+
+  .factTag {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .memorySource {
+    margin-block: var(--space-12) 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+    The limits. Deliberately NOT styled as warnings — they are properties of
+    the data, and an alarm colour would read as something being wrong rather
+    than as the screen being precise about what it holds.
+  */
+  .memoryLimit,
+  .timelineLimit,
+  .timelineScope {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .events {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-12);
+  }
+
+  .event {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .eventMeta {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .eventBody {
+    font-size: var(--font-size-meta);
+    color: var(--text-default);
+  }
+
+  /* Outbound sits visually apart, so a stream reads as a conversation. */
+  .event[data-direction='OUTBOUND'] .eventBody {
+    padding-inline-start: var(--space-12);
+    border-inline-start: 2px solid var(--border-subtle);
+  }
+
+  .absent {
+    border-top: 1px solid var(--border-subtle);
+    padding-block-start: var(--space-16);
+    display: grid;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .absent p {
+    margin: 0;
+  }
 }

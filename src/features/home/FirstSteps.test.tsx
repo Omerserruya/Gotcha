@@ -11,6 +11,13 @@ import messages from '../../i18n/messages/en/home.json';
  * ICU plurals and the wording are genuinely exercised - only the way they are
  * obtained differs from the server.
  */
+/*
+ * `timeZone` matches `i18n/request.ts`, which sets `Asia/Jerusalem` for every
+ * real request. A formatter without it falls back to the machine's zone (and
+ * warns ENVIRONMENT_FALLBACK); one set to UTC formats a different day for any
+ * timestamp in the evening. Either way the test renders a date the product
+ * never shows, and a date assertion can pass while the screen is a day out.
+ */
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
     createTranslator({
@@ -20,7 +27,7 @@ vi.mock('next-intl/server', () => ({
       // app's business, not this harness's.
       namespace: namespace as never,
     }),
-  getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'UTC' }),
+  getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
 /*

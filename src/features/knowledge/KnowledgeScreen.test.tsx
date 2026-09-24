@@ -31,10 +31,17 @@ import { KnowledgeScreen } from './KnowledgeScreen';
  * reader sees, not translation keys: a test that asserted `sources.sameName`
  * would keep passing after the sentence was rewritten into something wrong.
  */
+/*
+ * `timeZone` matches `i18n/request.ts`, which sets `Asia/Jerusalem` for every
+ * real request. A formatter without it falls back to the machine's zone (and
+ * warns ENVIRONMENT_FALLBACK); one set to UTC formats a different day for any
+ * timestamp in the evening. Either way the test renders a date the product
+ * never shows, and a date assertion can pass while the screen is a day out.
+ */
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'knowledge') =>
     createTranslator({ locale: 'en', messages: { knowledge: messages }, namespace }),
-  getFormatter: async () => createFormatter({ locale: 'en' }),
+  getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
 const source = (over: Partial<KnowledgeSource> = {}): KnowledgeSource => ({

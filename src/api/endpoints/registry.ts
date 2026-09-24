@@ -655,6 +655,40 @@ export const customerEndpoints = {
   /** POST. Body `{ rules?, channel?, countOnly? }`. */
   list: () => endpoint('/api/contacts/segment'),
   detail: (id: string) => endpoint('/api/contacts/{id}', { id }),
+  /**
+   * Screen 04b's timeline. CONTACT-keyed, and the only one of the three
+   * reads that takes the id the list hands us.
+   *
+   * Follows `mergedIntoId`, gathers sibling contacts and aliases preserved
+   * from prior merges — so this genuinely is every channel on one spine.
+   * What it is NOT is complete: 50 conversations, newest 5 messages each,
+   * and `type: "message"` is the whole event union. See
+   * `contracts/customer-detail.ts`.
+   */
+  timeline: (id: string) => endpoint('/api/identity/{id}/timeline', { id }),
+  /**
+   * The written character summary. A **POST**, and it requires a
+   * `conversationId` — customer-level intelligence behind a
+   * conversation-shaped door, so 04b passes this person's most recent
+   * conversation and a person with none has no brief.
+   *
+   * ⚠ Never send `refresh: true` from a page load. The route falls back to
+   * inline generation when the flag is set, which is a live model call.
+   */
+  summary: () => endpoint('/api/customer-summary'),
+  /**
+   * What GOTCHA learned about this person, keyed on THEIR OWN identifier
+   * rather than an import-internal id, with both-shapes phone normalisation.
+   *
+   * It exists because the import's memory "went into the bot prompt and
+   * nowhere else, so a human agent opening the same chat saw nothing" —
+   * which is the failure this whole redesign exists to stop repeating.
+   *
+   * Returns facts as `{ text, category, confidence }` only:
+   * `evidenceConversationIds` is written and returned by no route.
+   */
+  memory: (externalId: string) =>
+    endpoint('/api/historical-imports/customer-context?externalId={externalId}', { externalId }),
 } as const;
 
 /**

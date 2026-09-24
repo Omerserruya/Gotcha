@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { Link } from '@/i18n/navigation';
+
 import {
   collapseToPeople,
   customerLabel,
@@ -143,7 +145,22 @@ export async function CustomerList({
                 handle beats inventing "Unknown", which would be less
                 informative than the identifier we hold.
               */}
-              <span className={styles.rowName}>{label ?? t('list.unnamed')}</span>
+              {/*
+                ★ THE ROW IS A LINK, AND IT WAS NOT.
+
+                This list shipped with no `<Link>`, no `href` and no
+                `onClick`. A merchant saw a list of their customers and could
+                not open one — which is worse than a missing screen, because
+                a list of people implies a destination and this one had none.
+                Nothing said so; it simply did not respond.
+
+                `row` is the PRIMARY contact of a person group — the rows are
+                collapsed by `personId` — so this opens the person, not one
+                of their channel identities.
+              */}
+              <Link className={styles.rowName} href={`/customers/${row.id}`}>
+                {label ?? t('list.unnamed')}
+              </Link>
 
               {/*
                 Every channel this person reaches you on, not just the first.
