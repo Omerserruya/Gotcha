@@ -163,5 +163,24 @@
     "composition": "{plan} of {included} plan credits + {purchased} bought separately",
     "compositionPlanOnly": "{plan} of {included} plan credits",
     "compositionPurchasedOnly": "{purchased} bought separately"
+  },
+  "buy": {
+    "heading": "Buy credits",
+    "quantity": "How many",
+    "net": "Before VAT",
+    "total": "Total to pay",
+    "exempt": "Not liable for VAT",
+    "taxFallback": "VAT {pct}%",
+    "totalUnknown": "We can't show a total yet. VAT depends on the country on your billing details, and there isn't one on file — so the amount you'd be charged isn't something we can state.",
+    "action": "Buy",
+    "buying": "Buying…",
+    "bought": "Done — {credits} credits added.",
+    "blocked": {
+      "noAccount": "There's nobody to invoice yet. Add your billing details first, and this becomes available.",
+      "noCard": "There's no payment method on file, so there's nothing to charge. Add a card first."
+    },
+    "tooMany": "That's more than this pack allows in one purchase. Nothing was charged.",
+    "declined": "The payment didn't go through, and nothing was charged. You can try again.",
+    "unsettled": "We don't yet know whether that payment went through. Please do NOT try again — you may already have been charged. Check your invoices in a few minutes, and contact us if nothing appears."
   }
 }

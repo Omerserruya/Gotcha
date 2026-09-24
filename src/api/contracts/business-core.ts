@@ -100,6 +100,27 @@ export const rolePartSchema = z.object({
    * documented as.
    */
   reason: z.string().nullable().default(null),
+  /**
+   * The unavailability CODE, added at 61f0792f after the collision above was
+   * reported. `reason` keeps the prose; this keeps the enum.
+   *
+   * ★ PRESENT ONLY ON AN UNAVAILABLE PART, AND THAT ASYMMETRY IS DELIBERATE.
+   * Backend's tidy instinct was `unavailableReason: null` on every part.
+   * They rejected it for our scar: a strict `z.object` strips an unexpected
+   * key harmlessly but refuses a CHANGED TYPE, which is how the whole voice
+   * screen vanished behind "could not be loaded" when `messagesAnalysed`
+   * went 0 → null. A part that CAN be offered has no unavailability reason,
+   * and a null one would be a value where absence is the fact — the same
+   * distinction as `available: false` versus an empty array.
+   *
+   * Optional here rather than nullable, to match: `.optional()` accepts the
+   * key being missing, which is what an available part actually sends.
+   *
+   * Today's only value is `no_integrations_exist`. Nothing reads it yet —
+   * `partState()` keys on `available` and the sentence comes from `detail` —
+   * so this is recorded rather than rendered.
+   */
+  unavailableReason: z.string().optional(),
   /** Who serves it today. Null when nobody does. */
   elected: z.object({ slug: z.string(), name: z.string() }).nullable().default(null),
   /**

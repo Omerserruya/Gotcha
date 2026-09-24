@@ -266,6 +266,33 @@ export const billingEndpoints = {
    * nobody later concludes they are two features.
    */
   pricingChange: () => endpoint('/api/billing/pricing/change'),
+  /**
+   * Screen 17d — buy a credit pack. REAL MONEY.
+   *
+   * Owner-gated on `settings:billing:manage`. Accepts only a package KEY, a
+   * quantity and an intent key: price and credit amount are read from the
+   * catalogue inside `buyCredits()`, never from the request, so a tampered
+   * body cannot change what is bought or what it costs.
+   *
+   * ★ `intentKey` IDENTIFIES ONE PURCHASE THE CUSTOMER DECIDED ON, so a
+   * double-click is one charge. It must therefore be minted when the CHOICE
+   * is made and not when the button is pressed — a key generated per click
+   * is not an idempotency key, it is a new purchase each time.
+   *
+   * ★ AND A FAILURE HERE IS 409, NOT 402, when the provider has not settled:
+   * "a payment-required response invites the customer to try again, and they
+   * may already have been charged."
+   *
+   * ⚠ NOTHING AUTOMATED MAY CALL THIS. It charges a live card on a real
+   * tenant.
+   *
+   * NOTE: `/api/billing/credits/packages` is a SECOND packages route and it
+   * is NOT this screen's. It filters on `active` alone — no `customerVisible`,
+   * no `status`, no plan-eligibility gate — so it can list packages a
+   * customer must not see or cannot buy. `pricingPackages` above is the
+   * filtered one. Recorded so nobody later reads them as interchangeable.
+   */
+  creditsBuy: () => endpoint('/api/billing/credits/buy'),
 } as const;
 
 export const intelligenceReviewEndpoints = {

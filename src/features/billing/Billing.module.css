@@ -503,4 +503,120 @@
     font-weight: 500;
     color: var(--text-primary);
   }
+
+  /* ── 17d · buying credits ─────────────────────────────────────────────── */
+
+  .buyHeading {
+    margin-block: 0 var(--space-12);
+    font-size: var(--font-size-meta);
+  }
+
+  .buyPacks {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  .buyPack {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    font-size: var(--font-size-meta);
+  }
+
+  .buyPackCredits {
+    color: var(--text-subtle);
+  }
+
+  /* The one place per-pack expiry ever reaches a customer. */
+  .buyPackExpiry {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .buyQuantity {
+    margin-block-start: var(--space-12);
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .buyQuantity input {
+    font: inherit;
+    width: 4rem;
+    padding: var(--space-4);
+  }
+
+  .buyTotals {
+    margin-block: var(--space-12);
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .buyTotals > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .buyTotals dt,
+  .buyTotals dd {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+    The total is the amount that leaves the account, so it is the only row at
+    full weight. The net figure above it is the one a design would emphasise
+    and the one nobody is actually charged.
+  */
+  .buyTotalRow dt,
+  .buyTotalRow dd {
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-default);
+  }
+
+  .buyUnknownTotal,
+  .buyBlocked {
+    margin-block: var(--space-12) 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  .buyButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .buyOk {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+  }
+
+  .buyError {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  /*
+    An unsettled charge is NOT an error, and must not be styled as one — the
+    reader has to finish this sentence rather than dismiss it as a failure
+    and press the button again.
+  */
+  .buyUnsettled {
+    margin-block: var(--space-8) 0;
+    padding: var(--space-8);
+    border: 1px solid var(--intent-urgent-edge);
+    background: var(--intent-urgent-surface);
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
 }

@@ -20,6 +20,7 @@ import {
   type PaymentMethod,
 } from '@/api/contracts/billing-profile';
 import { creditSummarySchema, type CreditSummary } from '@/api/contracts/credits';
+import { packagesResponseSchema, type PackagesResponse } from '@/api/contracts/pricing';
 import { invoiceListSchema, type Invoice } from '@/api/contracts/invoices';
 import { logger } from '@/observability/logger';
 
@@ -77,6 +78,8 @@ export interface BillingData {
    * one another.
    */
   readonly credits: CreditSummary | null;
+  /** Screen 17d. Null when the read failed, which is not "none on sale". */
+  readonly packages: PackagesResponse | null;
 }
 
 export async function loadBilling(): Promise<BillingData> {
@@ -92,6 +95,7 @@ export async function loadBilling(): Promise<BillingData> {
     profile,
     paymentMethods,
     credits,
+    packages,
   ] = await Promise.all([
     api
       .get({ endpoint: usageEndpoints.allowance(), payload: allowanceSchema })
@@ -179,6 +183,27 @@ export async function loadBilling(): Promise<BillingData> {
         logger.warn('billing.credit_summary_failed', { cause });
         return null;
       }),
+    /*
+     * Screen 17d. Read HERE rather than on the plan page, although the plan
+     * page already reads it: buying belongs beside the balance somebody has
+     * just read, and the two facts that decide whether the button can work —
+     * the billing profile and the payment methods — are already loaded on
+     * this page. Fetching packages here costs one extra request; doing it the
+     * other way round would cost two, against a 1,000-per-fifteen-minutes
+     * window that a billing page already spends six of per load.
+     *
+     * ★ AND THIS IS `pricing/packages`, NOT `credits/packages`. The second
+     * route filters on `active` alone — no `customerVisible`, no `status`, no
+     * plan-eligibility gate — so it can list packages a customer must not see
+     * or cannot buy. Two routes, similar paths, different answers: the shape
+     * that made /api/knowledge look alive for a whole screen.
+     */
+    api
+      .get({ endpoint: billingEndpoints.pricingPackages(), payload: packagesResponseSchema })
+      .catch((cause: unknown) => {
+        logger.warn('billing.packages_failed', { cause });
+        return null;
+      }),
   ]);
 
   return {
@@ -191,5 +216,6 @@ export async function loadBilling(): Promise<BillingData> {
     paymentMethods,
     breakdown,
     credits,
+    packages,
   };
 }

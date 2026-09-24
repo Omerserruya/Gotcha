@@ -157,7 +157,92 @@ export const creditPackageSchema = z.object({
    */
   expiryPolicy: z.enum(['NEVER', 'DAYS_AFTER_PURCHASE', 'PERIOD_END']).default('NEVER'),
   expiryDays: z.number().nullable().default(null),
+  /**
+   * ★ WHAT WILL ACTUALLY BE CHARGED — AND IT IS NOT THE PRICE ON THE TILE.
+   *
+   * Catalogue prices are NET. The route's own comment says the tax travels
+   * with them so "the confirm dialog can state the amount that will actually
+   * be charged rather than the one on the tile", and it has been on the wire
+   * all along — our schema is `object`, so it was stripped at the boundary
+   * and screen 17 could only ever show the net figure.
+   *
+   * Showing a merchant ₪100 and charging ₪118 is the single worst thing a
+   * buy screen can do, and it is the reassuring direction.
+   *
+   * `exempt` is not the same as 0%: one is a status, the other an amount.
+   */
+  taxed: z
+    .object({
+      net: z.string(),
+      tax: z.string(),
+      gross: z.string(),
+      percent: z.number().default(0),
+      label: z.string().nullable().default(null),
+      countryCode: z.string().nullable().default(null),
+      exempt: z.boolean().default(false),
+    })
+    .nullable()
+    .default(null),
+  /**
+   * A per-package cap the SERVER enforces — `quantity_exceeds_maximum` with
+   * the max in `detail`. Also carried all along and also stripped, so the
+   * quantity control had no way to know its own limit and would have let
+   * somebody pick a number the purchase then refused.
+   */
+  maxPurchaseQuantity: z.number().nullable().default(null),
 });
+
+/* ── Buying ──────────────────────────────────────────────────────────────── */
+
+/**
+ * What one purchase will cost, in the currency it is charged in.
+ *
+ * Computed from `taxed`, never re-derived from `price` and a rate: the server
+ * rounds each component to its own scale, and a UI that multiplies and rounds
+ * again produces a total that differs from the invoice by a penny — which is
+ * the kind of discrepancy nobody can explain afterwards.
+ *
+ * `null` when the package carries no tax block. That is not zero tax: it
+ * means we were not told, and `taxSummaryForTenant` REFUSES rather than
+ * defaulting when a profile has declared no country — "defaulting to 0% would
+ * charge an Israeli customer no VAT and leave them" with a bill nobody quoted.
+ */
+export function chargeable(
+  pkg: CreditPackage,
+  quantity: number,
+): { readonly net: number; readonly tax: number; readonly gross: number } | null {
+  if (!pkg.taxed) return null;
+  const n = Math.max(1, Math.floor(quantity));
+  const num = (v: string) => Number.parseFloat(v);
+  const net = num(pkg.taxed.net);
+  const tax = num(pkg.taxed.tax);
+  const gross = num(pkg.taxed.gross);
+  if (!Number.isFinite(net) || !Number.isFinite(tax) || !Number.isFinite(gross)) return null;
+  return { net: net * n, tax: tax * n, gross: gross * n };
+}
+
+/** The server's cap, or a sane one when it did not state a cap. */
+export function maxQuantity(pkg: CreditPackage): number {
+  return pkg.maxPurchaseQuantity && pkg.maxPurchaseQuantity > 0 ? pkg.maxPurchaseQuantity : 10;
+}
+
+/**
+ * The outcome of `POST /billing/credits/buy`.
+ *
+ * ★ `outcomeUnknown` IS ANSWERED 409, NOT 402, AND THE ROUTE SAYS WHY:
+ * *"A payment-required response invites the customer to try again, and they
+ * may already have been charged."* The same rule as `mayRetry` on plan
+ * changes, in the one place where a double charge is a single click away.
+ */
+export const buyResultSchema = z.object({
+  success: z.boolean().default(false),
+  units: z.number().nullable().default(null),
+  invoiceId: z.string().nullable().default(null),
+  failureCode: z.string().nullable().default(null),
+  outcomeUnknown: z.boolean().default(false),
+});
+
+export type BuyResult = z.infer<typeof buyResultSchema>;
 
 export type CreditPackage = z.infer<typeof creditPackageSchema>;
 

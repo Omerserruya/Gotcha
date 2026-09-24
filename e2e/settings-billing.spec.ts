@@ -482,6 +482,95 @@ for (const size of SIZES) {
 
     /*
      * ══════════════════════════════════════════════════════════════════════
+     * 17d · BUYING CREDITS
+     * ══════════════════════════════════════════════════════════════════════
+     * ⚠⚠ THERE IS NO `.click()` ON THE BUY BUTTON IN THIS SPEC, EVER.
+     * `POST /billing/credits/buy` charges a live card against a real tenant.
+     * It is disabled on this deployment anyway — `buyCredits()` checks
+     * `no_billable_entity` first and this workspace has no billing profile —
+     * but "the button happens to be disabled today" is not a safety
+     * mechanism, so the rule is stated rather than relied upon.
+     *
+     * Four packs are sellable on this plan and every one is `expiryPolicy
+     * NEVER`, which is why the expiry line is assertable by its words.
+     */
+    test('17d · the packs, the VAT, and a button that says why it cannot work', async ({
+      page,
+    }) => {
+      await openBilling(page, 'en');
+
+      const buy = page.getByTestId('buy-credits');
+      await expect(buy, missingIds('the 17d buy-credits block')).toBeVisible();
+
+      /*
+       * Four sellable, and the design draws three. The catalogue that exists
+       * wins over the one the mockup expected — rendering three would mean
+       * choosing which real pack a merchant is not allowed to see.
+       */
+      const packs = page.getByTestId('buy-packs').locator('> li');
+      expect(await packs.count(), 'the plan-eligible catalogue has four packs').toBe(4);
+
+      /*
+       * ★ THE ONLY PLACE PER-PACK EXPIRY EVER REACHES A CUSTOMER.
+       * `/billing/credit-summary` strips `expiresAt` from the lots and keeps
+       * only `grantType`, so after the purchase nothing can say when these
+       * credits die. Asserted by its WORDS: a missing key renders as the
+       * empty string in this build, so a presence check would pass on a blank
+       * line — which is exactly how it shipped wrong the first time.
+       */
+      for (let i = 0; i < 4; i += 1) {
+        await expect(packs.nth(i)).toHaveText(/expire/i);
+      }
+      // Never read from the summary, which cannot know.
+      await expect(buy).not.toHaveText(/based on your balance/i);
+
+      /*
+       * ★ AND THE TOTAL IS THE GROSS.
+       *
+       * Catalogue prices are NET and `taxed` carries what is actually
+       * charged. Our contract was stripping it, so this screen could only
+       * have shown the smaller number — the reassuring direction, and the
+       * worst thing a buy screen can do.
+       *
+       * Either the totals are shown, or the screen says it cannot state one.
+       * A tenant with no billing country gets no tax block, and
+       * `taxSummaryForTenant` REFUSES rather than defaulting to 0% — so both
+       * branches are legitimate here and exactly one must be present.
+       */
+      const totals = page.getByTestId('buy-totals');
+      const unknown = page.getByTestId('buy-total-unknown');
+      const shown = await totals.count();
+      expect(
+        shown + (await unknown.count()),
+        'neither a total nor a sentence explaining why there is none',
+      ).toBe(1);
+
+      if (shown === 1) {
+        await expect(page.getByTestId('buy-total')).toHaveText(/\d/);
+        await expect(page.getByTestId('buy-tax-label')).toHaveText(/\S/);
+      } else {
+        await expect(unknown).toHaveText(/VAT depends on the country/i);
+      }
+
+      /*
+       * The button, disabled, with the reason — the 14d shape.
+       * `no_billable_entity` is checked first by the server, so "nobody to
+       * invoice" is the sentence this tenant must get, NOT the no-card one:
+       * they are different problems with different repairs.
+       */
+      await expect(page.getByTestId('buy-button')).toBeDisabled();
+      const blocked = page.getByTestId('buy-blocked');
+      await expect(blocked).toBeVisible();
+      await expect(blocked).toHaveText(/nobody to invoice|no payment method/i);
+
+      // Nothing on this screen may claim a purchase happened.
+      await expect(buy).not.toHaveText(/credits added/i);
+
+      await shoot(page, `${size.name}-17d-buy-credits`);
+    });
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
      * auto-purchase · THE BLOCK THAT WAS IN EVERY SHOT AND IN NO ASSERTION
      * ══════════════════════════════════════════════════════════════════════
      * `AutoPurchase.tsx` shipped with eight testids and nineteen new message

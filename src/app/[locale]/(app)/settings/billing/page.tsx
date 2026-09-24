@@ -2,7 +2,9 @@ import { getTranslations } from 'next-intl/server';
 
 import styles from '@/features/billing/Billing.module.css';
 import { AutoPurchase } from '@/features/billing/AutoPurchase';
+import { hasSomethingToCharge, profileReading } from '@/api/contracts/billing-profile';
 import { BillingProfileSection } from '@/features/billing/BillingProfile';
+import { BuyCredits } from '@/features/billing/BuyCredits';
 import { CreditsSection } from '@/features/billing/Credits';
 import { Invoices, PlanLine, UsageBreakdownSection } from '@/features/billing/BillingSections';
 import { loadBilling } from '@/features/billing/load-billing';
@@ -41,6 +43,7 @@ export default async function Page() {
     profile,
     paymentMethods,
     credits,
+    packages,
   } = await loadBilling();
 
   return (
@@ -55,6 +58,29 @@ export default async function Page() {
       <section className={styles.section} data-testid="section-credits">
         <h2 className={styles.sectionHeading}>{t('heading.credits')}</h2>
         <CreditsSection credits={credits} />
+      </section>
+
+      {/*
+        Screen 17d, directly under the balance.
+
+        Somebody reading "0 credits available" is one line away from the
+        thing that fixes it, and the two facts that decide whether it CAN be
+        fixed — who the invoice is made out to and what pays it — are already
+        on this page rather than a navigation away.
+      */}
+      <section className={styles.section} data-testid="section-buy">
+        <BuyCredits
+          packages={packages}
+          /*
+            `buyCredits()` checks `no_billable_entity` FIRST, so these are
+            the server's own two gates read back in the same order. Passed as
+            two booleans rather than one: "nobody to invoice" and "nothing to
+            charge" are different problems with different repairs, and one
+            sentence for both sends half of them to do the wrong thing.
+          */
+          billable={profileReading(profile) !== 'no_account'}
+          hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
+        />
       </section>
 
       <section className={styles.section} data-testid="section-breakdown">
