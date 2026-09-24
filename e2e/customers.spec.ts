@@ -589,6 +589,127 @@ for (const size of SIZES) {
           'evidenced only against the fixture and the live timeline read is UNEXERCISED.',
       );
 
+      /*
+       * ══════════════════════════════════════════════════════════════════════
+       * ★★ ASSERT ON THE RESPONSE, BECAUSE THE SCREEN CANNOT TELL THE
+       *    DIFFERENCE BETWEEN A FIELD THAT ARRIVED AND ONE THAT DEFAULTED
+       * ══════════════════════════════════════════════════════════════════════
+       * `coverage`, `page.types`, `totals` and `events[].id` all carry
+       * defaults in our contract. That is right for resilience and it means
+       * **their absence is silent**: a stale API that sends none of them
+       * parses cleanly, renders a page that looks correct, and passes every
+       * assertion made against the DOM.
+       *
+       * Ten of eleven services ran August images for a day while our
+       * contracts described today's API, and nothing we photographed could
+       * have told us. So this reads the raw response and asserts values the
+       * SERVER could produce and our defaults could not:
+       *
+       *   page.types      default []      → a non-empty array is the server's
+       *   coverage        default {}      → a non-empty map is the server's
+       *   events[].id     default ''      → a non-empty id is the server's
+       *   events[].origin default null    → a named origin is the server's
+       *
+       * `events[].type` needs no such check: it has NO default, so a payload
+       * without it fails the parse outright and the page renders its error.
+       * A required field proves itself; a defaulted one cannot.
+       */
+      const raw = await page.request.get(`/api/bff/api/identity/${realId}/timeline`);
+      expect(raw.status(), 'the live timeline endpoint did not answer 200 for a real contact').toBe(
+        200,
+      );
+      const payload = (await raw.json()) as {
+        events?: { id?: string; type?: string; origin?: string | null; conversationId?: string }[];
+        page?: { types?: string[]; limit?: number };
+        coverage?: Record<string, unknown>;
+        totals?: Record<string, number | boolean>;
+      };
+
+      expect(
+        payload.page?.types ?? [],
+        'page.types was absent or empty — our contract defaults it to [], so the screen would ' +
+          'have rendered correctly against an API that never sent it. This is the shape that ' +
+          'let a day of captures run against August images.',
+      ).not.toHaveLength(0);
+
+      expect(
+        Object.keys(payload.coverage ?? {}),
+        'coverage was absent or empty — defaulted to {} by our contract, which renders as no ' +
+          'caveats at all rather than as a missing field',
+      ).not.toHaveLength(0);
+
+      expect(
+        payload.totals,
+        'totals was absent — defaulted to zeroes, which render as a plausible empty history',
+      ).toBeDefined();
+      expect(Object.keys(payload.totals ?? {})).toContain('messages');
+
+      /*
+       * Per-event, only when there are events: a contact with none is a real
+       * state and not evidence about the fields.
+       */
+      const first = payload.events?.[0];
+      if (first) {
+        expect(first.id ?? '', 'events[].id was absent — defaulted to the empty string').not.toBe(
+          '',
+        );
+        expect(
+          ['message', 'handover', 'ai_action'],
+          'events[].type was outside the union our contract accepts',
+        ).toContain(first.type);
+        /*
+         * ★ `origin` is the fix that has never run. Until today the route
+         * never mentioned origin, so `applyLiveByDefault` filtered imported
+         * history out entirely and a long-standing customer rendered as new.
+         * A named origin on the wire is proof that fix is deployed.
+         */
+        expect(
+          ['LIVE', 'HISTORICAL_IMPORT'],
+          'events[].origin was null or absent — the origin fix is not deployed, and imported ' +
+            'history is being hidden exactly as it was before',
+        ).toContain(first.origin);
+      }
+
+      /*
+       * ★ AND 04d's READ, WHICH HAS THE SAME PROBLEM.
+       *
+       * The 04d capture navigates to a FIXTURE id, so it proves the fixture
+       * renders. This is the only place a real commerce-context response is
+       * seen — and it needs the conversation the timeline just gave us,
+       * which is why it lives here rather than in its own test.
+       *
+       * `state` is the one field that proves itself: it has NO default, so a
+       * response without it fails the parse. The assertion is that it is a
+       * member of the union we render explicitly — anything else means the
+       * platform grew a state and our screen is rendering nothing for it.
+       */
+      const conversationId = payload.events?.find((e) => e.conversationId)?.conversationId;
+      if (conversationId) {
+        const commerce = await page.request.get(`/api/bff/api/commerce-context/${conversationId}`);
+        if (commerce.status() === 200) {
+          const body = (await commerce.json()) as { state?: string };
+          expect(
+            [
+              'not_connected',
+              'connection_unhealthy',
+              'customer_not_linked',
+              'verification_required',
+              'missing_scopes',
+              'no_orders',
+              'unavailable',
+              'ok',
+            ],
+            `commerce-context answered state "${body.state}", which 04d has no sentence for — ` +
+              'the union grew and the screen renders nothing for the new member',
+          ).toContain(body.state);
+        }
+        /*
+         * A non-200 is not asserted against: this endpoint is permission
+         * gated on `customer:commerce:read`, and a session without it is a
+         * fact about the session rather than about 04d.
+         */
+      }
+
       await page.goto(`/en/customers/${realId}`);
 
       /*
