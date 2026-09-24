@@ -270,6 +270,8 @@ export async function mirrorToElectedSystem(args: {
   conversationId: string | null;
   body: string;
   visibility: NoteVisibility;
+  /** Gates the push. See the comment below: this is the only chokepoint. */
+  aiUsable: boolean;
   authHeader?: string;
 }): Promise<void> {
   const set = (data: Record<string, unknown>) =>
@@ -277,7 +279,28 @@ export async function mirrorToElectedSystem(args: {
 
   // A private note in the merchant's shared CRM is not private.
   if (args.visibility === "PRIVATE") {
-    return void (await set({ externalSyncStatus: "NOT_APPLICABLE", externalSyncError: null }));
+    return void (await set({ externalSyncStatus: "NOT_APPLICABLE", externalSyncError: "private" }));
+  }
+
+  // ★ A NOTE THE BOT MAY NOT USE MUST NOT BE MIRRORED, AND THIS IS THE ONLY
+  // PLACE THAT CAN STOP IT.
+  //
+  // `aiUsable` on our row is worthless against the real leak path, because the
+  // model never reads our row:
+  //
+  //   note -> elected CRM -> crmBundle.notes -> bundle.recent_crm_notes
+  //        -> "## Recent CRM notes" in the brief (customer-brief.service.ts:390)
+  //        -> the model's context -> a reply to the customer
+  //
+  // Verified end to end. So gating the READ of `customer_notes` cannot help: by
+  // then the note is in HubSpot and comes back as somebody else's data. The push
+  // is the only chokepoint.
+  //
+  // The cost is real and deliberate: a note not marked AI-usable does NOT reach
+  // the merchant's CRM. `externalSyncError` says why, so a screen can tell them
+  // rather than leaving it looking like a sync that quietly did not happen.
+  if (args.aiUsable !== true) {
+    return void (await set({ externalSyncStatus: "NOT_APPLICABLE", externalSyncError: "not_ai_usable" }));
   }
   // The ai endpoint is conversation-keyed. Without one there is nothing to
   // resolve a CRM contact from, which is a real "nothing to do", not an error.
@@ -355,4 +378,50 @@ async function requireOwnEditable(tenantId: string, noteId: string, editorUserId
 
 function dedupe(ids: string[]): string[] {
   return [...new Set(ids.map((s) => String(s).trim()).filter(Boolean))];
+}
+
+
+/**
+ * The ONLY read of `customer_notes` that may reach a model.
+ *
+ * One accessor rather than a filter at each call site, for the reason
+ * `applyLiveByDefault` exists: a default that must be remembered is a default
+ * that will be forgotten. Two conditions, and both are easy to omit by accident:
+ *
+ *   status: PUBLISHED   a note the AI proposed is not a note until a person
+ *                       agreed with it, so it must not feed itself back in
+ *   aiUsable: true      fails closed - a note is prompt-unsafe unless somebody
+ *                       said otherwise
+ *
+ * Deleted notes are excluded too. PRIVATE notes are NOT excluded here on
+ * purpose: `aiUsable` already decides this question, and adding a second
+ * condition that happens to agree would hide which one is doing the work.
+ *
+ * ⚠️ This does not protect a note that was MIRRORED to the merchant's CRM. The
+ * model reads those back as `recent_crm_notes`, which is somebody else's table
+ * by then - which is why `mirrorToElectedSystem` refuses to push a note that is
+ * not `aiUsable`, and why that refusal is the real control rather than this.
+ */
+export async function promptSafeNotes(args: {
+  tenantId: string;
+  contactId: string;
+  personId?: string | null;
+  limit?: number;
+}) {
+  return (prisma as any).customerNote.findMany({
+    where: {
+      tenantId: args.tenantId,
+      ...(args.personId
+        ? { OR: [{ contactId: args.contactId }, { personId: args.personId }] }
+        : { contactId: args.contactId }),
+      status: "PUBLISHED",
+      aiUsable: true,
+      deletedAt: null,
+    },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(args.limit ?? 10, 50),
+    // Only what a prompt needs. Author identity and edit history are not the
+    // model's business and would be tokens spent on nothing.
+    select: { id: true, body: true, createdAt: true },
+  });
 }

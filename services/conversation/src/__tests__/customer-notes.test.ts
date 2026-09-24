@@ -32,6 +32,7 @@ const state = vi.hoisted(() => ({
   notes: [] as any[],
   seq: 0,
   seenListWhere: null as any,
+  seenTake: 0 as number,
   fetch: { calls: [] as any[], reply: { ok: true, status: 200, body: { data: { vendor: "hubspot", note_id: "crm_1" } } } },
 }));
 
@@ -40,7 +41,7 @@ vi.mock("@chatcenter/shared", () => ({
     contact: { findFirst: async ({ where }: any) => state.contacts.find((c) => c.id === where.id) ?? null },
     user: { findFirst: async () => ({ name: "Yael Cohen", email: "yael@example.com" }) },
     customerNote: {
-      findMany: async (args: any) => { state.seenListWhere = args.where; return state.notes.filter((n) => !n.deletedAt).map((n) => ({ ...n })); },
+      findMany: async (args: any) => { state.seenListWhere = args.where; state.seenTake = args.take; return state.notes.filter((n) => !n.deletedAt).map((n) => ({ ...n })); },
       findFirst: async ({ where }: any) => state.notes.find((n) => n.id === where.id) ?? null,
       // ★ Every read and write returns a COPY, the way a database round-trip
       // does. Handing back the stored object makes `create`'s return value and
@@ -78,6 +79,7 @@ beforeEach(() => {
   state.notes = [];
   state.seq = 0;
   state.seenListWhere = null;
+  state.seenTake = 0;
   state.fetch = { calls: [], reply: { ok: true, status: 200, body: { data: { vendor: "hubspot", note_id: "crm_1" } } } };
 
   global.fetch = (async (url: any, init: any) => {
@@ -142,7 +144,7 @@ describe("a note is stored, and it is about a person", () => {
 
 describe("mirroring to the elected system", () => {
   it("★ copies the body to the CRM and records what came back", async () => {
-    const res = await post({ body: "Wants the blue one", conversationId: "cv1" });
+    const res = await post({ body: "Wants the blue one", conversationId: "cv1", aiUsable: true });
 
     expect(state.fetch.calls[0].url).toContain("/api/crm/conversation/cv1/notes");
     expect(state.fetch.calls[0].body).toEqual({ body: "Wants the blue one" });
@@ -155,7 +157,7 @@ describe("mirroring to the elected system", () => {
   });
 
   it("★ the note is still stored locally when the CRM accepts it", async () => {
-    await post({ body: "both places", conversationId: "cv1" });
+    await post({ body: "both places", conversationId: "cv1", aiUsable: true });
 
     // Mirroring, not routing. Routing would have discarded visibility, history,
     // mentions and suggestions for every tenant that has a CRM.
@@ -164,7 +166,7 @@ describe("mirroring to the elected system", () => {
   });
 
   it("★ NEVER mirrors a PRIVATE note", async () => {
-    const res = await post({ body: "my own reminder", visibility: "PRIVATE", conversationId: "cv1" });
+    const res = await post({ body: "my own reminder", visibility: "PRIVATE", conversationId: "cv1", aiUsable: true });
 
     // A private note in the merchant's shared CRM is not private.
     expect(state.fetch.calls).toHaveLength(0);
@@ -174,7 +176,7 @@ describe("mirroring to the elected system", () => {
   it("★ says NOT_APPLICABLE, not FAILED, when no CRM is configured", async () => {
     state.fetch.reply = { ok: false, status: 409, body: { error: "no_crm_configured" } } as any;
 
-    const res = await post({ body: "x", conversationId: "cv1" });
+    const res = await post({ body: "x", conversationId: "cv1", aiUsable: true });
 
     // A tenant without a CRM is a normal state. Reporting it as a failure would
     // put an error on the screen of every tenant who has not connected one.
@@ -185,7 +187,7 @@ describe("mirroring to the elected system", () => {
   it("★ says FAILED when there WAS a target and it refused", async () => {
     state.fetch.reply = { ok: false, status: 502, body: { error: "hubspot_rejected" } } as any;
 
-    const res = await post({ body: "x", conversationId: "cv1" });
+    const res = await post({ body: "x", conversationId: "cv1", aiUsable: true });
 
     // The distinction NOT_APPLICABLE/FAILED is the whole reason this is an enum
     // and not a boolean.
@@ -196,7 +198,7 @@ describe("mirroring to the elected system", () => {
   it("★ a transport failure is FAILED, not NOT_APPLICABLE", async () => {
     state.fetch.reply = new Error("ECONNREFUSED ai:4006") as any;
 
-    const res = await post({ body: "x", conversationId: "cv1" });
+    const res = await post({ body: "x", conversationId: "cv1", aiUsable: true });
 
     // Collapsing these would make an outage look like a tenant with no CRM.
     expect(res.body.note.externalSyncStatus).toBe("FAILED");
@@ -206,14 +208,14 @@ describe("mirroring to the elected system", () => {
   it("★ the mirror never loses the note, whatever the CRM does", async () => {
     state.fetch.reply = new Error("boom") as any;
 
-    const res = await post({ body: "survives the failure", conversationId: "cv1" });
+    const res = await post({ body: "survives the failure", conversationId: "cv1", aiUsable: true });
 
     expect(res.status).toBe(201);
     expect(state.notes[0].body).toBe("survives the failure");
   });
 
   it("has nothing to mirror to without a conversation", async () => {
-    const res = await post({ body: "written from the customer page" });
+    const res = await post({ body: "written from the customer page", aiUsable: true });
 
     // The ai endpoint is conversation-keyed; with no conversation there is
     // nothing to resolve a CRM contact from. A real "nothing to do".
@@ -339,7 +341,7 @@ describe("visibility is enforced in the QUERY", () => {
 
 describe("a note the AI proposed", () => {
   const suggest = async () =>
-    (await post({ body: "She mentioned a birthday in May", status: "AI_SUGGESTED", conversationId: "cv1" })).body.note;
+    (await post({ body: "She mentioned a birthday in May", status: "AI_SUGGESTED", conversationId: "cv1", aiUsable: true })).body.note;
 
   it("★ is NOT mirrored while it is only a suggestion", async () => {
     await suggest();
@@ -477,5 +479,78 @@ describe("createNote's own default, called directly", () => {
     });
 
     expect(note.aiUsable).toBe(true);
+  });
+});
+
+/**
+ * ★ THE PUSH IS THE ONLY CHOKEPOINT, AND IT IS WHERE aiUsable HAS TO BITE.
+ *
+ * `aiUsable` on our row does nothing against the real leak path, because the
+ * model never reads our row:
+ *
+ *   note -> elected CRM -> crmBundle.notes -> bundle.recent_crm_notes
+ *        -> "## Recent CRM notes" in the brief (customer-brief.service.ts:390)
+ *        -> the model's context -> a reply to the customer
+ *
+ * Verified end to end. Once the note is in HubSpot it comes back as somebody
+ * else's data, so no filter on `customer_notes` can help. Gating the PUSH is
+ * the control; the prompt-safe accessor is the smaller, second one.
+ *
+ * The cost is deliberate: a note not marked AI-usable does not reach the
+ * merchant's CRM, and the reason is recorded so a screen can say so.
+ */
+describe("a note the bot may not use is never pushed", () => {
+  it("★ does NOT mirror a note with aiUsable false, even to a working CRM", async () => {
+    const res = await post({ body: "he disputes the invoice", conversationId: "cv1" });
+
+    expect(res.body.note.aiUsable).toBe(false);
+    expect(state.fetch.calls).toHaveLength(0);
+    expect(res.body.note.externalSyncStatus).toBe("NOT_APPLICABLE");
+    // Distinguishable from "no CRM configured", so a screen can explain it.
+    expect(res.body.note.externalSyncError).toBe("not_ai_usable");
+  });
+
+  it("mirrors it once it IS marked usable", async () => {
+    const res = await post({ body: "safe to quote", conversationId: "cv1", aiUsable: true });
+
+    expect(state.fetch.calls).toHaveLength(1);
+    expect(res.body.note.externalSyncStatus).toBe("SYNCED");
+  });
+
+  it("keeps the two refusal reasons apart", async () => {
+    const priv = await post({ body: "a", visibility: "PRIVATE", conversationId: "cv1", aiUsable: true });
+    const unsafe = await post({ body: "b", conversationId: "cv1" });
+
+    // Both are NOT_APPLICABLE and both are correct, but a screen explains them
+    // differently: one is "you marked it private", the other "you did not mark
+    // it AI-usable".
+    expect(priv.body.note.externalSyncError).toBe("private");
+    expect(unsafe.body.note.externalSyncError).toBe("not_ai_usable");
+  });
+});
+
+describe("the one read that may reach a model", () => {
+  it("★ filters status AND aiUsable AND deletedAt, in one place", async () => {
+    const { promptSafeNotes } = await import("../services/customer-notes.service");
+
+    await promptSafeNotes({ tenantId: "t1", contactId: "c1", personId: "p1" });
+
+    // Asserted on the WHERE: these are exactly the conditions a call site would
+    // forget, which is why there is one accessor instead of a convention.
+    expect(state.seenListWhere).toMatchObject({
+      tenantId: "t1",
+      status: "PUBLISHED",
+      aiUsable: true,
+      deletedAt: null,
+    });
+    expect(state.seenListWhere.OR).toEqual([{ contactId: "c1" }, { personId: "p1" }]);
+  });
+
+  it("caps how much it will hand a prompt", async () => {
+    const { promptSafeNotes } = await import("../services/customer-notes.service");
+
+    await promptSafeNotes({ tenantId: "t1", contactId: "c1", limit: 9999 });
+
+    expect(state.seenTake).toBe(50);
   });
 });

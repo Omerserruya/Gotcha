@@ -7107,6 +7107,10 @@ model CustomerNote {
   /// is the more dangerous of the two axes and was missing here; keeping both
   /// separately loses neither protection.
   aiUsable   Boolean                @default(false) @map("ai_usable")
+  /// Pinned notes sort first, and 04f puts them at the top of the Inbox Copilot
+  /// too - so this is read by a surface outside the notes list, which is why it
+  /// is a column and not a client-side preference.
+  pinned     Boolean                @default(false)
   status     CustomerNoteStatus     @default(PUBLISHED)
 
   /// Null when the AI wrote it. A user row can be deleted, so the display name

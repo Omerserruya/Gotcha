@@ -128,6 +128,7 @@ router.post("/:contactId/notes", async (req: Request, res: Response) => {
         conversationId: note.conversationId,
         body: note.body,
         visibility,
+        aiUsable: note.aiUsable,
         authHeader: req.headers.authorization,
       });
     }
@@ -191,6 +192,7 @@ for (const decision of ["accept", "reject"] as const) {
           conversationId: note.conversationId,
           body: note.body,
           visibility: note.visibility,
+          aiUsable: note.aiUsable,
           authHeader: req.headers.authorization,
         });
       }
