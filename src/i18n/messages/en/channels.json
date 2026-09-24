@@ -131,6 +131,31 @@
       },
       "coexistHeading": "What happens to a Business app number",
       "migrationNotPossible": "Moving it off the Business app entirely is not something anyone can do — it is not a step you have missed."
+    },
+    "import": {
+      "heading": "Learning from this number's history",
+      "live": "The number is already live. Everything below happens alongside it and does not hold anything up.",
+      "stage": {
+        "transferring": "Bringing the history across",
+        "analyzing": "Reading it",
+        "ready": "Ready to review",
+        "failed": "Stopped",
+        "unavailable": "No history to learn from"
+      },
+      "whatHappens": "While this runs, GOTCHA is learning your language and tone, finding the questions you answer most and the answers you give, and remembering the customers it meets.",
+      "noOrder": "Those happen together rather than one after another, so there is no order to watch.",
+      "conversations": "{read} of {total} conversations read",
+      "conversationsNoTotal": "{read} conversations read so far",
+      "customers": "{read} of {total} customers looked at",
+      "answers": "{count, plural, =0 {No answers found yet} one {# answer found} other {# answers found}}",
+      "notCountedYet": "Nothing has been counted yet. The first numbers appear once the history finishes arriving.",
+      "safeToClose": "Safe to close this page — it keeps running.",
+      "emailOnDone": "An email goes to the workspace owners when the report is ready.",
+      "emailNeedsAddress": "That email only goes to owners who have an email address on their account.",
+      "readyBody": "GOTCHA has finished reading. Nothing it learned is in use until you approve it.",
+      "failedWithStage": "It stopped while {stage}. Nothing from this import is in use.",
+      "failedBare": "It stopped before finishing. Nothing from this import is in use.",
+      "unavailableBody": "This number has no history GOTCHA can read — usually because it is new, or because the source declined to share it."
     }
   }
 }

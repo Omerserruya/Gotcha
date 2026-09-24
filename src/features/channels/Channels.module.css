@@ -442,4 +442,12 @@
     flex-direction: column;
     gap: var(--space-12);
   }
+
+  /* ── Screen 13e · importing and learning ─────────────────────────────── */
+
+  .import {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
 }
