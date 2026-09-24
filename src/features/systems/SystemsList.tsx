@@ -2,6 +2,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import type { Integration, ToolPermission } from '@/api/contracts/integrations';
 
+import { CapabilityControls } from './CapabilityControls';
 import { buildSystemRows, messageOf, stanceCounts, type SystemRow } from './rows';
 import styles from './Systems.module.css';
 
@@ -190,6 +191,14 @@ function SystemEntry({
             ))}
         </ul>
       ) : null}
+
+      {/*
+        Screen 14d, BELOW the counts and the restricted list, because those
+        two answer the questions people actually arrive with — "what can it
+        do" and "what did we switch off". This is the full audit surface, and
+        it is collapsed.
+      */}
+      <CapabilityControls row={row} t={t} />
     </li>
   );
 }

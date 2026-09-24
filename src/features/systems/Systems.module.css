@@ -180,4 +180,88 @@
     font-size: var(--font-size-meta);
     color: var(--text-subtle);
   }
+
+  /* ── Screen 14d · what each capability may do ─────────────────────────── */
+
+  .tools {
+    margin-block-start: var(--space-12);
+    border-top: 1px solid var(--border-subtle);
+    padding-block-start: var(--space-12);
+  }
+
+  .toolsHeading {
+    cursor: pointer;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .toolList {
+    margin-block: var(--space-12) 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  .toolRow {
+    margin: 0;
+  }
+
+  /*
+    A fieldset, because the three states answer one question and a screen
+    reader should hear the capability's name before any of them. Reset,
+    because the browser default draws a box around every one of sixty-eight.
+  */
+  .toolStates {
+    margin: 0;
+    border: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  .toolName {
+    padding: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-default);
+  }
+
+  /*
+    Disabled, and it must LOOK disabled rather than merely fail quietly. The
+    chosen state stays at full contrast — it is the fact this block exists to
+    show, and dimming it along with the rest would hide the answer to make the
+    unavailability legible.
+  */
+  .toolState {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
+
+  .toolState:has(input:checked) {
+    color: var(--text-default);
+  }
+
+  .toolsApprovals {
+    margin-block: var(--space-12) 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-default);
+  }
+
+  .toolsLocked {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  .toolsScope {
+    margin-block: var(--space-8) 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
 }
