@@ -538,15 +538,30 @@ const dayScheduleSchema = z.object({
 const businessHoursSchema = z.object({
   enabled: z.boolean(),
   timezone: z.string().min(1),
-  autoResponse: z.string().optional().default(""),
+  // ★ NO .default() ON ANY OF THE THREE OPTIONAL FIELDS, and that is the fix.
+  // Zod's .default() MATERIALISES a field when the request omits it, and this
+  // route then persisted `req.body` wholesale - so omission was not "leave
+  // unchanged", it was "overwrite with the default".
+  //
+  // The one that matters is `aiOutsideHours` reverting to "active": a merchant
+  // who deliberately set "silent" got the AI answering customers while the shop
+  // was closed, from a request that never mentioned the field. Read at
+  // incoming-worker/ai-bot.service.ts:137. `autoResponse` and
+  // `outsideHoursHandoffMessage` had the same shape - an omitted away-message
+  // was silently blanked.
+  //
+  // Nothing was broken in practice because the only caller sends every field.
+  // That is the defect: the safety lived entirely in the caller, so the next
+  // client to touch this endpoint would unsilence the AI without mentioning it.
+  autoResponse: z.string().optional(),
   // Outside-hours AI policy (shared/lib/business-hours.ts owns the semantics):
   // "active" = the AI employee keeps answering while closed (handoffs must say
   // the team is away and when it returns); "silent" = no AI replies while
   // closed - the autoResponse (or a generated default) is sent instead.
-  aiOutsideHours: z.enum(["active", "silent"]).optional().default("active"),
+  aiOutsideHours: z.enum(["active", "silent"]).optional(),
   // Optional owner-written line appended to human-handoff messages while
   // closed (a generated line with the real next opening time is the default).
-  outsideHoursHandoffMessage: z.string().max(500).optional().default(""),
+  outsideHoursHandoffMessage: z.string().max(500).optional(),
   schedule: z.object({
     sunday: dayScheduleSchema,
     monday: dayScheduleSchema,
@@ -558,26 +573,35 @@ const businessHoursSchema = z.object({
   }),
 });
 
+/**
+ * What a workspace that has never configured hours gets.
+ *
+ * One definition, used by the GET and by the PUT when a field has no stored
+ * value to preserve. Two copies would drift, and the pair that decides whether
+ * the AI answers a closed shop is not a good place for drift.
+ */
+const BUSINESS_HOURS_DEFAULTS = {
+  enabled: false,
+  timezone: "Asia/Jerusalem",
+  autoResponse: "",
+  aiOutsideHours: "active" as const,
+  outsideHoursHandoffMessage: "",
+  schedule: {
+    sunday:    { enabled: true,  open: "09:00", close: "18:00" },
+    monday:    { enabled: true,  open: "09:00", close: "18:00" },
+    tuesday:   { enabled: true,  open: "09:00", close: "18:00" },
+    wednesday: { enabled: true,  open: "09:00", close: "18:00" },
+    thursday:  { enabled: true,  open: "09:00", close: "18:00" },
+    friday:    { enabled: false },
+    saturday:  { enabled: false },
+  },
+};
+
 router.get("/settings/business-hours", requirePermission("settings:workspace:read"), async (req: Request, res: Response) => {
   try {
     const raw = await readDurableSetting(req.tenantId!, "businessHours");
     if (!raw) {
-      res.json({
-        enabled: false,
-        timezone: "Asia/Jerusalem",
-        autoResponse: "",
-        aiOutsideHours: "active",
-        outsideHoursHandoffMessage: "",
-        schedule: {
-          sunday:    { enabled: true,  open: "09:00", close: "18:00" },
-          monday:    { enabled: true,  open: "09:00", close: "18:00" },
-          tuesday:   { enabled: true,  open: "09:00", close: "18:00" },
-          wednesday: { enabled: true,  open: "09:00", close: "18:00" },
-          thursday:  { enabled: true,  open: "09:00", close: "18:00" },
-          friday:    { enabled: false },
-          saturday:  { enabled: false },
-        },
-      });
+      res.json(BUSINESS_HOURS_DEFAULTS);
       return;
     }
     res.json(JSON.parse(raw));
@@ -589,8 +613,37 @@ router.get("/settings/business-hours", requirePermission("settings:workspace:rea
 
 router.put("/settings/business-hours", requirePermission("settings:workspace:update"), validate(businessHoursSchema), async (req: Request, res: Response) => {
   try {
-    await writeDurableSetting(req.tenantId!, "businessHours", JSON.stringify(req.body), req.user?.userId);
-    res.json(req.body);
+    // A field the request did not mention keeps whatever is stored, and falls
+    // back to the documented default only when nothing is stored. This makes the
+    // two writers of `businessHours` agree: PATCH /api/workspace already merges
+    // into the existing object, and this one used to replace it.
+    const existingRaw = await readDurableSetting(req.tenantId!, "businessHours");
+    let existing: Record<string, unknown> = {};
+    if (existingRaw) {
+      try {
+        existing = JSON.parse(existingRaw) as Record<string, unknown>;
+      } catch {
+        // Unparseable stored settings cannot be preserved. Falling back to the
+        // documented defaults is better than persisting `undefined` into the
+        // field that decides whether the AI answers a closed shop.
+        console.warn("[business-hours] stored settings did not parse; preserving nothing");
+      }
+    }
+    const body = req.body as Record<string, unknown>;
+    const keep = <K extends "autoResponse" | "aiOutsideHours" | "outsideHoursHandoffMessage">(k: K) =>
+      body[k] !== undefined ? body[k] : existing[k] !== undefined ? existing[k] : BUSINESS_HOURS_DEFAULTS[k];
+
+    const merged = {
+      ...body,
+      autoResponse: keep("autoResponse"),
+      aiOutsideHours: keep("aiOutsideHours"),
+      outsideHoursHandoffMessage: keep("outsideHoursHandoffMessage"),
+    };
+
+    await writeDurableSetting(req.tenantId!, "businessHours", JSON.stringify(merged), req.user?.userId);
+    // The MERGED object, not the request. Returning `req.body` would report a
+    // state the store does not hold for any field the caller omitted.
+    res.json(merged);
   } catch (err) {
     console.error("Update business hours error:", err);
     res.status(500).json({ error: "Failed to update business hours" });
