@@ -198,7 +198,50 @@ router.post("/merge", async (req: Request, res: Response) => {
   }
 });
 
-// GET /:id/timeline - unified timeline of events across channels for the contact
+/**
+ * GET /:id/timeline - one person's events across every channel.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * IT USED TO BE A SAMPLE PRESENTED AS A HISTORY
+ *
+ * The old query was `take: 50` conversations x `take: 5` messages, so it
+ * returned at most 250 events and - worse than the ceiling - it took the five
+ * NEWEST messages of each conversation. A 300-message thread contributed five.
+ * The events were then merged and sorted, which produced a plausible-looking
+ * stream with holes in the middle that nothing in the response disclosed.
+ *
+ * A screen calling that "her whole history" claims a completeness the data does
+ * not have, and no consumer could tell.
+ *
+ * ── So it paginates MESSAGES, not conversations ──
+ *
+ * The event is a message; paginating its container is what created the
+ * distortion. One cursor over the person's messages removes it, and `totals`
+ * lets a screen say "50 of 1,284" instead of implying it has everything.
+ *
+ * ★ AND IT NO LONGER HIDES THE IMPORTED HISTORY. `applyLiveByDefault` injects
+ * `origin: "LIVE"` into bulk Conversation/Message reads, so for a customer
+ * whose WhatsApp history was imported this endpoint excluded exactly the
+ * history. Both origins are now named explicitly (naming origin suppresses the
+ * injection) and every event carries its own, so a screen can label an imported
+ * message rather than silently missing it. `includeImported=false` restores the
+ * old scope for a caller that wants live only.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/** Page size ceiling. A caller asking for more gets this many, not an error. */
+const TIMELINE_MAX_LIMIT = 200;
+const TIMELINE_DEFAULT_LIMIT = 50;
+
+/**
+ * How many of the person's conversations we resolve ids for.
+ *
+ * Bounded because the id list becomes an `IN` clause. When a person has more
+ * than this, the response SAYS the scan was truncated rather than quietly
+ * dropping their oldest threads - the defect this endpoint is being fixed for.
+ */
+const TIMELINE_CONVERSATION_SCAN_CAP = 500;
+
 router.get("/:id/timeline", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
@@ -211,6 +254,19 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       ? await prisma.contact.findFirst({ where: { id: contact.mergedIntoId, tenantId } })
       : contact;
     if (!effective) return res.status(404).json({ error: "Contact target not found" });
+
+    const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(rawLimit, TIMELINE_MAX_LIMIT)
+      : TIMELINE_DEFAULT_LIMIT;
+    const cursor = typeof req.query.cursor === "string" && req.query.cursor ? req.query.cursor : null;
+    const includeImported = String(req.query.includeImported ?? "true") !== "false";
+
+    // Naming origin at all is what suppresses the live-by-default injection, so
+    // this clause is load-bearing even in the live-only case.
+    const originClause = includeImported
+      ? { origin: { in: ["LIVE", "HISTORICAL_IMPORT"] as any } }
+      : { origin: "LIVE" as any };
 
     // Pull all rows belonging to the same person - personId-first path
     // covers contacts auto-unified via /capture, fallback email/phone
@@ -227,31 +283,102 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       ...siblings.map((s) => ({ channel: s.channel, customerExternalId: s.externalId })),
       ...aliases.map((a) => ({ channel: a.channel as any, customerExternalId: a.externalId })),
     ];
-    const convos = await prisma.conversation.findMany({
-      where: { tenantId, OR: orClauses },
-      orderBy: { updatedAt: "desc" },
-      take: 50,
-      include: {
-        messages: {
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        },
-      },
-    });
 
-    const events = convos.flatMap((c) =>
-      c.messages.map((m) => ({
+    // An empty OR matches nothing in Prisma, and an empty page is the honest
+    // answer for a contact with no channel identity - not an error.
+    if (orClauses.length === 0) {
+      return res.json({
+        contact: effective,
+        events: [],
+        page: { limit, nextCursor: null, hasMore: false },
+        totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+      });
+    }
+
+    const convWhere = { tenantId, OR: orClauses, ...originClause };
+    const [conversationCount, convos] = await Promise.all([
+      prisma.conversation.count({ where: convWhere }),
+      prisma.conversation.findMany({
+        where: convWhere,
+        orderBy: { updatedAt: "desc" },
+        take: TIMELINE_CONVERSATION_SCAN_CAP,
+        select: { id: true, channel: true, origin: true },
+      }),
+    ]);
+
+    if (convos.length === 0) {
+      return res.json({
+        contact: effective,
+        events: [],
+        page: { limit, nextCursor: null, hasMore: false },
+        totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+      });
+    }
+
+    const byConversation = new Map(convos.map((c) => [c.id, c]));
+    const messageWhere = {
+      tenantId,
+      conversationId: { in: convos.map((c) => c.id) },
+      ...originClause,
+    };
+
+    let rows: Array<{ id: string; conversationId: string; direction: string; body: string | null; createdAt: Date; origin: string | null }>;
+    let messageCount: number;
+    try {
+      [messageCount, rows] = await Promise.all([
+        prisma.message.count({ where: messageWhere }),
+        prisma.message.findMany({
+          where: messageWhere,
+          // id breaks ties so two messages in the same millisecond cannot make
+          // the cursor loop or skip.
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+          select: { id: true, conversationId: true, direction: true, body: true, createdAt: true, origin: true },
+        }) as any,
+      ]);
+    } catch (err: any) {
+      // A cursor from a deleted or foreign message: refuse it by name rather
+      // than silently restarting from the top, which would look like the end of
+      // the list wrapping around to the beginning.
+      if (cursor) return res.status(400).json({ error: "invalid_cursor" });
+      throw err;
+    }
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+
+    const events = page.map((m) => {
+      const conv = byConversation.get(m.conversationId);
+      return {
         type: "message" as const,
-        channel: c.channel,
-        conversationId: c.id,
+        channel: conv?.channel ?? null,
+        conversationId: m.conversationId,
         direction: m.direction,
         body: m.body,
         createdAt: m.createdAt,
-      })),
-    );
-    events.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        // So a screen can mark an imported message instead of presenting it as
+        // something it watched happen.
+        origin: m.origin ?? conv?.origin ?? null,
+      };
+    });
 
-    return res.json({ contact: effective, events });
+    return res.json({
+      contact: effective,
+      events,
+      page: {
+        limit,
+        nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+        hasMore,
+      },
+      totals: {
+        conversations: conversationCount,
+        messages: messageCount,
+        // True when the person has more conversations than one scan covers, so
+        // a caller knows `messages` counts the scanned set and not all of them.
+        conversationScanTruncated: conversationCount > convos.length,
+      },
+    });
   } catch (err) {
     console.error("identity.timeline error:", err);
     return res.status(500).json({ error: "Failed to load timeline" });
