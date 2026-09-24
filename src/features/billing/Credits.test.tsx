@@ -206,3 +206,66 @@ describe('a failed read is not a balance of zero', () => {
     expect(screen.getByTestId('credits-unavailable')).toHaveTextContent(/could not load/i);
   });
 });
+
+describe("★ 17 · the framing is credits, and two of the design's lines are refused", () => {
+  it('bounds the balance with the cycle it belongs to', async () => {
+    /*
+     * "14,640 credits" is a quantity. "14,640 credits until 12 October" is a
+     * runway, and the runway is what somebody opened this screen for.
+     */
+    await render17c();
+    expect(screen.getByTestId('credits-cycle')).toHaveTextContent(/2027/);
+  });
+
+  it('shows what the total is made of', async () => {
+    const split = await render17c({
+      usage: { consumedCredits: 100, remainingPlanCredits: 12640, consumedPct: 10 },
+      plan: { name: 'Growth', includedCredits: 20000 },
+      purchasedCredits: { balance: 2000 },
+      totalAvailableCredits: 14640,
+    });
+    const composition = split.getByTestId('credits-composition');
+    expect(composition).toHaveTextContent(/12,640 of 20,000 plan credits/);
+    expect(composition).toHaveTextContent(/2,000 bought separately/);
+  });
+
+  it('★ never renders the design\'s "Used 7,360"', async () => {
+    /*
+     * That figure is `consumedCredits`, which counts expiry as spend. It is
+     * the same claim as the 100% bar this screen refuses to draw, in a
+     * quieter font.
+     */
+    const split = await render17c({
+      usage: { consumedCredits: 7360, remainingPlanCredits: 12640, consumedPct: 37 },
+      plan: { name: 'Growth', includedCredits: 20000 },
+      purchasedCredits: { balance: 2000 },
+      totalAvailableCredits: 14640,
+    });
+    expect(split.getByTestId('credits')).not.toHaveTextContent(/used 7,360/i);
+    expect(split.getByTestId('credits')).not.toHaveTextContent(/7,360/);
+  });
+
+  it('★ never calls the purchased half "kept until used"', async () => {
+    // `CreditExpiryPolicy` has PERIOD_END and the summary route strips
+    // `expiresAt`, so permanence is a promise the screen cannot check.
+    const split = await render17c({
+      purchasedCredits: { balance: 2000 },
+      totalAvailableCredits: 2000,
+    });
+    const credits = split.getByTestId('credits');
+    expect(credits).not.toHaveTextContent(/kept until used/i);
+    expect(credits).not.toHaveTextContent(/top-?up/i);
+  });
+
+  it('says only the half it has, when there is only one', async () => {
+    const purchasedOnly = await render17c({
+      plan: { name: 'AI Voice', includedCredits: 0 },
+      usage: { consumedCredits: 0, remainingPlanCredits: 0, consumedPct: 0 },
+      purchasedCredits: { balance: 500 },
+      totalAvailableCredits: 500,
+    });
+    const composition = purchasedOnly.getByTestId('credits-composition');
+    expect(composition).toHaveTextContent(/500 bought separately/);
+    expect(composition).not.toHaveTextContent(/plan credits/);
+  });
+});

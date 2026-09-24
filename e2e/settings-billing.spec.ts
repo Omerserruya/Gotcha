@@ -358,6 +358,18 @@ for (const size of SIZES) {
       // The number that must never appear. This is the whole finding.
       await expect(credits).not.toHaveText(/100\s?%/);
 
+      /*
+       * 17's framing is CREDITS, per the design: "Everything GOTCHA does uses
+       * credits. You see what's left, and how far it goes."
+       *
+       * And the two lines from that block the screen refuses: "Used 7,360",
+       * which is `consumedCredits` counting expiry as spend — the same claim
+       * as the bar — and "Top-up 2,000 · kept until used", which is a
+       * permanence the route's stripped `expiresAt` cannot support.
+       */
+      await expect(credits).not.toHaveText(/kept until used/i);
+      await expect(page.getByRole('heading', { name: /credits left/i })).toBeVisible();
+
       await shoot(page, `${size.name}-credits-withheld`);
     });
 

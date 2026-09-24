@@ -1,9 +1,9 @@
 {
   "title": "שימוש וחיוב",
-  "description": "מה התוכנית שלכם כוללת, ואיפה אתם עומדים בתוכה.",
+  "description": "כל מה ש‑GOTCHA עושה צורך קרדיטים. כאן רואים מה נשאר, ועד כמה זה מספיק.",
   "heading": {
     "runway": "שיחות בתקופה הזו",
-    "credits": "קרדיטים",
+    "credits": "קרדיטים שנותרו",
     "breakdown": "לאן הלכה התקופה",
     "invoices": "חשבוניות",
     "autoPurchase": "כשהקרדיט נגמר",
@@ -156,6 +156,11 @@
     "observed": {
       "noMetering": "היו לכם {conversations} שיחות ב־{days} הימים האחרונים ולא נרשמו מולן קרדיטים, ולכן איננו יכולים למדוד קצב משלכם. זה נוגע למה שנמדד, לא לכמה השתמשתם ב־GOTCHA.",
       "tooFewConversations": "{conversations} שיחות ב־{days} הימים האחרונים הן מעט מדי כדי למדוד מהן קצב אמין, ולכן ההערכה למעלה מבוססת על התעריף המפורסם של התוכנית."
-    }
+    },
+    "cycle": "המחזור הנוכחי · {from} – {to}",
+    "cycleEnds": "המחזור הנוכחי מסתיים ב־{to}.",
+    "composition": "{plan} מתוך {included} קרדיטים של התוכנית + {purchased} שנרכשו בנפרד",
+    "compositionPlanOnly": "{plan} מתוך {included} קרדיטים של התוכנית",
+    "compositionPurchasedOnly": "{purchased} שנרכשו בנפרד"
   }
 }

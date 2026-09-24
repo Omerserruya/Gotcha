@@ -1,9 +1,9 @@
 {
   "title": "Usage & billing",
-  "description": "What your plan covers, and how far into it you are.",
+  "description": "Everything GOTCHA does uses credits. You see what's left, and how far it goes.",
   "heading": {
     "runway": "Conversations this period",
-    "credits": "Credits",
+    "credits": "Credits left",
     "breakdown": "Where the period went",
     "invoices": "Invoices",
     "autoPurchase": "Running low",
@@ -156,6 +156,11 @@
     "observed": {
       "noMetering": "You have had {conversations} conversations in the last {days} days and no credits were recorded against them, so we cannot measure your own rate. That is about what has been metered, not about how much you have used GOTCHA.",
       "tooFewConversations": "{conversations} conversations in the last {days} days is too few to measure a reliable rate from, so the estimate above uses your plan's published rate instead."
-    }
+    },
+    "cycle": "This cycle · {from} – {to}",
+    "cycleEnds": "This cycle ends {to}.",
+    "composition": "{plan} of {included} plan credits + {purchased} bought separately",
+    "compositionPlanOnly": "{plan} of {included} plan credits",
+    "compositionPurchasedOnly": "{purchased} bought separately"
   }
 }

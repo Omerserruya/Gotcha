@@ -62,9 +62,56 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
       data-testid="credits"
       data-consumption={consumptionIsTrustworthy(credits, new Date()) ? 'shown' : 'withheld'}
     >
+      {/*
+        The cycle, above the number it bounds. The design puts it there and it
+        is the difference between "14,640 credits" and "14,640 credits until
+        12 October" — the second is a runway and the first is a quantity.
+      */}
+      {credits.period.startsAt && renewsAt ? (
+        <p className={styles.creditsBasis} data-testid="credits-cycle">
+          {t('cycle', {
+            from: day.format(new Date(credits.period.startsAt)),
+            to: day.format(new Date(renewsAt)),
+          })}
+        </p>
+      ) : renewsAt ? (
+        <p className={styles.creditsBasis} data-testid="credits-cycle">
+          {t('cycleEnds', { to: day.format(new Date(renewsAt)) })}
+        </p>
+      ) : null}
+
       <p className={styles.creditsBalance} data-testid="credits-balance">
         {t('balance', { credits: number.format(credits.totalAvailableCredits) })}
       </p>
+
+      {/*
+        What the total is made of — the design's "12,640 of 20,000 plan
+        credits + 2,000 top-up".
+
+        Two departures. It does NOT carry "Used 7,360", because that figure is
+        `consumedCredits` and counts expiry as spend: 7,360 used would be the
+        same claim as the 100% bar this screen refuses to draw.
+
+        And the purchased half is not called a "top-up kept until used".
+        `CreditExpiryPolicy` has PERIOD_END, the summary route strips
+        `expiresAt`, and permanence is a promise the screen cannot check.
+      */}
+      {credits.plan.includedCredits > 0 || purchased > 0 ? (
+        <p className={styles.creditsNote} data-testid="credits-composition">
+          {credits.plan.includedCredits > 0 && purchased > 0
+            ? t('composition', {
+                plan: number.format(expiring),
+                included: number.format(credits.plan.includedCredits),
+                purchased: number.format(purchased),
+              })
+            : credits.plan.includedCredits > 0
+              ? t('compositionPlanOnly', {
+                  plan: number.format(expiring),
+                  included: number.format(credits.plan.includedCredits),
+                })
+              : t('compositionPurchasedOnly', { purchased: number.format(purchased) })}
+        </p>
+      ) : null}
 
       {/*
         The two buckets, which do NOT have the same fate. INCLUDED is gated on
