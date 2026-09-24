@@ -16,21 +16,41 @@ import { logger } from '@/observability/logger';
 /**
  * The three writes on screen 03.
  *
- * ── WHAT IS DELIBERATELY ABSENT ──
- * **There is no edit action, and there will not be one.**
- * `TenantToolPermission.allowModification` exists to say *"the approver may
- * not change the parameters before this runs"*, it defaults to `false`, and
- * the approve route **never reads it** — zero occurrences in the route file.
- * It accepts `modifiedParams` from the request body on a bare
- * `typeof === "object"` check, and `row.modifiedParams ?? row.params` is what
- * then executes.
+ * ── THERE IS STILL NO EDIT ACTION, AND THE REASON HAS CHANGED ──
  *
- * So a tenant can switch that setting off, see it saved, and anyone who can
- * approve can still rewrite the amount on a refund. Building the UI would not
- * merely sit on that hole — it would make it **routinely exercised** instead of
- * theoretical: today it needs a hand-crafted request, with an edit box it needs
- * a click. And it is the one control on this screen that changes how much money
- * moves, with no undo anywhere in the platform behind it.
+ * ⚠ THIS BLOCK USED TO SAY "there will not be one", ON A HOLE THAT IS NOW
+ * CLOSED. Corrected 2026-09-24 rather than left standing: it was true when
+ * written and false by the time anybody read it, which is the class this
+ * project has spent the day chasing. A prose claim about another repo has no
+ * test holding it, so nothing failed when it went stale.
+ *
+ * What it said: `allowModification` was resolved by tool-gate and read by
+ * nobody, so an approver could rewrite the amount on a refund whose policy
+ * forbade editing, and building the UI would have made that routine rather
+ * than theoretical.
+ *
+ * What is true now — `approvals.ts:1061-1085`, D49, verified here rather
+ * than taken on report:
+ *
+ *     const wantsModification = req.body?.modifiedParams != null && …
+ *     if (wantsModification) {
+ *       const gate = await evaluateToolGate(tenantId, row.tool);
+ *       if (gate.approvalConfig?.allowModification !== true)
+ *         → 403 MODIFICATION_NOT_ALLOWED
+ *     }
+ *
+ * It refuses LOUDLY and fails CLOSED — an absent `approvalConfig` is not
+ * permission — and the route's own comment gives the reason: falling back to
+ * the original params would execute something the approver did not agree to
+ * while showing them the version they typed, so the approval record would
+ * disagree with what ran.
+ *
+ * ── SO AN EDIT CONTROL IS NOW BUILDABLE, AND IS NOT BUILT HERE ──
+ * It is buildable gated on the tool's policy, with the 403 rendered as its
+ * own sentence — "this tool's policy does not allow editing before
+ * approval" — rather than a generic failure. That is a separate piece of
+ * work with its own ruling; this file does not have it, and this comment no
+ * longer claims it never will.
  *
  * ── AND THERE IS NO UNDO ACTION ──
  * Not an omission. No route, no gateway path, no `undoneAt` or `reversalOf`
