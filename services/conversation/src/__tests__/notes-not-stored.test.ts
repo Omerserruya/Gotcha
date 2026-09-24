@@ -10,10 +10,10 @@
  *
  * ── Why 501 and not 404 ──
  *
- * Conversation notes DO work, in another service: `POST /api/crm/conversation/
- * :id/notes` writes to the merchant's CRM and they are read back as
- * `recent_crm_notes`. A 404 would hide that. The 501 names the endpoint so the
- * next person links a CRM instead of building a second note store here.
+ * Notes DO exist, keyed on a CUSTOMER: `/api/identity/:contactId/notes` stores
+ * them and mirrors the body to the elected system. A 404 would hide that. The
+ * 501 names the endpoint so the next person uses it instead of building a
+ * second note store here.
  *
  * Nothing in the repo calls this path (checked: the frontend's note box calls
  * the CRM one), so this is a trap being closed, not a client being fixed. It
@@ -82,8 +82,8 @@ describe("conversation notes are refused, not echoed", () => {
 
     // A bare 501 leaves the reader believing notes are unimplemented platform-
     // wide. They are not: they are written to the CRM.
-    expect(res.body.message).toContain("/api/crm/conversation/:id/notes");
-    expect(res.body.message).toContain("recent_crm_notes");
+    expect(res.body.message).toContain("/api/identity/:contactId/notes");
+    expect(res.body.message).toContain("Business Core");
   });
 
   it("refuses without reading the body at all", async () => {

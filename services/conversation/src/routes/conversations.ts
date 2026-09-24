@@ -121,22 +121,20 @@ router.get("/history/:customerExternalId", async (req: Request, res: Response) =
  * level down: "no notes" and "notes are not kept here" are different facts and
  * an empty array reads as the first.
  *
- * ★ NOTES DO EXIST, IN ANOTHER SERVICE, AND THEY WORK. A conversation note is
- * written to the merchant's CRM by `POST /api/crm/conversation/:id/notes`
- * (`services/ai/src/routes/crm-panel.ts`), which requires a resolved CRM link
- * and refuses honestly without one (409 `no_crm_link` / `no_crm_configured`).
- * They are read back as `recent_crm_notes` on the CRM context envelope. So the
- * truth is not "notes are unimplemented" - it is that GOTCHA holds no note
- * store of its own and a CRM does.
+ * ★ NOTES DO EXIST, AND THEY ARE KEYED ON A CUSTOMER. `/api/identity/:contactId/notes`
+ * stores them (`customer-notes.service.ts`) and mirrors the body to whatever
+ * system the merchant elected in Business Core, reporting that push's real
+ * outcome. A conversation is at most WHERE a note was written, never its
+ * subject - the person outlives the thread.
  *
  * Which is why this answers 501 and NAMES that endpoint rather than 404ing:
- * the next person to want notes here should link a CRM, not build a second
- * note store in the conversation service.
+ * the next person to want notes here should use the customer-keyed ones, not
+ * build a second note store in the conversation service.
  */
 const NOTES_NOT_STORED = {
   error: "notes_not_stored_here",
   message:
-    "This service does not store conversation notes. A note is written to the tenant's CRM by POST /api/crm/conversation/:id/notes and read back as recent_crm_notes.",
+    "Notes are keyed on a CUSTOMER, not a conversation. Use /api/identity/:contactId/notes (GET, POST, PATCH, DELETE), which stores the note and mirrors it to the system elected in Business Core.",
 } as const;
 
 router.get("/:id/notes", async (_req: Request, res: Response) => {
