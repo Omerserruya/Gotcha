@@ -37,7 +37,12 @@ export function missingIds(what: string): string {
     '      endpoints costs six times its test count: the two billing specs are\n' +
     '      ~600 requests for one pass of the pair. `--workers=1` does not help,\n' +
     '      because the budget is a window and not a rate. WAIT IT OUT.\n' +
-    '  2. a 401 — `gotcha_session` rotates on every BFF request, so a reused cookie is spent.\n' +
+    '  2. a 401 — `gotcha_session` ROTATES on every BFF request, so a reused\n' +
+    '      cookie is spent. ★ AND SO IS A COOKIE YOU PROBED TO CHECK: each curl\n' +
+    '      against the BFF rotates it, so verifying the session is what spends\n' +
+    '      it. Three probes, then a 96-test run that failed with rendered pages\n' +
+    '      and no ids — read as a screen defect. Do not test the credential;\n' +
+    '      mint a fresh one and smoke-test ONE spec before spending the budget.\n' +
     '  3. a stale build — `stat -c %y .next/BUILD_ID` and `find src -newer .next/BUILD_ID`.\n' +
     '  3b. a stale PROCESS. Identify it by what is LISTENING — not by name, and\n' +
     "      not by working directory. This machine also runs the platform's own\n" +
