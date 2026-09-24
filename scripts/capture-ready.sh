@@ -16,6 +16,31 @@
 #
 # So this runs BEFORE a capture and refuses, rather than explaining afterwards.
 #
+# ── WHAT THIS DOES NOT CHECK, AND IT IS THE ONE THAT COST A DAY ──────────
+#
+# Four layers are covered: something is listening, the build is not newer than
+# the server, no source is newer than the build, and the gateway reaches the
+# services. **None of them says the services are the RIGHT BUILD.**
+#
+# On 2026-09-24 ten of eleven backend services ran August images while our
+# contracts described that day's API. This script would have printed READY
+# through the whole six hours — correctly, because every layer it can see was
+# fine. The failure was one layer further out again.
+#
+# A `/health` build-sha gate would not have caught it either: `BUILD_SHA` is
+# the literal string `dev` on every dev service, so it matches itself.
+#
+# The instrument for that layer is the platform's own `tools/stale-services.sh`,
+# which compares running containers against the checkout. So the pre-capture
+# sequence is TWO commands, not one:
+#
+#   tools/stale-services.sh        # are the services the code we think?
+#   scripts/capture-ready.sh       # is the frontend, and can it reach them?
+#
+# Stated here rather than left implied, because a gate that prints READY is
+# read as "everything is ready" — and the scope of a green result is exactly
+# the thing nobody re-derives.
+#
 # Usage:  scripts/capture-ready.sh [port]
 set -uo pipefail
 
