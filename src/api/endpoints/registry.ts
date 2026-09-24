@@ -103,6 +103,19 @@ export const permissionEndpoints = {
  * fixed to today and takes no parameters.
  */
 export const analyticsEndpoints = {
+  /**
+   * The language mix of recent conversations — screen 11d.
+   *
+   * `{ windowDays, total, rows: [{ locale, conversations, share }] }`,
+   * grouped on `Conversation.detectedLocale` over the same billable
+   * population the allowance bar counts, and normalised to the language
+   * rather than the tag — *"he-IL and he are one language to a person
+   * choosing which languages to answer in"*.
+   *
+   * `locale: null` is a conversation whose language was never detected. It
+   * is a row like any other and must not be rendered as a language.
+   */
+  languageShare: () => endpoint('/api/analytics/language-share'),
   overview: () => endpoint('/api/analytics/overview'),
   channelPerformance: () => endpoint('/api/analytics/channel-performance'),
   /** Two scalars: `{ waiting, avgWaitTimeMs }`. Not the list. */
@@ -476,6 +489,14 @@ export const toolPermissionEndpoints = {
  * `available: false` rather than to an empty list.
  */
 export const securityEndpoints = {
+  /**
+   * The signed-in person and their workspace — screen 11d.
+   *
+   * Carries `tenantDefaultLocale` (the language GOTCHA itself runs in) and
+   * `user.locale` (this person's own interface language). They are two
+   * different settings and the design is right to separate them.
+   */
+  me: () => endpoint('/api/account'),
   sessions: () => endpoint('/api/account/sessions'),
   revokeSession: (id: string) => endpoint('/api/account/sessions/{id}', { id }),
   /** Revokes every OTHER session, keeping the caller's. */

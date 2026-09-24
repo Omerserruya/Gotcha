@@ -554,6 +554,46 @@ for (const size of SIZES) {
       await shoot(page, `${size.name}-13-provenance`);
     });
 
+    /*
+     * ★ 11d · three language settings, told apart.
+     *
+     * `GET /api/analytics/language-share` groups `Conversation.detectedLocale`
+     * over the same billable population the allowance bar counts. On this
+     * tenant: he 76, en 12, and one conversation whose language was never
+     * worked out.
+     *
+     * The reply rule comes FIRST. A merchant who reads "12 conversations in
+     * English" before it spends the next paragraph worrying about a setting
+     * that does not decide anything.
+     */
+    test('15 · languages, with the reassurance before the numbers', async ({ page }) => {
+      await openWorkspace(page, 'en');
+
+      const panel = page.getByTestId('languages');
+      await expect(panel).toBeVisible();
+
+      await expect(page.getByTestId('languages-replies')).toHaveText(
+        /in the language they wrote in/i,
+      );
+
+      // The mix, or an honest account of why there is none. Both are correct
+      // outcomes; silence is not.
+      const mix = page.getByTestId('languages-mix');
+      const none = page.getByTestId('languages-none');
+      const unavailable = page.getByTestId('languages-unavailable');
+      await expect(mix.or(none).or(unavailable).first()).toBeVisible();
+
+      // What GOTCHA writes in is a different setting from what this person
+      // reads, and both are stated.
+      await expect(page.getByTestId('languages-system')).toBeVisible();
+      await expect(page.getByTestId('languages-mine')).toBeVisible();
+
+      // And the setting that does not exist is named rather than omitted.
+      await expect(page.getByTestId('languages-not-storable')).toHaveText(/not a setting yet/i);
+
+      await shoot(page, `${size.name}-15-languages`);
+    });
+
     test('14 · one reply language, and the screen says so', async ({ page }) => {
       await openWorkspace(page, 'en');
 

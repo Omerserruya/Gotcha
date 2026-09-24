@@ -540,4 +540,26 @@
     padding-block: var(--space-8);
     padding-inline: var(--space-12);
   }
+
+  /* ── Screen 11d · languages ──────────────────────────────────────────── */
+
+  .languages {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .languageRows {
+    list-style: none;
+    margin: var(--space-6) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .languageRow {
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
 }

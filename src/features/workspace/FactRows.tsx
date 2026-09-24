@@ -508,16 +508,38 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
             ★ OUTSIDE THESE HOURS — AND THE DESIGN POINTS AT THE WRONG SCREEN.
             ════════════════════════════════════════════════════════════════
             The design says "What customers are told outside these hours is
-            set in Studio". There IS an agent-level field
-            (`agents.ts:549`), but the line a customer actually receives comes
-            from THIS setting: `ai-bot.service.ts:868` reads
-            `biz.cfg?.outsideHoursHandoffMessage`, and `biz.cfg` is
-            `parseBusinessHours` of the businessHours setting this form writes.
+            set in Studio". There is no second field to go and set: every
+            reference in the platform is to ONE key — `businessHours` in
+            `TenantSetting`. `agents.ts:538` is that key's validator, its PUT
+            and GET are that key's, `workspace.ts:93` serves it, and
+            `ai-bot.service.ts:868` reads
+            `biz.cfg?.outsideHoursHandoffMessage` off `parseBusinessHours` of
+            it. A merchant following the pointer to Studio would change
+            nothing, because there is nothing there to change.
 
-            So the message belongs here, beside the week it depends on. Both
-            fields have always travelled in this payload — the setting is
-            REPLACED, so omitting them would reset them — they were just
-            carried silently. Now they can be set.
+            (I first reported this as two rival fields with one reader. It is
+            one field. The Shopify shape was fresh and I matched on it.)
+
+            ── ★ AND WHY BOTH FIELDS MUST ALWAYS TRAVEL ──
+            The validator defaults them:
+
+              aiOutsideHours:             .optional().default("active")
+              outsideHoursHandoffMessage: .optional().default("")
+
+            and the PUT writes the parsed body wholesale. A Zod `.default()`
+            does not mean "leave it alone" — an OMITTED field is materialised
+            at its default and then WRITTEN. So a client that leaves these out
+            does not preserve them, it overwrites them: the message is cleared
+            and `aiOutsideHours` resets to `active`.
+
+            Which means **a merchant who deliberately silenced the AI overnight
+            has it answering customers at 2am** because some other caller saved
+            a schedule without mentioning it.
+
+            The protection lives entirely here, in the caller. That is a
+            backend defect and it is with Backend; what this screen owes is to
+            keep sending both, which `hoursPatch` does whether or not the form
+            is editing them.
           */}
           <p className={styles.hoursSectionHeading}>{t('hours.outsideHeading')}</p>
           <div className={styles.editFields}>

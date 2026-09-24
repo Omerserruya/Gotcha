@@ -2,6 +2,8 @@ import { getTranslations } from 'next-intl/server';
 
 import { FactRows } from '@/features/workspace/FactRows';
 import { FieldProvenance } from '@/features/workspace/FieldProvenance';
+import { Languages } from '@/features/workspace/Languages';
+import { loadLanguages } from '@/features/workspace/load-languages';
 import { loadWorkspace } from '@/features/workspace/load-workspace';
 import { ProhibitedClaims } from '@/features/workspace/ProhibitedClaims';
 import { VoiceEditor } from '@/features/workspace/VoiceEditor';
@@ -21,7 +23,10 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('workspace');
-  const { workspace, voice, claims } = await loadWorkspace();
+  const [{ workspace, voice, claims }, languages] = await Promise.all([
+    loadWorkspace(),
+    loadLanguages(),
+  ]);
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
@@ -32,6 +37,13 @@ export default async function Page() {
         hold both in their head to make sense of either.
       */}
       {workspace ? <FieldProvenance workspace={workspace} /> : null}
+      {/* Screen 11d. Below the facts, because it explains the Language row. */}
+      <Languages
+        share={languages.share}
+        systemLocale={languages.systemLocale}
+        myLocale={languages.myLocale}
+        storedLanguage={workspace?.languages[0] ?? null}
+      />
       {voice ? <VoiceEditor voice={voice} /> : <p>{t('voice.unavailable')}</p>}
       {claims ? <ProhibitedClaims claims={claims.claims} /> : <p>{t('claims.unavailable')}</p>}
     </SettingsSection>

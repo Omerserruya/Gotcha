@@ -132,5 +132,23 @@
   "intro": {
     "withSite": "Most of this was filled in from {domain} when you signed up. Scanning again only updates fields marked “From website”.",
     "noSite": "Most of this was filled in when you signed up."
+  },
+  "languages": {
+    "heading": "Languages",
+    "unavailable": "We could not read your conversation languages just now.",
+    "none": "No conversations in the last {days} days, so there is nothing to measure yet.",
+    "window": "Over the last {days} days, {total} conversations.",
+    "row": "{language} — {count} conversations",
+    "rowWithShare": "{language} — {count} conversations, {share}%",
+    "undetected": "{count} conversations whose language was not worked out. They are counted in the total.",
+    "thinSample": "Too few conversations to give percentages that would mean anything, so these are counts.",
+    "replies": "GOTCHA replies to each customer in the language they wrote in. That is a fixed rule and nothing on this screen changes it.",
+    "unstored": "{languages} did not come from your stored language. Nothing is wrong — replies still went out in the right language — but it is worth knowing which markets are writing to you.",
+    "systemHeading": "What GOTCHA writes in",
+    "system": "Summaries, briefs and notes to your team are written in {locale}.",
+    "systemUnknown": "We could not read the workspace language.",
+    "mine": "You personally see the interface in {locale}.",
+    "mineUnset": "You have not chosen an interface language, so you see the workspace's.",
+    "notStorable": "Which languages GOTCHA should answer in is not a setting yet — one language is stored, and it is used to tag your knowledge documents rather than to choose a reply."
   }
 }
