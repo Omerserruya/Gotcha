@@ -4,31 +4,36 @@ import { z } from 'zod';
  * Screen 04e — what happened in this customer's context.
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ⚠ THE READ THIS SCREEN NEEDS DOES NOT EXIST YET
+ * THE READ EXISTS NOW, AND IT DECLARES WHAT IT CANNOT ATTRIBUTE
  * ════════════════════════════════════════════════════════════════════════════
- * `GET /api/audit-logs` exists and is well built — cursor-paginated, tie-broken
- * on `id` because a burst of AI calls shares a millisecond, and honest about
- * what it does not know. But `buildWhere` accepts **`actorType`, `action`,
- * `from` and `to` and nothing else.** There is no `targetType` or `targetId`
- * filter, so it cannot be scoped to one customer at all.
+ *   GET /api/audit-logs/customer/:contactId
+ *       ?actorType= &action= &from= &to= &limit= &cursor= &shopifyCustomerId=
  *
- * It is tenant-wide. A customer page cannot use it.
+ * `GET /api/audit-logs` could not be used: its `buildWhere` accepts
+ * `actorType`, `action`, `from` and `to` and nothing else, so it is
+ * tenant-wide and cannot be scoped to a person at all.
  *
- * ── AND THE JOIN MUST NOT BE COMPOSED HERE ──
- * Audit rows reach a customer three ways: `target_type='conversation'` (the
- * rich one), `'customer'` and `'order'`. The conversation link is a SOFT
- * join —
+ * The new read resolves the soft join behind `findSiblingContacts` and the
+ * preserved `metadata.aliases`, so a merged contact resolves to the survivor,
+ * and **it names both origins** — otherwise a customer whose WhatsApp history
+ * was imported has that history missing from the record of what was done for
+ * them. `applyLiveByDefault` has now quietly emptied a customer read in five
+ * separate places, and this is the fifth.
  *
- *     conversations.customer_external_id ↔ contacts.external_id
+ * ── AND `metadata` IS LIFTED, NEVER RETURNED ──
+ * It holds `args`, and `args` hold phone numbers. `succeeded` is derived from
+ * it server-side and the blob stays there.
  *
- * — because `conversations` carries no `contact_id`. Composing that in the
- * BFF would give a merged contact an incomplete log, and **an incomplete log
- * looks like a quiet customer, not a broken join.** The platform already owns
- * `resolvePersonScope` and the sibling walk; this belongs behind them.
+ * ── TWO OF THE THREE TARGET TYPES ARE NOT ATTRIBUTABLE ──
+ * `targetId` on a customer-keyed row is a **Shopify** customer id, not a
+ * Contact id, so the endpoint cannot derive it — the commerce panel holds it
+ * and passes `?shopifyCustomerId=`. Order-keyed rows cannot be attributed at
+ * all: same id space, and no local Order table to enumerate a person's orders
+ * from.
  *
- * So this file describes the row shape — taken from the existing route's own
- * response mapping, so a scoped endpoint can return exactly it — and the
- * screen waits for that endpoint rather than being built on a guess.
+ * So `coverage` declares it rather than the list quietly omitting it, for the
+ * reason this project keeps arriving at: **an empty list cannot say why it is
+ * empty, and "no orders" is the wrong thing for a screen to imply.**
  */
 
 /**
@@ -76,6 +81,17 @@ export const auditEventSchema = z.object({
    * a failed refund; one that renders it as success invents a completed one.
    */
   succeeded: z.boolean().nullable().default(null),
+  /**
+   * The WEAKER signal, from the action name — `adapter.ok.*` / `adapter.err.*`.
+   * Also tri-state: `null` when the name says neither.
+   *
+   * Carried separately so a screen can show it AS a weaker signal. It is not
+   * a fallback for `succeeded`: see `outcomeOf` for why that distinction is
+   * the whole point.
+   */
+  nameImpliesSucceeded: z.boolean().nullable().default(null),
+  /** True when the emitter's verdict and its own name disagree. */
+  outcomeDisagrees: z.boolean().default(false),
 });
 export type AuditEvent = z.infer<typeof auditEventSchema>;
 
@@ -86,41 +102,60 @@ export const auditPageSchema = z.object({
 export type AuditPage = z.infer<typeof auditPageSchema>;
 
 /**
- * Did this action work?
+ * Did this action work? FOUR answers, and `not_recorded` is one of them.
  *
- * ★ TWO SIGNALS THAT CAN DISAGREE, AND THE NAME IS NOT THE VERDICT.
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE FIRST VERSION OF THIS FUNCTION HAD THE DEFECT IT WAS WRITTEN AGAINST
+ * ════════════════════════════════════════════════════════════════════════════
+ * It returned three states and fell back to the `adapter.err.` prefix when
+ * `succeeded` was null — described in its own comment as "the fallback, and
+ * only then, so an unrecorded verdict is still unknown".
  *
- * `adapter.err.shopify.process_refund` carries the outcome in its NAME, while
- * `succeeded` carries it in `metadata.ok`. Both exist on the same rows and
- * nothing guarantees they agree — a row named `adapter.err.*` with
- * `succeeded: true` is possible and would be a platform bug, not a display
- * question.
+ * It was not. **A fallback IS resolution by naming convention**, which is the
+ * thing that comment said not to do, in the same sentence. A row with no
+ * recorded verdict and a name containing `err` came out as `failed` — turning
+ * *"nobody wrote down whether this refund happened"* into *"this refund
+ * failed"*, which is a claim about a customer's money that nobody made.
  *
- * `succeeded` wins where it is present, because it is the emitter's explicit
- * verdict rather than a convention in a string. The prefix is the fallback,
- * and only then, so an unrecorded verdict is still `unknown` rather than
- * being resolved by a naming habit.
+ * Backend caught it. The three signals now travel separately and this
+ * function collapses them **without ever letting the name decide**:
+ *
+ *   outcomeDisagrees    → `contradicts`   the emitter and its own name differ
+ *   succeeded === true  → `worked`
+ *   succeeded === false → `failed`
+ *   succeeded === null  → `not_recorded`  WHATEVER the name says
+ *
+ * `contradicts` is first because it is a defect, not a value: a row that says
+ * a refund both worked and did not is something somebody must see, and
+ * smoothing it into either answer hides a bug in the emitter.
+ *
+ * ── AND THE NAME IS STILL WORTH SHOWING, JUST NOT WORTH OBEYING ──
+ * On a `not_recorded` row, `nameImpliesSucceeded` is the only hint there is.
+ * The screen renders it as a hint — "named as a failure, though the outcome
+ * was never recorded" — which informs without asserting. That is a different
+ * act from resolving the state with it, and it is the one this contract
+ * allows.
  */
-export function outcomeOf(event: AuditEvent): 'worked' | 'failed' | 'unknown' {
+export type ActionOutcome = 'worked' | 'failed' | 'not_recorded' | 'contradicts';
+
+export function outcomeOf(event: AuditEvent): ActionOutcome {
+  if (event.outcomeDisagrees) return 'contradicts';
   if (event.succeeded === true) return 'worked';
   if (event.succeeded === false) return 'failed';
-  if (event.action.startsWith('adapter.err.')) return 'failed';
-  if (event.action.startsWith('adapter.ok.')) return 'worked';
-  return 'unknown';
+  return 'not_recorded';
 }
 
 /**
- * Do the two signals contradict each other?
+ * The hint on a row whose outcome was never recorded, or null.
  *
- * Worth surfacing rather than silently preferring one: it means the emitter
- * and its own name disagree about whether a customer's refund happened, which
- * is a defect somebody should see rather than a rendering preference.
+ * Returns the NAME's implication only where there is no verdict to state —
+ * so a screen can say what the action is called without claiming what it did.
  */
-export function outcomeIsContradictory(event: AuditEvent): boolean {
-  if (event.succeeded === null) return false;
-  if (event.action.startsWith('adapter.err.')) return event.succeeded === true;
-  if (event.action.startsWith('adapter.ok.')) return event.succeeded === false;
-  return false;
+export function unrecordedHint(event: AuditEvent): 'named_ok' | 'named_err' | null {
+  if (event.succeeded !== null) return null;
+  if (event.nameImpliesSucceeded === true) return 'named_ok';
+  if (event.nameImpliesSucceeded === false) return 'named_err';
+  return null;
 }
 
 /** The tool an adapter row acted through, or null for anything else. */
@@ -128,3 +163,69 @@ export function toolOf(event: AuditEvent): string | null {
   const m = /^adapter\.(?:ok|err)\.(.+)$/.exec(event.action);
   return m?.[1] ?? null;
 }
+
+/* ── What the log can and cannot account for ─────────────────────────────── */
+
+/**
+ * ★★ DECLARED, NOT INFERRED — the same shape as the timeline's `coverage`.
+ *
+ * `attributable: false` on orders is not a failure and not an empty result:
+ * it is the endpoint saying it has no way to find those rows for this person.
+ * A screen that showed only what it received would imply the customer has no
+ * order history, which is a different and wrong claim.
+ */
+export const coverageEntrySchema = z.object({
+  attributable: z.boolean().default(false),
+  /** e.g. `shopifyCustomerId` — what would make this type attributable. */
+  requires: z.string().nullish().default(null),
+  reason: z.string().nullish().default(null),
+  detail: z.string().nullish().default(null),
+});
+export type AuditCoverageEntry = z.infer<typeof coverageEntrySchema>;
+
+export const auditCoverageSchema = z.record(z.string(), coverageEntrySchema).default({});
+export type AuditCoverage = z.infer<typeof auditCoverageSchema>;
+
+/**
+ * Everything the log cannot account for, in one list.
+ *
+ * Both kinds together — not attributable at all, and attributable only with
+ * something we did not pass — because to a merchant they are the same fact:
+ * a reason not to read this as the whole record.
+ */
+export function coverageGaps(
+  coverage: AuditCoverage,
+): readonly { readonly target: string; readonly detail: string }[] {
+  return Object.entries(coverage)
+    .filter(([, e]) => !e.attributable || e.requires)
+    .map(([target, e]) => ({ target, detail: e.detail ?? '' }))
+    .filter((g) => g.detail !== '');
+}
+
+/**
+ * How wide the resolution went, and whether it was bounded.
+ *
+ * `conversationScanTruncated` is the 500-conversation `IN` cap — the same
+ * distinction as the timeline's: a bounded read that discloses its bound is
+ * fine, one that quietly drops the oldest is the defect.
+ */
+export const auditScopeSchema = z
+  .object({
+    identities: z.number().default(0),
+    conversations: z.number().default(0),
+    conversationScanTruncated: z.boolean().default(false),
+  })
+  .default({ identities: 0, conversations: 0, conversationScanTruncated: false });
+export type AuditScope = z.infer<typeof auditScopeSchema>;
+
+export const customerAuditSchema = z.object({
+  contact: z
+    .object({ id: z.string(), displayName: z.string().nullable().default(null) })
+    .nullish()
+    .default(null),
+  data: z.array(auditEventSchema).default([]),
+  nextCursor: z.string().nullable().default(null),
+  coverage: auditCoverageSchema,
+  scope: auditScopeSchema,
+});
+export type CustomerAudit = z.infer<typeof customerAuditSchema>;

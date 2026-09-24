@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   auditEventSchema,
-  outcomeIsContradictory,
+  coverageGaps,
+  customerAuditSchema,
   outcomeOf,
   toolOf,
+  unrecordedHint,
   type AuditEvent,
 } from './customer-actions';
 
@@ -17,60 +19,116 @@ const event = (over: Partial<AuditEvent> = {}): AuditEvent =>
     ...over,
   });
 
-describe('★★ three outcomes, because the platform records three', () => {
-  it('never resolves an unrecorded verdict into a failure', () => {
+describe('★★ four outcomes, and the NAME never decides', () => {
+  it('★★ an unrecorded verdict stays unrecorded, whatever the action is called', async () => {
     /*
-     * The route's own comment: "null when the emitter recorded no verdict,
-     * which is different from false: 'we did not record whether this worked'
-     * is not 'it failed'."
+     * THE DEFECT THIS FILE'S FIRST VERSION SHIPPED.
      *
-     * Rendered as failed it invents a failed refund; rendered as succeeded it
-     * invents a completed one. Both are claims about a customer's money that
-     * nobody made.
+     * `outcomeOf` used to fall back to the `adapter.err.` prefix when
+     * `succeeded` was null — and described that in its own comment as
+     * preserving "unknown". It did not. **A fallback IS resolution by naming
+     * convention**, which the same sentence said not to do.
+     *
+     * So a row with no recorded verdict and `err` in its name came out as
+     * `failed`: "nobody wrote down whether this refund happened" rendered as
+     * "this refund failed". A claim about a customer's money that nobody made.
      */
-    expect(outcomeOf(event({ succeeded: null }))).toBe('unknown');
+    expect(outcomeOf(event({ succeeded: null, nameImpliesSucceeded: false }))).toBe('not_recorded');
+    expect(outcomeOf(event({ succeeded: null, nameImpliesSucceeded: true }))).toBe('not_recorded');
+    expect(outcomeOf(event({ succeeded: null, nameImpliesSucceeded: null }))).toBe('not_recorded');
+  });
+
+  it('reports the verdict where there is one', () => {
     expect(outcomeOf(event({ succeeded: true }))).toBe('worked');
     expect(outcomeOf(event({ succeeded: false }))).toBe('failed');
   });
 
-  it('falls back to the name prefix ONLY when there is no verdict', () => {
-    // `adapter.err.*` and `adapter.ok.*` carry the outcome in the string.
-    // Useful, and a convention rather than a record — so it is the fallback.
-    expect(outcomeOf(event({ action: 'adapter.err.shopify.process_refund' }))).toBe('failed');
-    expect(outcomeOf(event({ action: 'adapter.ok.shopify.get_order' }))).toBe('worked');
-    expect(outcomeOf(event({ action: 'crm.link.linked' }))).toBe('unknown');
-  });
-
-  it('★ prefers the recorded verdict over the name, and says when they disagree', () => {
+  it('★★ a contradiction is its own state, not a value to smooth', () => {
     /*
-     * A row named `adapter.err.*` whose metadata says `ok: true` means the
-     * emitter and its own name disagree about whether a customer's refund
-     * happened. That is a defect somebody should see, not a rendering
-     * preference to resolve quietly.
+     * A row that says a refund both worked and did not is a defect in the
+     * emitter. Rendered as either answer it disappears; rendered as its own
+     * state somebody can see it.
      */
-    const contradictory = event({
+    const row = event({
       action: 'adapter.err.shopify.process_refund',
       succeeded: true,
+      nameImpliesSucceeded: false,
+      outcomeDisagrees: true,
     });
-    expect(outcomeOf(contradictory)).toBe('worked');
-    expect(outcomeIsContradictory(contradictory)).toBe(true);
+    expect(outcomeOf(row)).toBe('contradicts');
+  });
 
-    // And agreement is not a contradiction.
-    expect(
-      outcomeIsContradictory(event({ action: 'adapter.err.shopify.x', succeeded: false })),
-    ).toBe(false);
-    // Nor is an unrecorded verdict: nothing to disagree with.
-    expect(
-      outcomeIsContradictory(event({ action: 'adapter.err.shopify.x', succeeded: null })),
-    ).toBe(false);
+  it('★ the name is shown as a HINT, and only where there is no verdict', () => {
+    /*
+     * On an unrecorded row the name is the only signal there is, and saying
+     * "named as a failure, though the outcome was never recorded" informs
+     * without asserting. That is a different act from resolving the state
+     * with it.
+     */
+    expect(unrecordedHint(event({ succeeded: null, nameImpliesSucceeded: false }))).toBe(
+      'named_err',
+    );
+    expect(unrecordedHint(event({ succeeded: null, nameImpliesSucceeded: true }))).toBe('named_ok');
+    // Nothing to hint at when the outcome IS recorded — the verdict speaks.
+    expect(unrecordedHint(event({ succeeded: false, nameImpliesSucceeded: false }))).toBeNull();
+    expect(unrecordedHint(event({ succeeded: null, nameImpliesSucceeded: null }))).toBeNull();
   });
 
   it('names the tool an adapter row acted through', () => {
     expect(toolOf(event({ action: 'adapter.ok.shopify.get_customer_orders' }))).toBe(
       'shopify.get_customer_orders',
     );
-    // And nothing for a row that is not an adapter call.
     expect(toolOf(event({ action: 'ai.responded' }))).toBeNull();
+  });
+});
+
+describe('★★ coverage declares what the log cannot account for', () => {
+  it('lists orders as a gap, and customer rows as a gap until the id is passed', () => {
+    /*
+     * `targetId` on a customer-keyed row is a SHOPIFY customer id, not a
+     * Contact id, so the endpoint cannot derive it. Order rows cannot be
+     * attributed at all — same id space, no local Order table.
+     *
+     * An empty list cannot say why it is empty, and "no orders" is the wrong
+     * thing for a screen to imply about somebody who may have many.
+     */
+    const parsed = customerAuditSchema.parse({
+      data: [],
+      coverage: {
+        conversation: { attributable: true },
+        customer: {
+          attributable: true,
+          requires: 'shopifyCustomerId',
+          detail: 'Pass ?shopifyCustomerId= to include them.',
+        },
+        order: {
+          attributable: false,
+          reason: 'no_local_order_table',
+          detail: "There is no local order table to enumerate this person's orders from.",
+        },
+      },
+    });
+    const gaps = coverageGaps(parsed.coverage);
+    expect(gaps.map((g) => g.target).sort()).toEqual(['customer', 'order']);
+    // Both kinds together: to a merchant they are the same fact.
+    expect(gaps.find((g) => g.target === 'customer')?.detail).toMatch(/shopifyCustomerId/);
+  });
+
+  it('a fully attributable source is not a gap', () => {
+    const parsed = customerAuditSchema.parse({
+      coverage: { conversation: { attributable: true } },
+    });
+    expect(coverageGaps(parsed.coverage)).toHaveLength(0);
+  });
+
+  it('★ discloses the conversation-scan bound', () => {
+    // A bounded read that says so is fine; one that quietly drops the oldest
+    // conversations is the defect.
+    const parsed = customerAuditSchema.parse({
+      scope: { identities: 3, conversations: 500, conversationScanTruncated: true },
+    });
+    expect(parsed.scope.conversationScanTruncated).toBe(true);
+    expect(parsed.scope.identities).toBe(3);
   });
 });
 
