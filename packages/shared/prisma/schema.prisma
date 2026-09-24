@@ -202,6 +202,7 @@ model Tenant {
   knowledgeCandidates       KnowledgeCandidate[]
 
   @@map("tenants")
+  customerNotes CustomerNote[]
 }
 
 /// Admin-configured runtime settings that must SURVIVE a restart.
@@ -7007,6 +7008,128 @@ model CustomerHistoricalMemory {
   @@index([tenantId, updatedAt])
   @@index([importId])
   @@map("customer_historical_memory")
+}
+
+/// Who may read a note. Two members, because a third would be a permission
+/// system and this is a flag.
+enum CustomerNoteVisibility {
+  /// Everyone in the tenant who can see the customer.
+  TEAM
+  /// The author only. Still stored, still auditable, never shown to others and
+  /// NEVER pushed to an external system - a private note in the merchant's CRM
+  /// is not private.
+  PRIVATE
+}
+
+/// A note the AI proposed is not a note until a human agrees with it.
+enum CustomerNoteStatus {
+  PUBLISHED
+  /// Written by the AI, awaiting a person. Must not be counted or shown as a
+  /// team note, for the same reason an unapproved knowledge candidate is not
+  /// knowledge.
+  AI_SUGGESTED
+  /// A person declined the suggestion. Kept rather than deleted so the AI is
+  /// not re-proposing the same thing forever.
+  REJECTED
+}
+
+/// Whether the note reached the system the merchant actually works in.
+///
+/// Four states because the difference between them is the whole point: a note
+/// that never had a target, one on its way, one that arrived, and one that
+/// failed. Collapsing the last two is how "saved" starts meaning nothing.
+enum CustomerNoteSyncStatus {
+  /// No external system is elected for this part of the business, so there is
+  /// nothing to sync to. Not a failure.
+  NOT_APPLICABLE
+  PENDING
+  SYNCED
+  FAILED
+}
+
+/// A note a person (or the AI) wrote about a CUSTOMER.
+///
+/// ════════════════════════════════════════════════════════════════════════════
+/// WHY THIS EXISTS AT ALL, GIVEN NOTES ALREADY GO TO THE CRM
+///
+/// `POST /api/crm/conversation/:id/notes` writes to the merchant's CRM and
+/// works. It cannot hold what this design asks for: a visibility flag, an edit
+/// history, @mentions of teammates, or a note the AI proposed and nobody has
+/// accepted yet. Those are GOTCHA concepts and a CRM note body has nowhere to
+/// put them.
+///
+/// So this row is the record, and the elected system gets a COPY of the body.
+/// Stated because the two readings of "notes live either in GOTCHA or in the
+/// elected system" lead to different schemas:
+///
+///   Not routing. MIRRORING, with the outcome reported.
+///
+/// A note is always saved here, and when a system is elected for the customer
+/// part of the business it is also pushed there. Nothing is silent in either
+/// direction: `externalSyncStatus` says whether the push happened, and FAILED
+/// is a state a screen must render rather than a detail in a log. Routing to
+/// the CRM *instead* would have meant dropping visibility, history, mentions
+/// and suggestions on the floor whenever a CRM happened to be connected.
+///
+/// ── Keyed on a CUSTOMER, not a conversation ──
+///
+/// The stub this replaces was keyed on `conversationId`, which is the wrong
+/// subject: a note is about a person, and the person outlives the thread.
+/// `conversationId` survives only as WHERE it was written, and is nullable
+/// because a note written from a customer page has no conversation.
+///
+/// `personId` is carried beside `contactId` so a note survives a contact merge,
+/// the same reason the brief resolves on it.
+/// ════════════════════════════════════════════════════════════════════════════
+model CustomerNote {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  /// The contact the note is about.
+  contactId String  @map("contact_id")
+  /// Cross-channel identity, so a merge does not orphan the note.
+  personId  String? @map("person_id")
+  /// WHERE it was written, when it was written in a conversation. Not the subject.
+  conversationId String? @map("conversation_id")
+
+  body       String
+  visibility CustomerNoteVisibility @default(TEAM)
+  status     CustomerNoteStatus     @default(PUBLISHED)
+
+  /// Null when the AI wrote it. A user row can be deleted, so the display name
+  /// is denormalised: an unattributable note is worth less than no note.
+  authorUserId String? @map("author_user_id")
+  authorName   String  @map("author_name")
+
+  /// User ids mentioned with @. Ids, not names, so a rename does not break them.
+  mentions String[] @default([]) @map("mentions")
+
+  /// Append-only [{ at, byUserId, byName, previousBody }]. A note that can be
+  /// corrected silently is a record of whatever it says now.
+  editHistory Json @default("[]") @map("edit_history")
+
+  /// The elected system this was mirrored to, and what came of it.
+  externalSystem     String?                @map("external_system")
+  externalNoteId     String?                @map("external_note_id")
+  externalSyncStatus CustomerNoteSyncStatus @default(NOT_APPLICABLE) @map("external_sync_status")
+  /// The provider's own words when it refused. Shown, not just logged.
+  externalSyncError  String?                @map("external_sync_error")
+  externalSyncedAt   DateTime?              @map("external_synced_at")
+
+  /// Soft delete: the history of a customer should not develop holes, and a
+  /// deleted note is still evidence of what somebody believed.
+  deletedAt DateTime? @map("deleted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, contactId, createdAt])
+  @@index([tenantId, personId])
+  @@index([tenantId, status])
+  @@index([tenantId, externalSyncStatus])
+  @@map("customer_notes")
 }
 
 /// What a mined piece of knowledge is BEFORE a human agrees with it.
