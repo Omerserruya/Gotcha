@@ -478,6 +478,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
       ],
     },
   },
+  conversationId: 'fixture-conv-1',
   noConversations: false,
 };
 

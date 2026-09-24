@@ -209,3 +209,53 @@ export function anythingPossible(order: OrderCard): boolean {
   const e = order.eligibility;
   return e.cancellable || e.refundable || e.returnable || e.exchangeable;
 }
+
+/* ── Acting on an order ──────────────────────────────────────────────────── */
+
+/**
+ * The four order actions, and the tools they are.
+ *
+ * `TOOL_FOR` in `commerce-actions.service.ts`. There is no address change —
+ * cancel, refund, return and exchange is the whole set, so 04d's *"change
+ * address"* has nothing behind it and is not drawn.
+ */
+export const ORDER_ACTIONS = ['cancel', 'refund', 'create_return', 'exchange_item'] as const;
+export type OrderAction = (typeof ORDER_ACTIONS)[number];
+
+/**
+ * ★★ FIVE OUTCOMES, AND ONLY ONE OF THEM MEANS IT HAPPENED.
+ *
+ * `pending_approval` is not a failure and not a success: the action is in the
+ * queue screen 03 renders, holding until a person decides. Rendered as
+ * either of the others it would be a lie in a different direction each time.
+ *
+ * `executed` carries the VERIFIED order card — the service runs a
+ * post-action verify and returns what the provider actually reports, and its
+ * header says *"a button click never mutates order state in the UI; the
+ * caller updates only from the verified result returned here."* So the new
+ * state is read from this, never predicted from the action that was taken.
+ */
+export const orderActionResultSchema = z.object({
+  state: z.enum(['pending_approval', 'denied', 'unavailable', 'executed', 'executed_customer']),
+  approvalRequestId: z.string().nullish().default(null),
+  reason: z.string().nullish().default(null),
+  /** Present on `executed`. The provider's verified state, not our guess. */
+  order: orderCardSchema.nullish().default(null),
+  note: z.string().nullish().default(null),
+});
+export type OrderActionResult = z.infer<typeof orderActionResultSchema>;
+
+/** Did anything actually change at the provider? */
+export function didExecute(result: OrderActionResult | null): boolean {
+  return result?.state === 'executed';
+}
+
+/**
+ * Is this outcome still in flight?
+ *
+ * An approval-gated action has neither happened nor failed, and a screen that
+ * resolves it either way is wrong about somebody's money.
+ */
+export function isWaitingOnAPerson(result: OrderActionResult | null): boolean {
+  return result?.state === 'pending_approval';
+}

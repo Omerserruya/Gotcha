@@ -555,11 +555,38 @@ for (const size of SIZES) {
      * cannot reach a real contact should say so, not go red.
      */
     test('04b · the live timeline read, photographed safely', async ({ page }) => {
-      const realId = process.env.E2E_REAL_CONTACT_ID;
+      /*
+       * ★ THE ID IS DISCOVERED, NOT SUPPLIED.
+       *
+       * Asking a human to paste a contact id made this test skip forever:
+       * nobody has one to hand, and the gap stayed documented rather than
+       * closed. The list endpoint has them, and going through the BFF gets
+       * one without rendering a real person anywhere.
+       *
+       * No PII reaches the evidence: only an opaque id is read, it is used
+       * to navigate, and the page it opens substitutes the fixture before
+       * rendering. The env var still wins when set, for pinning a specific
+       * contact.
+       *
+       * ⚠ This SPENDS a cookie rotation — `gotcha_session` rotates on every
+       * BFF request. Inside the browser context that is handled by the
+       * cookie jar, unlike a curl from outside, which is what made probing
+       * the session so expensive before.
+       */
+      let realId = process.env.E2E_REAL_CONTACT_ID ?? '';
+      if (!realId) {
+        const probe = await page.request.post('/api/bff/api/contacts/segment', { data: {} });
+        if (probe.ok()) {
+          const body = (await probe.json()) as { data?: { id?: string }[] } | { id?: string }[];
+          const rows = Array.isArray(body) ? body : (body.data ?? []);
+          realId = rows.find((r) => typeof r?.id === 'string')?.id ?? '';
+        }
+      }
+
       test.skip(
         !realId,
-        'E2E_REAL_CONTACT_ID is not set, so 04b is evidenced only against the fixture — ' +
-          'the live timeline read is UNEXERCISED. Set it to a contact id from this tenant.',
+        'No real contact id was discoverable and E2E_REAL_CONTACT_ID is unset, so 04b is ' +
+          'evidenced only against the fixture and the live timeline read is UNEXERCISED.',
       );
 
       await page.goto(`/en/customers/${realId}`);
@@ -593,6 +620,67 @@ for (const size of SIZES) {
       ).toContainText('Avery Stone');
 
       await shoot(page, `${size.name}-04b-live-read`);
+    });
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * 04d · HER ORDERS
+     * ══════════════════════════════════════════════════════════════════════
+     * Only ONE of the eight states is reachable here: Shopify is in ERROR on
+     * this deployment, so the live answer is `connection_unhealthy` — and
+     * that is exactly what a merchant on this tenant sees, which makes it the
+     * state most worth photographing.
+     *
+     * The other seven and every order card are unit-only and on the list.
+     */
+    test('04d · orders, in the one state this tenant can show', async ({ page }) => {
+      await openCustomer(page, 'en');
+
+      const orders = page.getByTestId('customer-orders');
+      await expect(orders, missingIds('the 04d orders block')).toBeVisible();
+
+      /*
+       * ★ WHICHEVER STATE IT IS, IT MUST BE NAMED — and never collapsed into
+       * a bare error. `CommerceContextResponse`'s own comment asks the
+       * frontend to render an explicit UI for each, and the whole point is
+       * that five of them carry different repairs.
+       *
+       * Asserted by finding the state block rather than by naming one, so
+       * this passes on the fixture's `ok` and on the live
+       * `connection_unhealthy` without pretending to know which ran.
+       */
+      const named = await orders.locator('[data-state]').count();
+      const cards = await page.getByTestId('order-list').count();
+      expect(
+        named + cards,
+        'the orders block rendered neither a named state nor a list — a bare error, which is the ' +
+          'one thing the eight-state union exists to prevent',
+      ).toBeGreaterThan(0);
+
+      if (cards > 0) {
+        /*
+         * ★ THE CHIPS ARE THE PLATFORM'S, with the platform's tone. A tone
+         * we re-derived would make this screen disagree with the Inbox about
+         * the same order.
+         */
+        const chip = orders.locator('[data-tone]').first();
+        await expect(chip).toHaveText(/\S/);
+
+        // Exactly one order expanded: three expanded is none expanded.
+        expect(await page.locator('[data-expanded="yes"]').count()).toBeLessThanOrEqual(1);
+      }
+
+      /*
+       * ★★ AND NOTHING ON THIS PAGE IS PRESSED.
+       *
+       * The order actions cancel, refund and return real orders in a live
+       * store. They are built and they are never exercised by a capture —
+       * their outcomes are unit-tested, including the one that matters most:
+       * an unsettled result must not invite a retry.
+       */
+      await expect(orders).not.toHaveText(/\{[a-zA-Z]+\}/);
+
+      await shoot(page, `${size.name}-04d-orders`);
     });
   });
 }

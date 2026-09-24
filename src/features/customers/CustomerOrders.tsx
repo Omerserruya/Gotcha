@@ -10,6 +10,7 @@ import {
   type StatusChip,
 } from '@/api/contracts/customer-orders';
 
+import { OrderActions } from './OrderActions';
 import styles from './Customers.module.css';
 
 /**
@@ -55,8 +56,15 @@ import styles from './Customers.module.css';
  */
 export async function CustomerOrders({
   orders,
+  conversationId,
 }: {
   readonly orders: CommerceContextResponse | null;
+  /**
+   * Where the actions post. `null` when this person has no conversation to
+   * act through — and then the controls are absent rather than broken,
+   * because the endpoint has nowhere to route.
+   */
+  readonly conversationId: string | null;
 }) {
   const t = await getTranslations('customers');
   const format = await getFormatter();
@@ -223,14 +231,21 @@ export async function CustomerOrders({
                 ineligible order is ineligible, rendered rather than
                 paraphrased.
               */}
-              {anythingPossible(order) ? (
+              {conversationId ? (
+                <OrderActions order={order} conversationId={conversationId} />
+              ) : anythingPossible(order) ? (
+                /*
+                 * No conversation to act through, so the actions have nowhere
+                 * to route. What COULD be done is still said — it is a fact
+                 * about the order — and nothing is drawn that would fail.
+                 */
                 <p className={styles.orderCan} data-testid={`order-possible-${order.orderId}`}>
                   {t('orders.possible', {
                     actions: [
                       order.eligibility.cancellable ? t('orders.action.cancel') : null,
                       order.eligibility.refundable ? t('orders.action.refund') : null,
-                      order.eligibility.returnable ? t('orders.action.return') : null,
-                      order.eligibility.exchangeable ? t('orders.action.exchange') : null,
+                      order.eligibility.returnable ? t('orders.action.create_return') : null,
+                      order.eligibility.exchangeable ? t('orders.action.exchange_item') : null,
                     ]
                       .filter(Boolean)
                       .join(', '),
@@ -251,9 +266,24 @@ export async function CustomerOrders({
         reads "a refund is possible" and finds no button is owed the reason —
         and the reason is ours, not theirs.
       */}
-      {list.length > 0 ? (
-        <p className={styles.timelineLimit} data-testid="orders-no-actions">
-          {t('orders.noActionsHere')}
+      {/*
+        ★ THE ACTIONS ARE HERE AFTER ALL, and the reason is a sharpened rule
+        rather than a reversal.
+
+        Both `createNote` and this write are conversation-keyed. The
+        difference is what the conversation BECOMES in the record:
+        `createNote` puts it in `source_interaction_id`, the attribution, in
+        the merchant's own CRM where it cannot be corrected. This one writes
+        `targetType: "customer" | "order"` and carries the conversation in
+        free-form metadata as context.
+
+        **A conversation key is a problem when it is the record's identity,
+        and acceptable when it is context on a record already keyed to the
+        person.** Notes fail that test; these pass it.
+      */}
+      {list.length > 0 && !conversationId ? (
+        <p className={styles.timelineLimit} data-testid="orders-no-conversation">
+          {t('orders.noConversationToActThrough')}
         </p>
       ) : null}
     </section>

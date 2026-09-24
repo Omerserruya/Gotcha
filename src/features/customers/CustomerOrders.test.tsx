@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { createFormatter, createTranslator } from 'next-intl';
+import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -25,8 +25,24 @@ vi.mock('next-intl/server', () => ({
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
-const show = async (orders: CommerceContextResponse | null) =>
-  render(await CustomerOrders({ orders }));
+/*
+ * `conversationId` defaults to null here, so the order-card tests assert the
+ * SAID-not-offered branch. The action controls have their own file — they
+ * are a client component and belong with the outcomes they render.
+ */
+const show = async (orders: CommerceContextResponse | null, conversationId: string | null = null) =>
+  render(
+    /*
+     * Wrapped, because `OrderActions` is a CLIENT component inside this
+     * server tree and `useTranslations` needs a context the server mock does
+     * not supply. Fourth time this session — the tell is always the same
+     * sentence about `NextIntlClientProvider`, and it names the component
+     * rather than the harness.
+     */
+    <NextIntlClientProvider locale="en" messages={{ customers: messages }}>
+      {await CustomerOrders({ orders, conversationId })}
+    </NextIntlClientProvider>,
+  );
 
 const order = (over: Record<string, unknown> = {}) => ({
   orderId: 'o1',
@@ -196,18 +212,13 @@ describe('★ the order cards', () => {
     expect(screen.getByTestId('order-why-not-o1')).toHaveTextContent(/30 days ago/);
   });
 });
-
-describe('★★ what could be done is SAID, and never offered', () => {
-  it('lists the possible actions without drawing a single control', async () => {
+describe('★ with no conversation to act through, what could be done is still SAID', () => {
+  it('names the possible actions and draws no control', async () => {
     /*
-     * `POST /api/commerce-context/:conversationId/actions` is the best-guarded
-     * write in the platform — and it is conversation-keyed.
-     * `commerce-actions.service.ts:190` writes the audit with
-     * `metadata: { conversationId }`, so an action taken here would be
-     * recorded against whichever conversation this page entered through.
-     *
-     * A wrong audit trail, on the actions whose whole purpose is leaving a
-     * right one.
+     * The actions post to `/commerce-context/:conversationId/actions`. A
+     * person with no conversation has nowhere for one to route, so the
+     * controls are absent rather than broken — and what could be done is
+     * still said, because it is a fact about the order.
      */
     const { container } = await show(
       ok([
@@ -221,22 +232,42 @@ describe('★★ what could be done is SAID, and never offered', () => {
           },
         }),
       ]),
+      null,
     );
-    const possible = screen.getByTestId('order-possible-o1');
-    expect(possible).toHaveTextContent(/refund it/i);
-    expect(possible).toHaveTextContent(/open a return/i);
-
-    // Nothing to press, anywhere.
+    expect(screen.getByTestId('order-possible-o1')).toHaveTextContent(/Refund/i);
     expect(container.querySelector('button')).toBeNull();
-    expect(container.querySelector('form')).toBeNull();
+    expect(screen.getByTestId('orders-no-conversation')).toHaveTextContent(
+      /no conversation with this person/i,
+    );
   });
 
-  it('★ explains WHY there is nothing to press', async () => {
-    // A merchant who reads "a refund is possible" and finds no button is owed
-    // the reason, and the reason is ours rather than the platform's.
-    await show(ok([order()]));
-    const note = screen.getByTestId('orders-no-actions');
-    expect(note).toHaveTextContent(/done in the conversation/i);
-    expect(note).toHaveTextContent(/wrong conversation/i);
+  it('★ offers the controls once there IS a conversation', async () => {
+    /*
+     * The ruling sharpened rather than reversed: both this write and
+     * `createNote` are conversation-keyed, but `writeAudit` targets
+     * `customer`/`order` and carries the conversation as metadata CONTEXT,
+     * while `createNote` uses it as the record's identity in the merchant's
+     * own CRM.
+     *
+     * A conversation key is a problem when it is the record's identity and
+     * acceptable when it is context on a record already keyed to the person.
+     */
+    await show(
+      ok([
+        order({
+          eligibility: {
+            cancellable: false,
+            refundable: true,
+            returnable: false,
+            exchangeable: false,
+            reasonIfNot: null,
+          },
+        }),
+      ]),
+      'conv-1',
+    );
+    expect(screen.getByTestId('order-action-o1-refund')).toBeInTheDocument();
+    // And the said-instead sentence is gone, because it is no longer true.
+    expect(screen.queryByTestId('orders-no-conversation')).toBeNull();
   });
 });

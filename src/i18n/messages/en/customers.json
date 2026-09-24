@@ -100,11 +100,17 @@
     "refundableMax": "Up to {amount} can still be refunded.",
     "possible": "On this order you could: {actions}.",
     "action": {
-      "cancel": "cancel it",
-      "refund": "refund it",
-      "return": "open a return",
-      "exchange": "exchange an item"
+      "cancel": "Cancel order",
+      "create_return": "Open a return",
+      "exchange_item": "Exchange an item",
+      "refund": "Refund"
     },
-    "noActionsHere": "These are done in the conversation with this customer, not here — an action taken from this page would be filed against the wrong conversation in your records."
+    "running": "Working…",
+    "pendingApproval": "This is waiting for someone to approve it. It hasn't happened yet, and it hasn't failed — it's in your Approvals queue until a person decides.",
+    "denied": "This wasn't allowed: {reason}. Nothing was changed.",
+    "actionUnavailable": "This couldn't be done just now: {reason}. Nothing was changed.",
+    "noReason": "no reason given",
+    "outcomeUnknown": "We don't know whether that went through. Please do NOT try it again — check the order in your store first, and contact us if it looks wrong.",
+    "noConversationToActThrough": "These orders can't be acted on from here — there's no conversation with this person to carry the action."
   }
 }

@@ -392,4 +392,38 @@
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
+
+  .orderActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: center;
+  }
+
+  .orderAction:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /*
+    Waiting on a person is NOT an error and must not be styled as one — the
+    reader has to finish this sentence rather than dismiss it and press again.
+  */
+  .orderWaiting {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  /* An unknown outcome is the loudest thing on the card, deliberately. */
+  .orderUnknown {
+    flex-basis: 100%;
+    margin: 0;
+    padding: var(--space-8);
+    border: 1px solid var(--intent-urgent-edge);
+    background: var(--intent-urgent-surface);
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
 }

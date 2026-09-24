@@ -1,0 +1,172 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+import { useMemo, useState, useTransition } from 'react';
+
+import {
+  didExecute,
+  isWaitingOnAPerson,
+  type OrderAction,
+  type OrderActionResult,
+  type OrderCard,
+  type StatusChip,
+} from '@/api/contracts/customer-orders';
+
+import { runOrderAction } from './order-actions';
+import styles from './Customers.module.css';
+
+/**
+ * Screen 04d's controls — and the state after they run.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ NOTHING HERE IS OPTIMISTIC, AND THE CHIPS PROVE IT
+ * ════════════════════════════════════════════════════════════════════════════
+ * `commerce-actions.service.ts` runs a post-action verify and returns the
+ * provider's own order card. Its header: *"a button click never mutates
+ * order state in the UI; the caller updates only from the verified result
+ * returned here."*
+ *
+ * So after a successful action this renders the chips from
+ * `result.order` — the provider's verified state — and never from the action
+ * that was requested. Pressing Refund does not make a card say "Refunded";
+ * the provider saying so makes it say so.
+ *
+ * ── FIVE OUTCOMES, AND ONLY ONE MEANS IT HAPPENED ──
+ * `pending_approval` is the one a screen gets wrong. It is neither a success
+ * nor a failure: the action is sitting in the queue screen 03 renders,
+ * holding until a person decides. Shown as done, somebody stops watching for
+ * it; shown as failed, somebody does it again.
+ *
+ * ── AND A THROWN ERROR IS NOT A FAILURE ──
+ * `null` back from the action means we do not know what happened. On a
+ * refund that is the 17d distinction exactly: never invite a retry on an
+ * unknown outcome, because money taken twice is not recoverable by pressing
+ * something again.
+ */
+export function OrderActions({
+  order,
+  conversationId,
+}: {
+  readonly order: OrderCard;
+  readonly conversationId: string;
+}) {
+  const t = useTranslations('customers');
+  const [result, setResult] = useState<OrderActionResult | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  /*
+   * One key per (order, action set). The service uses it to make a
+   * double-click one charge — the same mechanism as 17d's `intentKey`, and
+   * the same trap: minted per click it would be a new operation every time,
+   * with identical code and identical appearance.
+   */
+  const idempotencyKey = useMemo(
+    () => `order:${order.orderId}:${Math.floor(Date.now() / 60_000)}`,
+    [order.orderId],
+  );
+
+  const possible: readonly OrderAction[] = [
+    order.eligibility.cancellable ? 'cancel' : null,
+    order.eligibility.refundable ? 'refund' : null,
+    order.eligibility.returnable ? 'create_return' : null,
+    order.eligibility.exchangeable ? 'exchange_item' : null,
+  ].filter((a): a is OrderAction => a !== null);
+
+  if (possible.length === 0) {
+    return order.eligibility.reasonIfNot ? (
+      <p className={styles.orderCan} data-testid={`order-why-not-${order.orderId}`}>
+        {order.eligibility.reasonIfNot}
+      </p>
+    ) : null;
+  }
+
+  function run(action: OrderAction) {
+    setAttempted(true);
+    setResult(null);
+    startTransition(async () => {
+      setResult(await runOrderAction(conversationId, order.orderId, action, idempotencyKey));
+    });
+  }
+
+  /*
+   * ★ THE VERIFIED CARD, IF ONE CAME BACK. The chips below are the
+   * provider's, read after the fact — not the ones we would have drawn from
+   * knowing which button was pressed.
+   */
+  const verified = didExecute(result) ? (result?.order ?? null) : null;
+
+  return (
+    <div className={styles.orderActions} data-testid={`order-actions-${order.orderId}`}>
+      {possible.map((action) => (
+        <button
+          key={action}
+          type="button"
+          className={styles.orderAction}
+          data-testid={`order-action-${order.orderId}-${action}`}
+          /*
+           * Disabled once anything has been attempted on this order. The
+           * outcome may be `pending_approval`, and a second press on an
+           * action already waiting for a human is a second request for the
+           * same money.
+           */
+          disabled={isPending || attempted}
+          onClick={() => run(action)}
+        >
+          {isPending ? t('orders.running') : t(`orders.action.${action}` as 'orders.action.cancel')}
+        </button>
+      ))}
+
+      {/* ★ The provider's verified state, replacing nothing until it exists. */}
+      {verified ? (
+        <div className={styles.chips} data-testid={`order-verified-${order.orderId}`}>
+          {(
+            [verified.financial, verified.fulfillment, verified.shipping, verified.refund] as (
+              StatusChip | null | undefined
+            )[]
+          )
+            .filter((chip): chip is StatusChip => !!chip)
+            .map((chip) => (
+              <span
+                key={`${chip.key}-${chip.label}`}
+                className={styles.chip}
+                data-tone={chip.tone}
+                data-testid={`verified-chip-${verified.orderId}-${chip.key}`}
+              >
+                {chip.label}
+              </span>
+            ))}
+        </div>
+      ) : null}
+
+      {isWaitingOnAPerson(result) ? (
+        <p className={styles.orderWaiting} data-testid={`order-pending-${order.orderId}`}>
+          {t('orders.pendingApproval')}
+        </p>
+      ) : null}
+
+      {result?.state === 'denied' ? (
+        <p className={styles.orderCan} data-testid={`order-denied-${order.orderId}`}>
+          {t('orders.denied', { reason: result.reason ?? t('orders.noReason') })}
+        </p>
+      ) : null}
+
+      {result?.state === 'unavailable' ? (
+        <p className={styles.orderCan} data-testid={`order-unavailable-${order.orderId}`}>
+          {t('orders.actionUnavailable', { reason: result.reason ?? t('orders.noReason') })}
+        </p>
+      ) : null}
+
+      {/*
+        ★★ WE DO NOT KNOW. Not "it failed" — the request threw, and on a
+        refund the honest sentence is the 17d one: do not try again, check,
+        and ask. A retry offered here spends somebody's money twice.
+      */}
+      {attempted && !isPending && result === null ? (
+        <p className={styles.orderUnknown} data-testid={`order-unknown-${order.orderId}`}>
+          {t('orders.outcomeUnknown')}
+        </p>
+      ) : null}
+    </div>
+  );
+}

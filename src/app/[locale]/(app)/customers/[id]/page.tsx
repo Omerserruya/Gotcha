@@ -40,7 +40,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         async node and nothing renders. Screen 11 hit this with `ScanPanel`
         and placed it the same way.
       */}
-      <CustomerOrders orders={detail.orders} />
+      <CustomerOrders orders={detail.orders} conversationId={detail.conversationId} />
     </PageContainer>
   );
 }

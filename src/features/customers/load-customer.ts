@@ -59,6 +59,13 @@ export interface CustomerDetail {
    */
   readonly orders: CommerceContextResponse | null;
   /**
+   * The conversation 04d's actions post through. Exposed rather than
+   * recomputed in the component: `readKeyFor` is the one place that choice
+   * is made, and a second caller choosing differently is the drift the
+   * helper exists to prevent.
+   */
+  readonly conversationId: string | null;
+  /**
    * True when the person has no conversations at all, so the brief was never
    * requested rather than requested and missing.
    *
@@ -90,6 +97,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
         memory: null,
         crm: null,
         orders: null,
+        conversationId: null,
         noConversations: false,
       },
       contactId,
@@ -176,7 +184,15 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
    * Applied to what the real reads returned, so a failure stays a failure.
    */
   return withDetailFixtures(
-    { timeline, brief, memory, crm, orders, noConversations: conversationId === null },
+    {
+      timeline,
+      brief,
+      memory,
+      crm,
+      orders,
+      conversationId,
+      noConversations: conversationId === null,
+    },
     contactId,
   );
 }

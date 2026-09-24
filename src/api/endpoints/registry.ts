@@ -720,6 +720,23 @@ export const customerEndpoints = {
    */
   orders: (conversationId: string) =>
     endpoint('/api/commerce-context/{conversationId}', { conversationId }),
+  /**
+   * Screen 04d's order actions — cancel, refund, return, exchange. REAL MONEY.
+   *
+   * The best-guarded write in the platform: permission, ownership
+   * re-validation, business policy, optional approval, idempotent adapter
+   * call, provider-result validation, post-action verify, audit. *"There is
+   * NO second frontend-to-Shopify execution path."*
+   *
+   * Conversation-keyed, and that is acceptable HERE because the audit's
+   * subject is `targetType: "customer" | "order"` with the conversation in
+   * free-form metadata as context. Contrast `createNote`, where the
+   * conversation IS the attribution in the merchant's own CRM.
+   *
+   * ⚠ NOTHING AUTOMATED MAY CALL THIS.
+   */
+  orderAction: (conversationId: string) =>
+    endpoint('/api/commerce-context/{conversationId}/actions', { conversationId }),
 } as const;
 
 /**
