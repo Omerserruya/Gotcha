@@ -123,6 +123,23 @@ http {
 
     # Rate limiting zone
     limit_req_zone $binary_remote_addr zone=api:10m rate=100r/s;
+    # ★ 429, NOT NGINX'S DEFAULT 503. Without this every rate-limited route in
+    # the product answers "Service Unavailable" for "you sent too many requests",
+    # and the two are investigated in completely different places.
+    #
+    # It cost a real diagnosis: a capture run saw three 503s on
+    # /api/billing/credit-summary, the billing service had logged nothing about
+    # them - because it never received the requests - and the absence of any 429
+    # in the run was read as evidence that the rate limiter was NOT involved. It
+    # was the rate limiter. This nginx could not emit a 429 to be found.
+    #
+    # The client already classifies correctly and was being lied to:
+    # redesign/src/api/client/api-error.ts maps 429 -> 'rate_limited' and
+    # 502/503/504 -> 'integration'. So a throttled request was reported as an
+    # upstream failure. With this line, `integration` means an upstream problem
+    # again, and a throttle is findable by grepping for the status it deserves.
+    limit_req_status 429;
+
 
     # Authentik gets its own zone. Login/token endpoints deserve a tighter
     # limit than the general API, and they must not share a bucket with it -
