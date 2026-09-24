@@ -129,3 +129,99 @@ describe("the use case decides which parts are asked about", () => {
     expect(isUseCase(null)).toBe(false);
   });
 });
+
+/**
+ * Electing a system for a part.
+ *
+ * ★ THE READ SIDE SHIPPED WITHOUT THIS WRITE, and that is the defect these cover.
+ * `GET /business-core` reported who serves each part while nothing in the
+ * monorepo ever wrote `config.roles` - so a five-part dropdown would have saved
+ * for the CRM and silently done nothing for the other four. A control that looks
+ * configurable and is not.
+ *
+ * Omer's ruling on conflict: it DISPLACES and the response names what it replaced.
+ * Refusing would recreate the undeletable-employee trap - blocked by a state the
+ * merchant cannot see - and silent displacement is the reassuring direction.
+ */
+import { planRoleElection, type ElectableIntegration } from "../services/connectors/business-roles";
+
+const CONNECTED: ElectableIntegration[] = [
+  { id: "ti_shopify", slug: "shopify", name: "Shopify", status: "CONNECTED", roles: [] },
+  { id: "ti_woo", slug: "woocommerce", name: "WooCommerce", status: "CONNECTED", roles: ["ecommerce"] },
+  { id: "ti_stripe", slug: "stripe", name: "Stripe", status: "CONNECTED", roles: ["payments"] },
+];
+
+describe("electing a system for a part", () => {
+  it("elects an unheld part with a single write", () => {
+    const plan = planRoleElection("returns", "shopify", [
+      { id: "ti_rg", slug: "returngo", name: "ReturnGo", status: "CONNECTED", roles: [] },
+      ...CONNECTED,
+    ]);
+
+    expect(plan.elected).toEqual({ slug: "shopify", name: "Shopify" });
+    expect(plan.replaced).toBeNull();
+    expect(plan.writes).toEqual([{ id: "ti_shopify", roles: ["returns"] }]);
+  });
+
+  it("★ DISPLACES the incumbent and names it", () => {
+    const plan = planRoleElection("ecommerce", "shopify", CONNECTED);
+
+    expect(plan.elected).toEqual({ slug: "shopify", name: "Shopify" });
+    // The only way a screen can say "it was WooCommerce". Silent displacement is
+    // the reassuring direction; refusing is the undeletable-employee trap.
+    expect(plan.replaced).toEqual({ slug: "woocommerce", name: "WooCommerce" });
+    expect(plan.writes).toEqual([
+      { id: "ti_woo", roles: [] },
+      { id: "ti_shopify", roles: ["ecommerce"] },
+    ]);
+  });
+
+  it("leaves the incumbent's OTHER roles alone when displacing", () => {
+    const withBoth: ElectableIntegration[] = [
+      { id: "ti_shopify", slug: "shopify", name: "Shopify", status: "CONNECTED", roles: [] },
+      { id: "ti_woo", slug: "woocommerce", name: "WooCommerce", status: "CONNECTED", roles: ["ecommerce", "payments"] },
+    ];
+
+    const plan = planRoleElection("ecommerce", "shopify", withBoth);
+
+    // Losing one part must not clear the others.
+    expect(plan.writes).toContainEqual({ id: "ti_woo", roles: ["payments"] });
+  });
+
+  it("re-electing the incumbent is a no-op, not a displace-then-add", () => {
+    const plan = planRoleElection("ecommerce", "woocommerce", CONNECTED);
+
+    expect(plan.replaced).toBeNull();
+    // It already holds the part. Writing would churn the row for nothing, and
+    // reporting itself as "replaced" would make the screen say it changed.
+    expect(plan.writes).toEqual([]);
+    expect(plan.elected).toEqual({ slug: "woocommerce", name: "WooCommerce" });
+  });
+
+  it("★ null CLEARS the part, which is a real answer", () => {
+    const plan = planRoleElection("ecommerce", null, CONNECTED);
+
+    // "Nothing serves this" is distinct from never having chosen, and the
+    // incumbent is still named so the screen can say what was removed.
+    expect(plan.elected).toBeNull();
+    expect(plan.replaced).toEqual({ slug: "woocommerce", name: "WooCommerce" });
+    expect(plan.writes).toEqual([{ id: "ti_woo", roles: [] }]);
+  });
+
+  it("clearing an unheld part changes nothing", () => {
+    const plan = planRoleElection("returns", null, CONNECTED);
+
+    expect(plan.writes).toEqual([]);
+    expect(plan.replaced).toBeNull();
+  });
+
+  it("one system can serve several parts at once", () => {
+    const plan = planRoleElection("crm", "shopify", [
+      { id: "ti_shopify", slug: "shopify", name: "Shopify", status: "CONNECTED", roles: ["ecommerce"] },
+    ]);
+
+    // The route refuses `crm` for a different reason - one elector - but the RULE
+    // must not assume a system holds at most one part.
+    expect(plan.writes).toEqual([{ id: "ti_shopify", roles: ["ecommerce", "crm"] }]);
+  });
+});

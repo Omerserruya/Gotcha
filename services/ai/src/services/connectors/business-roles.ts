@@ -141,3 +141,63 @@ export function candidatesForRole(
 ): string[] {
   return catalogue.filter((row) => rolesFor(row.slug, row).includes(role)).map((row) => row.slug);
 }
+
+// ─── Electing a system for a part ────────────────────────────
+
+/** The minimum a caller must know about a connected integration to elect it. */
+export interface ElectableIntegration {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+  roles: string[];
+}
+
+export interface RoleElection {
+  /** Rows whose stored roles must change, with the value to write. */
+  writes: Array<{ id: string; roles: string[] }>;
+  /** Who held the part before, if anyone. Named so a screen can say so. */
+  replaced: { slug: string; name: string } | null;
+  elected: { slug: string; name: string } | null;
+}
+
+/**
+ * Work out what electing `slug` for `role` changes.
+ *
+ * ★ IT DISPLACES AND NAMES THE INCUMBENT. One system per part is the rule, and
+ * refusing when a part is taken would recreate the undeletable-employee trap: the
+ * merchant is blocked by a state they cannot see and did not set. Silent
+ * displacement is the reassuring direction. So the election succeeds and the
+ * incumbent comes back in `replaced`, which is the only way a screen can say
+ * "it was Shopify".
+ *
+ * Pure, so the rule is testable without a database and lives in one place rather
+ * than spread through a route. `slug: null` clears the part - a merchant saying
+ * "nothing serves this" is a real answer, distinct from never having chosen.
+ *
+ * The caller is responsible for the refusals that need the catalogue
+ * (`roleAvailability`, `rolesFor`, CONNECTED status), because those are facts
+ * about whether the election is allowed at all rather than about what it changes.
+ */
+export function planRoleElection(
+  role: BusinessRole,
+  slug: string | null,
+  connected: readonly ElectableIntegration[],
+): RoleElection {
+  const elect = slug === null ? null : connected.find((c) => c.slug === slug) ?? null;
+  const incumbent = connected.find((c) => c.id !== elect?.id && c.roles.includes(role)) ?? null;
+
+  const writes: Array<{ id: string; roles: string[] }> = [];
+  if (incumbent) {
+    writes.push({ id: incumbent.id, roles: incumbent.roles.filter((r) => r !== role) });
+  }
+  if (elect && !elect.roles.includes(role)) {
+    writes.push({ id: elect.id, roles: [...elect.roles, role] });
+  }
+
+  return {
+    writes,
+    replaced: incumbent ? { slug: incumbent.slug, name: incumbent.name } : null,
+    elected: elect ? { slug: elect.slug, name: elect.name } : null,
+  };
+}

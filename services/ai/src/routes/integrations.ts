@@ -16,6 +16,9 @@ import {
   candidatesForRole,
   roleAvailability,
   isUseCase,
+  isBusinessRole,
+  rolesFor,
+  planRoleElection,
 } from "../services/connectors/business-roles";
 
 const router = Router();
@@ -232,19 +235,37 @@ router.get("/business-core", async (req: Request, res: Response) => {
       }),
       prisma.tenantIntegration.findMany({
         where: { tenantId },
-        select: { config: true, integration: { select: { slug: true, name: true } } },
+        select: { status: true, config: true, integration: { select: { slug: true, name: true } } },
       }),
     ]);
 
     const useCase = isUseCase(rawUseCase) ? rawUseCase : null;
     const catalogueRows = catalogue.map((c) => ({ ...c, category: String(c.category) }));
-    const connectedSlugs = new Set(connected.map((c) => c.integration.slug));
+    // ★ STATUS, NOT PRESENCE. A TenantIntegration row exists for anything a
+    // tenant has ever started connecting, including one sitting in ERROR - and
+    // reporting that as "connected" is the reassuring direction: the screen would
+    // offer a system as ready while the election endpoint refuses it, and the
+    // merchant would have no way to see why.
+    //
+    // Three states, not two: connected, never connected, and connected-but-
+    // failing. The raw status travels so the screen can say which.
+    const statusBySlug = new Map(connected.map((c) => [c.integration.slug, String(c.status)]));
 
     const roles = (useCase ? ROLES_FOR_USE_CASE[useCase] : BUSINESS_ROLES).map((role) => {
       const availability = roleAvailability(role);
       const candidates = candidatesForRole(role, catalogueRows).map((slug) => {
         const row = catalogueRows.find((c) => c.slug === slug)!;
-        return { slug, name: row.name, connected: connectedSlugs.has(slug) };
+        const status = statusBySlug.get(slug) ?? null;
+        return {
+          slug,
+          name: row.name,
+          // Only a CONNECTED row may be elected, and the write enforces the same
+          // thing - so this cannot claim a system the write would refuse.
+          connected: status === "CONNECTED",
+          // null = never connected. Any other value = a row exists and is not
+          // usable yet, which needs a different sentence from "not connected".
+          status,
+        };
       });
 
       // Who serves it today. CRM keeps its existing resolver rather than being
@@ -280,6 +301,134 @@ router.get("/business-core", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("business-core read error:", err);
     res.status(500).json({ error: "Failed to read the business core" });
+  }
+});
+
+/**
+ * PUT /business-core/role - choose which connected system serves one part.
+ *
+ * ★ THIS IS THE WRITE MY OWN READ SIDE IMPLIED AND DID NOT HAVE. `GET
+ * /business-core` reported who serves each part, and nothing in the monorepo
+ * ever wrote `config.roles` - 32 tenantIntegration writes, none of them this one.
+ * So a five-part dropdown would have saved for the CRM and silently done nothing
+ * for the other four: a control that looks configurable and is not, which is the
+ * failure this codebase keeps finding and I had just built a fresh one of.
+ *
+ * ── It ELECTS, it does not connect ──
+ *
+ * Only an already-CONNECTED integration can be chosen. Connecting stays in the
+ * marketplace; this is a dropdown over what a tenant already has.
+ *
+ * ── It DISPLACES, and says what it replaced ──
+ *
+ * One system per part is the rule. Refusing when a part is taken would recreate
+ * the undeletable-employee trap: the merchant is blocked by a state they cannot
+ * see and did not know about. Silent displacement is the reassuring direction. So
+ * the write succeeds and the response NAMES the incumbent, which is the only way
+ * a screen can say "it was Shopify".
+ *
+ * ── The CRM part is NOT electable here, deliberately ──
+ *
+ * `config.useAsCrm` and its resolver already elect the customer system of record,
+ * and the GET reads that resolver so this screen cannot disagree with the system
+ * the bot actually calls. A second way to elect a CRM would be two sources for
+ * one decision - the shape that has cost this repo a day already. Refused with a
+ * pointer to the one path.
+ *
+ * ── A part that cannot be served is refused, not stored ──
+ *
+ * `shipping` has a category and zero integrations, so the GET reports
+ * `available: false`. Accepting an election for it would store something the read
+ * will immediately contradict.
+ */
+router.put("/business-core/role", canSelectSot, async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const role = body.role;
+  const slug = body.slug;
+
+  if (!isBusinessRole(role)) {
+    res.status(422).json({ error: `role must be one of: ${BUSINESS_ROLES.join(", ")}` });
+    return;
+  }
+  if (role === "crm") {
+    res.status(409).json({
+      error: "The CRM is elected through PUT /api/integrations/:slug/crm-source, which is the one path for it",
+      code: "CRM_ELECTED_ELSEWHERE",
+    });
+    return;
+  }
+  const availability = roleAvailability(role);
+  if (!availability.available) {
+    res.status(409).json({ error: availability.detail, code: availability.reason.toUpperCase() });
+    return;
+  }
+  // `null` clears the part rather than electing anything - a merchant saying
+  // "nothing serves this" is a real answer and distinct from never choosing.
+  if (slug !== null && typeof slug !== "string") {
+    res.status(422).json({ error: "slug must be an integration slug, or null to clear the part" });
+    return;
+  }
+
+  try {
+    const tenantId = req.tenantId!;
+    const connected = await prisma.tenantIntegration.findMany({
+      where: { tenantId },
+      select: { id: true, status: true, config: true, integration: { select: { slug: true, name: true, category: true, canActAsCrm: true } } },
+    });
+
+    let elect: (typeof connected)[number] | null = null;
+    if (slug !== null) {
+      elect = connected.find((c) => c.integration.slug === slug) ?? null;
+      if (!elect) {
+        res.status(404).json({ error: "Connect that system first - this screen chooses between systems you already have" });
+        return;
+      }
+      if (elect.status !== "CONNECTED") {
+        res.status(409).json({ error: "That system must be connected before it can serve a part of your business" });
+        return;
+      }
+      const can = rolesFor(elect.integration.slug, {
+        canActAsCrm: elect.integration.canActAsCrm,
+        category: String(elect.integration.category),
+      });
+      if (!can.includes(role)) {
+        // Refused rather than stored: the GET derives candidates from the same
+        // map, so storing this would produce an elected system the read does not
+        // list as a candidate for the part.
+        res.status(409).json({ error: `${elect.integration.name} cannot serve ${role}`, code: "ROLE_NOT_SUPPORTED" });
+        return;
+      }
+    }
+
+    const electable = connected.map((c) => {
+      const cfg = (c.config && typeof c.config === "object" ? c.config : {}) as Record<string, unknown>;
+      return {
+        id: c.id,
+        slug: c.integration.slug,
+        name: c.integration.name,
+        status: String(c.status),
+        roles: Array.isArray(cfg.roles) ? (cfg.roles as unknown[]).filter((r): r is string => typeof r === "string") : [],
+      };
+    });
+
+    const plan = planRoleElection(role, slug, electable);
+    for (const w of plan.writes) {
+      const row = connected.find((c) => c.id === w.id)!;
+      const cfg = (row.config && typeof row.config === "object" ? row.config : {}) as Record<string, unknown>;
+      cfg.roles = w.roles;
+      await prisma.tenantIntegration.update({ where: { id: w.id }, data: { config: cfg as any } });
+    }
+
+    res.json({
+      data: {
+        role,
+        elected: plan.elected,
+        replaced: plan.replaced,
+      },
+    });
+  } catch (err) {
+    console.error("business-core role write error:", err);
+    res.status(500).json({ error: "Failed to choose a system for that part" });
   }
 });
 
