@@ -213,21 +213,46 @@ for (const size of SIZES) {
      * while this row is open — and a 96/96 capture passed over it, because no
      * shot opened a control.
      *
-     * So this asserts the label is a SENTENCE rather than a key. A missing
-     * message renders as its own dotted path, which reads as a deliberate
-     * name and is invisible to tsc, to the locale-parity check, and to every
-     * test that never opens the thing.
+     * ★ AND THE FIRST VERSION OF THIS GUARD COULD NOT FIRE.
+     *
+     * It asserted the ABSENCE of a dotted path and of next-intl's error text.
+     * Neither is producible here. `src/i18n/request.ts:51`:
+     *
+     *     getMessageFallback: NODE_ENV === 'production' ? '' : `⟪ns.key⟫`
+     *
+     * The capture runs `next start` — the production build — so a missing key
+     * renders as the EMPTY STRING. An empty label contains no dotted path and
+     * no error text, so both assertions passed by absence. Reintroduce 11d's
+     * defect today and that test went green.
+     *
+     * You cannot detect an empty string by asserting the absence of
+     * something. So this asserts POSITIVELY: the field must have its
+     * accessible name, and the hint must say what it says. A positive
+     * assertion fails on the empty fallback, on the dev-mode guillemets, and
+     * on error text, without having to enumerate which the environment
+     * produces — and enumerating from dev behaviour is exactly how the first
+     * version went wrong.
      */
     test('4 · language', async ({ page }) => {
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-language').click();
       await expect(page.getByTestId('fact-save-language')).toBeVisible();
 
-      // No dotted key anywhere in the open row, in either direction: neither
-      // `workspace.language` nor a bare `language.system`.
+      /*
+       * The accessible name. An empty label leaves the input without one, so
+       * this query fails outright rather than matching nothing.
+       */
+      await expect(page.getByLabel('Language', { exact: true })).toBeVisible();
+
+      // And the hint, which is long and specific enough that only the real
+      // message satisfies it.
       const row = page.getByTestId('fact-language');
-      await expect(row).not.toHaveText(/\b[a-z]+\.[a-z]+[A-Za-z.]*\b/);
-      await expect(row).not.toHaveText(/IntlError|MISSING_MESSAGE|INSUFFICIENT_PATH/i);
+      await expect(row).toHaveText(/One language is stored/i);
+      await expect(row).toHaveText(/knowledge documents are tagged/i);
+
+      // Second line, free: catches the dev-mode fallback if this is ever run
+      // against a dev server. NOT the thing standing guard.
+      await expect(row).not.toHaveText(/⟪|⟫/);
 
       await shoot(page, `${size.name}-04-edit-language-en`);
     });

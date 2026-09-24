@@ -313,3 +313,65 @@ describe('★ 11e · the time zone picker is searchable', () => {
     expect(input.tagName).toBe('INPUT');
   });
 });
+
+describe('★ a missing key renders as NOTHING in production, not as a key', () => {
+  /*
+   * `src/i18n/request.ts:51`:
+   *
+   *     getMessageFallback: NODE_ENV === 'production' ? '' : `⟪ns.key⟫`
+   *
+   * The capture runs `next start` — the production build — so a broken
+   * message key does not shout, it disappears. The e2e guard written for
+   * 11d's defect asserted the ABSENCE of a dotted path and of next-intl's
+   * error text, and neither is producible here: an empty label contains
+   * neither, so the guard passed by absence.
+   *
+   * These pin the mechanism, so the reasoning behind the e2e assertion is
+   * checked by something that runs rather than by a comment.
+   */
+  const renderWithProdFallback = (messages: Record<string, unknown>) =>
+    render(
+      <NextIntlClientProvider
+        locale="en"
+        messages={{ workspace: messages }}
+        getMessageFallback={() => ''}
+      >
+        <FactRows workspace={ws()} />
+      </NextIntlClientProvider>,
+    );
+
+  it('renders an EMPTY label when the key is gone', async () => {
+    const broken = JSON.parse(JSON.stringify(messages));
+    delete broken.fact.language;
+
+    renderWithProdFallback(broken);
+    await userEvent.click(screen.getByTestId('fact-edit-language'));
+
+    // The failure mode, demonstrated: no error text, no dotted path, nothing.
+    const row = screen.getByTestId('fact-language');
+    expect(row.textContent).not.toMatch(/IntlError|MISSING_MESSAGE|INSUFFICIENT_PATH/);
+    expect(row.textContent).not.toMatch(/\bfact\.language\b/);
+  });
+
+  it('★ a POSITIVE assertion catches it and a negative one does not', async () => {
+    const broken = JSON.parse(JSON.stringify(messages));
+    delete broken.languageNote;
+
+    renderWithProdFallback(broken);
+    await userEvent.click(screen.getByTestId('fact-edit-language'));
+    const row = screen.getByTestId('fact-language');
+
+    // What the first guard did — satisfied by absence, therefore useless.
+    expect(row.textContent).not.toMatch(/⟪|⟫/);
+
+    // What the guard does now — fails, because the sentence is not there.
+    expect(row.textContent).not.toMatch(/One language is stored/);
+  });
+
+  it('and the real catalogue renders the sentence the guard looks for', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-language'));
+    expect(screen.getByTestId('fact-language')).toHaveTextContent(/One language is stored/);
+    expect(screen.getByLabelText('Language')).toBeInTheDocument();
+  });
+});
