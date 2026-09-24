@@ -110,15 +110,44 @@ router.get("/history/:customerExternalId", async (req: Request, res: Response) =
   }
 });
 
+/**
+ * Conversation notes are NOT stored by this service, and these say so.
+ *
+ * They used to be demo stubs: the GET answered `{ data: [] }` and the POST
+ * answered 200 with `{ id, text, createdAt }` - a well-formed note that was
+ * never written anywhere. That is the worst shape a stub can take. A client
+ * renders it as saved, the person who typed it believes it saved, and nothing
+ * records that it did not. An empty 200 from the GET has the same defect one
+ * level down: "no notes" and "notes are not kept here" are different facts and
+ * an empty array reads as the first.
+ *
+ * ★ NOTES DO EXIST, IN ANOTHER SERVICE, AND THEY WORK. A conversation note is
+ * written to the merchant's CRM by `POST /api/crm/conversation/:id/notes`
+ * (`services/ai/src/routes/crm-panel.ts`), which requires a resolved CRM link
+ * and refuses honestly without one (409 `no_crm_link` / `no_crm_configured`).
+ * They are read back as `recent_crm_notes` on the CRM context envelope. So the
+ * truth is not "notes are unimplemented" - it is that GOTCHA holds no note
+ * store of its own and a CRM does.
+ *
+ * Which is why this answers 501 and NAMES that endpoint rather than 404ing:
+ * the next person to want notes here should link a CRM, not build a second
+ * note store in the conversation service.
+ */
+const NOTES_NOT_STORED = {
+  error: "notes_not_stored_here",
+  message:
+    "This service does not store conversation notes. A note is written to the tenant's CRM by POST /api/crm/conversation/:id/notes and read back as recent_crm_notes.",
+} as const;
+
 router.get("/:id/notes", async (_req: Request, res: Response) => {
-  // Demo stub - notes will be stored in a future model
-  res.json({ data: [] });
+  res.status(501).json(NOTES_NOT_STORED);
 });
 
-router.post("/:id/notes", async (req: Request, res: Response) => {
-  // Demo stub - echo back the note
-  const { text } = req.body;
-  res.json({ data: { id: Date.now().toString(), text, createdAt: new Date().toISOString() } });
+router.post("/:id/notes", async (_req: Request, res: Response) => {
+  // Refused BEFORE reading the body: accepting input we will not keep is the
+  // whole defect, and a 501 that still parses the note invites a caller to
+  // believe some of it was used.
+  res.status(501).json(NOTES_NOT_STORED);
 });
 
 router.get("/:id", async (req: Request, res: Response) => {
