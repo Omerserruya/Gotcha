@@ -55,8 +55,34 @@ export const candidateSchema = z.object({
    * screen carries that distinction. It has to be visible BEFORE approval.
    */
   requiresLiveLookup: z.boolean().default(false),
-  /** Platform-authored, per candidate. Rendered verbatim, never paraphrased. */
-  curationVerdict: z.enum(CURATION_VERDICTS).nullable().default(null),
+  /**
+   * Platform-authored, per candidate. Rendered verbatim, never paraphrased.
+   *
+   * ════════════════════════════════════════════════════════════════════════
+   * ★ `.catch(null)` BECAUSE THIS ONE CAN NEVER BE AUDITED COMPLETE
+   * ════════════════════════════════════════════════════════════════════════
+   * Every other enum in these contracts has ground truth — a Prisma enum, a
+   * TS union, or an `as const` array — and all 53 were checked against it
+   * after `roles.2.source` took screen 14 off the page.
+   *
+   * This one has none. `curation_verdict` is `String?` in the schema, and
+   * the only writer picks between "live_data" and "rewritten" inline. There
+   * is no declared domain to compare against, so "our enum is complete" is
+   * not a statement anybody can make today or keep true tomorrow — the next
+   * writer to add a verdict would take down the ENTIRE candidate list, not
+   * this field, because one invalid member fails the whole parse.
+   *
+   * So it degrades instead: an unrecognised verdict becomes null and the
+   * screen shows no verdict, which is what it already does when the platform
+   * has not authored one. Absence, not a guess.
+   *
+   * ⚠ This is NOT a pattern to spread. `.catch()` on `riskLevel`, an
+   * approval status or a connection state would turn an unknown value into a
+   * reassuring one — the calm wrong value, in the places where it costs
+   * most. It is right here only because the honest fallback for a missing
+   * verdict is nothing at all.
+   */
+  curationVerdict: z.enum(CURATION_VERDICTS).nullable().catch(null).default(null),
   curationNote: z.string().nullable().default(null),
   /** How much evidence stands behind it. The reviewer's real decision input. */
   occurrenceCount: z.number().default(0),

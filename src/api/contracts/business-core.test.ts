@@ -6,6 +6,8 @@ import {
   electable,
   electedElsewhere,
   isInferred,
+  BUSINESS_ROLES,
+  PART_SOURCES,
   needsMarketplace,
   partState,
   rolePartSchema,
@@ -97,6 +99,78 @@ describe('★ the CRM is the one part this endpoint refuses', () => {
     expect(electedElsewhere(part({ role: 'crm' }))).toBe('crm');
     expect(electedElsewhere(part({ role: 'returns' }))).toBe('returns');
     expect(electedElsewhere(part({ role: 'ecommerce' }))).toBeNull();
+  });
+
+  it('★ accepts EVERY source the platform can send, including unavailable', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════
+     * THE REGRESSION. THIS TOOK THE WHOLE SECTION OFF THE LIVE PAGE.
+     * ════════════════════════════════════════════════════════════════════
+     * `shipping` resolves to `source: "unavailable"` — returned by the
+     * availability guard, above the resolution logic. The enum had three of
+     * its four members, and `.default()` does not rescue that: a default
+     * applies to an ABSENT key, and this one arrives present and invalid.
+     *
+     * So the parse failed, `loadBusinessCore` returned null, and all five
+     * parts vanished behind "could not be read" — on a 200 with a valid
+     * body. Nine capture failures.
+     *
+     * ★ Asserted on the WHOLE RESPONSE, not on one part. A per-part test
+     * passes the moment the member is added and would never show that the
+     * blast radius is every other part in the array; that asymmetry between
+     * one bad field and a blank screen is the thing to hold onto.
+     */
+    /*
+     * ★★ THE VALUES ARE WRITTEN OUT, NOT MAPPED FROM `PART_SOURCES`.
+     *
+     * The first version of this test built its fixture with
+     * `PART_SOURCES.map(...)`. Shrinking the constant back to three members
+     * shrank the fixture with it, and **the test still passed** — a
+     * regression test parameterised by the thing it is testing, inert
+     * against precisely the defect it was written for.
+     *
+     * Found by mutating the enum and watching this test stay green while a
+     * different one failed. It is the inert guard in a new costume: the
+     * `if (count > 0)` wrapper, the absence-assertion that could never fire,
+     * and now a fixture that moves with the subject.
+     *
+     * A contract test asserts what the PRODUCER sends. Its expected values
+     * have to be copied from the producer's own type declaration — read to
+     * its end — and frozen here, where changing them is a deliberate edit.
+     */
+    const FROM_PART_SYSTEMS_TS = ['elected', 'inferred', 'unmapped', 'unavailable'] as const;
+
+    const withEverySource = businessCoreSchema.parse({
+      useCase: 'both',
+      roles: FROM_PART_SYSTEMS_TS.map((source, i) => ({
+        role: BUSINESS_ROLES[i % BUSINESS_ROLES.length],
+        source,
+        candidates: [],
+      })),
+    });
+    expect(withEverySource.roles).toHaveLength(FROM_PART_SYSTEMS_TS.length);
+    expect(withEverySource.roles.map((r) => r.source)).toEqual([...FROM_PART_SYSTEMS_TS]);
+
+    // And the constant itself must still cover them, so a future narrowing of
+    // PART_SOURCES fails here rather than at a customer's browser.
+    expect([...PART_SOURCES].sort()).toEqual([...FROM_PART_SYSTEMS_TS].sort());
+  });
+
+  it('is the shipping part that carries it, and it needs no new UI', () => {
+    /*
+     * `unavailable` is not a fourth thing to render. `available: false` plus
+     * `detail` already carry the fact, and `partState()` keys on `available`
+     * — so the contract must ACCEPT the value without the screen growing a
+     * branch for it. Accepting is not the same as displaying.
+     */
+    const shipping = part({
+      role: 'shipping',
+      available: false,
+      source: 'unavailable',
+      unavailableReason: 'no_integrations_exist',
+    });
+    expect(partState(shipping)).toBe('impossible');
+    expect(isInferred(shipping)).toBe(false);
   });
 
   it('★ tells an inferred system from a chosen one', () => {

@@ -47,6 +47,42 @@ export const USE_CASES = ['ecommerce', 'leads', 'both'] as const;
 export type UseCase = (typeof USE_CASES)[number];
 
 export const BUSINESS_ROLES = ['ecommerce', 'payments', 'shipping', 'returns', 'crm'] as const;
+
+/**
+ * Why a part resolves to the system it does — the platform's `PartSource`.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★ THIS LIST SHIPPED WITH THREE OF ITS FOUR MEMBERS AND TOOK THE SCREEN DOWN
+ * ════════════════════════════════════════════════════════════════════════════
+ * `shipping` resolves to `unavailable`, which was missing here. Zod's
+ * `.default()` does NOT rescue that: a default applies to an ABSENT key, and
+ * this key arrives present with a value outside the enum — so the parse
+ * fails, `loadBusinessCore` returns null, and **every part disappears,
+ * including the four that were fine.** One bad member rejects the whole
+ * response. The server answered 200 with a valid body.
+ *
+ * ── HOW THE FOURTH WAS MISSED, WHICH IS THE PART WORTH KEEPING ──
+ * I read the producer by grepping for occurrences instead of reading the
+ * type. Neither obvious pattern finds all four:
+ *
+ *   grep 'source: "…"'   misses `inferred` — it comes from a ternary
+ *   grep at the resolver misses `unavailable` — it is returned by the
+ *                        availability guard ABOVE the resolution logic
+ *
+ * And when I did open the declaration, I printed six lines of a nine-line
+ * union and took it for the whole thing. The authority for a union's DOMAIN
+ * is the type, read to its end — never the call sites, and never a window
+ * over the type.
+ *
+ * ── AND THIS IS THE SCHEMA-BOUNDARY RULE IN ITS LOUD DIRECTION ──
+ * A field we do not name is stripped silently; a field we DO name breaks the
+ * whole response when our idea of its domain is wrong. Naming a field is not
+ * the end of the work — naming its domain is. 903 unit tests passed
+ * throughout, because the fixtures carried the three values I knew about: a
+ * contract test is only as complete as the author's model of the producer.
+ */
+export const PART_SOURCES = ['elected', 'inferred', 'unmapped', 'unavailable'] as const;
+export type PartSource = (typeof PART_SOURCES)[number];
 export type BusinessRole = (typeof BUSINESS_ROLES)[number];
 
 export const candidateSystemSchema = z.object({
@@ -139,7 +175,7 @@ export const rolePartSchema = z.object({
    * `looseObject`, so until now it was stripped at the boundary and the UI
    * could not have drawn the distinction even in principle.
    */
-  source: z.enum(['elected', 'inferred', 'unmapped']).default('unmapped'),
+  source: z.enum(PART_SOURCES).default('unmapped'),
   candidates: z.array(candidateSystemSchema).default([]),
 });
 

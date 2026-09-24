@@ -115,4 +115,33 @@ describe('the reviewer’s actual decision input', () => {
     expect(dup.duplicateOfDocumentId).toBe('doc1');
     expect(dup).not.toHaveProperty('source');
   });
+
+  it('★ an unknown curation verdict loses the FIELD, not the whole list', () => {
+    /*
+     * `curation_verdict` is `String?` in the schema — no Prisma enum, no TS
+     * union, and the only writer picks two values inline. So unlike every
+     * other enum in these contracts, this one has no declared domain to
+     * audit against: "complete" is not a claim anybody can make about it
+     * today or keep true tomorrow.
+     *
+     * Without `.catch`, the next verdict the platform invents would fail the
+     * parse — and one invalid member takes down the ENTIRE response, not the
+     * field. That is exactly what `roles.2.source` did to screen 14: a 200
+     * with a valid body, and five parts rendering nothing.
+     *
+     * So it degrades to null, which is the state the screen already handles
+     * for a candidate the platform has not judged. Absence, not a guess.
+     */
+    const row = candidate({ curationVerdict: 'a_verdict_from_next_year' });
+    expect(row.curationVerdict).toBeNull();
+    // ...and the rest of the candidate survives intact, which is the point.
+    expect(row.status).toBeDefined();
+  });
+
+  it('still keeps the verdicts it does know', () => {
+    // `.catch` must not swallow the real values into null — that would make
+    // the degradation total and silent, which is worse than the parse error.
+    expect(candidate({ curationVerdict: 'live_data' }).curationVerdict).toBe('live_data');
+    expect(candidate({ curationVerdict: 'rewritten' }).curationVerdict).toBe('rewritten');
+  });
 });
