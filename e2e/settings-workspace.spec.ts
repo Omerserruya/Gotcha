@@ -204,11 +204,31 @@ for (const size of SIZES) {
       await shoot(page, `${size.name}-03-edit-hours-en`);
     });
 
-    /* 4 · the language row, with the note explaining why one language. */
+    /*
+     * 4 · the language row OPEN — the state 11d's evidence never photographed.
+     *
+     * `workspace.language` was the string "Language" until 11d added
+     * `language.system` and `language.replies`, which turned the key into an
+     * object. The label rendered an `IntlError` from then on, visible ONLY
+     * while this row is open — and a 96/96 capture passed over it, because no
+     * shot opened a control.
+     *
+     * So this asserts the label is a SENTENCE rather than a key. A missing
+     * message renders as its own dotted path, which reads as a deliberate
+     * name and is invisible to tsc, to the locale-parity check, and to every
+     * test that never opens the thing.
+     */
     test('4 · language', async ({ page }) => {
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-language').click();
       await expect(page.getByTestId('fact-save-language')).toBeVisible();
+
+      // No dotted key anywhere in the open row, in either direction: neither
+      // `workspace.language` nor a bare `language.system`.
+      const row = page.getByTestId('fact-language');
+      await expect(row).not.toHaveText(/\b[a-z]+\.[a-z]+[A-Za-z.]*\b/);
+      await expect(row).not.toHaveText(/IntlError|MISSING_MESSAGE|INSUFFICIENT_PATH/i);
+
       await shoot(page, `${size.name}-04-edit-language-en`);
     });
 
