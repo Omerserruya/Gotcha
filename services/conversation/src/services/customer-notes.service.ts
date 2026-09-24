@@ -107,7 +107,7 @@ export async function listNotes(args: ListArgs) {
     // `select`, never `include`: three routes have shipped secrets through a
     // spread of a related row.
     select: {
-      id: true, body: true, visibility: true, status: true,
+      id: true, body: true, visibility: true, aiUsable: true, status: true,
       authorUserId: true, authorName: true, mentions: true,
       conversationId: true, editHistory: true,
       externalSystem: true, externalNoteId: true,
@@ -124,6 +124,8 @@ export interface CreateArgs {
   conversationId?: string | null;
   body: string;
   visibility?: NoteVisibility;
+  /** Whether the bot's prompt may include it. Defaults false: fails closed. */
+  aiUsable?: boolean;
   mentions?: string[];
   /** AI_SUGGESTED for a proposal a person has not accepted yet. */
   status?: NoteStatus;
@@ -143,6 +145,9 @@ export async function createNote(args: CreateArgs) {
       conversationId: args.conversationId ?? null,
       body,
       visibility: args.visibility ?? "TEAM",
+      // Prompt-unsafe unless the caller says otherwise. An omitted field must
+      // not open the note to the bot.
+      aiUsable: args.aiUsable === true,
       status: args.status ?? "PUBLISHED",
       authorUserId: args.author.userId,
       authorName: args.author.name,
@@ -158,6 +163,7 @@ export interface UpdateArgs {
   editor: NoteAuthor;
   body?: string;
   visibility?: NoteVisibility;
+  aiUsable?: boolean;
   mentions?: string[];
 }
 
@@ -194,6 +200,9 @@ export async function updateNote(args: UpdateArgs) {
     data: {
       ...(typeof args.body === "string" ? { body: args.body.trim() } : {}),
       ...(args.visibility ? { visibility: args.visibility } : {}),
+      // Only when stated. Omitting it leaves the note as it was, rather than
+      // resetting a deliberate choice - the business-hours defaults trap.
+      ...(typeof args.aiUsable === "boolean" ? { aiUsable: args.aiUsable } : {}),
       ...(args.mentions ? { mentions: dedupe(args.mentions) } : {}),
       editHistory: appended,
     },

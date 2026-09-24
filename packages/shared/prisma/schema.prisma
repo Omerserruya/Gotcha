@@ -7093,7 +7093,20 @@ model CustomerNote {
   conversationId String? @map("conversation_id")
 
   body       String
+  /// WHO MAY READ IT. Orthogonal to `aiUsable` below, and conflating the two is
+  /// a bug either way round: a note can be readable by the whole team and still
+  /// be something the bot must never repeat to a customer.
   visibility CustomerNoteVisibility @default(TEAM)
+  /// ★ MAY THE AI'S PROMPT INCLUDE IT. Default FALSE, so a note is prompt-unsafe
+  /// until somebody says otherwise. A teammate reading a note they should not
+  /// have is a privacy problem; the bot reading one and repeating it to the
+  /// customer is a product incident, so this fails closed.
+  ///
+  /// A peer's proposal (docs/migrations/customer-notes-and-promises.proposal.md)
+  /// carried this axis as the visibility enum itself (AI_USABLE/TEAM_ONLY). It
+  /// is the more dangerous of the two axes and was missing here; keeping both
+  /// separately loses neither protection.
+  aiUsable   Boolean                @default(false) @map("ai_usable")
   status     CustomerNoteStatus     @default(PUBLISHED)
 
   /// Null when the AI wrote it. A user row can be deleted, so the display name

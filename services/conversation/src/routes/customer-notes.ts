@@ -113,6 +113,7 @@ router.post("/:contactId/notes", async (req: Request, res: Response) => {
       conversationId: typeof req.body?.conversationId === "string" ? req.body.conversationId : null,
       body,
       visibility,
+      aiUsable: req.body?.aiUsable === true,
       mentions: asMentions(req.body?.mentions),
       status,
       author: await author(req),
@@ -149,6 +150,7 @@ router.patch("/:contactId/notes/:noteId", async (req: Request, res: Response) =>
       editor: await author(req),
       body: typeof req.body?.body === "string" ? req.body.body : undefined,
       visibility: asVisibility(req.body?.visibility),
+      aiUsable: typeof req.body?.aiUsable === "boolean" ? req.body.aiUsable : undefined,
       mentions: asMentions(req.body?.mentions),
     });
     return res.json({ note });

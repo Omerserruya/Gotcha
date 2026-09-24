@@ -400,3 +400,82 @@ describe("mentions", () => {
     expect(res.body.note.mentions).toEqual(["u2", "u3"]);
   });
 });
+
+/**
+ * Who may READ a note and whether the BOT may use it are different questions.
+ *
+ * A peer's proposal carried one enum, AI_USABLE/TEAM_ONLY. This table shipped
+ * visibility as TEAM/PRIVATE. Neither covers the other: a note can be readable
+ * by the whole team and still be something the bot must never repeat to a
+ * customer. Both axes now exist, and `aiUsable` fails CLOSED - a teammate
+ * reading a note they should not have is a privacy problem, the bot repeating
+ * one to the customer is an incident.
+ */
+describe("the AI axis is separate, and fails closed", () => {
+  it("★ a note is prompt-unsafe unless it says otherwise", async () => {
+    const res = await post({ body: "internal: he disputes the invoice" });
+
+    expect(res.body.note.aiUsable).toBe(false);
+  });
+
+  it("opens it only on an explicit true", async () => {
+    expect((await post({ body: "x", aiUsable: true })).body.note.aiUsable).toBe(true);
+    // Not a truthy string from a form post.
+    expect((await post({ body: "y", aiUsable: "true" })).body.note.aiUsable).toBe(false);
+  });
+
+  it("★ is orthogonal to visibility, not a second name for it", async () => {
+    const res = await post({ body: "z", visibility: "TEAM", aiUsable: false });
+
+    // The combination the single-enum design cannot express.
+    expect(res.body.note.visibility).toBe("TEAM");
+    expect(res.body.note.aiUsable).toBe(false);
+  });
+
+  it("★ an edit that omits it does not reopen the note to the bot", async () => {
+    const note = (await post({ body: "sensitive", aiUsable: true })).body.note;
+
+    const res = await request(app).patch(`/api/identity/c1/notes/${note.id}`)
+      .set("Authorization", "Bearer tok").send({ body: "sensitive, corrected" });
+
+    // And the reverse: an omitted field must not RESET a deliberate choice
+    // either. Same trap as the business-hours zod defaults.
+    expect(res.body.note.aiUsable).toBe(true);
+  });
+});
+
+/**
+ * The service's own default, exercised directly.
+ *
+ * ★ A mutation flipping `createNote`'s default to open survived every test
+ * above, because the ROUTE coerces `aiUsable` to a boolean before calling in -
+ * so the service's default is unreachable over HTTP and nothing could see it.
+ *
+ * That matters because the route is not the only planned caller: the AI
+ * suggestion writer calls `createNote` directly, and for that caller the
+ * service's default IS the protection. An untested default on the path that
+ * needs it most is how a note reaches the bot's prompt by omission.
+ */
+import { createNote as createNoteDirect } from "../services/customer-notes.service";
+
+describe("createNote's own default, called directly", () => {
+  it("★ omitting aiUsable stores FALSE, not true", async () => {
+    const note = await createNoteDirect({
+      tenantId: "t1",
+      contactId: "c1",
+      body: "drafted by the AI, nobody has vetted it",
+      author: { userId: null, name: "GOTCHA AI" },
+    });
+
+    expect(note.aiUsable).toBe(false);
+  });
+
+  it("an explicit true is still honoured", async () => {
+    const note = await createNoteDirect({
+      tenantId: "t1", contactId: "c1", body: "safe to quote",
+      aiUsable: true, author: { userId: "u1", name: "Yael Cohen" },
+    });
+
+    expect(note.aiUsable).toBe(true);
+  });
+});

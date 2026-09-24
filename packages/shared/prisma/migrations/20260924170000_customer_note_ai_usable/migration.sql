@@ -1,0 +1,12 @@
+-- Whether the AI's prompt may include a note. Separate from who may READ it.
+--
+-- A peer's proposal carried this as the visibility enum (AI_USABLE/TEAM_ONLY)
+-- while this table shipped visibility as TEAM/PRIVATE. The two are orthogonal,
+-- not alternatives: a note can be readable by the whole team and still be
+-- something the bot must never repeat to a customer. Conflating them loses one
+-- protection whichever way round it is done.
+--
+-- Defaults FALSE so a note is prompt-unsafe until somebody says otherwise. A
+-- teammate reading a note they should not have is a privacy problem; the bot
+-- reading one and repeating it to the customer is a product incident.
+ALTER TABLE "customer_notes" ADD COLUMN "ai_usable" BOOLEAN NOT NULL DEFAULT false;
