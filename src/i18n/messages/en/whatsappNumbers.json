@@ -1,0 +1,8 @@
+{
+  "outcome": {
+    "noCandidates": "That account has no WhatsApp numbers we can use.",
+    "allAlreadyConnected": "Every number on that account is already connected to this workspace.",
+    "allBlocked": "None of the numbers on that account can be connected. Each one says why below.",
+    "unknown": "We could not work out what to do with that account. Nothing was changed."
+  }
+}
