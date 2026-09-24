@@ -178,7 +178,31 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
         a pricing claim out of one customer's behaviour". So whichever is
         shown, the screen names which it is.
       */}
-      {observed.chats != null && observed.basis === 'TENANT_ACTUAL' ? (
+      {/*
+        ★ AND NEITHER IS SHOWN WHILE THE PERIOD'S CREDITS HAVE NOT BEEN
+        GRANTED.
+
+        Both estimates divide a BALANCE by a rate. While `awaitingGrant()`,
+        that balance is zero for a reason the two paragraphs above spend
+        their whole length explaining — the grant has not happened, and this
+        is not credit anybody spent. Rendering "about 0 more conversations"
+        underneath is a forecast from an input the screen has just disowned,
+        and it is worse than the estimate standing alone: by that point the
+        reader has been taught to trust this screen's carefulness, so they
+        read the 0 as a measurement.
+
+        Same shape as 13e's "0 of 0 conversations read is not progress — it
+        is a pipeline that has not started counting", and the same answer.
+        A forecast from an ungranted allowance is not a small forecast; it is
+        not a forecast. So the estimate is withheld and the screen says it
+        comes back when the credits are granted — which also tells somebody
+        that nothing here is broken.
+      */}
+      {awaitingGrant(credits) ? (
+        <p className={styles.creditsBasis} data-testid="credits-estimate-withheld">
+          {t('estimate.awaitingGrant')}
+        </p>
+      ) : observed.chats != null && observed.basis === 'TENANT_ACTUAL' ? (
         <div className={styles.creditsEstimate} data-testid="credits-estimate-observed">
           <p className={styles.creditsNote}>
             {t('estimate.observed', { chats: number.format(observed.chats) })}

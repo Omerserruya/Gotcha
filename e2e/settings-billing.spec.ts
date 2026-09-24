@@ -414,28 +414,34 @@ for (const size of SIZES) {
       await expect(balance).toHaveText(/credits available/i);
 
       /*
-       * ★ A FORECAST DERIVED FROM A BALANCE THE SCREEN HAS JUST DISOWNED.
+       * ★ NO FORECAST FROM A BALANCE THE SCREEN HAS JUST DISOWNED.
        *
-       * "At your plan's rate that is about 0 more conversations" renders
-       * directly beneath "no credits have been issued for this period yet".
-       * It is not false — nothing buys nothing — but it is a projection
-       * standing on an input the paragraph above calls absent.
+       * This shot used to carry "At your plan's rate that is about 0 more
+       * conversations" directly beneath "no credits have been issued for this
+       * period yet" — a projection standing on an input the paragraph above
+       * calls absent, and read as a measurement precisely because the reader
+       * has just been taught that this screen is careful.
        *
-       * The basis line is what keeps it honest, so the two are asserted
-       * TOGETHER: the estimate must never appear without the sentence saying
-       * it comes from the published rate and not from this tenant.
+       * Both estimates divide a balance by a rate, so while `awaitingGrant()`
+       * the quotient is not an estimate. It is suppressed, and the sentence
+       * that replaces it is asserted POSITIVELY.
+       *
+       * The first draft of this test wrapped the estimate in `if count > 0`,
+       * which after the suppression would have skipped every assertion and
+       * passed in silence — the inert guard again. A test for something that
+       * must not be there has to assert what IS.
        */
-      const estimate = page.getByTestId('credits-estimate-plan');
-      const basis = page.getByTestId('credits-estimate-basis');
-      if ((await estimate.count()) > 0) {
-        await expect(estimate).toHaveText(/\d/);
-        await expect(estimate).toHaveText(/more conversations/i);
-        await expect(
-          basis,
-          'a conversation estimate was shown with no statement of what it was derived from',
-        ).toBeVisible();
-        await expect(basis).toHaveText(/not on your own usage/i);
-      }
+      const withheld = page.getByTestId('credits-estimate-withheld');
+      await expect(
+        withheld,
+        'the estimate was withheld with no sentence explaining why — a gap where a number was reads as broken',
+      ).toBeVisible();
+      await expect(withheld).toHaveText(/credits are granted/i);
+      await expect(page.getByTestId('credits-estimate-plan')).toHaveCount(0);
+      await expect(page.getByTestId('credits-estimate-observed')).toHaveCount(0);
+      // The words themselves, not just the id: a key can change and a
+      // forecast can come back under a different testid.
+      await expect(page.getByTestId('credits')).not.toHaveText(/0 more conversations/i);
 
       /*
        * Unserved, and saying so. `breakdown-unavailable` is the difference

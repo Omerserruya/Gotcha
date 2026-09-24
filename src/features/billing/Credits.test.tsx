@@ -175,6 +175,31 @@ describe('an estimate always says what it rests on', () => {
     // The route forbids swapping the two, so this must say it is not theirs.
     expect(basis).toHaveTextContent(/not on your own usage/i);
   });
+
+  it('shows NO estimate at all while the period’s credits have not been granted', async () => {
+    /*
+     * ★ THE LINE THAT SAT IN EVERY SHOT OF THIS SCREEN.
+     *
+     * `MEASURED` is this tenant: the grant has not happened, so the balance
+     * is zero and `estimatedRemaining.chats` is 0 with it. The page rendered
+     * "At your plan's rate that is about 0 more conversations" directly
+     * beneath two paragraphs explaining that the zero is not a measurement.
+     *
+     * Both estimates divide a balance by a rate, so while the balance is not
+     * a balance the quotient is not an estimate. The suppression is asserted
+     * together with the sentence that replaces it — withholding silently
+     * would leave a gap where a number used to be, and a gap reads as broken.
+     */
+    const awaiting = await render17c({});
+    expect(awaiting.queryByTestId('credits-estimate-plan')).toBeNull();
+    expect(awaiting.queryByTestId('credits-estimate-observed')).toBeNull();
+    expect(awaiting.queryByTestId('credits-estimate-basis')).toBeNull();
+
+    const withheld = awaiting.getByTestId('credits-estimate-withheld');
+    expect(withheld).toHaveTextContent(/once this period's credits are granted/i);
+    // It must not leave a "0" behind in the sentence that explains its absence.
+    expect(withheld).not.toHaveTextContent(/\b0 more conversations\b/);
+  });
 });
 
 describe('“no consumption recorded” is about metering, not activity', () => {

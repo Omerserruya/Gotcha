@@ -151,7 +151,8 @@
       "observed": "At the rate you have actually been using credits, that is about {chats} more conversations.",
       "observedBasis": "Measured from your own usage over the last {days} days.",
       "planBasis": "Based on your plan's published rate, not on your own usage.",
-      "partiallyAttributed": "Only {pct}% of that usage was tied to a conversation — the rest was other AI work — so a per-conversation figure describes less of it than it looks."
+      "partiallyAttributed": "Only {pct}% of that usage was tied to a conversation — the rest was other AI work — so a per-conversation figure describes less of it than it looks.",
+      "awaitingGrant": "A per-conversation estimate comes back once this period's credits are granted. There is nothing to work it out from yet."
     },
     "observed": {
       "noMetering": "You have had {conversations} conversations in the last {days} days and no credits were recorded against them, so we cannot measure your own rate. That is about what has been metered, not about how much you have used GOTCHA.",
