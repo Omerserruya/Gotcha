@@ -40,9 +40,10 @@
       "heading": "What GOTCHA remembers",
       "source": "Learned from {source}, across {count} messages.",
       "unknownSource": "an earlier import",
-      "noPerFactTrace": "These can't be traced to the individual conversation each came from — that link isn't available yet. They also can't be corrected or removed from here.",
+      "noPerFactTrace": "GOTCHA records which conversation each of these came from, but those conversations can't be opened from here yet — so there's nothing to follow. They also can't be corrected or removed from here.",
       "none": "GOTCHA hasn't learned anything durable about this person yet.",
-      "unavailable": "We couldn't read what GOTCHA remembers about this person."
+      "unavailable": "We couldn't read what GOTCHA remembers about this person.",
+      "window": "Observed between {from} and {to}."
     },
     "timeline": {
       "heading": "Recent activity",
@@ -51,10 +52,11 @@
       "INBOUND": "from them",
       "OUTBOUND": "to them",
       "noBody": "(no text)",
-      "limit": "This is not the full history: the most recent {perConversation} messages from each of {conversations, plural, one {# conversation} other {# conversations}}.",
-      "capped": "Only the {cap} most recent conversations are shown. Older ones exist and aren't here.",
-      "truncated": "{count, plural, one {# conversation has} other {# conversations have}} more messages than shown.",
-      "messagesOnly": "Messages only. Orders, returns and actions GOTCHA took aren't part of this stream yet."
+      "messagesOnly": "Messages only. Orders, returns and actions GOTCHA took aren't part of this stream yet.",
+      "imported": "imported",
+      "partial": "Showing {shown, number} of {total, number} messages with this person.",
+      "whole": "{total, plural, one {# message} other {All {total, number} messages}} with this person.",
+      "scanTruncated": "This person has more conversations than we scan in one go, so the oldest may not be represented here."
     },
     "absent": {
       "notes": "Notes aren't recorded yet. There's nowhere to write one that would still be here tomorrow, so this screen doesn't offer it yet.",

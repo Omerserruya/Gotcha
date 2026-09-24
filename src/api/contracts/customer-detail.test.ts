@@ -4,13 +4,12 @@ import {
   conversationsIn,
   hasBrief,
   hasMemory,
-  moreConversationsExist,
+  importedEvents,
+  isPartialHistory,
   newestConversationId,
+  shownOfTotal,
   timelineEventSchema,
   timelineSchema,
-  truncatedConversations,
-  TIMELINE_CONVERSATION_CAP,
-  TIMELINE_MESSAGES_PER_CONVERSATION,
   type TimelineEvent,
 } from './customer-detail';
 
@@ -35,35 +34,59 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
     expect(conversationsIn(events)).toEqual(['c1', 'c2']);
   });
 
-  it('★ reports more conversations exist once the cap is reached', () => {
+  it('★★ says how many of the total are on screen, not just how many are on screen', () => {
     /*
-     * `identity.ts:233` — `take: 50`. Fifty distinct conversations means the
-     * route stopped counting, not that the person has exactly fifty.
+     * The old route took 50 conversations × the newest 5 messages of each,
+     * so a 300-message thread contributed five and the output was a
+     * well-ordered stream WITH HOLES IN THE MIDDLE. Not truncated — thinned.
+     * A truncated history is visibly short; a thinned one looks complete and
+     * is undetectable from the response.
+     *
+     * `totals.messages` is the real count, so "50 of 1,284" is now sayable
+     * and "showing recent activity" is no longer good enough.
      */
-    const under = Array.from({ length: TIMELINE_CONVERSATION_CAP - 1 }, (_, i) =>
-      event({ conversationId: `c${i}` }),
-    );
-    expect(moreConversationsExist(under)).toBe(false);
-
-    const at = Array.from({ length: TIMELINE_CONVERSATION_CAP }, (_, i) =>
-      event({ conversationId: `c${i}` }),
-    );
-    expect(moreConversationsExist(at)).toBe(true);
+    const timeline = timelineSchema.parse({
+      contact: null,
+      events: [event(), event({ conversationId: 'c2' })],
+      page: { limit: 50, nextCursor: 'abc', hasMore: true },
+      totals: { conversations: 40, messages: 1284, conversationScanTruncated: false },
+    });
+    expect(shownOfTotal(timeline)).toEqual({ shown: 2, total: 1284 });
+    expect(isPartialHistory(timeline)).toBe(true);
   });
 
-  it('★ names conversations whose tail is all we have', () => {
+  it('does not call a complete history partial', () => {
+    // The inverse, so the sentence is a statement about the data rather than
+    // a hedge that is always on.
+    const whole = timelineSchema.parse({
+      contact: null,
+      events: [event()],
+      page: { limit: 50, nextCursor: null, hasMore: false },
+      totals: { conversations: 1, messages: 1, conversationScanTruncated: false },
+    });
+    expect(isPartialHistory(whole)).toBe(false);
+  });
+
+  it('★★ separates imported messages from observed ones', () => {
     /*
-     * `take: 5` per conversation. A conversation contributing five messages
-     * here either HAD five or had five hundred — the payload cannot tell
-     * them apart, which is exactly why the screen must not imply it can.
+     * `applyLiveByDefault` injects `origin: "LIVE"` into any bulk read that
+     * does not mention origin, and this route never did — so for any customer
+     * with imported WhatsApp history the timeline showed NONE of it, and a
+     * long-standing customer rendered as brand new with no marker.
+     *
+     * Now both origins are named, and an imported message is labelled:
+     * something we were told about, not something we watched happen.
      */
-    const five = Array.from({ length: TIMELINE_MESSAGES_PER_CONVERSATION }, (_, i) =>
-      event({ createdAt: `2026-09-01T1${i}:00:00.000Z` }),
-    );
-    const four = Array.from({ length: TIMELINE_MESSAGES_PER_CONVERSATION - 1 }, (_, i) =>
-      event({ conversationId: 'c2', createdAt: `2026-09-02T1${i}:00:00.000Z` }),
-    );
-    expect(truncatedConversations([...five, ...four])).toEqual(['c1']);
+    const events = [event(), event({ origin: 'HISTORICAL_IMPORT', conversationId: 'c2' })];
+    expect(importedEvents(events)).toHaveLength(1);
+    expect(importedEvents(events)[0]!.conversationId).toBe('c2');
+  });
+
+  it('defaults origin to null rather than assuming LIVE', () => {
+    // A row written before the column exists is not evidence that it was
+    // observed. Guessing LIVE here is the same class of error as the guard
+    // that caused the problem.
+    expect(event().origin).toBeNull();
   });
 
   it('★ a second event kind fails the parse rather than rendering as a message', () => {
@@ -167,12 +190,20 @@ describe('an empty answer is not a failed one', () => {
           messageCount: null,
           source: null,
           learnedAt: null,
+          evidenceWindow: null,
         },
       }),
     ).toBe(true);
     expect(
       hasMemory({
-        context: { summary: null, facts: [], messageCount: null, source: null, learnedAt: null },
+        context: {
+          summary: null,
+          facts: [],
+          messageCount: null,
+          source: null,
+          learnedAt: null,
+          evidenceWindow: null,
+        },
       }),
     ).toBe(false);
     expect(hasMemory(null)).toBe(false);

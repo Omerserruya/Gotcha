@@ -217,6 +217,7 @@ const FIXTURE_DETAIL: CustomerDetail = {
         direction: 'INBOUND',
         body: 'Hi — is the wholesale order still arriving Thursday?',
         createdAt: '2026-09-18T09:14:00.000Z',
+        origin: 'LIVE',
       },
       {
         type: 'message',
@@ -225,6 +226,7 @@ const FIXTURE_DETAIL: CustomerDetail = {
         direction: 'OUTBOUND',
         body: 'It is, and I will send the tracking as soon as it ships.',
         createdAt: '2026-09-18T09:16:00.000Z',
+        origin: 'LIVE',
       },
       {
         type: 'message',
@@ -233,8 +235,18 @@ const FIXTURE_DETAIL: CustomerDetail = {
         direction: 'INBOUND',
         body: 'Following up on the March delivery — has anything changed?',
         createdAt: '2026-08-02T15:40:00.000Z',
+        // Imported, so the capture photographs the label. Until today these
+        // were excluded from the timeline entirely.
+        origin: 'HISTORICAL_IMPORT',
       },
     ],
+    page: { limit: 50, nextCursor: null, hasMore: true },
+    /*
+     * More than is shown, deliberately: the capture should photograph the
+     * "50 of 1,284" sentence rather than the all-of-it one, because the
+     * partial case is the one that used to be told as a lie.
+     */
+    totals: { conversations: 2, messages: 1284, conversationScanTruncated: false },
   },
   brief: {
     ok: true,
@@ -255,16 +267,23 @@ const FIXTURE_DETAIL: CustomerDetail = {
     context: {
       summary: null,
       facts: [
-        { text: 'Buys wholesale rather than retail.', category: 'commercial', confidence: 'high' },
+        {
+          text: 'Buys wholesale rather than retail.',
+          category: 'commercial',
+          confidence: 'high',
+          evidenceConversationIds: ['fixture-conv-1'],
+        },
         {
           text: 'Experienced a delayed shipment in March 2026.',
           category: 'service',
           confidence: 'high',
+          evidenceConversationIds: ['fixture-conv-2'],
         },
       ],
       messageCount: 412,
       source: 'historical_whatsapp_import',
       learnedAt: '2026-09-14T00:00:00.000Z',
+      evidenceWindow: { from: '2026-03-02T00:00:00.000Z', to: '2026-09-14T00:00:00.000Z' },
     },
   },
   noConversations: false,

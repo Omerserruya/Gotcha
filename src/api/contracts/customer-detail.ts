@@ -18,44 +18,59 @@ import { z } from 'zod';
 /* ── The timeline ────────────────────────────────────────────────────────── */
 
 /**
- * ★ THE CAPS, AND WHY THEY ARE EXPORTED RATHER THAN BURIED.
+ * ★★ THE OLD SHAPE WAS NOT TRUNCATED — IT WAS THINNED, AND THAT IS WORSE.
  *
- * `identity.ts:233,237` — the route takes 50 conversations and the newest 5
- * messages of each. So the "unified timeline" is **the last five messages of
- * the last fifty conversations**, with nothing in the payload saying so.
+ * Until 2026-09-24 this route took 50 conversations and the newest **5
+ * messages of each**, then merged and sorted them. So a 300-message thread
+ * contributed five, and the output was a plausible, well-ordered stream
+ * **with holes in the middle of every conversation**.
  *
- * A screen rendering that under the design's words — *"every channel in one
- * thread"*, *"her whole history"* — makes a claim of completeness the data
- * cannot support, and it is the calm wrong value at the scale of a whole
- * screen: nothing looks broken, the stream reads convincingly, and messages
- * six through n of every conversation are simply not there.
+ * A truncated history is visibly short. A thinned one looks complete and is
+ * undetectable from the response — and the honest-limit sentence this screen
+ * was built with would have named the WRONG limit, describing recent activity
+ * over a stream that was missing the middle.
  *
- * They are constants here so the screen can say the number rather than
- * gesture at it, and so this comment is the one place either has to change.
+ * ★ AND IT EXCLUDED IMPORTED HISTORY ENTIRELY. `applyLiveByDefault`
+ * (`packages/shared/src/lib/prisma.ts:243`) injects `origin: "LIVE"` into any
+ * bulk read that does not mention origin, and this route never did. For any
+ * customer whose WhatsApp history was imported, the timeline showed none of
+ * it — a long-standing customer rendered as brand new, confidently, with no
+ * marker.
+ *
+ * ── THE STANDING RULE FOR THIS AREA ──
+ * One guard produces both failures, and it will empty the
+ * `evidenceConversationIds` link target too. **Anything reading a customer's
+ * past must decide about origin explicitly**, and a screen that has not
+ * thought about it should be assumed to be showing a truncated life.
  */
-export const TIMELINE_CONVERSATION_CAP = 50;
-export const TIMELINE_MESSAGES_PER_CONVERSATION = 5;
 
-/**
- * ★ AND `type` HAS EXACTLY ONE MEMBER.
- *
- * `identity.ts:244` emits `type: "message" as const` and nothing else. The
- * design asks for one stream mixing conversations, orders, returns, AI
- * actions and notes; the route carries messages.
- *
- * Typed as the literal rather than a wider union, so the day a second kind
- * arrives the parse fails loudly here instead of the screen silently
- * rendering an unknown event as a message — the `roles.2.source` lesson,
- * applied in the direction where the narrow enum is correct because the
- * producer's own union is narrow.
- */
+/** Where a message came from. `null` on rows written before the column. */
+export const MESSAGE_ORIGINS = ['LIVE', 'HISTORICAL_IMPORT'] as const;
+export type MessageOrigin = (typeof MESSAGE_ORIGINS)[number];
+
 export const timelineEventSchema = z.object({
+  /**
+   * `identity.ts` emits `type: "message"` and nothing else. The design asks
+   * for one stream mixing conversations, orders, returns, AI actions and
+   * notes; the route carries messages.
+   *
+   * Typed as the literal rather than a wider union, so a second kind fails
+   * the parse here instead of rendering as a message body nobody questions.
+   */
   type: z.literal('message'),
   channel: z.string(),
   conversationId: z.string(),
   direction: z.enum(['INBOUND', 'OUTBOUND']),
   body: z.string().nullable().default(null),
   createdAt: z.string(),
+  /**
+   * ★ IMPORTED IS NOT THE SAME AS OBSERVED.
+   *
+   * An imported message is something we were TOLD about, not something we
+   * watched happen. The screen labels it, because a merchant reading a
+   * history has a right to know which parts the product witnessed.
+   */
+  origin: z.enum(MESSAGE_ORIGINS).nullable().default(null),
 });
 export type TimelineEvent = z.infer<typeof timelineEventSchema>;
 
@@ -75,51 +90,66 @@ export const timelineSchema = z.object({
     .nullable()
     .default(null),
   events: z.array(timelineEventSchema).default([]),
+  /** One cursor over the person's messages. `limit` defaults to 50, caps at 200. */
+  page: z
+    .object({
+      limit: z.number().default(50),
+      nextCursor: z.string().nullable().default(null),
+      hasMore: z.boolean().default(false),
+    })
+    .default({ limit: 50, nextCursor: null, hasMore: false }),
+  /**
+   * The REAL counts, which is what lets the screen say "50 of 1,284" rather
+   * than implying it holds everything.
+   *
+   * `conversationScanTruncated` is set when the 500-conversation `IN` cap
+   * bit. A bounded read that discloses its bound is fine; one that quietly
+   * drops the oldest threads is the defect this whole block is about.
+   */
+  totals: z
+    .object({
+      conversations: z.number().default(0),
+      messages: z.number().default(0),
+      conversationScanTruncated: z.boolean().default(false),
+    })
+    .default({ conversations: 0, messages: 0, conversationScanTruncated: false }),
 });
 export type CustomerTimeline = z.infer<typeof timelineSchema>;
 
-/** Distinct conversations represented in the stream. */
+/** Distinct conversations represented in the page we were served. */
 export function conversationsIn(events: readonly TimelineEvent[]): readonly string[] {
   return Array.from(new Set(events.map((e) => e.conversationId)));
 }
 
 /**
- * Did we hit the conversation cap? Then there are older conversations that
- * are not here at all.
+ * How many of this person's messages are on screen, out of how many exist.
  *
- * `>=` rather than `===`: the route's `take` makes more impossible, and an
- * equality test would quietly stop working if the cap ever rose.
+ * Both numbers, always. "Showing 50" is the sentence that made the old shape
+ * survivable; "50 of 1,284" is the one that is true.
  */
-export function moreConversationsExist(events: readonly TimelineEvent[]): boolean {
-  return conversationsIn(events).length >= TIMELINE_CONVERSATION_CAP;
+export function shownOfTotal(timeline: CustomerTimeline): {
+  readonly shown: number;
+  readonly total: number;
+} {
+  return { shown: timeline.events.length, total: timeline.totals.messages };
+}
+
+/** Are we looking at part of it? Trust the server's flag over arithmetic. */
+export function isPartialHistory(timeline: CustomerTimeline): boolean {
+  return timeline.page.hasMore || timeline.events.length < timeline.totals.messages;
+}
+
+/** Events we were told about rather than watched happen. */
+export function importedEvents(events: readonly TimelineEvent[]): readonly TimelineEvent[] {
+  return events.filter((e) => e.origin === 'HISTORICAL_IMPORT');
 }
 
 /**
- * Conversations that hit the per-conversation message cap, so we are showing
- * only their tail.
+ * The most recent conversation, which is the KEY TO THE BRIEF and to notes.
  *
- * A conversation with exactly five messages here either HAD five or had five
- * hundred — the payload cannot distinguish them, which is precisely why the
- * screen must not imply it can.
- */
-export function truncatedConversations(events: readonly TimelineEvent[]): readonly string[] {
-  const counts = new Map<string, number>();
-  for (const e of events) counts.set(e.conversationId, (counts.get(e.conversationId) ?? 0) + 1);
-  return Array.from(counts.entries())
-    .filter(([, n]) => n >= TIMELINE_MESSAGES_PER_CONVERSATION)
-    .map(([id]) => id);
-}
-
-/**
- * The most recent conversation, which is the KEY TO THE BRIEF.
- *
- * `POST /api/customer-summary` requires a `conversationId` and resolves the
- * person from it — the route's own words are *"persistent, customer-level
- * behavioural intelligence, not a per-conversation summary"*, reached
- * through a conversation-shaped door.
- *
- * So a customer with no conversations has no brief, and that is a fact about
- * them rather than a failure to report.
+ * `POST /api/customer-summary` and the CRM panel both require a
+ * `conversationId`. A customer with no conversations has neither, and that
+ * is a fact about them rather than a failure to report.
  */
 export function newestConversationId(events: readonly TimelineEvent[]): string | null {
   let best: TimelineEvent | null = null;
@@ -183,16 +213,23 @@ export function hasBrief(brief: CustomerBrief | null): boolean {
  * lastSeenAt }]` — and `evidenceConversationIds` is the exact thing 04b asks
  * for: *"each traceable to where it was learned"*.
  *
- * **It reaches no route.** The reachable endpoint projects each fact down to
- * `{ text, category, confidence }` (`historical-import.ts:540-543`), and the
- * field appears twice in the whole monorepo, both in the WRITER. The
- * endpoint that returns the row whole is keyed on an import-internal id we
- * cannot reach from a contact.
+ * It reached no route when this screen was built, and Backend has since
+ * added it. So the ids are here and they are real.
  *
- * So the schema carries what arrives, the screen states the set's source and
- * date, and it says plainly that a single fact cannot be traced yet. Not a
- * greyed link: a traceability marker that cannot be followed would be worse
- * than an honest block-level statement.
+ * ★★ AND THE SCREEN STILL DRAWS NO LINK, ON PURPOSE.
+ *
+ * Those conversations carry `origin: "HISTORICAL_IMPORT"`, and
+ * `applyLiveByDefault` injects `origin: "LIVE"` into bulk reads — **so a read
+ * that does not name an origin returns ZERO ROWS.** A link that looks
+ * followable would open an empty conversation.
+ *
+ * That is the exact failure the block-level statement was chosen to avoid,
+ * arriving from the other direction: not a missing field, but a present one
+ * whose destination is empty unless whatever serves it passes
+ * `withHistoricalRecords`. Nobody here has loaded one and watched messages
+ * come back, so the link is not drawn. A marker that resolves to nothing is
+ * worse than an honest statement that the trace exists and is not yet
+ * followable.
  *
  * The model's own comment is worth keeping in view — it stores durable
  * observations only, because *"'is waiting for a package' was true for a
@@ -202,6 +239,19 @@ export const memoryFactSchema = z.object({
   text: z.string(),
   category: z.string().nullable().default(null),
   confidence: z.string().nullable().default(null),
+  /**
+   * ★ NOW RETURNED — AND DECLARED HERE OR IT IS STRIPPED.
+   *
+   * Backend added it after this screen reported it missing. Third field
+   * today that had to be NAMED to arrive, after `source` and `taxed`: a
+   * strict `z.object` discards what the consumer never asked for, so a new
+   * field is invisible until somebody writes it down.
+   *
+   * Real `Conversation.id` values — `identity.stage.ts:208-213` queries the
+   * `Message` table by them, which is proof rather than inference. `[]` when
+   * there are none; never absent.
+   */
+  evidenceConversationIds: z.array(z.string()).default([]),
 });
 export type MemoryFact = z.infer<typeof memoryFactSchema>;
 
@@ -214,6 +264,26 @@ export const memorySchema = z.object({
       /** e.g. `historical_whatsapp_import`. The block's provenance. */
       source: z.string().nullable().default(null),
       learnedAt: z.string().nullable().default(null),
+      /**
+       * ★ WHEN THE EVIDENCE WAS OBSERVED — AT BLOCK LEVEL, DELIBERATELY.
+       *
+       * `firstSeenAt` / `lastSeenAt` exist per fact and Backend refused to
+       * return them there, because both come from `transcript[0]` and
+       * `transcript[last]` of the whole conversation — so **every fact in a
+       * row carries identical values.** Per fact they would read as "this
+       * preference was first observed on 2 March", which the data cannot
+       * support and which nothing in the shape would reveal.
+       *
+       * Worth copying as a rule: a field that is free to return is not
+       * therefore honest to display.
+       */
+      evidenceWindow: z
+        .object({
+          from: z.string().nullable().default(null),
+          to: z.string().nullable().default(null),
+        })
+        .nullable()
+        .default(null),
     })
     .nullable()
     .default(null),

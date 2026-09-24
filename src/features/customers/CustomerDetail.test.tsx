@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TIMELINE_CONVERSATION_CAP } from '@/api/contracts/customer-detail';
 import messages from '@/i18n/messages/en/customers.json';
 
 import { CustomerDetail } from './CustomerDetail';
@@ -40,6 +39,7 @@ const message = (over: Record<string, unknown> = {}) => ({
   direction: 'INBOUND' as const,
   body: 'hello',
   createdAt: '2026-09-01T10:00:00.000Z',
+  origin: 'LIVE' as const,
   ...over,
 });
 
@@ -48,6 +48,8 @@ function detail(over: Partial<Detail> = {}): Detail {
     timeline: {
       contact: { id: 'p1', displayName: 'Dana', externalId: '+972500000000', channel: 'WHATSAPP' },
       events: [message()],
+      page: { limit: 50, nextCursor: null, hasMore: false },
+      totals: { conversations: 1, messages: 1, conversationScanTruncated: false },
     },
     brief: null,
     memory: null,
@@ -59,21 +61,82 @@ function detail(over: Partial<Detail> = {}): Detail {
 const show = async (d: Detail) => render(await CustomerDetail({ detail: d }));
 
 describe('★★ the timeline must never claim to be a history', () => {
-  it('states the rule in numbers on every non-empty timeline', async () => {
+  it('★★ says how many of the total are shown, not just how many are shown', async () => {
     /*
-     * `identity.ts:233,237` — 50 conversations, newest 5 messages each, and
-     * the payload says so nowhere. Under the design's words — "her whole
-     * history", "every channel in one thread" — that is a claim of
-     * completeness the data cannot support.
+     * The sentence this replaces named 50 conversations × 5 messages — a
+     * shape that no longer exists, and that was the WRONG limit even then.
+     * The old route thinned rather than truncated, so the stream had holes in
+     * the middle of every conversation and an honest-sounding "showing recent
+     * activity" would still have been false.
      *
-     * Stated ALWAYS, not only when a cap is provably hit: the payload cannot
-     * distinguish a conversation that had five messages from one that had
-     * five hundred.
+     * `totals.messages` makes the true sentence available.
      */
+    await show(
+      detail({
+        timeline: {
+          contact: null,
+          events: [message()],
+          page: { limit: 50, nextCursor: 'abc', hasMore: true },
+          totals: { conversations: 40, messages: 1284, conversationScanTruncated: false },
+        },
+      }),
+    );
+    const count = screen.getByTestId('timeline-count');
+    expect(count).toHaveTextContent(/1,284/);
+    expect(count).toHaveTextContent(/showing 1 of/i);
+  });
+
+  it('does not hedge a complete history', async () => {
+    // The inverse direction, so the sentence is a statement about the data.
     await show(detail());
-    const limit = screen.getByTestId('timeline-limit');
-    expect(limit).toHaveTextContent(/not the full history/i);
-    expect(limit).toHaveTextContent(/most recent 5 messages/i);
+    const count = screen.getByTestId('timeline-count');
+    // Not "showing 1 of 1", which hedges a complete history into a partial one.
+    expect(count).toHaveTextContent(/1 message with this person/i);
+    expect(count).not.toHaveTextContent(/showing/i);
+  });
+
+  it('★★ labels an imported message as imported', async () => {
+    /*
+     * Until today the timeline excluded imported history entirely —
+     * `applyLiveByDefault` injects `origin: "LIVE"` into any read that does
+     * not mention origin, and this route never did. A customer with years of
+     * imported WhatsApp rendered as brand new, confidently, with no marker.
+     *
+     * Now it is included, and labelled: something we were TOLD about is not
+     * something the product watched happen.
+     */
+    await show(
+      detail({
+        timeline: {
+          contact: null,
+          events: [message({ origin: 'HISTORICAL_IMPORT' })],
+          page: { limit: 50, nextCursor: null, hasMore: false },
+          totals: { conversations: 1, messages: 1, conversationScanTruncated: false },
+        },
+      }),
+    );
+    expect(screen.getByTestId('event-imported')).toHaveTextContent(/imported/i);
+  });
+
+  it('does not label a live message as imported', async () => {
+    await show(detail());
+    expect(screen.queryByTestId('event-imported')).toBeNull();
+  });
+
+  it('discloses the conversation-scan bound when it bit', async () => {
+    // A bounded read that discloses its bound is fine; one that quietly
+    // drops the oldest threads is the defect.
+    await show(
+      detail({
+        timeline: {
+          contact: null,
+          events: [message()],
+          page: { limit: 50, nextCursor: null, hasMore: false },
+          totals: { conversations: 500, messages: 900, conversationScanTruncated: true },
+        },
+      }),
+    );
+    expect(screen.getByTestId('timeline-scan-truncated')).toHaveTextContent(/oldest may not be/i);
   });
 
   it('★ says what is NOT in the stream, not only what is', async () => {
@@ -84,21 +147,6 @@ describe('★★ the timeline must never claim to be a history', () => {
     const sources = screen.getByTestId('timeline-sources');
     expect(sources).toHaveTextContent(/messages only/i);
     expect(sources).toHaveTextContent(/orders, returns and actions/i);
-  });
-
-  it('adds a stronger marker once the conversation cap is reached', async () => {
-    const events = Array.from({ length: TIMELINE_CONVERSATION_CAP }, (_, i) =>
-      message({ conversationId: `c${i}` }),
-    );
-    await show(detail({ timeline: { contact: null, events } }));
-    expect(screen.getByTestId('timeline-capped')).toHaveTextContent(/older ones exist/i);
-  });
-
-  it('does NOT claim conversations are capped when they are not', async () => {
-    // The inverse direction, so the marker is a statement about the data
-    // rather than decoration that is always on.
-    await show(detail());
-    expect(screen.queryByTestId('timeline-capped')).toBeNull();
   });
 
   it('still says the cross-channel part IS real, because it is', async () => {
@@ -156,11 +204,20 @@ describe('★ what GOTCHA remembers, and what it cannot tell you about it', () =
         context: {
           summary: null,
           facts: [
-            { text: 'Had a delayed shipment in March.', category: 'service', confidence: 'high' },
+            {
+              text: 'Had a delayed shipment in March.',
+              category: 'service',
+              confidence: 'high',
+              // Present now, and still not drawn — the conversations behind
+              // these carry origin HISTORICAL_IMPORT and a read that does not
+              // name an origin returns nothing.
+              evidenceConversationIds: ['conv-abc'],
+            },
           ],
           messageCount: 412,
           source: 'historical_whatsapp_import',
           learnedAt: '2026-09-14T00:00:00.000Z',
+          evidenceWindow: { from: '2026-03-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' },
         },
       },
     });
@@ -184,11 +241,29 @@ describe('★ what GOTCHA remembers, and what it cannot tell you about it', () =
      */
     const { container } = await show(withMemory());
     const note = screen.getByTestId('memory-no-trace');
-    expect(note).toHaveTextContent(/can't be traced to the individual conversation/i);
+    /*
+     * ★ THE CLAIM CHANGED WHEN BACKEND ADDED THE FIELD.
+     *
+     * It used to be "we don't record which conversation this came from".
+     * Now we do — and the conversations carry origin HISTORICAL_IMPORT,
+     * which `applyLiveByDefault` filters out of any read that does not name
+     * an origin. So a link would open an empty conversation.
+     *
+     * The screen must say the trace EXISTS and cannot be followed, which is
+     * a different and more useful sentence than "there is no trace".
+     */
+    expect(note).toHaveTextContent(/records which conversation each of these came from/i);
+    expect(note).toHaveTextContent(/can't be opened from here yet/i);
     // And it says the other absent write, because these are the facts
     // somebody would most want to correct.
     expect(note).toHaveTextContent(/can't be corrected or removed/i);
+    // No anchor anywhere: the ids are present and must not become links.
     expect(container.querySelector('a')).toBeNull();
+
+    // The window belongs to the SET, never to a fact — every fact in a row
+    // carries identical firstSeen/lastSeen, so per fact it would be a date
+    // the data cannot support.
+    expect(screen.getByTestId('memory-window')).toHaveTextContent(/observed between/i);
   });
 
   it('distinguishes “nothing learned” from “we could not read it”', async () => {
@@ -207,7 +282,17 @@ describe('★ the brief has three states, not two', () => {
   it('says there are no conversations to write one from', async () => {
     // Distinct from "we asked and there is none": one is a property of the
     // person, the other means the pipeline has not reached them.
-    await show(detail({ noConversations: true, timeline: { contact: null, events: [] } }));
+    await show(
+      detail({
+        noConversations: true,
+        timeline: {
+          contact: null,
+          events: [],
+          page: { limit: 50, nextCursor: null, hasMore: false },
+          totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+        },
+      }),
+    );
     expect(screen.getByTestId('brief-no-conversations')).toHaveTextContent(
       /no conversations with this person/i,
     );

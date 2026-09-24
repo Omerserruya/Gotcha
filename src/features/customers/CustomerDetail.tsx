@@ -1,13 +1,10 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
-  conversationsIn,
   hasBrief,
   hasMemory,
-  moreConversationsExist,
-  truncatedConversations,
-  TIMELINE_CONVERSATION_CAP,
-  TIMELINE_MESSAGES_PER_CONVERSATION,
+  isPartialHistory,
+  shownOfTotal,
 } from '@/api/contracts/customer-detail';
 import type { CustomerDetail as Detail } from './load-customer';
 
@@ -80,9 +77,8 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
     );
   }
 
-  const { events, contact } = detail.timeline;
-  const conversationCount = conversationsIn(events).length;
-  const truncated = truncatedConversations(events);
+  const { events, contact, totals } = detail.timeline;
+  const { shown, total } = shownOfTotal(detail.timeline);
 
   return (
     <div className={styles.detail} data-testid="customer-detail">
@@ -159,17 +155,38 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
             })}
           </p>
 
+          {/* When the evidence window is known, it belongs to the SET. */}
+          {detail.memory!.context!.evidenceWindow?.from &&
+          detail.memory!.context!.evidenceWindow?.to ? (
+            <p className={styles.memorySource} data-testid="memory-window">
+              {t('detail.memory.window', {
+                from: format.dateTime(new Date(detail.memory!.context!.evidenceWindow!.from!), {
+                  dateStyle: 'medium',
+                }),
+                to: format.dateTime(new Date(detail.memory!.context!.evidenceWindow!.to!), {
+                  dateStyle: 'medium',
+                }),
+              })}
+            </p>
+          ) : null}
+
           {/*
-            ★★ AND THE LIMIT, AS A SENTENCE.
+            ★★ THE TRACE EXISTS AND IS NOT FOLLOWABLE — A DIFFERENT SENTENCE
+            FROM THE ONE THIS SCREEN SHIPPED WITH.
 
-            `evidenceConversationIds` is written on every fact and returned by
-            no route — the reachable endpoint projects each fact down to
-            text, category and confidence. So "each traceable to where it was
-            learned" is not possible today.
+            `evidenceConversationIds` now arrives, and they are real
+            `Conversation.id` values. But those conversations carry
+            `origin: "HISTORICAL_IMPORT"`, and `applyLiveByDefault` injects
+            `origin: "LIVE"` into bulk reads — so a read that does not name an
+            origin returns ZERO ROWS.
 
-            Said rather than drawn as a dead link: a traceability marker that
-            cannot be followed is worse than an honest statement that the
-            trace is not available.
+            A link here would open an empty conversation: the same failure the
+            block-level statement was chosen to avoid, arriving from the other
+            direction. Not a missing field — a present one whose destination
+            is empty unless whatever serves it passes `withHistoricalRecords`.
+
+            Nobody has loaded one and watched messages come back, so no link
+            is drawn and the screen says which of the two it is.
           */}
           <p className={styles.memoryLimit} data-testid="memory-no-trace">
             {t('detail.memory.noPerFactTrace')}
@@ -222,6 +239,18 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
                   {event.channel}
                   {' · '}
                   {t(`detail.timeline.${event.direction}` as 'detail.timeline.INBOUND')}
+                  {/*
+                    ★ IMPORTED IS NOT OBSERVED. Something we were TOLD about,
+                    not something the product watched happen — and until
+                    today these were excluded from the timeline entirely, so
+                    a long-standing customer rendered as brand new.
+                  */}
+                  {event.origin === 'HISTORICAL_IMPORT' ? (
+                    <span className={styles.imported} data-testid="event-imported">
+                      {' · '}
+                      {t('detail.timeline.imported')}
+                    </span>
+                  ) : null}
                 </span>
                 <span className={styles.eventBody}>
                   {event.body?.trim() || t('detail.timeline.noBody')}
@@ -232,31 +261,33 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         )}
 
         {/*
-          ★ THE LIMIT, IN NUMBERS, ALWAYS — not only when a cap is hit.
+          ★★ THE COUNT, BOTH HALVES.
 
-          The payload cannot distinguish a conversation that HAD five
-          messages from one that had five hundred, so the rule has to be
-          stated whether or not we can prove it bit this time.
+          The route now returns `totals.messages` — the real number of this
+          person's messages — so the screen can say "50 of 1,284" instead of
+          implying it holds everything.
+
+          This replaces a sentence that named 50 conversations × 5 messages,
+          which described a shape that no longer exists AND was the wrong
+          limit even then: the old route THINNED rather than truncated, so
+          the stream had holes in the middle of every conversation and the
+          honest-sounding sentence would still have been false.
         */}
         {events.length > 0 ? (
-          <p className={styles.timelineLimit} data-testid="timeline-limit">
-            {t('detail.timeline.limit', {
-              conversations: conversationCount,
-              perConversation: TIMELINE_MESSAGES_PER_CONVERSATION,
-            })}
+          <p className={styles.timelineLimit} data-testid="timeline-count">
+            {isPartialHistory(detail.timeline)
+              ? t('detail.timeline.partial', { shown, total })
+              : t('detail.timeline.whole', { total })}
           </p>
         ) : null}
 
-        {/* Stronger, when we can see the cap was reached. */}
-        {moreConversationsExist(events) ? (
-          <p className={styles.timelineLimit} data-testid="timeline-capped">
-            {t('detail.timeline.capped', { cap: TIMELINE_CONVERSATION_CAP })}
-          </p>
-        ) : null}
-
-        {truncated.length > 0 ? (
-          <p className={styles.timelineLimit} data-testid="timeline-truncated">
-            {t('detail.timeline.truncated', { count: truncated.length })}
+        {/*
+          A bounded read that discloses its bound is fine; one that quietly
+          drops the oldest threads is the defect. This flag is the disclosure.
+        */}
+        {totals.conversationScanTruncated ? (
+          <p className={styles.timelineLimit} data-testid="timeline-scan-truncated">
+            {t('detail.timeline.scanTruncated')}
           </p>
         ) : null}
 
