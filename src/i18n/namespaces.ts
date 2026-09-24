@@ -6,6 +6,7 @@
  * here when they are built; the foundation ships the cross-cutting ones.
  */
 export const NAMESPACES = [
+  'business-core',
   /** Shared vocabulary: save, cancel, close, retry. */
   'common',
   /** Navigation and shell chrome. */

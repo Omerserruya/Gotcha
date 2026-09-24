@@ -1,0 +1,36 @@
+{
+  "title": "Business core",
+  "description": "What GOTCHA is allowed to look at, and which system it asks.",
+  "unavailable": "We could not read your business core just now.",
+  "useCase": {
+    "heading": "What does your business do?",
+    "hint": "This decides which parts GOTCHA asks you about. A leads business is never asked about shipping or returns.",
+    "ecommerce": "Sell online",
+    "leads": "Take enquiries and leads",
+    "both": "Both",
+    "unset": "Choose one to see the parts that apply to you."
+  },
+  "part": {
+    "ecommerce": "Store",
+    "payments": "Payments",
+    "shipping": "Shipping",
+    "returns": "Returns",
+    "crm": "Customer records"
+  },
+  "state": {
+    "impossible": "Nothing can do this yet. GOTCHA has no shipping systems to connect, so there is nothing here for you to choose — this is not something you are missing.",
+    "nothing_connected": "Nothing connected. Connect one in the marketplace and come back — {systems} would work.",
+    "connected_but_failing": "{name} is connected and not working, so it cannot be used here yet. Fix it in the marketplace rather than connecting it again.",
+    "connected_none_chosen": "Connected and not chosen yet.",
+    "chosen": "{name} does this."
+  },
+  "crm": {
+    "elsewhere": "Customer records are chosen on the Integrations screen, not here — there is one place for it so this screen can never disagree with the system the AI actually calls."
+  },
+  "marketplace": "Go to Integrations",
+  "notesHeading": "Worth knowing",
+  "choosing": {
+    "notYet": "Choosing which system plays a part is not offered here yet. The way to save it exists and has never once run against a real connection — no system on this workspace is connected and working — so it is not being put in front of you as though it were proven.",
+    "crmWorks": "Customer records are the exception: that choice has its own screen and has been in use for a long time."
+  }
+}

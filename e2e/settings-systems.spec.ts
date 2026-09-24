@@ -263,5 +263,58 @@ for (const size of SIZES) {
 
       await shoot(page, `${size.name}-7-above-the-fold`);
     });
+
+    /*
+     * ★ 14b/14c · the state the platform actually produces.
+     *
+     * Four of five parts have nothing to choose from and the fifth's only
+     * candidate is CONNECTED-and-BROKEN. So this photographs a screen that
+     * routes somebody to the marketplace, not one with five filled dropdowns
+     * — and the two sentences that must differ.
+     */
+    test('business core · a broken connection is not an empty one', async ({ page }) => {
+      await openSystems(page, 'en');
+
+      const core = page.getByTestId('business-core');
+      await expect(core).toBeVisible();
+
+      /*
+       * The ecommerce part. "Connect one" would send a merchant to redo work
+       * they have already done — asserted by CONTENT, because the empty and
+       * the broken states differ only in what they say.
+       */
+      const ecommerce = page.getByTestId('core-part-ecommerce');
+      await expect(ecommerce).toHaveAttribute('data-state', 'connected_but_failing');
+      await expect(ecommerce).toHaveText(/connected and not working/i);
+      await expect(ecommerce).not.toHaveText(/nothing connected/i);
+
+      // Shipping: nothing can ever serve it, and that is not the merchant's
+      // doing. An empty dropdown here reads as an unfinished setup.
+      const shipping = page.getByTestId('core-part-shipping');
+      await expect(shipping).toHaveAttribute('data-state', 'impossible');
+      await expect(shipping).toHaveText(/not something you are missing/i);
+
+      await shoot(page, `${size.name}-core-parts`);
+    });
+
+    /*
+     * ★ The two sentences that keep this screen honest.
+     */
+    test('business core · the CRM lives elsewhere, and the save is unproven', async ({ page }) => {
+      await openSystems(page, 'en');
+
+      // One place for the CRM decision, so this screen can never disagree
+      // with the system the AI actually calls.
+      await expect(page.getByTestId('core-part-crm-elsewhere')).toHaveText(
+        /never disagree with the system the AI actually calls/i,
+      );
+
+      // Built and verified are different words.
+      await expect(page.getByTestId('core-choosing-not-yet')).toHaveText(
+        /never once run against a real connection/i,
+      );
+
+      await shoot(page, `${size.name}-core-honesty`);
+    });
   });
 }

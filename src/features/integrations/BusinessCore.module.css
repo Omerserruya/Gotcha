@@ -1,0 +1,128 @@
+@layer features {
+  /*
+   * Screens 14b/14c · Business core.
+   *
+   * Deliberately a list of sentences rather than a grid of dropdowns: on this
+   * estate four of five parts have nothing to choose from, and a row of empty
+   * selects would say "you have not finished setting up" to a merchant who
+   * has nothing to finish.
+   */
+
+  .core {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .heading {
+    margin: 0 0 var(--space-4);
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+  .notesHeading {
+    margin: 0 0 var(--space-6);
+    font-size: var(--font-size-caption);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .hint {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .useCases {
+    list-style: none;
+    margin: var(--space-8) 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .useCase {
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+    background-color: var(--panel-inset);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-14);
+  }
+
+  .useCase[data-selected='true'] {
+    color: var(--intent-calm-text);
+    background-color: var(--intent-calm-surface);
+  }
+
+  .parts {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .part {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .partName {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .partState {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-body);
+  }
+
+  /* Connected and broken. Amber, because the work is done and something is wrong. */
+  .partFailing {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-blocked-text);
+    background-color: var(--intent-blocked-surface);
+    border-radius: var(--radius-badge);
+    padding-block: var(--space-6);
+    padding-inline: var(--space-10);
+  }
+
+  .notes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .note {
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .unavailable {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+}
