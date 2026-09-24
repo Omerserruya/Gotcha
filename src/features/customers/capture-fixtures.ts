@@ -218,6 +218,9 @@ const FIXTURE_DETAIL: CustomerDetail = {
         body: 'Hi — is the wholesale order still arriving Thursday?',
         createdAt: '2026-09-18T09:14:00.000Z',
         origin: 'LIVE',
+        id: 'fx-1',
+        handover: null,
+        action: null,
       },
       {
         type: 'message',
@@ -227,6 +230,9 @@ const FIXTURE_DETAIL: CustomerDetail = {
         body: 'It is, and I will send the tracking as soon as it ships.',
         createdAt: '2026-09-18T09:16:00.000Z',
         origin: 'LIVE',
+        id: 'fx-2',
+        handover: null,
+        action: null,
       },
       {
         type: 'message',
@@ -238,15 +244,25 @@ const FIXTURE_DETAIL: CustomerDetail = {
         // Imported, so the capture photographs the label. Until today these
         // were excluded from the timeline entirely.
         origin: 'HISTORICAL_IMPORT',
+        id: 'fx-3',
+        handover: null,
+        action: null,
       },
     ],
-    page: { limit: 50, nextCursor: null, hasMore: true },
+    page: { limit: 50, types: ['message'], nextCursor: null, hasMore: true },
+    coverage: {},
     /*
      * More than is shown, deliberately: the capture should photograph the
      * "50 of 1,284" sentence rather than the all-of-it one, because the
      * partial case is the one that used to be told as a lie.
      */
-    totals: { conversations: 2, messages: 1284, conversationScanTruncated: false },
+    totals: {
+      conversations: 2,
+      messages: 1284,
+      handovers: 0,
+      aiActions: 0,
+      conversationScanTruncated: false,
+    },
   },
   brief: {
     ok: true,

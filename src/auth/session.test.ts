@@ -53,8 +53,27 @@ describe('sealSession', () => {
   });
 
   it('rejects a tampered cookie rather than trusting it', async () => {
+    /*
+     * ★ THE TAMPER IS DERIVED FROM THE SEAL, NOT HARDCODED.
+     *
+     * This read `${sealed.slice(0, -2)}xy` — which does not tamper with
+     * anything when the seal already ends in "xy". Roughly one seal in four
+     * thousand, so it failed once in a full-suite run today and passed alone
+     * in 400ms, which is the signature of a flake and was a real defect in
+     * the test.
+     *
+     * A security assertion that silently becomes a no-op is worse than the
+     * odds suggest: the run where it does nothing is also the run where it
+     * reports the cookie was accepted, and the natural reading of that is a
+     * broken seal rather than a broken test.
+     *
+     * Flipping the final character against itself always changes the string.
+     */
     const sealed = await sealSession(session());
-    expect(await unsealSession(`${sealed.slice(0, -2)}xy`)).toBeNull();
+    const last = sealed.slice(-1);
+    const tampered = `${sealed.slice(0, -1)}${last === 'A' ? 'B' : 'A'}`;
+    expect(tampered).not.toBe(sealed);
+    expect(await unsealSession(tampered)).toBeNull();
   });
 
   it('rejects a session past its absolute expiry', async () => {

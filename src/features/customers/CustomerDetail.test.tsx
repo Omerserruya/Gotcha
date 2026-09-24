@@ -39,7 +39,10 @@ const message = (over: Record<string, unknown> = {}) => ({
   direction: 'INBOUND' as const,
   body: 'hello',
   createdAt: '2026-09-01T10:00:00.000Z',
+  id: 'e1',
   origin: 'LIVE' as const,
+  handover: null,
+  action: null,
   ...over,
 });
 
@@ -48,8 +51,15 @@ function detail(over: Partial<Detail> = {}): Detail {
     timeline: {
       contact: { id: 'p1', displayName: 'Dana', externalId: '+972500000000', channel: 'WHATSAPP' },
       events: [message()],
-      page: { limit: 50, nextCursor: null, hasMore: false },
-      totals: { conversations: 1, messages: 1, conversationScanTruncated: false },
+      page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
+      coverage: {},
+      totals: {
+        conversations: 1,
+        messages: 1,
+        handovers: 0,
+        aiActions: 0,
+        conversationScanTruncated: false,
+      },
     },
     brief: null,
     memory: null,
@@ -77,8 +87,15 @@ describe('★★ the timeline must never claim to be a history', () => {
         timeline: {
           contact: null,
           events: [message()],
-          page: { limit: 50, nextCursor: 'abc', hasMore: true },
-          totals: { conversations: 40, messages: 1284, conversationScanTruncated: false },
+          page: { limit: 50, types: ['message'], nextCursor: 'abc', hasMore: true },
+          coverage: {},
+          totals: {
+            conversations: 40,
+            messages: 1284,
+            handovers: 0,
+            aiActions: 0,
+            conversationScanTruncated: false,
+          },
         },
       }),
     );
@@ -111,8 +128,15 @@ describe('★★ the timeline must never claim to be a history', () => {
         timeline: {
           contact: null,
           events: [message({ origin: 'HISTORICAL_IMPORT' })],
-          page: { limit: 50, nextCursor: null, hasMore: false },
-          totals: { conversations: 1, messages: 1, conversationScanTruncated: false },
+          page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
+          coverage: {},
+          totals: {
+            conversations: 1,
+            messages: 1,
+            handovers: 0,
+            aiActions: 0,
+            conversationScanTruncated: false,
+          },
         },
       }),
     );
@@ -132,22 +156,148 @@ describe('★★ the timeline must never claim to be a history', () => {
         timeline: {
           contact: null,
           events: [message()],
-          page: { limit: 50, nextCursor: null, hasMore: false },
-          totals: { conversations: 500, messages: 900, conversationScanTruncated: true },
+          page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
+          coverage: {},
+          totals: {
+            conversations: 500,
+            messages: 900,
+            handovers: 0,
+            aiActions: 0,
+            conversationScanTruncated: true,
+          },
         },
       }),
     );
     expect(screen.getByTestId('timeline-scan-truncated')).toHaveTextContent(/oldest may not be/i);
   });
 
-  it('★ says what is NOT in the stream, not only what is', async () => {
-    // `type: "message"` is the whole union. A merchant reading a
-    // messages-only stream headed "activity" would reasonably conclude this
-    // customer never ordered anything.
-    await show(detail());
-    const sources = screen.getByTestId('timeline-sources');
-    expect(sources).toHaveTextContent(/messages only/i);
-    expect(sources).toHaveTextContent(/orders, returns and actions/i);
+  it("★★ renders the server's coverage, including AVAILABLE-but-incomplete", async () => {
+    /*
+     * `available: true` is not the same as complete. `ai_action` carries a
+     * detail saying ToolExecution records catalog HTTP tools only — so a
+     * Shopify refund the AI performed is NOT in this list, and Backend's own
+     * note says the gap is invisible from the data.
+     *
+     * A screen that renders the events and drops the detail deletes the only
+     * warning there is. Both kinds of gap are shown together, because a
+     * merchant does not care which is which: absent and present-but-partial
+     * are equally reasons not to read this as the whole story.
+     */
+    await show(
+      detail({
+        timeline: {
+          contact: null,
+          events: [message()],
+          page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
+          coverage: {
+            message: { available: true, reason: null, detail: null },
+            ai_action: {
+              available: true,
+              reason: null,
+              detail:
+                'ToolExecution records catalog HTTP tools only. An action taken through an adapter, such as a Shopify refund, is not recorded here.',
+            },
+            order: {
+              available: false,
+              reason: 'no_local_model',
+              detail: 'Orders live in the commerce platform and are served by their own screen.',
+            },
+          },
+          totals: {
+            conversations: 1,
+            messages: 1,
+            handovers: 0,
+            aiActions: 0,
+            conversationScanTruncated: false,
+          },
+        },
+      }),
+    );
+    // The PARTIAL one — the dangerous one.
+    expect(screen.getByTestId('coverage-ai_action')).toHaveTextContent(/not recorded here/i);
+    // And the absent one.
+    expect(screen.getByTestId('coverage-order')).toHaveTextContent(/own screen/i);
+    // A source that is available AND complete needs no sentence.
+    expect(screen.queryByTestId('coverage-message')).toBeNull();
+  });
+
+  it('★★ renders a handover from `handover`, never from `body`', async () => {
+    /*
+     * `body` is null on handovers and AI actions. Backend deliberately did
+     * not compose summary sentences into it: a sentence they compose is not
+     * data, and in that field it would be indistinguishable from something
+     * the customer actually wrote.
+     *
+     * The legacy CustomerTimeline renders `body ?? "(no body)"` and shows
+     * both kinds as empty messages.
+     */
+    await show(
+      detail({
+        timeline: {
+          contact: null,
+          events: [
+            message({
+              type: 'handover',
+              body: null,
+              direction: null,
+              handover: { from: 'ai', to: 'Dana', actorUserId: 'u1', reason: 'refund request' },
+            }),
+          ],
+          page: { limit: 50, types: ['handover'], nextCursor: null, hasMore: false },
+          coverage: {},
+          totals: {
+            conversations: 1,
+            messages: 0,
+            handovers: 1,
+            aiActions: 0,
+            conversationScanTruncated: false,
+          },
+        },
+      }),
+    );
+    const handover = screen.getByTestId('event-handover');
+    expect(handover).toHaveTextContent(/Handed to Dana/);
+    expect(handover).toHaveTextContent(/refund request/);
+    // Never the empty-message fallback.
+    expect(screen.queryByText(/\(no text\)/)).toBeNull();
+  });
+
+  it('★ an AI action says whether it WORKED', async () => {
+    // A failed tool call rendered as "GOTCHA ran process_refund" would read
+    // as a refund that happened.
+    await show(
+      detail({
+        timeline: {
+          contact: null,
+          events: [
+            message({
+              type: 'ai_action',
+              body: null,
+              direction: null,
+              action: {
+                tool: 'process_refund',
+                success: false,
+                triggeredBy: 'ai',
+                durationMs: 120,
+                approvedBy: null,
+              },
+            }),
+          ],
+          page: { limit: 50, types: ['ai_action'], nextCursor: null, hasMore: false },
+          coverage: {},
+          totals: {
+            conversations: 1,
+            messages: 0,
+            handovers: 0,
+            aiActions: 1,
+            conversationScanTruncated: false,
+          },
+        },
+      }),
+    );
+    const action = screen.getByTestId('event-action');
+    expect(action).toHaveTextContent(/tried process_refund and it failed/i);
+    expect(action).not.toHaveTextContent(/^GOTCHA ran/);
   });
 
   it('still says the cross-channel part IS real, because it is', async () => {
@@ -362,8 +512,15 @@ describe('★★ a person who has never written is a state, not four blank panel
       timeline: {
         contact: null,
         events: [],
-        page: { limit: 50, nextCursor: null, hasMore: false },
-        totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+        page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
+        coverage: {},
+        totals: {
+          conversations: 0,
+          messages: 0,
+          handovers: 0,
+          aiActions: 0,
+          conversationScanTruncated: false,
+        },
       },
     });
 
@@ -405,8 +562,15 @@ describe('★ the brief has three states, not two', () => {
         timeline: {
           contact: null,
           events: [],
-          page: { limit: 50, nextCursor: null, hasMore: false },
-          totals: { conversations: 0, messages: 0, conversationScanTruncated: false },
+          page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
+          coverage: {},
+          totals: {
+            conversations: 0,
+            messages: 0,
+            handovers: 0,
+            aiActions: 0,
+            conversationScanTruncated: false,
+          },
         },
       }),
     );

@@ -52,11 +52,19 @@
       "INBOUND": "from them",
       "OUTBOUND": "to them",
       "noBody": "(no text)",
-      "messagesOnly": "Messages only. Orders, returns and actions GOTCHA took aren't part of this stream yet.",
       "imported": "imported",
       "partial": "Showing {shown, number} of {total, number} messages with this person.",
       "whole": "{total, plural, one {# message} other {All {total, number} messages}} with this person.",
-      "scanTruncated": "This person has more conversations than we scan in one go, so the oldest may not be represented here."
+      "scanTruncated": "This person has more conversations than we scan in one go, so the oldest may not be represented here.",
+      "handover": "Handed to {to}.",
+      "handoverWithReason": "Handed to {to} — {reason}.",
+      "actionDone": "GOTCHA ran {tool}.",
+      "actionFailed": "GOTCHA tried {tool} and it failed.",
+      "kind": {
+        "handover": "handover",
+        "ai_action": "action",
+        "message": "message"
+      }
     },
     "absent": {
       "money": "Spend, order count and refunds aren't shown here. Reading them means calling your store live for each customer, so they appear where one person is being decided about — on an approval — rather than on every page."

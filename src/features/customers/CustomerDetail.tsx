@@ -1,6 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
+  coverageCaveats,
   hasBrief,
   hasMemory,
   hasNeverWritten,
@@ -253,9 +254,11 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
                 <span className={styles.eventMeta}>
                   {format.dateTime(new Date(event.createdAt), { dateStyle: 'medium' })}
                   {' · '}
-                  {event.channel}
-                  {' · '}
-                  {t(`detail.timeline.${event.direction}` as 'detail.timeline.INBOUND')}
+                  {event.channel ? `${event.channel} · ` : ''}
+                  {/* Direction is a property of a message, not of an action. */}
+                  {event.direction
+                    ? t(`detail.timeline.${event.direction}` as 'detail.timeline.INBOUND')
+                    : t(`detail.timeline.kind.${event.type}` as 'detail.timeline.kind.handover')}
                   {/*
                     ★ IMPORTED IS NOT OBSERVED. Something we were TOLD about,
                     not something the product watched happen — and until
@@ -269,9 +272,41 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
                     </span>
                   ) : null}
                 </span>
-                <span className={styles.eventBody}>
-                  {event.body?.trim() || t('detail.timeline.noBody')}
-                </span>
+                {/*
+                  ★★ EACH KIND FROM ITS OWN FIELD, NEVER FROM `body`.
+
+                  `body` is null on handovers and AI actions. Backend
+                  deliberately did not compose summary sentences into it, and
+                  the reason is worth copying: a sentence they compose is not
+                  data, and in that field it would be indistinguishable from
+                  something the customer actually wrote.
+
+                  The legacy `CustomerTimeline.tsx` does `body ?? "(no body)"`
+                  and renders both kinds as empty messages.
+                */}
+                {event.type === 'handover' && event.handover ? (
+                  <span className={styles.eventBody} data-testid="event-handover">
+                    {event.handover.reason
+                      ? t('detail.timeline.handoverWithReason', {
+                          to: event.handover.to,
+                          reason: event.handover.reason,
+                        })
+                      : t('detail.timeline.handover', { to: event.handover.to })}
+                  </span>
+                ) : event.type === 'ai_action' && event.action ? (
+                  <span className={styles.eventBody} data-testid="event-action">
+                    {t(
+                      event.action.success
+                        ? 'detail.timeline.actionDone'
+                        : 'detail.timeline.actionFailed',
+                      { tool: event.action.tool },
+                    )}
+                  </span>
+                ) : (
+                  <span className={styles.eventBody}>
+                    {event.body?.trim() || t('detail.timeline.noBody')}
+                  </span>
+                )}
               </li>
             ))}
           </ol>
@@ -309,13 +344,35 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         ) : null}
 
         {/*
-          ★ WHAT IS NOT IN THE STREAM. A merchant reading a messages-only
-          timeline under the word "activity" would reasonably conclude this
-          customer never ordered anything.
+          ★★ WHAT THE STREAM CANNOT FULLY TELL YOU — FROM THE SERVER, NOT
+          FROM A HARDCODED SENTENCE.
+
+          `coverage` names both kinds of gap and the screen renders both
+          together, because a merchant does not care which is which: a source
+          that is ABSENT and a source that is present-but-PARTIAL are equally
+          reasons not to read this as the whole story.
+
+          The partial one is the dangerous one. `ai_action` is
+          `available: true` and still omits any action taken through an
+          adapter — a Shopify refund the AI performed is not in this list.
+          Backend's own note says the gap is invisible from the data, so a
+          screen that renders the events and drops the detail deletes the
+          only warning there is.
+
+          Server-supplied rather than written here, so a source arriving or
+          changing its limit updates the screen without an edit — the
+          opposite of the hardcoded "messages only" sentence this replaces,
+          which was already stale the day the union shipped.
         */}
-        <p className={styles.timelineLimit} data-testid="timeline-sources">
-          {t('detail.timeline.messagesOnly')}
-        </p>
+        {coverageCaveats(detail.timeline.coverage).length > 0 ? (
+          <ul className={styles.coverage} data-testid="timeline-coverage">
+            {coverageCaveats(detail.timeline.coverage).map((caveat) => (
+              <li key={caveat.type} data-testid={`coverage-${caveat.type}`}>
+                {caveat.detail}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
 
       {/*

@@ -21,6 +21,9 @@ const event = (over: Partial<TimelineEvent> = {}): TimelineEvent =>
     direction: 'INBOUND',
     body: 'hello',
     createdAt: '2026-09-01T10:00:00.000Z',
+    id: 'e1',
+    handover: null,
+    action: null,
     ...over,
   });
 
@@ -48,8 +51,15 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
     const timeline = timelineSchema.parse({
       contact: null,
       events: [event(), event({ conversationId: 'c2' })],
-      page: { limit: 50, nextCursor: 'abc', hasMore: true },
-      totals: { conversations: 40, messages: 1284, conversationScanTruncated: false },
+      page: { limit: 50, types: ['message'], nextCursor: 'abc', hasMore: true },
+      coverage: {},
+      totals: {
+        conversations: 40,
+        messages: 1284,
+        handovers: 0,
+        aiActions: 0,
+        conversationScanTruncated: false,
+      },
     });
     expect(shownOfTotal(timeline)).toEqual({ shown: 2, total: 1284 });
     expect(isPartialHistory(timeline)).toBe(true);
@@ -61,8 +71,15 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
     const whole = timelineSchema.parse({
       contact: null,
       events: [event()],
-      page: { limit: 50, nextCursor: null, hasMore: false },
-      totals: { conversations: 1, messages: 1, conversationScanTruncated: false },
+      page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
+      coverage: {},
+      totals: {
+        conversations: 1,
+        messages: 1,
+        handovers: 0,
+        aiActions: 0,
+        conversationScanTruncated: false,
+      },
     });
     expect(isPartialHistory(whole)).toBe(false);
   });

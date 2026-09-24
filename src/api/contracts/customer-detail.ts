@@ -48,19 +48,34 @@ import { z } from 'zod';
 export const MESSAGE_ORIGINS = ['LIVE', 'HISTORICAL_IMPORT'] as const;
 export type MessageOrigin = (typeof MESSAGE_ORIGINS)[number];
 
+export const TIMELINE_EVENT_TYPES = ['message', 'handover', 'ai_action'] as const;
+export type TimelineEventType = (typeof TIMELINE_EVENT_TYPES)[number];
+
 export const timelineEventSchema = z.object({
   /**
-   * `identity.ts` emits `type: "message"` and nothing else. The design asks
-   * for one stream mixing conversations, orders, returns, AI actions and
-   * notes; the route carries messages.
-   *
-   * Typed as the literal rather than a wider union, so a second kind fails
-   * the parse here instead of rendering as a message body nobody questions.
+   * Three kinds now, where there was one. The design asks for five —
+   * conversations, orders, returns, AI actions and notes — and `coverage`
+   * below says what became of the other two rather than leaving the stream
+   * to imply they never happened.
    */
-  type: z.literal('message'),
-  channel: z.string(),
+  type: z.enum(TIMELINE_EVENT_TYPES),
+  /** On every event now; the cursor is built from it. */
+  id: z.string().default(''),
+  /** Null on rows whose conversation could not be resolved. */
+  channel: z.string().nullable().default(null),
   conversationId: z.string(),
-  direction: z.enum(['INBOUND', 'OUTBOUND']),
+  direction: z.enum(['INBOUND', 'OUTBOUND']).nullable().default(null),
+  /**
+   * ⚠ NULL ON HANDOVERS AND AI ACTIONS, AND MUST NOT BE FALLEN BACK TO.
+   *
+   * Backend deliberately did not compose summary sentences into this field,
+   * and the reason is worth copying: **a sentence they compose is not data,
+   * and in this field it would be indistinguishable from a real message
+   * body.** The legacy `CustomerTimeline.tsx` renders `body ?? "(no body)"`,
+   * so those events read as empty messages there.
+   *
+   * Render a handover from `handover` and an AI action from `action`.
+   */
   body: z.string().nullable().default(null),
   createdAt: z.string(),
   /**
@@ -71,8 +86,69 @@ export const timelineEventSchema = z.object({
    * history has a right to know which parts the product witnessed.
    */
   origin: z.enum(MESSAGE_ORIGINS).nullable().default(null),
+  /** Present on `handover` events. Who took the conversation, and why. */
+  handover: z
+    .object({
+      from: z.string().nullable().default(null),
+      to: z.string(),
+      actorUserId: z.string().nullable().default(null),
+      reason: z.string().nullable().default(null),
+    })
+    .nullish()
+    .default(null),
+  /** Present on `ai_action` events. What the AI did and whether it worked. */
+  action: z
+    .object({
+      tool: z.string(),
+      success: z.boolean().default(false),
+      triggeredBy: z.string().nullable().default(null),
+      durationMs: z.number().nullable().default(null),
+      approvedBy: z.string().nullable().default(null),
+    })
+    .nullish()
+    .default(null),
 });
 export type TimelineEvent = z.infer<typeof timelineEventSchema>;
+
+/**
+ * ★★ WHAT THE STREAM COVERS — INCLUDING WHERE IT IS AVAILABLE AND STILL
+ * INCOMPLETE.
+ *
+ * `available: true` is not the same as complete. `ai_action` carries a
+ * `detail` saying *"ToolExecution records catalog HTTP tools only. An action
+ * taken through an adapter, such as a Shopify refund, is not recorded
+ * here."*
+ *
+ * So a merchant reading the AI-actions stream sees a plausible, complete
+ * list that omits a whole class of action — Backend's own comment says the
+ * gap is invisible from the data. A screen that renders the events and drops
+ * the detail is the calm wrong value with the explanation deleted.
+ */
+export const coverageEntrySchema = z.object({
+  available: z.boolean().default(false),
+  reason: z.string().nullable().default(null),
+  detail: z.string().nullable().default(null),
+});
+export type CoverageEntry = z.infer<typeof coverageEntrySchema>;
+
+export const coverageSchema = z.record(z.string(), coverageEntrySchema).default({});
+export type TimelineCoverage = z.infer<typeof coverageSchema>;
+
+/**
+ * Everything the stream cannot fully tell you, in one list.
+ *
+ * Both kinds together, because a merchant does not care which is which: a
+ * source that is absent and a source that is present-but-partial are equally
+ * reasons not to read this stream as the whole story.
+ */
+export function coverageCaveats(
+  coverage: TimelineCoverage,
+): readonly { readonly type: string; readonly detail: string }[] {
+  return Object.entries(coverage)
+    .filter(([, entry]) => !entry.available || entry.detail)
+    .map(([type, entry]) => ({ type, detail: entry.detail ?? '' }))
+    .filter((c) => c.detail !== '');
+}
 
 export const timelineSchema = z.object({
   /**
@@ -90,14 +166,17 @@ export const timelineSchema = z.object({
     .nullable()
     .default(null),
   events: z.array(timelineEventSchema).default([]),
-  /** One cursor over the person's messages. `limit` defaults to 50, caps at 200. */
+  /** One cursor over the person's events. `limit` defaults to 50, caps at 200. */
   page: z
     .object({
       limit: z.number().default(50),
+      /** Which sources this response actually used. */
+      types: z.array(z.string()).default([]),
       nextCursor: z.string().nullable().default(null),
       hasMore: z.boolean().default(false),
     })
-    .default({ limit: 50, nextCursor: null, hasMore: false }),
+    .default({ limit: 50, types: [], nextCursor: null, hasMore: false }),
+  coverage: coverageSchema,
   /**
    * The REAL counts, which is what lets the screen say "50 of 1,284" rather
    * than implying it holds everything.
@@ -110,9 +189,17 @@ export const timelineSchema = z.object({
     .object({
       conversations: z.number().default(0),
       messages: z.number().default(0),
+      handovers: z.number().default(0),
+      aiActions: z.number().default(0),
       conversationScanTruncated: z.boolean().default(false),
     })
-    .default({ conversations: 0, messages: 0, conversationScanTruncated: false }),
+    .default({
+      conversations: 0,
+      messages: 0,
+      handovers: 0,
+      aiActions: 0,
+      conversationScanTruncated: false,
+    }),
 });
 export type CustomerTimeline = z.infer<typeof timelineSchema>;
 
@@ -131,12 +218,23 @@ export function shownOfTotal(timeline: CustomerTimeline): {
   readonly shown: number;
   readonly total: number;
 } {
-  return { shown: timeline.events.length, total: timeline.totals.messages };
+  /*
+   * Every kind the response actually used, not just messages. Counting only
+   * messages against a stream that now contains three kinds would report
+   * "50 of 1,284" over a list whose other entries are uncounted.
+   */
+  const { messages, handovers, aiActions } = timeline.totals;
+  const used = new Set(timeline.page.types);
+  const total =
+    (used.size === 0 || used.has('message') ? messages : 0) +
+    (used.has('handover') ? handovers : 0) +
+    (used.has('ai_action') ? aiActions : 0);
+  return { shown: timeline.events.length, total };
 }
 
 /** Are we looking at part of it? Trust the server's flag over arithmetic. */
 export function isPartialHistory(timeline: CustomerTimeline): boolean {
-  return timeline.page.hasMore || timeline.events.length < timeline.totals.messages;
+  return timeline.page.hasMore || timeline.events.length < shownOfTotal(timeline).total;
 }
 
 /** Events we were told about rather than watched happen. */
