@@ -1,5 +1,7 @@
 'use server';
 
+import { z } from 'zod';
+
 import { revalidatePath } from 'next/cache';
 
 import { isApiError } from '@/api/client/api-error';
@@ -78,6 +80,58 @@ async function write(
       if (cause.status === 404) return { ok: false, reason: 'gone' };
     }
     logger.warn('grants.write_failed', { cause, granted });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/**
+ * Create a role — screen 12c.
+ *
+ * The design: *"You start from an existing role and only touch what's
+ * different."* That is not a server concept — `POST /permissions/roles` takes
+ * `{ name, description, features }` and knows nothing about a source. Starting
+ * from a role means seeding the selection from its features and sending the
+ * result, which is one call rather than a copy plus an edit.
+ *
+ * Two refusals worth distinguishing, because they need different actions:
+ * **409** is a name already in use, and **400** names the unknown features it
+ * rejected — a feature key the catalogue offered but the server does not
+ * grant, which is a drift between the two and not something the person typed.
+ */
+export type CreateRoleResult =
+  | { readonly ok: true; readonly id: string }
+  | {
+      readonly ok: false;
+      /**
+       * `name_taken` is a 409 and the person can fix it by typing something
+       * else. `unknown_features` is a 400 and they cannot: it means the
+       * catalogue offered a key the server will not grant, which is drift
+       * between two lists and nothing the person did.
+       */
+      readonly reason: 'name_taken' | 'unknown_features' | 'forbidden' | 'failed';
+    };
+
+export async function createRole(input: {
+  name: string;
+  description: string;
+  features: readonly string[];
+}): Promise<CreateRoleResult> {
+  try {
+    const data = await serverApi().post({
+      endpoint: permissionEndpoints.roles(),
+      payload: z.object({ data: z.object({ id: z.string() }) }).transform((r) => r.data),
+      body: input,
+      raw: true,
+    });
+    revalidatePath('/[locale]/settings/people/roles', 'page');
+    return { ok: true, id: data.id };
+  } catch (cause) {
+    logger.warn('roles.create_failed', { cause });
+    if (isApiError(cause)) {
+      if (cause.status === 409) return { ok: false, reason: 'name_taken' };
+      if (cause.status === 400) return { ok: false, reason: 'unknown_features' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
     return { ok: false, reason: 'failed' };
   }
 }

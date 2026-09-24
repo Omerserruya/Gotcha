@@ -1,6 +1,8 @@
 import { getTranslations } from 'next-intl/server';
 
+import { loadCatalog } from '@/features/roles/load-catalog';
 import { loadRoles } from '@/features/roles/load-roles';
+import { RoleForm } from '@/features/roles/RoleForm';
 import { RoleList } from '@/features/roles/RoleList';
 import styles from '@/features/roles/Roles.module.css';
 import { PageContainer } from '@/shell/PageContainer';
@@ -28,7 +30,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  */
 export default async function Page() {
   const t = await getTranslations('roles');
-  const roles = await loadRoles();
+  const [roles, catalog] = await Promise.all([loadRoles(), loadCatalog()]);
 
   if (roles === null) {
     return (
@@ -57,6 +59,17 @@ export default async function Page() {
           Zero custom roles is the state here, and it is worth naming: it
           means every permission anyone has comes from a role nobody chose.
         */}
+        {/*
+          Screen 12c, BELOW the list. "Start from an existing role" needs the
+          existing roles to have been read first — a form above them would ask
+          somebody to choose a starting point they have not seen.
+
+          Omitted entirely when the catalogue could not be read: a permission
+          picker with no permissions is a form that silently creates a role
+          granting nothing.
+        */}
+        {catalog ? <RoleForm permissions={catalog.permissions} roles={roles} /> : null}
+
         {custom.length === 0 ? (
           <div className={styles.empty} data-testid="no-custom-roles">
             <p className={styles.emptyLead}>{t('noCustom')}</p>

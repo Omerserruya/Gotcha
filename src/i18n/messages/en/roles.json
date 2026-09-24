@@ -56,5 +56,24 @@
     "gone": "That person or permission no longer exists.",
     "needs_reason": "Say why first — a removal without a reason leaves nobody able to explain it.",
     "failed": "That didn't go through."
+  },
+  "form": {
+    "heading": "New role",
+    "startFrom": "Start from",
+    "startFromNone": "Nothing — start with no permissions",
+    "startFromHint": "Copies that role's permissions so you only change what differs. It does not link the two: later edits to {name} will not reach this one.",
+    "name": "Name",
+    "description": "What this role is for",
+    "selected": "{count, plural, =0 {No permissions selected} one {# permission selected} other {# permissions selected}}",
+    "save": "Create role",
+    "saving": "Creating…",
+    "error": {
+      "name_taken": "A role with that name already exists. Choose another name.",
+      "unknown_features": "The server refused some of these permissions. That is a mismatch between this list and what it will grant, not something you did — nothing was created.",
+      "forbidden": "You do not have permission to create roles.",
+      "failed": "The role could not be created. Nothing was changed."
+    },
+    "noLevels": "A permission is held or it is not. GOTCHA has no None / View / Edit / Manage levels — the design shows four and the catalogue stores one bit per permission.",
+    "noLimits": "Money limits cannot be set on a permission. There is no amount stored anywhere, so a role that may issue refunds may issue any refund."
   }
 }

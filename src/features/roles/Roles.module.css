@@ -405,4 +405,85 @@
     line-height: var(--line-height-snug);
     color: var(--text-body);
   }
+
+  /* ── Screen 12c · create a role ──────────────────────────────────────── */
+
+  .roleForm {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: var(--space-10);
+  }
+
+  .formHeading {
+    margin: 0;
+    font-size: var(--font-size-body-lg);
+    font-weight: 500;
+  }
+
+  .formField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .formLabel,
+  .formLegend {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .formSelect {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+  }
+
+  .formHint {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .formDomain {
+    margin: 0;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .formPermission {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-meta);
+  }
+
+  /* What the catalogue cannot hold, said rather than omitted. */
+  .formAbsent {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--text-subtle);
+  }
+
+  .formError {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--intent-urgent-text);
+  }
 }
