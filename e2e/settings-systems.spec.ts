@@ -454,6 +454,25 @@ for (const size of SIZES) {
       await expect(crm).toHaveText(/no dedicated CRM is connected/i);
 
       /*
+       * ★ AND THIS TENANT'S SHOPIFY IS THE CRM WHILE IT IS BROKEN.
+       *
+       * `crm-adapter-resolver.ts:158,178` both match
+       * `status: { in: ["CONNECTED", "ERROR"] }`. Shopify is in ERROR on this
+       * deployment with a failed token refresh — so this sentence is being
+       * photographed in exactly the state it describes, which is rare enough
+       * on this tenant to be worth saying.
+       *
+       * Asserted on BOTH halves. The reassurance alone is the calm wrong
+       * value: a merchant told their records have not moved, without being
+       * told the system being written to is the one that is down, has been
+       * comforted rather than informed.
+       */
+      const still = page.getByTestId('core-writeback-still-source');
+      await expect(still).toHaveText(/stays the source of truth/i);
+      await expect(still).toHaveText(/deliberate/i);
+      await expect(still).toHaveText(/the one that's currently down/i);
+
+      /*
        * ★★ IDENTITY IS A 0/1/2+ FLOW AND THE MIDDLE CASE IS A WRITE.
        *
        * `crm-identity.service.ts`. On exactly one match GOTCHA ENRICHES the

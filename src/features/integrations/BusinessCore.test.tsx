@@ -333,6 +333,32 @@ describe('★ 14e — absent is not unset', () => {
     expect(crm).toHaveTextContent(/no dedicated CRM is connected/i);
   });
 
+  it('★ says a failing system STAYS the source of truth, and why that is deliberate', async () => {
+    /*
+     * `crm-adapter-resolver.ts:158,178` both match
+     * `status: { in: ["CONNECTED", "ERROR"] }`. This tenant's Shopify is in
+     * ERROR with a failed token refresh and is still where its customer
+     * records resolve.
+     *
+     * ★ FRAMED AS REASSURANCE, WHICH IS WHAT IT IS. A merchant watching a
+     * failing Shopify would reasonably assume their records had quietly moved
+     * or stopped being written. They have not, and no other page can tell
+     * them.
+     *
+     * But the cost is stated too: the system being written to is the one that
+     * is down. Reassurance that omits that would be the calm wrong value in
+     * the place this whole page exists to avoid it.
+     */
+    await render14();
+    const still = screen.getByTestId('core-writeback-still-source');
+    expect(still).toHaveTextContent(/stays the source of truth/i);
+    expect(still).toHaveTextContent(/doesn't quietly move your customer records/i);
+    // Deliberate, not an oversight — and the reason, so it reads as a design.
+    expect(still).toHaveTextContent(/deliberate/i);
+    // ★ The cost, said out loud.
+    expect(still).toHaveTextContent(/the one that's currently down/i);
+  });
+
   it('★★ identity: the ONE-match case is a write, not a lookup', async () => {
     /*
      * `crm-identity.service.ts` owns a 0/1/2+ flow. "First match wins, new

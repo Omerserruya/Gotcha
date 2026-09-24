@@ -184,6 +184,30 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
           {t('writeback.crmDefault')}
         </p>
 
+        {/*
+          ★ AND IT STAYS THE SOURCE OF TRUTH WHILE IT IS BROKEN.
+
+          `crm-adapter-resolver.ts:158,178` both match
+          `status: { in: ["CONNECTED", "ERROR"] }`. So THIS tenant's Shopify,
+          sitting in ERROR with a failed token refresh, is still where its
+          customer records resolve.
+
+          Stated as reassurance rather than as alarm, because that is what it
+          is. The resolver includes ERROR so an OAuth integration whose token
+          merely expired still resolves to its real adapter instead of the
+          NoOp stub — otherwise the adapter is never used, the token is never
+          refreshed, and the connection deadlocks.
+
+          A merchant watching a failing Shopify would reasonably assume the
+          opposite: that their records had quietly moved, or stopped being
+          written. They have not. This is the only page that can say so, and
+          the last clause says the cost too — the system being written to is
+          the one that is down.
+        */}
+        <p className={styles.writebackLead} data-testid="core-writeback-still-source">
+          {t('writeback.stillSourceWhileFailing')}
+        </p>
+
         <ul className={styles.writebackList}>
           {/*
             Per-rule write-back configuration. What is written is decided by
