@@ -156,6 +156,36 @@
       "failedWithStage": "It stopped while {stage}. Nothing from this import is in use.",
       "failedBare": "It stopped before finishing. Nothing from this import is in use.",
       "unavailableBody": "This number has no history GOTCHA can read — usually because it is new, or because the source declined to share it."
+    },
+    "review": {
+      "heading": "What GOTCHA learned",
+      "nothingUsedYet": "None of this is in use. GOTCHA only answers from what you approve here — an answer that is still waiting cannot reach a customer.",
+      "evidenceNotTruth": "These are things your team actually said. That makes them evidence, not policy: an agent may have made an exception once, or been wrong.",
+      "group": {
+        "needs_a_look": "Needs a look",
+        "ready": "Approved",
+        "rejected": "Rejected",
+        "already_covered": "Already covered"
+      },
+      "alreadyCoveredBody": "You already have an answer for these, so they were not added a second time. Nothing was turned down.",
+      "empty": "Nothing in this group.",
+      "evidence": "Said {occurrences, plural, one {once} other {# times}} to {customers, plural, one {one customer} other {# customers}}, {from} to {to}.",
+      "evidenceNoDates": "Said {occurrences, plural, one {once} other {# times}} to {customers, plural, one {one customer} other {# customers}}.",
+      "liveLookup": "Do not let the AI state this as fact. It is true in general and depends on something that changes — stock, a calendar, a price — so the AI is told to check before answering rather than promise.",
+      "curation": {
+        "kept": "Kept as your team wrote it.",
+        "rewritten": "Reworded for clarity.",
+        "live_data": "Marked as needing a live check."
+      },
+      "conflict": "Your team gave more than one answer to this. Choose or write the right one — GOTCHA will not pick for you.",
+      "duplicateOf": "You already have an answer to this in your knowledge base.",
+      "approve": "Approve",
+      "reject": "Reject",
+      "bulkApprove": "Approve the {count} that are ready",
+      "bulkSafe": "This only takes suggestions with no conflict and enough evidence behind them. The list is worked out here, not on this page, so it cannot approve a conflict however it is pressed.",
+      "rerun": "Look again",
+      "rerunSafe": "Looking again updates the counts on these suggestions. It does not ask you about anything you have already rejected.",
+      "noLanguageShortcut": "The design offers to add a missing reply language from here. There is nowhere to add one — GOTCHA stores a single language and answers each customer in their own regardless."
     }
   }
 }
