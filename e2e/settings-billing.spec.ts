@@ -396,6 +396,58 @@ for (const size of SIZES) {
       // The sentence that stops a zero being read as overspending.
       await expect(notice).toHaveText(/not credits you have spent/i);
 
+      /*
+       * ── THE FOUR LINES THAT WERE IN EVERY SHOT AND IN NO ASSERTION ──
+       * Found by comparing the rendered evidence against the assertions
+       * rather than the file tree against the design. All four are visible in
+       * `1440-6-above-the-fold.png` and none had ever been read by a test.
+       *
+       * They are asserted HERE, inside a test that already has the page open,
+       * because the rate limit is a 1,000-request window and a billing page
+       * costs six requests every time it loads. A new test per line would
+       * have spent a fifth of the budget to assert four sentences.
+       */
+
+      // The headline number on the block. Nothing checked it said anything.
+      const balance = page.getByTestId('credits-balance');
+      await expect(balance).toHaveText(/\d/);
+      await expect(balance).toHaveText(/credits available/i);
+
+      /*
+       * ★ A FORECAST DERIVED FROM A BALANCE THE SCREEN HAS JUST DISOWNED.
+       *
+       * "At your plan's rate that is about 0 more conversations" renders
+       * directly beneath "no credits have been issued for this period yet".
+       * It is not false — nothing buys nothing — but it is a projection
+       * standing on an input the paragraph above calls absent.
+       *
+       * The basis line is what keeps it honest, so the two are asserted
+       * TOGETHER: the estimate must never appear without the sentence saying
+       * it comes from the published rate and not from this tenant.
+       */
+      const estimate = page.getByTestId('credits-estimate-plan');
+      const basis = page.getByTestId('credits-estimate-basis');
+      if ((await estimate.count()) > 0) {
+        await expect(estimate).toHaveText(/\d/);
+        await expect(estimate).toHaveText(/more conversations/i);
+        await expect(
+          basis,
+          'a conversation estimate was shown with no statement of what it was derived from',
+        ).toBeVisible();
+        await expect(basis).toHaveText(/not on your own usage/i);
+      }
+
+      /*
+       * Unserved, and saying so. `breakdown-unavailable` is the difference
+       * between "we could not read this" and "there is nothing here", and it
+       * is the branch this tenant actually renders.
+       */
+      const breakdown = page.getByTestId('breakdown-unavailable');
+      if ((await breakdown.count()) > 0) {
+        await expect(breakdown).toHaveText(/\S/);
+        await expect(breakdown).toHaveText(/can.t show the breakdown/i);
+      }
+
       await shoot(page, `${size.name}-credits-awaiting-grant`);
     });
 
@@ -420,6 +472,179 @@ for (const size of SIZES) {
       await expect(note).toHaveText(/not about how much you have used/i);
 
       await shoot(page, `${size.name}-credits-no-metering`);
+    });
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * auto-purchase · THE BLOCK THAT WAS IN EVERY SHOT AND IN NO ASSERTION
+     * ══════════════════════════════════════════════════════════════════════
+     * `AutoPurchase.tsx` shipped with eight testids and nineteen new message
+     * keys, and was photographed at three viewports — while **not one test
+     * had ever looked at it.** A green capture is evidence about the
+     * assertions that ran, and there were none.
+     *
+     * This is screen 11d exactly: an `IntlError` sat in a shot for a full
+     * capture because the test asserted only that Save was visible. It is
+     * worse here, because `getMessageFallback` returns `''` in a production
+     * build — a wrong key renders NOTHING, the page looks tidy, and every
+     * billing test still passes. There is no error to notice.
+     *
+     * So every assertion below is on CONTENT. Presence proves nothing about
+     * a block whose failure mode is being present and empty.
+     */
+    test('auto-purchase · the block that was photographed but never read', async ({ page }) => {
+      await openBilling(page, 'en');
+
+      const unset = page.getByTestId('auto-purchase-unset');
+      const block = page.getByTestId('auto-purchase');
+
+      /*
+       * Exactly one. "Nothing is configured" and "here is the configuration"
+       * are different facts, and rendering neither is the empty-key failure
+       * this whole test exists to catch.
+       */
+      const unsetCount = await unset.count();
+      const blockCount = await block.count();
+      expect(
+        unsetCount + blockCount,
+        missingIds('the auto-purchase block (neither the unset sentence nor the policy)'),
+      ).toBe(1);
+
+      if (unsetCount === 1) {
+        /*
+         * No policy row. The sentence must still name the DEFAULT outcome —
+         * "nothing is set up" alone leaves a merchant believing nothing
+         * happens, when in fact the AI stops answering.
+         */
+        await expect(unset).toHaveText(/\S/);
+        await expect(unset).toHaveText(/default/i);
+        await expect(unset).toHaveText(/stops answering/i);
+        await shoot(page, `${size.name}-auto-unset`);
+        return;
+      }
+
+      // ── No placeholder ever reaches a merchant ──────────────────────────
+      // `{threshold}`, `{warn}`, `{cap}`, `{spent}`, `{currency}`, `{used}`.
+      // An un-substituted placeholder renders literally and looks like a
+      // template someone forgot, which is the one thing worse than empty.
+      await expect(block).not.toHaveText(/\{[a-zA-Z]/);
+
+      // ── 1 · does it buy, and at what ────────────────────────────────────
+      const state = page.getByTestId('auto-state');
+      await expect(state).toHaveText(/\S/);
+      const stateText = (await state.textContent()) ?? '';
+      const buysAutomatically = /Buys more automatically/i.test(stateText);
+      if (buysAutomatically) {
+        // The trigger is the number. A sentence saying it buys without saying
+        // when is the part a merchant came here to read.
+        await expect(state).toHaveText(/\d+%/);
+      } else {
+        expect(stateText, 'auto-state said neither that it buys nor that it does not').toMatch(
+          /Doesn.t buy more automatically/i,
+        );
+      }
+
+      // ── 2 · TWO thresholds, not one ─────────────────────────────────────
+      // `warningThresholdPct` tells the owner and `thresholdPct` buys. The
+      // design drew one control; a warning that fires at the same instant as
+      // the purchase is not a warning, so when buying is on, the screen must
+      // say somebody is told FIRST — and must say at what.
+      const warning = page.getByTestId('auto-warning');
+      if (buysAutomatically) {
+        await expect(warning).toBeVisible();
+        await expect(warning).toHaveText(/\d+%/);
+        await expect(warning).toHaveText(/before anything is bought/i);
+      } else {
+        await expect(warning).toHaveCount(0);
+      }
+
+      // ── 3 · the ceiling, and what has gone against it ───────────────────
+      const cap = page.getByTestId('auto-cap');
+      await expect(cap).toHaveText(/\S/);
+      const capText = (await cap.textContent()) ?? '';
+      const hasCeiling = !/No monthly limit/i.test(capText);
+      if (hasCeiling) {
+        /*
+         * A ceiling with no figure is not a ceiling. Both numbers are
+         * required: the limit and the spend so far — one without the other
+         * cannot answer "how close am I".
+         */
+        expect(capText, 'a monthly ceiling was claimed with no amount in it').toMatch(/\d/);
+        await expect(cap).toHaveText(/a month on automatic purchases/i);
+        await expect(cap).toHaveText(/so far this cycle/i);
+      }
+
+      /*
+       * ★ AND IT IS A MONEY CEILING, NOT A PURCHASE-COUNT CAP.
+       *
+       * The design asks "at most how many times a month". `AutoPurchasePolicy`
+       * stores `packageKey`, `thresholdPct`, `warningThresholdPct` and
+       * `maxMonthlySpend` — there is nowhere to put a count. Five ₪100 buys
+       * and one ₪500 buy are identical to a money ceiling and opposite to a
+       * count, so the screen must not imply the guarantee it cannot make.
+       */
+      await expect(cap).not.toHaveText(/\btimes a month\b/i);
+      await expect(cap).not.toHaveText(/\bpurchases? per month\b/i);
+
+      // ── 4 · what happens when it runs out ───────────────────────────────
+      // The key is COMPUTED from the enum (`autoPurchase.behavior.${value}`).
+      // A sixth value on the platform renders the empty string here, and the
+      // most consequential sentence on the block silently disappears.
+      const behavior = page.getByTestId('auto-behavior');
+      await expect(behavior).toHaveText(/\S/);
+      const behaviorText = (await behavior.textContent()) ?? '';
+      expect(
+        behaviorText,
+        'auto-behavior rendered something that is none of the five known outcomes — ' +
+          'most likely a limitBehavior this build has no message key for, which renders ' +
+          'as the empty string in a production build',
+      ).toMatch(/When it runs out|Never buys more/i);
+      // Never the raw enum at a merchant.
+      await expect(behavior).not.toHaveText(
+        /STOP_AI|HUMAN_ONLY|REQUIRE_APPROVAL|PREPAID_ONLY|PAYG/,
+      );
+
+      // ── 5 · pay-as-you-go, and the two things it implies ────────────────
+      const isPayg = /keeps working and the extra usage is billed/i.test(behaviorText);
+
+      /*
+       * `SETTABLE_BEHAVIORS` excludes PAYG and nothing else, so the notice
+       * and the behaviour are a BICONDITIONAL — asserted in both directions.
+       * One direction alone passes on a screen that shows the notice for
+       * every behaviour, which would tell four merchants out of five that a
+       * setting they can change is out of their hands.
+       */
+      const unsettable = page.getByTestId('auto-unsettable');
+      if (isPayg) {
+        await expect(unsettable).toBeVisible();
+        await expect(unsettable).toHaveText(/can.t be switched on or off from here/i);
+        // And it must not leave them thinking the whole page is read-only.
+        await expect(unsettable).toHaveText(/other options on this page can be changed/i);
+      } else {
+        await expect(unsettable).toHaveCount(0);
+      }
+
+      /*
+       * ★ THE COMBINATION THAT LOOKS SAFE AND IS NOT.
+       *
+       * A ceiling stops the auto-PURCHASE. With PAYG, usage past zero is
+       * accrued and billed at the end of the cycle anyway — so a merchant who
+       * set a limit and reads it as "this is the most I can be charged" is
+       * wrong, and nothing else on the screen would tell them.
+       *
+       * Asserted in both directions, which is what makes it catch an inverted
+       * `spendsPastZero`: present when a ceiling meets PAYG, absent otherwise.
+       */
+      const contradiction = page.getByTestId('auto-cap-not-a-cap');
+      if (hasCeiling && isPayg) {
+        await expect(contradiction).toBeVisible();
+        await expect(contradiction).toHaveText(/doesn.t stop the bill/i);
+        await expect(contradiction).toHaveText(/still charged at the end of the cycle/i);
+      } else {
+        await expect(contradiction).toHaveCount(0);
+      }
+
+      await shoot(page, `${size.name}-auto-purchase`);
     });
   });
 }
