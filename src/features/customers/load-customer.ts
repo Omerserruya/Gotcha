@@ -11,6 +11,10 @@ import {
   type CustomerMemory,
   type CustomerTimeline,
 } from '@/api/contracts/customer-detail';
+import {
+  commerceContextSchema,
+  type CommerceContextResponse,
+} from '@/api/contracts/customer-orders';
 import { customerEndpoints } from '@/api/endpoints/registry';
 import { withDetailFixtures } from './capture-fixtures';
 import { readKeyFor } from './conversation-key';
@@ -49,6 +53,12 @@ export interface CustomerDetail {
   /** The merchant's CRM notes for this person. `null` when the read failed. */
   readonly crm: CrmContext | null;
   /**
+   * Screen 04d. `null` when the read failed or there was no conversation to
+   * enter through — distinct from the response's own eight states, which are
+   * all successful answers about why there are no orders to show.
+   */
+  readonly orders: CommerceContextResponse | null;
+  /**
    * True when the person has no conversations at all, so the brief was never
    * requested rather than requested and missing.
    *
@@ -74,7 +84,14 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
      * that failure is not evidence about this screen. See `withDetailFixtures`.
      */
     return withDetailFixtures(
-      { timeline: null, brief: null, memory: null, crm: null, noConversations: false },
+      {
+        timeline: null,
+        brief: null,
+        memory: null,
+        crm: null,
+        orders: null,
+        noConversations: false,
+      },
       contactId,
     );
   }
@@ -92,7 +109,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
    */
   const externalId = timeline.contact?.externalId?.trim() ?? '';
 
-  const [brief, memory, crm] = await Promise.all([
+  const [brief, memory, crm, orders] = await Promise.all([
     /*
      * ★ BY CONTACT, NOT BY CONVERSATION — Backend added the entry point
      * after this screen reported the door problem.
@@ -136,6 +153,17 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
             return null;
           })
       : Promise.resolve(null),
+    conversationId
+      ? api
+          .get({
+            endpoint: customerEndpoints.orders(conversationId),
+            payload: commerceContextSchema,
+          })
+          .catch((cause: unknown) => {
+            logger.warn('customer.orders_failed', { cause });
+            return null;
+          })
+      : Promise.resolve(null),
   ]);
 
   /*
@@ -148,7 +176,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
    * Applied to what the real reads returned, so a failure stays a failure.
    */
   return withDetailFixtures(
-    { timeline, brief, memory, crm, noConversations: conversationId === null },
+    { timeline, brief, memory, crm, orders, noConversations: conversationId === null },
     contactId,
   );
 }

@@ -1,4 +1,5 @@
 import { CustomerDetail } from '@/features/customers/CustomerDetail';
+import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { loadCustomer } from '@/features/customers/load-customer';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -31,6 +32,15 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   return (
     <PageContainer>
       <CustomerDetail detail={detail} />
+      {/*
+        Screen 04d, BESIDE the detail rather than inside it.
+
+        Both are async server components, and nesting one in the other makes
+        the outer untestable — awaiting it yields a tree with an unresolved
+        async node and nothing renders. Screen 11 hit this with `ScanPanel`
+        and placed it the same way.
+      */}
+      <CustomerOrders orders={detail.orders} />
     </PageContainer>
   );
 }

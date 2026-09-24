@@ -308,4 +308,88 @@
     font-size: var(--font-size-meta);
     color: var(--text-default);
   }
+
+  /* ── Screen 04d · her orders ──────────────────────────────────────────── */
+
+  .orderList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-12);
+  }
+
+  .order {
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  /* The troubled order is the one somebody came here about. */
+  .order[data-troubled='yes'] {
+    padding-inline-start: var(--space-12);
+    border-inline-start: 2px solid var(--intent-urgent-edge);
+  }
+
+  .orderHead {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: baseline;
+    font-size: var(--font-size-meta);
+  }
+
+  .orderNumber {
+    font-weight: 600;
+  }
+  .orderDate,
+  .orderTotal {
+    color: var(--text-subtle);
+  }
+  .orderTotal {
+    margin-inline-start: auto;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  /*
+    The tone is the PLATFORM's judgement, not ours — re-deciding it here
+    would make this screen disagree with the Inbox about the same order.
+  */
+  .chip {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+  .chip[data-tone='positive'] {
+    color: var(--intent-calm-text);
+  }
+  .chip[data-tone='warning'] {
+    color: var(--intent-urgent-text);
+  }
+  .chip[data-tone='danger'] {
+    color: var(--intent-blocked-text);
+  }
+
+  .orderDetail {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .orderItems {
+    margin: 0;
+    padding-inline-start: var(--space-20);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .orderMore,
+  .orderMoney,
+  .orderCan {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
 }

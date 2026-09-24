@@ -64,6 +64,7 @@ function detail(over: Partial<Detail> = {}): Detail {
     brief: null,
     memory: null,
     crm: null,
+    orders: null,
     noConversations: false,
     ...over,
   } as Detail;

@@ -149,6 +149,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     brief: null,
     memory: null,
     crm: null,
+    orders: null,
     noConversations: false,
   };
 
@@ -191,6 +192,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       brief: null,
       memory: null,
       crm: null,
+      orders: null,
       noConversations: false,
     };
     expect(withDetailFixtures(failed, 'real-contact-99')).toBe(failed);
@@ -219,6 +221,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       brief: null,
       memory: null,
       crm: null,
+      orders: null,
       noConversations: false,
     };
     const shown = withDetailFixtures(failed, 'fixture-1');

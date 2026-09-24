@@ -411,6 +411,73 @@ export const FIXTURE_DETAIL: CustomerDetail = {
     ],
     link_meta: { outcome: 'linked' },
   },
+  /*
+   * Screen 04d. The `ok` state with two orders — one troubled, so the
+   * capture photographs the expansion rule choosing the RIGHT one rather
+   * than simply the first.
+   *
+   * The chips carry the platform's own localised labels and tones, because
+   * that is what the real response does and a fixture with invented labels
+   * would photograph a screen nobody will ever see.
+   */
+  orders: {
+    state: 'ok',
+    missing: [],
+    summary: null,
+    data: {
+      summary: { orderCount: 2, name: 'Avery Stone', email: null, phone: null, currency: 'ILS' },
+      fetchedAt: '2026-09-18T09:20:00.000Z',
+      recentOrders: [
+        {
+          orderId: 'fixture-order-1',
+          orderNumber: '#1246',
+          createdAt: '2026-09-16T11:02:00.000Z',
+          total: { amount: 420, currency: 'ILS' },
+          financial: { key: 'paid', label: 'Paid', tone: 'positive' },
+          fulfillment: { key: 'partial', label: 'Partially fulfilled', tone: 'warning' },
+          cancelled: false,
+          refund: null,
+          shipping: null,
+          items: [
+            { title: 'Olive oil, 750ml', quantity: 6 },
+            { title: 'Sea salt, coarse', quantity: 2 },
+          ],
+          extraItemCount: 3,
+          refundedAmount: { amount: null, currency: null },
+          refundableMaximum: { amount: 420, currency: 'ILS' },
+          eligibility: {
+            cancellable: false,
+            refundable: true,
+            returnable: true,
+            exchangeable: false,
+            reasonIfNot: null,
+          },
+        },
+        {
+          orderId: 'fixture-order-2',
+          orderNumber: '#1203',
+          createdAt: '2026-08-02T15:31:00.000Z',
+          total: { amount: 180, currency: 'ILS' },
+          financial: { key: 'paid', label: 'Paid', tone: 'positive' },
+          fulfillment: { key: 'delivered', label: 'Delivered', tone: 'positive' },
+          cancelled: false,
+          refund: null,
+          shipping: null,
+          items: [{ title: 'Olive oil, 750ml', quantity: 2 }],
+          extraItemCount: 0,
+          refundedAmount: { amount: null, currency: null },
+          refundableMaximum: { amount: null, currency: null },
+          eligibility: {
+            cancellable: false,
+            refundable: false,
+            returnable: false,
+            exchangeable: false,
+            reasonIfNot: 'This order was delivered more than 30 days ago.',
+          },
+        },
+      ],
+    },
+  },
   noConversations: false,
 };
 

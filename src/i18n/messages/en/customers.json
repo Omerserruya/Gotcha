@@ -79,5 +79,32 @@
       "anonymous": "Your CRM doesn't record who wrote a note, so these show a date and no author.",
       "readOnly": "Notes are read here and written in your CRM. Writing one from this page would file it against the wrong conversation, so it isn't offered yet."
     }
+  },
+  "orders": {
+    "heading": "Orders",
+    "unread": "We couldn't read this customer's orders.",
+    "state": {
+      "not_connected": "No store is connected, so there are no orders to show. Connect one in Business core.",
+      "connection_unhealthy": "Your store is connected and not working, so orders can't be read right now. Fix it in Business core rather than connecting it again.",
+      "customer_not_linked": "Your store has no customer record matching this person, so there are no orders to show against them.",
+      "verification_required": "This person hasn't been verified as the owner of this account, so their orders aren't shown.",
+      "no_orders": "No orders from this person yet.",
+      "unavailable": "Orders couldn't be loaded just now. This usually passes — try again in a moment.",
+      "ok": ""
+    },
+    "missingScopes": "Your store connection is working, but GOTCHA was never granted permission to read orders. Grant these in Shopify: {scopes}.",
+    "item": "{quantity} × {title}",
+    "moreItems": "{count, plural, one {# more item} other {# more items}} on this order.",
+    "amountUnknown": "amount not available",
+    "refunded": "{amount} already refunded.",
+    "refundableMax": "Up to {amount} can still be refunded.",
+    "possible": "On this order you could: {actions}.",
+    "action": {
+      "cancel": "cancel it",
+      "refund": "refund it",
+      "return": "open a return",
+      "exchange": "exchange an item"
+    },
+    "noActionsHere": "These are done in the conversation with this customer, not here — an action taken from this page would be filed against the wrong conversation in your records."
   }
 }

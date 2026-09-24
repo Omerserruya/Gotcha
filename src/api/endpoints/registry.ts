@@ -700,6 +700,26 @@ export const customerEndpoints = {
    */
   crmContext: (conversationId: string) =>
     endpoint('/api/crm/conversation/{conversationId}/context', { conversationId }),
+  /**
+   * Screen 04d — this customer's orders from the connected store.
+   *
+   * Conversation-keyed like the CRM panel, so the customer page enters
+   * through `readKeyFor(events)`. Permission-gated on
+   * `customer:commerce:read`.
+   *
+   * ★ Answers a DISCRIMINATED UNION of eight states, and the type's own
+   * comment asks the frontend to render an explicit UI for each rather than
+   * guess from a bare error. `not_connected` and `connection_unhealthy` are
+   * separate, which is the 14c distinction made by Backend before we got
+   * here.
+   *
+   * ⚠ READ ONLY from this screen. The sibling `POST /:conversationId/actions`
+   * writes an audit record carrying that conversation id, so an order action
+   * taken from a customer page would leave a wrong audit trail — and the
+   * audit trail is the thing those actions exist to leave behind.
+   */
+  orders: (conversationId: string) =>
+    endpoint('/api/commerce-context/{conversationId}', { conversationId }),
 } as const;
 
 /**

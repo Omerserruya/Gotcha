@@ -57,7 +57,18 @@ import styles from './Customers.module.css';
  * on every update — *"pipeline activity wearing a customer-activity name"*.
  * A line saying a three-year customer joined today is worse than no line.
  *
- * **LIFETIME VALUE, ORDERS, REFUNDS.** Real, and only reachable through
+ * ── 04d IS A SIBLING, NOT A CHILD ──
+ * `CustomerOrders` is mounted by the page beside this component rather than
+ * inside it. Both are async server components, and nesting one in the other
+ * makes the outer one untestable: awaiting it yields a tree with an
+ * unresolved async node and the render produces nothing. Screen 11 hit this
+ * with `ScanPanel` and solved it the same way.
+ *
+ * Found here by 25 tests failing at once on a missing `timeline-count` —
+ * the whole tree had stopped rendering, and the symptom named a testid that
+ * had nothing to do with the cause.
+ *
+ * **LIFETIME VALUE, REFUNDS.** Real, and only reachable through
  * `GET /api/customer-card/:approvalId`, which is approval-keyed on purpose:
  * commerce facts are two live calls to the merchant's store per customer
  * with no cache, and *"a queue of twenty approvals would be forty vendor
