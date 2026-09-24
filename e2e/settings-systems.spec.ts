@@ -198,6 +198,33 @@ for (const size of SIZES) {
       // And the separate, certain fact: nothing runs while it is down.
       await expect(page.getByTestId('not-running-shopify')).toBeVisible();
 
+      /*
+       * ★ AND SCREEN 14d IS ABSENT HERE, FOR THE SAME REASON — ASSERTED AS A
+       * PAIR SO IT CANNOT DRIFT.
+       *
+       * 14d draws each capability's current stance as a disabled three-state
+       * control. It needs a stance to draw, and on a disconnected system
+       * there is none: the route omits these 68 tools entirely, so every
+       * `stance` is null and `CapabilityControls` renders nothing.
+       *
+       * The ruling that commissioned 14d assumed reading the current value
+       * "works without a connection". For this platform it does not — the
+       * same `status: CONNECTED` filter that stops the tools running is what
+       * keeps them out of the policy response.
+       *
+       * So this is asserted as an implication rather than a bare absence: if
+       * "we couldn't check" is on screen, the controls must NOT be. A bare
+       * `toHaveCount(0)` would also pass on a page where the whole block was
+       * deleted, or renamed, or never built — which is precisely the inert
+       * guard this suite has been bitten by twice.
+       */
+      await expect(page.getByTestId('stance-unknown-shopify')).toBeVisible();
+      await expect(
+        page.getByTestId('tools-shopify'),
+        'the 14d controls rendered for a system whose stances are all unknown — ' +
+          'every radio would be showing a decision nobody made',
+      ).toHaveCount(0);
+
       await shoot(page, `${size.name}-3-capabilities-unknown`);
     });
 
