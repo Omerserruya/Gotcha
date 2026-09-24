@@ -1,15 +1,38 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { workspaceSchema } from '@/api/contracts/workspace';
 import messages from '@/i18n/messages/en/workspace.json';
 
 import { FactRows } from './FactRows';
 
-const { saveWorkspace } = vi.hoisted(() => ({ saveWorkspace: vi.fn() }));
-vi.mock('./actions', () => ({ saveWorkspace }));
+/*
+ * `saveWorkspaceFacts` — the name the component imports.
+ *
+ * The first version of this mock exported `saveWorkspace`, which the module
+ * does not have, so submitting threw inside FactRows and the run reported
+ * "An error occurred in the <FactRows> component". That reads as a fault in
+ * the subject and was a fault in the harness: the tests that already existed
+ * passed because none of them ever submitted.
+ */
+const { saveWorkspaceFacts } = vi.hoisted(() => ({ saveWorkspaceFacts: vi.fn() }));
+vi.mock('./actions', () => ({ saveWorkspaceFacts }));
+const saveWorkspace = saveWorkspaceFacts;
+
+/*
+ * Reset here, NOT in the render helper.
+ *
+ * Without it the first test's call leaked into the next two and made
+ * `not.toHaveBeenCalled()` fail against a call from a different test — which
+ * reads as the component saving when it should not.
+ *
+ * In the helper it would be the opposite mistake: screen 12e wiped a resolved
+ * value that had been set before rendering, so the action resolved undefined
+ * and the component threw.
+ */
+beforeEach(() => saveWorkspaceFacts.mockReset());
 
 /**
  * The fact rows, against the design's list.
@@ -215,5 +238,78 @@ describe('★ 11c · the week, and what cannot be stored beside it', () => {
     // sending nothing, and that is worth knowing before you leave it blank.
     await openHours();
     expect(screen.getByText(/says when you next open/i)).toBeInTheDocument();
+  });
+});
+
+describe('★ 11e · single values edit in place, with the keyboard', () => {
+  it('saves on Enter', async () => {
+    /*
+     * "Enter saves, Esc cancels." There was no keyboard handling at all —
+     * every row had to be finished with the mouse.
+     */
+    saveWorkspace.mockResolvedValue({ ok: true, data: {} });
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-name'));
+    await userEvent.type(screen.getByDisplayValue('Urban Supply'), ' Ltd{Enter}');
+    expect(saveWorkspace).toHaveBeenCalled();
+  });
+
+  it('cancels on Escape without saving', async () => {
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-name'));
+    expect(screen.getByTestId('fact-save-name')).toBeInTheDocument();
+
+    // From inside the field, which is where a person's hands are. Pressing it
+    // with focus on `body` would test the document, not the row.
+    await userEvent.type(screen.getByDisplayValue('Urban Supply'), '{Escape}');
+    expect(screen.queryByTestId('fact-save-name')).toBeNull();
+    expect(saveWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('★ does NOT save the hours grid on Enter', async () => {
+    /*
+     * Seven days of time inputs. Enter while one has focus would commit a
+     * half-entered week, and the grid is the one place where "move to the
+     * next field" is far likelier to be what was meant.
+     */
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-hours'));
+    await userEvent.type(screen.getAllByRole('checkbox')[0]!, '{Enter}');
+    expect(saveWorkspace).not.toHaveBeenCalled();
+    // And it stays open, rather than silently closing.
+    expect(screen.getByTestId('fact-save-hours')).toBeInTheDocument();
+  });
+
+  it('still cancels the hours grid on Escape', async () => {
+    // Esc has no destructive reading, so it works everywhere.
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-hours'));
+    await userEvent.type(screen.getAllByRole('checkbox')[0]!, '{Escape}');
+    expect(screen.queryByTestId('fact-save-hours')).toBeNull();
+  });
+});
+
+describe('★ 11e · the time zone picker is searchable', () => {
+  it('offers the IANA zones, which carry the city in the name', async () => {
+    // "Pickers are searchable (time zone by city)" — typing "Jer" finds
+    // Asia/Jerusalem, because the zone name contains the city.
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
+    const list = screen.getByTestId('timezone-options');
+    expect(list.querySelectorAll('option').length).toBeGreaterThan(100);
+    expect(list.querySelector('option[value="Asia/Jerusalem"]')).not.toBeNull();
+  });
+
+  it('leaves the field free text, so an unlisted zone can still be saved', async () => {
+    /*
+     * The server stores a string. A tenant on a zone this browser's ICU does
+     * not list must not be locked out of saving their own value — the
+     * datalist is autocomplete, not a whitelist.
+     */
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
+    const input = screen.getByDisplayValue('Europe/London');
+    expect(input).toHaveAttribute('list', 'timezone-options');
+    expect(input.tagName).toBe('INPUT');
   });
 });

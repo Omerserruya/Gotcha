@@ -628,4 +628,9 @@
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
+
+  /* The open row's editor, which owns the Enter/Esc keys. */
+  .rowEditor {
+    display: contents;
+  }
 }

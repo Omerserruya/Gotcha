@@ -41,6 +41,21 @@ type FactKey =
  * provenanced (`currency`) and one not (timezone lives in the hours setting).
  * A single badge over the pair would be claiming a source for both.
  */
+/**
+ * Every IANA zone this runtime knows, for the searchable picker.
+ *
+ * Computed once. `Intl.supportedValuesOf` is not in every runtime, so an
+ * empty list is the fallback — the input stays free text and a missing
+ * datalist costs autocomplete rather than the ability to save.
+ */
+const TIMEZONES: readonly string[] = (() => {
+  try {
+    return Intl.supportedValuesOf?.('timeZone') ?? [];
+  } catch {
+    return [];
+  }
+})();
+
 const PROVENANCE_FIELD: Partial<Record<FactKey, string>> = {
   name: 'organizationName',
   description: 'businessDescription',
@@ -102,7 +117,35 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
         data-testid={`fact-${key}`}
       >
         {isOpen ? (
-          <>
+          <div
+            className={styles.rowEditor}
+            /*
+              ★ 11e — "Enter saves, Esc cancels."
+              ══════════════════════════════════════════════════════════════
+              There was no keyboard handling at all: every row had to be
+              finished with the mouse. Bound on the container rather than on
+              each input, so it works for the multi-field rows too.
+
+              Enter is scoped to SINGLE-VALUE rows, which is what the design
+              says — in the seven-day hours grid, Enter while a time input has
+              focus would save a half-entered week, and the grid is the one
+              place where the next field is more likely to be what was meant.
+
+              Esc cancels everywhere. It has no destructive reading.
+            */
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.stopPropagation();
+                setEditing(null);
+                setNote(null);
+                return;
+              }
+              if (event.key === 'Enter' && key !== 'hours' && !event.shiftKey) {
+                event.preventDefault();
+                submit(key);
+              }
+            }}
+          >
             <div className={styles.label}>{t(`fact.${key}`)}</div>
             {form}
             <div className={styles.editActions}>
@@ -136,7 +179,7 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
                 </span>
               ) : null}
             </div>
-          </>
+          </div>
         ) : (
           <>
             <div className={styles.label}>{t(`fact.${key}`)}</div>
@@ -583,8 +626,18 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
           ? `${t('language.replies')} · ${t('language.system', { locale: languageName(storedLanguage) })}`
           : null,
         <div className={styles.value}>
+          {/*
+            `fact.language`, not `language`. 11d added `language.system` and
+            `language.replies`, which turned the string `language` into an
+            object — so this label rendered an IntlError from then on, visible
+            only while the row was open, which no test did.
+
+            A key silently becoming a namespace is invisible to tsc, to the
+            locale-parity check (both files gained the same shape), and to any
+            test that never opens the control.
+          */}
           <Input
-            label={t('language')}
+            label={t('fact.language')}
             value={language}
             maxLength={8}
             hint={t('languageNote')}
@@ -615,11 +668,27 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
               maxLength={3}
               onChange={(e) => setCurrency(e.target.value)}
             />
+            {/*
+              ★ "Pickers are searchable (time zone by city)."
+              A datalist over the IANA zones: 418 of them, native, keyboard
+              accessible, and searchable by city because the zone name
+              CONTAINS the city — typing "Jer" finds Asia/Jerusalem.
+
+              Still a free text input underneath, deliberately. The server
+              stores a string and a tenant on a zone this browser's ICU does
+              not list must not be locked out of saving their own value.
+            */}
             <Input
               label={t('fact.currencyTimezone')}
               value={text}
+              list="timezone-options"
               onChange={(e) => setText(e.target.value)}
             />
+            <datalist id="timezone-options" data-testid="timezone-options">
+              {TIMEZONES.map((zone) => (
+                <option key={zone} value={zone} />
+              ))}
+            </datalist>
           </div>
         </div>,
       )}
