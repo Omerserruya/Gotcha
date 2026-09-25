@@ -1,6 +1,6 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { byName, noRepliesYet, type AgentLoad } from '@/api/contracts/analytics';
+import { byName, type AgentLoad } from '@/api/contracts/analytics';
 
 import styles from './Analytics.module.css';
 
@@ -49,8 +49,6 @@ export async function TeamLoad({
     );
   }
 
-  const seconds = (ms: number) => format.number(Math.round(ms / 1000));
-
   return (
     <section className={styles.panel} data-testid="team-load">
       <h2 className={styles.panelHeading}>{t('team.heading')}</h2>
@@ -79,7 +77,6 @@ export async function TeamLoad({
                   number beside a name is usually read as. */}
               <th scope="col">{t('team.openNow')}</th>
               <th scope="col">{t('team.takenToday')}</th>
-              <th scope="col">{t('team.replyToday')}</th>
             </tr>
           </thead>
           <tbody>
@@ -94,28 +91,29 @@ export async function TeamLoad({
                 <th scope="row">{agent.name ?? t('team.unnamed')}</th>
                 <td>{format.number(agent.activeConversations)}</td>
                 <td>{format.number(agent.claimedToday)}</td>
-                <td data-testid={`reply-${agent.agentId}`}>
-                  {/*
-                    Null is not zero. Somebody who has taken nothing today has
-                    no average, and a 0 would make them the fastest person on
-                    the team — a fabricated superlative on the one screen
-                    built not to rank anybody.
-                  */}
-                  {agent.avgResponseTimeMs === null
-                    ? t('team.noReplies')
-                    : t('team.seconds', { seconds: seconds(agent.avgResponseTimeMs) })}
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
 
-      {noRepliesYet(agents) ? (
-        <p className={styles.note} data-testid="team-quiet">
-          {t('team.quietSoFar')}
-        </p>
-      ) : null}
+      {/*
+        ★★ THE REPLY-TIME COLUMN WAS HERE AND HAS BEEN REMOVED.
+
+        `avgResponseTimeMs` is written as `now − claim_time` on every agent
+        message, and `claim_time` is set once per conversation and never
+        cleared. So it measures the distance from one fixed point to each
+        reply, and **grows with how long a conversation runs rather than
+        with how slow anybody is**.
+
+        Printed beside a person's name it makes whoever handles the long
+        difficult cases look slowest — on the screen built not to rank
+        anybody. An absent column is better than an unfair one, and the note
+        below says it is absent rather than leaving a reader to wonder.
+      */}
+      <p className={styles.note} data-testid="team-no-speed">
+        {t('team.noSpeed')}
+      </p>
 
       {/*
         ★★ THE ABSENCE A READER WILL NOTICE FIRST.

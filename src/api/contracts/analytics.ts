@@ -481,10 +481,38 @@ export const agentLoadSchema = z.object({
   /** Today only, from a Redis day-key. */
   claimedToday: z.number().default(0),
   /**
-   * Today's average, or `null` when nobody replied yet.
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ NOT A REPLY TIME. DELIBERATELY NOT RENDERED ANYWHERE.
+   * ════════════════════════════════════════════════════════════════════════
+   * Named here so the field is accounted for and so nobody adds a column for
+   * it later believing it is what it sounds like. It is read from Redis and
+   * written by `analytics.worker.ts:38-46`:
    *
-   * Null is not zero: a person who has taken nothing today has no average,
-   * and rendering 0ms would make them the fastest on the team.
+   *   claim_time      set ONCE when a conversation is claimed, `EX` 7 days
+   *   agent_response  pushes `now − claim_time` on EVERY agent message
+   *
+   * `claim_time` is **never cleared**. So the second reply in a conversation
+   * measures from the original claim, the tenth measures from the original
+   * claim, and the average **grows with how long a conversation runs rather
+   * than with how slow anybody is.**
+   *
+   * It is therefore neither of the two things it gets called:
+   *
+   *   not "first reply"      the customer's wait before anyone claimed is
+   *                          excluded entirely — and only human-claimed
+   *                          conversations contribute at all, so an
+   *                          AI-handled workspace reports on almost nothing
+   *   not "average reply"    it is not the gap between messages; it is the
+   *                          distance from one fixed point to each of them
+   *
+   * ── AND ON SCREEN 06c IT WOULD HAVE BEEN UNFAIR, NOT MERELY WRONG ──
+   * A number that rises with conversation length, printed beside a person's
+   * name, makes whoever handles the long difficult cases look slowest. On
+   * the one screen built not to rank anybody, that is worse than an absent
+   * column. It shipped as "Average reply today" and has been removed.
+   *
+   * Fourth field this week whose name describes an outcome while its value
+   * records an event, after `confidence`, `lastTestedAt` and `automatable`.
    */
   avgResponseTimeMs: z.number().nullable().default(null),
 });
@@ -504,10 +532,13 @@ export function byName(agents: readonly AgentLoad[]): readonly AgentLoad[] {
   return [...agents].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
 }
 
-/** Nobody has replied yet today, so no average exists for anyone. */
-export function noRepliesYet(agents: readonly AgentLoad[]): boolean {
-  return agents.length > 0 && agents.every((a) => a.avgResponseTimeMs === null);
-}
+/**
+ * ★ REMOVED WITH THE COLUMN IT SUPPORTED.
+ *
+ * `avgResponseTimeMs` is not a reply time — see the field's own note — so
+ * there is no "nobody has replied yet" to report. Kept as a named export
+ * would have left a helper pointing at a metric the screen must not show.
+ */
 
 /* ── 06's "What people ask about" panel ──────────────────────────────────── */
 

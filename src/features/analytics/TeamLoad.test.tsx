@@ -80,24 +80,32 @@ describe('★★ the two absences a reader would otherwise infer', () => {
   });
 });
 
-describe('★★ null is not zero, on the screen built not to rank anybody', () => {
-  it('★★ somebody with no replies today has no average, not a fast one', async () => {
+describe('★★ the reply-time column, and why it is gone', () => {
+  it('★★ renders no reply-speed column at all', async () => {
     /*
-     * A 0ms average would make the person who has taken nothing today the
-     * fastest on the team — a fabricated superlative, and the worst possible
-     * one on this screen.
+     * ════════════════════════════════════════════════════════════════════════
+     * THIS SHIPPED AS "Average reply today" AND WAS WRONG.
+     * ════════════════════════════════════════════════════════════════════════
+     * `avgResponseTimeMs` is pushed by `analytics.worker.ts` as
+     * `now − claim_time` on EVERY agent message, and `claim_time` is set once
+     * per conversation and never cleared. So the tenth reply measures from
+     * the original claim: the number **grows with how long a conversation
+     * runs rather than with how slow anybody is.**
+     *
+     * Beside a person's name that makes whoever handles the long difficult
+     * cases look slowest — on the screen built not to rank anybody. An
+     * absent column beats an unfair one.
      */
-    await show([agent({ avgResponseTimeMs: null })]);
-    expect(screen.getByTestId('reply-u1')).toHaveTextContent(/no replies yet today/i);
-    expect(screen.getByTestId('reply-u1')).not.toHaveTextContent(/0s/);
+    const { container } = await show([agent({ avgResponseTimeMs: 42_000 })]);
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/42s|average reply|reply time|response time/i);
   });
 
-  it('says so once when nobody has replied at all', async () => {
-    await show([
-      agent({ avgResponseTimeMs: null }),
-      agent({ agentId: 'u2', avgResponseTimeMs: null }),
-    ]);
-    expect(screen.getByTestId('team-quiet')).toBeInTheDocument();
+  it('★ says the column is absent rather than leaving a gap', async () => {
+    // A reader holding the design looks for a speed column. An absence that
+    // explains itself only has to explain itself once.
+    await show([agent()]);
+    expect(screen.getByTestId('team-no-speed')).toHaveTextContent(/grows with how long/i);
   });
 
   it('★ a failed read is not an empty team', async () => {

@@ -5,14 +5,11 @@
     "person": "Person",
     "openNow": "Open now",
     "takenToday": "Taken today",
-    "replyToday": "Average reply today",
-    "noReplies": "no replies yet today",
-    "seconds": "{seconds}s",
     "unnamed": "Unnamed",
     "none": "Nobody on the team is set up to take conversations yet.",
-    "quietSoFar": "Nobody has replied yet today, so there are no averages to show.",
     "humansOnly": "This is the human team. GOTCHA's AI employees don't appear here — their work is on the GOTCHA tab.",
-    "unavailable": "We couldn't read the team's workload just now."
+    "unavailable": "We couldn't read the team's workload just now.",
+    "noSpeed": "There's no reply-speed column here. The only timing GOTCHA records measures from when a conversation was claimed to each reply in it, so it grows with how long a conversation runs — beside a name that would read as slowness."
   },
   "asked": {
     "heading": "What people ask about",
