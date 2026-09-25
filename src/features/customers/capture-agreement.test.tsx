@@ -92,9 +92,19 @@ describe('the capture fixture agrees with the capture spec', () => {
   });
 
   it('★ contains nothing the spec forbids', async () => {
-    // Tenure, money and un-substituted placeholders. The spec asserts their
-    // absence against the whole page; this asserts it against the fixture,
-    // so a fixture that introduced one fails here first.
+    /*
+     * Tenure, money and un-substituted placeholders, asserted against the
+     * fixture so one that introduced any of them fails here before a run.
+     *
+     * ★ THE TEXTAREA CHECK IS SCOPED TO `CustomerDetail`, AND THAT IS WHY IT
+     * SURVIVED 04f. The spec's version covered the whole page and had to be
+     * re-aimed when the notes composer arrived; this one has always been
+     * about the 04b panel, where the prohibition actually lives — the CRM
+     * write is conversation-keyed and would file against the wrong chat.
+     *
+     * The narrower assertion outlived the broader one, which is the argument
+     * for saying what you mean rather than what happens to be true.
+     */
     const { container } = await show();
     const text = container.textContent ?? '';
     expect(text).not.toMatch(/customer since/i);

@@ -519,9 +519,50 @@ for (const size of SIZES) {
       // No un-substituted ICU placeholder anywhere on the page.
       await expect(main).not.toHaveText(/\{[a-zA-Z]+\}/);
 
-      // And no write control: the CRM note write files against the wrong
-      // conversation from here, so it is not offered.
-      await expect(main.locator('textarea')).toHaveCount(0);
+      /*
+       * ══════════════════════════════════════════════════════════════════
+       * ★★ RE-AIMED. IT SAID "NO TEXTAREA ON THIS PAGE" AND MEANT SOMETHING
+       *    MUCH NARROWER
+       * ══════════════════════════════════════════════════════════════════
+       * The prohibition is about ONE write: the CRM note write is
+       * conversation-keyed, so a note taken from a customer page files
+       * against whichever chat `readKeyFor` happened to pick — in the
+       * merchant's own CRM, where we cannot correct it.
+       *
+       * `toHaveCount(0)` over the whole of `main` was a proxy for that, and
+       * it was exact for as long as no page had a backed write control. 04f
+       * added one — CONTACT-keyed, which is the defect the notes table was
+       * built to fix — and the proxy started failing a correct screen.
+       *
+       * Third assertion today that hardcoded the absence of something, and
+       * the first where the thing that arrived was our own build rather
+       * than the tenant's state.
+       *
+       * So it now says what it means, in two parts.
+       */
+
+      // ONE · the actual prohibition. The 04b CRM panel is READ-ONLY, and it
+      // is the panel whose write would be conversation-keyed.
+      await expect(
+        page.getByTestId('customer-notes').locator('textarea, input'),
+        'the 04b CRM panel is offering a write — that note would file against the wrong conversation',
+      ).toHaveCount(0);
+
+      /*
+       * TWO · and the general guard survives, narrowed rather than deleted.
+       * Every write box on this page belongs to 04f, whose write is keyed on
+       * the contact. A new control appearing anywhere else still fails here,
+       * which is the protection the original was worth keeping for.
+       */
+      const boxes = await main.locator('textarea').count();
+      // Both counts scoped to `main`, so the difference cannot go negative
+      // if the notes section ever moves outside it. The version that scoped
+      // one to the page and one to `main` was correct only because of where
+      // `AppShell` happens to put `<main>` — a fact the reader would have to
+      // go and check, which is the kind of correctness this project has
+      // stopped accepting.
+      const inNotes = await main.getByTestId('team-notes').locator('textarea').count();
+      expect(boxes - inNotes, 'a write control appeared outside the team notes section').toBe(0);
 
       await shoot(page, `${size.name}-04b-customer`);
     });
@@ -929,11 +970,11 @@ for (const size of SIZES) {
       await openCustomer(page, 'en');
 
       await expect(
-        page.getByTestId('notes-04f-unread'),
+        page.getByTestId('team-notes-unread'),
         'the notes read failed — this run would photograph a fault, not an empty list',
       ).toHaveCount(0);
 
-      const panel = page.getByTestId('customer-notes-04f');
+      const panel = page.getByTestId('team-notes');
       await expect(panel, missingIds('the 04f notes block')).toBeVisible();
 
       /*
@@ -957,7 +998,7 @@ for (const size of SIZES) {
        * pretending to know which ran.
        */
       const rows = await panel.locator('[data-destination]').count();
-      const empty = await page.getByTestId('notes-04f-empty').count();
+      const empty = await page.getByTestId('team-notes-empty').count();
       expect(
         rows + empty,
         'the 04f block rendered neither notes nor the nothing-written-yet sentence',
@@ -1024,7 +1065,7 @@ for (const size of SIZES) {
       await openCustomer(page, 'he');
 
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-      const panel = page.getByTestId('customer-notes-04f');
+      const panel = page.getByTestId('team-notes');
       await expect(panel, missingIds('the 04f notes block in Hebrew')).toBeVisible();
       await expect(panel).toHaveText(/[֐-׿]/);
 

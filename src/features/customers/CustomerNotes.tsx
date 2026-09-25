@@ -59,7 +59,7 @@ export async function CustomerNotes({
   const format = await getFormatter();
 
   return (
-    <section className={styles.notesPanel} data-testid="customer-notes-04f">
+    <section className={styles.notesPanel} data-testid="team-notes">
       <h2 className={styles.detailHeading}>{t('teamNotes.title')}</h2>
 
       {/*
@@ -75,11 +75,11 @@ export async function CustomerNotes({
          * about this person" is a claim, and it is the wrong one to make
          * from a request that did not come back.
          */
-        <p className={styles.unavailable} data-testid="notes-04f-unread">
+        <p className={styles.unavailable} data-testid="team-notes-unread">
           {t('teamNotes.unread')}
         </p>
       ) : notes.length === 0 ? (
-        <p className={styles.notesEmpty} data-testid="notes-04f-empty">
+        <p className={styles.notesEmpty} data-testid="team-notes-empty">
           {t('teamNotes.none')}
         </p>
       ) : (

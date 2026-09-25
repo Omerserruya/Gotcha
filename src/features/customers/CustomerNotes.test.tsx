@@ -49,7 +49,7 @@ const show = async (
 describe('★★ a failed read is not an empty one', () => {
   it('★★ never says nobody wrote anything from a request that did not return', async () => {
     await show(null);
-    const unread = screen.getByTestId('notes-04f-unread');
+    const unread = screen.getByTestId('team-notes-unread');
     expect(unread).toHaveTextContent(/couldn't read/i);
     // And it says so explicitly, because the empty screen is the plausible
     // misreading rather than an obviously broken one.
@@ -58,7 +58,7 @@ describe('★★ a failed read is not an empty one', () => {
 
   it('an empty list IS a fact about the customer', async () => {
     await show([]);
-    expect(screen.getByTestId('notes-04f-empty')).toHaveTextContent(/nobody has written/i);
+    expect(screen.getByTestId('team-notes-empty')).toHaveTextContent(/nobody has written/i);
   });
 
   it('★ still offers the composer when the read failed', async () => {
