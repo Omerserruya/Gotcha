@@ -354,3 +354,90 @@ export const quietDaySchema = z.looseObject({
 });
 
 export type QuietDay = z.infer<typeof quietDaySchema>;
+
+/* ── Screen 06's metric strip ────────────────────────────────────────────── */
+
+/**
+ * A headline figure, with its comparison only where one genuinely exists.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THREE OF THE DESIGN'S FIVE METRICS HAVE NO COMPARISON, AND ONE PAIRING
+ *    IS A TRAP
+ * ════════════════════════════════════════════════════════════════════════════
+ * The design draws five: conversations +12%, handled-without-you +4, first
+ * reply −18s, resolved flat, time saved +6h. `deltas` carries exactly three
+ * percentages — `totalConversationsPct`, `resolvedConversationsPct`,
+ * `totalMessagesPct` — and nothing else.
+ *
+ * ── THE TRAP ──
+ * `resolvedConversationsPct` is the change in the **count** of resolved
+ * conversations. The design's "Resolved · 94%" is the **rate**. Putting that
+ * delta beside that figure prints a count's movement under a percentage, and
+ * they can move in opposite directions: a week with twice the volume and the
+ * same rate shows +100% beside a number that did not change.
+ *
+ * So a delta is bound to the metric it was computed for, here, once —
+ * rather than at each render site where the pairing could drift.
+ *
+ * ── AND THE UNIT IS A PERCENTAGE ──
+ * The design says the comparison is *"stated in the same unit as the
+ * metric"*. It is not: what exists is a percentage, for all three. Rendering
+ * "up 140 conversations" would mean reconstructing the prior period as
+ * `current / (1 + pct/100)` — **a derived number a reader cannot tell from a
+ * recorded one**, with rounding error, in a headline. The screen says the
+ * comparison in the unit it exists in.
+ */
+export interface HeadlineMetric {
+  readonly key: string;
+  readonly value: number;
+  /**
+   * Percent change against the preceding period of equal length.
+   *
+   * `null` means no comparison could be made — the prior period had a zero
+   * denominator, which is the normal state for a tenant in its first period.
+   * **Not the same as 0%**, and the screen must not render it as "no change":
+   * there is no baseline to have changed from.
+   *
+   * `undefined` means this metric has no comparison at all. Also not zero,
+   * and a different sentence again — one is "we could not compare", the
+   * other is "nobody computes this".
+   */
+  readonly deltaPct?: number | null;
+}
+
+/**
+ * The metrics screen 06 can actually show, each with its own delta or none.
+ *
+ * Deliberately not every field on the overview: this returns what a merchant
+ * asked for on the strip, in the order the design puts them, minus the ones
+ * whose comparison does not exist and plus nothing invented.
+ */
+export function headlineMetrics(overview: AnalyticsOverview): readonly HeadlineMetric[] {
+  const deltas = overview.deltas;
+  return [
+    {
+      key: 'conversations',
+      value: overview.totalConversations,
+      deltaPct: deltas?.totalConversationsPct ?? null,
+    },
+    {
+      /*
+       * ★ THE COUNT, NOT THE RATE — because the count is what the delta
+       * belongs to. `resolutionRate` is on the same response and has no
+       * comparison, so pairing them would be the trap above.
+       */
+      key: 'resolved',
+      value: overview.resolvedConversations,
+      deltaPct: deltas?.resolvedConversationsPct ?? null,
+    },
+    { key: 'messages', value: overview.totalMessages, deltaPct: deltas?.totalMessagesPct ?? null },
+    // No delta exists for either of these. `undefined`, not null.
+    { key: 'handledWithoutYou', value: overview.aiHandledPct },
+    { key: 'waitingOnYou', value: overview.pendingApprovalCount },
+  ];
+}
+
+/** Does this metric have a comparison at all? */
+export function hasComparison(metric: HeadlineMetric): boolean {
+  return metric.deltaPct !== undefined && metric.deltaPct !== null;
+}
