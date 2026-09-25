@@ -530,3 +530,35 @@ describe("the person's channels", () => {
     expect(res.body.identityChannels).toHaveLength(1);
   });
 });
+
+/**
+ * The response carries named columns, never the open JSON column.
+ *
+ * `effective` was a `findFirst` with no `select`, so every timeline response
+ * shipped the contact's `metadata` — which holds phone numbers among other
+ * things. One consumer was picking `aliases` out of it and asserting in its own
+ * test that a `phone` beside it did not survive its parse: a guard protecting
+ * exactly one caller. `aliases` is served as part of `identityChannels` now, so
+ * nothing needs the blob.
+ */
+describe("the contact in the response", () => {
+  it("★ never carries the raw metadata blob", async () => {
+    state.contact.metadata = { aliases: [], phone: "+972500000000", internalNote: "surplus" };
+
+    const res = await get();
+
+    expect(res.body.contact.metadata).toBeUndefined();
+    const body = JSON.stringify(res.body.contact);
+    expect(body).not.toContain("internalNote");
+    expect(body).not.toContain("surplus");
+  });
+
+  it("still carries what a customer panel legitimately shows", async () => {
+    const res = await get();
+
+    // The surplus was never the named columns - a panel shows the customer their
+    // own details. It was everything else an unbounded JSON column can hold.
+    expect(res.body.contact.id).toBe("c1");
+    expect(res.body.contact.displayName).toBe("Dana");
+  });
+});

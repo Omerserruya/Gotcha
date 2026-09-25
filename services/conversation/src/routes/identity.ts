@@ -235,12 +235,47 @@ async function resolvePersonScope(
   contactId: string,
   includeImported: boolean,
 ): Promise<PersonScope> {
-  const contact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
+  /**
+   * Explicit columns, never the whole row.
+   *
+   * ★ This was a `findFirst` with NO `select`, so every timeline response
+   * carried the contact's open `metadata` JSON - which holds phone numbers among
+   * other things. The one consumer was picking `aliases` out of it by name and
+   * asserting in its own test that a `phone` beside it did not survive the
+   * parse: a guard that protected exactly one caller and nothing else.
+   *
+   * `aliases` is now served as part of `identityChannels`, so nothing needs the
+   * blob. Named columns include the customer's own email and phone, which a
+   * customer panel legitimately shows - the surplus was never those, it was
+   * everything else that happens to be in an unbounded JSON column.
+   */
+  // Every named column on Contact. `findSiblingContacts` takes a whole `Contact`,
+  // so the list is exhaustive by necessity rather than by preference - which is
+  // fine, because the surplus was never the named columns. It was `metadata`: an
+  // unbounded JSON column whose contents nobody downstream can enumerate.
+  const CONTACT_FIELDS = {
+    id: true, tenantId: true, channel: true, externalId: true,
+    displayName: true, email: true, emailVerified: true,
+    phone: true, phoneVerified: true, avatarUrl: true, tags: true,
+    lastSeenAt: true, lastInteractionAt: true, source: true,
+    optOutChannels: true, optedOutAt: true,
+    personId: true, mergedIntoId: true, createdAt: true, updatedAt: true,
+  } as const;
+
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, tenantId },
+    // `metadata` is read here and NOT returned: the alias walk needs it, the
+    // response does not.
+    select: { ...CONTACT_FIELDS, metadata: true },
+  });
   if (!contact) return { ok: false, status: 404, error: "Contact not found" };
 
   // Follow soft-merge pointer if the entry point itself was merged away
   const effective = contact.mergedIntoId
-    ? await prisma.contact.findFirst({ where: { id: contact.mergedIntoId, tenantId } })
+    ? await prisma.contact.findFirst({
+        where: { id: contact.mergedIntoId, tenantId },
+        select: { ...CONTACT_FIELDS, metadata: true },
+      })
     : contact;
   if (!effective) return { ok: false, status: 404, error: "Contact target not found" };
 
@@ -409,6 +444,9 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     const scope = await resolvePersonScope(tenantId, String(req.params.id), wantsImported(req));
     if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
     const { effective, orClauses, originClause, channels } = scope;
+    // Everything the panel needs, minus the open JSON column. `aliases` from it
+    // is already folded into identityChannels below.
+    const { metadata: _contactMetadata, ...contact } = effective as Record<string, unknown>;
 
     /**
      * Every handle this person is known by, and where each came from.
@@ -440,7 +478,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     // answer for a contact with no channel identity - not an error.
     if (orClauses.length === 0) {
       return res.json({
-        contact: effective,
+        contact,
         identityChannels,
         events: [],
         page: { limit, types: [...TIMELINE_EVENT_TYPES], nextCursor: null, hasMore: false },
@@ -462,7 +500,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
 
     if (convos.length === 0) {
       return res.json({
-        contact: effective,
+        contact,
         identityChannels,
         events: [],
         page: { limit, types: [...TIMELINE_EVENT_TYPES], nextCursor: null, hasMore: false },
@@ -589,7 +627,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     const last = pageRows[pageRows.length - 1];
 
     return res.json({
-      contact: effective,
+      contact,
       identityChannels,
       events: pageRows,
       page: {
