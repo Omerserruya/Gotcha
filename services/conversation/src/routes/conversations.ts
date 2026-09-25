@@ -68,7 +68,7 @@ router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Re
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { status, assignedAgentId, channel, departmentId, search, page, limit, includeAutomated, automatedOnly } = req.query;
+    const { status, assignedAgentId, channel, departmentId, search, page, limit, cursor, includeAutomated, automatedOnly } = req.query;
     const result = await conversationService.list(req.tenantId!, {
       status: status as string | undefined,
       assignedAgentId: assignedAgentId as string | undefined,
@@ -77,6 +77,9 @@ router.get("/", async (req: Request, res: Response) => {
       search: search as string | undefined,
       page: page ? parseInt(page as string, 10) : undefined,
       limit: limit ? parseInt(limit as string, 10) : undefined,
+      // Presence switches the list to keyset paging; an empty string means
+      // "first keyset page" and is distinct from absent, which means offset.
+      cursor: typeof cursor === "string" ? cursor : undefined,
       includeAutomated: includeAutomated === "true",
       automatedOnly: automatedOnly === "true",
       userRole: req.user!.role,
@@ -84,7 +87,8 @@ router.get("/", async (req: Request, res: Response) => {
       userDepartmentId: req.user!.departmentId,
     });
     res.json(result);
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.status === 400) { res.status(400).json({ error: err.message }); return; }
     console.error("List conversations error:", err);
     res.status(500).json({ error: "Failed to list conversations" });
   }

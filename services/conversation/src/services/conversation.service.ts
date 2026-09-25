@@ -5,6 +5,71 @@ import { getIO } from "../lib/socket";
 import { visibilityClause } from "../lib/conversation-visibility";
 import * as messageService from "./message.service";
 
+/**
+ * Keyset pagination for the conversation list.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * WHY NOT OFFSET
+ *
+ * The list is ordered by recency. With `skip`/`take`, a message arriving between
+ * page 1 and page 2 shifts every row down one: the agent sees one conversation
+ * twice and **never sees another at all**. A skipped conversation in an inbox is
+ * not a cosmetic defect - it is somebody waiting who never appears, and the list
+ * looks complete.
+ *
+ * Deduplicating by id was rejected deliberately: it hides the duplicate and not
+ * the skip, so it removes the only visible symptom of the invisible fault.
+ *
+ * ── The cursor is the sort key, and `lastMessageAt` is NULLABLE ──
+ *
+ * `(lastMessageAt, id)` with nulls last. The column is a denormalised cache that
+ * ~9 message writers never maintained, so historical rows exist with it NULL
+ * even though the live paths are fixed now. Nulls sort after every real value,
+ * so the cursor carries the literal `"null"` once paging reaches that tail and
+ * orders by id alone inside it. Without that, the tail is unreachable and those
+ * conversations become the very thing this change exists to prevent.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+export function encodeConversationCursor(lastMessageAt: Date | null, id: string): string {
+  return `${lastMessageAt ? lastMessageAt.toISOString() : "null"}~${id}`;
+}
+
+export function decodeConversationCursor(raw: string): { at: Date | null; id: string } | null {
+  const sep = raw.indexOf("~");
+  if (sep <= 0) return null;
+  const head = raw.slice(0, sep);
+  const id = raw.slice(sep + 1);
+  if (!id) return null;
+  if (head === "null") return { at: null, id };
+  const at = new Date(head);
+  if (Number.isNaN(at.getTime())) return null;
+  return { at, id };
+}
+
+/**
+ * "Strictly after this point" in `(lastMessageAt desc nulls last, id desc)`.
+ *
+ * ★ RETURNED AS A CLAUSE TO PUT IN `AND`, NEVER ASSIGNED TO `where.OR`.
+ * `where.OR` on this query already holds the DEPARTMENT/AGENT VISIBILITY clause.
+ * Assigning a keyset predicate to it replaces that scoping silently: the list
+ * then returns conversations the agent must never see, perfectly ordered, with
+ * no error, and the diff reads as pagination.
+ */
+export function conversationKeysetClause(c: { at: Date | null; id: string }): Record<string, unknown> {
+  if (c.at === null) {
+    // Already inside the null tail: only id separates rows.
+    return { AND: [{ lastMessageAt: null }, { id: { lt: c.id } }] };
+  }
+  return {
+    OR: [
+      { lastMessageAt: { lt: c.at } },
+      { AND: [{ lastMessageAt: c.at }, { id: { lt: c.id } }] },
+      // Nulls sort last, so every null row is after any real timestamp.
+      { lastMessageAt: null },
+    ],
+  };
+}
+
 export interface ConversationFilters {
   status?: string;
   assignedAgentId?: string;
@@ -13,6 +78,8 @@ export interface ConversationFilters {
   search?: string;
   page?: number;
   limit?: number;
+  /** Keyset cursor. When present, `page` is ignored and no total is counted. */
+  cursor?: string;
   includeAutomated?: boolean;
   /**
    * Return ONLY the conversations an automation currently owns - the exact
@@ -35,7 +102,14 @@ export interface ConversationFilters {
 const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
 
 export async function list(tenantId: string, filters: ConversationFilters) {
-  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, includeAutomated = false, automatedOnly = false, userRole, userId, userDepartmentId } = filters;
+  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, cursor, includeAutomated = false, automatedOnly = false, userRole, userId, userDepartmentId } = filters;
+  const decodedCursor = cursor ? decodeConversationCursor(cursor) : null;
+  if (cursor && !decodedCursor) {
+    // Refused by name rather than silently restarting from the top, which a
+    // paging UI renders as a list that never ends.
+    throw Object.assign(new Error("invalid_cursor"), { status: 400 });
+  }
+  const keyset = cursor !== undefined;
   const where: any = { tenantId };
   if (status) where.status = status;
   if (automatedOnly) {
@@ -85,30 +159,64 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       ],
     });
   }
-  const skip = (page - 1) * limit;
+  // ★ ADDITIVE. `where.OR` is the visibility clause - see
+  // conversationKeysetClause's note. `search` above already pushes its own
+  // `{ OR: [...] }` into AND, which is the shape to copy.
+  if (decodedCursor) {
+    where.AND = where.AND || [];
+    where.AND.push(conversationKeysetClause(decodedCursor));
+  }
+
+  const include = {
+    assignedAgent: { select: { id: true, name: true, email: true } },
+    department: { select: { id: true, name: true } },
+    _count: { select: { messages: true } },
+    messages: { orderBy: { createdAt: "desc" as const }, take: 1, select: { direction: true, body: true, createdAt: true } },
+  };
+  // id breaks ties so two conversations sharing a millisecond cannot straddle a
+  // page boundary and reproduce the skip in a rarer form.
+  const orderBy = [
+    { lastMessageAt: { sort: "desc" as const, nulls: "last" as const } },
+    { id: "desc" as const },
+  ];
+
+  // Keyset takes `limit + 1` to learn whether more exist, and counts NO total:
+  // a keyset list cannot page to a known end, and the count was a second full
+  // scan for a figure the caller does not need.
   const [conversations, total] = await Promise.all([
     prisma.conversation.findMany({
       where,
-      include: {
-        assignedAgent: { select: { id: true, name: true, email: true } },
-        department: { select: { id: true, name: true } },
-        _count: { select: { messages: true } },
-        messages: { orderBy: { createdAt: "desc" }, take: 1, select: { direction: true, body: true, createdAt: true } },
-      },
-      orderBy: { lastMessageAt: { sort: "desc", nulls: "last" } },
-      skip, take: limit,
+      include,
+      orderBy,
+      take: keyset ? limit + 1 : limit,
+      ...(keyset ? {} : { skip: (page - 1) * limit }),
     }),
-    prisma.conversation.count({ where }),
+    keyset ? Promise.resolve(null) : prisma.conversation.count({ where }),
   ]);
+  const hasMore = keyset && conversations.length > limit;
+  const pageRows = hasMore ? conversations.slice(0, limit) : conversations;
 
   // Flatten last message info
-  const data = conversations.map((c) => {
+  const data = (keyset ? pageRows : conversations).map((c) => {
     const lastMsg = c.messages[0] || null;
     const { messages, ...rest } = c;
     return { ...rest, lastMessageDirection: lastMsg?.direction || null, lastMessageBody: lastMsg?.body || null };
   });
 
-  return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  if (keyset) {
+    const last = pageRows[pageRows.length - 1];
+    return {
+      data,
+      page: {
+        limit,
+        hasMore: !!hasMore,
+        nextCursor: hasMore && last ? encodeConversationCursor(last.lastMessageAt, last.id) : null,
+      },
+    };
+  }
+  // Legacy offset callers keep the exact shape they had, total included.
+  const t = total as number;
+  return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) } };
 }
 
 export async function getById(tenantId: string, id: string) {
