@@ -56,7 +56,47 @@ const queuePageSchema = z.object({
     hasMore: z.boolean(),
     nextCursor: z.string().nullable(),
   }),
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ OPTIONAL, AND ABSENT IS NOT ZERO
+   * ════════════════════════════════════════════════════════════════════════
+   * How many conversations in THIS VIEW have no `lastMessageAt` — scoped to
+   * the caller's filters including the visibility clause, and deliberately
+   * **cursor-blind**, so it does not shrink as somebody pages.
+   *
+   * Three states, and the third is the point:
+   *
+   *   a number   the count for this view
+   *   0          the writers are behaving, and somebody looked
+   *   undefined  **the running service predates the count.** Nobody looked.
+   *
+   * `.optional()` and never `.default(0)`. A default would have the screen
+   * assert *"no undated conversations"* on a service that cannot answer the
+   * question — the reassuring-direction failure, on the one instrument built
+   * to detect a problem that is otherwise invisible. **The instrument would
+   * report all-clear because it is not there.**
+   *
+   * This is the second time today this exact group has hidden the thing it
+   * exists to show: first because nulls sort last and the group was empty
+   * until the final page, now because the field is absent on a service
+   * older than it.
+   */
+  undatedCount: z.number().optional(),
 });
+
+/**
+ * Exported so the schema itself can be tested.
+ *
+ * ★ THE COMPONENT TESTS CANNOT SEE THIS. They pass `undatedCount` straight
+ * into the component, so `.optional()` versus `.default(0)` is invisible to
+ * them — a mutation swapping the two passed every one of them. The
+ * distinction lives in the parse and has to be asserted there.
+ *
+ * Same shape as a test double being more forgiving than the real thing: the
+ * stand-in was built from what the author believed the contract said, so it
+ * could not disagree with the author.
+ */
+export const queuePageSchemaForTests = queuePageSchema;
 
 const streamPageSchema = z.object({
   data: z.array(messageSchema),
@@ -67,6 +107,11 @@ export interface InboxData {
   /** More pages exist. `false` when the read failed — we claim nothing. */
   readonly hasMore: boolean;
   readonly nextCursor: string | null;
+  /**
+   * Undated conversations in this view, or `undefined` when the service
+   * cannot answer. Never zero by default — see the schema.
+   */
+  readonly undatedCount: number | undefined;
   readonly open: ConversationRow | null;
   readonly messages: readonly InboxMessage[] | null;
   readonly timeline: CustomerTimeline | null;
@@ -112,6 +157,12 @@ export async function loadInbox(conversationId?: string, cursor?: string): Promi
     // A failed read claims nothing about what else exists.
     hasMore: queue?.page.hasMore ?? false,
     nextCursor: queue?.page.nextCursor ?? null,
+    /*
+     * `?? undefined` and never `?? 0`. A failed read and a service that
+     * cannot count are the same fact here — nobody looked — and both must
+     * stay distinguishable from a service that looked and found none.
+     */
+    undatedCount: queue?.undatedCount,
   };
 
   if (!open) {

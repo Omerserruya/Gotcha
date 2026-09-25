@@ -38,6 +38,7 @@ export async function ConversationList({
   cap,
   now,
   hasMore,
+  undatedCount,
 }: {
   /** `null` when the read failed. Never an empty queue. */
   readonly rows: readonly ConversationRow[] | null;
@@ -52,6 +53,14 @@ export async function ConversationList({
    * about the queue rather than about this page.
    */
   readonly hasMore: boolean;
+  /**
+   * Undated conversations across the whole view, cursor-blind.
+   *
+   * ★ `undefined` MEANS NOBODY LOOKED. The running service may predate the
+   * count, or the read may have failed. Either way the screen must not say
+   * zero — that is the instrument reporting all-clear because it is absent.
+   */
+  readonly undatedCount?: number;
 }) {
   const t = await getTranslations('inbox');
 
@@ -64,6 +73,16 @@ export async function ConversationList({
   }
 
   const { dated, undated } = queueOrder(rows);
+
+  /*
+   * ★ A COUNT WITH NO ROWS ON THIS PAGE IS STILL WORTH SAYING.
+   *
+   * Undated rows sort last, so on any page but the final one the count can
+   * be non-zero while this page holds none of them. That is exactly the
+   * case the count was added for, and hiding the group because the page is
+   * clean would reinstate the defect it fixes.
+   */
+  const showUndated = undated.length > 0 || (undatedCount !== undefined && undatedCount > 0);
 
   const row = (conversation: ConversationRow, testid: string) => {
     const waiting = waitingMinutes(conversation, now);
@@ -153,12 +172,23 @@ export async function ConversationList({
         So the caption says which it is. A whole-queue count needs an
         endpoint nobody offers yet.
       */}
-      {undated.length > 0 ? (
+      {showUndated ? (
         <section data-testid="queue-undated">
+          {/*
+            ★★ THE VIEW-WIDE COUNT SUPERSEDES THE PER-PAGE ONE.
+
+            `undatedCount` is scoped to this view's filters and is
+            cursor-blind, so it answers the question the per-page group could
+            only gesture at. When it is absent — an older service, or a
+            failed read — the caption falls back to what this page can see
+            and says that is what it is.
+          */}
           <p className={styles.note}>
-            {hasMore
-              ? t('queue.undatedThisPage', { count: undated.length })
-              : t('queue.undated', { count: undated.length })}
+            {undatedCount !== undefined
+              ? t('queue.undatedInView', { count: undatedCount })
+              : hasMore
+                ? t('queue.undatedThisPage', { count: undated.length })
+                : t('queue.undated', { count: undated.length })}
           </p>
           <ol className={styles.queueList}>{undated.map((c) => row(c, `undated-${c.id}`))}</ol>
         </section>

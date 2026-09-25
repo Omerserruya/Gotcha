@@ -24,8 +24,12 @@ const row = (over: Record<string, unknown> = {}): ConversationRow =>
     ...over,
   });
 
-const show = async (rows: readonly ConversationRow[] | null, cap = 50, hasMore = false) =>
-  render(await ConversationList({ rows, cap, now: NOW, hasMore }));
+const show = async (
+  rows: readonly ConversationRow[] | null,
+  cap = 50,
+  hasMore = false,
+  undatedCount?: number,
+) => render(await ConversationList({ rows, cap, now: NOW, hasMore, undatedCount }));
 
 describe('★★ the cap is stated, because a silent one teaches a falsehood', () => {
   it('★★ says how many it is showing and that older ones are not reachable', async () => {
@@ -145,5 +149,53 @@ describe('★ waiting time, and the row that has none', () => {
   it('an empty queue says nothing is waiting', async () => {
     await show([]);
     expect(screen.getByTestId('queue-empty')).toHaveTextContent(/nothing is waiting/i);
+  });
+});
+
+describe('★★ the view-wide undated count, and its three states', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ABSENT IS NOT ZERO, AND THIS IS THE INSTRUMENT'S OWN BLIND SPOT.
+   * ════════════════════════════════════════════════════════════════════════
+   * `undatedCount` is scoped to the view's filters and is cursor-blind, so
+   * it answers what the per-page group could only gesture at. But it is
+   * additive and absent on a service that predates it.
+   *
+   * Defaulting it to 0 would have the screen assert "no undated
+   * conversations" on a service that cannot answer — **the instrument
+   * reporting all-clear because it is not there.** That is the second time
+   * today this same group would have hidden the thing it exists to show.
+   */
+  it('★★ a non-zero count shows even when this page holds none of them', async () => {
+    /*
+     * Undated rows sort LAST, so on any page but the final one the count can
+     * be non-zero while the page is clean. Hiding the group because the page
+     * looks fine would reinstate the defect the count fixes.
+     */
+    await show([row()], 50, true, 3);
+    const note = screen.getByTestId('queue-undated');
+    expect(note).toHaveTextContent(/3 conversations in this view/i);
+    expect(note).not.toHaveTextContent(/on this page/i);
+  });
+
+  it('★★ an ABSENT count falls back to the page and says so', async () => {
+    // Not zero. The service cannot answer, so the caption claims only what
+    // this page can see.
+    await show([row({ id: 'lost', lastMessageAt: null })], 50, true, undefined);
+    const note = screen.getByTestId('queue-undated');
+    expect(note).toHaveTextContent(/on this page/i);
+    expect(note).not.toHaveTextContent(/in this view/i);
+  });
+
+  it('★★ never renders an absent count as zero', async () => {
+    // The whole point: no "0" claim anywhere when nobody looked.
+    const { container } = await show([row()], 50, true, undefined);
+    expect(screen.queryByTestId('queue-undated')).toBeNull();
+    expect(container.textContent ?? '').not.toMatch(/no conversation here is missing/i);
+  });
+
+  it('★ a real zero IS reported, because somebody looked and found none', async () => {
+    await show([row()], 50, false, 0);
+    expect(screen.queryByTestId('queue-undated')).toBeNull();
   });
 });
