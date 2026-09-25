@@ -14,6 +14,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const get = vi.hoisted(() => vi.fn());
+
+/**
+ * A settings payload the platform could actually send.
+ *
+ * ★ THE MOCK BYPASSES ZOD, SO THE FIXTURE HAS TO CARRY ITS OWN HONESTY.
+ * `api.get` is stubbed, which means `payload: voiceAvailabilitySchema` never
+ * runs here. A fixture naming only the field a test cares about would be a
+ * claim the platform can send that object — and after these three became
+ * required it cannot. `tenant-settings` sends all three unconditionally.
+ */
+const settings = (over: Record<string, boolean> = {}) => ({
+  voiceCopilotEnabled: false,
+  voiceIncomingEnabled: false,
+  hasActiveVoiceChannel: false,
+  ...over,
+});
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 vi.mock('server-only', () => ({}));
 
@@ -44,14 +60,14 @@ describe('★★ three answers, because "we could not ask" is one of them', () =
   });
 
   it('reports voice genuinely off as false', async () => {
-    get.mockResolvedValueOnce({ voiceCopilotEnabled: false });
+    get.mockResolvedValueOnce(settings({ voiceCopilotEnabled: false }));
     const { loadCalls } = await import('./load-calls');
     expect((await loadCalls()).voiceEnabled).toBe(false);
   });
 
   it('proceeds to the reads when voice is on', async () => {
     // `voice_copilot_enabled` is true on this tenant as of 2026-09-25.
-    get.mockResolvedValueOnce({ voiceCopilotEnabled: true });
+    get.mockResolvedValueOnce(settings({ voiceCopilotEnabled: true, hasActiveVoiceChannel: true }));
     get.mockResolvedValue({ data: [] });
     const { loadCalls } = await import('./load-calls');
     const data = await loadCalls();
@@ -65,12 +81,59 @@ describe('★★ three answers, because "we could not ask" is one of them', () =
     // The distinction the `failed` flag exists for: voice off is a fact
     // about the workspace, an unknown is our failure to ask, and this is a
     // real fault worth reporting as one.
-    get.mockResolvedValueOnce({ voiceCopilotEnabled: true });
+    get.mockResolvedValueOnce(settings({ voiceCopilotEnabled: true, hasActiveVoiceChannel: true }));
     get.mockRejectedValue(new Error('calls unreachable'));
     const { loadCalls } = await import('./load-calls');
     const data = await loadCalls();
 
     expect(data.voiceEnabled).toBe(true);
     expect(data.failed).toBe(true);
+  });
+
+  it('★ carries whether a number is connected, which the empty screen needs', async () => {
+    /*
+     * Voice switched on and no ACTIVE VOICE channel is a real state, and the
+     * two empty screens say different things: "calls appear here as they
+     * happen" is a promise that cannot come true without a number.
+     */
+    get.mockResolvedValueOnce(settings({ voiceCopilotEnabled: true, hasActiveVoiceChannel: false }));
+    get.mockResolvedValue({ data: [] });
+    const { loadCalls } = await import('./load-calls');
+    expect((await loadCalls()).hasNumber).toBe(false);
+  });
+
+  it('★★ an unknown availability leaves the number unknown too', async () => {
+    // Not `false`. We never got to ask, and "no number connected" would be
+    // the same manufactured claim as "no voice" — one field along.
+    get.mockRejectedValueOnce(new Error('settings unreachable'));
+    const { loadCalls } = await import('./load-calls');
+    expect((await loadCalls()).hasNumber).toBeNull();
+  });
+});
+
+describe('★★ the contract refuses to default the answer', () => {
+  it('★★ a response missing the flag FAILS the parse rather than reading as "off"', async () => {
+    /*
+     * `voiceCopilotEnabled` was `.default(false)`. A payload that stopped
+     * carrying it parsed cleanly and rendered "voice is not switched on for
+     * this workspace" — the loader's repaired collapse, committed one level
+     * down where nothing logs.
+     *
+     * Required, absence throws, the loader catches, and the screen says we
+     * could not find out.
+     */
+    const { voiceAvailabilitySchema } = await import('@/api/contracts/calls');
+
+    expect(() => voiceAvailabilitySchema.parse({})).toThrow();
+    expect(() =>
+      voiceAvailabilitySchema.parse({ voiceCopilotEnabled: true, voiceIncomingEnabled: false }),
+    ).toThrow();
+    expect(
+      voiceAvailabilitySchema.parse({
+        voiceCopilotEnabled: true,
+        voiceIncomingEnabled: false,
+        hasActiveVoiceChannel: true,
+      }).hasActiveVoiceChannel,
+    ).toBe(true);
   });
 });

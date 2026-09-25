@@ -52,6 +52,21 @@ export interface CallsData {
    * The file said the collapse was wrong and the catch did it anyway.
    */
   readonly voiceEnabled: boolean | null;
+  /**
+   * Whether any phone number is actually connected — at least one `VOICE`
+   * channel `ACTIVE`.
+   *
+   * ★ VOICE SWITCHED ON IS NOT THE SAME AS A PHONE NUMBER CONNECTED, AND THE
+   * EMPTY SCREEN SAYS A DIFFERENT THING FOR EACH.
+   *
+   * *"Calls appear here as they happen"* is true only for a workspace that
+   * can receive one. Said to a workspace with no connected number it is a
+   * promise about something that cannot occur — the same shape as telling
+   * somebody to connect a CRM they already connected, pointed the other way.
+   *
+   * `null` alongside `voiceEnabled: null`: we did not get to ask.
+   */
+  readonly hasNumber: boolean | null;
   readonly calls: readonly Call[] | null;
   readonly summary: CallSummary | null;
   /** True when voice IS on and the reads still failed — a real fault. */
@@ -99,20 +114,16 @@ export async function loadLiveCall(): Promise<{
 export async function loadCalls(direction?: 'inbound' | 'outbound'): Promise<CallsData> {
   const api = serverApi();
 
-  let voiceEnabled = false;
+  let voiceEnabled: boolean;
+  let hasNumber: boolean;
   try {
     const settings = await api.get({
       endpoint: tenantSettingsEndpoints.read(),
       payload: voiceAvailabilitySchema,
     });
     voiceEnabled = settings.voiceCopilotEnabled;
+    hasNumber = settings.hasActiveVoiceChannel;
   } catch (cause) {
-    /*
-     * Not fatal, but it does mean nothing below can be interpreted. Treated as
-     * "voice off", because that is the safer of the two readings: it shows an
-     * explanation rather than an error, and a tenant that does have voice sees
-     * the real screen as soon as this call succeeds.
-     */
     /*
      * NOT `false`. We asked the question that resolves the ambiguity and did
      * not get an answer — which is a third thing, and the only honest one.
@@ -120,11 +131,11 @@ export async function loadCalls(direction?: 'inbound' | 'outbound'): Promise<Cal
      * a failed request.
      */
     logger.warn('calls.settings_failed', { cause });
-    return { voiceEnabled: null, calls: null, summary: null, failed: false };
+    return { voiceEnabled: null, hasNumber: null, calls: null, summary: null, failed: false };
   }
 
   if (voiceEnabled === false) {
-    return { voiceEnabled: false, calls: null, summary: null, failed: false };
+    return { voiceEnabled: false, hasNumber, calls: null, summary: null, failed: false };
   }
 
   const degrade =
@@ -153,6 +164,7 @@ export async function loadCalls(direction?: 'inbound' | 'outbound'): Promise<Cal
 
   return {
     voiceEnabled: true,
+    hasNumber,
     calls,
     summary,
     // Both failing is a fault worth naming; one failing degrades quietly.

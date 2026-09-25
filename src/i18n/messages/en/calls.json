@@ -6,6 +6,8 @@
   "unavailable": "We couldn't read your calls just now.",
   "none": "No calls yet.",
   "noneBody": "Calls appear here as they happen, whether GOTCHA answered them or you did.",
+  "noNumber": "No phone number is connected yet.",
+  "noNumberBody": "Phone calls are switched on for this workspace, but there's no number for anyone to reach you on. Whoever set up GOTCHA can connect one.",
   "summary": {
     "total": "Calls",
     "average": "Average length",

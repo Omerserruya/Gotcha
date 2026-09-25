@@ -122,10 +122,35 @@ export const transcriptSchema = z.object({
 
 export type TranscriptLine = z.infer<typeof transcriptLineSchema>;
 
-/** Whether the tenant has voice at all. Read OUTSIDE the gate, on purpose. */
+/**
+ * Whether the tenant has voice at all. Read OUTSIDE the gate, on purpose.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ NOTHING HERE IS DEFAULTED, AND THAT IS THE POINT
+ * ════════════════════════════════════════════════════════════════════════════
+ * `voiceCopilotEnabled` used to be `.default(false)`. A response that stopped
+ * carrying it would have parsed cleanly and read as **"this workspace has no
+ * voice"** — a statement about somebody's workspace manufactured out of a
+ * missing key. That is the same collapse the loader was just repaired for,
+ * one level further down, and a default is the quieter version of it: the
+ * loader at least logged.
+ *
+ * Required, so absence fails the parse, the loader catches it, and the screen
+ * says *we could not find out*. **A required field proves itself; a defaulted
+ * one cannot.** `/api/tenant-settings` sends all three unconditionally —
+ * `!!tenant?.x` — so nothing is being asked of the platform that it does not
+ * already do.
+ *
+ * `hasActiveVoiceChannel` is the platform's own precondition, and its comment
+ * says what it is for: *"skip /api/voice-copilot/token entirely when the
+ * tenant has no active voice channel yet."* Voice switched on and no number
+ * connected is a real and separate state — see `CallsData.hasNumber`.
+ */
 export const voiceAvailabilitySchema = z.object({
-  voiceCopilotEnabled: z.boolean().default(false),
-  voiceIncomingEnabled: z.boolean().default(false),
+  voiceCopilotEnabled: z.boolean(),
+  voiceIncomingEnabled: z.boolean(),
+  /** At least one `VOICE` channel is `ACTIVE`. Without one no call can arrive. */
+  hasActiveVoiceChannel: z.boolean(),
 });
 
 /** A recording exists and can be played. `pending` and `failed` cannot. */

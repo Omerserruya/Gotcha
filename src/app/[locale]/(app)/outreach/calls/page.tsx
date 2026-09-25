@@ -34,7 +34,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  */
 export default async function Page() {
   const t = await getTranslations('calls');
-  const { voiceEnabled, calls, summary, failed } = await loadCalls();
+  const { voiceEnabled, hasNumber, calls, summary, failed } = await loadCalls();
   // 05e lives on the same route: a call in progress is the thing you need
   // when there is one, and the log is what you need when there is not.
   const { call: liveCall, transcript } =
@@ -78,11 +78,24 @@ export default async function Page() {
   }
 
   if (calls.length === 0 && !liveCall) {
+    /*
+     * ★ TWO EMPTY SCREENS, BECAUSE THERE ARE TWO REASONS TO BE EMPTY.
+     *
+     * "Calls appear here as they happen" is a promise, and it is only true
+     * for a workspace that can receive one. `hasActiveVoiceChannel` is the
+     * platform's own precondition — no ACTIVE VOICE channel means no call
+     * can arrive, so the honest sentence names the missing number instead of
+     * describing a future that cannot happen.
+     *
+     * `hasNumber === null` cannot reach here: it travels with
+     * `voiceEnabled === null`, which returned above.
+     */
+    const noNumber = hasNumber === false;
     return (
       <PageContainer title={t('title')} description={t('description')}>
-        <div className={styles.empty} data-testid="calls-empty">
-          <p className={styles.emptyLead}>{t('none')}</p>
-          <p className={styles.emptyBody}>{t('noneBody')}</p>
+        <div className={styles.empty} data-testid={noNumber ? 'calls-no-number' : 'calls-empty'}>
+          <p className={styles.emptyLead}>{noNumber ? t('noNumber') : t('none')}</p>
+          <p className={styles.emptyBody}>{noNumber ? t('noNumberBody') : t('noneBody')}</p>
         </div>
       </PageContainer>
     );
