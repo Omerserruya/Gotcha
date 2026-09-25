@@ -1,0 +1,17 @@
+{
+  "team": {
+    "heading": "Who is holding what",
+    "today": "These are today's numbers. They reset at midnight, and they are not the seven days shown above.",
+    "person": "Person",
+    "openNow": "Open now",
+    "takenToday": "Taken today",
+    "replyToday": "Average reply today",
+    "noReplies": "no replies yet today",
+    "seconds": "{seconds}s",
+    "unnamed": "Unnamed",
+    "none": "Nobody on the team is set up to take conversations yet.",
+    "quietSoFar": "Nobody has replied yet today, so there are no averages to show.",
+    "humansOnly": "This is the human team. GOTCHA's AI employees don't appear here — their work is on the GOTCHA tab.",
+    "unavailable": "We couldn't read the team's workload just now."
+  }
+}

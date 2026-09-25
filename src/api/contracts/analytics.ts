@@ -441,3 +441,70 @@ export function headlineMetrics(overview: AnalyticsOverview): readonly HeadlineM
 export function hasComparison(metric: HeadlineMetric): boolean {
   return metric.deltaPct !== undefined && metric.deltaPct !== null;
 }
+
+/* ── Screen 06c · the team's workload ────────────────────────────────────── */
+
+/**
+ * `GET /api/analytics/agents` — `analytics:workspace:read`.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ EVERY FIELD HERE COVERS A DIFFERENT PERIOD, AND TWO OF THEM ARE TODAY
+ * ════════════════════════════════════════════════════════════════════════════
+ * `getAgentStats` reads Prisma for the people and **Redis day-keys** for the
+ * numbers: `analytics:{tenant}:agent:{id}:{today}`. So:
+ *
+ *   activeConversations   open RIGHT NOW. Not "handled", not a period at all
+ *   claimedToday          today. Resets at midnight
+ *   avgResponseTimeMs     today, averaged over a Redis list
+ *
+ * Screen 06's header says *"Last 7 days, compared with the week before"*.
+ * **That header cannot sit above these figures**, and the screen labels each
+ * number with the period it actually covers rather than inheriting one.
+ *
+ * ── AND IT IS HUMANS ONLY ──
+ * `where: { role: "AGENT" }` selects human users. AI employees are not in
+ * this list, which the design puts *"in the same table — colleagues in the
+ * workload, not a separate report"*. A real absence a reader notices, so the
+ * screen states it rather than letting the table imply the team is smaller
+ * than it is.
+ *
+ * ── `email` IS DELIBERATELY NOT NAMED ──
+ * The route returns it and `z.object` strips what it does not name. A
+ * workload table is not a directory, and an address on this screen is one
+ * copy-paste from being used for something it was not collected for.
+ */
+export const agentLoadSchema = z.object({
+  agentId: z.string(),
+  name: z.string().nullable().default(null),
+  /** Open right now. A queue depth, not a throughput. */
+  activeConversations: z.number().default(0),
+  /** Today only, from a Redis day-key. */
+  claimedToday: z.number().default(0),
+  /**
+   * Today's average, or `null` when nobody replied yet.
+   *
+   * Null is not zero: a person who has taken nothing today has no average,
+   * and rendering 0ms would make them the fastest on the team.
+   */
+  avgResponseTimeMs: z.number().nullable().default(null),
+});
+export type AgentLoad = z.infer<typeof agentLoadSchema>;
+
+export const agentLoadListSchema = z.array(agentLoadSchema);
+
+/**
+ * Ordered for reading, not for ranking.
+ *
+ * ★ BY NAME. Sorting by volume would build the leaderboard out of the row
+ * order even with no outcome column present — the top of a sorted list reads
+ * as the best or the worst of something, and this data cannot support either
+ * claim. Alphabetical says only "here is the team".
+ */
+export function byName(agents: readonly AgentLoad[]): readonly AgentLoad[] {
+  return [...agents].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+}
+
+/** Nobody has replied yet today, so no average exists for anyone. */
+export function noRepliesYet(agents: readonly AgentLoad[]): boolean {
+  return agents.length > 0 && agents.every((a) => a.avgResponseTimeMs === null);
+}

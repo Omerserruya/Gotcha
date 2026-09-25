@@ -1,0 +1,46 @@
+@layer features {
+  /*
+   * Screen 06 · Analytics.
+   *
+   * 06c ships without the outcome column the design pairs load with, on the
+   * owner's decision. Nothing here styles volume as achievement: no bars, no
+   * ranking colour, no emphasis that would turn a count into a verdict.
+   */
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .panelHeading {
+    margin: 0;
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: start;
+  }
+
+  .table th,
+  .table td {
+    padding: var(--space-8);
+    border-bottom: 1px solid var(--surface-edge);
+    text-align: start;
+    /* Tabular figures so columns line up without implying a ranking. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  .table thead th {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+}

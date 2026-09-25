@@ -1,0 +1,132 @@
+import { render, screen } from '@testing-library/react';
+import { createFormatter, createTranslator } from 'next-intl';
+import { describe, expect, it, vi } from 'vitest';
+
+import { agentLoadSchema, type AgentLoad } from '@/api/contracts/analytics';
+import messages from '@/i18n/messages/en/analytics.json';
+
+import { TeamLoad } from './TeamLoad';
+
+/**
+ * Screen 06c.
+ *
+ * Shipped without the outcome column the design pairs load with, on Omer's
+ * decision after the leaderboard risk was put to him. These tests hold the
+ * part that was NOT authorised with it: the screen may lack a metric, it may
+ * not misdescribe the ones it has.
+ */
+
+vi.mock('next-intl/server', () => ({
+  getTranslations: async (namespace: 'analytics') =>
+    createTranslator({ locale: 'en', messages: { analytics: messages }, namespace }),
+  getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
+}));
+
+const agent = (over: Record<string, unknown> = {}): AgentLoad =>
+  agentLoadSchema.parse({
+    agentId: 'u1',
+    name: 'Dana Levi',
+    activeConversations: 7,
+    claimedToday: 12,
+    avgResponseTimeMs: 42_000,
+    ...over,
+  });
+
+const show = async (agents: readonly AgentLoad[] | null) => render(await TeamLoad({ agents }));
+
+describe('★★ every number says which period it covers', () => {
+  it('★★ labels the figures as today, not as the seven days above', async () => {
+    /*
+     * `claimedToday` and the reply average are Redis day-keys. The tab's
+     * header says "Last 7 days, compared with the week before" — a figure
+     * under the wrong period label is wrong in a way no reader can see.
+     */
+    await show([agent()]);
+    const period = screen.getByTestId('team-period');
+    expect(period).toHaveTextContent(/today's numbers/i);
+    expect(period).toHaveTextContent(/not the seven days/i);
+  });
+
+  it('★ calls the open count "open now" rather than "handled"', async () => {
+    // `activeConversations` is a queue depth. A number beside a name is read
+    // as throughput unless the column says otherwise.
+    await show([agent()]);
+    expect(screen.getByTestId('team-load')).toHaveTextContent(/Open now/i);
+    expect(screen.getByTestId('team-load')).not.toHaveTextContent(/handled/i);
+  });
+});
+
+describe('★★ the two absences a reader would otherwise infer', () => {
+  it('★★ says the table is the human team', async () => {
+    /*
+     * The design puts AI employees in this table as colleagues in the
+     * workload; `where: { role: "AGENT" }` is human users. Unstated, the
+     * first question is why they are missing and the second is whether
+     * their work is counted somewhere invisible.
+     */
+    await show([agent()]);
+    expect(screen.getByTestId('team-humans-only')).toHaveTextContent(/human team/i);
+  });
+
+  it('★★ ships no outcome column and no proxy for one', async () => {
+    /*
+     * Speed is not quality. A fast average beside a big count invites the
+     * reading the design was built to prevent, and dressed as an outcome it
+     * would be worse than the honest absence.
+     */
+    const { container } = await show([agent()]);
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/resolution|resolved|success rate|score|rank|best|top performer/i);
+  });
+});
+
+describe('★★ null is not zero, on the screen built not to rank anybody', () => {
+  it('★★ somebody with no replies today has no average, not a fast one', async () => {
+    /*
+     * A 0ms average would make the person who has taken nothing today the
+     * fastest on the team — a fabricated superlative, and the worst possible
+     * one on this screen.
+     */
+    await show([agent({ avgResponseTimeMs: null })]);
+    expect(screen.getByTestId('reply-u1')).toHaveTextContent(/no replies yet today/i);
+    expect(screen.getByTestId('reply-u1')).not.toHaveTextContent(/0s/);
+  });
+
+  it('says so once when nobody has replied at all', async () => {
+    await show([
+      agent({ avgResponseTimeMs: null }),
+      agent({ agentId: 'u2', avgResponseTimeMs: null }),
+    ]);
+    expect(screen.getByTestId('team-quiet')).toBeInTheDocument();
+  });
+
+  it('★ a failed read is not an empty team', async () => {
+    await show(null);
+    expect(screen.getByTestId('team-unavailable')).toHaveTextContent(/couldn't read/i);
+  });
+});
+
+describe('★ order is for reading, not for ranking', () => {
+  it('★★ sorts by name, never by volume', async () => {
+    /*
+     * Sorting by count builds the leaderboard out of the row order even with
+     * no outcome column present: the top of a sorted list reads as the best
+     * or the worst of something, and these numbers support neither.
+     */
+    await show([
+      agent({ agentId: 'busy', name: 'Zoe', activeConversations: 99 }),
+      agent({ agentId: 'quiet', name: 'Amit', activeConversations: 1 }),
+    ]);
+    const rows = screen.getAllByTestId(/^agent-/);
+    expect(rows[0]).toHaveAttribute('data-testid', 'agent-quiet');
+  });
+
+  it('★★ never renders an email address', async () => {
+    // The route returns one; `z.object` strips what it does not name. A
+    // workload table is not a directory.
+    const parsed = agentLoadSchema.parse({ agentId: 'u1', email: 'dana@example.com' });
+    expect(parsed).not.toHaveProperty('email');
+    const { container } = await show([agent()]);
+    expect(container.textContent ?? '').not.toMatch(/@/);
+  });
+});
