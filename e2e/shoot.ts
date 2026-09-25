@@ -1,4 +1,4 @@
-import { openSync, readSync, closeSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect, type Page } from '@playwright/test';
@@ -154,4 +154,39 @@ export async function shoot(page: Page, evidenceDir: string, name: string): Prom
       'the shot is clipped, and a clipped shot under a descriptive name is the thing ' +
       'this helper exists to prevent.',
   ).toBeGreaterThanOrEqual(Math.min(content, wanted));
+}
+
+/**
+ * Record a state that was NOT photographed, and why.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ A PERMANENTLY SKIPPED GUARD IS INDISTINGUISHABLE FROM A PASSING ONE
+ * ════════════════════════════════════════════════════════════════════════════
+ * `outreach.spec.ts`'s campaign-card test exists to prove we do not render
+ * counters the platform never increments. It skips, because the tenant has no
+ * campaigns — so **the assertion written to catch a false counter is the one
+ * the tenant's state switches off.** The screen's dormant-defect pattern, in
+ * the guard rather than in the product.
+ *
+ * A skip is the honest outcome: the assertion genuinely did not run, and
+ * turning it into a pass would be worse. What is not honest is that a skip
+ * reads as a pass in every summary either of us writes, and disappears
+ * entirely from a count of greens.
+ *
+ * So the skip leaves an artifact beside the shots. `e2e/evidence` is emptied
+ * before a run, so a missing shot already means "a spec did not shoot" — this
+ * makes the *deliberate* absences say so in their own words, and leaves the
+ * accidental ones as the only silent gaps.
+ *
+ * Deliberately a plain `.txt` next to the PNGs rather than a log line: the
+ * evidence directory is what somebody reviews, and a reason that lives only
+ * in a terminal that has scrolled away is not part of the evidence.
+ */
+export function recordUnreached(evidenceDir: string, name: string, reason: string): void {
+  mkdirSync(evidenceDir, { recursive: true });
+  writeFileSync(
+    join(evidenceDir, `${name}.unreached.txt`),
+    `${name}\n\nNOT PHOTOGRAPHED.\n\n${reason.trim()}\n`,
+    'utf8',
+  );
 }

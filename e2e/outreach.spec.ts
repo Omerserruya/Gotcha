@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 import { missingIds } from './diagnose';
-import { shoot as captureScreen } from './shoot';
+import { recordUnreached, shoot as captureScreen } from './shoot';
 
 /**
  * Screens 05 + 05b · Outreach — acceptance evidence.
@@ -184,13 +184,40 @@ for (const size of SIZES) {
       const campaigns = await countCampaigns(page);
       await openOutreach(page, 'en');
 
-      test.skip(
-        campaigns === 0,
-        'This tenant has no campaigns, so the card is NOT photographed. Seeding one would mean ' +
-          'creating something whose only purpose is to be sent to real contacts. The two ' +
-          'sentences are covered by src/features/outreach/CampaignCard.test.tsx and are ' +
-          'UNEXERCISED against a real broadcast.',
-      );
+      if (campaigns === 0) {
+        /*
+         * ★★ THE GUARD THE TENANT'S STATE SWITCHES OFF.
+         *
+         * This assertion exists to prove we do not render counters the
+         * platform never increments. It cannot run without a campaign, and
+         * seeding one would mean creating something whose only purpose is to
+         * be sent to real contacts.
+         *
+         * A skip is the honest outcome — the assertion did not run. But a
+         * skip reads as a pass in every summary, and a guard that is
+         * permanently skipped is indistinguishable from one that is
+         * permanently passing. So it leaves a record in the evidence
+         * directory rather than only in a terminal.
+         */
+        recordUnreached(
+          EVIDENCE,
+          `${size.name}-1b-campaign-card`,
+          'The campaign card was not photographed: this tenant has 0 campaigns, read from ' +
+            '/api/broadcasts at run time rather than assumed.\n\n' +
+            'Not worked around. A broadcast exists only to be sent to real contacts, and ' +
+            'POST /:id/send is not a button anyone should press to make a screenshot.\n\n' +
+            'What is unexercised: the two sentences that replaced deliveredCount, ' +
+            'openedCount and repliedCount — three columns nothing in the platform ' +
+            'increments, which rendered as a permanent zero on a shipped screen. They are ' +
+            'covered by src/features/outreach/CampaignCard.test.tsx and by NOTHING against ' +
+            'a real broadcast.',
+        );
+        test.skip(
+          true,
+          'This tenant has no campaigns, so the card is NOT photographed — see ' +
+            `${size.name}-1b-campaign-card.unreached.txt in the evidence directory.`,
+        );
+      }
 
       const card = page.getByTestId(/^campaign-/).first();
       await expect(card, missingIds('a campaign card')).toBeVisible();

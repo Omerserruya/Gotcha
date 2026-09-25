@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 import { missingIds } from './diagnose';
-import { shoot as captureScreen } from './shoot';
+import { recordUnreached, shoot as captureScreen } from './shoot';
 
 /**
  * Screen 05d · Outreach · calls — acceptance evidence.
@@ -263,12 +263,24 @@ for (const size of SIZES) {
         'a call is in progress — this spec must not photograph a real conversation',
       ).toHaveCount(0);
 
+      /*
+       * The annotation alone lived in a terminal that scrolls away. The
+       * evidence directory is what somebody reviews, so the reason goes
+       * there too — an absence that says why it is absent.
+       */
+      recordUnreached(
+        EVIDENCE,
+        `${size.name}-1b-live-call`,
+        `05e's live call is not exercised. hasActiveVoiceChannel=${hasNumber}, no TWILIO_* ` +
+          'credentials exist, and nothing here may dial — a capture must not place a real ' +
+          'call or photograph a real conversation.\n\n' +
+          'Covered only by src/features/calls/load-calls.test.ts, which shares the ' +
+          "frontend's assumptions about the response and so cannot catch a client/server " +
+          'disagreement on that path.',
+      );
       test.info().annotations.push({
         type: 'unreached',
-        description:
-          `05e's live call is not exercised: hasActiveVoiceChannel=${hasNumber}, no TWILIO_* ` +
-          'credentials exist, and nothing here may dial. Its behaviour is covered only by ' +
-          'src/features/calls/load-calls.test.ts.',
+        description: `see ${size.name}-1b-live-call.unreached.txt in the evidence directory`,
       });
     });
 
