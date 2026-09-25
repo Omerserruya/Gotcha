@@ -103,3 +103,56 @@ describe('the uniform facts are stated only when they are uniform', () => {
     expect(screen.getByTestId('all-default')).toBeInTheDocument();
   });
 });
+
+describe('★★ the fourth state, on screen', () => {
+  it('★★ a blocked row says what to repair instead of reading as "never"', async () => {
+    /*
+     * The difference the fourth state buys. "Never" looks like a decision
+     * somebody made; "reconnect it" is a repair somebody can perform. A
+     * three-state screen has to render one as the other.
+     */
+    await renderScreen([
+      capability({ toolName: 'shopify.process_refund', integrationConnected: false }),
+    ]);
+    const blocked = screen.getByTestId('blocked-shopify.process_refund');
+    expect(blocked).toHaveAttribute('data-reason', 'integration_disconnected');
+    expect(blocked).toHaveTextContent(/reconnect it/i);
+    // And the stance control is gone, because it is not the admin's to press.
+    expect(screen.queryByTestId('stance-shopify.process_refund')).toBeNull();
+  });
+
+  it('★★ names the missing scopes rather than saying "permissions are missing"', async () => {
+    // "Permissions are missing" sends somebody hunting for a setting. The
+    // list tells them which to grant — the same rule as 04d's panel.
+    await renderScreen([
+      capability({
+        toolName: 'shopify.refund',
+        scopeBlocked: true,
+        missingScopes: ['write_orders', 'read_returns'],
+      }),
+    ]);
+    const blocked = screen.getByTestId('blocked-shopify.refund');
+    expect(blocked).toHaveTextContent(/write_orders/);
+    expect(blocked).toHaveTextContent(/read_returns/);
+  });
+
+  it('★★ an unknown provider keeps its control, and is not greyed out', async () => {
+    /*
+     * `integrationConnected: undefined` is "we have no record of this
+     * provider", which the route deliberately separates from
+     * "disconnected". Greying it out would tell an admin to reconnect
+     * something that is connected.
+     */
+    await renderScreen([capability({ toolName: 'send_message', integrationConnected: undefined })]);
+    expect(screen.getByTestId('stance-send_message')).toBeInTheDocument();
+    expect(screen.queryByTestId('blocked-send_message')).toBeNull();
+  });
+
+  it('★ a row the admin turned off still reads as their choice', async () => {
+    // `disabled` with `reason: 'ok'` — the switch is theirs and it is off.
+    // That must not render as the platform blocking them.
+    await renderScreen([capability({ toolName: 'delete_contact', enabled: false })]);
+    expect(screen.getByTestId('stance-delete_contact')).toBeInTheDocument();
+    expect(screen.queryByTestId('blocked-delete_contact')).toBeNull();
+  });
+});

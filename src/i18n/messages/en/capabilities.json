@@ -42,5 +42,13 @@
     "create_workflow": "Create a new automation",
     "merge_contacts": "Join two customer records into one",
     "link_customer_identifier": "Attach another way of reaching a customer to their record"
+  },
+  "blocked": {
+    "integration_disconnected": "You can't set this until the connection is restored — reconnect it in Integrations.",
+    "missing_scope": "You can't set this until the provider grants the permission it needs.",
+    "missingScopesNamed": "You can't set this until {scopes} is granted where you connected it.",
+    "plan_not_entitled": "Your plan doesn't include this.",
+    "no_catalog_entry": "This isn't set up on GOTCHA's side yet.",
+    "ok": "You can't set this right now."
   }
 }

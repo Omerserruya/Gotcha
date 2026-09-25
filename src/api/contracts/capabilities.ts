@@ -99,6 +99,41 @@ export const capabilitySchema = z.object({
    */
   riskGroup: z.string().nullable().default(null),
   integration: z.string().nullable().default(null),
+
+  /* ── The fourth state's evidence, and it is all OPTIONAL on purpose ────── */
+
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ `undefined` HERE MEANS "WE DO NOT KNOW", AND THE ROUTE SAYS SO
+   * ════════════════════════════════════════════════════════════════════════
+   * *"A tool whose provider we have no record of is not reported as
+   * disconnected — we simply do not know, and guessing 'broken' is its own
+   * false statement."*
+   *
+   * So this is `.optional()` and **not** `.nullable().default(false)`. A
+   * default would turn every tool with an unrecognised provider into a
+   * disconnected one, which is the same manufactured claim as `voiceEnabled`
+   * collapsing to false — and here it would grey out a control that works.
+   */
+  integrationConnected: z.boolean().optional(),
+  /**
+   * ★★ THE RUNTIME'S OWN VERDICT, AND IT MUST NOT BE RE-DERIVED.
+   *
+   * The route's comment: *"Sent as a decided boolean rather than leaving the
+   * UI to re-derive it from two scope lists, because a second derivation is
+   * a second chance to disagree with the runtime."* It comes from
+   * `toolBlockedByMissingScopes` — the same function the bot's own tool
+   * surface uses.
+   *
+   * `undefined` means the caller could not supply a verdict, which **never
+   * means "definitely fine"**. See `resolveAvailability`.
+   */
+  scopeBlocked: z.boolean().optional(),
+  /** Which required scopes are known-missing, when the runtime says so. */
+  missingScopes: z.array(z.string()).optional(),
+  /** Declared requirement and actual grant, for the fallback comparison. */
+  requiredScopes: z.array(z.string()).optional(),
+  grantedScopes: z.array(z.string()).optional(),
 });
 
 export type Capability = z.infer<typeof capabilitySchema>;
@@ -202,4 +237,152 @@ export function groupByCategory(capabilities: readonly Capability[]): readonly C
   return [...groups.entries()]
     .map(([category, items]) => ({ category, capabilities: items }))
     .sort((a, b) => b.capabilities.length - a.capabilities.length);
+}
+
+/* ── What the row should actually say ────────────────────────────────────── */
+
+/**
+ * The design asks for three settings. **The platform models four.**
+ *
+ *   always_allow      do it
+ *   require_approval  ask me
+ *   disabled          never — and the admin chose it
+ *   unavailable       the switch is not the admin's to press right now
+ *
+ * The fourth is the one worth having: a greyed row that says WHY beats a
+ * greyed row, and beats an enabled row that fails when pressed.
+ */
+export const PERMISSION_STATES = [
+  'always_allow',
+  'require_approval',
+  'disabled',
+  'unavailable',
+] as const;
+export type PermissionState = (typeof PERMISSION_STATES)[number];
+
+/**
+ * Why a row is unavailable. `ok` explicitly means *"this really is the
+ * admin's choice"* rather than "no reason given".
+ *
+ * ⚠ TWO OF THESE CANNOT ARRIVE FROM `/api/tool-permissions`.
+ * `plan_not_entitled` and `no_catalog_entry` are resolved from `planEntitled`
+ * and `hasCatalogEntry`, and that route sends neither — it builds its rows by
+ * hand rather than calling the shared resolver. They are named here because
+ * the domain has five and a `z.enum` missing a member rejects the whole
+ * response the day a second caller appears; they are not rendered as states
+ * this screen can reach.
+ */
+export const UNAVAILABLE_REASONS = [
+  'ok',
+  'integration_disconnected',
+  'missing_scope',
+  'plan_not_entitled',
+  'no_catalog_entry',
+] as const;
+export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number];
+
+export interface Availability {
+  readonly state: PermissionState;
+  readonly reason: UnavailableReason;
+  /** Empty unless `missing_scope`. */
+  readonly missingScopes: readonly string[];
+  /** True when the stored preference is currently overridden by the platform. */
+  readonly overriddenByPlatform: boolean;
+}
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ A PORT OF `resolveToolAvailability`, ORDER INCLUDED — AND THE ORDER IS
+ *    THE POINT
+ * ════════════════════════════════════════════════════════════════════════════
+ * The shared lib's own comment: *"Reasons are checked in the order the admin
+ * can act on them: an unentitled plan cannot be fixed by connecting
+ * anything, a disconnected integration cannot be fixed by granting scopes,
+ * and a missing scope cannot be fixed by toggling the switch. **Reporting the
+ * wrong one sends them to the wrong screen.**"*
+ *
+ * So this is not "check the flags in any order and return the first true" —
+ * the sequence encodes which repair supersedes which, and reordering it
+ * would send somebody to grant a scope on an integration that is not
+ * connected.
+ *
+ * ── WHY A PORT AND NOT A SECOND OPINION ──
+ * The route does not call the resolver; it hands us the decided booleans.
+ * Given those, the mapping to a state is arithmetic, and doing it here keeps
+ * the screen and the runtime agreeing by construction. What this must never
+ * do is re-derive `scopeBlocked` when the runtime supplied it — that is the
+ * second derivation the route's comment warns about.
+ */
+export function resolveAvailability(capability: Capability): Availability {
+  const base = { missingScopes: [] as readonly string[] };
+
+  // `plan_not_entitled` and `no_catalog_entry` would be checked first, and
+  // are unreachable from this endpoint — see UNAVAILABLE_REASONS.
+
+  /*
+   * ★ `=== false`, NOT `!connected`. `undefined` is "we have no record of
+   * this provider", which the route deliberately distinguishes from
+   * "disconnected". Truthiness would collapse the two.
+   */
+  if (capability.integrationConnected === false) {
+    return {
+      ...base,
+      state: 'unavailable',
+      reason: 'integration_disconnected',
+      overriddenByPlatform: true,
+    };
+  }
+
+  // The runtime's verdict wins wherever it gave one.
+  if (capability.scopeBlocked === true) {
+    return {
+      ...base,
+      state: 'unavailable',
+      reason: 'missing_scope',
+      missingScopes: capability.missingScopes ?? [],
+      overriddenByPlatform: true,
+    };
+  }
+
+  /*
+   * ★★ AND AN ABSENT VERDICT IS NOT A PASS.
+   *
+   * `!== false` rather than `=== undefined`: the fallback runs when the
+   * runtime said nothing, because *"an absent verdict never means
+   * 'definitely fine'"*. A provider with no adapter definition supplies no
+   * verdict, and its declared scopes are then the only evidence there is.
+   */
+  if (capability.scopeBlocked !== false) {
+    const required = capability.requiredScopes ?? [];
+    if (required.length > 0) {
+      const granted = new Set(capability.grantedScopes ?? []);
+      const missing = required.filter((scope) => !granted.has(scope));
+      if (missing.length > 0) {
+        return {
+          ...base,
+          state: 'unavailable',
+          reason: 'missing_scope',
+          missingScopes: missing,
+          overriddenByPlatform: true,
+        };
+      }
+    }
+  }
+
+  // Everything the platform controls is satisfied, so the switch really is
+  // the admin's — which is what `reason: 'ok'` says.
+  if (!capability.enabled) {
+    return { ...base, state: 'disabled', reason: 'ok', overriddenByPlatform: false };
+  }
+  return {
+    ...base,
+    state: capability.requiresApproval ? 'require_approval' : 'always_allow',
+    reason: 'ok',
+    overriddenByPlatform: false,
+  };
+}
+
+/** Can the admin change this row at all? */
+export function isTheAdminsChoice(availability: Availability): boolean {
+  return availability.state !== 'unavailable';
 }

@@ -125,4 +125,19 @@
     line-height: var(--line-height-snug);
     color: var(--text-body);
   }
+
+  /*
+   * ★ THE FOURTH STATE. Not styled as an error — nothing is broken and the
+   * admin did nothing wrong. It is a repair somebody else has to perform,
+   * and it reads as an instruction rather than as an alarm.
+   */
+  .blocked {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  /* A disconnected provider is the one a merchant can act on themselves. */
+  .blocked[data-reason='integration_disconnected'] {
+    color: var(--intent-urgent-text);
+  }
 }

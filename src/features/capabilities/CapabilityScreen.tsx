@@ -6,7 +6,9 @@ import {
   groupByCategory,
   hasOwnWords,
   humaniseToolName,
+  isTheAdminsChoice,
   isUniform,
+  resolveAvailability,
   type Capability,
 } from '@/api/contracts/capabilities';
 
@@ -103,9 +105,51 @@ export async function CapabilityScreen({
                       ? t(`tool.${capability.toolName}` as 'tool.send_message')
                       : humaniseToolName(capability.toolName)}
                   </span>
-                  <span className={styles.stance} data-testid={`stance-${capability.toolName}`}>
-                    {t(`stance.${stance}` as 'stance.ask_first')}
-                  </span>
+                  {/*
+                    ════════════════════════════════════════════════════════
+                    ★★ FOUR STATES, BECAUSE THE PLATFORM MODELS FOUR
+                    ════════════════════════════════════════════════════════
+                    The design asks for three — do it, ask me, never. The
+                    platform adds `unavailable`: the switch is not the
+                    admin's to press right now, with a reason saying why.
+
+                    That fourth state is the difference between a row that
+                    reads "never" and a row that reads "you cannot turn this
+                    on until the integration is reconnected". The first
+                    looks like a decision somebody made; the second is a
+                    repair somebody can perform.
+
+                    And the reason ORDER matters: a disconnected integration
+                    outranks a missing scope, because granting a scope on a
+                    provider that is not connected is work that cannot help.
+                  */}
+                  {(() => {
+                    const availability = resolveAvailability(capability);
+                    return isTheAdminsChoice(availability) ? (
+                      <span className={styles.stance} data-testid={`stance-${capability.toolName}`}>
+                        {t(`stance.${stance}` as 'stance.ask_first')}
+                      </span>
+                    ) : (
+                      <span
+                        className={styles.blocked}
+                        data-reason={availability.reason}
+                        data-testid={`blocked-${capability.toolName}`}
+                      >
+                        {availability.reason === 'missing_scope' &&
+                        availability.missingScopes.length > 0
+                          ? /*
+                             ★ THE SCOPES BY NAME. "Permissions are missing"
+                             sends somebody hunting; the list tells them what
+                             to grant — the same rule as 04d's missing_scopes
+                             panel.
+                            */
+                            t('blocked.missingScopesNamed', {
+                              scopes: availability.missingScopes.join(', '),
+                            })
+                          : t(`blocked.${availability.reason}` as 'blocked.missing_scope')}
+                      </span>
+                    );
+                  })()}
                 </li>
               );
             })}
