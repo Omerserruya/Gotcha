@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 import { missingIds } from './diagnose';
+import { shoot as captureScreen } from './shoot';
 
 /**
  * Screen 14 · Settings · Business systems — acceptance evidence.
@@ -88,8 +89,13 @@ async function openSystems(page: Page, locale: 'en' | 'he') {
   return page;
 }
 
+/**
+ * Shots land in `EVIDENCE`. The helper grows the viewport before capturing:
+ * this app scrolls `main`, not the document, so `fullPage` alone captured
+ * exactly one screenful — see `e2e/shoot.ts`.
+ */
 async function shoot(page: Page, name: string) {
-  await page.screenshot({ path: join(EVIDENCE, `${name}.png`), fullPage: true });
+  await captureScreen(page, EVIDENCE, name);
 }
 
 for (const size of SIZES) {

@@ -10,6 +10,7 @@ import {
 } from '../src/features/notifications-settings/events';
 
 import { missingIds } from './diagnose';
+import { shoot as captureScreen } from './shoot';
 
 /**
  * Screen 15 · Settings · Notifications — acceptance evidence.
@@ -124,8 +125,13 @@ async function openNotifications(page: Page, locale: 'en' | 'he') {
   return page;
 }
 
+/**
+ * Shots land in `EVIDENCE`. The helper grows the viewport before capturing:
+ * this app scrolls `main`, not the document, so `fullPage` alone captured
+ * exactly one screenful — see `e2e/shoot.ts`.
+ */
 async function shoot(page: Page, name: string) {
-  await page.screenshot({ path: join(EVIDENCE, `${name}.png`), fullPage: true });
+  await captureScreen(page, EVIDENCE, name);
 }
 
 for (const size of SIZES) {
