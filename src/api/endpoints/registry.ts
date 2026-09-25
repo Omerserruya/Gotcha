@@ -985,14 +985,19 @@ export const capabilityEndpoints = {
   update: (toolName: string) => endpoint('/api/tool-permissions/{toolName}', { toolName }),
 } as const;
 
-
 /**
  * Screen 02 · the Inbox.
  *
- * ⚠ THE LIST PAGINATES BY OFFSET (`page` + `limit`). On a recency ordering a
- * new message reorders rows between pages, so scrolling shows a duplicate
- * and **silently skips one** — somebody waiting who never appears. The
- * screen reads a single capped page until a keyset endpoint exists.
+ * ★ PASS `cursor` TO GET KEYSET. Without it the route paginates by OFFSET,
+ * and on a recency ordering a new message between pages shows a duplicate
+ * and **silently skips one** — somebody waiting who never appears.
+ *
+ * With a cursor it orders `{ lastMessageAt: desc, nulls: last }` with a
+ * `(timestamp, id)` tiebreak and answers `{ data, page: { limit, hasMore,
+ * nextCursor } }`. The cursor encodes the literal string "null" for a row
+ * with no timestamp, and the predicate has a branch for the null tail — so
+ * the undated rows at the end of the queue are paged through correctly
+ * rather than repeating or vanishing.
  */
 export const inboxEndpoints = {
   list: () => endpoint('/api/conversations'),

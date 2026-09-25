@@ -37,12 +37,21 @@ export async function ConversationList({
   rows,
   cap,
   now,
+  hasMore,
 }: {
   /** `null` when the read failed. Never an empty queue. */
   readonly rows: readonly ConversationRow[] | null;
-  /** How many the single page holds. Stated on screen, not implied. */
+  /** How many the page holds. Stated on screen, not implied. */
   readonly cap: number;
   readonly now: Date;
+  /**
+   * Whether the server says more pages exist.
+   *
+   * ★ IT DECIDES WHAT THE UNDATED GROUP CAN CLAIM. Undated rows sort last,
+   * so only on the final page is "these are the undated ones" a statement
+   * about the queue rather than about this page.
+   */
+  readonly hasMore: boolean;
 }) {
   const t = await getTranslations('inbox');
 
@@ -83,7 +92,7 @@ export async function ConversationList({
         nothing teaches an agent that N is all there is.
       */}
       <p className={styles.note} data-testid="queue-cap">
-        {t('queue.cap', { count: cap })}
+        {hasMore ? t('queue.cap', { count: cap }) : t('queue.capAll', { count: rows.length })}
       </p>
 
       {dated.length === 0 && undated.length === 0 ? (
@@ -126,10 +135,31 @@ export async function ConversationList({
 
         The majority case is with the write-path audit and is not solvable
         from this file.
+
+        ════════════════════════════════════════════════════════════════════
+        ⚠ AND THE GROUP ITSELF IS PER PAGE, BECAUSE NULLS SORT LAST
+        ════════════════════════════════════════════════════════════════════
+        The server orders `{ lastMessageAt: desc, nulls: last }`, so every
+        undated row sits at the **very end of the whole queue**. On a tenant
+        with more conversations than one page holds, this group is empty on
+        every page but the last — and an empty group reads as "none".
+
+        Found when the keyset endpoint landed and made the paging real. It
+        was already true of the capped list and I had not seen it: the group
+        I built to make a hidden problem visible was itself hidden by the
+        ordering, for exactly the tenants with enough conversations to have
+        the problem.
+
+        So the caption says which it is. A whole-queue count needs an
+        endpoint nobody offers yet.
       */}
       {undated.length > 0 ? (
         <section data-testid="queue-undated">
-          <p className={styles.note}>{t('queue.undated', { count: undated.length })}</p>
+          <p className={styles.note}>
+            {hasMore
+              ? t('queue.undatedThisPage', { count: undated.length })
+              : t('queue.undated', { count: undated.length })}
+          </p>
           <ol className={styles.queueList}>{undated.map((c) => row(c, `undated-${c.id}`))}</ol>
         </section>
       ) : null}

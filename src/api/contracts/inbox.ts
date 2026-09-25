@@ -205,6 +205,22 @@ export function hasTranscript(_message: InboxMessage): false {
  * The queue, newest first — and the rows whose place we cannot determine.
  *
  * ════════════════════════════════════════════════════════════════════════════
+ * ⚠ THIS SPLIT IS PER PAGE, AND THE SERVER SORTS NULLS LAST
+ * ════════════════════════════════════════════════════════════════════════════
+ * `orderBy` is `{ lastMessageAt: { sort: "desc", nulls: "last" } }`, so every
+ * undated row is **at the very end of the whole queue** — after every dated
+ * one, on the last page.
+ *
+ * So on a tenant with more conversations than one page holds, this function
+ * returns an empty `undated` on every page but the last, and the group
+ * disappears. **It is a per-page view of a whole-queue fact**, and the
+ * screen must say so rather than letting an empty group read as "none".
+ *
+ * Answering "how many conversations have no `lastMessageAt`" properly needs
+ * a count of its own, which no endpoint offers. Until one does, the caption
+ * carries the scope — see `ConversationList`.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
  * ★★ `lastMessageAt` IS A DENORMALISED CACHE MAINTAINED BY CONVENTION
  * ════════════════════════════════════════════════════════════════════════════
  * It is written at ten call sites, and **ten or more writers bypass

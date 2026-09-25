@@ -38,8 +38,24 @@ import { z } from 'zod';
  */
 export const QUEUE_CAP = 50;
 
+/**
+ * ★ THE KEYSET SHAPE, AND `hasMore` IS LOAD-BEARING ON SCREEN.
+ *
+ * Passing `cursor` switches the route from offset to keyset — ordered
+ * `{ lastMessageAt: desc, nulls: last }` with a `(timestamp, id)` tiebreak,
+ * so a new message between pages no longer skips a row.
+ *
+ * `hasMore` is not only a button state: undated rows sort **last**, so only
+ * on the final page can the screen say "these are the undated ones" about
+ * the queue rather than about the page. See `ConversationList`.
+ */
 const queuePageSchema = z.object({
   data: z.array(conversationRowSchema),
+  page: z.object({
+    limit: z.number().default(0),
+    hasMore: z.boolean(),
+    nextCursor: z.string().nullable(),
+  }),
 });
 
 const streamPageSchema = z.object({
@@ -48,33 +64,42 @@ const streamPageSchema = z.object({
 
 export interface InboxData {
   readonly rows: readonly ConversationRow[] | null;
+  /** More pages exist. `false` when the read failed — we claim nothing. */
+  readonly hasMore: boolean;
+  readonly nextCursor: string | null;
   readonly open: ConversationRow | null;
   readonly messages: readonly InboxMessage[] | null;
   readonly timeline: CustomerTimeline | null;
   readonly orders: CommerceContextResponse | null;
 }
 
-export async function loadInbox(conversationId?: string): Promise<InboxData> {
+export async function loadInbox(conversationId?: string, cursor?: string): Promise<InboxData> {
   const api = serverApi();
 
-  const rows = await api
+  const queue = await api
     .get({
       endpoint: inboxEndpoints.list(),
       payload: queuePageSchema,
-      // `{ data }` beside a page envelope — checked, not assumed.
+      // `data` sits beside `page` — checked, not assumed.
       raw: true,
       /*
-       * ★ ONE PAGE. The endpoint paginates by offset, and on a recency
-       * ordering that silently skips rows between pages. See
-       * `ConversationList` for why a skip in a queue is not cosmetic.
+       * ★ KEYSET, NOT OFFSET. `cursor` switches the route over; the first
+       * page passes an empty one, which the route treats as keyset-from-the-
+       * start rather than falling back to `skip`.
+       *
+       * Offset on a recency ordering shows a duplicate and silently skips a
+       * row when a new message arrives between pages — somebody waiting who
+       * never appears. That is why this waited for the keyset rather than
+       * scrolling on offset.
        */
-      query: { limit: QUEUE_CAP },
+      query: { limit: QUEUE_CAP, cursor: cursor ?? '' },
     })
-    .then((page) => page.data)
     .catch((cause: unknown) => {
       logger.warn('inbox.queue_failed', { cause });
       return null;
     });
+
+  const rows = queue?.data ?? null;
 
   /*
    * The conversation to show. An explicit id wins; otherwise the first row
@@ -83,7 +108,15 @@ export async function loadInbox(conversationId?: string): Promise<InboxData> {
    */
   const open = (conversationId ? rows?.find((r) => r.id === conversationId) : rows?.[0]) ?? null;
 
-  if (!open) return { rows, open: null, messages: null, timeline: null, orders: null };
+  const paging = {
+    // A failed read claims nothing about what else exists.
+    hasMore: queue?.page.hasMore ?? false,
+    nextCursor: queue?.page.nextCursor ?? null,
+  };
+
+  if (!open) {
+    return { rows, ...paging, open: null, messages: null, timeline: null, orders: null };
+  }
 
   const [messages, timeline, orders] = await Promise.all([
     api
@@ -129,5 +162,5 @@ export async function loadInbox(conversationId?: string): Promise<InboxData> {
       }),
   ]);
 
-  return { rows, open, messages, timeline, orders };
+  return { rows, ...paging, open, messages, timeline, orders };
 }

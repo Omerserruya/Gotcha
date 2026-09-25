@@ -24,8 +24,8 @@ const row = (over: Record<string, unknown> = {}): ConversationRow =>
     ...over,
   });
 
-const show = async (rows: readonly ConversationRow[] | null, cap = 50) =>
-  render(await ConversationList({ rows, cap, now: NOW }));
+const show = async (rows: readonly ConversationRow[] | null, cap = 50, hasMore = false) =>
+  render(await ConversationList({ rows, cap, now: NOW, hasMore }));
 
 describe('★★ the cap is stated, because a silent one teaches a falsehood', () => {
   it('★★ says how many it is showing and that older ones are not reachable', async () => {
@@ -37,10 +37,43 @@ describe('★★ the cap is stated, because a silent one teaches a falsehood', (
      * So there is one page, and it says so. A list that stops at N without
      * saying anything teaches an agent that N is all there is.
      */
-    await show([row()], 50);
-    const cap = screen.getByTestId('queue-cap');
-    expect(cap).toHaveTextContent(/50 most recent/i);
-    expect(cap).toHaveTextContent(/aren't reachable from here yet/i);
+    await show([row()], 50, true);
+    expect(screen.getByTestId('queue-cap')).toHaveTextContent(/50 most recent/i);
+  });
+
+  it('★ says so plainly when there is nothing beyond this page', async () => {
+    await show([row()], 50, false);
+    expect(screen.getByTestId('queue-cap')).toHaveTextContent(/that's all of them/i);
+  });
+});
+
+describe('★★ the undated group is per PAGE, because nulls sort last', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE DEFECT THE KEYSET ENDPOINT EXPOSED IN MY OWN WORK.
+   * ════════════════════════════════════════════════════════════════════════
+   * The server orders `{ lastMessageAt: desc, nulls: last }`, so every
+   * undated row is at the very END of the whole queue. On a tenant with
+   * more conversations than one page holds, the group I built to make a
+   * hidden problem visible is itself empty on every page but the last —
+   * hidden by the ordering, for exactly the tenants big enough to have the
+   * problem.
+   *
+   * It was already true of the capped list and I did not see it until
+   * paging became real.
+   */
+  it('★★ says "on this page" while more pages exist', async () => {
+    await show([row({ id: 'lost', lastMessageAt: null })], 50, true);
+    const note = screen.getByTestId('queue-undated');
+    expect(note).toHaveTextContent(/on this page/i);
+    expect(note).toHaveTextContent(/very end of the queue/i);
+  });
+
+  it('★★ claims the whole queue only on the last page', async () => {
+    await show([row({ id: 'lost', lastMessageAt: null })], 50, false);
+    const note = screen.getByTestId('queue-undated');
+    expect(note).not.toHaveTextContent(/on this page/i);
+    expect(note).toHaveTextContent(/can't place it in the order above/i);
   });
 });
 

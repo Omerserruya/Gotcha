@@ -14,13 +14,15 @@
     }
   },
   "queue": {
-    "cap": "Showing the {count} most recent. Older conversations aren't reachable from here yet.",
+    "cap": "Showing the {count} most recent.",
     "empty": "Nothing is waiting.",
     "unavailable": "We couldn't read the queue just now.",
     "unnamed": "Someone",
     "unknownChannel": "Unknown channel",
     "waiting": "{minutes}m",
-    "undated": "{count, plural, =1 {One conversation has no last-message time, so we can't place it in the order above} other {# conversations have no last-message time, so we can't place them in the order above}}"
+    "undated": "{count, plural, =1 {One conversation has no last-message time, so we can't place it in the order above} other {# conversations have no last-message time, so we can't place them in the order above}}",
+    "capAll": "{count, plural, =0 {} =1 {One conversation, and that's all of them.} other {# conversations, and that's all of them.}}",
+    "undatedThisPage": "{count, plural, =1 {One conversation on this page has no last-message time} other {# conversations on this page have no last-message time}} — and any others are at the very end of the queue, past the pages you've loaded."
   },
   "identity": {
     "unnamed": "Someone",
