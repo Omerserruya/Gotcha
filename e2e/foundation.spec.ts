@@ -13,23 +13,85 @@ import { expect, test } from '@playwright/test';
  * with its own credentials.
  */
 
-test('an unauthenticated visitor is handed to the identity provider with PKCE', async ({
-  page,
-}) => {
-  await page.goto('/en/home');
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THIS READ `page.url()` AND THE BROWSER HAD ALREADY MOVED ON
+ * ════════════════════════════════════════════════════════════════════════════
+ * It navigated to `/en/home` and then inspected the address bar for the
+ * authorize URL's PKCE parameters. There are TWO redirects, not one:
+ *
+ *   /en/home  →  /api/auth/login  →  Authentik /authorize
+ *             →  Authentik /if/flow/default-authentication-flow/
+ *
+ * The last hop is Authentik showing its login form, which is what an
+ * unauthenticated visitor is supposed to get. By the time `page.url()` was
+ * read it held the flow page, and the parameters had gone with the URL that
+ * carried them. The received value was
+ * `/if/flow/default-authentication-flow/`.
+ *
+ * ── AND IT WAS ASSERTING SOMEBODY ELSE'S BEHAVIOUR ──
+ * Whether Authentik bounces straight to a flow, shows a chooser, or honours
+ * an existing IdP session is **Authentik's decision and can change without
+ * us**. Reading the final URL made this test depend on it. Whether it ever
+ * passed for the right reason or only when the timing favoured us is no
+ * longer knowable, which is its own argument.
+ *
+ * So the two facts that are OURS are asserted where they are observable, on
+ * the redirects our own code emits, with no dependency on what the IdP does
+ * next:
+ *
+ *   A · a protected page hands an unauthenticated visitor to `/api/auth/login`
+ *   B · that route issues a real Authorization Code + PKCE handoff
+ */
+test('a protected page hands an unauthenticated visitor to sign-in', async ({ page }) => {
+  // No redirect following: the thing under test IS the redirect, and letting
+  // the browser chase it is what hid the defect above.
+  const response = await page.request.get('/en/home', { maxRedirects: 0 });
 
-  // The app must not render a protected page, and the handoff must be a real
-  // Authorization Code + PKCE request - not an implicit flow, and not a
-  // challenge method we would accept but should not.
-  const url = new URL(page.url());
-  expect(url.origin).not.toBe('http://localhost:3000');
+  expect(
+    [302, 303, 307, 308],
+    `a protected page answered ${response.status()} instead of redirecting an anonymous visitor`,
+  ).toContain(response.status());
+  expect(response.headers()['location']).toContain('/api/auth/login');
+});
+
+test('the handoff is Authorization Code + PKCE, not something weaker', async ({ page }) => {
+  /*
+   * Asserted on the `Location` OUR route sets, so this says nothing about
+   * Authentik and cannot be broken by Authentik changing what it shows.
+   */
+  const response = await page.request.get('/api/auth/login', { maxRedirects: 0 });
+  expect(
+    [302, 303, 307, 308],
+    `the login route answered ${response.status()} instead of redirecting to the provider`,
+  ).toContain(response.status());
+
+  const location = response.headers()['location'];
+  expect(location, 'the login route redirected without a Location header').toBeTruthy();
+
+  const url = new URL(location!);
+  expect(url.origin, 'the handoff stayed on our own origin').not.toBe('http://localhost:3000');
   expect(url.pathname).toContain('/authorize');
+  // Not an implicit flow, and not a challenge method we would accept but
+  // should not.
   expect(url.searchParams.get('response_type')).toBe('code');
   expect(url.searchParams.get('code_challenge_method')).toBe('S256');
   expect(url.searchParams.get('code_challenge')).toBeTruthy();
   // `state` is what defeats CSRF on the callback; its absence is a real bug.
   expect(url.searchParams.get('state')).toBeTruthy();
   expect(url.searchParams.get('redirect_uri')).toBe('http://localhost:3000/api/auth/callback');
+
+  /*
+   * ★ AND THE VERIFIER MUST NOT BE READABLE BY SCRIPT.
+   *
+   * The code verifier and the CSRF state travel in this cookie. It was not
+   * asserted before, and it is the half of PKCE the URL cannot show: a
+   * challenge in the query string proves nothing if the verifier that
+   * matches it is exposed.
+   */
+  const cookie = response.headers()['set-cookie'] ?? '';
+  expect(cookie, 'the login route set no state cookie').toMatch(/gotcha_login/i);
+  expect(cookie, 'the PKCE verifier cookie is readable by script').toMatch(/HttpOnly/i);
 });
 
 test('the sign-in page renders in English', async ({ page }) => {
