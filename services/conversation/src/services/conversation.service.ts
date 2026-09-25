@@ -159,6 +159,42 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       ],
     });
   }
+  /**
+   * How many conversations in THIS VIEW have no `lastMessageAt`.
+   *
+   * ════════════════════════════════════════════════════════════════════════════
+   * THE INSTRUMENT FOR THE INVISIBLE HALF
+   *
+   * ~9 message writers never maintained this column, so a conversation can carry
+   * a stale or absent sort key and drift down the queue while somebody waits.
+   * Two properties make a count the only honest answer:
+   *
+   *   · nulls sort LAST, so the undated rows sit at the very end of the queue.
+   *     Any group rendered from a page is empty on every page but the last, and
+   *     empty entirely on a capped list - so the instrument for the problem is
+   *     invisible for exactly the tenants large enough to have it.
+   *   · a number does not require loading the whole queue to obtain.
+   *
+   * ★ SCOPED TO THE VIEW, NOT TO THE PAGE. It reuses the caller's filters
+   * INCLUDING the visibility clause - a count that ignored visibility would
+   * report a figure about conversations this agent may not see. And it is built
+   * BEFORE the keyset predicate is pushed, because "how many are undated in this
+   * view" must not change as somebody scrolls.
+   *
+   * Cost: one extra `count` per list request, narrow (`lastMessageAt IS NULL`)
+   * and on the same filters. Deliberate - the total we dropped was a full scan
+   * for a figure nobody asked for; this is a small one for a figure that is the
+   * only way to tell "we fixed it" from "we stopped looking".
+   * ════════════════════════════════════════════════════════════════════════════
+   */
+  const undatedWhere = {
+    ...where,
+    // A fresh array: `where.AND` is about to be mutated by the push below, and
+    // sharing it would let the cursor leak into a count that must not see it.
+    AND: [...((where.AND as unknown[]) ?? [])],
+    lastMessageAt: null,
+  };
+
   // ★ ADDITIVE. `where.OR` is the visibility clause - see
   // conversationKeysetClause's note. `search` above already pushes its own
   // `{ OR: [...] }` into AND, which is the shape to copy.
@@ -183,7 +219,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // Keyset takes `limit + 1` to learn whether more exist, and counts NO total:
   // a keyset list cannot page to a known end, and the count was a second full
   // scan for a figure the caller does not need.
-  const [conversations, total] = await Promise.all([
+  const [conversations, total, undatedCount] = await Promise.all([
     prisma.conversation.findMany({
       where,
       include,
@@ -192,6 +228,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       ...(keyset ? {} : { skip: (page - 1) * limit }),
     }),
     keyset ? Promise.resolve(null) : prisma.conversation.count({ where }),
+    prisma.conversation.count({ where: undatedWhere }),
   ]);
   const hasMore = keyset && conversations.length > limit;
   const pageRows = hasMore ? conversations.slice(0, limit) : conversations;
@@ -212,11 +249,13 @@ export async function list(tenantId: string, filters: ConversationFilters) {
         hasMore: !!hasMore,
         nextCursor: hasMore && last ? encodeConversationCursor(last.lastMessageAt, last.id) : null,
       },
+      // For the whole view, not this page. See undatedWhere above.
+      undatedCount,
     };
   }
   // Legacy offset callers keep the exact shape they had, total included.
   const t = total as number;
-  return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) } };
+  return { data, meta: { total: t, page, limit, totalPages: Math.ceil(t / limit) }, undatedCount };
 }
 
 export async function getById(tenantId: string, id: string) {

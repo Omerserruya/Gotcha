@@ -39,6 +39,7 @@ const state = vi.hoisted(() => ({
   seenWhere: null as any,
   seenArgs: null as any,
   counted: 0,
+  undatedWheres: [] as any[],
 }));
 
 // Exhaustive by necessity: the barrel is mocked wholesale, and a symbol the
@@ -71,7 +72,17 @@ vi.mock("@chatcenter/shared", () => ({
         rows.sort((a, b) => order(a, b, args.orderBy));
         return rows.slice(0, args.take);
       },
-      count: async () => { state.counted += 1; return state.rows.length; },
+      count: async (args: any) => {
+        // Two different counts reach this: the legacy total and the undated one.
+        // Recording the WHERE of each is what lets the tests assert the undated
+        // count is view-scoped and cursor-blind.
+        if (args?.where?.lastMessageAt === null) {
+          state.undatedWheres.push(args.where);
+          return state.rows.filter((r) => r.lastMessageAt === null).length;
+        }
+        state.counted += 1;
+        return state.rows.length;
+      },
     },
   },
 }));
@@ -130,6 +141,7 @@ beforeEach(() => {
   state.seenWhere = null;
   state.seenArgs = null;
   state.counted = 0;
+  state.undatedWheres = [];
 });
 
 describe("★ the visibility clause survives the keyset", () => {
@@ -324,5 +336,107 @@ describe("what the keyset does not do, and what offset callers keep", () => {
 
     expect(state.seenArgs.take).toBe(26);
     expect(state.seenArgs.skip).toBeUndefined();
+  });
+});
+
+/**
+ * ★ The undated count — the instrument for the invisible half.
+ *
+ * ~9 message writers never maintained `lastMessageAt`, so a conversation can
+ * carry an absent sort key and drift to the end of the queue while somebody
+ * waits. Two properties make a COUNT the only honest answer:
+ *
+ *   · nulls sort LAST, so undated rows sit at the very end. A group rendered
+ *     from a page is empty on every page but the last, and empty entirely on a
+ *     capped list — so the instrument for the problem is invisible for exactly
+ *     the tenants large enough to have it.
+ *   · a number does not require loading the whole queue to obtain.
+ *
+ * It is the only way to tell "we fixed it" from "we stopped looking".
+ */
+describe("★ the undated count", () => {
+  it("counts the undated rows in this view", async () => {
+    state.rows = [conv("c1", 1), conv("c2", 2), conv("n1", null), conv("n2", null)];
+
+    const res: any = await list("t1", { ...AGENT, cursor: "" });
+
+    expect(res.undatedCount).toBe(2);
+  });
+
+  it("★ is VIEW-scoped: it carries the visibility clause", async () => {
+    state.rows = [conv("n1", null)];
+
+    await list("t1", { ...AGENT, cursor: "" });
+
+    // A count that ignored visibility would report a figure about conversations
+    // this agent may not see. Asserted on the WHERE, because the fake returns
+    // whatever it likes regardless of the filter.
+    expect(state.undatedWheres).toHaveLength(1);
+    expect(state.undatedWheres[0].OR).toEqual([
+      { departmentId: "d1", assignedAgentId: null },
+      { departmentId: null, assignedAgentId: null },
+      { assignedAgentId: "u1" },
+    ]);
+    expect(state.undatedWheres[0].tenantId).toBe("t1");
+  });
+
+  it("★ is CURSOR-blind: the same number on page two", async () => {
+    state.rows = [conv("c1", 1), conv("c2", 2), conv("n1", null)];
+
+    const first: any = await list("t1", { ...AGENT, cursor: "", limit: 1 });
+    const second: any = await list("t1", { ...AGENT, cursor: first.page.nextCursor, limit: 1 });
+
+    // "How many are undated in this view" must not change as somebody scrolls -
+    // which is the failure this count exists to replace, one level up.
+    expect(first.undatedCount).toBe(1);
+    expect(second.undatedCount).toBe(1);
+    // And the keyset predicate never reached the count's WHERE.
+    for (const w of state.undatedWheres) {
+      expect(JSON.stringify(w.AND ?? [])).not.toContain("lt");
+    }
+  });
+
+  it("★ does not share the AND array with the paged query", async () => {
+    state.rows = [conv("c1", 1), conv("c2", 2), conv("n1", null)];
+    const first: any = await list("t1", { ...AGENT, cursor: "", limit: 1 });
+
+    await list("t1", { ...AGENT, cursor: first.page.nextCursor, limit: 1, search: "dana" });
+
+    // The paged query pushes the keyset into `where.AND` in place. A shared array
+    // would leak the cursor into a count that must not see it - and the symptom
+    // would be a number that shrinks as you scroll.
+    const undated = state.undatedWheres[state.undatedWheres.length - 1];
+    expect(JSON.stringify(undated.AND)).toContain("customerName");
+    expect(JSON.stringify(undated.AND)).not.toContain("lastMessageAt");
+  });
+
+  it("respects the other filters too", async () => {
+    state.rows = [conv("n1", null)];
+
+    await list("t1", { ...AGENT, cursor: "", status: "OPEN", channel: "WHATSAPP" });
+
+    const w = state.undatedWheres[0];
+    expect(w.status).toBe("OPEN");
+    expect(w.channel).toBe("WHATSAPP");
+  });
+
+  it("is present on the legacy offset path as well", async () => {
+    state.rows = [conv("c1", 1), conv("n1", null)];
+
+    const res: any = await list("t1", { ...AGENT, page: 1, limit: 50 });
+
+    // Additive: `meta` is untouched and the count sits beside it.
+    expect(res.meta.total).toBe(2);
+    expect(res.undatedCount).toBe(1);
+  });
+
+  it("is zero, not absent, when every row is dated", async () => {
+    state.rows = [conv("c1", 1)];
+
+    const res: any = await list("t1", { ...AGENT, cursor: "" });
+
+    // Zero and absent are different facts: one says the writers are behaving,
+    // the other says nobody looked.
+    expect(res.undatedCount).toBe(0);
   });
 });
