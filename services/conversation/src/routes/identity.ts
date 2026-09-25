@@ -218,6 +218,15 @@ type PersonScope =
       effective: any;
       /** OR clauses matching every channel identity this person is known by. */
       orClauses: Array<{ channel: any; customerExternalId: string }>;
+      /**
+       * The person's handles, one per contact row the walk found.
+       *
+       * PROJECTED, never the raw rows. `findSiblingContacts` selects no columns,
+       * so each sibling arrives carrying its whole `metadata` JSON - which holds
+       * customer phone numbers among other things. Returning them as-is would
+       * ship that blob once per channel instead of once.
+       */
+      channels: Array<{ contactId: string; channel: any; externalId: string; displayName: string | null }>;
       originClause: { origin: any };
     };
 
@@ -242,13 +251,25 @@ async function resolvePersonScope(
 
   // Aliases preserved from prior merges in target.metadata.aliases
   const meta = (effective.metadata as Record<string, unknown>) || {};
-  const aliases = Array.isArray((meta as any).aliases)
-    ? ((meta as any).aliases as Array<{ channel: string; externalId: string }>)
-    : [];
+  // Validated, not just type-asserted. A `null` or a bare string in this array
+  // threw on `a.channel` and took the whole timeline to a 500 - found by a test
+  // that fed it four malformed shapes. The cast said the elements were objects;
+  // nothing checked.
+  const aliases = (Array.isArray((meta as any).aliases) ? ((meta as any).aliases as unknown[]) : [])
+    .filter((a): a is { channel: string; externalId: string } =>
+      !!a && typeof a === "object"
+      && typeof (a as any).channel === "string"
+      && typeof (a as any).externalId === "string");
 
   return {
     ok: true,
     effective,
+    channels: siblings.map((c: any) => ({
+      contactId: c.id,
+      channel: c.channel,
+      externalId: c.externalId,
+      displayName: c.displayName ?? null,
+    })),
     orClauses: [
       ...siblings.map((s: any) => ({ channel: s.channel, customerExternalId: s.externalId })),
       ...aliases.map((a) => ({ channel: a.channel as any, customerExternalId: a.externalId })),
@@ -387,7 +408,27 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     const tenantId = req.tenantId!;
     const scope = await resolvePersonScope(tenantId, String(req.params.id), wantsImported(req));
     if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
-    const { effective, orClauses, originClause } = scope;
+    const { effective, orClauses, originClause, channels } = scope;
+
+    /**
+     * Every handle this person is known by, and where each came from.
+     *
+     * `metadata.aliases` covers only handles MERGED INTO this contact. Somebody
+     * unified-but-never-merged - linked by `personId` - has handles that list
+     * cannot see, so a panel built on aliases alone says "channels we joined up"
+     * rather than "her channels". The walk that finds them already happens to
+     * scope the query below; it was simply discarded on the way out.
+     */
+    const aliasHandles = ((effective.metadata as any)?.aliases ?? [])
+      .filter((a: any) => a && typeof a.channel === "string" && typeof a.externalId === "string")
+      .map((a: any) => ({ contactId: null as string | null, channel: a.channel, externalId: a.externalId, displayName: null, source: "merged" as const }));
+    const seen = new Set(channels.map((c) => `${c.channel}:${c.externalId}`));
+    const identityChannels = [
+      ...channels.map((c) => ({ ...c, source: "linked" as const })),
+      // A merged alias whose handle is already a live sibling would be the same
+      // channel twice with two provenances; the live row wins.
+      ...aliasHandles.filter((a: any) => !seen.has(`${a.channel}:${a.externalId}`)),
+    ];
 
     const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0
@@ -400,6 +441,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     if (orClauses.length === 0) {
       return res.json({
         contact: effective,
+        identityChannels,
         events: [],
         page: { limit, types: [...TIMELINE_EVENT_TYPES], nextCursor: null, hasMore: false },
         coverage: TIMELINE_COVERAGE,
@@ -421,6 +463,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     if (convos.length === 0) {
       return res.json({
         contact: effective,
+        identityChannels,
         events: [],
         page: { limit, types: [...TIMELINE_EVENT_TYPES], nextCursor: null, hasMore: false },
         coverage: TIMELINE_COVERAGE,
@@ -547,6 +590,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
 
     return res.json({
       contact: effective,
+      identityChannels,
       events: pageRows,
       page: {
         limit,

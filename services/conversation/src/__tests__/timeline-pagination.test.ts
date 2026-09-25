@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
   messages: [] as any[],
   messageCount: 0,
   handovers: [] as any[],
+  siblings: null as any[] | null,
   actions: [] as any[],
   seen: { convWhere: null as any, msgArgs: null as any, countWhere: null as any, handoverArgs: null as any, actionArgs: null as any },
 }));
@@ -86,7 +87,7 @@ vi.mock("@chatcenter/shared", () => ({
     identityLinkSuggestion: { findMany: async () => [], create: async () => ({}) },
     person: { findFirst: async () => null },
   },
-  findSiblingContacts: async () => [state.contact],
+  findSiblingContacts: async () => state.siblings ?? [state.contact],
   authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: "ADMIN" }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },
   requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
@@ -125,6 +126,7 @@ beforeEach(() => {
   state.messages = makeMessages(120);
   state.messageCount = 120;
   state.handovers = [];
+  state.siblings = null;
   state.actions = [];
   state.seen = { convWhere: null, msgArgs: null, countWhere: null, handoverArgs: null, actionArgs: null };
 });
@@ -437,5 +439,94 @@ describe("the union carries what exists and names what does not", () => {
     // Every event once, in one order, across three pages drawn from two tables.
     expect(seen).toHaveLength(10);
     expect(new Set(seen).size).toBe(10);
+  });
+});
+
+/**
+ * Every handle the person is known by — and why the alias list alone is not it.
+ *
+ * `metadata.aliases` covers only handles MERGED INTO this contact. Somebody
+ * unified-but-never-merged, linked by `personId`, has handles that list cannot
+ * see — so a panel built on aliases says "channels we joined up" rather than
+ * "her channels". The sibling walk already happens to scope the query; it was
+ * simply discarded on the way out.
+ *
+ * ★ PROJECTED, never the raw rows. `findSiblingContacts` selects no columns, so
+ * each sibling arrives carrying its whole `metadata` JSON — which holds customer
+ * phone numbers. Returning them as-is would ship that blob once per channel.
+ */
+describe("the person's channels", () => {
+  const sibling = (id: string, channel: string, externalId: string) => ({
+    id, channel, externalId, displayName: "Dana", personId: "p1", mergedIntoId: null,
+    // The surplus the projection must not pass on.
+    metadata: { phone: "+972500000000", internalNote: "do not ship this" },
+  });
+
+  it("★ returns one entry per linked contact, PROJECTED", async () => {
+    state.siblings = [sibling("c1", "WHATSAPP", "+972500000000"), sibling("c2", "EMAIL", "dana@example.com")];
+
+    const res = await get();
+
+    expect(res.body.identityChannels).toEqual([
+      { contactId: "c1", channel: "WHATSAPP", externalId: "+972500000000", displayName: "Dana", source: "linked" },
+      { contactId: "c2", channel: "EMAIL", externalId: "dana@example.com", displayName: "Dana", source: "linked" },
+    ]);
+  });
+
+  it("★ never ships a sibling's raw metadata", async () => {
+    state.siblings = [sibling("c1", "WHATSAPP", "+972500000000")];
+
+    const res = await get();
+
+    // The whole reason this is a projection and not a pass-through.
+    const body = JSON.stringify(res.body.identityChannels);
+    expect(body).not.toContain("internalNote");
+    expect(body).not.toContain("do not ship this");
+    expect(res.body.identityChannels[0].metadata).toBeUndefined();
+  });
+
+  it("★ includes merged aliases, marked as a different provenance", async () => {
+    state.siblings = [sibling("c1", "WHATSAPP", "+972500000000")];
+    state.contact.metadata = { aliases: [{ channel: "INSTAGRAM", externalId: "dana_ig" }] };
+
+    const res = await get();
+
+    // "linked" and "merged" are different facts about how we know the handle,
+    // and a screen may caption them differently.
+    expect(res.body.identityChannels).toContainEqual(
+      { contactId: null, channel: "INSTAGRAM", externalId: "dana_ig", displayName: null, source: "merged" },
+    );
+  });
+
+  it("does not list a channel twice when an alias is also a live sibling", async () => {
+    state.siblings = [sibling("c1", "WHATSAPP", "+972500000000")];
+    state.contact.metadata = { aliases: [{ channel: "WHATSAPP", externalId: "+972500000000" }] };
+
+    const res = await get();
+
+    expect(res.body.identityChannels).toHaveLength(1);
+    // The live row wins: it carries a contactId the alias cannot.
+    expect(res.body.identityChannels[0].source).toBe("linked");
+  });
+
+  it("ignores a malformed alias rather than emitting a half-empty handle", async () => {
+    state.siblings = [];
+    state.contact.metadata = { aliases: [{ channel: "INSTAGRAM" }, null, { externalId: "x" }, "nope"] };
+
+    const res = await get();
+
+    expect(res.body.identityChannels).toEqual([]);
+  });
+
+  it("is present even on an empty timeline", async () => {
+    state.siblings = [sibling("c1", "WHATSAPP", "+972500000000")];
+    state.conversations = [];
+    state.conversationCount = 0;
+
+    const res = await get();
+
+    // An absent key and an empty list are different facts; the panel needs the
+    // handles even when there are no events yet.
+    expect(res.body.identityChannels).toHaveLength(1);
   });
 });
