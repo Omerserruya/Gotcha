@@ -31,8 +31,27 @@ import { logger } from '@/observability/logger';
  * resolved by asking a different question.**
  */
 export interface CallsData {
-  /** False when the tenant has no voice at all. Not a failure. */
-  readonly voiceEnabled: boolean;
+  /**
+   * `true` voice is on · `false` the tenant has no voice · **`null` we could
+   * not find out.**
+   *
+   * ★ THE THIRD STATE WAS ADDED WHEN THE FLAG FLIPPED, AND IT WAS ALWAYS
+   * NEEDED.
+   *
+   * A failed settings read used to return `false`, justified in a comment as
+   * "the safer of the two readings". It was safe only by accident: voice was
+   * off on all thirteen tenants, so collapsing the unknown into `false` was
+   * correct everywhere it ran.
+   *
+   * With voice ON, that same collapse renders *"Nothing here will show calls
+   * until voice is enabled. Ask whoever set up GOTCHA for you"* — sending a
+   * merchant to ask for a feature they already have. The header of this file
+   * names that exact danger, one screen up: *"would eventually tell somebody
+   * their workspace lacks a feature it has."*
+   *
+   * The file said the collapse was wrong and the catch did it anyway.
+   */
+  readonly voiceEnabled: boolean | null;
   readonly calls: readonly Call[] | null;
   readonly summary: CallSummary | null;
   /** True when voice IS on and the reads still failed — a real fault. */
@@ -94,11 +113,17 @@ export async function loadCalls(direction?: 'inbound' | 'outbound'): Promise<Cal
      * explanation rather than an error, and a tenant that does have voice sees
      * the real screen as soon as this call succeeds.
      */
+    /*
+     * NOT `false`. We asked the question that resolves the ambiguity and did
+     * not get an answer — which is a third thing, and the only honest one.
+     * Claiming "no voice" here is a statement about the workspace made from
+     * a failed request.
+     */
     logger.warn('calls.settings_failed', { cause });
-    return { voiceEnabled: false, calls: null, summary: null, failed: false };
+    return { voiceEnabled: null, calls: null, summary: null, failed: false };
   }
 
-  if (!voiceEnabled) {
+  if (voiceEnabled === false) {
     return { voiceEnabled: false, calls: null, summary: null, failed: false };
   }
 

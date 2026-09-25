@@ -28,5 +28,6 @@
     "you": "You",
     "them": "Them",
     "suggestions": "Things you could say"
-  }
+  },
+  "availabilityUnknown": "We couldn't check whether voice is set up for this workspace, so there's nothing reliable to show here yet. This is our side, not yours — try again in a moment."
 }

@@ -37,11 +37,26 @@ export default async function Page() {
   const { voiceEnabled, calls, summary, failed } = await loadCalls();
   // 05e lives on the same route: a call in progress is the thing you need
   // when there is one, and the log is what you need when there is not.
-  const { call: liveCall, transcript } = voiceEnabled
-    ? await loadLiveCall()
-    : { call: null, transcript: [] };
+  const { call: liveCall, transcript } =
+    voiceEnabled === true ? await loadLiveCall() : { call: null, transcript: [] };
 
-  if (!voiceEnabled) {
+  /*
+   * ★ WE COULD NOT FIND OUT, WHICH IS NOT "YOU DO NOT HAVE IT".
+   *
+   * The settings read is what resolves the gate's ambiguous 404. When IT
+   * fails there is no answer, and rendering the not-enabled panel would tell
+   * a merchant to go and ask for a feature that may already be on — which is
+   * what it would have done from the moment voice was switched on.
+   */
+  if (voiceEnabled === null) {
+    return (
+      <PageContainer title={t('title')} description={t('description')}>
+        <p data-testid="calls-availability-unknown">{t('availabilityUnknown')}</p>
+      </PageContainer>
+    );
+  }
+
+  if (voiceEnabled === false) {
     // A fact about the workspace, not a fault. It reads as an explanation and
     // names what would change it.
     return (
