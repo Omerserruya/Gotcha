@@ -82,6 +82,28 @@ describe('★★ four outcomes, and the NAME never decides', () => {
   });
 });
 
+/**
+ * A body the route could actually send.
+ *
+ * ★ THESE FIXTURES USED TO BE PARTIAL AND PARSED ANYWAY, because every key
+ * at this level carried a default. `{}` was a valid `CustomerAudit`, which
+ * meant a stale or renamed response rendered as "nothing has been recorded
+ * against this person" with no caveats — a confident claim about somebody's
+ * history built from a response that said nothing.
+ *
+ * The defaults are gone, and these had to be completed to keep passing. That
+ * is the point: a fixture is a claim that the platform can produce these
+ * values, and three of them here could not.
+ */
+const envelope = (over: Record<string, unknown> = {}) => ({
+  contact: { id: 'c1', displayName: 'Avery Stone' },
+  data: [],
+  nextCursor: null,
+  coverage: { conversation: { attributable: true } },
+  scope: { identities: 1, conversations: 1, conversationScanTruncated: false },
+  ...over,
+});
+
 describe('★★ coverage declares what the log cannot account for', () => {
   it('lists orders as a gap, and customer rows as a gap until the id is passed', () => {
     /*
@@ -92,8 +114,8 @@ describe('★★ coverage declares what the log cannot account for', () => {
      * An empty list cannot say why it is empty, and "no orders" is the wrong
      * thing for a screen to imply about somebody who may have many.
      */
-    const parsed = customerAuditSchema.parse({
-      data: [],
+    const parsed = customerAuditSchema.parse(
+      envelope({
       coverage: {
         conversation: { attributable: true },
         customer: {
@@ -107,7 +129,8 @@ describe('★★ coverage declares what the log cannot account for', () => {
           detail: "There is no local order table to enumerate this person's orders from.",
         },
       },
-    });
+      }),
+    );
     const gaps = coverageGaps(parsed.coverage);
     expect(gaps.map((g) => g.target).sort()).toEqual(['customer', 'order']);
     // Both kinds together: to a merchant they are the same fact.
@@ -115,18 +138,18 @@ describe('★★ coverage declares what the log cannot account for', () => {
   });
 
   it('a fully attributable source is not a gap', () => {
-    const parsed = customerAuditSchema.parse({
-      coverage: { conversation: { attributable: true } },
-    });
+    const parsed = customerAuditSchema.parse(
+      envelope({ coverage: { conversation: { attributable: true } } }),
+    );
     expect(coverageGaps(parsed.coverage)).toHaveLength(0);
   });
 
   it('★ discloses the conversation-scan bound', () => {
     // A bounded read that says so is fine; one that quietly drops the oldest
     // conversations is the defect.
-    const parsed = customerAuditSchema.parse({
-      scope: { identities: 3, conversations: 500, conversationScanTruncated: true },
-    });
+    const parsed = customerAuditSchema.parse(
+      envelope({ scope: { identities: 3, conversations: 500, conversationScanTruncated: true } }),
+    );
     expect(parsed.scope.conversationScanTruncated).toBe(true);
     expect(parsed.scope.identities).toBe(3);
   });
@@ -150,5 +173,21 @@ describe('★ the shape is the platform’s, including what it will not promote'
     // so a flow-driven action arrives as one of those three and the
     // distinction cannot be made — named on screen rather than approximated.
     expect(() => auditEventSchema.parse({ ...event(), actorType: 'flow' })).toThrow();
+  });
+
+  it('★★ refuses a body that is missing what the route always sends', () => {
+    /*
+     * The screen this guards: `{}` used to parse, and rendered "nothing has
+     * been recorded against this person yet" with no coverage caveats
+     * underneath — from a response that carried no rows and no declarations.
+     * A stale service produces exactly that body.
+     */
+    expect(() => customerAuditSchema.parse({})).toThrow();
+    const { coverage: _c, ...noCoverage } = envelope();
+    expect(() => customerAuditSchema.parse(noCoverage)).toThrow();
+    const { scope: _s, ...noScope } = envelope();
+    expect(() => customerAuditSchema.parse(noScope)).toThrow();
+    // And the complete body still parses, so this is a floor and not a wall.
+    expect(customerAuditSchema.parse(envelope()).contact?.id).toBe('c1');
   });
 });

@@ -195,7 +195,11 @@ export const coverageEntrySchema = z.object({
 });
 export type AuditCoverageEntry = z.infer<typeof coverageEntrySchema>;
 
-export const auditCoverageSchema = z.record(z.string(), coverageEntrySchema).default({});
+/**
+ * ★ NO `.default({})`. An absent coverage map rendered as "this log accounts
+ * for everything", which is the opposite of what the field exists to say.
+ */
+export const auditCoverageSchema = z.record(z.string(), coverageEntrySchema);
 export type AuditCoverage = z.infer<typeof auditCoverageSchema>;
 
 /**
@@ -239,22 +243,43 @@ export function coverageGaps(
  * distinction as the timeline's: a bounded read that discloses its bound is
  * fine, one that quietly drops the oldest is the defect.
  */
-export const auditScopeSchema = z
-  .object({
-    identities: z.number().default(0),
-    conversations: z.number().default(0),
-    conversationScanTruncated: z.boolean().default(false),
-  })
-  .default({ identities: 0, conversations: 0, conversationScanTruncated: false });
+export const auditScopeSchema = z.object({
+  identities: z.number().default(0),
+  conversations: z.number().default(0),
+  /** ★ NOT defaulted: absent would read as "nothing was dropped". */
+  conversationScanTruncated: z.boolean(),
+});
 export type AuditScope = z.infer<typeof auditScopeSchema>;
 
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ NOTHING AT THIS LEVEL IS DEFAULTED, AND THE REASON IS A SCREEN
+ * ════════════════════════════════════════════════════════════════════════════
+ * Every key here used to carry a default, which meant **`{}` parsed
+ * cleanly** — and rendered as *"nothing has been recorded against this
+ * person yet"* with no coverage caveats underneath it. A stale service, a
+ * renamed field or a half-deployed route would all have produced that
+ * screen, and it is a confident statement about somebody's history made
+ * from a response that said nothing.
+ *
+ * The route sends all five unconditionally. Required, so a disagreement
+ * fails the parse, the loader records it, and the screen says we could not
+ * read it — which is true, unlike the empty log.
+ *
+ * Found because a test wrote `{ nonsense: true }` expecting a failure and
+ * got a valid `CustomerAudit`. **A required field proves itself; a
+ * defaulted one cannot** — third application of that rule today.
+ *
+ * The defaults INSIDE `auditEventSchema` stay: one odd row degrading is
+ * better than a whole log vanishing, and the row still has a required `id`,
+ * `action` and `createdAt` to prove itself with.
+ */
 export const customerAuditSchema = z.object({
   contact: z
     .object({ id: z.string(), displayName: z.string().nullable().default(null) })
-    .nullish()
-    .default(null),
-  data: z.array(auditEventSchema).default([]),
-  nextCursor: z.string().nullable().default(null),
+    .nullable(),
+  data: z.array(auditEventSchema),
+  nextCursor: z.string().nullable(),
   coverage: auditCoverageSchema,
   scope: auditScopeSchema,
 });

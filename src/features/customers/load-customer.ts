@@ -78,6 +78,36 @@ export interface CustomerDetail {
   readonly noConversations: boolean;
   /** Screen 04e. Three answers, because "not allowed" is not "broken". */
   readonly actions: AuditRead;
+  /**
+   * The reads that were ATTEMPTED and FAILED, by name.
+   *
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THIS EXISTS BECAUSE THE CAPTURE FIXTURE HID A READ THAT RETURNED
+   *    NOTHING, AND EVERY TEST PASSED OVER IT
+   * ════════════════════════════════════════════════════════════════════════
+   * On 2026-09-25 the 04e read failed on all six capture runs — a contract
+   * and an envelope disagreeing — and the spec's own tripwire for exactly
+   * that (`customer-actions-failed` must not appear) never fired.
+   * `withDetailFixtures` had already replaced the whole detail with the
+   * fixture, whose audit state is `ok`. The screen photographed healthy, the
+   * log said otherwise, and 84 assertions agreed with the screen.
+   *
+   * The fixture file's own header says it "must not hide a broken screen",
+   * and the guard it wrote for that checks `timeline === null` only —
+   * correct when the timeline was the only read that could fail, and
+   * silently insufficient from the moment a sibling read was added.
+   *
+   * ── AND `null` COULD NOT CARRY THIS ──
+   * `brief`, `memory`, `crm` and `orders` are all `null` both when the read
+   * failed and when it was never attempted — no conversation to ask
+   * through, no external id to key on. The fixture gate cannot tell those
+   * apart, and preserving the wrong one would report a failure that never
+   * happened. So the loader, which DOES know, says so here.
+   *
+   * The same unknown-versus-negative distinction as `voiceEnabled`,
+   * `succeeded` and `coverage`, arrived at from a fifth direction.
+   */
+  readonly readsFailed: readonly string[];
 }
 
 /**
@@ -155,6 +185,9 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
         // Not asked for: without a timeline there is no page to put it on,
         // and `failed` would report a read we never made.
         actions: { state: 'not_asked' },
+        // The timeline is the failure, and the page renders as one. Nothing
+        // else was attempted, so nothing else can be reported as failing.
+        readsFailed: [],
       },
       contactId,
     );
@@ -172,6 +205,22 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
    * identifier even when the page was opened by a merged-away id.
    */
   const externalId = timeline.contact?.externalId?.trim() ?? '';
+
+  /*
+   * ★ RECORDED AT THE CATCH, WHERE THE DIFFERENCE IS STILL KNOWN.
+   *
+   * One line further out every one of these is `null`, and `null` means
+   * both "we asked and it failed" and "there was nothing to ask with". Only
+   * here can the two be told apart.
+   */
+  const readsFailed: string[] = [];
+  const failing =
+    <T>(name: string, event: string) =>
+    (cause: unknown): T | null => {
+      readsFailed.push(name);
+      logger.warn(event, { cause });
+      return null;
+    };
 
   const [brief, memory, crm, orders] = await Promise.all([
     /*
@@ -194,17 +243,11 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
         body: { contactId },
         payload: briefSchema,
       })
-      .catch((cause: unknown) => {
-        logger.warn('customer.brief_failed', { cause });
-        return null;
-      }),
+      .catch(failing<CustomerBrief>('brief', 'customer.brief_failed')),
     externalId
       ? api
           .get({ endpoint: customerEndpoints.memory(externalId), payload: memorySchema })
-          .catch((cause: unknown) => {
-            logger.warn('customer.memory_failed', { cause });
-            return null;
-          })
+          .catch(failing<CustomerMemory>('memory', 'customer.memory_failed'))
       : Promise.resolve(null),
     conversationId
       ? api
@@ -212,21 +255,38 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
             endpoint: customerEndpoints.crmContext(conversationId),
             payload: crmContextSchema,
           })
-          .catch((cause: unknown) => {
-            logger.warn('customer.crm_failed', { cause });
-            return null;
-          })
+          .catch(failing<CrmContext>('crm', 'customer.crm_failed'))
       : Promise.resolve(null),
     conversationId
       ? api
           .get({
             endpoint: customerEndpoints.orders(conversationId),
             payload: commerceContextSchema,
+            /*
+             * ════════════════════════════════════════════════════════════
+             * ★★ FOUND BY SWEEPING THE NAME, AND IT WAS DORMANT FOR THE
+             *    SAME REASON THE VOICE COLLAPSE WAS
+             * ════════════════════════════════════════════════════════════
+             * The route answers the union UNENVELOPED — `res.json(result)`
+             * where `result` is `{ state, data }` for `ok`. The client sees
+             * a top-level `data` key, unwraps it, and hands the bare
+             * `CommerceContext` to a schema that requires `state`. The
+             * parse fails, and 04d renders "we couldn't read your orders".
+             *
+             * ★ IT HAS NEVER FIRED, BECAUSE THE ONLY STATE THIS TENANT CAN
+             * PRODUCE HAS NO `data` KEY. Shopify is in ERROR here, so the
+             * answer is `{ state: "connection_unhealthy" }`, nothing is
+             * unwrapped, and every test and capture has passed over a
+             * screen whose success path could not work. Connect a store and
+             * 04d breaks on the spot.
+             *
+             * And it cascades: `shopifyCustomerIdIn` reads `data.customer`,
+             * so 04e would never send `?shopifyCustomerId=` and would print
+             * the "pass it" gap for good.
+             */
+            raw: true,
           })
-          .catch((cause: unknown) => {
-            logger.warn('customer.orders_failed', { cause });
-            return null;
-          })
+          .catch(failing<CommerceContextResponse>('orders', 'customer.orders_failed'))
       : Promise.resolve(null),
   ]);
 
@@ -252,6 +312,20 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
     .get({
       endpoint: customerEndpoints.audit(contactId),
       payload: customerAuditSchema,
+      /*
+       * ★★ `data` IS A SIBLING HERE, NOT THE PAYLOAD.
+       *
+       * The answer is `{ contact, data, nextCursor, coverage, scope }`.
+       * Without this the client unwraps the envelope and hands `.data` — an
+       * ARRAY — to a schema expecting an object, so the parse fails at
+       * `(root)` on a perfectly good 200.
+       *
+       * The flag's own doc names this case for `/api/notifications`
+       * (`{ data, nextCursor }`) and I read that sentence, wrote a contract
+       * for a five-key envelope, and did not apply it. This route is the
+       * same shape three keys wider.
+       */
+      raw: true,
       ...(shopifyCustomerId ? { query: { shopifyCustomerId } } : {}),
     })
     .then((audit): AuditRead => ({ state: 'ok', audit, supplied }))
@@ -266,6 +340,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
         logger.warn('customer.audit_forbidden', { cause });
         return { state: 'forbidden' };
       }
+      readsFailed.push('actions');
       logger.warn('customer.audit_failed', { cause });
       return { state: 'failed' };
     });
@@ -289,6 +364,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       conversationId,
       noConversations: conversationId === null,
       actions,
+      readsFailed,
     },
     contactId,
   );

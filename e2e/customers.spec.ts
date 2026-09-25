@@ -765,6 +765,20 @@ for (const size of SIZES) {
     test('04d · orders, in the one state this tenant can show', async ({ page }) => {
       await openCustomer(page, 'en');
 
+      /*
+       * ★★ A FAILED READ IS NOT ONE OF THE EIGHT STATES, AND UNTIL TODAY
+       * THIS COULD NOT BE ASSERTED.
+       *
+       * `withDetailFixtures` replaced the whole detail with the fixture, so
+       * a read that returned nothing photographed as a healthy panel. It
+       * now carries failures through, which makes this tripwire — and the
+       * two on 04e below — able to fire for the first time.
+       */
+      await expect(
+        page.getByTestId('orders-unread'),
+        'the commerce read failed — this run would photograph a fault, not one of the eight states',
+      ).toHaveCount(0);
+
       const orders = page.getByTestId('customer-orders');
       await expect(orders, missingIds('the 04d orders block')).toBeVisible();
 

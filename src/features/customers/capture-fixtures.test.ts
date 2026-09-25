@@ -4,7 +4,12 @@ import type { CustomerRow } from '@/api/contracts/customers';
 
 import type { CustomerDetail } from './load-customer';
 
-import { FIXTURE_MARKER, withCaptureFixtures, withDetailFixtures } from './capture-fixtures';
+import {
+  FIXTURE_DETAIL,
+  FIXTURE_MARKER,
+  withCaptureFixtures,
+  withDetailFixtures,
+} from './capture-fixtures';
 
 const { enabled } = vi.hoisted(() => ({ enabled: vi.fn() }));
 vi.mock('@/features/security/capture-fixtures', () => ({ captureFixturesEnabled: enabled }));
@@ -154,6 +159,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     noConversations: false,
     // A real person's page whose audit log we could not read.
     actions: { state: 'failed' },
+    readsFailed: ['actions'],
   };
 
   it('substitutes nothing when the gate is closed', () => {
@@ -200,6 +206,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       noConversations: false,
       // The timeline failed, so 04e was never asked for.
       actions: { state: 'not_asked' },
+      readsFailed: [],
     };
     expect(withDetailFixtures(failed, 'real-contact-99')).toBe(failed);
   });
@@ -232,6 +239,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       noConversations: false,
       // The timeline failed, so 04e was never asked for.
       actions: { state: 'not_asked' },
+      readsFailed: [],
     };
     const shown = withDetailFixtures(failed, 'fixture-1');
     expect(shown.timeline).not.toBeNull();
@@ -250,5 +258,88 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     enabled.mockReturnValue(true);
     const shown = withDetailFixtures(real, 'fixture-1');
     expect(shown.timeline?.contact?.externalId).toBe('+447700900123');
+  });
+});
+
+describe('★★ the fixture substitutes CONTENT and must never substitute HEALTH', () => {
+  /*
+   * ══════════════════════════════════════════════════════════════════════════
+   * THE DEFECT THIS GUARDS, WHICH SHIPPED AND PASSED 84 ASSERTIONS
+   * ══════════════════════════════════════════════════════════════════════════
+   * The 04e audit read failed on all six capture runs — our contract and the
+   * response envelope disagreeing — and the capture photographed a healthy
+   * panel at three viewports in two locales. The spec's own tripwire for
+   * that exact state (`customer-actions-failed` must not appear) could not
+   * fire: `withDetailFixtures` had already replaced the failed read with a
+   * fixture whose state is `ok`.
+   *
+   * The guard it slipped past checks `timeline === null`, which was every
+   * read that could fail on the day it was written. It stopped being enough
+   * the moment a sibling read was added, and nothing said so, because the
+   * guard still passed.
+   */
+  const realDetail = (over: Partial<CustomerDetail>): CustomerDetail => ({
+    ...FIXTURE_DETAIL,
+    ...over,
+  });
+
+  it('★★ carries a FAILED sibling read through, rather than hiding it', () => {
+    enabled.mockReturnValue(true);
+    const out = withDetailFixtures(
+      realDetail({ actions: { state: 'failed' }, readsFailed: ['actions'] }),
+      'a-real-contact-id',
+    );
+
+    // The failure survives — so the screen renders its failure panel and the
+    // capture spec's tripwire gets the chance it was written to have.
+    expect(out.actions.state).toBe('failed');
+    // And the substitution still did its job: no real person's name or
+    // message bodies are on the page.
+    expect(out.timeline?.contact?.displayName).toBe('Avery Stone');
+  });
+
+  it('★ carries a failed orders read through too — this is a CLASS, not a case', () => {
+    /*
+     * Fixing only the read that happened to break is the mistake this
+     * project has made before. Every sibling read can fail the same way.
+     */
+    enabled.mockReturnValue(true);
+    const out = withDetailFixtures(
+      realDetail({ orders: null, readsFailed: ['orders'] }),
+      'a-real-contact-id',
+    );
+    expect(out.orders).toBeNull();
+    expect(out.brief).not.toBeNull();
+  });
+
+  it('★★ does NOT invent a failure from a read that was never attempted', () => {
+    /*
+     * `brief`, `memory`, `crm` and `orders` are null both when the read
+     * failed and when there was nothing to ask with — no conversation, no
+     * external id. Reading null as failure would report a broken section on
+     * every customer who has never written.
+     *
+     * Which is why `readsFailed` is recorded at the catch and not derived
+     * here: this function cannot tell, and guessing would be the same
+     * unknown-collapsed-into-a-verdict the whole screen is built against.
+     */
+    enabled.mockReturnValue(true);
+    const out = withDetailFixtures(
+      realDetail({ crm: null, orders: null, readsFailed: [] }),
+      'a-real-contact-id',
+    );
+    expect(out.crm).not.toBeNull();
+    expect(out.orders).not.toBeNull();
+  });
+
+  it('substitutes wholesale for a fixture id, whose reads 404 by construction', () => {
+    // Unchanged and still right: a 404 for an id we invented says nothing
+    // about the screen, so its failure is not preserved.
+    enabled.mockReturnValue(true);
+    const out = withDetailFixtures(
+      realDetail({ actions: { state: 'failed' }, readsFailed: ['actions'] }),
+      'fixture-1',
+    );
+    expect(out.actions.state).toBe('ok');
   });
 });

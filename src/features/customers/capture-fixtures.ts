@@ -495,6 +495,9 @@ export const FIXTURE_DETAIL: CustomerDetail = {
   },
   conversationId: 'fixture-conv-1',
   noConversations: false,
+  // The fixture stands for a page where every read succeeded. A real page
+  // that did not gets its failures carried through — see `keepFailures`.
+  readsFailed: [],
   /*
    * ════════════════════════════════════════════════════════════════════════
    * ★★ SCREEN 04e — AND EVERY ROW IS ONE THE PLATFORM ACTUALLY WRITES
@@ -670,9 +673,58 @@ const FIXTURE_CONTACT_IDS: ReadonlySet<string> = new Set(FIXTURE_CONTACTS.map((c
  */
 export function withDetailFixtures(detail: CustomerDetail, contactId: string): CustomerDetail {
   if (!captureFixturesEnabled()) return detail;
-  if (!FIXTURE_CONTACT_IDS.has(contactId)) {
-    // A real person's page. If it is broken, it is photographed broken.
-    return detail.timeline === null ? detail : FIXTURE_DETAIL;
-  }
-  return FIXTURE_DETAIL;
+  if (FIXTURE_CONTACT_IDS.has(contactId)) return FIXTURE_DETAIL;
+  // A real person's page. If it is broken, it is photographed broken.
+  if (detail.timeline === null) return detail;
+  return keepFailures(detail);
+}
+
+/**
+ * Substitute the CONTENT, keep the FAILURES.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE GUARD ABOVE WAS WRITTEN WHEN THE TIMELINE WAS THE ONLY READ THAT
+ *    COULD FAIL, AND IT SILENTLY STOPPED BEING ENOUGH
+ * ════════════════════════════════════════════════════════════════════════════
+ * On 2026-09-25 the 04e audit read failed on every capture run — our
+ * contract and the response envelope disagreeing — and `customer-actions`
+ * photographed a healthy panel at three viewports in two locales. The
+ * spec's tripwire for precisely that state never fired, because by the time
+ * the page rendered, this function had already replaced the failed read
+ * with a fixture whose state is `ok`.
+ *
+ * **84 assertions agreed with the screen, and the screen was a fixture
+ * standing over a read that returned nothing.** Which is the one thing this
+ * file's own header says it must never do.
+ *
+ * The rule was right and the implementation checked a single read by name.
+ * A guard written against the failures that existed when it was written
+ * does not cover the failure added afterwards — and nothing reports the
+ * gap, because the guard still passes.
+ *
+ * ── WHY THIS IS SAFE FOR THE THING FIXTURES EXIST FOR ──
+ * A failed read carries NO DATA. Preserving it leaks nothing: the page
+ * shows the fixture's name above a sentence saying we could not read that
+ * section, which is exactly what a merchant would see and exactly what the
+ * evidence should show.
+ *
+ * ── AND WHY IT TAKES A LIST RATHER THAN CHECKING FOR `null` ──
+ * `brief`, `memory`, `crm` and `orders` are `null` both when the read
+ * failed and when it was never attempted. Reading `null` as failure would
+ * report failures that never happened on every customer with no
+ * conversation. `readsFailed` is recorded at the catch, where the loader
+ * still knows which it was.
+ */
+function keepFailures(detail: CustomerDetail): CustomerDetail {
+  if (detail.readsFailed.length === 0) return FIXTURE_DETAIL;
+  const failed = new Set(detail.readsFailed);
+  return {
+    ...FIXTURE_DETAIL,
+    ...(failed.has('brief') ? { brief: null } : {}),
+    ...(failed.has('memory') ? { memory: null } : {}),
+    ...(failed.has('crm') ? { crm: null } : {}),
+    ...(failed.has('orders') ? { orders: null } : {}),
+    ...(failed.has('actions') ? { actions: detail.actions } : {}),
+    readsFailed: detail.readsFailed,
+  };
 }
