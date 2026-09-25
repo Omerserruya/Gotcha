@@ -23,6 +23,11 @@ const state = vi.hoisted(() => ({
   conversationCount: 0,
   rows: [] as any[],
   seen: { convWhere: null as any, auditWhere: null as any, auditSelect: null as any },
+  /** Permission keys this request's principal holds. */
+  grants: new Set<string>(),
+  /** What each route demanded, captured per request. */
+  demanded: [] as Array<{ path: string; permission: string; roles: string[] }>,
+  role: "ADMIN" as string,
 }));
 
 vi.mock("@chatcenter/shared", () => ({
@@ -42,9 +47,18 @@ vi.mock("@chatcenter/shared", () => ({
     },
   },
   findSiblingContacts: async () => state.siblings,
-  authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: "ADMIN" }; n(); },
+  authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: state.role }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },
-  requirePermissionOrRole: () => (_q: any, _s: any, n: any) => n(),
+  // The gate is REAL here, and it records the key the route actually demanded.
+  // A double that always calls next() cannot see a gate swapped for a wider one,
+  // which is precisely the mistake this route was one line away from.
+  requirePermissionOrRole: (permission: string, ...roles: string[]) =>
+    (req: any, res: any, next: any) => {
+      state.demanded.push({ path: req.path, permission, roles });
+      if (state.grants.has(permission)) return next();
+      if (roles.includes(req.user?.role)) return next();
+      return res.status(403).json({ error: "Permission denied", code: "PERMISSION_DENIED" });
+    },
   assertTenantId: (req: any) => req.tenantId,
 }));
 
@@ -67,6 +81,10 @@ beforeEach(() => {
   state.conversationCount = 2;
   state.rows = [row()];
   state.seen = { convWhere: null, auditWhere: null, auditSelect: null };
+  // Existing tests are about the READ, so they run as an admin.
+  state.role = "ADMIN";
+  state.grants = new Set<string>();
+  state.demanded = [];
 });
 
 const get = (q = "", id = "c1") => request(app).get(`/api/audit-logs/customer/${id}${q}`);
@@ -250,5 +268,98 @@ describe("it reuses the tenant-wide filters rather than inventing its own", () =
     expect(res.body.page_limit_used ?? 100).toBe(100);
     expect(res.body.data).toHaveLength(60);
     expect(res.body.nextCursor).toBeNull();
+  });
+});
+
+
+/**
+ * Who may read one customer's log - and who may still NOT read the workspace's.
+ *
+ * Omer: "לכל מי שיש גישה למסך 4" - everyone with access to the Customers
+ * screen. That is agents, so the customer-scoped route needs a wider gate than
+ * its siblings.
+ *
+ * ★ THE DANGER WAS THE ONE-LINE VERSION OF THAT CHANGE. A single `CAN_READ`
+ * gated four routes: the facet, this one, the whole-workspace list, and
+ * `/audit-logs/export`. Widening it in place would have handed every agent the
+ * entire tenant's audit log and a CSV of it, and the diff would have looked
+ * like a permission fix.
+ *
+ * These assert the mapping from the REQUEST, not from the order the gates were
+ * declared in - so a later edit that re-points the customer route at `CAN_READ`,
+ * or points a sibling at the customer gate, fails by name.
+ */
+describe("the wider gate is on ONE route", () => {
+  const demandedFor = (path: string) => state.demanded.find((d) => d.path === path);
+
+  it("★ an agent with crm:contacts:read can read one customer's log", async () => {
+    state.role = "AGENT";
+    state.grants = new Set(["crm:contacts:read"]);
+
+    const res = await get();
+
+    expect(res.status).toBe(200);
+    expect(demandedFor("/audit-logs/customer/c1")).toMatchObject({
+      permission: "crm:contacts:read",
+      roles: ["ADMIN"],
+    });
+  });
+
+  it("★ the SAME agent is refused the whole-workspace log", async () => {
+    state.role = "AGENT";
+    state.grants = new Set(["crm:contacts:read"]);
+
+    const list = await request(app).get("/api/audit-logs");
+
+    // The blast radius of widening CAN_READ in place. 403, not 200.
+    expect(list.status).toBe(403);
+    expect(demandedFor("/audit-logs")).toMatchObject({ permission: "settings:workspace:update" });
+  });
+
+  it("★★ and is refused the EXPORT, which is a CSV of everything", async () => {
+    state.role = "AGENT";
+    state.grants = new Set(["crm:contacts:read"]);
+
+    const exp = await request(app).get("/api/audit-logs/export");
+
+    expect(exp.status).toBe(403);
+    expect(demandedFor("/audit-logs/export")).toMatchObject({ permission: "settings:workspace:update" });
+  });
+
+  it("is refused the facet too, which lists the tenant's whole action vocabulary", async () => {
+    state.role = "AGENT";
+    state.grants = new Set(["crm:contacts:read"]);
+
+    const facet = await request(app).get("/api/audit-logs/actions");
+
+    expect(facet.status).toBe(403);
+    expect(demandedFor("/audit-logs/actions")).toMatchObject({ permission: "settings:workspace:update" });
+  });
+
+  it("an agent WITHOUT the contact grant is refused the customer log", async () => {
+    state.role = "AGENT";
+    state.grants = new Set<string>();
+
+    expect((await get()).status).toBe(403);
+  });
+
+  it("★ an ADMIN without the fine-grained grant keeps the screen", async () => {
+    state.role = "ADMIN";
+    state.grants = new Set<string>();
+
+    // "ADMIN" is the second argument at every other call site for this reason:
+    // a permission system rolled out gradually must not remove access from the
+    // role that already had it.
+    expect((await get()).status).toBe(200);
+  });
+
+  it("★ admins keep BOTH the workspace log and the export", async () => {
+    state.role = "ADMIN";
+    state.grants = new Set<string>();
+
+    expect((await request(app).get("/api/audit-logs")).status).toBe(200);
+    // Omer's screen-16 ruling: no difference between seeing and exporting. The
+    // second gate must not have quietly split them.
+    expect((await request(app).get("/api/audit-logs/export")).status).not.toBe(403);
   });
 });

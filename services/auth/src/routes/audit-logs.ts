@@ -45,6 +45,36 @@ const router = Router();
 // introducing a new permission key for one read.
 const CAN_READ = requirePermissionOrRole("settings:workspace:update", "ADMIN");
 
+/**
+ * The CUSTOMER-scoped log only. Omer: "לכל מי שיש גישה למסך 4" - everyone with
+ * access to the Customers screen, which is agents, not admins alone.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * WHY THIS IS A SECOND CONSTANT AND NOT A CHANGE TO THE FIRST
+ *
+ * `CAN_READ` gates FOUR routes: the facet, this one, the whole-workspace list,
+ * and `/audit-logs/export`. Widening it in place would hand every agent the
+ * entire tenant's audit log AND a CSV of it - and nothing in that one-line diff
+ * would look wrong. The ruling was about one screen; the blast radius would have
+ * been the other three.
+ *
+ * ★ IT ALSO PRESERVES THE EXPORT INVARIANT rather than breaking it. Omer's
+ * ruling on screen 16 was "there is no difference between seeing it and
+ * exporting it", which is why export reuses `CAN_READ`. That still holds:
+ * admins see and export the whole log; agents see one customer's and there is
+ * no per-customer export for it to diverge from. The invariant lives inside
+ * each gate, not across them.
+ *
+ * `crm:contacts:read` is the key the contact reads already use
+ * (`conversation/routes/contacts.ts`, `ai/routes/integrations.ts`) and two
+ * default role bundles carry it (`permission-catalog.ts:404,445`), so this
+ * lines up with the screen it belongs to instead of inventing a parallel rule.
+ * `"ADMIN"` stays as the fallback, matching every other call site: an admin
+ * without the fine-grained grant must not lose the screen.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+const CAN_READ_CUSTOMER = requirePermissionOrRole("crm:contacts:read", "ADMIN");
+
 router.use("/audit-logs", authenticate, resolveTenant);
 
 const MAX_LIMIT = 100;
@@ -197,7 +227,7 @@ function outcomeOf(action: string, metadata: unknown) {
   };
 }
 
-router.get("/audit-logs/customer/:contactId", CAN_READ, async (req: Request, res: Response): Promise<void> => {
+router.get("/audit-logs/customer/:contactId", CAN_READ_CUSTOMER, async (req: Request, res: Response): Promise<void> => {
   const tenantId = assertTenantId(req);
   const bad = badDates(req);
   if (bad.length > 0) {
