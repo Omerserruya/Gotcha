@@ -1592,6 +1592,20 @@ async function persistOutbound(
       metadata: metadata || {},
     } as any,
   });
+  // The inbox orders by `lastMessageAt` and this path never set it, so every
+  // message a flow sent left the sort key stale.
+  //
+  // ★ ONLY WHEN THE SEND SUCCEEDED. `status` is FAILED when there is no
+  // `externalMessageId`, and a message the customer never received must not make
+  // the conversation look answered - the last real activity is still their
+  // inbound, and moving it would sink a waiting customer down the queue on the
+  // strength of a delivery that did not happen.
+  if (extId) {
+    await prisma.conversation.update({
+      where: { id: ctx.conversationId },
+      data: { lastMessageAt: m.createdAt },
+    }).catch(() => {});
+  }
   publishEvent({
     event: "message:new",
     tenantId: ctx.tenantId,
@@ -1774,6 +1788,13 @@ async function applyOrphanedHandoff(
         },
       },
     });
+    // The handoff event itself is the last thing that happened and somebody is
+    // waiting on it. The `update` above sets status/handledBy and predates the
+    // message, so the ordering column is set here.
+    await prisma.conversation.update({
+      where: { id: ctx.conversationId },
+      data: { lastMessageAt: new Date() },
+    }).catch(() => {});
 
     await publishEvent({
       event: "conversation:updated",

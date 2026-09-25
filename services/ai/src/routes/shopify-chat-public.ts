@@ -749,7 +749,7 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
       reason: "takeover",
       data: { isHandedOver: true, status: "WAITING" },
     });
-    await prisma.message.create({
+    const handoffMessage = await prisma.message.create({
       data: {
         tenantId: session.tenantId,
         conversationId: conversation.id,
@@ -761,6 +761,15 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
         status: "DELIVERED",
         metadata: { systemEvent: "visitor_requested_human" },
       },
+    });
+    // The inbox orders by `lastMessageAt`, and this path never set it - so a
+    // storefront visitor who asked for a human sorted as though nothing had
+    // happened since whichever earlier writer last remembered. Uses the
+    // message's own `createdAt`, matching message.service.ts:85 rather than
+    // `new Date()`.
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: handoffMessage.createdAt },
     });
     // Routing and agent notification are the existing platform's job -
     // this event is the same one every other channel raises on handoff.
@@ -811,7 +820,7 @@ router.post("/lead", conversationLimiter, async (req: Request, res: Response) =>
         isHandedOver: true,
       },
     });
-    await prisma.message.create({
+    const offlineMessage = await prisma.message.create({
       data: {
         tenantId: session.tenantId,
         conversationId: conversation.id,
@@ -823,6 +832,12 @@ router.post("/lead", conversationLimiter, async (req: Request, res: Response) =>
         status: "DELIVERED",
         metadata: { source: "offline_form", email: email || null, consent: true },
       },
+    });
+    // Same reason. The `update` above sets status/isHandedOver and predates the
+    // message, so the ordering column is set here from the message itself.
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: offlineMessage.createdAt },
     });
     await publishEvent({
       event: "conversation:updated",
