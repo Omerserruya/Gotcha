@@ -105,7 +105,27 @@ export async function ConversationList({
 
         Its own group says the true thing: open, and we cannot tell where
         they belong. The count makes a growing problem visible instead of
-        gradual.
+        gradual — if writers that forget are common, that number rising is
+        how anybody would ever find out, and it rises in front of the person
+        using the screen rather than only in an audit.
+
+        ════════════════════════════════════════════════════════════════════
+        ⚠ AND THIS COVERS THE VISIBLE TENTH OF THE PROBLEM
+        ════════════════════════════════════════════════════════════════════
+        **We can refuse to bury the rows that ADMIT they do not know. We
+        cannot find the ones that are quietly wrong.** A stale
+        `lastMessageAt` — a plausible timestamp from before the newest
+        message, written by a forgetful path — is indistinguishable from a
+        correct one at every layer we control. Nothing on the row disagrees
+        with it and the list looks entirely normal.
+
+        This is written here rather than only in a message because **a
+        partial fix that looks complete is how a known problem stops being
+        tracked**, and this one is shaped to look complete: a named group, a
+        count, a true sentence, all correct, covering the minority case.
+
+        The majority case is with the write-path audit and is not solvable
+        from this file.
       */}
       {undated.length > 0 ? (
         <section data-testid="queue-undated">

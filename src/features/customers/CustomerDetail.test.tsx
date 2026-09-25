@@ -88,6 +88,7 @@ describe('★★ the timeline must never claim to be a history', () => {
       detail({
         timeline: {
           contact: null,
+          identityChannels: [],
           events: [message()],
           page: { limit: 50, types: ['message'], nextCursor: 'abc', hasMore: true },
           coverage: {},
@@ -129,6 +130,7 @@ describe('★★ the timeline must never claim to be a history', () => {
       detail({
         timeline: {
           contact: null,
+          identityChannels: [],
           events: [message({ origin: 'HISTORICAL_IMPORT' })],
           page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
           coverage: {},
@@ -157,6 +159,7 @@ describe('★★ the timeline must never claim to be a history', () => {
       detail({
         timeline: {
           contact: null,
+          identityChannels: [],
           events: [message()],
           page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
           coverage: {},
@@ -189,6 +192,7 @@ describe('★★ the timeline must never claim to be a history', () => {
       detail({
         timeline: {
           contact: null,
+          identityChannels: [],
           events: [message()],
           page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
           coverage: {
@@ -237,6 +241,7 @@ describe('★★ the timeline must never claim to be a history', () => {
       detail({
         timeline: {
           contact: null,
+          identityChannels: [],
           events: [
             message({
               type: 'handover',
@@ -271,6 +276,7 @@ describe('★★ the timeline must never claim to be a history', () => {
       detail({
         timeline: {
           contact: null,
+          identityChannels: [],
           events: [
             message({
               type: 'ai_action',
@@ -513,6 +519,7 @@ describe('★★ a person who has never written is a state, not four blank panel
       },
       timeline: {
         contact: null,
+        identityChannels: [],
         events: [],
         page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
         coverage: {},
@@ -563,6 +570,7 @@ describe('★ the brief has three states, not two', () => {
         noConversations: true,
         timeline: {
           contact: null,
+          identityChannels: [],
           events: [],
           page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
           coverage: {},

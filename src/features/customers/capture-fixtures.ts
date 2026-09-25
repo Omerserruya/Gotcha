@@ -221,21 +221,34 @@ export const FIXTURE_DETAIL: CustomerDetail = {
       displayName: 'Avery Stone',
       externalId: '+447700900123',
       channel: 'WHATSAPP',
-      /*
-       * ★ THE EMAIL ENTRY, MERGED IN — AND IT IS THE JOIN THAT EXISTS.
-       *
-       * The fixture list already carries `fixture-2` as the same person
-       * arriving by EMAIL with the same phone, which is what the unifier
-       * actually does. An alias is what that merge leaves behind, so this
-       * is the same join seen from the surviving row.
-       *
-       * No Instagram alias, for the reason this file already records: an
-       * Instagram contact has `phone: null`, so the unifier cannot match it
-       * and it never gets merged. Adding one here would be the
-       * WhatsApp-plus-Instagram mistake again, one table over.
-       */
-      metadata: { aliases: [{ channel: 'EMAIL', externalId: 'avery@example.com' }] },
     },
+    /*
+     * ★ THE JOIN THAT EXISTS, FROM THE ROUTE'S OWN PROJECTION.
+     *
+     * The EMAIL entry shares this person's phone, which is what the unifier
+     * matches on — `linked` rather than `merged` because it is a live
+     * sibling contact rather than an alias left by a merge.
+     *
+     * No Instagram row: that contact has `phone: null`, so the unifier
+     * cannot match it and it is never joined. Adding one would be the
+     * WhatsApp-plus-Instagram mistake this file already records.
+     */
+    identityChannels: [
+      {
+        contactId: 'fixture-1',
+        channel: 'WHATSAPP',
+        externalId: '+447700900123',
+        displayName: 'Avery Stone',
+        source: 'linked',
+      },
+      {
+        contactId: 'fixture-2',
+        channel: 'EMAIL',
+        externalId: 'avery@example.com',
+        displayName: 'Avery Stone',
+        source: 'linked',
+      },
+    ],
     events: [
       {
         type: 'message',

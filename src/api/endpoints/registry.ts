@@ -985,5 +985,20 @@ export const capabilityEndpoints = {
   update: (toolName: string) => endpoint('/api/tool-permissions/{toolName}', { toolName }),
 } as const;
 
+
+/**
+ * Screen 02 · the Inbox.
+ *
+ * ⚠ THE LIST PAGINATES BY OFFSET (`page` + `limit`). On a recency ordering a
+ * new message reorders rows between pages, so scrolling shows a duplicate
+ * and **silently skips one** — somebody waiting who never appears. The
+ * screen reads a single capped page until a keyset endpoint exists.
+ */
+export const inboxEndpoints = {
+  list: () => endpoint('/api/conversations'),
+  messages: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/messages', { conversationId }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

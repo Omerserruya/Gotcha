@@ -21,5 +21,12 @@
     "unknownChannel": "Unknown channel",
     "waiting": "{minutes}m",
     "undated": "{count, plural, =1 {One conversation has no last-message time, so we can't place it in the order above} other {# conversations have no last-message time, so we can't place them in the order above}}"
+  },
+  "identity": {
+    "unnamed": "Someone",
+    "unavailable": "We couldn't read who this is just now.",
+    "noHandles": "No channel handle is recorded for this person.",
+    "joinedUp": "Her channels — every one we've matched to this person.",
+    "thisChannelOnly": "The channel this conversation came in on. We can't show her other channels from here yet."
   }
 }

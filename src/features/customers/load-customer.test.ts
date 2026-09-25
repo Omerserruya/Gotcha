@@ -57,6 +57,9 @@ let BODIES: Record<string, unknown> = {};
 
 const TIMELINE = {
   data: {
+    // Required since 6e9e84a9: present on every response, including empty
+    // ones, so absence means the service is older than the contract.
+    identityChannels: [],
     contact: {
       id: 'c1',
       displayName: 'Real Person',

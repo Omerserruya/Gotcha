@@ -49,6 +49,7 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
      * and "showing recent activity" is no longer good enough.
      */
     const timeline = timelineSchema.parse({
+      identityChannels: [],
       contact: null,
       events: [event(), event({ conversationId: 'c2' })],
       page: { limit: 50, types: ['message'], nextCursor: 'abc', hasMore: true },
@@ -69,6 +70,7 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
     // The inverse, so the sentence is a statement about the data rather than
     // a hedge that is always on.
     const whole = timelineSchema.parse({
+      identityChannels: [],
       contact: null,
       events: [event()],
       page: { limit: 50, types: ['message'], nextCursor: null, hasMore: false },
@@ -134,6 +136,7 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
     // The route follows `mergedIntoId`. The name shown must be the survivor's,
     // not the one the list happened to hold.
     const parsed = timelineSchema.parse({
+      identityChannels: [],
       contact: { id: 'survivor', displayName: 'Dana', externalId: '+972500000000' },
       events: [],
     });

@@ -162,38 +162,47 @@ export const timelineSchema = z.object({
       displayName: z.string().nullable().default(null),
       externalId: z.string().default(''),
       channel: z.string().default(''),
-      /**
-       * ════════════════════════════════════════════════════════════════════
-       * ★★ ONE KEY OUT OF `metadata`, AND NOT THE BLOB
-       * ════════════════════════════════════════════════════════════════════
-       * The route sends `contact: effective`, and `effective` comes from a
-       * `findFirst` with **no `select`** — so the whole row arrives,
-       * `metadata` included, and `z.object` has been stripping it. The
-       * per-channel handle list screen 02 draws was on the wire all along.
-       *
-       * ── BUT ONLY `aliases`, DELIBERATELY ──
-       * `metadata` is an open JSON column. Naming it wholesale would pull in
-       * whatever anybody has ever put there, which on this platform includes
-       * phone numbers — the same reason 04e lifts `succeeded` server-side
-       * and leaves the blob behind. This picks one key with a known shape
-       * and lets the rest be discarded.
-       *
-       * ── AND IT IS A PARTIAL LIST, WHICH THE SCREEN MUST SAY ──
-       * `aliases` holds handles **merged INTO this contact** by a prior
-       * merge. The route separately computes `findSiblingContacts` — people
-       * currently linked by `personId` — and **does not return them**. So
-       * this is "channels that were folded in", not "every channel she uses",
-       * and a screen calling it the second would overstate what we know.
-       */
-      metadata: z
-        .object({
-          aliases: z.array(z.object({ channel: z.string(), externalId: z.string() })).default([]),
-        })
-        .nullish()
-        .default(null),
     })
     .nullable()
     .default(null),
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ EVERY CHANNEL THIS PERSON USES — A PROJECTION, NOT A ROW DUMP
+   * ════════════════════════════════════════════════════════════════════════
+   * Five named fields per handle, with a `source` discriminator:
+   *
+   *   linked   a live sibling contact, from the `personId` walk
+   *   merged   a preserved alias from a prior merge
+   *
+   * A handle that is both appears once and the live row wins, because it
+   * carries a `contactId` the alias cannot.
+   *
+   * ── THIS REPLACED A `metadata.aliases` PARSE, AND THE REASON MATTERS ──
+   * We read the handles out of the contact's raw `metadata` because the
+   * route sent the whole row. The obvious fix — "return the siblings you
+   * already compute" — would have been **worse than what it replaced**:
+   * `findSiblingContacts` selects no columns, so each sibling arrives
+   * carrying its own `metadata` blob, and returning them raw would ship the
+   * customer's phone number **once per linked channel instead of once.**
+   *
+   * A five-field projection cannot do that. `metadata` is no longer read
+   * here at all, which is what lets the route stop sending it.
+   *
+   * ── REQUIRED, NOT DEFAULTED ──
+   * Present on every response including empty ones, so absence means the
+   * service is older than this contract. That fails the parse loudly rather
+   * than rendering an empty channel list, which would say "she uses one
+   * channel" about somebody who uses four.
+   */
+  identityChannels: z.array(
+    z.object({
+      contactId: z.string().nullable().default(null),
+      channel: z.string(),
+      externalId: z.string(),
+      displayName: z.string().nullable().default(null),
+      source: z.enum(['linked', 'merged']),
+    }),
+  ),
   events: z.array(timelineEventSchema).default([]),
   /** One cursor over the person's events. `limit` defaults to 50, caps at 200. */
   page: z
@@ -530,35 +539,19 @@ export interface ChannelHandle {
 }
 
 /**
- * Every channel handle this read can account for, deduplicated.
+ * Every channel this person uses.
  *
- * ★ THE CONTACT'S OWN, PLUS WHAT WAS MERGED IN. Not "every channel she
- * uses": sibling contacts linked by `personId` are computed by the route and
- * never returned, so somebody unified but not merged is invisible here.
+ * ★ THE CAPTION CHANGED WITH THE DATA. This used to be "channels we've
+ * joined up" — the contact's own handle plus whatever a prior merge left
+ * behind — because live siblings were computed by the route and never
+ * returned. `identityChannels` carries both kinds with a `source` saying
+ * which, so the list is now complete and the screen can say so.
  *
- * The screen says "channels we've joined up" rather than "her channels" for
- * that reason — the same distinction screen 04's list makes about the
- * unifier, where a shared phone joins two entries and an Instagram handle
- * with no phone stands alone.
+ * Deduplication is the route's: a handle that is both linked and merged
+ * arrives once, as the linked row.
  */
 export function channelHandles(timeline: CustomerTimeline | null): readonly ChannelHandle[] {
-  const contact = timeline?.contact;
-  if (!contact) return [];
-
-  const own: ChannelHandle[] =
-    contact.channel && contact.externalId
-      ? [{ channel: contact.channel, externalId: contact.externalId }]
-      : [];
-
-  const merged = (contact.metadata?.aliases ?? []).filter(
-    (a) => a.channel.trim() !== '' && a.externalId.trim() !== '',
-  );
-
-  const seen = new Set<string>();
-  return [...own, ...merged].filter((h) => {
-    const key = `${h.channel}\u0000${h.externalId}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return (timeline?.identityChannels ?? [])
+    .filter((c) => c.channel.trim() !== '' && c.externalId.trim() !== '')
+    .map((c) => ({ channel: c.channel, externalId: c.externalId }));
 }
