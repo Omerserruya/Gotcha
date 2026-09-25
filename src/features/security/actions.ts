@@ -31,6 +31,15 @@ export type SecurityWriteResult =
   | { readonly ok: false; readonly reason: 'forbidden' }
   /** The IdP could not be reached. Distinct from "it refused". */
   | { readonly ok: false; readonly reason: 'unavailable' }
+  /**
+   * ★ WE COULD NOT CONFIRM IT, WHICH IS NOT "IT DID NOT HAPPEN".
+   *
+   * The route answered without a usable `ok`. The session may well be gone.
+   * "That didn't sign out" would be a claim we cannot make, and the safe
+   * advice is the same either way: **signing out again is idempotent**, so
+   * the screen says what it knows and offers the control back.
+   */
+  | { readonly ok: false; readonly reason: 'unconfirmed' }
   | { readonly ok: false; readonly reason: 'failed' };
 
 function classify(cause: unknown): Extract<SecurityWriteResult, { ok: false }> {
@@ -47,11 +56,22 @@ function classify(cause: unknown): Extract<SecurityWriteResult, { ok: false }> {
 /** Signs one session out. The reader's own stays untouched. */
 export async function revokeSession(id: string): Promise<SecurityWriteResult> {
   try {
-    await serverApi().delete({
+    const result = await serverApi().delete({
       endpoint: securityEndpoints.revokeSession(id),
       payload: revokeResultSchema,
       raw: true,
     });
+    /*
+     * ★★ THE ANSWER IS READ, WHICH IT WAS NOT BEFORE.
+     *
+     * This used to await the call, discard the result and report success —
+     * so a 200 whose body said `{ ok: false }` rendered "signed out". The
+     * request not throwing is not the same fact as the session being gone.
+     */
+    if (!result.ok) {
+      logger.warn('security.revoke_unconfirmed', {});
+      return { ok: false, reason: 'unconfirmed' };
+    }
     revalidatePath('/[locale]/settings/security', 'page');
     return { ok: true };
   } catch (cause) {
@@ -68,11 +88,15 @@ export async function revokeSession(id: string): Promise<SecurityWriteResult> {
  */
 export async function revokeOtherSessions(): Promise<SecurityWriteResult> {
   try {
-    await serverApi().delete({
+    const result = await serverApi().delete({
       endpoint: securityEndpoints.revokeOtherSessions(),
       payload: revokeResultSchema,
       raw: true,
     });
+    if (!result.ok) {
+      logger.warn('security.revoke_all_unconfirmed', {});
+      return { ok: false, reason: 'unconfirmed' };
+    }
     revalidatePath('/[locale]/settings/security', 'page');
     return { ok: true };
   } catch (cause) {

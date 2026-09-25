@@ -239,7 +239,36 @@ export const buyResultSchema = z.object({
   units: z.number().nullable().default(null),
   invoiceId: z.string().nullable().default(null),
   failureCode: z.string().nullable().default(null),
-  outcomeUnknown: z.boolean().default(false),
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ DEFAULTS TO `true`, AND THE COMMENT ABOVE THIS FIELD IS WHY
+   * ════════════════════════════════════════════════════════════════════════
+   * It used to default to `false` — a schema asserting that the outcome IS
+   * known, on the one field whose entire purpose is to admit that it is not.
+   * A body that arrived without it read as *"we know what happened"*, fell
+   * through to `declined`, and the screen offered a retry on a charge that
+   * may already have gone through.
+   *
+   * The paragraph four lines up names that exact danger: *"A payment-required
+   * response invites the customer to try again, and they may already have
+   * been charged."* **The comment was correct and the line underneath armed
+   * the thing it warned about** — which is worse than a comment that merely
+   * describes the code wrongly, because a reader checking this field would
+   * read it, agree, and move on. The comment certified the defect.
+   *
+   * ── AND REQUIRING IT WOULD HAVE BEEN THE WRONG FIX ──
+   * A missing required field throws, `buyCreditPack`'s catch sees a contract
+   * error rather than a 409, and it returns `kind: 'failed'` — which renders
+   * a retry. That moves the defect from the schema into the error handler,
+   * where it is harder to see and identical in effect.
+   *
+   * **The safe default for "is this unknown" is `true`.** Absent means we
+   * could not read the answer, which is precisely when we do not know
+   * whether the customer was charged. `buyCreditPack` already routes this to
+   * `unsettled`, the state built for it, and the retry is suppressed with no
+   * new handling at all.
+   */
+  outcomeUnknown: z.boolean().default(true),
 });
 
 export type BuyResult = z.infer<typeof buyResultSchema>;

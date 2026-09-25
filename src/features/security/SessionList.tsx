@@ -129,7 +129,15 @@ export function SessionList({
             ? t('sessions.idpDown')
             : result.reason === 'forbidden'
               ? t('forbidden')
-              : t('sessions.revokeFailed')}
+              : /*
+                 ★ "WE COULDN'T CONFIRM" IS NOT "THAT DIDN'T SIGN OUT".
+                 The second is a claim about a session that may well be gone.
+                 The advice is identical either way because signing out twice
+                 is idempotent — so saying the true one costs nothing.
+                */
+                result.reason === 'unconfirmed'
+                ? t('sessions.revokeUnconfirmed')
+                : t('sessions.revokeFailed')}
         </p>
       ) : null}
     </div>

@@ -190,4 +190,23 @@ export type AuditFacet = z.infer<typeof auditFacetSchema>;
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 
 /** `DELETE /api/account/sessions[/:id]` answers `{ ok: true }`, bare. */
-export const revokeResultSchema = z.object({ ok: z.boolean().default(true) });
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ `ok` DEFAULTED TO **true**, AND NOTHING READ IT EITHER
+ * ════════════════════════════════════════════════════════════════════════════
+ * Two defects on one line. The default meant a response that did not carry
+ * `ok` reported a **successful session revoke** — somebody signing out a
+ * stolen session was told it was done, on the strength of a field that never
+ * arrived. And `revokeSession` never consulted the value at all: it awaited
+ * the call, discarded the result and returned success, so a body explicitly
+ * saying `{ ok: false }` reported the same.
+ *
+ * Flipping the default alone would have fixed nothing, because the field was
+ * not read. Worth recording: the scan that found this one could only see the
+ * schema, and the schema was the harmless half.
+ *
+ * `false` is the safe direction here and it costs nothing — **revoking a
+ * session twice is idempotent**, so an unconfirmed revoke offered again is
+ * free, while an unrevoked session reported as revoked is not.
+ */
+export const revokeResultSchema = z.object({ ok: z.boolean().default(false) });

@@ -16,7 +16,8 @@
     "revoke": "Sign out",
     "revokeOthers": "{count, plural, one {Sign out the other device} other {Sign out all # other devices}}",
     "idpDown": "The identity provider didn't answer, so nothing was signed out. Try again shortly.",
-    "revokeFailed": "That didn't sign out. Try again."
+    "revokeFailed": "That didn't sign out. Try again.",
+    "revokeUnconfirmed": "We couldn't confirm that signed out. It may have worked — signing out again is safe either way."
   },
   "logins": {
     "unavailable": "We couldn't reach the identity provider, so we can't show recent sign-ins.",

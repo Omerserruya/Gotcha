@@ -151,3 +151,49 @@ describe('what an upgrade actually does', () => {
     expect(creditsGrantedOnUpgrade(2000, 7000)).toBe(0);
   });
 });
+
+describe('★★ the safe default for "is this unknown" is `true`', () => {
+  it('★★ a buy response missing `outcomeUnknown` does NOT claim the outcome is known', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE DEFECT, AND IT WAS ON MONEY
+     * ════════════════════════════════════════════════════════════════════════
+     * `outcomeUnknown` defaulted to `false`, so a body that arrived without
+     * it asserted that we KNOW what happened — on the one field built to
+     * admit that we do not. `buyCreditPack` then fell through to `declined`,
+     * and the screen offered a retry on a charge that may already have gone
+     * through.
+     *
+     * The comment four lines above the field says exactly this: *"A
+     * payment-required response invites the customer to try again, and they
+     * may already have been charged."* The comment was CORRECT and the line
+     * underneath armed the danger it named — which is worse than a wrong
+     * comment, because a reader checking the field would agree with it and
+     * move on.
+     */
+    const { buyResultSchema } = await import('./pricing');
+
+    expect(buyResultSchema.parse({}).outcomeUnknown).toBe(true);
+    expect(buyResultSchema.parse({ success: false }).outcomeUnknown).toBe(true);
+    // And a server that says the outcome IS known is still believed.
+    expect(buyResultSchema.parse({ success: true, outcomeUnknown: false }).outcomeUnknown).toBe(
+      false,
+    );
+  });
+
+  it('★★ a revoke response missing `ok` is NOT a completed sign-out', async () => {
+    /*
+     * `ok` defaulted to `true`, so an unreadable answer reported a successful
+     * session revoke — somebody signing out a stolen session told it was
+     * done on the strength of a field that never arrived.
+     *
+     * `false` is safe because revoking twice is idempotent: an unconfirmed
+     * revoke offered again costs nothing, and an unrevoked session reported
+     * as revoked costs a great deal.
+     */
+    const { revokeResultSchema } = await import('./security');
+
+    expect(revokeResultSchema.parse({}).ok).toBe(false);
+    expect(revokeResultSchema.parse({ ok: true }).ok).toBe(true);
+  });
+});
