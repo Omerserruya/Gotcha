@@ -480,41 +480,45 @@ export const agentLoadSchema = z.object({
   activeConversations: z.number().default(0),
   /** Today only, from a Redis day-key. */
   claimedToday: z.number().default(0),
-  /**
+  /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ NOT A REPLY TIME. DELIBERATELY NOT RENDERED ANYWHERE.
+   * ★★ `avgResponseTimeMs` IS DELIBERATELY NOT NAMED HERE. DO NOT ADD IT.
    * ════════════════════════════════════════════════════════════════════════
-   * Named here so the field is accounted for and so nobody adds a column for
-   * it later believing it is what it sounds like. It is read from Redis and
-   * written by `analytics.worker.ts:38-46`:
+   * The route sends it and `z.object` strips it, which is the point: a field
+   * that parses cleanly, carries a plausible name and is rendered by nothing
+   * is a trap for whoever builds the next team panel. They would find it
+   * defaulted, typed and apparently supported, and none of what follows
+   * lives anywhere they would look.
+   *
+   * IT IS NOT A REPLY TIME. `analytics.worker.ts:38-46`:
    *
    *   claim_time      set ONCE when a conversation is claimed, `EX` 7 days
    *   agent_response  pushes `now − claim_time` on EVERY agent message
    *
-   * `claim_time` is **never cleared**. So the second reply in a conversation
-   * measures from the original claim, the tenth measures from the original
-   * claim, and the average **grows with how long a conversation runs rather
-   * than with how slow anybody is.**
+   * `claim_time` is **never deleted** — one `set`, one `get`, no `del`
+   * anywhere. So the second reply measures from the original claim, the
+   * tenth reports hours, and the average **grows with how long a
+   * conversation runs rather than with how slow anybody is.**
    *
-   * It is therefore neither of the two things it gets called:
+   * Three more ways it is not what it sounds like:
    *
-   *   not "first reply"      the customer's wait before anyone claimed is
-   *                          excluded entirely — and only human-claimed
-   *                          conversations contribute at all, so an
-   *                          AI-handled workspace reports on almost nothing
-   *   not "average reply"    it is not the gap between messages; it is the
-   *                          distance from one fixed point to each of them
+   *   · it starts at the CLAIM, so a conversation that sat unclaimed for
+   *     forty minutes and was answered in ten seconds reports 10s, and the
+   *     customer's real wait is invisible
+   *   · it counts every agent response, not the first
+   *   · it needs a `claim_time` key, so AI-answered conversations contribute
+   *     nothing — on this product, most of them
    *
-   * ── AND ON SCREEN 06c IT WOULD HAVE BEEN UNFAIR, NOT MERELY WRONG ──
-   * A number that rises with conversation length, printed beside a person's
-   * name, makes whoever handles the long difficult cases look slowest. On
-   * the one screen built not to rank anybody, that is worse than an absent
-   * column. It shipped as "Average reply today" and has been removed.
+   * ── AND BESIDE A PERSON'S NAME IT IS UNFAIR, NOT MERELY WRONG ──
+   * A number rising with conversation length makes whoever handles the long
+   * difficult cases look slowest. It shipped on 06c as "Average reply
+   * today" and was removed.
    *
-   * Fourth field this week whose name describes an outcome while its value
-   * records an event, after `confidence`, `lastTestedAt` and `automatable`.
+   * ── IF YOU NEED THIS FIGURE ──
+   * Compute the real one: first OUTBOUND after each INBOUND, from
+   * `Message.createdAt` and `direction`. The messages table supports it, it
+   * covers AI replies, and it needs no event stream.
    */
-  avgResponseTimeMs: z.number().nullable().default(null),
 });
 export type AgentLoad = z.infer<typeof agentLoadSchema>;
 

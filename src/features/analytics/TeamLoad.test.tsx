@@ -28,7 +28,6 @@ const agent = (over: Record<string, unknown> = {}): AgentLoad =>
     name: 'Dana Levi',
     activeConversations: 7,
     claimedToday: 12,
-    avgResponseTimeMs: 42_000,
     ...over,
   });
 
@@ -96,7 +95,20 @@ describe('★★ the reply-time column, and why it is gone', () => {
      * cases look slowest — on the screen built not to rank anybody. An
      * absent column beats an unfair one.
      */
-    const { container } = await show([agent({ avgResponseTimeMs: 42_000 })]);
+    /*
+     * ★ THE FIELD IS NOT IN THE SCHEMA EITHER.
+     *
+     * Removing the column was the first half. The second is that
+     * `avgResponseTimeMs` is no longer NAMED in `agentLoadSchema`, so
+     * `z.object` strips it — a field that parses cleanly, carries a
+     * plausible name and is rendered by nothing is a trap for whoever
+     * builds the next team panel, and everything wrong with it would live
+     * in a message thread rather than at the call site.
+     */
+    const parsed = agentLoadSchema.parse({ agentId: 'u1', avgResponseTimeMs: 42_000 });
+    expect(parsed).not.toHaveProperty('avgResponseTimeMs');
+
+    const { container } = await show([agent()]);
     const text = container.textContent ?? '';
     expect(text).not.toMatch(/42s|average reply|reply time|response time/i);
   });
