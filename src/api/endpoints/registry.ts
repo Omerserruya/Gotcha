@@ -135,6 +135,20 @@ export const analyticsEndpoints = {
   dismissInsight: (id: string) => endpoint('/api/analytics/insights/{id}/dismiss', { id }),
   /** Per-agent open counts and reply times. Carries no presence. */
   agents: () => endpoint('/api/analytics/agents'),
+  /**
+   * Screen 10 — how often each tool has actually run.
+   *
+   * ★ IT UNIONS TWO TABLES AND THAT IS THE POINT. `getToolUsageStats` reads
+   * `ToolExecution` AND the `adapter.*` audit rows, because *"the dev estate
+   * holds 0 ToolExecution rows and 3,475 adapter records… the connector
+   * executions were never missing; they were in the other table."* A panel
+   * built on a `ToolExecution` groupBy would be silently blind to every
+   * adapter-run tool — a Shopify refund among them.
+   *
+   * Gated on `analytics:dashboard:read`, which the permissions list itself
+   * does not need, so this can 403 on a screen that otherwise works.
+   */
+  toolUsage: () => endpoint('/api/analytics/tool-usage'),
 } as const;
 
 /**

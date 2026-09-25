@@ -8,8 +8,11 @@ import {
   humaniseToolName,
   isTheAdminsChoice,
   isUniform,
+  neverFailed,
   resolveAvailability,
+  usageFor,
   type Capability,
+  type ToolUsage,
 } from '@/api/contracts/capabilities';
 
 import styles from './Capabilities.module.css';
@@ -31,8 +34,11 @@ import styles from './Capabilities.module.css';
  */
 export async function CapabilityScreen({
   capabilities,
+  usage,
 }: {
   readonly capabilities: readonly Capability[];
+  /** `null` when the usage read failed or was not permitted. Never zeroes. */
+  readonly usage: readonly ToolUsage[] | null;
 }) {
   const t = await getTranslations('capabilities');
 
@@ -123,6 +129,37 @@ export async function CapabilityScreen({
                     outranks a missing scope, because granting a scope on a
                     provider that is not connected is work that cannot help.
                   */}
+                  {/*
+                    ★★ "USED 612 TIMES", AND WHAT WE CANNOT SAY AFTER IT.
+                    The design prints "· never failed" beside the count.
+                    `erroredCount === 0` does not support that: attempts
+                    written before the platform recorded a failure reason land
+                    in `unclassifiedFailureCount` and are deliberately NOT
+                    counted as errors, because the service will not guess
+                    whether they were refusals or breakages.
+
+                    So the claim has three answers and the middle one is
+                    silence — see `neverFailed`. A refusal is never reported
+                    as a failure either: a tool a policy keeps stopping and a
+                    tool that keeps breaking need opposite repairs.
+                  */}
+                  {(() => {
+                    const ran = usageFor(capability.toolName, usage);
+                    if (!ran || ran.executionCount === 0) return null;
+                    const clean = neverFailed(ran);
+                    return (
+                      <span className={styles.used} data-testid={`used-${capability.toolName}`}>
+                        {t('used', { count: ran.executionCount })}
+                        {clean === true ? ` · ${t('neverFailed')}` : ''}
+                        {clean === false
+                          ? ` · ${t('failedTimes', { count: ran.erroredCount })}`
+                          : ''}
+                        {ran.refusedCount > 0
+                          ? ` · ${t('refusedTimes', { count: ran.refusedCount })}`
+                          : ''}
+                      </span>
+                    );
+                  })()}
                   {(() => {
                     const availability = resolveAvailability(capability);
                     return isTheAdminsChoice(availability) ? (

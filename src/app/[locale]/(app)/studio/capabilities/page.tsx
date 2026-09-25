@@ -34,7 +34,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  */
 export default async function Page() {
   const t = await getTranslations('capabilities');
-  const capabilities = await loadCapabilities();
+  const { capabilities, usage } = await loadCapabilities();
 
   if (capabilities === null) {
     return (
@@ -57,7 +57,7 @@ export default async function Page() {
 
   return (
     <PageContainer title={t('title')} description={t('description')}>
-      <CapabilityScreen capabilities={capabilities} />
+      <CapabilityScreen capabilities={capabilities} usage={usage} />
     </PageContainer>
   );
 }

@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Capability } from '@/api/contracts/capabilities';
+import type { Capability, ToolUsage } from '@/api/contracts/capabilities';
 import messages from '@/i18n/messages/en/capabilities.json';
 
 import { CapabilityScreen } from './CapabilityScreen';
@@ -41,8 +41,10 @@ const capability = (over: Partial<Capability> = {}): Capability => ({
   ...over,
 });
 
-const renderScreen = async (capabilities: readonly Capability[]) =>
-  render(await CapabilityScreen({ capabilities }));
+const renderScreen = async (
+  capabilities: readonly Capability[],
+  usage: readonly ToolUsage[] | null = null,
+) => render(await CapabilityScreen({ capabilities, usage }));
 
 describe('our words, not the platform’s', () => {
   it('replaces the API prose with a merchant sentence', async () => {
@@ -154,5 +156,87 @@ describe('★★ the fourth state, on screen', () => {
     await renderScreen([capability({ toolName: 'delete_contact', enabled: false })]);
     expect(screen.getByTestId('stance-delete_contact')).toBeInTheDocument();
     expect(screen.queryByTestId('blocked-delete_contact')).toBeNull();
+  });
+});
+
+describe('★★ how often it has run, and what that does not prove', () => {
+  const ran = (over: Partial<ToolUsage> = {}): ToolUsage => ({
+    toolName: 'close_conversation',
+    executionCount: 612,
+    successCount: 612,
+    refusedCount: 0,
+    erroredCount: 0,
+    unclassifiedFailureCount: 0,
+    successRate: 100,
+    avgDurationMs: 120,
+    ...over,
+  });
+
+  it('shows the count beside the setting', async () => {
+    await renderScreen([capability()], [ran()]);
+    expect(screen.getByTestId('used-close_conversation')).toHaveTextContent(/Used 612 times/i);
+  });
+
+  it('★★ will not say "never failed" while attempts are unclassified', async () => {
+    /*
+     * THE DESIGN'S CAPTION, AND WHY IT NEEDS A THIRD ANSWER.
+     *
+     * Attempts written before the platform recorded a failure reason land in
+     * `unclassifiedFailureCount` and are deliberately NOT counted as errors —
+     * the service refuses to guess whether they were refusals or breakages.
+     * So `erroredCount === 0` does not support "never failed"; it supports
+     * "nothing we can read failed", which is a different sentence and the
+     * screen says neither.
+     */
+    await renderScreen([capability()], [ran({ unclassifiedFailureCount: 3 })]);
+    const used = screen.getByTestId('used-close_conversation');
+    expect(used).toHaveTextContent(/Used 612 times/i);
+    expect(used).not.toHaveTextContent(/never failed/i);
+    expect(used).not.toHaveTextContent(/failed 0/i);
+  });
+
+  it('says it plainly when nothing is unclassified', async () => {
+    await renderScreen([capability()], [ran()]);
+    expect(screen.getByTestId('used-close_conversation')).toHaveTextContent(/never failed/i);
+  });
+
+  it('★★ a refusal is never reported as a failure', async () => {
+    /*
+     * *"A refusal is the product working correctly, and guessing would make a
+     * functioning approval policy read as a broken integration."* A tool a
+     * rule keeps stopping and a tool that keeps breaking need opposite
+     * repairs — one is a policy review, the other is an outage.
+     */
+    await renderScreen([capability()], [ran({ refusedCount: 41, successCount: 571 })]);
+    const used = screen.getByTestId('used-close_conversation');
+    expect(used).toHaveTextContent(/stopped 41 times by a rule/i);
+    /*
+     * ★ ASSERTED AGAINST A FAILURE COUNT, NOT AGAINST THE WORD.
+     *
+     * The first version excluded only "failed 41", and a mutation folding
+     * refusals into failures rendered "failed 0 times" and passed it. The
+     * second excluded /failed/ outright and failed on correct code, because
+     * "never failed" contains it — which is the right answer here: 41
+     * refusals with no errors genuinely never failed.
+     *
+     * So the claim to exclude is a failure COUNT. Both wrong assertions were
+     * found by mutation testing, and neither by reading.
+     */
+    expect(used).not.toHaveTextContent(/failed (once|\d+ times)/i);
+    expect(used).toHaveTextContent(/never failed/i);
+  });
+
+  it('★★ a failed usage read prints no count at all, never a zero', async () => {
+    // "Used 0 times" is a claim about the tool. A failed or unpermitted read
+    // is a fact about us, and the row simply carries no history.
+    await renderScreen([capability()], null);
+    expect(screen.queryByTestId('used-close_conversation')).toBeNull();
+  });
+
+  it('★ a tool that has genuinely never run says nothing either', async () => {
+    // Zero executions is real, but "used 0 times" beside a permission reads
+    // as a reproach. The absence of a count is the honest rendering.
+    await renderScreen([capability()], [ran({ executionCount: 0, successCount: 0 })]);
+    expect(screen.queryByTestId('used-close_conversation')).toBeNull();
   });
 });

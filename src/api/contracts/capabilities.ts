@@ -386,3 +386,78 @@ export function resolveAvailability(capability: Capability): Availability {
 export function isTheAdminsChoice(availability: Availability): boolean {
   return availability.state !== 'unavailable';
 }
+
+/* ── How often each tool has actually been used ──────────────────────────── */
+
+/**
+ * `GET /api/analytics/tool-usage` — `analytics:dashboard:read`.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ IT READS TWO TABLES, AND THAT IS WHY IT IS THE RIGHT SOURCE
+ * ════════════════════════════════════════════════════════════════════════════
+ * `getToolUsageStats` unions `ToolExecution` with the `adapter.*` rows in the
+ * audit log, deliberately: *"the dev estate holds 0 ToolExecution rows and
+ * 3,475 adapter records… the connector executions were never missing; they
+ * were in the other table, and nothing joined them up."*
+ *
+ * So a usage panel built on this is NOT blind to adapter-run tools. A panel
+ * built on a `ToolExecution` groupBy would be — that is the shape to avoid,
+ * and the reason this endpoint exists.
+ */
+export const toolUsageSchema = z.object({
+  toolName: z.string(),
+  executionCount: z.number().default(0),
+  successCount: z.number().default(0),
+  /**
+   * ★ A REFUSAL IS THE PRODUCT WORKING. The service keeps these apart from
+   * errors for a stated reason: *"guessing would make a functioning approval
+   * policy read as a broken integration."* A tool a rule keeps stopping and a
+   * tool that keeps breaking need opposite repairs.
+   */
+  refusedCount: z.number().default(0),
+  erroredCount: z.number().default(0),
+  /**
+   * ★★ FAILURES FROM BEFORE THE REASON WAS RECORDED, AND NOT COUNTED AS
+   * ERRORS — the service refuses to guess which kind they were.
+   *
+   * This is what stops the screen saying the design's *"never failed"*. See
+   * `neverFailed`.
+   */
+  unclassifiedFailureCount: z.number().default(0),
+  /** Successes over ALL attempts, refusals included in the denominator. */
+  successRate: z.number().default(0),
+  avgDurationMs: z.number().nullable().default(null),
+});
+export type ToolUsage = z.infer<typeof toolUsageSchema>;
+
+export const toolUsageListSchema = z.array(toolUsageSchema);
+
+/**
+ * Can we say this tool has never failed?
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ `null` IS AN ANSWER, AND IT IS THE DESIGN'S CAPTION THAT FORCES IT
+ * ════════════════════════════════════════════════════════════════════════════
+ * The design prints *"Used 1,840 times this week · never failed"*. That is a
+ * claim, and `erroredCount === 0` does not support it: rows written before
+ * the platform recorded a failure reason land in `unclassifiedFailureCount`
+ * and are **deliberately not counted as errors**, because the service will
+ * not guess whether they were refusals or breakages.
+ *
+ * So there are three answers, not two:
+ *
+ *   true   no errors and nothing unclassified — the claim is safe
+ *   false  something errored
+ *   null   nothing errored, but some attempts we cannot classify. "Never
+ *          failed" would be an assertion about rows nobody can read.
+ */
+export function neverFailed(usage: ToolUsage): boolean | null {
+  if (usage.erroredCount > 0) return false;
+  if (usage.unclassifiedFailureCount > 0) return null;
+  return true;
+}
+
+/** Usage for one tool, or `null` when it has never run. */
+export function usageFor(toolName: string, usage: readonly ToolUsage[] | null): ToolUsage | null {
+  return usage?.find((u) => u.toolName === toolName) ?? null;
+}

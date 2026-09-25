@@ -50,5 +50,9 @@
     "plan_not_entitled": "התוכנית שלכם לא כוללת את זה.",
     "no_catalog_entry": "זה עדיין לא מוגדר בצד של GOTCHA.",
     "ok": "אי אפשר להגדיר את זה כרגע."
-  }
+  },
+  "used": "{count, plural, one {בשימוש פעם אחת} other {בשימוש # פעמים}}",
+  "neverFailed": "מעולם לא נכשל",
+  "failedTimes": "{count, plural, one {נכשל פעם אחת} other {נכשל # פעמים}}",
+  "refusedTimes": "{count, plural, one {נעצר פעם אחת על ידי כלל} other {נעצר # פעמים על ידי כלל}}"
 }

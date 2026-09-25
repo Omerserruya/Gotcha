@@ -50,5 +50,9 @@
     "plan_not_entitled": "Your plan doesn't include this.",
     "no_catalog_entry": "This isn't set up on GOTCHA's side yet.",
     "ok": "You can't set this right now."
-  }
+  },
+  "used": "{count, plural, =1 {Used once} other {Used # times}}",
+  "neverFailed": "never failed",
+  "failedTimes": "{count, plural, =1 {failed once} other {failed # times}}",
+  "refusedTimes": "{count, plural, =1 {stopped once by a rule} other {stopped # times by a rule}}"
 }
