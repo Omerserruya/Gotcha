@@ -22,7 +22,7 @@
  *
  *   npx tsx scripts/check-shoot.ts
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -64,7 +64,44 @@ function check(label: string, pass: boolean, detail: string) {
   out(`  ${pass ? 'ok  ' : 'FAIL'}  ${label.padEnd(46)} ${detail}\n`);
 }
 
+/**
+ * Is every shot in the project taken through `shoot()`?
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE ONE THE FIRST SWEEP MISSED, AND WHY
+ * ════════════════════════════════════════════════════════════════════════════
+ * Nineteen specs defined `shoot()` and were fixed together.
+ * `settings-notifications-seeded.spec.ts` wrote its screenshot INLINE, so a
+ * sweep keyed on the function name could not see it — **we swept the name and
+ * the defect was in the behaviour.**
+ *
+ * It is also the spec that would have stayed broken longest: it is opt-in
+ * behind `E2E_SEED_RULES`, so the run that would have exposed it is the one
+ * nobody starts by default.
+ *
+ * This check keys on the behaviour instead. It needs no browser, so it runs
+ * even when the rest of this script cannot.
+ */
+function everyShotGoesThroughTheHelper(): void {
+  const dir = join(import.meta.dirname, '..', 'e2e');
+  const offenders: string[] = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith('.ts') || file === 'shoot.ts') continue;
+    const source = readFileSync(join(dir, file), 'utf8');
+    source.split('\n').forEach((line, i) => {
+      if (/\.screenshot\s*\(/.test(line)) offenders.push(`${file}:${i + 1}`);
+    });
+  }
+  check(
+    'every shot goes through shoot()',
+    offenders.length === 0,
+    offenders.length === 0 ? 'no direct .screenshot() calls under e2e/' : offenders.join(', '),
+  );
+}
+
 async function main() {
+  everyShotGoesThroughTheHelper();
+
   const dir = mkdtempSync(join(tmpdir(), 'check-shoot-'));
   const browser = await chromium.launch();
   try {

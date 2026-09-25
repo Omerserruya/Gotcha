@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import { expect, test, type APIResponse, type Page } from '@playwright/test';
 
+import { shoot } from './shoot';
+
 /**
  * Screen 15 · Settings · Notifications — the rule list, photographed.
  *
@@ -311,7 +313,20 @@ test('1 · the rule list: an event that cannot fire, and a rule that is overridd
 
   await expect(page.locator('main')).not.toHaveText(/\{[a-zA-Z]+\}/);
 
-  await page.screenshot({ path: join(EVIDENCE, '1440-7-rule-list.png'), fullPage: true });
+  /*
+   * ★ THE ONE SHOT IN THE PROJECT THAT WAS NOT TAKEN THROUGH `shoot()`.
+   *
+   * It survived the fix to every other spec because the sweep keyed on the
+   * FUNCTION NAME rather than on the behaviour, and this file writes its
+   * screenshot inline. Being opt-in behind `E2E_SEED_RULES` is what would
+   * have kept it truncated indefinitely: the run that would have exposed it
+   * is the one nobody starts by default.
+   *
+   * The rule list is the longest list on the screen and precisely the thing
+   * a reader scrolls, so this was among the worst shots to lose below the
+   * fold.
+   */
+  await shoot(page, EVIDENCE, '1440-7-rule-list');
 });
 
 /** ── conditions 4, 5 and 6 ───────────────────────────────────────────── */

@@ -76,7 +76,14 @@ fi
 
 # The other direction, which the existing gate already covers — kept here so
 # one command answers the whole question rather than two thirds of it.
-newer=$(find src e2e -newer "$BUILD_ID" -name '*.ts*' 2>/dev/null | head -3)
+#
+# `src` only, and 2026-09-25 is why. This scanned `src e2e`, and a commit that
+# touched nothing but spec files turned the gate red: e2e specs are read off
+# disk by Playwright at run time and never enter the build output, so a spec
+# newer than the build says nothing about what the server is serving. A gate
+# that goes red for a reason the reader knows is false is a gate the reader
+# starts stepping over, which is worse than not having it.
+newer=$(find src -newer "$BUILD_ID" -name '*.ts*' 2>/dev/null | head -3)
 if [ -n "$newer" ]; then
   echo "NOT READY  source is newer than the build:" >&2
   echo "$newer" | sed 's/^/           /' >&2
