@@ -426,4 +426,105 @@
     font-size: var(--font-size-caption);
     color: var(--intent-urgent-text);
   }
+
+  /*
+   * ── Screen 04e · what was done in this customer's context ──
+   */
+
+  /*
+   * ★ `.unavailable` WAS USED BY THREE PLACES IN `CustomerDetail` AND
+   * DEFINED BY NONE. A CSS module hands back `undefined` for a class it does
+   * not have, React drops it, and the element renders unstyled — a failure
+   * with no error anywhere. Found while adding the fourth user.
+   */
+  .unavailable {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .actionsEmpty {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .actionList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .actionRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+    padding: var(--space-8) 0;
+    border-bottom: 1px solid var(--surface-edge);
+  }
+
+  .actionWho {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .actionWhat {
+    flex: 1 1 12rem;
+  }
+
+  .actionWhen {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * ★★ `not_recorded` IS THE COMMON CASE AND MUST NOT LOOK LIKE A FAILURE.
+   * No customer-keyed row in this platform records a verdict, so styling an
+   * unrecorded outcome as bad would paint an ordinary log red and invent an
+   * alarm nobody raised.
+   */
+  .actionOutcome {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .actionOutcome[data-outcome='worked'] {
+    color: var(--intent-positive-text);
+  }
+
+  .actionOutcome[data-outcome='failed'] {
+    color: var(--intent-urgent-text);
+  }
+
+  /* A row that contradicts itself is a defect somebody must see. */
+  .actionOutcome[data-outcome='contradicts'] {
+    padding: 0 var(--space-4);
+    border: 1px solid var(--intent-urgent-edge);
+    color: var(--intent-urgent-text);
+  }
+
+  .actionHint {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  /* What the log cannot account for, said rather than left to be noticed. */
+  .actionGaps {
+    margin: 0;
+    padding-inline-start: var(--space-16);
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
 }

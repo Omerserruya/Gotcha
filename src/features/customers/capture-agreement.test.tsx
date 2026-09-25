@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import messages from '@/i18n/messages/en/customers.json';
 
 import { FIXTURE_DETAIL } from './capture-fixtures';
+import { CustomerActions } from './CustomerActions';
 import { CustomerDetail } from './CustomerDetail';
 
 /**
@@ -99,5 +100,57 @@ describe('the capture fixture agrees with the capture spec', () => {
     expect(text).not.toMatch(/lifetime value/i);
     expect(text).not.toMatch(/\{[a-zA-Z]+\}/);
     expect(container.querySelector('textarea')).toBeNull();
+  });
+});
+
+describe('★ and so does 04e — the fixture the audit shots are taken of', () => {
+  /*
+   * Mounted on its own, exactly as the page mounts it: a sibling, never a
+   * child. An async server component nested inside another yields a tree
+   * with an unresolved node and renders nothing, with no error to say so.
+   */
+  const showActions = async () => render(await CustomerActions({ actions: FIXTURE_DETAIL.actions }));
+
+  it('renders the four rows the spec counts', async () => {
+    await showActions();
+    expect(screen.getAllByTestId(/^action-fx-audit-/)).toHaveLength(4);
+  });
+
+  it('★★ shows the executed commerce row with its outcome UNRECORDED', async () => {
+    /*
+     * The shot that carries the screen's argument. The row's name says it
+     * was executed; nothing wrote down whether it was, and the screen says
+     * so rather than letting the name decide.
+     */
+    await showActions();
+    expect(screen.getByTestId('action-outcome-fx-audit-4')).toHaveAttribute(
+      'data-outcome',
+      'not_recorded',
+    );
+  });
+
+  it('★★ does NOT ask for the parameter the fixture supplied', async () => {
+    // `coverage` still declares `requires: shopifyCustomerId`, because it is
+    // a constant. The screen must not print it beneath the rows that
+    // parameter fetched — and must still print the order gap.
+    await showActions();
+    expect(screen.queryByTestId('actions-gap-customer')).toBeNull();
+    expect(screen.getByTestId('actions-gap-order')).toBeInTheDocument();
+  });
+
+  it('★ photographs no row the platform cannot write', async () => {
+    /*
+     * The rule this fixture file exists to keep, asserted rather than
+     * trusted. `contradicts` and the name-hints need an emitter that sets a
+     * verdict disagreeing with its own action name; the only writer of such
+     * a name sets both from one boolean. A fixture row showing either would
+     * be evidence of something that cannot happen — the same mistake as the
+     * WhatsApp-plus-Instagram contact this file already records.
+     */
+    await showActions();
+    expect(screen.queryByTestId(/^action-hint-/)).toBeNull();
+    for (const cell of screen.getAllByTestId(/^action-outcome-/)) {
+      expect(cell).not.toHaveAttribute('data-outcome', 'contradicts');
+    }
   });
 });

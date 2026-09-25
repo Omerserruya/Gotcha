@@ -15,11 +15,21 @@ import { missingIds } from './diagnose';
  *
  * Shots land in e2e/evidence/s05/.
  *
- * ── WHAT THIS TENANT CAN SHOW ──
- * **Zero campaigns.** So the evidence is the never-sent state, and the card
- * with its five counters cannot be photographed — the fifth screen in a row
- * whose real state is the sparse one, which is in the reviewer's note as a
- * pattern.
+ * ── WHAT THIS TENANT CAN SHOW, ASKED RATHER THAN ASSUMED ──
+ * **Zero campaigns** when this spec was written, so the evidence was the
+ * never-sent state and the card could not be photographed at all.
+ *
+ * ★ THAT IS NO LONGER WRITTEN DOWN AS A PREMISE. The calls spec asserted
+ * "voice is off" for weeks and was correct until somebody flipped a flag,
+ * at which point it was asserting a world that had moved and nothing said
+ * so. So this run **reads `/api/broadcasts` first** and reports the count,
+ * and the card's assertions run if and only if a card is on screen.
+ *
+ * The card no longer carries five counters. Three of the five —
+ * `deliveredCount`, `openedCount`, `repliedCount` — are columns **nothing
+ * in the platform increments**, so they rendered as a permanent zero on a
+ * shipped screen. They were removed and replaced by two sentences, and
+ * those sentences are what a card shot is now evidence of.
  *
  * Not worked around. Seeding a campaign would mean creating something whose
  * only purpose is to be sent to real contacts, and `POST /:id/send` is not a
@@ -109,6 +119,24 @@ async function shoot(page: Page, name: string) {
   await page.screenshot({ path: join(EVIDENCE, `${name}.png`), fullPage: true });
 }
 
+/**
+ * How many campaigns exist, from the endpoint the screen reads.
+ *
+ * ⚠ SPENDS a cookie rotation — `gotcha_session` rotates on every BFF
+ * request, and inside the browser context the jar handles it.
+ *
+ * A READ. Nothing here creates a campaign: a broadcast exists only to be
+ * sent to real contacts, and `POST /:id/send` is not a button anybody should
+ * press to make a screenshot.
+ */
+async function countCampaigns(page: Page): Promise<number> {
+  const res = await page.request.get('/api/bff/api/broadcasts');
+  expect(res.status(), 'the broadcasts endpoint did not answer 200').toBe(200);
+  const body = (await res.json()) as { data?: unknown[] } | unknown[];
+  const rows = Array.isArray(body) ? body : (body.data ?? []);
+  return rows.length;
+}
+
 for (const size of SIZES) {
   test.describe(`${size.name}px`, () => {
     test.use({ viewport: { width: size.width, height: size.height } });
@@ -130,6 +158,53 @@ for (const size of SIZES) {
       await expect(empty).toHaveText(/shows up here while it's sending/i);
 
       await shoot(page, `${size.name}-1-never-sent`);
+    });
+
+    /*
+     * 1b · THE CARD'S TWO SENTENCES, IF THERE IS A CARD.
+     *
+     * ★★ WHAT THEY REPLACED. `deliveredCount`, `openedCount` and
+     * `repliedCount` are written by nothing in this platform. The card
+     * rendered all three as counters, so a merchant who sent to 250 people
+     * read "0 delivered · 0 opened · 0 replied" and would reasonably have
+     * concluded the send had failed.
+     *
+     * They are now two sentences that say the numbers are not collected,
+     * which is the true statement and the one a capture is worth taking of.
+     */
+    test('1b · a campaign card says what is not counted, and counts nothing false', async ({
+      page,
+    }) => {
+      const campaigns = await countCampaigns(page);
+      await openOutreach(page, 'en');
+
+      test.skip(
+        campaigns === 0,
+        'This tenant has no campaigns, so the card is NOT photographed. Seeding one would mean ' +
+          'creating something whose only purpose is to be sent to real contacts. The two ' +
+          'sentences are covered by src/features/outreach/CampaignCard.test.tsx and are ' +
+          'UNEXERCISED against a real broadcast.',
+      );
+
+      const card = page.getByTestId(/^campaign-/).first();
+      await expect(card, missingIds('a campaign card')).toBeVisible();
+
+      /*
+       * ★ THE SENTENCES, ASSERTED POSITIVELY. A test that only checked the
+       * counters were gone would pass on a card that rendered nothing at
+       * all, which is a different and worse screen.
+       */
+      await expect(card.getByTestId(/^pending-/).first()).toHaveText(/\S/);
+      await expect(card.getByTestId(/^no-replies-/).first()).toHaveText(/\S/);
+
+      /*
+       * ★★ AND NO ZERO WHERE A REAL NUMBER WOULD GO. `sent` and `failed`
+       * ARE incremented and stay; delivered, opened and replied must not
+       * appear as counters at all, at any value.
+       */
+      await expect(card).not.toHaveText(/\b\d+\s*(delivered|opened|replied)/i);
+
+      await shoot(page, `${size.name}-1b-campaign-card`);
     });
 
     /*

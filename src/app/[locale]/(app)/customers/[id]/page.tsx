@@ -1,3 +1,4 @@
+import { CustomerActions } from '@/features/customers/CustomerActions';
 import { CustomerDetail } from '@/features/customers/CustomerDetail';
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { loadCustomer } from '@/features/customers/load-customer';
@@ -41,6 +42,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         and placed it the same way.
       */}
       <CustomerOrders orders={detail.orders} conversationId={detail.conversationId} />
+      {/*
+        Screen 04e, a SIBLING for the same reason 04d is: an async server
+        component nested inside another yields a tree with an unresolved
+        async node and renders nothing, with no error to explain it. Three
+        screens have now been placed this way.
+      */}
+      <CustomerActions actions={detail.actions} />
     </PageContainer>
   );
 }

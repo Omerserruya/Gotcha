@@ -36,6 +36,14 @@ import { missingIds } from './diagnose';
  * than a scan, and it belongs on the same list. Written here so it cannot
  * soften into "04b is verified against the API" three documents from now.
  *
+ * ── 04e IS IN THIS RUN, AND ITS GATE IS THE THING TO WATCH ──
+ * The customer audit route went live today with `crm:contacts:read` or
+ * ADMIN — widened from the admin-only constant its three siblings still
+ * use, because that constant also gates the workspace-wide CSV export.
+ * A `customer-actions-forbidden` panel therefore means the widened gate is
+ * not in the running image, and this spec fails on it rather than
+ * photographing it.
+ *
  * ── AND THE ONE TEST THAT DOES EXERCISE THE LIVE READ ──
  * `E2E_REAL_CONTACT_ID` closes it. A REAL id under the gate takes the live
  * path — the endpoint is called, the response is parsed by our contract, and
@@ -802,6 +810,103 @@ for (const size of SIZES) {
       await expect(orders).not.toHaveText(/\{[a-zA-Z]+\}/);
 
       await shoot(page, `${size.name}-04d-orders`);
+    });
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * 04e · WHAT WAS DONE IN THIS CUSTOMER'S CONTEXT
+     * ══════════════════════════════════════════════════════════════════════
+     * The route went live today with a gate widened specifically for this
+     * screen: `crm:contacts:read` or ADMIN, so whoever can open screen 04
+     * can read it. Its three siblings keep `settings:workspace:update` —
+     * the export deliberately, because one constant gated all four and
+     * widening it in place would have handed every agent a CSV of the whole
+     * workspace log.
+     *
+     * ── WHAT THIS RUN CANNOT PHOTOGRAPH ──
+     * `contradicts` and the name-as-hint rows. They need an emitter whose
+     * recorded verdict disagrees with its own action name, and the only
+     * writer of an `ok.`/`err.` action derives both from one boolean. Unit
+     * tested, named unreached, and NOT fabricated into the fixture.
+     */
+    test('04e · the record of what was done, and what it cannot account for', async ({ page }) => {
+      await openCustomer(page, 'en');
+
+      /*
+       * ★ THE FORBIDDEN PANEL IS A FAILED RUN, NOT A SCREEN.
+       *
+       * If it appears, the widened gate did not land in the running image —
+       * which is a deploy fact worth knowing immediately, and exactly the
+       * thing that would otherwise be photographed as though it were the
+       * design.
+       */
+      await expect(
+        page.getByTestId('customer-actions-forbidden'),
+        'the audit route answered 403 — the widened gate is not in the running auth image',
+      ).toHaveCount(0);
+      await expect(
+        page.getByTestId('customer-actions-failed'),
+        'the customer audit read failed — this run would photograph a fault',
+      ).toHaveCount(0);
+
+      const actions = page.getByTestId('customer-actions');
+      await expect(actions, missingIds('the 04e actions block')).toBeVisible();
+
+      /*
+       * ★★ EVERY ROW STATES AN OUTCOME, AND `not_recorded` IS EXPECTED TO BE
+       * THE COMMON ONE.
+       *
+       * No customer-keyed write in this platform records `metadata.ok` —
+       * `commerce.customer_action_executed` and `..._failed` both omit it.
+       * So a log that is mostly "outcome not recorded" is the honest
+       * picture, and a screen showing verdicts everywhere would mean
+       * somebody let the action NAME decide.
+       */
+      const rows = await actions.locator('[data-outcome]').count();
+      const empty = await page.getByTestId('actions-empty').count();
+      expect(
+        rows + empty,
+        'the 04e block rendered neither rows nor the nothing-recorded sentence',
+      ).toBeGreaterThan(0);
+
+      if (rows > 0) {
+        await expect(actions.locator('[data-outcome]').first()).toHaveText(/\S/);
+      }
+
+      /*
+       * ★★ THE GAP THE SCREEN MUST STILL DECLARE.
+       *
+       * Order-keyed rows are not attributable at all — same id space, no
+       * local Order table — so the endpoint declares it and the screen
+       * prints it. An empty list cannot say why it is empty, and "nothing
+       * was done" is the wrong thing for this screen to imply.
+       */
+      await expect(
+        page.getByTestId('actions-gap-order'),
+        'the order coverage gap is not on screen — a short log reading as a complete one',
+      ).toBeVisible();
+
+      await expect(actions).not.toHaveText(/\{[a-zA-Z]+\}/);
+
+      await shoot(page, `${size.name}-04e-actions`);
+    });
+
+    /*
+     * 04e · Hebrew. Its own test because the audit rows are the densest
+     * mixed-direction content on the page: Latin tool names and event names
+     * inside an RTL paragraph.
+     */
+    test('04e · Hebrew, right to left', async ({ page }) => {
+      await openCustomer(page, 'he');
+
+      await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+      const actions = page.getByTestId('customer-actions');
+      await expect(actions, missingIds('the 04e actions block in Hebrew')).toBeVisible();
+      // Hebrew, not the English fallback — a missing key renders EMPTY in a
+      // production build, so presence of text is not enough on its own.
+      await expect(actions).toHaveText(/[֐-׿]/);
+
+      await shoot(page, `${size.name}-04e-hebrew`);
     });
   });
 }

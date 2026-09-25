@@ -112,5 +112,44 @@
     "noReason": "no reason given",
     "outcomeUnknown": "We don't know whether that went through. Please do NOT try it again — check the order in your store first, and contact us if it looks wrong.",
     "noConversationToActThrough": "These orders can't be acted on from here — there's no conversation with this person to carry the action."
+  },
+  "actions": {
+    "title": "What was done here",
+    "forbidden": "You don't have permission to read this workspace's record of actions. Whoever administers GOTCHA can grant it.",
+    "failed": "We couldn't read the record of what was done for this person just now.",
+    "none": "Nothing has been recorded against this person yet.",
+    "truncated": "This covers the {count, plural, =1 {one conversation} other {# conversations}} we could scan — the oldest may not be included.",
+    "more": "Older entries exist than the ones shown here.",
+    "actor": {
+      "ai": "GOTCHA",
+      "user": "Someone on your team",
+      "system": "The system",
+      "unknown": "Not recorded"
+    },
+    "outcome": {
+      "worked": "Recorded as done",
+      "failed": "Recorded as failed",
+      "not_recorded": "Outcome not recorded",
+      "contradicts": "This entry disagrees with itself"
+    },
+    "hint": {
+      "named_ok": "named as a success, though the outcome was never recorded",
+      "named_err": "named as a failure, though the outcome was never recorded"
+    },
+    "name": {
+      "aiResponded": "GOTCHA replied",
+      "aiBotTurn": "GOTCHA took a turn in the conversation",
+      "aiPausedForApproval": "GOTCHA paused and asked for approval",
+      "aiToolCall": "GOTCHA used {detail}",
+      "aiBudgetAborted": "GOTCHA stopped, out of budget for {detail}",
+      "messageSent": "A message was sent",
+      "productMessageSent": "A product was sent in the chat",
+      "crossCustomerDenied": "A request for another customer's data was refused",
+      "adapterCall": "Called {tool}",
+      "commerceExecuted": "A change to the customer's record was sent to the store",
+      "commerceFailed": "A change to the customer's record did not go through",
+      "commerceDenied": "A change to the customer's record was not allowed",
+      "commerceUnverified": "A change to the customer's record could not be confirmed with the store"
+    }
   }
 }

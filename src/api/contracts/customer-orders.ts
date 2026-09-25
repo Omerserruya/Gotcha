@@ -154,11 +154,51 @@ export const commerceContextSchema = z.object({
       summary: commerceSummarySchema.nullish().default(null),
       recentOrders: z.array(orderCardSchema).default([]),
       fetchedAt: z.string().nullable().default(null),
+      /**
+       * ★★ NAMED BECAUSE 04e NEEDS IT, AND IT WAS ON THE WIRE ALL ALONG.
+       *
+       * `z.object` strips what the schema does not name, so this arrived on
+       * every `ok` response and was discarded before anything could use it —
+       * the third time today a field we needed was already being sent.
+       *
+       * It is the **provider's** customer id, resolved server-side from the
+       * trusted conversation linkage: *"SECURITY: the customer id is
+       * resolved ONLY from the trusted linkage."* We never derive it and
+       * never accept one from a client.
+       *
+       * 04e's audit log cannot attribute customer-keyed rows without it —
+       * `targetId` there is a Shopify id and the endpoint says it cannot
+       * derive one from a contact. So this is what turns a declared gap into
+       * rows on screen. See `shopifyCustomerIdIn`.
+       */
+      customer: z
+        .object({
+          verified: z.boolean().default(false),
+          customerId: z.string().nullish().default(null),
+        })
+        .nullish()
+        .default(null),
     })
     .nullish()
     .default(null),
 });
 export type CommerceContextResponse = z.infer<typeof commerceContextSchema>;
+
+/**
+ * The provider's customer id, when there is a verified one.
+ *
+ * ★ `verified` IS REQUIRED, NOT DECORATION. The service sets it only on the
+ * path that resolved the id from the trusted linkage; anything else renders
+ * `customer_not_linked` and loads no protected data. Passing an unverified
+ * id to the audit log would be asking for one person's rows using another
+ * person's identifier.
+ */
+export function shopifyCustomerIdIn(context: CommerceContextResponse | null): string | null {
+  if (context?.state !== 'ok') return null;
+  const customer = context.data?.customer;
+  if (!customer?.verified) return null;
+  return customer.customerId?.trim() || null;
+}
 
 /** The orders to render, or an empty list for every non-`ok` state. */
 export function ordersIn(context: CommerceContextResponse | null): readonly OrderCard[] {

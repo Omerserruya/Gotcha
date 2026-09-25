@@ -737,6 +737,27 @@ export const customerEndpoints = {
    */
   orderAction: (conversationId: string) =>
     endpoint('/api/commerce-context/{conversationId}/actions', { conversationId }),
+  /**
+   * Screen 04e — what was done in this customer's context.
+   *
+   * ★ A DIFFERENT GATE FROM ITS THREE SIBLINGS, ON PURPOSE.
+   * `crm:contacts:read` **or** `ADMIN` — whoever can open screen 04. The
+   * other three `/audit-logs` routes keep `settings:workspace:update` or
+   * ADMIN, and the export deliberately stays there: one constant gated all
+   * four, and widening it in place would have handed every agent a CSV of
+   * the whole workspace log.
+   *
+   * `?shopifyCustomerId=` is what makes customer-keyed rows attributable —
+   * `targetId` on those is the PROVIDER's customer id and this endpoint
+   * cannot derive one from a contact. The value comes from the verified
+   * commerce context, never from anything client-supplied.
+   *
+   * Answers `{ contact, data, nextCursor, coverage, scope }`. `coverage` is
+   * a CONSTANT describing what is attributable in principle — see
+   * `coverageGaps`, which is why it takes what we actually sent.
+   */
+  audit: (contactId: string) =>
+    endpoint('/api/audit-logs/customer/{contactId}', { contactId }),
 } as const;
 
 /**

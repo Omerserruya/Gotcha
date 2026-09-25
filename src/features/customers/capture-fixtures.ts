@@ -433,6 +433,15 @@ export const FIXTURE_DETAIL: CustomerDetail = {
     data: {
       summary: { orderCount: 2, name: 'Avery Stone', email: null, phone: null, currency: 'ILS' },
       fetchedAt: '2026-09-18T09:20:00.000Z',
+      /*
+       * ★ THE ID 04e's `supplied: ['shopifyCustomerId']` CLAIMS WE SENT.
+       * `verified: true` is the only shape this can take: the service sets
+       * it solely on the path that resolved the id from the trusted
+       * conversation linkage, and anything else answers
+       * `customer_not_linked` and loads nothing. A fixture with an
+       * unverified id would describe a request the code would never make.
+       */
+      customer: { verified: true, customerId: 'fixture-shopify-customer-1' },
       recentOrders: [
         {
           orderId: 'fixture-order-1',
@@ -486,6 +495,131 @@ export const FIXTURE_DETAIL: CustomerDetail = {
   },
   conversationId: 'fixture-conv-1',
   noConversations: false,
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ SCREEN 04e — AND EVERY ROW IS ONE THE PLATFORM ACTUALLY WRITES
+   * ════════════════════════════════════════════════════════════════════════
+   * Checked at the write sites, not taken from the route's header. The
+   * header advertises `crm.link.linked` as part of the "rich set"; **no code
+   * in the platform writes it**, so it is not here. The same mistake as the
+   * WhatsApp-plus-Instagram row above, and caught the same way — by looking
+   * for the code path rather than for a sentence describing one.
+   *
+   * ── WHAT IS DELIBERATELY ABSENT ──
+   * **No `contradicts` row and no `nameImpliesSucceeded` hint.** Both need
+   * an action carrying an `ok.`/`err.` segment whose recorded verdict
+   * disagrees with it. The only writer of such an action is
+   * `auditAdapterCall`, which sets the name and `metadata.ok` from the SAME
+   * boolean — they cannot disagree. Manufacturing one would put a row in the
+   * evidence that this platform cannot produce, which is the exact rule this
+   * file exists to keep. Those branches are unit-tested and named unreached.
+   *
+   * ── AND `not_recorded` IS THE MAJORITY, WHICH IS REAL ──
+   * `commerce.customer_action_executed` and `..._failed` write no
+   * `metadata.ok`, so `succeeded` is null on every customer-keyed row. The
+   * evidence shows an ordinary log where most outcomes were never written
+   * down, because that is what this platform's log looks like.
+   */
+  actions: {
+    state: 'ok',
+    supplied: ['shopifyCustomerId'],
+    audit: {
+      contact: { id: 'fixture-1', displayName: 'Avery Stone' },
+      data: [
+        {
+          // `logAudit` from `ai.service.ts`, metadata `{model, type, tokens}`
+          // — no `ok`, so the outcome genuinely was never recorded.
+          id: 'fx-audit-1',
+          actorType: 'ai',
+          actorId: null,
+          action: 'ai.responded',
+          targetType: 'conversation',
+          targetId: 'fixture-conv-1',
+          createdAt: '2026-09-18T09:16:00.000Z',
+          succeeded: null,
+          nameImpliesSucceeded: null,
+          outcomeDisagrees: false,
+        },
+        {
+          // `auditAdapterCall` — the one writer that records a verdict, and
+          // it records it in agreement with its own name, always.
+          id: 'fx-audit-2',
+          actorType: 'ai',
+          actorId: null,
+          action: 'adapter.ok.shopify.get_customer_orders',
+          targetType: 'conversation',
+          targetId: 'fixture-conv-1',
+          createdAt: '2026-09-18T09:15:30.000Z',
+          succeeded: true,
+          nameImpliesSucceeded: true,
+          outcomeDisagrees: false,
+        },
+        {
+          id: 'fx-audit-3',
+          actorType: 'ai',
+          actorId: null,
+          action: 'adapter.err.shopify.process_refund',
+          targetType: 'conversation',
+          targetId: 'fixture-conv-1',
+          createdAt: '2026-09-17T14:02:00.000Z',
+          succeeded: false,
+          nameImpliesSucceeded: false,
+          outcomeDisagrees: false,
+        },
+        {
+          /*
+           * ★ THE ROW THE SCREEN IS HARDEST ON. Its name says it was done;
+           * `commerce-actions.service.ts` writes no `metadata.ok` beside it,
+           * so nothing recorded whether it was. The screen shows the name
+           * and says the outcome is unrecorded — it does not let the name
+           * decide, which is the defect Backend caught in `outcomeOf`.
+           */
+          id: 'fx-audit-4',
+          actorType: 'user',
+          actorId: 'fixture-agent-1',
+          action: 'commerce.customer_action_executed',
+          targetType: 'customer',
+          targetId: 'fixture-shopify-customer-1',
+          createdAt: '2026-09-16T11:40:00.000Z',
+          succeeded: null,
+          nameImpliesSucceeded: null,
+          outcomeDisagrees: false,
+        },
+      ],
+      nextCursor: null,
+      /*
+       * ★ VERBATIM FROM `CUSTOMER_AUDIT_COVERAGE` in
+       * `services/auth/src/routes/audit-logs.ts`. Copied rather than
+       * paraphrased for the reason the chips are: a second, vaguer copy of a
+       * sentence they already wrote would drift from it.
+       *
+       * `customer` still declares `requires: "shopifyCustomerId"` even
+       * though this fixture SUPPLIED it — the constant is what the endpoint
+       * returns either way. `supplied` above is what stops the screen
+       * printing "pass it" underneath the rows it fetched.
+       */
+      coverage: {
+        conversation: { attributable: true, requires: null, reason: null, detail: null },
+        customer: {
+          attributable: true,
+          requires: 'shopifyCustomerId',
+          reason: null,
+          detail:
+            "Rows are keyed by the commerce platform's customer id, which this endpoint cannot " +
+            'derive from a contact. Pass ?shopifyCustomerId= to include them.',
+        },
+        order: {
+          attributable: false,
+          requires: null,
+          reason: 'no_local_order_table',
+          detail:
+            "Order-keyed rows are keyed by the commerce platform's order id and there is no " +
+            "local Order table to enumerate this person's orders from.",
+        },
+      },
+      scope: { identities: 2, conversations: 1, conversationScanTruncated: false },
+    },
+  },
 };
 
 /**

@@ -56,10 +56,22 @@ export const auditEventSchema = z.object({
   actorType: z.enum(ACTOR_TYPES).nullable().default(null),
   actorId: z.string().nullable().default(null),
   /**
-   * The platform's own vocabulary — `ai.responded`,
-   * `adapter.ok.shopify.get_order`, `adapter.err.shopify.process_refund`,
-   * `crm.link.linked`. Rendered through a lookup where we have one and
-   * verbatim where we do not, never invented.
+   * The platform's own vocabulary. Rendered through a lookup where we have
+   * one and verbatim where we do not, never invented.
+   *
+   * ★★ THE EXAMPLES HERE WERE COPIED FROM THE ROUTE'S HEADER AND ONE OF
+   * THEM IS NOT WRITTEN ANYWHERE.
+   *
+   * That header lists `ai.responded`, `adapter.ok/err.shopify.*` and
+   * `crm.link.linked` as "the rich set". The first two are real — checked at
+   * `ai.service.ts:501` and `integration-framework.ts:581`. **No code in the
+   * platform writes `crm.link.linked`**; it exists in that comment and in
+   * one test's query string, and nowhere else.
+   *
+   * Repeating it here made a comment into evidence, which is the costume
+   * this project keeps meeting: the comment does the reading, and does it
+   * wrong. The verified list lives in `CustomerActions.tsx`, beside the
+   * lookup that uses it, and was built from the write sites.
    */
   action: z.string(),
   targetType: z.string().nullable().default(null),
@@ -192,12 +204,30 @@ export type AuditCoverage = z.infer<typeof auditCoverageSchema>;
  * Both kinds together — not attributable at all, and attributable only with
  * something we did not pass — because to a merchant they are the same fact:
  * a reason not to read this as the whole record.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ `supplied` EXISTS BECAUSE `coverage` IS A CONSTANT, NOT A REPORT
+ * ════════════════════════════════════════════════════════════════════════════
+ * The endpoint returns the same `CUSTOMER_AUDIT_COVERAGE` object on every
+ * response, whether or not `?shopifyCustomerId=` was sent. So `requires:
+ * "shopifyCustomerId"` means *"this is what would make customer-keyed rows
+ * attributable"* — **not** *"you did not send it"*.
+ *
+ * Read as the second thing, a screen that DID send it would print *"Pass
+ * ?shopifyCustomerId= to include them"* underneath the very rows that
+ * parameter fetched. False, and false in the specific way this project keeps
+ * finding: a sentence that is true only while a condition holds, with
+ * nothing tying the sentence to the condition.
+ *
+ * So the caller says what it actually sent, and a requirement it met stops
+ * being a gap.
  */
 export function coverageGaps(
   coverage: AuditCoverage,
+  supplied: readonly string[] = [],
 ): readonly { readonly target: string; readonly detail: string }[] {
   return Object.entries(coverage)
-    .filter(([, e]) => !e.attributable || e.requires)
+    .filter(([, e]) => !e.attributable || (e.requires && !supplied.includes(e.requires)))
     .map(([target, e]) => ({ target, detail: e.detail ?? '' }))
     .filter((g) => g.detail !== '');
 }
