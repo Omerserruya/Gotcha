@@ -508,3 +508,57 @@ export function byName(agents: readonly AgentLoad[]): readonly AgentLoad[] {
 export function noRepliesYet(agents: readonly AgentLoad[]): boolean {
   return agents.length > 0 && agents.every((a) => a.avgResponseTimeMs === null);
 }
+
+/* ── 06's "What people ask about" panel ──────────────────────────────────── */
+
+/**
+ * `GET /api/analytics/top-questions` — `analytics:dashboard:read`.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ A "TOPIC" IS A `groupBy`, NOT A THING THE PRODUCT HOLDS
+ * ════════════════════════════════════════════════════════════════════════════
+ * `getTopQuestions` is
+ * `conversationIntelligence.groupBy({ by: ["detectedIntent"] })` over a date
+ * range, with a fallback that scans 1,000 inbound message bodies. **There is
+ * no `Topic` model in the schema.** The grouping is recomputed on every
+ * request from one unconstrained column.
+ *
+ * That is why 06e became this panel rather than a screen: rename and merge
+ * have nowhere to persist to, and the next request would regroup from the
+ * raw column and show the old name back.
+ *
+ * ── AND THE LABELS ARE MODEL-WRITTEN, SO NEAR-DUPLICATES ARE EXPECTED ──
+ * `detectedIntent` is `String?` — nullable, no enum. "where is my order",
+ * "order status" and "where's my package" are three rows with three counts.
+ * The panel's caption says GOTCHA did the grouping, so a reader seeing two
+ * rows that look like one question knows we know, rather than concluding the
+ * counts are broken.
+ *
+ * ── `automatable` IS DELIBERATELY NOT NAMED ──
+ * The route sends it, and it is `count > 5` — a threshold relabelled as a
+ * property of the topic. Rendered as *"GOTCHA could handle this"* it asserts
+ * a capability from a frequency; rendered as *"asked more than 5 times"* it
+ * is a worse way of printing the count in the next column. Third field this
+ * week whose name describes a verdict while its value records a count, after
+ * `confidence` on a candidate and `lastTestedAt` on a connection.
+ */
+export const askedAboutSchema = z.object({
+  /** The model's own label. Rendered verbatim; we did not write it. */
+  question: z.string().nullable().default(null),
+  count: z.number().default(0),
+});
+export type AskedAbout = z.infer<typeof askedAboutSchema>;
+
+export const askedAboutListSchema = z.array(askedAboutSchema);
+
+/**
+ * The rows worth showing: those with a label.
+ *
+ * A null `detectedIntent` is excluded by the route's own `where`, but the
+ * fallback path can produce an unlabelled row. An unnamed topic is not a
+ * topic — it is a count with nothing to attach to — and inventing a name
+ * for it would be the one thing this panel must not do.
+ */
+export function namedTopics(rows: readonly AskedAbout[]): readonly AskedAbout[] {
+  return rows.filter((r) => (r.question ?? '').trim().length > 0);
+}

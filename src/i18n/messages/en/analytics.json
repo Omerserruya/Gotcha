@@ -13,5 +13,12 @@
     "quietSoFar": "Nobody has replied yet today, so there are no averages to show.",
     "humansOnly": "This is the human team. GOTCHA's AI employees don't appear here — their work is on the GOTCHA tab.",
     "unavailable": "We couldn't read the team's workload just now."
+  },
+  "asked": {
+    "heading": "What people ask about",
+    "grouped": "GOTCHA grouped these questions itself. Two lines can be the same question worded differently — it hasn't learned to merge them yet.",
+    "asked": "asked {count} times",
+    "none": "Nothing has been grouped yet. This fills in as conversations are analysed.",
+    "unavailable": "We couldn't read what people are asking about just now."
   }
 }

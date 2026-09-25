@@ -43,4 +43,28 @@
     color: var(--text-muted);
     font-weight: 400;
   }
+
+  /* What people ask about — a list, never a ranking with a verdict. */
+
+  .topicList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .topic {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-8);
+    padding: var(--space-4) 0;
+  }
+
+  .topicCount {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
 }
