@@ -208,4 +208,30 @@
     font-size: var(--font-size-caption);
     color: var(--text-muted);
   }
+
+  /* ── The header counters ── facts first, verdicts second. ── */
+
+  .counters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8) var(--space-16);
+    padding-bottom: var(--space-12);
+    border-bottom: 1px solid var(--surface-edge);
+  }
+
+  .counter {
+    margin: 0;
+  }
+
+  /*
+   * The measure that does not exist. Quieter than the real counters, because
+   * it is an explanation rather than a number — but present, so a reader
+   * holding the design does not have to ask where it went.
+   */
+  .counterAbsent {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
 }

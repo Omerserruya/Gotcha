@@ -2,6 +2,14 @@
   "title": "What GOTCHA knows",
   "description": "Where it learned about your business, and the questions it could not answer.",
   "unavailable": "We couldn't read your knowledge just now.",
+  "counters": {
+    "sources": "{count, plural, =0 {No sources yet} =1 {One source} other {# sources}}",
+    "stale": "{count, plural, =0 {All refreshed in the last {days} days} =1 {1 not refreshed in {days} days} other {# not refreshed in {days} days}}",
+    "undated": "{count, plural, =1 {1 source has no last-read date} other {# sources have no last-read date}}",
+    "conflicts": "{count, plural, =0 {Nothing answered two ways} =1 {1 answered two ways} other {# answered two ways}}",
+    "conflictsUnknown": "We couldn't check for contradictions",
+    "noConfidence": "GOTCHA doesn't record how sure it is of what it already knows — that score exists only on suggestions, before you accept them."
+  },
   "conflicts": {
     "heading": "Answered more than one way",
     "unavailable": "We couldn't read these just now. This doesn't mean there are none.",

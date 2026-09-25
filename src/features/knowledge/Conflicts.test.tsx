@@ -212,3 +212,52 @@ describe('★ the two sentences this screen must not say', () => {
     expect(text).not.toMatch(/your website · |uploaded PDF|wholesale page/i);
   });
 });
+
+describe('★★ the header counts what it can, and names what it cannot', () => {
+  it('★★ never renders a confidence count, because the score is not on knowledge', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE DESIGN'S FIRST TWO COUNTERS CANNOT BE COMPUTED AT ALL.
+     * ════════════════════════════════════════════════════════════════════════
+     * `confidence` is a column on `KnowledgeCandidate` and on no other
+     * knowledge model — checked against every confidence field in the
+     * schema. A candidate is a SUGGESTION awaiting approval, and approving
+     * one creates a `KnowledgeDocument`, which has no confidence column.
+     *
+     * So the score exists only while the thing is not yet knowledge and is
+     * discarded at the moment it becomes knowledge. Counting pending
+     * candidates under "what GOTCHA knows about your business" would be
+     * counting the inbox as the filing cabinet.
+     */
+    const { container } = await show();
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/answers confidently|guesses sometimes/i);
+    expect(text).not.toMatch(/\b\d+ topics\b/i);
+    // And the absence explains itself, so nobody re-requests it every time
+    // they read the design beside the screen.
+    expect(screen.getByTestId('counter-no-confidence')).toHaveTextContent(
+      /only on suggestions, before you accept/i,
+    );
+  });
+
+  it('★★ the stale counter states the threshold, because the threshold is ours', async () => {
+    // "4 out of date" is a verdict. "4 not refreshed in 90 days" is what we
+    // actually know, and it is the same length.
+    await show({ sources: [] });
+    expect(screen.getByTestId('counter-stale')).toHaveTextContent(/90 days/);
+    expect(screen.getByTestId('counter-stale')).not.toHaveTextContent(/out of date/i);
+  });
+
+  it('★ a failed conflict read does not count as zero conflicts', async () => {
+    // The counter is a claim about the workspace. `null` is a claim about us.
+    await show({ conflicts: null });
+    expect(screen.getByTestId('counter-conflicts')).toHaveTextContent(/couldn't check/i);
+  });
+
+  it('★ no counters at all when the sources read failed', async () => {
+    // Every counter is derived from sources or conflicts. A header of
+    // zeroes over a failed read is the most confident thing on the page.
+    await show({ sources: null });
+    expect(screen.queryByTestId('knowledge-counters')).toBeNull();
+  });
+});

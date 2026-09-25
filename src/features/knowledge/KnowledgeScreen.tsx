@@ -4,6 +4,9 @@ import {
   hasAmbiguousName,
   lastRefreshed,
   notReadyCount,
+  staleSources,
+  undatedSources,
+  STALE_AFTER_DAYS,
   type KnowledgeSource,
   type UnansweredQuestion,
 } from '@/api/contracts/knowledge';
@@ -47,8 +50,80 @@ export async function KnowledgeScreen({
   const date = (iso: string | null) =>
     iso ? format.dateTime(new Date(iso), { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
+  /*
+   * ══════════════════════════════════════════════════════════════════════
+   * ★★ THE HEADER IS THREE COUNTERS, NOT THE DESIGN'S FOUR
+   * ══════════════════════════════════════════════════════════════════════
+   * *"Answers confidently · 34 topics"* and *"Thin — guesses sometimes · 6"*
+   * are not rendered, and not because a threshold is missing.
+   *
+   * `confidence` is a column on `KnowledgeCandidate` and on no other
+   * knowledge model. A candidate is a suggestion awaiting approval, and
+   * approving one creates a `KnowledgeDocument`, which has no confidence
+   * column — so the score exists only while the thing is **not yet
+   * knowledge** and is discarded the moment it becomes knowledge.
+   *
+   * Counting pending candidates under a header that says *"what GOTCHA
+   * knows about your business"* would be counting the inbox as the filing
+   * cabinet. The screen says the measure does not exist instead.
+   *
+   * ── AND THE ONE WE DO COMPUTE SHOWS ITS WORKING ──
+   * "Out of date" is ours: ninety days, chosen between the design's own
+   * "rescanned yesterday · Fresh" and "last change 5 months ago · Ageing".
+   * So the counter names the threshold, and each source prints its date
+   * beside the verdict — a reader who thinks three months is fine for a
+   * returns policy can see the fact and disagree with us.
+   */
+  const stale = sources ? staleSources(sources, new Date()) : [];
+  const undated = sources ? undatedSources(sources) : [];
+
   return (
     <div className={styles.screen} data-testid="knowledge-screen">
+      {sources !== null ? (
+        <section className={styles.counters} data-testid="knowledge-counters">
+          <p className={styles.counter} data-testid="counter-sources">
+            {t('counters.sources', { count: sources.length })}
+          </p>
+
+          {/*
+            ★ THE FACT IS THE COUNTER, THE THRESHOLD IS THE CAPTION.
+            "4 out of date" is a verdict; "4 not refreshed in 90 days" is
+            what we actually know, and it is the same length.
+          */}
+          <p className={styles.counter} data-testid="counter-stale">
+            {t('counters.stale', { count: stale.length, days: STALE_AFTER_DAYS })}
+          </p>
+
+          {/*
+            Separate, because "we cannot tell when this was last read" is a
+            different thing to tell somebody than "this is old". Shown only
+            when it is true — a zero here is noise.
+          */}
+          {undated.length > 0 ? (
+            <p className={styles.counter} data-testid="counter-undated">
+              {t('counters.undated', { count: undated.length })}
+            </p>
+          ) : null}
+
+          <p className={styles.counter} data-testid="counter-conflicts">
+            {conflicts === null
+              ? t('counters.conflictsUnknown')
+              : t('counters.conflicts', { count: conflicts.length })}
+          </p>
+
+          {/*
+            ★★ THE COUNTER THAT IS NOT THERE, SAID RATHER THAN OMITTED.
+            A reader coming from the design will look for "answers
+            confidently" and find nothing. An absence explains itself once;
+            a missing counter gets re-requested every time somebody reads
+            the design next to the screen.
+          */}
+          <p className={styles.counterAbsent} data-testid="counter-no-confidence">
+            {t('counters.noConfidence')}
+          </p>
+        </section>
+      ) : null}
+
       {/*
         ════════════════════════════════════════════════════════════════════
         ★★ THE CONFLICT — AND IT IS NOT THE CONFLICT THE DESIGN DRAWS

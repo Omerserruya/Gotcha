@@ -73,6 +73,83 @@ export function notReadyCount(source: KnowledgeSource): number {
   return source.documents.filter((d) => d.status !== 'ready').length;
 }
 
+/* ── The header counters, and the one that cannot be computed ────────────── */
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ "ANSWERS CONFIDENTLY · 34 TOPICS" CANNOT BE COMPUTED, AND NOT FOR WANT
+ *    OF A THRESHOLD
+ * ════════════════════════════════════════════════════════════════════════════
+ * The design's header is four counters: confident, thin, contradictory, out
+ * of date. Three of them read as slices of one thing — what GOTCHA knows.
+ * They are not.
+ *
+ * `confidence` is a column on **`KnowledgeCandidate` and nowhere else in the
+ * knowledge domain** — checked against every `confidence` field in the
+ * schema; the others belong to conversation intelligence, identity linking
+ * and discovery facts. `KnowledgeDocument` has none and `KnowledgeChunk` has
+ * none.
+ *
+ * And a candidate is a **suggestion awaiting approval**. Approving one
+ * creates a `KnowledgeDocument` — which has no confidence column — so **the
+ * score exists only while the thing is not yet knowledge, and is discarded
+ * at the moment it becomes knowledge.**
+ *
+ * So "how confidently does GOTCHA answer?" has no answer for the knowledge
+ * base at all. Counting pending candidates instead would be counting the
+ * inbox as the filing cabinet: a number that looks like what GOTCHA knows
+ * and is made of what nobody has accepted yet.
+ *
+ * `thin` is the same column and fails the same way. Neither is rendered.
+ */
+
+/**
+ * How long without a refresh before a source is worth a second look.
+ *
+ * ★ OURS, NOT THE PLATFORM'S. No staleness policy exists anywhere — no
+ * threshold, no field, no job. The design's *"Ageing"* on a folder whose
+ * last change was five months ago and *"Fresh"* on a site rescanned
+ * yesterday are the only guidance, so ninety days sits between them.
+ *
+ * It is a judgement and the screen treats it as one: **the date is printed
+ * and the verdict sits under it**, so a reader who thinks three months is
+ * perfectly fine for a returns policy can see the fact and disagree with us.
+ */
+export const STALE_AFTER_DAYS = 90;
+
+/**
+ * Sources not refreshed within `STALE_AFTER_DAYS`.
+ *
+ * ★ A SOURCE THAT HOLDS NOTHING IS NOT OUT OF DATE. `lastRefreshed` is null
+ * both for an empty source and for one whose documents carry no timestamp,
+ * and neither is a stale source — one is empty and the other is unknown.
+ * Counting them would put a number against a state nobody can act on.
+ */
+export function staleSources(
+  sources: readonly KnowledgeSource[],
+  now: Date,
+  afterDays: number = STALE_AFTER_DAYS,
+): readonly KnowledgeSource[] {
+  const cutoff = now.getTime() - afterDays * 24 * 60 * 60 * 1000;
+  return sources.filter((source) => {
+    const refreshed = lastRefreshed(source);
+    if (!refreshed) return false;
+    const at = Date.parse(refreshed);
+    return Number.isFinite(at) && at < cutoff;
+  });
+}
+
+/**
+ * Sources we cannot date at all — no document carries an `updatedAt`.
+ *
+ * Reported separately rather than folded into either count, because "we do
+ * not know when this was last read" is a different thing to tell somebody
+ * than "this is old".
+ */
+export function undatedSources(sources: readonly KnowledgeSource[]): readonly KnowledgeSource[] {
+  return sources.filter((s) => s.documents.length > 0 && lastRefreshed(s) === null);
+}
+
 /**
  * Two sources can share a name, and on this tenant two do.
  *
