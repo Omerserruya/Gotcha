@@ -66,7 +66,17 @@ const source = (over: Partial<KnowledgeSource> = {}): KnowledgeSource => ({
 
 async function renderScreen(sources: readonly KnowledgeSource[]) {
   // Server component: await it, then render what it returned.
-  return render(await KnowledgeScreen({ sources, unanswered: [] }));
+  return render(
+    await KnowledgeScreen({
+      sources,
+      unanswered: [],
+      conflicts: [],
+      conflictsScannedAt: null,
+      // These tests are about the sources panel; an imported workspace with
+      // no conflicts keeps the conflict panel out of their way.
+      everImported: true,
+    }),
+  );
 }
 
 describe('two sources sharing a name', () => {

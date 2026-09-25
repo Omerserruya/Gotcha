@@ -99,3 +99,13 @@ export function hasMeasuredAnything(status: ImportStatus): boolean {
   const done = workDone(status);
   return done.conversationsRead > 0 || done.customersRead > 0 || done.answersFound > 0;
 }
+
+/**
+ * `GET /api/historical-imports` → `{ imports }`, newest first, capped at 20.
+ *
+ * `imports` is the only key, but it is still a sibling rather than the
+ * payload, so a reader must not let the envelope be unwrapped.
+ */
+export const importListSchema = z.object({
+  imports: z.array(importStatusSchema),
+});

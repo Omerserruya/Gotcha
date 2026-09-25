@@ -913,6 +913,28 @@ export const knowledgeEndpoints = {
    */
   sources: () => endpoint('/api/knowledge-bases'),
   unanswered: () => endpoint('/api/knowledge/unanswered-questions'),
+  /**
+   * Screen 08's conflicts, and the reason they need an import id first.
+   *
+   * ★ CONFLICT DETECTION RUNS INSIDE THE HISTORICAL-IMPORT PIPELINE ONLY.
+   * `knowledge-clustering.stage.ts` queries
+   * `where: { importId, tenantId, status: "PENDING" }` — so conflicts belong
+   * to an import, not to the tenant, and there is no tenant-wide read of
+   * them. Nothing looks at live conversations or at a document uploaded
+   * afterwards, which the screen has to say rather than imply.
+   *
+   * Answers `{ imports: [...] }`, newest first, capped at 20.
+   */
+  imports: () => endpoint('/api/historical-imports'),
+  /**
+   * One import's knowledge candidates. Answers `{ candidates, counts }`.
+   *
+   * Conflicts are ordered first by the route itself — *"they are the only
+   * items where doing nothing is the wrong answer"* — and `variants` is sent
+   * only on a conflicted row (`c.conflict ? c.variants : null`).
+   */
+  candidates: (importId: string) =>
+    endpoint('/api/historical-imports/{importId}/candidates', { importId }),
 } as const;
 
 /**

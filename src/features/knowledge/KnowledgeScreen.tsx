@@ -7,6 +7,7 @@ import {
   type KnowledgeSource,
   type UnansweredQuestion,
 } from '@/api/contracts/knowledge';
+import { lastHeardFor, variantsOf, type Candidate } from '@/api/contracts/knowledge-candidates';
 
 import styles from './Knowledge.module.css';
 
@@ -30,9 +31,15 @@ import styles from './Knowledge.module.css';
 export async function KnowledgeScreen({
   sources,
   unanswered,
+  conflicts,
+  conflictsScannedAt,
+  everImported,
 }: {
   readonly sources: readonly KnowledgeSource[] | null;
   readonly unanswered: readonly UnansweredQuestion[] | null;
+  readonly conflicts: readonly Candidate[] | null;
+  readonly conflictsScannedAt: string | null;
+  readonly everImported: boolean;
 }) {
   const t = await getTranslations('knowledge');
   const format = await getFormatter();
@@ -42,6 +49,142 @@ export async function KnowledgeScreen({
 
   return (
     <div className={styles.screen} data-testid="knowledge-screen">
+      {/*
+        ════════════════════════════════════════════════════════════════════
+        ★★ THE CONFLICT — AND IT IS NOT THE CONFLICT THE DESIGN DRAWS
+        ════════════════════════════════════════════════════════════════════
+        The design shows two NAMED SOURCES disagreeing: "₪550 · your website ·
+        wholesale page · updated March" against "₪850 · Wholesale terms PDF ·
+        uploaded July".
+
+        What this platform detects is different and the schema says so in as
+        many words: *"The business answered this differently at different
+        times. We do NOT pick one."* It clusters semantically-equivalent
+        questions out of past conversations and keeps every answer that was
+        given, with how often each was said.
+
+        Cross-source contradiction — website versus PDF, with each side's
+        name and date — **does not exist**, and captioning these as though it
+        did would be inventing provenance. So the panel says what it is: the
+        business answered this question in more than one way, here is each
+        answer and how often it was heard.
+
+        ── AND THE SCAN IS NOT CONTINUOUS ──
+        `knowledge-clustering.stage.ts` runs inside the historical-import
+        pipeline only. An empty list means "nothing contradicted itself in
+        what we imported", never "GOTCHA's knowledge is consistent". That
+        sentence is on the screen, not in this comment.
+      */}
+      <section className={styles.section} data-testid="conflicts-section">
+        <h2 className={styles.sectionHeading}>{t('conflicts.heading')}</h2>
+
+        {conflicts === null ? (
+          <p className={styles.degraded} data-testid="conflicts-unavailable">
+            {t('conflicts.unavailable')}
+          </p>
+        ) : !everImported ? (
+          /*
+           * ★ NOTHING HAS EVER LOOKED, WHICH IS NOT "NOTHING DISAGREES".
+           * Without an import the clustering stage has never run at all, so
+           * an empty list here carries no information whatsoever — and
+           * "no contradictions" would be the most misleading thing on the
+           * screen.
+           */
+          <p className={styles.none} data-testid="conflicts-never-scanned">
+            {t('conflicts.neverScanned')}
+          </p>
+        ) : conflicts.length === 0 ? (
+          <p className={styles.none} data-testid="conflicts-none">
+            {conflictsScannedAt
+              ? t('conflicts.noneScanned', { when: date(conflictsScannedAt) ?? '' })
+              : t('conflicts.none')}
+          </p>
+        ) : (
+          <ul className={styles.conflicts}>
+            {conflicts.map((candidate) => {
+              const variants = variantsOf(candidate);
+              return (
+                <li
+                  key={candidate.id}
+                  className={styles.conflict}
+                  data-testid={`conflict-${candidate.id}`}
+                >
+                  <p className={styles.conflictQuestion}>{candidate.question}</p>
+                  <p className={styles.conflictAsked}>
+                    {t('conflicts.asked', { count: candidate.occurrenceCount })}
+                  </p>
+
+                  {/*
+                    ★ BOTH ANSWERS, NEITHER PREFERRED. The route sorts them
+                    by how often each was heard and the platform explicitly
+                    refuses to pick — so the screen shows the order it was
+                    given and marks nothing as the winner. An "most likely"
+                    badge here would be the product making the decision it
+                    says is the owner's.
+                  */}
+                  <ul className={styles.variants}>
+                    {variants.map((variant) => {
+                      const heard = lastHeardFor(variant, candidate.examples);
+                      return (
+                        <li
+                          key={variant.key}
+                          className={styles.variant}
+                          data-testid={`variant-${candidate.id}-${variant.key}`}
+                        >
+                          <p className={styles.variantAnswer}>{variant.answer}</p>
+                          <p className={styles.variantMeta}>
+                            {t('conflicts.said', { count: variant.occurrenceCount })}
+                            {/*
+                              Dropped by the dedupe merge, so shown only
+                              where it survived. Absent is absent — a zero
+                              here would read as "no customers", which is
+                              a claim nobody made.
+                            */}
+                            {variant.customerCount !== null && variant.customerCount !== undefined
+                              ? ` · ${t('conflicts.byCustomers', { count: variant.customerCount })}`
+                              : ''}
+                            {/*
+                              Reconstructed from the representative examples
+                              via `variantKey`. At most three are returned,
+                              so a later variant may have none — and then it
+                              gets no date rather than borrowing another's.
+                            */}
+                            {heard
+                              ? ` · ${t('conflicts.lastHeard', { when: date(heard) ?? '' })}`
+                              : ''}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {/*
+                    ⚠ NO RESOLVE CONTROL HERE, AND NOT BECAUSE ONE IS MISSING.
+                    `POST /candidates/:id/approve` with `editedAnswer` is the
+                    resolve path and it exists. It writes to the tenant's
+                    knowledge base, which every AI employee answers from —
+                    so it is a write this screen introduces, not one it
+                    inherits, and it goes in once the panel itself is
+                    accepted. The sentence below says what happens until then.
+                  */}
+                  <p className={styles.conflictMeanwhile}>{t('conflicts.meanwhile')}</p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {/*
+          ★★ THE COVERAGE STATEMENT, ALWAYS, NOT ONLY WHEN THE LIST IS EMPTY.
+          A reader looking at two conflicts needs to know the scan was of one
+          import and has not run since, exactly as much as a reader looking
+          at none does.
+        */}
+        <p className={styles.coverage} data-testid="conflicts-coverage">
+          {t('conflicts.coverage')}
+        </p>
+      </section>
+
       {/* ── What it could not answer ─────────────────────────────────── */}
       <section className={styles.section} data-testid="gaps-section">
         <h2 className={styles.sectionHeading}>{t('gaps.heading')}</h2>

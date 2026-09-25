@@ -138,4 +138,74 @@
     line-height: var(--line-height-snug);
     color: var(--text-body);
   }
+
+  /*
+   * ── The conflict, which is the hero of screen 08 ──
+   *
+   * Two answers side by side with neither preferred. The platform refuses to
+   * pick one and so does this: no "most likely" badge, no ordering cue beyond
+   * the order it was given in.
+   */
+
+  .conflicts,
+  .variants {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .conflicts {
+    gap: var(--space-16);
+  }
+
+  .conflict {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-12);
+    border: 1px solid var(--intent-urgent-edge);
+    background: var(--intent-urgent-surface);
+    border-radius: var(--radius-8);
+  }
+
+  .conflictQuestion {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .conflictAsked,
+  .variantMeta,
+  .conflictMeanwhile {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .variants {
+    gap: var(--space-8);
+  }
+
+  /*
+   * Both answers get identical weight. A difference in emphasis would be the
+   * screen choosing, which is exactly what the platform declines to do.
+   */
+  .variant {
+    padding: var(--space-8);
+    border: 1px solid var(--surface-edge);
+    background: var(--surface-base);
+    border-radius: var(--radius-4);
+  }
+
+  .variantAnswer {
+    margin: 0 0 var(--space-4);
+  }
+
+  /* What the scan covered, said whether or not anything was found. */
+  .coverage {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
 }

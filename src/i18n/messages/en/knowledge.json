@@ -2,6 +2,19 @@
   "title": "What GOTCHA knows",
   "description": "Where it learned about your business, and the questions it could not answer.",
   "unavailable": "We couldn't read your knowledge just now.",
+  "conflicts": {
+    "heading": "Answered more than one way",
+    "unavailable": "We couldn't read these just now. This doesn't mean there are none.",
+    "neverScanned": "Nothing has looked for contradictions yet. This runs when past conversations are imported, and that hasn't happened for this workspace — so this isn't “nothing disagrees”, it's “nobody has checked”.",
+    "none": "Nothing in what we read contradicted itself.",
+    "noneScanned": "Nothing in what we read on {when} contradicted itself.",
+    "asked": "{count, plural, =1 {Came up once} other {Came up # times}}",
+    "said": "{count, plural, =1 {said once} other {said # times}}",
+    "byCustomers": "{count, plural, =1 {to one customer} other {to # customers}}",
+    "lastHeard": "last on {when}",
+    "meanwhile": "Nobody has decided which of these is right, so GOTCHA has both.",
+    "coverage": "These come from reading past conversations — each answer is one your team actually gave, not something written on your website or in a document. Nothing has compared your website against your files; that check doesn't exist yet."
+  },
   "gaps": {
     "heading": "Questions it couldn't answer",
     "none": "Nothing has been asked that GOTCHA couldn't answer.",

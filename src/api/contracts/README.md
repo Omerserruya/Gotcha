@@ -109,3 +109,27 @@ platform actually emits** — usually the default — rather than deleting the
 test. A fixture carrying the real zero makes the next person's assertion fail
 honestly instead of passing on fiction.
 
+## A flag without its payload is a feature that does not exist
+
+`knowledge-candidates.ts` named `conflict` and omitted `variants`. `z.object`
+strips what it does not name, so every conflicted candidate arrived carrying
+both of its competing answers and the UI received a boolean saying a conflict
+existed and nothing to show for it. Screen 08's hero panel looked unbuildable
+for as long as that was true.
+
+**A contract that names a flag and omits the payload the flag guards turns "we
+have this" into "this does not exist."** It is worse than dropping both: the
+flag is enough to make the gap look like a backend gap rather than ours.
+
+This was the fourth field in one day that we needed and were already being
+sent — after `data.customer.customerId`, `hasActiveVoiceChannel` and the
+`{ notes, contactId }` envelope. When a screen seems to need something the
+platform has no room for, check what the response actually carries before
+writing that down.
+
+**And read the payload's shape from its writers, not from the column comment.**
+`variants` has two writers that disagree — the extraction stage writes four
+fields, the dedupe stage merges and writes back three, dropping
+`customerCount`. The column's comment promises a fifth, `exampleEvidenceIds`,
+which **no code writes at all**.
+

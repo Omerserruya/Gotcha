@@ -30,7 +30,8 @@ import { pageMetadata } from '@/shell/page-metadata';
  */
 export default async function Page() {
   const t = await getTranslations('knowledge');
-  const { sources, unanswered } = await loadKnowledge();
+  const { sources, unanswered, conflicts, conflictsScannedAt, everImported } =
+    await loadKnowledge();
 
   // Both halves failed: that is a read failure, not a knowledge base with
   // nothing in it, and the two must never look the same.
@@ -44,7 +45,13 @@ export default async function Page() {
 
   return (
     <PageContainer title={t('title')} description={t('description')}>
-      <KnowledgeScreen sources={sources} unanswered={unanswered} />
+      <KnowledgeScreen
+        sources={sources}
+        unanswered={unanswered}
+        conflicts={conflicts}
+        conflictsScannedAt={conflictsScannedAt}
+        everImported={everImported}
+      />
     </PageContainer>
   );
 }
