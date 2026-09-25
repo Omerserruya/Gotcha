@@ -64,9 +64,9 @@ describe('★★ where the note lives — five roads to NOT_APPLICABLE', () => {
     expect(destinationOf(failed)).toBe('failed');
     expect(pushFailed(failed)).toBe(true);
     // And the status wins over the error string, which is also set on failure.
-    expect(destinationOf(note({ externalSyncStatus: 'FAILED', externalSyncError: 'private' }))).toBe(
-      'failed',
-    );
+    expect(
+      destinationOf(note({ externalSyncStatus: 'FAILED', externalSyncError: 'private' })),
+    ).toBe('failed');
   });
 
   it('★ PENDING is "we do not know yet", not a synced note in a hurry', () => {

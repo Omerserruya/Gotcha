@@ -116,19 +116,19 @@ describe('★★ coverage declares what the log cannot account for', () => {
      */
     const parsed = customerAuditSchema.parse(
       envelope({
-      coverage: {
-        conversation: { attributable: true },
-        customer: {
-          attributable: true,
-          requires: 'shopifyCustomerId',
-          detail: 'Pass ?shopifyCustomerId= to include them.',
+        coverage: {
+          conversation: { attributable: true },
+          customer: {
+            attributable: true,
+            requires: 'shopifyCustomerId',
+            detail: 'Pass ?shopifyCustomerId= to include them.',
+          },
+          order: {
+            attributable: false,
+            reason: 'no_local_order_table',
+            detail: "There is no local order table to enumerate this person's orders from.",
+          },
         },
-        order: {
-          attributable: false,
-          reason: 'no_local_order_table',
-          detail: "There is no local order table to enumerate this person's orders from.",
-        },
-      },
       }),
     );
     const gaps = coverageGaps(parsed.coverage);

@@ -123,6 +123,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     timeline: {
       contact: {
         id: 'real-1',
+        metadata: null,
         displayName: 'A Real Person',
         externalId: '+972500000000',
         channel: 'WHATSAPP',
