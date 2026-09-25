@@ -415,15 +415,34 @@ export const toolUsageSchema = z.object({
    * tool that keeps breaking need opposite repairs.
    */
   refusedCount: z.number().default(0),
-  erroredCount: z.number().default(0),
+  /**
+   * ★★ OPTIONAL, NOT DEFAULTED — SEE `neverFailed`.
+   *
+   * A service that does not report errors at all would default to `0` and
+   * let the screen print *"never failed"*. Absent is "we were not told",
+   * not "there were none".
+   */
+  erroredCount: z.number().optional(),
   /**
    * ★★ FAILURES FROM BEFORE THE REASON WAS RECORDED, AND NOT COUNTED AS
    * ERRORS — the service refuses to guess which kind they were.
    *
    * This is what stops the screen saying the design's *"never failed"*. See
    * `neverFailed`.
+   *
+   * ★★ AND IT IS `.optional()`, WHICH IS THE WHOLE POINT.
+   *
+   * It shipped as `.default(0)`. A service that does not report this field
+   * — every service older than it — then had `unclassifiedFailureCount: 0`
+   * and `neverFailed` returned **true**, printing the exact caption this
+   * field exists to prevent.
+   *
+   * I built the three-state function and defaulted the third state away at
+   * the parse, one file over. Found by a sweep asking, of every three-state
+   * field, whether any test drives it through the schema. This one had
+   * none: the component tests handed `ToolUsage` objects straight in.
    */
-  unclassifiedFailureCount: z.number().default(0),
+  unclassifiedFailureCount: z.number().optional(),
   /** Successes over ALL attempts, refusals included in the denominator. */
   successRate: z.number().default(0),
   avgDurationMs: z.number().nullable().default(null),
@@ -452,6 +471,16 @@ export const toolUsageListSchema = z.array(toolUsageSchema);
  *          failed" would be an assertion about rows nobody can read.
  */
 export function neverFailed(usage: ToolUsage): boolean | null {
+  /*
+   * ★ A FIELD WE WERE NOT SENT CANNOT SUPPORT A CLAIM.
+   *
+   * Absent means the service does not report it — not that it counted none.
+   * Either absence makes "never failed" unsayable, because the claim needs
+   * BOTH counters to be zero and we would be asserting one of them.
+   */
+  if (usage.erroredCount === undefined || usage.unclassifiedFailureCount === undefined) {
+    return null;
+  }
   if (usage.erroredCount > 0) return false;
   if (usage.unclassifiedFailureCount > 0) return null;
   return true;

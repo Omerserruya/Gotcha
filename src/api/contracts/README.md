@@ -133,3 +133,53 @@ fields, the dedupe stage merges and writes back three, dropping
 `customerCount`. The column's comment promises a fifth, `exampleEvidenceIds`,
 which **no code writes at all**.
 
+## A component test tells you only what you handed it
+
+A distinction between *none* and *nobody could tell us* lives in a **schema**.
+If every test of it builds the object and hands it to a component, the schema
+is never exercised — and the mutation that collapses the distinction passes.
+
+That is not a gap in coverage. It is **coverage pointed at one layer and read
+as coverage of another**, and a green suite then asserts your beliefs about
+the contract back to you.
+
+Found by running a mutation expected to fail: swapping `undatedCount`'s
+`.optional()` for `.default(0)` broke nothing, because every test passed the
+value straight into the component. There was no test double at all — **props
+are a stand-in for a parse**, supplied from the author's understanding of the
+schema rather than from the schema.
+
+**The rule: for every field where a default would be a lie, one test must
+drive it through `schema.parse` and assert the absent case.** One per field,
+not one per component.
+
+A sweep on 2026-09-25 found 17 of 19 already covered and 2 not — and one of
+the 2 was live: `toolUsageSchema` defaulted both failure counters to `0`, so
+`neverFailed()` returned **true** for any service that did not report them,
+printing the exact caption that function exists to prevent.
+
+### This completes a family
+
+Three ways to believe something about data without checking it, all of which
+read as rigour:
+
+| | what it tells you |
+|---|---|
+| a **comment** describing a payload | what somebody intended once |
+| a **cast** asserting a type | nothing — it is an assertion with no verifier |
+| a **component test** | only what you handed it |
+
+Against all three, the same answer: **read the shape from its writers, and
+assert it where it is parsed.**
+
+### And one no process catches
+
+A **true general statement sitting immediately above the thing it describes.**
+`ConversationList` carried a comment saying *"a partial fix that looks
+complete is how a known problem stops being tracked"* two lines above a group
+that was empty on every page but the last, for exactly the tenants with the
+problem.
+
+It is written by the person best placed to see it, which is presumably why
+they do not: having just articulated the rule feels like having applied it.
+

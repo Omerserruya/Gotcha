@@ -151,7 +151,7 @@ export async function CapabilityScreen({
                       <span className={styles.used} data-testid={`used-${capability.toolName}`}>
                         {t('used', { count: ran.executionCount })}
                         {clean === true ? ` · ${t('neverFailed')}` : ''}
-                        {clean === false
+                        {clean === false && ran.erroredCount !== undefined
                           ? ` · ${t('failedTimes', { count: ran.erroredCount })}`
                           : ''}
                         {ran.refusedCount > 0
