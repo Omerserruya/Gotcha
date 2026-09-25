@@ -1,0 +1,67 @@
+@layer features {
+  /*
+   * Screen 02 · the Inbox.
+   *
+   * Nothing here styles a reaction, an intent edge or a transcript: none of
+   * the three has data behind it, and a style waiting for a feature is how a
+   * feature gets assumed to exist.
+   */
+
+  .stream {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .message {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-inline-size: 42rem;
+    padding: var(--space-8) var(--space-12);
+    border-radius: var(--radius-8);
+    background: var(--surface-raised);
+  }
+
+  /* Ours sits at the end of the line, theirs at the start — mirrored in
+     Hebrew by the logical property, with no second rule. */
+  .message[data-direction='OUTBOUND'] {
+    align-self: flex-end;
+    background: var(--intent-selected-surface);
+  }
+
+  .body {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  /*
+   * A quote we could not resolve, and a medium we cannot read. Both are
+   * statements about what is missing, so they read as notes rather than as
+   * content somebody wrote.
+   */
+  .quoted,
+  .mediaNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .meta {
+    display: flex;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+}

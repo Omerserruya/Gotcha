@@ -1,0 +1,16 @@
+{
+  "stream": {
+    "unavailable": "We couldn't read this conversation just now.",
+    "empty": "Nothing has been said here yet.",
+    "quotedMissing": "Replying to an earlier message we don't have.",
+    "voiceNoTranscript": "A voice note. GOTCHA can't read it out for you — you'll need to listen.",
+    "unknownType": "Something was sent here that we can't show yet.",
+    "customerRead": "read",
+    "delivered": "delivered",
+    "media": {
+      "image": "A photo.",
+      "video": "A video.",
+      "document": "A file."
+    }
+  }
+}
