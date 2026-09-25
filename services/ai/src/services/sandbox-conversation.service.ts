@@ -137,6 +137,12 @@ export async function runSandboxTurn(input: SandboxTurnInput): Promise<SandboxTu
 
   // Persist the inbound exactly as the channel would, so the production path
   // reads its history from the same place it always does.
+  //
+  // ★ INCLUDING `lastMessageAt`. This path wrote messages and never touched the
+  // conversation's denormalised ordering column, which is why the one row on dev
+  // with `lastMessageAt IS NULL` has two messages. "Exactly as the channel would"
+  // has to mean the column too: the inbox orders by it, so a conversation this
+  // path touched sorted as though nothing had happened since.
   await prisma.message.create({
     data: {
       tenantId: input.tenantId,
@@ -148,6 +154,10 @@ export async function runSandboxTurn(input: SandboxTurnInput): Promise<SandboxTu
       senderName: "Test conversation",
       metadata: { sandbox: true },
     },
+  });
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { lastMessageAt: new Date() },
   });
 
   const result = await generateAIBotReply({
@@ -173,6 +183,10 @@ export async function runSandboxTurn(input: SandboxTurnInput): Promise<SandboxTu
         senderName: agent.name,
         metadata: { sandbox: true, simulated: writes === "safe" },
       },
+    });
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: new Date() },
     });
   }
 
