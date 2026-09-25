@@ -198,3 +198,49 @@ export function quotedState(message: InboxMessage): QuotedState {
 export function hasTranscript(_message: InboxMessage): false {
   return false;
 }
+
+/* ── Ordering, and what the column it depends on is worth ────────────────── */
+
+/**
+ * The queue, newest first — and the rows whose place we cannot determine.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ `lastMessageAt` IS A DENORMALISED CACHE MAINTAINED BY CONVENTION
+ * ════════════════════════════════════════════════════════════════════════════
+ * It is written at ten call sites, and **ten or more writers bypass
+ * `message.service` entirely.** One conversation on dev has it null while
+ * being open, not a test, and carrying two real messages — the sandbox
+ * writer never sets it.
+ *
+ * So the column the queue sorts by is maintained by everybody remembering,
+ * and a **stale** value has no symptom at all: a conversation whose newest
+ * message arrived through a forgetful writer sinks down the list while
+ * somebody waits, and the list looks entirely normal.
+ *
+ * We cannot detect staleness from here — a plausible-but-old timestamp is
+ * indistinguishable from a correct one. What we CAN do is refuse to bury the
+ * rows that admit they do not know.
+ *
+ * ── SO NULL GOES IN ITS OWN GROUP, NOT AT THE BOTTOM ──
+ * Sorted naively, a null sinks to the floor of a recency-ordered list and is
+ * never seen — which is the same defect as the offset-pagination skip, and
+ * the reason the capped list exists. Sorted to the top it would claim to be
+ * the most recent, which it does not know either.
+ *
+ * Its own group says the true thing: **these are open and we cannot tell
+ * where they belong.** The caption names it, and the count makes a growing
+ * problem visible rather than gradual.
+ */
+export function queueOrder(rows: readonly ConversationRow[]): {
+  readonly dated: readonly ConversationRow[];
+  readonly undated: readonly ConversationRow[];
+} {
+  const dated: ConversationRow[] = [];
+  const undated: ConversationRow[] = [];
+  for (const row of rows) {
+    if (row.lastMessageAt && Number.isFinite(Date.parse(row.lastMessageAt))) dated.push(row);
+    else undated.push(row);
+  }
+  dated.sort((a, b) => Date.parse(b.lastMessageAt!) - Date.parse(a.lastMessageAt!));
+  return { dated, undated };
+}

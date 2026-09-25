@@ -64,4 +64,39 @@
     font-size: var(--font-size-caption);
     color: var(--text-muted);
   }
+
+  /* The queue. Ordering is worth only as much as `lastMessageAt` is. */
+
+  .queue {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .queueList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .queueRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-8);
+    padding: var(--space-8) 0;
+    border-bottom: 1px solid var(--surface-edge);
+  }
+
+  .who {
+    flex: 1 1 auto;
+  }
+
+  .channel,
+  .waiting {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
 }

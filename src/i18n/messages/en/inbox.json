@@ -12,5 +12,14 @@
       "video": "A video.",
       "document": "A file."
     }
+  },
+  "queue": {
+    "cap": "Showing the {count} most recent. Older conversations aren't reachable from here yet.",
+    "empty": "Nothing is waiting.",
+    "unavailable": "We couldn't read the queue just now.",
+    "unnamed": "Someone",
+    "unknownChannel": "Unknown channel",
+    "waiting": "{minutes}m",
+    "undated": "{count, plural, =1 {One conversation has no last-message time, so we can't place it in the order above} other {# conversations have no last-message time, so we can't place them in the order above}}"
   }
 }
