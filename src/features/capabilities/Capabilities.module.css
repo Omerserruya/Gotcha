@@ -146,4 +146,57 @@
     font-size: var(--font-size-caption);
     color: var(--text-muted);
   }
+
+  /* ── The catalogue rail: connected on top, available below. ── */
+
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .railHeading {
+    margin: 0 0 var(--space-8);
+    font-size: var(--font-size-caption);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .railGroupHeading {
+    margin: var(--space-12) 0 var(--space-4);
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .railList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .railItem {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  /* The platform s own word for the connection state, not our reading of it. */
+  .railState {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .railState[data-state='ERROR'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .railNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
 }

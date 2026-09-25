@@ -54,5 +54,12 @@
   "used": "{count, plural, =1 {Used once} other {Used # times}}",
   "neverFailed": "never failed",
   "failedTimes": "{count, plural, =1 {failed once} other {failed # times}}",
-  "refusedTimes": "{count, plural, =1 {stopped once by a rule} other {stopped # times by a rule}}"
+  "refusedTimes": "{count, plural, =1 {stopped once by a rule} other {stopped # times by a rule}}",
+  "rail": {
+    "connected": "{count, plural, =0 {Nothing connected} =1 {Connected · 1} other {Connected · #}}",
+    "available": "{count, plural, =0 {Nothing else available yet} =1 {Available · 1} other {Available · #}}",
+    "noneConnected": "Nothing is connected yet.",
+    "uncategorised": "Everything else",
+    "unavailable": "We couldn't read what's connected just now."
+  }
 }

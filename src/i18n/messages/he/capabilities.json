@@ -54,5 +54,12 @@
   "used": "{count, plural, one {בשימוש פעם אחת} other {בשימוש # פעמים}}",
   "neverFailed": "מעולם לא נכשל",
   "failedTimes": "{count, plural, one {נכשל פעם אחת} other {נכשל # פעמים}}",
-  "refusedTimes": "{count, plural, one {נעצר פעם אחת על ידי כלל} other {נעצר # פעמים על ידי כלל}}"
+  "refusedTimes": "{count, plural, one {נעצר פעם אחת על ידי כלל} other {נעצר # פעמים על ידי כלל}}",
+  "rail": {
+    "connected": "{count, plural, =0 {לא מחובר כלום} one {מחובר · 1} other {מחובר · #}}",
+    "available": "{count, plural, =0 {אין עוד מה לחבר כרגע} one {זמין · 1} other {זמין · #}}",
+    "noneConnected": "עדיין לא מחובר שום דבר.",
+    "uncategorised": "כל השאר",
+    "unavailable": "לא הצלחנו לקרוא כרגע מה מחובר."
+  }
 }

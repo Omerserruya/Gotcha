@@ -251,3 +251,66 @@ export function resolveStance(
   if (!activated) return 'never';
   return policy?.requiresApproval ? 'ask' : 'allow';
 }
+
+/* ── Screen 10's left rail: what is connected, and what could be ─────────── */
+
+/**
+ * Connected means there is a tenant connection row, whatever state it is in.
+ *
+ * ★ A BROKEN CONNECTION IS STILL CONNECTED. `status: "ERROR"` belongs in the
+ * connected list with its error showing — moving it to "available" would
+ * offer a Connect button for something already connected, which is the
+ * distinction 14c, 04d and 05d each had to make separately.
+ */
+export function isConnected(entry: Integration): boolean {
+  return Boolean(entry.tenantConnection);
+}
+
+/**
+ * The two lists the design's rail is made of.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE COUNT IS WHATEVER THE TABLE HOLDS, AND THE DESIGN SAYS 58
+ * ════════════════════════════════════════════════════════════════════════════
+ * `IntegrationCatalog` has **17 published rows on dev**. The design draws
+ * "Available · 58" and names ten providers, most of which have no row.
+ *
+ * This returns what is there. Padding the list to match the design — or
+ * printing 58 above a list of 17 — would imply coverage the product does not
+ * have, which is the same defect as a knowledge counter made of candidates
+ * nobody accepted. Each missing provider is a catalogue row plus an adapter,
+ * and that is a decision for Omer rather than a gap to paper over.
+ */
+export function splitCatalogue(entries: readonly Integration[]): {
+  readonly connected: readonly Integration[];
+  readonly available: readonly Integration[];
+} {
+  return {
+    connected: entries.filter(isConnected),
+    available: entries.filter((e) => !isConnected(e)),
+  };
+}
+
+/**
+ * Available entries grouped by category, in the catalogue's own order.
+ *
+ * `category` is a stored column the route sorts by `sortOrder`, so the groups
+ * arrive in the order somebody chose rather than alphabetically. An entry
+ * with no category goes in its own bucket rather than being assigned one —
+ * inventing a category is how a filter starts lying about what it contains.
+ */
+export function byCategory(
+  entries: readonly Integration[],
+): readonly { readonly category: string | null; readonly entries: readonly Integration[] }[] {
+  const order: (string | null)[] = [];
+  const buckets = new Map<string | null, Integration[]>();
+  for (const entry of entries) {
+    const key = entry.category?.trim() || null;
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+      order.push(key);
+    }
+    buckets.get(key)!.push(entry);
+  }
+  return order.map((category) => ({ category, entries: buckets.get(category)! }));
+}

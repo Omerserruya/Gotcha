@@ -7,7 +7,12 @@ import {
   type Capability,
   type ToolUsage,
 } from '@/api/contracts/capabilities';
-import { analyticsEndpoints, capabilityEndpoints } from '@/api/endpoints/registry';
+import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
+import {
+  analyticsEndpoints,
+  capabilityEndpoints,
+  integrationEndpoints,
+} from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
@@ -30,12 +35,20 @@ export interface CapabilityData {
    * counts is still the screen's main answer.
    */
   readonly usage: readonly ToolUsage[] | null;
+  /**
+   * The catalogue behind screen 10's rail — connected and available in one
+   * list, split on `tenantConnection`.
+   *
+   * `null` is a failed read. An empty array would mean the catalogue itself
+   * is empty, which is a different and much stranger thing to report.
+   */
+  readonly integrations: readonly Integration[] | null;
 }
 
 export async function loadCapabilities(): Promise<CapabilityData> {
   const api = serverApi();
 
-  const [capabilities, usage] = await Promise.all([
+  const [capabilities, usage, integrations] = await Promise.all([
     api
       .get({ endpoint: capabilityEndpoints.list(), payload: capabilityListSchema })
       .catch((cause: unknown) => {
@@ -57,7 +70,20 @@ export async function loadCapabilities(): Promise<CapabilityData> {
         logger.warn('capabilities.usage_failed', { cause });
         return null;
       }),
+    /*
+     * The published catalogue with this tenant's connection on each row, so
+     * connected-versus-available is one read rather than two. Gated on
+     * `integrations:connections:read`, a third permission again — each of
+     * these three panels can fail on its own and the screen degrades to the
+     * ones that answered.
+     */
+    api
+      .get({ endpoint: integrationEndpoints.list(), payload: integrationsSchema })
+      .catch((cause: unknown) => {
+        logger.warn('capabilities.integrations_failed', { cause });
+        return null;
+      }),
   ]);
 
-  return { capabilities, usage };
+  return { capabilities, usage, integrations };
 }

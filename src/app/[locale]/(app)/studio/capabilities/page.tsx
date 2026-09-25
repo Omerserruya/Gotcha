@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
+import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import styles from '@/features/capabilities/Capabilities.module.css';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
 import { PageContainer } from '@/shell/PageContainer';
@@ -34,7 +35,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  */
 export default async function Page() {
   const t = await getTranslations('capabilities');
-  const { capabilities, usage } = await loadCapabilities();
+  const { capabilities, usage, integrations } = await loadCapabilities();
 
   if (capabilities === null) {
     return (
@@ -57,6 +58,13 @@ export default async function Page() {
 
   return (
     <PageContainer title={t('title')} description={t('description')}>
+      {/*
+        The rail is a SIBLING of the permissions panel, not a child — both are
+        async server components, and nesting one in the other yields a tree
+        with an unresolved node that renders nothing. Fifth screen placed
+        this way.
+      */}
+      <IntegrationRail integrations={integrations} />
       <CapabilityScreen capabilities={capabilities} usage={usage} />
     </PageContainer>
   );
