@@ -527,4 +527,147 @@
     font-size: var(--font-size-caption);
     color: var(--text-muted);
   }
+
+  /*
+   * ── Screen 04f · the team's notes about this person ──
+   *
+   * Distinct from `.notes`, which is 04b's CRM panel. Two different things
+   * that both want the word, which is also why the copy lives under
+   * `teamNotes` rather than a second `notes` block in the same namespace.
+   */
+
+  .notesPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .notesEmpty {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .composer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-12);
+    border: 1px solid var(--surface-edge);
+    border-radius: var(--radius-8);
+  }
+
+  .composerLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .composerInput {
+    width: 100%;
+    padding: var(--space-8);
+    border: 1px solid var(--surface-edge);
+    border-radius: var(--radius-4);
+    font: inherit;
+    resize: vertical;
+  }
+
+  .composerToggle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  /*
+   * ★ THE CONSEQUENCE, NOT THE FIELD NAME. A note marked AI-usable reaches
+   * the merchant's CRM and can come back out of the bot's mouth, so the hint
+   * says that rather than restating the label.
+   */
+  .composerHint {
+    flex-basis: 100%;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .composerSubmit {
+    align-self: flex-start;
+  }
+
+  .noteList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .note {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-bottom: var(--space-12);
+    border-bottom: 1px solid var(--surface-edge);
+  }
+
+  .noteHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  .noteAuthor {
+    font-weight: 600;
+  }
+
+  .noteWhen,
+  .noteEdited {
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .noteBody {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  /* Where the note lives. Quiet: for most notes this is not news. */
+  .noteDest {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  /*
+   * ★★ A FAILED PUSH IS NOT QUIET. There was a CRM to write to and it
+   * refused — the one destination a merchant may need to act on, and the
+   * whole lesson of the stub that answered 200 and wrote nothing.
+   */
+  .noteDestFailed {
+    margin: 0;
+    padding: var(--space-4) var(--space-8);
+    border: 1px solid var(--intent-urgent-edge);
+    background: var(--intent-urgent-surface);
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .noteControls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    margin-top: var(--space-4);
+  }
+
+  .noteAction {
+    font-size: var(--font-size-caption);
+  }
+
+  .noteProblem {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
 }

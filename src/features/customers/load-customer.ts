@@ -17,6 +17,9 @@ import {
   type CommerceContextResponse,
 } from '@/api/contracts/customer-orders';
 import { customerAuditSchema, type CustomerAudit } from '@/api/contracts/customer-actions';
+import { noteListSchema, type Note } from '@/api/contracts/customer-notes';
+import { currentUserSchema } from '@/api/contracts/identity';
+import { authEndpoints } from '@/api/endpoints/registry';
 import { ApiError } from '@/api/client/api-error';
 import { customerEndpoints } from '@/api/endpoints/registry';
 import { withDetailFixtures } from './capture-fixtures';
@@ -78,6 +81,24 @@ export interface CustomerDetail {
   readonly noConversations: boolean;
   /** Screen 04e. Three answers, because "not allowed" is not "broken". */
   readonly actions: AuditRead;
+  /**
+   * Screen 04f. `null` when the read failed — distinct from an empty list,
+   * which means nobody has written anything and is a perfectly good screen.
+   */
+  readonly notes: readonly Note[] | null;
+  /**
+   * The viewer's `User.id`, for deciding who may edit a note.
+   *
+   * ★ NOT THE SESSION'S `sub`. That is the Authentik subject; `authorUserId`
+   * holds `User.id`, and `/api/auth/me` is what maps one to the other. Two
+   * different identifiers for the same person, and comparing the wrong pair
+   * would hide the edit control from everybody, including the author.
+   *
+   * `null` when the read failed: nobody is offered an edit they may not have,
+   * which is the safe direction and costs only a control that reappears on
+   * the next load.
+   */
+  readonly viewerUserId: string | null;
   /**
    * The reads that were ATTEMPTED and FAILED, by name.
    *
@@ -185,6 +206,8 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
         // Not asked for: without a timeline there is no page to put it on,
         // and `failed` would report a read we never made.
         actions: { state: 'not_asked' },
+        notes: null,
+        viewerUserId: null,
         // The timeline is the failure, and the page renders as one. Nothing
         // else was attempted, so nothing else can be reported as failing.
         readsFailed: [],
@@ -222,7 +245,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       return null;
     };
 
-  const [brief, memory, crm, orders] = await Promise.all([
+  const [brief, memory, crm, orders, notes, viewerUserId] = await Promise.all([
     /*
      * ★ BY CONTACT, NOT BY CONVERSATION — Backend added the entry point
      * after this screen reported the door problem.
@@ -288,6 +311,27 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
           })
           .catch(failing<CommerceContextResponse>('orders', 'customer.orders_failed'))
       : Promise.resolve(null),
+    /*
+     * ★ 04f JOINS THE FAN-OUT, AND 04e COULD NOT.
+     *
+     * Notes are CONTACT-keyed — the stub they replaced was conversation-keyed
+     * and that was the defect. So this needs nothing from the other three
+     * answers and costs no extra round trip, unlike the audit read, which
+     * waits on the commerce read for `shopifyCustomerId`.
+     */
+    api
+      .get({ endpoint: customerEndpoints.notes(contactId), payload: noteListSchema })
+      .then((page) => page.notes)
+      .catch(failing<readonly Note[]>('notes', 'customer.notes_failed')),
+    /*
+     * Who is reading, so the edit control appears for the author and nobody
+     * else. A failure leaves it `null` and hides the control — safe, and
+     * recorded as a failed read so the capture fixture cannot mask it.
+     */
+    api
+      .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
+      .then((me) => me.user.id)
+      .catch(failing<string>('viewer', 'customer.viewer_failed')),
   ]);
 
   /*
@@ -364,6 +408,8 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       conversationId,
       noConversations: conversationId === null,
       actions,
+      notes,
+      viewerUserId,
       readsFailed,
     },
     contactId,

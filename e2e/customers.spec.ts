@@ -906,6 +906,97 @@ for (const size of SIZES) {
     });
 
     /*
+     * ══════════════════════════════════════════════════════════════════════
+     * 04f · THE TEAM'S NOTES — AND THE FIRST POPULATED STATE THAT IS REAL
+     * ══════════════════════════════════════════════════════════════════════
+     * Every other section of this page stands in for data the tenant cannot
+     * produce. The notes table is LIVE and EMPTY, so the empty state here is
+     * the honest screen rather than a foreclosed branch.
+     *
+     * ── NOTHING IS WRITTEN, AND THAT IS NOT A SHORTCUT ──
+     * A note is real tenant data: it appears on a real person's record in a
+     * real workspace, and one marked AI-usable is mirrored into the
+     * merchant's own CRM — where it returns through `recent_crm_notes` into
+     * the brief and into the model's context, and where we cannot correct
+     * it. **No `.click()` in this spec saves, edits or deletes a note.**
+     * The write path's behaviour is unit-tested against the contract.
+     *
+     * Seeding one would need Omer's word and belongs in an opt-in spec on
+     * the `settings-notifications-seeded.spec.ts` pattern, which says at the
+     * top that it writes to the tenant.
+     */
+    test('04f · notes, and where each one lives', async ({ page }) => {
+      await openCustomer(page, 'en');
+
+      await expect(
+        page.getByTestId('notes-04f-unread'),
+        'the notes read failed — this run would photograph a fault, not an empty list',
+      ).toHaveCount(0);
+
+      const panel = page.getByTestId('customer-notes-04f');
+      await expect(panel, missingIds('the 04f notes block')).toBeVisible();
+
+      /*
+       * ★ THE COMPOSER IS THERE AND THE TOGGLE IS OFF.
+       *
+       * `aiUsable` fails closed on the column and must fail closed here: a
+       * note marked AI-usable can come back out of the bot's mouth, so a
+       * default-on control would be the product incident the column's own
+       * comment describes.
+       */
+      const toggle = page.getByTestId('note-ai-usable');
+      await expect(toggle).toBeVisible();
+      await expect(toggle, 'the AI-usable toggle is ON by default').not.toBeChecked();
+      await expect(page.getByTestId('note-composer')).toHaveText(/stays in GOTCHA/i);
+
+      /*
+       * ★★ EVERY NOTE SAYS WHERE IT LIVES.
+       *
+       * Asserted by finding the destination rather than by naming one, so
+       * this passes on the fixture's four and on a live empty list without
+       * pretending to know which ran.
+       */
+      const rows = await panel.locator('[data-destination]').count();
+      const empty = await page.getByTestId('notes-04f-empty').count();
+      expect(
+        rows + empty,
+        'the 04f block rendered neither notes nor the nothing-written-yet sentence',
+      ).toBeGreaterThan(0);
+
+      if (rows > 0) {
+        for (const where of await panel.locator('[data-destination]').all()) {
+          await expect(where, 'a note does not say where it lives').toHaveText(/\S/);
+        }
+      }
+
+      /*
+       * ★ THE PINNED OMISSIONS — Omer cut these and a ruling survives only
+       * if something fails when it is undone.
+       */
+      await expect(panel, 'a pin control appeared under "classic notes only"').not.toHaveText(
+        /\bpin\b|\bpinned\b/i,
+      );
+      await expect(panel, 'a revisions UI appeared').not.toHaveText(
+        /revision|version history|previous version/i,
+      );
+      await expect(panel, 'the AI-suggestion decision flow appeared').not.toHaveText(
+        /\baccept\b|\breject\b/i,
+      );
+      /*
+       * ★★ AND NO VISIBILITY CONTROL. TEAM versus PRIVATE is who may READ
+       * it; `aiUsable` is whether the bot may USE it. Re-merging the two on
+       * screen is the conflation a round was spent untangling.
+       */
+      await expect(panel, 'a visibility control appeared beside the AI toggle').not.toHaveText(
+        /\bprivate\b|visibility/i,
+      );
+
+      await expect(panel).not.toHaveText(/\{[a-zA-Z]+\}/);
+
+      await shoot(page, `${size.name}-04f-notes`);
+    });
+
+    /*
      * 04e · Hebrew. Its own test because the audit rows are the densest
      * mixed-direction content on the page: Latin tool names and event names
      * inside an RTL paragraph.
@@ -921,6 +1012,27 @@ for (const size of SIZES) {
       await expect(actions).toHaveText(/[֐-׿]/);
 
       await shoot(page, `${size.name}-04e-hebrew`);
+    });
+
+    /*
+     * 04f · Hebrew. Its own test because the destination sentences are the
+     * longest prose on the page and the one place a merchant reads carefully
+     * — a missing key renders EMPTY in a production build, and an empty
+     * "where does this live" line is worse than a wrong one.
+     */
+    test('04f · Hebrew, right to left', async ({ page }) => {
+      await openCustomer(page, 'he');
+
+      await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+      const panel = page.getByTestId('customer-notes-04f');
+      await expect(panel, missingIds('the 04f notes block in Hebrew')).toBeVisible();
+      await expect(panel).toHaveText(/[֐-׿]/);
+
+      // The composer's consequence line specifically: it is the sentence
+      // that tells somebody a note can reach their CRM.
+      await expect(page.getByTestId('note-composer')).toHaveText(/[֐-׿]/);
+
+      await shoot(page, `${size.name}-04f-hebrew`);
     });
   });
 }

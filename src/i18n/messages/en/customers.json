@@ -151,5 +151,37 @@
       "commerceDenied": "A change to the customer's record was not allowed",
       "commerceUnverified": "A change to the customer's record could not be confirmed with the store"
     }
+  },
+  "teamNotes": {
+    "title": "Notes",
+    "write": "Add a note about this customer",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete for good?",
+    "edited": "edited",
+    "none": "Nobody has written a note about this person yet.",
+    "unread": "We couldn't read the notes for this person just now. This doesn't mean there are none.",
+    "empty": "A note needs something in it.",
+    "tooLong": "That's longer than {max} characters. Shorten it and try again.",
+    "notTheAuthor": "Only whoever wrote a note can change or delete it.",
+    "writeFailed": "That didn't save. Try again.",
+    "noReason": "no reason given",
+    "yourCrm": "your CRM",
+    "aiUsable": "GOTCHA may use this when replying",
+    "aiUsableOn": "It will be sent to your CRM and GOTCHA can repeat it to this customer.",
+    "aiUsableOff": "Team only. It stays in GOTCHA and never reaches your CRM.",
+    "where": {
+      "synced": "Also written to {system}.",
+      "pending": "We're still sending this to your CRM — we don't know yet whether it arrived.",
+      "failed": "This did NOT reach your CRM. Your CRM said: {reason}.",
+      "private": "Kept in GOTCHA only — a private note doesn't go to a shared CRM.",
+      "not_ai_usable": "Kept in GOTCHA only, because it isn't marked for GOTCHA to use.",
+      "no_crm": "Kept in GOTCHA only — no CRM is connected.",
+      "not_linked": "Kept in GOTCHA only — your CRM is connected, but this person isn't matched to a record in it.",
+      "nothing_to_push": "Kept in GOTCHA only — there was nothing to send it through."
+    }
   }
 }

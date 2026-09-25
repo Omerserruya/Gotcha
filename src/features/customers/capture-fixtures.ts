@@ -495,6 +495,122 @@ export const FIXTURE_DETAIL: CustomerDetail = {
   },
   conversationId: 'fixture-conv-1',
   noConversations: false,
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ SCREEN 04f — THE FIRST CUSTOMER SCREEN WHOSE POPULATED STATE IS REAL
+   * ════════════════════════════════════════════════════════════════════════
+   * Every other section here stands in for data this tenant cannot produce.
+   * Notes are different: the table is live and empty, so **the real empty
+   * state is the honest screen** and these rows exist only to photograph the
+   * variants a real tenant will have.
+   *
+   * ── EVERY ROW IS ONE THE ROUTE CAN WRITE ──
+   * The four destinations below are the four the mirror actually produces
+   * with a body it has: SYNCED, FAILED, and NOT_APPLICABLE by way of
+   * `not_ai_usable` and `no_crm_link`. `authorName` is denormalised on the
+   * real column, `editHistory` non-empty is what an edit leaves.
+   *
+   * ── AND `viewerUserId` MATCHES ONE AUTHOR, DELIBERATELY ──
+   * So the evidence shows both halves of the authorship rule at once: the
+   * note this reader may edit, and the teammate's note they may not. A
+   * fixture where the viewer owned everything would photograph a screen that
+   * cannot tell the two apart.
+   */
+  notes: [
+    {
+      id: 'fx-note-1',
+      body: 'Prefers delivery after 4pm — asked twice. Worth remembering before we promise a morning slot.',
+      visibility: 'TEAM',
+      aiUsable: true,
+      status: 'PUBLISHED',
+      authorUserId: 'fixture-viewer-1',
+      authorName: 'Dana Levi',
+      conversationId: 'fixture-conv-1',
+      editHistory: [],
+      externalSystem: 'hubspot',
+      externalSyncStatus: 'SYNCED',
+      externalSyncError: null,
+      externalSyncedAt: '2026-09-18T09:22:00.000Z',
+      deletedAt: null,
+      createdAt: '2026-09-18T09:21:00.000Z',
+      updatedAt: '2026-09-18T09:22:00.000Z',
+    },
+    {
+      /*
+       * ★ NOT MARKED FOR THE AI, SO IT NEVER LEFT. The push is the only
+       * chokepoint — once a note is in the CRM it returns through
+       * `recent_crm_notes` into the brief and into the model, and no filter
+       * on our own table can stop it. The screen says where it lives.
+       */
+      id: 'fx-note-2',
+      body: 'Chased us about the invoice twice. Keep it in mind but do not let GOTCHA bring it up.',
+      visibility: 'TEAM',
+      aiUsable: false,
+      status: 'PUBLISHED',
+      authorUserId: 'fixture-viewer-1',
+      authorName: 'Dana Levi',
+      conversationId: 'fixture-conv-1',
+      // Edited once: the screen says THAT it changed, never what it said.
+      editHistory: [{ at: '2026-09-18T10:02:00.000Z' }],
+      externalSystem: null,
+      externalSyncStatus: 'NOT_APPLICABLE',
+      externalSyncError: 'not_ai_usable',
+      externalSyncedAt: null,
+      deletedAt: null,
+      createdAt: '2026-09-18T09:58:00.000Z',
+      updatedAt: '2026-09-18T10:02:00.000Z',
+    },
+    {
+      /*
+       * ★★ A FAILED PUSH, SAID OUT LOUD. The lesson of the stub that
+       * answered 200 and wrote nothing: a write reported as saved when it
+       * was refused is worse than one that refuses.
+       *
+       * Written by somebody else, so this row also carries the half of the
+       * authorship rule where the controls are absent.
+       */
+      id: 'fx-note-3',
+      body: 'Agreed a 10% credit on the late order. Finance know.',
+      visibility: 'TEAM',
+      aiUsable: true,
+      status: 'PUBLISHED',
+      authorUserId: 'fixture-other-1',
+      authorName: 'Noa Barak',
+      conversationId: 'fixture-conv-1',
+      editHistory: [],
+      externalSystem: null,
+      externalSyncStatus: 'FAILED',
+      externalSyncError: 'rate_limited',
+      externalSyncedAt: null,
+      deletedAt: null,
+      createdAt: '2026-09-17T14:05:00.000Z',
+      updatedAt: '2026-09-17T14:05:00.000Z',
+    },
+    {
+      /*
+       * ★ A CRM IS CONNECTED AND THIS PERSON IS NOT IN IT. Distinct from "no
+       * CRM connected", and telling this merchant to connect one would be
+       * the mistake four other screens already record.
+       */
+      id: 'fx-note-4',
+      body: 'Came in from the Instagram ad, not the shop.',
+      visibility: 'TEAM',
+      aiUsable: true,
+      status: 'PUBLISHED',
+      authorUserId: 'fixture-other-1',
+      authorName: 'Noa Barak',
+      conversationId: 'fixture-conv-1',
+      editHistory: [],
+      externalSystem: null,
+      externalSyncStatus: 'NOT_APPLICABLE',
+      externalSyncError: 'no_crm_link',
+      externalSyncedAt: null,
+      deletedAt: null,
+      createdAt: '2026-09-16T08:30:00.000Z',
+      updatedAt: '2026-09-16T08:30:00.000Z',
+    },
+  ],
+  viewerUserId: 'fixture-viewer-1',
   // The fixture stands for a page where every read succeeded. A real page
   // that did not gets its failures carried through — see `keepFailures`.
   readsFailed: [],
@@ -725,6 +841,8 @@ function keepFailures(detail: CustomerDetail): CustomerDetail {
     ...(failed.has('crm') ? { crm: null } : {}),
     ...(failed.has('orders') ? { orders: null } : {}),
     ...(failed.has('actions') ? { actions: detail.actions } : {}),
+    ...(failed.has('notes') ? { notes: null } : {}),
+    ...(failed.has('viewer') ? { viewerUserId: null } : {}),
     readsFailed: detail.readsFailed,
   };
 }

@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { createFormatter, createTranslator } from 'next-intl';
+import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import messages from '@/i18n/messages/en/customers.json';
@@ -7,6 +7,7 @@ import messages from '@/i18n/messages/en/customers.json';
 import { FIXTURE_DETAIL } from './capture-fixtures';
 import { CustomerActions } from './CustomerActions';
 import { CustomerDetail } from './CustomerDetail';
+import { CustomerNotes } from './CustomerNotes';
 
 /**
  * Does the capture fixture actually produce what the capture spec asserts?
@@ -109,7 +110,8 @@ describe('★ and so does 04e — the fixture the audit shots are taken of', () 
    * child. An async server component nested inside another yields a tree
    * with an unresolved node and renders nothing, with no error to say so.
    */
-  const showActions = async () => render(await CustomerActions({ actions: FIXTURE_DETAIL.actions }));
+  const showActions = async () =>
+    render(await CustomerActions({ actions: FIXTURE_DETAIL.actions }));
 
   it('renders the four rows the spec counts', async () => {
     await showActions();
@@ -152,5 +154,63 @@ describe('★ and so does 04e — the fixture the audit shots are taken of', () 
     for (const cell of screen.getAllByTestId(/^action-outcome-/)) {
       expect(cell).not.toHaveAttribute('data-outcome', 'contradicts');
     }
+  });
+});
+
+describe('★ and so does 04f — the notes the capture photographs', () => {
+  /*
+   * Wrapped, because the composer and the per-note controls are CLIENT
+   * components inside this server tree. Fifth time this session, and the
+   * tell is always the same sentence about `NextIntlClientProvider`.
+   */
+  const showNotes = async () =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ customers: messages }}>
+        {await CustomerNotes({
+          notes: FIXTURE_DETAIL.notes,
+          contactId: 'fixture-1',
+          viewerUserId: FIXTURE_DETAIL.viewerUserId,
+        })}
+      </NextIntlClientProvider>,
+    );
+
+  it('renders the four notes the spec counts', async () => {
+    await showNotes();
+    expect(screen.getAllByTestId(/^note-fx-note-/)).toHaveLength(4);
+  });
+
+  it('★★ every note says where it lives, which is what the shot is for', async () => {
+    await showNotes();
+    const wheres = screen.getAllByTestId(/^note-where-/);
+    expect(wheres).toHaveLength(4);
+    for (const where of wheres) expect(where).toHaveTextContent(/\S/);
+  });
+
+  it('★★ the failed push is visible as a failure, not as a kept note', async () => {
+    // The row the fixture exists for. A push that was refused must never
+    // read as one that quietly stayed here.
+    await showNotes();
+    expect(screen.getByTestId('note-where-fx-note-3')).toHaveAttribute(
+      'data-destination',
+      'failed',
+    );
+  });
+
+  it('★★ shows BOTH halves of the authorship rule in one shot', async () => {
+    /*
+     * The viewer owns two of the four notes. A fixture where they owned all
+     * of them would photograph a screen that cannot tell an editable note
+     * from a teammate's — which is the thing the rule is.
+     */
+    await showNotes();
+    expect(screen.getByTestId('note-controls-fx-note-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('note-controls-fx-note-3')).toBeNull();
+  });
+
+  it('★ and the toggle in the shot is OFF', async () => {
+    // A capture showing it on would be evidence of the wrong default on the
+    // one control that decides whether a note can reach the model.
+    await showNotes();
+    expect(screen.getByTestId('note-ai-usable')).not.toBeChecked();
   });
 });

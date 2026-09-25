@@ -159,6 +159,8 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     noConversations: false,
     // A real person's page whose audit log we could not read.
     actions: { state: 'failed' },
+    notes: null,
+    viewerUserId: null,
     readsFailed: ['actions'],
   };
 
@@ -206,6 +208,8 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       noConversations: false,
       // The timeline failed, so 04e was never asked for.
       actions: { state: 'not_asked' },
+      notes: null,
+      viewerUserId: null,
       readsFailed: [],
     };
     expect(withDetailFixtures(failed, 'real-contact-99')).toBe(failed);
@@ -239,6 +243,8 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       noConversations: false,
       // The timeline failed, so 04e was never asked for.
       actions: { state: 'not_asked' },
+      notes: null,
+      viewerUserId: null,
       readsFailed: [],
     };
     const shown = withDetailFixtures(failed, 'fixture-1');

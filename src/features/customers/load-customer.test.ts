@@ -57,7 +57,12 @@ let BODIES: Record<string, unknown> = {};
 
 const TIMELINE = {
   data: {
-    contact: { id: 'c1', displayName: 'Real Person', externalId: '+972500000000', channel: 'WHATSAPP' },
+    contact: {
+      id: 'c1',
+      displayName: 'Real Person',
+      externalId: '+972500000000',
+      channel: 'WHATSAPP',
+    },
     // One event, so there IS a conversation to read orders and CRM through.
     events: [
       {
@@ -114,6 +119,12 @@ beforeEach(() => {
     '/api/historical-imports/customer-context': { data: { context: null } },
     '/api/crm/conversation/conv-1/context': { data: {} },
     '/api/commerce-context/conv-1': ORDERS_OK,
+    // 04f. Contact-keyed and enveloped as `{ notes, contactId }` — no
+    // top-level `data`, so nothing is unwrapped and no `raw` is wanted.
+    '/api/identity/c1/notes': { notes: [], contactId: 'c1' },
+    // The viewer's User.id, which is what `authorUserId` holds. NOT the
+    // session's `sub`.
+    '/api/auth/me': { user: { id: 'viewer-1' } },
   };
   vi.resetModules();
 });
@@ -219,5 +230,55 @@ describe('★★ 04d\u2019s success path, which no test or capture has ever reac
     expect(detail.actions.state).toBe('ok');
     if (detail.actions.state !== 'ok') return;
     expect(detail.actions.supplied).toContain('shopifyCustomerId');
+  });
+});
+
+describe('★★ 04f reads what 04e could not: the contact, with no conversation in the key', () => {
+  it('★ joins the fan-out, because notes are keyed on the person', async () => {
+    /*
+     * The stub these replace was conversation-keyed, and that WAS the defect
+     * — "a note is about a person, and the person outlives the thread". So
+     * unlike the audit read, which waits on the commerce read for
+     * `shopifyCustomerId`, this needs nothing from the other answers and
+     * costs no extra round trip.
+     */
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+
+    expect(detail.notes).toEqual([]);
+    expect(detail.readsFailed).not.toContain('notes');
+  });
+
+  it('★★ carries the viewer’s User.id, not the session subject', async () => {
+    /*
+     * `authorUserId` holds `User.id`; the session holds Authentik's `sub`.
+     * Comparing the wrong pair would hide the edit control from everybody,
+     * including the author — and it would look like a permission problem
+     * rather than a mismatched identifier.
+     */
+    const { loadCustomer } = await import('./load-customer');
+    expect((await loadCustomer('c1')).viewerUserId).toBe('viewer-1');
+  });
+
+  it('★★ an unreadable notes list is NULL, never an empty one', async () => {
+    // "Nobody has written a note about this person yet" is a claim, and it
+    // is the wrong one to make from a request that did not come back.
+    BODIES['/api/identity/c1/notes'] = { contactId: 'c1' };
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+
+    expect(detail.notes).toBeNull();
+    expect(detail.readsFailed).toContain('notes');
+  });
+
+  it('★ a failed viewer read hides the controls rather than offering them', async () => {
+    // The safe direction: nobody is handed an edit they may not have, and
+    // the control returns on the next load.
+    BODIES['/api/auth/me'] = { nothing: true };
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+
+    expect(detail.viewerUserId).toBeNull();
+    expect(detail.readsFailed).toContain('viewer');
   });
 });

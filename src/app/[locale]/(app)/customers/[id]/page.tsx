@@ -1,5 +1,6 @@
 import { CustomerActions } from '@/features/customers/CustomerActions';
 import { CustomerDetail } from '@/features/customers/CustomerDetail';
+import { CustomerNotes } from '@/features/customers/CustomerNotes';
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { loadCustomer } from '@/features/customers/load-customer';
 import { PageContainer } from '@/shell/PageContainer';
@@ -49,6 +50,21 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         screens have now been placed this way.
       */}
       <CustomerActions actions={detail.actions} />
+      {/*
+        Screen 04f. A sibling for the same reason 04d and 04e are — an async
+        server component nested inside another renders nothing, with no error
+        to explain it. Fourth screen placed this way.
+
+        `contactId` comes from the route rather than from the timeline: the
+        notes are keyed on the contact we were ASKED for, and the timeline
+        resolves merges. Passing the resolved one would write a note against
+        a different id than the page the author is looking at.
+      */}
+      <CustomerNotes
+        notes={detail.notes}
+        contactId={id}
+        viewerUserId={detail.viewerUserId}
+      />
     </PageContainer>
   );
 }

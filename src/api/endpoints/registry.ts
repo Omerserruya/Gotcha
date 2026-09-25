@@ -756,8 +756,33 @@ export const customerEndpoints = {
    * a CONSTANT describing what is attributable in principle — see
    * `coverageGaps`, which is why it takes what we actually sent.
    */
-  audit: (contactId: string) =>
-    endpoint('/api/audit-logs/customer/{contactId}', { contactId }),
+  audit: (contactId: string) => endpoint('/api/audit-logs/customer/{contactId}', { contactId }),
+  /**
+   * Screen 04f — the team's notes about this person.
+   *
+   * ★ CONTACT-KEYED, which is the whole reason the stub was replaced: it was
+   * keyed on a conversation, and *"a note is about a person, and the person
+   * outlives the thread."* So this does NOT go through `readKeyFor`, and the
+   * write prohibition recorded there does not reach it.
+   *
+   * Answers `{ notes, contactId }` — **no `data` envelope**, checked at the
+   * route rather than assumed either way.
+   *
+   * ⚠ NO PERMISSION GATE ON THE ROUTER. `authenticate, resolveTenant,
+   * requireActiveTenant()` and nothing more. Authorship is enforced per-note
+   * on PATCH and DELETE (`not_the_author`), not by a permission.
+   */
+  notes: (contactId: string) => endpoint('/api/identity/{contactId}/notes', { contactId }),
+  /**
+   * One note. PATCH edits it, DELETE soft-deletes it — the row stays, because
+   * *"a customer's history should not develop holes."*
+   *
+   * ⚠ AUTHOR ONLY. Both answer 403 `not_the_author` for anybody else, so the
+   * screen must offer these controls only to the author or it is offering a
+   * button that fails.
+   */
+  note: (contactId: string, noteId: string) =>
+    endpoint('/api/identity/{contactId}/notes/{noteId}', { contactId, noteId }),
 } as const;
 
 /**

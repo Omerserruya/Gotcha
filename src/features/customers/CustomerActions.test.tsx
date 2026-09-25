@@ -132,7 +132,9 @@ describe('★★ the outcome column, and the name that never decides it', () => 
   });
 
   it('★ names the tool an adapter row acted through, rather than the raw action', async () => {
-    await show(ok([event({ id: 't', action: 'adapter.ok.shopify.process_refund', succeeded: true })]));
+    await show(
+      ok([event({ id: 't', action: 'adapter.ok.shopify.process_refund', succeeded: true })]),
+    );
     expect(screen.getByTestId('action-t')).toHaveTextContent(/shopify\.process_refund/);
   });
 

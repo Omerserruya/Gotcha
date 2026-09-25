@@ -162,9 +162,7 @@ export async function CustomerActions({ actions }: { readonly actions: AuditRead
             return (
               <li key={event.id} className={styles.actionRow} data-testid={`action-${event.id}`}>
                 <span className={styles.actionWho} data-testid={`action-who-${event.id}`}>
-                  {t(
-                    `actions.actor.${event.actorType ?? 'unknown'}` as 'actions.actor.ai',
-                  )}
+                  {t(`actions.actor.${event.actorType ?? 'unknown'}` as 'actions.actor.ai')}
                 </span>
                 <span className={styles.actionWhat}>{label(event)}</span>
                 <time className={styles.actionWhen} dateTime={event.createdAt}>
