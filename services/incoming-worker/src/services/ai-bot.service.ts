@@ -327,10 +327,13 @@ export async function processAIBot(
             metadata: { source: "ai_bot", kind: "bridge_ack_for_approval" },
           },
         });
-        await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { lastMessageAt: new Date() },
-        });
+        // ★ ONLY WHEN THE SEND SUCCEEDED - see the reply path below for why.
+        if (extId) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { lastMessageAt: bridgeMsg.createdAt },
+          });
+        }
         await publishEvent({
           event: "message:new",
           tenantId,
@@ -388,10 +391,13 @@ export async function processAIBot(
             metadata: { source: "ai_bot", kind: "interim_ack" },
           },
         });
-        await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { lastMessageAt: new Date() },
-        });
+        // ★ ONLY WHEN THE SEND SUCCEEDED - see the reply path below for why.
+        if (interimExtId) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { lastMessageAt: interimMsg.createdAt },
+          });
+        }
         await publishEvent({
           event: "message:new",
           tenantId,
@@ -450,10 +456,31 @@ export async function processAIBot(
 
   trackMessageUsage(tenantId, conversationId, aiMessage.id, sendContext.channel).catch(() => {});
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { lastMessageAt: new Date() },
-  });
+  /**
+   * ★ A FAILED SEND DOES NOT MOVE THE CONVERSATION'S SORT KEY.
+   *
+   * The inbox orders by `lastMessageAt`. `status` is FAILED whenever no
+   * `externalMessageId` came back, and a reply the customer never received must
+   * not make the conversation look answered: the last real thing that happened
+   * is still their inbound question, and advancing the column would sink a
+   * customer who is still waiting below everyone the bot happened to answer.
+   *
+   * ★★ THIS PATH IS WHERE IT BIT HARDEST. The two ack writers above only reach
+   * their `create` when the adapter RETURNS - a thrown send skips them. Here the
+   * send error is caught further up so that the failure is persisted and
+   * diagnosable, which means this site is reached on a thrown send too, and
+   * therefore wrote a stale sort key on exactly the failures that matter most.
+   *
+   * The event below is still published for a FAILED row on purpose: the agent
+   * needs to SEE the failed reply in the thread. It is only the ordering claim
+   * that is withheld.
+   */
+  if (extId) {
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: aiMessage.createdAt },
+    });
+  }
 
   await publishEvent({
     event: "message:new",
