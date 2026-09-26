@@ -212,4 +212,15 @@
   .verbProblem {
     color: var(--intent-urgent-text);
   }
+
+  /*
+   * A reaction. Its own line, not a bubble: it is an annotation on another
+   * message and the customer did not "say" it.
+   */
+  .reaction {
+    align-self: flex-start;
+    padding-inline: var(--space-4);
+    color: var(--text-muted);
+    font-size: var(--font-size-caption);
+  }
 }

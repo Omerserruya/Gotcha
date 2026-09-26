@@ -168,6 +168,11 @@ export const messageSchema = z.object({
   replyToExternalId: z.string().nullable().default(null),
   replyToMessageId: z.string().nullable().default(null),
   /**
+   * The provider's own id for this message. What a reaction points at — Meta
+   * names the target by `wamid`, never by ours.
+   */
+  externalMessageId: z.string().nullable().default(null),
+  /**
    * ★★ WHERE A SYSTEM MESSAGE KEEPS ITS MEANING.
    *
    * `createSystemMessage` writes `body: ""` and puts everything in metadata:
@@ -191,6 +196,34 @@ export const messageSchema = z.object({
       /** `agent_transferred`. */
       fromAgentName: z.string().optional(),
       toAgentName: z.string().optional(),
+      /**
+       * ★★ A MESSAGE THE PROVIDER COULD NOT BE REPRESENTED AS ANYTHING ELSE.
+       *
+       * `whatsapp.adapter.ts`'s default branch turns an unmodelled type into
+       * `{ type: "text", text: "[<type> message]" }` and attaches the real
+       * payload here; `webhook.ts:344` persists it. So the row LOOKS like a
+       * text message whose body is a bracketed token, and everything the
+       * provider actually sent is in this object.
+       *
+       * Only `reaction` is decoded, because it is the only one whose shape
+       * this product has read. Everything else is named, not interpreted.
+       */
+      unsupported: z
+        .object({
+          providerType: z.string().optional(),
+          raw: z
+            .object({
+              reaction: z
+                .object({
+                  message_id: z.string().optional(),
+                  /** Empty string is Meta's "the reaction was REMOVED". */
+                  emoji: z.string().optional(),
+                })
+                .optional(),
+            })
+            .optional(),
+        })
+        .optional(),
     })
     .nullish()
     .default(null),
@@ -332,4 +365,69 @@ export function systemEventOf(message: InboxMessage): SystemEvent | null {
   const event = message.metadata?.systemEvent?.trim();
   if (!event) return null;
   return (SYSTEM_EVENTS as readonly string[]).includes(event) ? (event as SystemEvent) : null;
+}
+
+/* ── Reactions, inbound only, because outbound does not exist ────────────── */
+
+/**
+ * A customer's reaction, or `null`.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * THERE IS NO REACTION MODEL. THIS IS READ OUT OF AN UNSUPPORTED PAYLOAD.
+ * ════════════════════════════════════════════════════════════════════════════
+ * No table, no column, no handler. A WhatsApp reaction arrives as a type the
+ * adapter does not model, so it becomes a text message whose body is the
+ * literal string `"[reaction message]"` — which is what an agent sees today —
+ * with the emoji and the target's id kept on `metadata.unsupported.raw`.
+ *
+ * So this is a derived reading of a payload nobody modelled, and it is worth
+ * saying plainly: the day reactions get a model, this function is what
+ * changes, and nothing above it should know the difference.
+ *
+ * **Inbound only is not a restraint here, it is the shape of the platform.**
+ * `whatsAppOutboundAdapter` has no reaction send, so there is nothing a
+ * picker could call. The absence Omer asked for is one the code already had.
+ *
+ * `removed` is a third state and Meta's own: a reaction that is taken back
+ * arrives as the same message with `emoji: ""`. Read as "no reaction" it
+ * would silently drop the event; read as a reaction it would print an empty
+ * bubble.
+ */
+export type Reaction =
+  | { readonly kind: 'added'; readonly emoji: string; readonly toExternalId: string | null }
+  | { readonly kind: 'removed'; readonly toExternalId: string | null };
+
+export function reactionOf(message: InboxMessage): Reaction | null {
+  const unsupported = message.metadata?.unsupported;
+  if (unsupported?.providerType !== 'reaction') return null;
+  const reaction = unsupported.raw?.reaction;
+  if (!reaction) return null;
+  const toExternalId = reaction.message_id?.trim() || null;
+  const emoji = reaction.emoji ?? '';
+  return emoji === '' ? { kind: 'removed', toExternalId } : { kind: 'added', emoji, toExternalId };
+}
+
+/**
+ * The provider's name for a message we could not be given properly, or null.
+ *
+ * Everything the adapter cannot model lands as `[<providerType> message]` in
+ * the body — `[revoke message]`, `[edit message]`, `[unsupported message]`.
+ * An agent reading a bracketed token has no idea whether that is the
+ * customer's text or ours.
+ *
+ * Naming the type is all this does. It does not say what happened, because
+ * for every type except `reaction` we do not know.
+ */
+export function unsupportedType(message: InboxMessage): string | null {
+  const providerType = message.metadata?.unsupported?.providerType?.trim();
+  return providerType ? providerType : null;
+}
+
+/** Our id for the message a reaction points at, if it is on this page. */
+export function resolveExternal(
+  externalId: string | null,
+  messages: readonly InboxMessage[],
+): InboxMessage | null {
+  if (!externalId) return null;
+  return messages.find((m) => m.externalMessageId === externalId) ?? null;
 }

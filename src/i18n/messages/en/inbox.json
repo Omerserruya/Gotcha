@@ -17,7 +17,13 @@
       "agent_transferred": "{from} transferred this to {to}",
       "department_transferred": "This was transferred to another team",
       "returned_to_ai": "Handed back to the AI"
-    }
+    },
+    "reaction": {
+      "toMessage": "They reacted {emoji} to “{preview}”",
+      "toEarlier": "They reacted {emoji} to an earlier message",
+      "removed": "They took their reaction back"
+    },
+    "unsupported": "They sent something GOTCHA can't show. WhatsApp calls it a “{type}”."
   },
   "queue": {
     "cap": "Showing the {count} most recent.",

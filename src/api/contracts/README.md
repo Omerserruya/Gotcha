@@ -264,3 +264,29 @@ and the tests passed because they handed the component an outcome directly.
 When an outcome is decided in a `catch`, the test that proves it exists has to
 throw. A test that constructs the outcome proves only that the renderer has a
 branch for it.
+
+## A mutation that did not apply looks like a mutation nothing catches
+
+Both print a green run, and they mean opposite things: one says the code is
+guarded, the other says it is not. Twice now a `sed` has silently missed
+because prettier had collapsed a multi-line ternary onto one line, and the
+green result read as "no test covers this".
+
+So a green mutation is not a result. Confirm the edit landed — `grep` the
+mutated line, or diff the file — before concluding anything from it. The first
+of these took a wrong finding as far as a report.
+
+## A reaction is read out of a payload nobody modelled
+
+There is no reaction table, column or handler. WhatsApp's reaction hits the
+adapter's default branch, so it is stored as a **text message whose body is
+`"[reaction message]"`**, and the emoji and target id survive only because
+`webhook.ts:344` persists `metadata.unsupported`.
+
+`reactionOf` is therefore a derived reading, and says so. The day reactions
+get a model, that function is what changes and nothing above it should notice.
+
+The same payload carries every other type the adapter cannot model — `revoke`,
+`edit`, `unsupported` — as `[<type> message]`. Naming the provider's type is
+all that can honestly be said about those: unlike a reaction, nobody here has
+read their payloads.

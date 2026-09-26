@@ -3,8 +3,11 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import {
   hasTranscript,
   quotedState,
+  reactionOf,
   renderableType,
+  resolveExternal,
   systemEventOf,
+  unsupportedType,
   type InboxMessage,
 } from '@/api/contracts/inbox';
 
@@ -100,8 +103,56 @@ export async function MessageStream({
           );
         }
 
+        /*
+          ════════════════════════════════════════════════════════════════
+          ★★ A REACTION IS NOT A MESSAGE, AND IT ARRIVES AS ONE
+          ════════════════════════════════════════════════════════════════
+          There is no reaction model in this platform. WhatsApp sends a type
+          the adapter does not model, so it becomes a text message whose body
+          is the literal string `[reaction message]` — which is what an agent
+          reads today — and the emoji survives only on
+          `metadata.unsupported.raw`.
+
+          Drawn as its own thin line rather than attached to the target,
+          because that is how it arrives: its own row, in order. Where the
+          message it points at is on this page we say which one; where it is
+          not, we say it was earlier, the same `resolved` / `unresolved`
+          distinction as a quoted reply.
+
+          Inbound only, and not by restraint: `whatsAppOutboundAdapter` has
+          no reaction send, so there is nothing a picker could call.
+        */
+        const reaction = reactionOf(message);
+        if (reaction) {
+          const target = resolveExternal(reaction.toExternalId, messages);
+          const preview = target ? target.body.trim().slice(0, 40) : '';
+          return (
+            <li
+              key={message.id}
+              className={styles.reaction}
+              data-testid={`reaction-${message.id}`}
+              data-kind={reaction.kind}
+            >
+              {reaction.kind === 'removed'
+                ? t('stream.reaction.removed')
+                : preview !== ''
+                  ? t('stream.reaction.toMessage', { emoji: reaction.emoji, preview })
+                  : t('stream.reaction.toEarlier', { emoji: reaction.emoji })}
+            </li>
+          );
+        }
+
         const type = renderableType(message);
         const quoted = quotedState(message);
+        /*
+          ★ AND ANYTHING ELSE THE PROVIDER COULD NOT GIVE US PROPERLY.
+          `[revoke message]`, `[edit message]`, `[unsupported message]` — an
+          agent reading a bracketed token cannot tell whether it is the
+          customer's words or ours. Naming the provider's own type is all we
+          can honestly do: for every type but `reaction`, we do not know what
+          happened.
+        */
+        const unsupported = unsupportedType(message);
         /*
          * Did any branch above draw the message's content? Recognising a
          * type and rendering it are different things, and only the second
@@ -177,7 +228,11 @@ export async function MessageStream({
               no body and no branch — location, template, interactive,
               system, and whatever is added next — lands here and says so.
             */}
-            {message.body.trim() !== '' ? (
+            {unsupported !== null ? (
+              <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
+                {t('stream.unsupported', { type: unsupported })}
+              </p>
+            ) : message.body.trim() !== '' ? (
               <p className={styles.body}>{message.body}</p>
             ) : !rendered ? (
               <p className={styles.mediaNote} data-testid={`unknown-${message.id}`}>
