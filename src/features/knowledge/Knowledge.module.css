@@ -167,7 +167,7 @@
     padding: var(--space-12);
     border: 1px solid var(--intent-urgent-edge);
     background: var(--intent-urgent-surface);
-    border-radius: var(--radius-8);
+    border-radius: var(--radius-card);
   }
 
   .conflictQuestion {
@@ -193,9 +193,13 @@
    */
   .variant {
     padding: var(--space-8);
-    border: 1px solid var(--surface-edge);
-    background: var(--surface-base);
-    border-radius: var(--radius-4);
+    /* All three tokens here were undefined, so each answer had no border, no
+       fill and square corners — sitting directly on the urgent surface with
+       nothing separating the two. White is what makes them read as two
+       things. */
+    border: 1px solid var(--border-default);
+    background: var(--panel-field);
+    border-radius: var(--radius-item);
   }
 
   .variantAnswer {
@@ -216,7 +220,7 @@
     flex-wrap: wrap;
     gap: var(--space-8) var(--space-16);
     padding-bottom: var(--space-12);
-    border-bottom: 1px solid var(--surface-edge);
+    border-bottom: 1px solid var(--border-default);
   }
 
   .counter {

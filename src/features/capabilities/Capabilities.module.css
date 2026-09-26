@@ -221,9 +221,20 @@
     font-size: var(--font-size-caption);
   }
 
+  /*
+   * The stored choice. Neutral rather than approving: `never` is as correct a
+   * state as `do_it`, and a green "selected" would congratulate an admin for
+   * whichever one they happened to have.
+   *
+   * Was `--intent-selected-surface` / `--intent-selected-edge`, neither of
+   * which exists — so the fill was dropped entirely and the edge fell back to
+   * `currentColor`. The edge is unchanged in effect; the fill is new, and it
+   * is what makes the current choice legible at a glance rather than by
+   * comparing border darkness.
+   */
   .choiceButton[data-current='yes'] {
-    background: var(--intent-selected-surface);
-    border-color: var(--intent-selected-edge);
+    background: var(--intent-neutral-surface);
+    border-color: var(--action-base);
   }
 
   .choiceNote {

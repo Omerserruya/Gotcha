@@ -225,7 +225,7 @@
   .toolName {
     padding: 0;
     font-size: var(--font-size-meta);
-    color: var(--text-default);
+    color: var(--text-primary);
   }
 
   /*
@@ -243,14 +243,15 @@
     cursor: not-allowed;
   }
 
+  /* The chosen state, told apart from the two it sits beside. */
   .toolState:has(input:checked) {
-    color: var(--text-default);
+    color: var(--text-primary);
   }
 
   .toolsApprovals {
     margin-block: var(--space-12) 0;
     font-size: var(--font-size-caption);
-    color: var(--text-default);
+    color: var(--text-body);
   }
 
   .toolsLocked {

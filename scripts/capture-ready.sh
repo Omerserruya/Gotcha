@@ -139,5 +139,31 @@ case "$code" in
     exit 1 ;;
 esac
 
+# ── AND THE LAYER THAT ONLY A SCREENSHOT WOULD HAVE SHOWN ────────────────
+#
+# 2026-09-26: twelve CSS custom properties are referenced and never defined.
+# An undefined var with no fallback invalidates the WHOLE declaration at
+# computed-value time, so `border: 1px solid var(--x)` is no border at all and
+# `background: var(--x)` is no background. There is no build error, no lint
+# error and no test failure — the only artefact that disagrees is the picture.
+#
+# That is the MISSING_MESSAGE defect one layer down, and it is exactly the
+# class this gate exists for: a capture that runs anyway produces evidence of
+# a design that was never broken, and nobody reviewing the shots can tell the
+# difference between "the screen looks like this" and "the screen could not
+# find its colours".
+if [ -x scripts/css-token-sweep.sh ]; then
+  undefined=$(bash scripts/css-token-sweep.sh 2>/dev/null | grep -cE '^  --' || true)
+  if [ "${undefined:-0}" -gt 0 ]; then
+    echo "NOT READY  $undefined CSS custom properties are referenced and never defined." >&2
+    echo "           An undefined var with no fallback drops the whole declaration:" >&2
+    echo "           a missing border, not a fallback border. It fails no test and" >&2
+    echo "           appears only in the shots." >&2
+    echo "             bash scripts/css-token-sweep.sh" >&2
+    exit 1
+  fi
+fi
+
 echo "READY      the server booted after the build, nothing is newer than it,"
-echo "           and the gateway reaches the services (HTTP $code)."
+echo "           the gateway reaches the services (HTTP $code), and every CSS"
+echo "           custom property the screens reference is defined."

@@ -580,7 +580,9 @@
   .buyTotalRow dd {
     font-size: var(--font-size-meta);
     font-weight: 600;
-    color: var(--text-default);
+    /* The total. Bold and full contrast, since it is the number somebody is
+       agreeing to pay. */
+    color: var(--text-primary);
   }
 
   .buyUnknownTotal,

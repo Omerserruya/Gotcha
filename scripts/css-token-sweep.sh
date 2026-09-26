@@ -24,8 +24,29 @@ used=$(grep -rhoE -- 'var\(--[a-zA-Z0-9-]+\)' $css |
 missing=$(comm -13 <(echo "$defined") <(echo "$used") |
   grep -vE '^--(font-(archivo|heebo|frank-ruhl-libre|ibm-plex-mono|instrument-serif)|brand-mark)$' || true)
 
+# ── The second mechanism, which is quieter than the first ───────────────────
+#
+# `var(--x, something)` where `--x` is undefined does not drop the
+# declaration — it renders the fallback, forever, and looks deliberate. That is
+# how `var(--font-family-serif, Georgia, …)` shipped: the real token is
+# `--font-serif`, and it is locale-aware, so the fallback meant the Hebrew
+# customer brief was set in a font with no Hebrew glyphs. Nothing was missing
+# on screen; it was simply always the wrong font.
+#
+# Listed rather than failed: a fallback can be a deliberate local constant
+# (`--size-label-column, 6rem` has no token behind it and does not want one).
+# Somebody decides, per line.
+masked=$(grep -rnE -- 'var\(--[a-zA-Z0-9-]+[[:space:]]*,' $css | grep -vE '^[^:]+:[0-9]+:[[:space:]]*/?\*' || true)
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  token=$(echo "$line" | grep -oE -- 'var\(--[a-zA-Z0-9-]+[[:space:]]*,' | grep -oE -- '--[a-zA-Z0-9-]+' | head -1)
+  if ! echo "$defined" | grep -qxF -- "$token"; then
+    echo "MASKED BY A FALLBACK — renders the fallback, not the token: $line"
+  fi
+done <<< "$masked"
+
 if [ -z "$missing" ]; then
-  echo "OK — every var() resolves ($(echo "$used" | wc -l) used, $(echo "$defined" | wc -l) defined)."
+  echo "OK — every var() with no fallback resolves ($(echo "$used" | wc -l) used, $(echo "$defined" | wc -l) defined)."
   exit 0
 fi
 

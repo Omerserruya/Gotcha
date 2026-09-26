@@ -142,7 +142,7 @@
   .writebackLead {
     margin-block: var(--space-8) 0;
     font-size: var(--font-size-meta);
-    color: var(--text-default);
+    color: var(--text-body);
   }
 
   .writebackList {
@@ -183,9 +183,9 @@
     font-size: var(--font-size-meta);
     padding: var(--space-4) var(--space-8);
     border: 1px solid var(--border-default);
-    border-radius: var(--radius-sm);
-    background: var(--surface-default);
-    color: var(--text-default);
+    border-radius: var(--radius-control);
+    background: var(--panel-field);
+    color: var(--text-primary);
   }
 
   .electSave:disabled {
@@ -203,7 +203,11 @@
     flex-basis: 100%;
     margin: 0;
     font-size: var(--font-size-caption);
-    color: var(--text-default);
+    /* ★ The comment above asked for full contrast and the token that would
+       have given it does not exist, so this sentence has been inheriting
+       whatever its parent had — read as a caption, which is the one thing it
+       says it must not be. */
+    color: var(--text-primary);
   }
 
   .electError {

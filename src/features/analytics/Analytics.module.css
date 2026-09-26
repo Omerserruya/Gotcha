@@ -32,7 +32,9 @@
   .table th,
   .table td {
     padding: var(--space-8);
-    border-bottom: 1px solid var(--surface-edge);
+    /* `--row-divider` is named for exactly this and is lighter than a card
+       border, which is what a dense table wants. */
+    border-bottom: 1px solid var(--row-divider);
     text-align: start;
     /* Tabular figures so columns line up without implying a ranking. */
     font-variant-numeric: tabular-nums;

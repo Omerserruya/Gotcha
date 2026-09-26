@@ -122,6 +122,8 @@
     border-radius: var(--radius-panel);
     padding: var(--space-32);
     overflow-y: auto;
-    z-index: var(--z-drawer, 200);
+    /* `--z-drawer` is not a token; `--z-panel` is, and it is 200 — so this
+       was right by coincidence and outside the scale. */
+    z-index: var(--z-panel);
   }
 }

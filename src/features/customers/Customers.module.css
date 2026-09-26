@@ -194,11 +194,26 @@
   */
   .briefProse {
     margin: 0;
-    font-family: var(--font-family-serif, Georgia, 'Times New Roman', serif);
-    font-style: italic;
+    /*
+     * ★★ `--font-serif`, AND ITS STYLE TOKEN WITH IT.
+     * This said `var(--font-family-serif, Georgia, …)`. That token does not
+     * exist, so the fallback was what ran — and the fallback is the bug:
+     * **Georgia has no Hebrew glyphs**, so a Hebrew customer brief was
+     * rendered in whatever the system substituted, never in the brand serif.
+     * `--font-serif` is locale-aware by design: Instrument Serif in Latin,
+     * Frank Ruhl Libre in Hebrew.
+     *
+     * And the style follows it rather than being hardcoded, because Frank
+     * Ruhl Libre has no italic — hardcoding `italic` asks the browser to
+     * slant Hebrew synthetically, which is the thing `--font-serif-style`
+     * exists to stop. `Text.module.css` pairs the two tokens in both of its
+     * serif roles; a fallback is not a licence to do it differently.
+     */
+    font-family: var(--font-serif);
+    font-style: var(--font-serif-style);
     font-size: var(--font-size-lead, var(--font-size-body));
     line-height: 1.6;
-    color: var(--text-default);
+    color: var(--text-body);
   }
 
   .signals {
@@ -277,7 +292,7 @@
 
   .eventBody {
     font-size: var(--font-size-meta);
-    color: var(--text-default);
+    color: var(--text-body);
   }
 
   /* Outbound sits visually apart, so a stream reads as a conversation. */
@@ -306,7 +321,9 @@
   .neverWritten {
     margin: 0;
     font-size: var(--font-size-meta);
-    color: var(--text-default);
+    /* ★ Same as `.electOk`: the comment above says full contrast, and the
+       dead token gave it none. */
+    color: var(--text-primary);
   }
 
   /* ── Screen 04d · her orders ──────────────────────────────────────────── */
@@ -470,7 +487,7 @@
     align-items: baseline;
     gap: var(--space-8);
     padding: var(--space-8) 0;
-    border-bottom: 1px solid var(--surface-edge);
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .actionWho {
@@ -500,7 +517,9 @@
   }
 
   .actionOutcome[data-outcome='worked'] {
-    color: var(--intent-positive-text);
+    /* `--signal-done-text`: this is the "done" vocabulary, not the
+       "opportunity" one. `--intent-positive-text` does not exist. */
+    color: var(--signal-done-text);
   }
 
   .actionOutcome[data-outcome='failed'] {
@@ -553,8 +572,8 @@
     flex-direction: column;
     gap: var(--space-8);
     padding: var(--space-12);
-    border: 1px solid var(--surface-edge);
-    border-radius: var(--radius-8);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
   }
 
   .composerLabel {
@@ -565,8 +584,8 @@
   .composerInput {
     width: 100%;
     padding: var(--space-8);
-    border: 1px solid var(--surface-edge);
-    border-radius: var(--radius-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-control);
     font: inherit;
     resize: vertical;
   }
@@ -607,7 +626,7 @@
     flex-direction: column;
     gap: var(--space-4);
     padding-bottom: var(--space-12);
-    border-bottom: 1px solid var(--surface-edge);
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .noteHead {

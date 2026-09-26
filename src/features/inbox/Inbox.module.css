@@ -22,15 +22,22 @@
     gap: var(--space-4);
     max-inline-size: 42rem;
     padding: var(--space-8) var(--space-12);
-    border-radius: var(--radius-8);
-    background: var(--surface-raised);
+    /* `--radius-8` and `--surface-raised` are both undefined: the bubble had
+       square corners and no fill at all. */
+    border-radius: var(--radius-item);
+    background: var(--panel-field);
   }
 
   /* Ours sits at the end of the line, theirs at the start — mirrored in
      Hebrew by the logical property, with no second rule. */
+  /*
+   * Ours. Warm rather than the conventional blue: the palette is warm
+   * neutrals throughout, and the side the bubble sits on already says who
+   * sent it — the tint is the second signal, not the first.
+   */
   .message[data-direction='OUTBOUND'] {
     align-self: flex-end;
-    background: var(--intent-selected-surface);
+    background: var(--panel-well);
   }
 
   .body {
@@ -86,7 +93,7 @@
     align-items: baseline;
     gap: var(--space-8);
     padding: var(--space-8) 0;
-    border-bottom: 1px solid var(--surface-edge);
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .who {
