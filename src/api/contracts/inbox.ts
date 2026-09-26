@@ -32,12 +32,20 @@ import { z } from 'zod';
  * same word for a different fact — and using it would show an agent's queue
  * as read because the customer read our reply. See `agentUnreadIsUnknown`.
  *
- * **Per-message intent does not persist.** `ConversationIntelligence` carries
- * `detectedIntent` per CONVERSATION with a confidence. The per-message type
- * exists in `ai-assist.service.ts` and nothing writes it, so the design's
- * *"3px left edge plus one small line"* — which is per message — has no data.
- * The conversation-level intent can sit on the list row; the edge cannot be
- * drawn.
+ * **Per-message intent does not persist YET, and it is authorized.**
+ * `ConversationIntelligence` carries `detectedIntent` per CONVERSATION; the
+ * per-message type exists in `ai-assist.service.ts` and nothing writes it,
+ * so the design's *"3px left edge plus one small line"* has no data today.
+ *
+ * ★ OMER HAS APPROVED PERSISTING IT (2026-09-26), so this is a gap with a
+ * date on it rather than a decision. Recorded that way deliberately: a note
+ * saying only "does not exist" invites the next reader to design permanently
+ * around it, which is how a temporary absence becomes a fixed shape.
+ *
+ * Until the column lands the marker is not drawn, and **absent will not mean
+ * "no intent" — it means nobody recorded one.** The stream renders per
+ * message with its own attributes, so adding the edge is an attribute and a
+ * style rather than a restructure.
  */
 
 /* ── The list ────────────────────────────────────────────────────────────── */

@@ -24,6 +24,23 @@ import styles from './Knowledge.module.css';
  * last refreshed and leaves the judgement to the reader, who knows their own
  * business well enough to decide whether two months is fine.
  *
+ * ── FOUR WAYS IN, NOT THE DESIGN'S FIVE ──
+ * The design lists *"Business core · Products & prices · Shopify · live"* as
+ * a fifth source. **Omer ruled it out (2026-09-26): it is not a knowledge
+ * source.** It is the part→system mapping on screen 14, and presenting it
+ * here would have required inventing a read that treats it as one.
+ *
+ * The screen does not explain the absence, deliberately — nobody looking at
+ * a knowledge screen misses a row that was never a knowledge row, and an
+ * explanation would be the only place the idea appeared.
+ *
+ * ── AND THE CONFLICT PANEL'S OTHER AXIS IS COMING ──
+ * Fact extraction from ingested documents is authorized, so *"your website
+ * says ₪550, the PDF says ₪850"* will eventually be real. Nothing is
+ * pre-built for it: the shape is unsettled, and the conversation-axis card
+ * says truthfully what it knows — which is why widening it later will be an
+ * addition rather than a correction.
+ *
  * ── AND THE QUESTIONS ARE THE SCREEN ──
  * The design's headline counts — confident topics, thin topics, out of date —
  * have no source. What is real is **the list of questions GOTCHA could not
