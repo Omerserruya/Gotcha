@@ -490,3 +490,106 @@ export function neverFailed(usage: ToolUsage): boolean | null {
 export function usageFor(toolName: string, usage: readonly ToolUsage[] | null): ToolUsage | null {
   return usage?.find((u) => u.toolName === toolName) ?? null;
 }
+
+/* ── May this be automated at all? ───────────────────────────────────────── */
+
+/**
+ * The three states an admin may choose from for one tool.
+ *
+ * `do_it` is absent from the list wherever the platform cannot positively
+ * say the tool is read-only. See `automationCeiling`.
+ */
+export const ADMIN_CHOICES = ['do_it', 'ask_me', 'never'] as const;
+export type AdminChoice = (typeof ADMIN_CHOICES)[number];
+
+/** Why "Do it" is not on offer, or `null` when it is. */
+export type NoAutomationReason = 'changes_orders_or_money' | 'unclassified' | null;
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ "DO IT" IS OFFERED ONLY WHERE THE PLATFORM POSITIVELY SAYS `read_only`
+ * ════════════════════════════════════════════════════════════════════════════
+ * Two independent reasons, either of which would be enough.
+ *
+ * ── ONE · THE CLASSIFIER IS A NAME REGEX AND IT MISSES TWO OF THE FOUR ──
+ * `riskGroupFor` tests four patterns against the tool's NAME and falls
+ * through to `create_update`. Measured against real names:
+ *
+ *   shopify.process_refund   → financial       mayBeAlwaysAllowed = false
+ *   shopify.cancel_order     → create_update   mayBeAlwaysAllowed = TRUE
+ *   shopify.create_return    → create_update   mayBeAlwaysAllowed = TRUE
+ *
+ * Neither "cancel" nor "return" appears in `FINANCIAL_RE`, `DELETE_RE`,
+ * `ADMIN_RE` or `SENSITIVE_RE`. The design puts both under *"Changing orders
+ * and money"* reading *"Comes to Approvals"* — so the classifier disagrees
+ * with the design about two of them, permissively.
+ *
+ * **`create_update` is not a judgement. It is the absence of four
+ * judgements**, and a name-based classifier may be trusted when it says SAFE
+ * and never when it merely fails to say DANGEROUS. That is the rule already
+ * written three functions above `mayBeAlwaysAllowed` in the platform's own
+ * file: *"an absent verdict never means 'definitely fine'."*
+ *
+ * ── TWO · THE DESIGN'S "DO IT" PRESUPPOSES A LIMIT THAT DOES NOT EXIST ──
+ * It draws *"Refund up to ₪100 · Do it"*. There is no limit anywhere:
+ * `BusinessActionPolicy` has zero rows, `AgentToolPermission` has no numeric
+ * field, and per-employee amounts are deferred.
+ *
+ * So *Do it* on a refund today does not mean *"up to ₪100 automatically"*.
+ * It means **refund, any amount, automatically.** The design's control and
+ * the product's capability are different controls wearing the same three
+ * radio buttons, and the state that requires a bound cannot be offered while
+ * no bound exists.
+ *
+ * ── AND THE ASYMMETRY DECIDES THE TIE ──
+ * Too strict: an admin cannot automate a safe write, and says so. A sentence
+ * fixes it. Too loose: `cancel_order` is set to Do it **because the screen
+ * offered it**, an order is cancelled with nobody looking, and the audit row
+ * says `succeeded: null` because no customer-keyed write records a verdict.
+ * Not recoverable, and least visible afterwards.
+ *
+ * ⚠ AND THIS IS NOT THE ONLY GUARD IT SHOULD BE.
+ * `PUT /api/tool-permissions/:toolName` does not call `mayBeAlwaysAllowed` —
+ * it stores `requiresApproval: false` on a refund if asked. A UI-only guard
+ * is one anybody with curl steps over. Backend has the enforcement; this one
+ * exists because it is the guard that explains itself to a person.
+ */
+export function automationCeiling(capability: Capability): NoAutomationReason {
+  const group = (capability.riskGroup ?? '').trim();
+  if (group === 'read_only') return null;
+  /*
+   * Named apart so the sentence can be. "This changes orders or money" is a
+   * statement about the tool; "we could not classify this" is a statement
+   * about us, and a reader can act on the first.
+   */
+  return group === '' || group === 'create_update' ? 'unclassified' : 'changes_orders_or_money';
+}
+
+/** The choices an admin may actually pick for this tool, in design order. */
+export function choicesFor(capability: Capability): readonly AdminChoice[] {
+  return automationCeiling(capability) === null
+    ? ['do_it', 'ask_me', 'never']
+    : ['ask_me', 'never'];
+}
+
+/** Which choice the tool is on now. */
+export function currentChoice(capability: Capability): AdminChoice {
+  if (!capability.enabled) return 'never';
+  return capability.requiresApproval ? 'ask_me' : 'do_it';
+}
+
+/**
+ * What the write body must be to reach a chosen state.
+ *
+ * ★ BOTH FIELDS, ALWAYS. The route applies `requiresApproval` only when it
+ * is present, so sending `{ enabled: true }` alone on a tool currently set
+ * to Never would enable it at whatever approval setting it last had — which
+ * on a financial tool could be none. Every transition states both.
+ */
+export function bodyFor(choice: AdminChoice): {
+  readonly enabled: boolean;
+  readonly requiresApproval: boolean;
+} {
+  if (choice === 'never') return { enabled: false, requiresApproval: true };
+  return { enabled: true, requiresApproval: choice === 'ask_me' };
+}

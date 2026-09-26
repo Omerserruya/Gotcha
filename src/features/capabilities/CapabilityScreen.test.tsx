@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { createTranslator } from 'next-intl';
+import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Capability, ToolUsage } from '@/api/contracts/capabilities';
@@ -44,7 +44,19 @@ const capability = (over: Partial<Capability> = {}): Capability => ({
 const renderScreen = async (
   capabilities: readonly Capability[],
   usage: readonly ToolUsage[] | null = null,
-) => render(await CapabilityScreen({ capabilities, usage }));
+) =>
+  render(
+    /*
+     * Wrapped, because `PermissionChoice` is a CLIENT component inside this
+     * server tree and `useTranslations` needs a context the server mock does
+     * not supply. Sixth time this session — the tell is always the same
+     * sentence about `NextIntlClientProvider`, and it names the component
+     * rather than the harness.
+     */
+    <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+      {await CapabilityScreen({ capabilities, usage })}
+    </NextIntlClientProvider>,
+  );
 
 describe('our words, not the platform’s', () => {
   it('replaces the API prose with a merchant sentence', async () => {
@@ -146,7 +158,9 @@ describe('★★ the fourth state, on screen', () => {
      * something that is connected.
      */
     await renderScreen([capability({ toolName: 'send_message', integrationConnected: undefined })]);
-    expect(screen.getByTestId('stance-send_message')).toBeInTheDocument();
+    // The control is offered. (It is `choice-…` since the three-state
+    // control replaced the read-only stance label — the claim is the same.)
+    expect(screen.getByTestId('choice-send_message')).toBeInTheDocument();
     expect(screen.queryByTestId('blocked-send_message')).toBeNull();
   });
 
@@ -154,8 +168,17 @@ describe('★★ the fourth state, on screen', () => {
     // `disabled` with `reason: 'ok'` — the switch is theirs and it is off.
     // That must not render as the platform blocking them.
     await renderScreen([capability({ toolName: 'delete_contact', enabled: false })]);
-    expect(screen.getByTestId('stance-delete_contact')).toBeInTheDocument();
+    expect(screen.getByTestId('choice-delete_contact')).toBeInTheDocument();
     expect(screen.queryByTestId('blocked-delete_contact')).toBeNull();
+    /*
+     * ★ AND "Never" READS AS THEIRS. `disabled` with `reason: 'ok'` means the
+     * admin turned it off — the control shows that as the current choice
+     * rather than as the platform blocking them.
+     */
+    expect(screen.getByTestId('choice-delete_contact-never')).toHaveAttribute(
+      'data-current',
+      'yes',
+    );
   });
 });
 

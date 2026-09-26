@@ -15,6 +15,7 @@ import {
   type ToolUsage,
 } from '@/api/contracts/capabilities';
 
+import { PermissionChoice } from './PermissionChoice';
 import styles from './Capabilities.module.css';
 
 /**
@@ -90,6 +91,12 @@ export async function CapabilityScreen({
 
           <ul className={styles.capabilities}>
             {group.capabilities.map((capability) => {
+              /*
+               * Still used, for `data-stance` — a styling and test hook that
+               * says which of the three the tool is on. Not dead: I removed
+               * it as unused a moment ago and the attribute below is the
+               * reader I had missed.
+               */
               const stance = capabilityStance(capability);
               return (
                 <li
@@ -163,9 +170,7 @@ export async function CapabilityScreen({
                   {(() => {
                     const availability = resolveAvailability(capability);
                     return isTheAdminsChoice(availability) ? (
-                      <span className={styles.stance} data-testid={`stance-${capability.toolName}`}>
-                        {t(`stance.${stance}` as 'stance.ask_first')}
-                      </span>
+                      <PermissionChoice capability={capability} />
                     ) : (
                       <span
                         className={styles.blocked}

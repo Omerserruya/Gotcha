@@ -199,4 +199,43 @@
     font-size: var(--font-size-caption);
     color: var(--text-muted);
   }
+
+  /*
+   * The three-state control. Nothing here styles "Do it" as the preferred
+   * answer: on most tools it is not even offered, and on the rest it is a
+   * decision rather than a default.
+   */
+
+  .choice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .choiceRow {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .choiceButton {
+    font-size: var(--font-size-caption);
+  }
+
+  .choiceButton[data-current='yes'] {
+    background: var(--intent-selected-surface);
+    border-color: var(--intent-selected-edge);
+  }
+
+  .choiceNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  /* A stored state the ceiling would now forbid, and a failed write. */
+  .choiceWarn {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
 }

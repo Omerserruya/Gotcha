@@ -61,5 +61,22 @@
     "noneConnected": "Nothing is connected yet.",
     "uncategorised": "Everything else",
     "unavailable": "We couldn't read what's connected just now."
+  },
+  "choice": {
+    "label": "What GOTCHA may do with this",
+    "do_it": "Do it",
+    "ask_me": "Ask me first",
+    "never": "Never",
+    "noAutomation": {
+      "changes_orders_or_money": "This one changes orders or money, so it can be asked or refused — not automated.",
+      "unclassified": "We can't tell what this one changes, so it can be asked or refused — not automated."
+    },
+    "storedAutomatic": "This is set to run on its own. You can change it to ask or refuse, but it can't be set back to automatic from here.",
+    "problem": {
+      "not_automatable": "That one can't be set to run on its own.",
+      "not_connected": "Connect the integration first — there's nothing to switch on yet.",
+      "forbidden": "You don't have permission to change what GOTCHA may do.",
+      "failed": "That didn't save. Try again."
+    }
   }
 }
