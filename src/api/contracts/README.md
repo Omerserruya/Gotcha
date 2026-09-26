@@ -183,3 +183,45 @@ problem.
 It is written by the person best placed to see it, which is presumably why
 they do not: having just articulated the rule feels like having applied it.
 
+
+## An error code is only where the route puts it
+
+`cause.code` is the idiom everywhere in this codebase, and for the routes it
+was written against it is right. Those codes come from the **entitlement
+envelope in `packages/shared`**, which really does send a `code` field.
+
+A service's own route-level refusals mostly do not. `historical-import.ts`
+answers `{ error: "no_knowledge_base", message }`, and `readErrorBody` maps
+`error` → `developerMessage` while `code` stays `undefined`. So the idiom,
+copied, **compiles and never fires** — the tenant is told "something went
+wrong" forever and the one action that would fix it is never named.
+
+Read the `res.status(...).json(...)` before choosing the field to match on.
+A branch that cannot fire is worse than a missing branch, because it looks
+handled.
+
+## `ok: true` is a claim about the request, not about the outcome
+
+`POST /candidates/:id/approve` awaits `processDocument` inside a `try/catch`
+that logs and swallows, then answers `{ ok: true }`. The comment above that
+await says *"Awaited rather than fired and forgotten, so an approval that
+reports success is an approval the AI can actually use."* The catch removes
+exactly that guarantee.
+
+**A comment that names the property the code does not have is the most
+expensive kind of wrong comment**, because it answers the question a reader
+came to ask. Where a write's usefulness depends on work done after the write,
+the response is not evidence — read the thing back.
+
+## A token that does not exist renders as nothing
+
+`var(--surface-edge)` with no definition and no fallback makes the whole
+declaration invalid at computed-value time: `border: 1px solid
+var(--surface-edge)` is **no border at all**. No build error, no lint error,
+no test failure — the same shape as a wrong i18n key, one layer down.
+
+The vocabulary in `design-system/tokens/tokens.css` is semantic
+(`--radius-card`, `--panel-base`, `--intent-urgent-text`). Inventing a
+primitive-sounding name next to it (`--radius-8`, `--surface-base`) produces a
+plausible declaration that does nothing. `scripts/css-token-sweep.sh` lists
+every use with no definition.

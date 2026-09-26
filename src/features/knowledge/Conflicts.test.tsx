@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { createFormatter, createTranslator } from 'next-intl';
+import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -63,16 +63,25 @@ const candidate = (over: Record<string, unknown> = {}): Candidate =>
     ...over,
   });
 
+/*
+ * ★ THE PROVIDER, BECAUSE THE PANEL NOW CONTAINS A CLIENT COMPONENT.
+ * `ResolveConflict` calls `useTranslations`, which reads React context —
+ * mocking `next-intl/server` does nothing for it. Without this the render
+ * throws rather than rendering an empty string, which is the good failure:
+ * the seventh time this has come up, and the only one that was loud.
+ */
 const show = async (over: Record<string, unknown> = {}) =>
   render(
-    await KnowledgeScreen({
-      sources: [],
-      unanswered: [],
-      conflicts: [candidate()],
-      conflictsScannedAt: '2026-09-01T00:00:00.000Z',
-      everImported: true,
-      ...over,
-    }),
+    <NextIntlClientProvider locale="en" messages={{ knowledge: messages }}>
+      {await KnowledgeScreen({
+        sources: [],
+        unanswered: [],
+        conflicts: [candidate()],
+        conflictsScannedAt: '2026-09-01T00:00:00.000Z',
+        everImported: true,
+        ...over,
+      })}
+    </NextIntlClientProvider>,
   );
 
 describe('★★ both answers, and neither is preferred', () => {

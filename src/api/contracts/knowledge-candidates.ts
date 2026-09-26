@@ -272,3 +272,100 @@ export function conflictsIn(candidates: readonly Candidate[]): readonly Candidat
     .slice()
     .sort((a, b) => b.occurrenceCount - a.occurrenceCount);
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * RESOLVING A CONFLICT — the write, and what the response does and does not say
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ★★ THE BODY KEY IS `answer`. IT IS NOT `editedAnswer`.
+ *
+ * `editedAnswer` is the name of the *variable* inside the handler, and the
+ * column it is finally stored in. The route reads `req.body?.answer`
+ * (`historical-import.ts:377`). Posting `editedAnswer` leaves the local
+ * `editedAnswer` null, and for a conflicted candidate the very next branch is
+ * `if (candidate.conflict && !editedAnswer)` → **400
+ * `conflict_requires_answer`**. So the wrong key does not lose the edit
+ * quietly; it makes the button refuse every single time, on the one row type
+ * the button exists for.
+ *
+ * Worth saying plainly because the wrong name is the one written on the field
+ * at both ends of the route — request handler variable and database column —
+ * and the only place the real one appears is the line that reads it.
+ */
+export const APPROVE_BODY_KEY = 'answer' as const;
+
+/**
+ * The route does `.trim().slice(0, 4000)` on the answer and `.slice(0, 500)`
+ * on the question.
+ *
+ * ★ SILENT TRUNCATION, WHICH IS WHY THE CLIENT REFUSES INSTEAD.
+ * A 4100-character answer does not fail: it is stored cut off mid-sentence and
+ * becomes the answer the AI gives customers. Half a returns policy is worse
+ * than no returns policy, because nobody will look at it again — it was
+ * approved. So a variant this long is refused here by name, and the person is
+ * told to shorten it themselves rather than having it done to them.
+ */
+export const ANSWER_MAX_CHARS = 4000;
+
+export function answerTooLong(answer: string): boolean {
+  return answer.trim().length > ANSWER_MAX_CHARS;
+}
+
+/**
+ * What the approve route answers on success.
+ *
+ * `alreadyApproved` arrives on the idempotent replay — a second press returns
+ * the document the first one made instead of writing the knowledge twice.
+ * It is `.optional()` and never defaulted: on the normal path the route omits
+ * it, and defaulting it to `false` would be a claim we made the document.
+ */
+export const approveResultSchema = z.object({
+  ok: z.boolean(),
+  /**
+   * Present on both paths. Nullable because the idempotent branch returns
+   * `candidate.approvedDocumentId`, which is a nullable column — an APPROVED
+   * row written before that column existed returns `ok: true` with no id, and
+   * then there is nothing to confirm against.
+   */
+  documentId: z.string().nullish().default(null),
+  alreadyApproved: z.boolean().optional(),
+});
+export type ApproveResult = z.infer<typeof approveResultSchema>;
+
+/**
+ * Whether the AI can actually answer with a document — the third state the
+ * approve response does not carry.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ⚠ `{ ok: true }` DOES NOT MEAN THE KNOWLEDGE IS IN USE
+ * ════════════════════════════════════════════════════════════════════════════
+ * The route awaits `processDocument`, and the comment above that await says
+ * *"Awaited rather than fired and forgotten, so an approval that reports
+ * success is an approval the AI can actually use."* The `try/catch` wrapped
+ * around it removes exactly that guarantee: an embedding failure is logged,
+ * the document is left at `status: "error"` with no vectors in Qdrant, and the
+ * route still answers `{ ok: true }`.
+ *
+ * **The comment is true about the `await` and false about the outcome.** It is
+ * the strongest kind of wrong comment, because it names the property it does
+ * not have.
+ *
+ * Retrieval reads Qdrant and filters on tenant and knowledge base, **not on
+ * `status`** — so `status` is not what gates the answer, it is the only record
+ * of whether the vectors got written. `ready` is the one value that says they
+ * did.
+ */
+export type DocumentUse = 'in_use' | 'not_retrievable' | 'unknown';
+
+export function documentUseOf(status: string | null | undefined): DocumentUse {
+  /*
+   * Only `ready` is a positive statement. `processing` is mid-flight,
+   * `pending` is the value the row is created with, and anything else is a
+   * value this build has not seen — all three are "we do not know yet", never
+   * "it is live". `error` is the one case we can promise is not working.
+   */
+  if (status === 'ready') return 'in_use';
+  if (status === 'error') return 'not_retrievable';
+  return 'unknown';
+}

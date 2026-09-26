@@ -21,7 +21,26 @@
     "byCustomers": "{count, plural, =1 {to one customer} other {to # customers}}",
     "lastHeard": "last on {when}",
     "meanwhile": "Nobody has decided which of these is right, so GOTCHA has both.",
-    "coverage": "These come from reading past conversations — each answer is one your team actually gave, not something written on your website or in a document. Nothing has compared your website against your files; that check doesn't exist yet."
+    "coverage": "These come from reading past conversations — each answer is one your team actually gave, not something written on your website or in a document. Nothing has compared your website against your files; that check doesn't exist yet.",
+    "resolve": {
+      "choose": "This one is right",
+      "confirm": "Save “{answer}” as the answer?",
+      "armed": "Press again to save it. GOTCHA will answer customers with the text above.",
+      "alreadyApproved": "This was already approved, so nothing was written twice.",
+      "use": {
+        "in_use": "Saved. GOTCHA answers with this from now on.",
+        "not_retrievable": "Saved to your knowledge base, but GOTCHA cannot use it yet — preparing it for search failed. Nothing will answer with it until that is retried.",
+        "unknown": "Saved to your knowledge base. We could not confirm it is ready for GOTCHA to use yet."
+      },
+      "problem": {
+        "already_covered": "Your knowledge base already answers this, so nothing was added. This suggestion is marked as covered and will not come back as a conflict.",
+        "no_knowledge_base": "There is no knowledge base to save this into yet. Create one first, and then this will have somewhere to go.",
+        "not_found": "This suggestion is no longer there. Someone may have decided it already — reload to see where it stands.",
+        "forbidden": "You do not have permission to change the knowledge base. Whoever administers GOTCHA for you can do this or grant it.",
+        "too_long": "One of these answers is too long to save as it stands. Shorten it in the knowledge base after approving a shorter one, or edit it there directly.",
+        "failed": "We could not save that just now, and nothing was written. Try again in a moment."
+      }
+    }
   },
   "gaps": {
     "heading": "Questions it couldn't answer",

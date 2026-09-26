@@ -12,6 +12,7 @@ import {
 } from '@/api/contracts/knowledge';
 import { lastHeardFor, variantsOf, type Candidate } from '@/api/contracts/knowledge-candidates';
 
+import { ResolveConflict } from './ResolveConflict';
 import styles from './Knowledge.module.css';
 
 /**
@@ -251,15 +252,27 @@ export async function KnowledgeScreen({
                   </ul>
 
                   {/*
-                    ⚠ NO RESOLVE CONTROL HERE, AND NOT BECAUSE ONE IS MISSING.
-                    `POST /candidates/:id/approve` with `editedAnswer` is the
-                    resolve path and it exists. It writes to the tenant's
-                    knowledge base, which every AI employee answers from —
-                    so it is a write this screen introduces, not one it
-                    inherits, and it goes in once the panel itself is
-                    accepted. The sentence below says what happens until then.
+                    ★ WHAT IS TRUE UNTIL SOMEBODY DECIDES, SAID BEFORE THE
+                    CONTROL THAT DECIDES IT. "Nobody has decided which of
+                    these is right, so GOTCHA has both" is the cost of not
+                    pressing anything, and it is the reason to press.
                   */}
                   <p className={styles.conflictMeanwhile}>{t('conflicts.meanwhile')}</p>
+
+                  {/*
+                    ⚠ THIS WRITES THE TENANT KNOWLEDGE BASE. Authorized by
+                    Omer for this panel. Two presses, the second quoting the
+                    answer back — see `ResolveConflict`. No test and no
+                    capture presses it.
+
+                    Only where there is something to choose between: a
+                    conflicted row whose `variants` did not survive the read
+                    gets the sentence above and no buttons, because "this one
+                    is right" needs more than one `this`.
+                  */}
+                  {variants.length > 1 ? (
+                    <ResolveConflict candidateId={candidate.id} variants={variants} />
+                  ) : null}
                 </li>
               );
             })}

@@ -234,4 +234,47 @@
     font-size: var(--font-size-caption);
     color: var(--text-muted);
   }
+
+  /*
+   * ── Resolving a conflict ──
+   *
+   * The buttons are the `Button` primitive, so nothing here restyles a
+   * control. Only the layout and the three sentences under it live here.
+   */
+  .resolve {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin-block-start: var(--space-8);
+  }
+
+  .resolveRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .resolveNote,
+  .resolveDone,
+  .resolveWarn {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+  }
+
+  .resolveNote {
+    color: var(--text-muted);
+  }
+
+  .resolveDone {
+    color: var(--text-body);
+  }
+
+  /*
+   * Urgent rather than muted: every sentence with this class says something
+   * was not written, or was written and cannot be used yet.
+   */
+  .resolveWarn {
+    color: var(--intent-urgent-text);
+  }
 }

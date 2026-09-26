@@ -949,6 +949,35 @@ export const knowledgeEndpoints = {
    */
   candidates: (importId: string) =>
     endpoint('/api/historical-imports/{importId}/candidates', { importId }),
+  /**
+   * Resolve a conflict — screen 08's hero.
+   *
+   * ⚠ THIS WRITES THE TENANT KNOWLEDGE BASE EVERY AI EMPLOYEE ANSWERS FROM.
+   * Gated on `ai:knowledge:write` or ADMIN, so a 403 is a real state rather
+   * than a fault.
+   *
+   * A conflicted candidate is refused with `conflict_requires_answer` unless
+   * the body names the chosen answer — the route will not *"silently enshrine
+   * whichever variant happened to be most common"*. Which is what makes
+   * resolving it a one-tap act: the tap supplies the answer.
+   *
+   * ★★ THE BODY KEY IS `answer`, NOT `editedAnswer`. `editedAnswer` is the
+   * handler's local variable and the column it lands in; the line that reads
+   * the request says `req.body?.answer`. See `APPROVE_BODY_KEY` — the wrong
+   * key makes this route refuse every conflicted row, which is every row the
+   * button exists for.
+   *
+   * Three other refusals, each a different repair: `no_knowledge_base` (there
+   * is nowhere to write), `already_covered` with a 409 (the base already
+   * answers this — not a failure, and it marks the candidate), and the 403
+   * above. `force` skips the duplicate check and **this product never sends
+   * it**.
+   *
+   * ⚠ `{ ok: true }` does not mean the AI can answer with it — the embedding
+   * failure is caught and discarded inside the route. See `documentUseOf`.
+   */
+  approveCandidate: (candidateId: string) =>
+    endpoint('/api/historical-imports/candidates/{candidateId}/approve', { candidateId }),
 } as const;
 
 /**
