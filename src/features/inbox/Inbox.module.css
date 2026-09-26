@@ -139,4 +139,77 @@
     font-size: var(--font-size-caption);
     color: var(--text-muted);
   }
+
+  /*
+   * A system divider. No bubble, no side: it records what a colleague did,
+   * and the stream's `align-self` would otherwise put it on the customer's.
+   */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    align-self: stretch;
+    margin-block: var(--space-4);
+    color: var(--text-muted);
+    font-size: var(--font-size-caption);
+    text-align: center;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    flex: 1;
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .dividerText {
+    flex: 0 1 auto;
+  }
+
+  /* ── Who is driving, and how to change it ─────────────────────────────── */
+  .verbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    padding-block: var(--space-8);
+  }
+
+  .verbTransfer {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .verbLabel {
+    color: var(--text-muted);
+    font-size: var(--font-size-caption);
+  }
+
+  .verbSelect {
+    font: inherit;
+    font-size: var(--font-size-meta);
+    padding: var(--space-4) var(--space-8);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    background: var(--panel-field);
+    color: var(--text-primary);
+  }
+
+  .verbNote,
+  .verbProblem {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+  }
+
+  .verbNote {
+    color: var(--text-muted);
+  }
+
+  /* Every sentence here says something did not happen. */
+  .verbProblem {
+    color: var(--intent-urgent-text);
+  }
 }

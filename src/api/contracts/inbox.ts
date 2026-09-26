@@ -167,6 +167,33 @@ export const messageSchema = z.object({
    */
   replyToExternalId: z.string().nullable().default(null),
   replyToMessageId: z.string().nullable().default(null),
+  /**
+   * ★★ WHERE A SYSTEM MESSAGE KEEPS ITS MEANING.
+   *
+   * `createSystemMessage` writes `body: ""` and puts everything in metadata:
+   * `{ systemEvent, ...eventData }`. So a claim, a transfer and a return to
+   * the AI are all the same empty INBOUND row until this is read — and
+   * rendered as messages they look like the customer sending nothing.
+   *
+   * Only the keys we draw are named. The rest are stripped, which is right
+   * here: the unnamed ones are other events' payloads, and a divider that
+   * printed an unknown field would be guessing at what happened.
+   *
+   * On the wire because `listByConversation` puts no `select` on the message
+   * itself — it takes the whole row. Checked rather than assumed: the
+   * conversation payload one route along **does** strip metadata.
+   */
+  metadata: z
+    .object({
+      systemEvent: z.string().optional(),
+      /** `agent_claimed`. */
+      agentName: z.string().optional(),
+      /** `agent_transferred`. */
+      fromAgentName: z.string().optional(),
+      toAgentName: z.string().optional(),
+    })
+    .nullish()
+    .default(null),
 });
 export type InboxMessage = z.infer<typeof messageSchema>;
 
@@ -267,4 +294,42 @@ export function queueOrder(rows: readonly ConversationRow[]): {
   }
   dated.sort((a, b) => Date.parse(b.lastMessageAt!) - Date.parse(a.lastMessageAt!));
   return { dated, undated };
+}
+
+/* ── What a colleague did, which is not a message ────────────────────────── */
+
+/**
+ * The system events `conversation.service.ts` writes.
+ *
+ * All four are `messageType: "system"`, `direction: "INBOUND"` and
+ * `body: ""`. The direction is the service's, not a statement about who
+ * acted — rendering them as inbound bubbles puts a colleague's action on the
+ * customer's side of the thread.
+ */
+export const SYSTEM_EVENTS = [
+  'agent_claimed',
+  'agent_transferred',
+  'department_transferred',
+  'returned_to_ai',
+] as const;
+export type SystemEvent = (typeof SYSTEM_EVENTS)[number];
+
+/**
+ * The event this row records, or `null` if it is not one we can account for.
+ *
+ * `department_transferred` is included although this product never offers a
+ * department transfer: the platform writes it, other clients can cause it,
+ * and a divider that skipped it would leave an unexplained gap in the thread
+ * exactly where somebody needs to know the conversation moved.
+ *
+ * Unknown events return `null` and fall to the stream's "we cannot show
+ * this" line — **not** to a generic "something happened", which would be the
+ * `messageType` trap one level down: an unconstrained string read through an
+ * exhaustive switch, where the default branch names something it does not
+ * know.
+ */
+export function systemEventOf(message: InboxMessage): SystemEvent | null {
+  const event = message.metadata?.systemEvent?.trim();
+  if (!event) return null;
+  return (SYSTEM_EVENTS as readonly string[]).includes(event) ? (event as SystemEvent) : null;
 }

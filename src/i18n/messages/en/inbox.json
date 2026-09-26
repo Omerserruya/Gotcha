@@ -11,6 +11,12 @@
       "image": "A photo.",
       "video": "A video.",
       "document": "A file."
+    },
+    "system": {
+      "agent_claimed": "{name} took control",
+      "agent_transferred": "{from} transferred this to {to}",
+      "department_transferred": "This was transferred to another team",
+      "returned_to_ai": "Handed back to the AI"
     }
   },
   "queue": {
@@ -31,5 +37,22 @@
     "noHandles": "No channel handle is recorded for this person.",
     "joinedUp": "Her channels — every one we've matched to this person.",
     "thisChannelOnly": "The channel this conversation came in on. We can't show her other channels from here yet."
+  },
+  "verbs": {
+    "claim": "Take control",
+    "returnToAi": "Return to the AI",
+    "transferTo": "Transfer to",
+    "transferPick": "Choose someone",
+    "transfer": "Transfer",
+    "greetingSends": "Taking control sends your workspace's greeting to this customer, with your name in it.",
+    "greetingMaybe": "If your workspace has a greeting set up, taking control sends it to this customer with your name in it. We can't check that from here.",
+    "noAiEmployee": "There's no AI employee on this conversation, so there's nobody to hand it back to. Whoever set up GOTCHA can assign one.",
+    "problem": {
+      "already_claimed": "A colleague took this one first, so nothing changed. Ask them before taking it over — the customer would get a second greeting.",
+      "no_ai_employee": "There's no AI employee on this conversation to hand it back to, so nothing changed.",
+      "not_yours": "You can only transfer a conversation you're holding. Take control first, and then you can pass it on.",
+      "not_found": "This conversation, or the person you picked, isn't there any more. Reload to see where things stand.",
+      "failed": "That didn't go through, and nothing changed. Try again in a moment."
+    }
   }
 }

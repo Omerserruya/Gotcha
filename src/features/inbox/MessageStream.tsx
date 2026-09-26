@@ -4,6 +4,7 @@ import {
   hasTranscript,
   quotedState,
   renderableType,
+  systemEventOf,
   type InboxMessage,
 } from '@/api/contracts/inbox';
 
@@ -59,6 +60,46 @@ export async function MessageStream({
   return (
     <ol className={styles.stream} data-testid="message-stream" data-channel={channel ?? 'unknown'}>
       {messages.map((message) => {
+        /*
+         * ════════════════════════════════════════════════════════════════
+         * ★★ A COLLEAGUE'S ACTION IS NOT A MESSAGE, AND NOT THE CUSTOMER'S
+         * ════════════════════════════════════════════════════════════════
+         * `createSystemMessage` writes `direction: "INBOUND"` with an empty
+         * body, so a claim, a transfer and a return to the AI all arrive
+         * looking like the customer sent nothing. Rendered as a bubble they
+         * sit on the customer's side of the thread and read as theirs.
+         *
+         * A divider instead: no side, no timestamp bubble, and it names who
+         * did what. This is the visible consequence of the three buttons
+         * below the stream — pressing "take control" writes one of these.
+         */
+        const systemEvent = systemEventOf(message);
+        if (systemEvent) {
+          return (
+            <li
+              key={message.id}
+              className={styles.divider}
+              data-testid={`system-${message.id}`}
+              data-event={systemEvent}
+            >
+              <span className={styles.dividerText}>
+                {t(`stream.system.${systemEvent}` as 'stream.system.agent_claimed', {
+                  /*
+                   * Empty string rather than a placeholder name. The service
+                   * writes `agentName: updated.assignedAgent?.name || "Agent"`
+                   * — so a missing name already arrives as the word "Agent",
+                   * and inventing a second fallback here would hide which of
+                   * the two happened. ICU needs the argument present.
+                   */
+                  name: message.metadata?.agentName ?? '',
+                  from: message.metadata?.fromAgentName ?? '',
+                  to: message.metadata?.toAgentName ?? '',
+                })}
+              </span>
+            </li>
+          );
+        }
+
         const type = renderableType(message);
         const quoted = quotedState(message);
         /*

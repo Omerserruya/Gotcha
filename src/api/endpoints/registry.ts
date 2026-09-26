@@ -1032,6 +1032,73 @@ export const inboxEndpoints = {
   list: () => endpoint('/api/conversations'),
   messages: (conversationId: string) =>
     endpoint('/api/conversations/{conversationId}/messages', { conversationId }),
+
+  /* ── Screen 02's three verbs ─────────────────────────────────────────── */
+
+  /**
+   * Take control — *"קבל שליטה"*.
+   *
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠ THIS CAN SEND A MESSAGE TO THE CUSTOMER
+   * ════════════════════════════════════════════════════════════════════════
+   * `claim()` ends with `sendAutoGreeting(...)`, whose comment reads *"send
+   * on both claim and reclaim"*. If the tenant has an `autoGreeting` durable
+   * setting, claiming enqueues a real outbound message on the customer's
+   * channel with the agent's name in it. **No test and no capture may press
+   * this**, for the same reason as `connect` and `resume`: dev sends real
+   * traffic.
+   *
+   * 409 when somebody else already holds it. Re-claiming your own is allowed
+   * and is a no-op for the assignment — but it greets the customer again, so
+   * the control is not drawn when the conversation is already yours.
+   *
+   * Sets `isHandedOver: true` and writes an `agent_claimed` system message.
+   */
+  claim: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/claim', { conversationId }),
+
+  /**
+   * Return to the AI. The inverse of a takeover, and the only thing that
+   * clears the `isHandedOver` latch — *"which nothing else in the system ever
+   * clears"*.
+   *
+   * 409 when no AI employee is bound to the conversation: there is nobody to
+   * hand back to, and the screen has to say that rather than offer a control
+   * that always fails.
+   */
+  returnToAi: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/return-to-ai', { conversationId }),
+
+  /**
+   * Transfer to a named colleague. `{ agentId }`.
+   *
+   * ★ 403 UNLESS IT IS YOURS OR YOU ARE ADMIN. The route checks
+   * `conv.assignedAgentId !== userId` for non-admins, so the control belongs
+   * on a conversation the viewer holds and nowhere else.
+   *
+   * Also accepts `{ departmentId }`, which this product does not send — Omer
+   * ruled transfers go to a named person. The platform writes a
+   * `department_transferred` divider for that path, which the stream renders,
+   * because another client can cause it.
+   *
+   * ⚠ ALSO GREETS THE CUSTOMER, from the new agent, by the same helper.
+   */
+  reassign: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/reassign', { conversationId }),
+
+  /**
+   * ⚠⚠ `POST /:id/release` EXISTS AND IS DELIBERATELY NOT LISTED ABOVE.
+   *
+   * It is the "put back in the queue" the design drew, and Omer ruled it out:
+   * a human who has taken a conversation may hand it back to the AI or to a
+   * named colleague, never drop it.
+   *
+   * The platform agrees, by accident. `release()` clears `assignedAgentId`
+   * and **does not clear `isHandedOver`** — so a released conversation has no
+   * human and the AI is still latched off it. Nobody is driving, and nothing
+   * on any screen says so. The rule prevents a real defect rather than
+   * expressing a preference.
+   */
 } as const;
 
 export type { Endpoint as ApiEndpoint };
