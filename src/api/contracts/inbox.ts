@@ -257,11 +257,26 @@ export function quotedState(message: InboxMessage): QuotedState {
 /**
  * Is a voice note's content available to read?
  *
- * Always `false`. Nothing transcribes audio: the worker's only
- * audio-specific line is a filename extension, and the Deepgram credential
- * exists without a client. A function so the stream can say *"a voice note —
- * we can't read it out for you"* from one place, and so the day a
- * transcriber exists there is one thing to change.
+ * Always `false`. Nothing transcribes a stored audio message: the worker's
+ * only audio-specific line is a filename extension.
+ *
+ * ★★ AND A DEEPGRAM CLIENT DOES EXIST — IT IS THE WRONG ONE.
+ * This note used to say *"the Deepgram credential exists without a client"*,
+ * and that stopped being true. `services/voice-copilot/src/stt/`
+ * instantiates `@deepgram/sdk` with `LiveTranscriptionEvents`: **streaming
+ * STT for a phone call in progress**, which is screens 05d and 05e. A
+ * WhatsApp voice note is a finished file on a URL, and Deepgram's prerecorded
+ * API is called from nowhere in this repository.
+ *
+ * Stated carefully on purpose. A reader who greps for a Deepgram client finds
+ * one, concludes the comment is stale, and wires the live provider to a
+ * stored file — a different API and a different failure. **The conclusion did
+ * not change; the reason for it did, and a stale reason is how a true note
+ * gets overturned.**
+ *
+ * A function rather than a constant so the stream says *"a voice note — we
+ * can't read it out for you"* from one place, and so the day a transcriber
+ * exists there is one thing to change.
  */
 export function hasTranscript(_message: InboxMessage): false {
   return false;
