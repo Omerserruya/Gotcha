@@ -14,6 +14,12 @@ vi.mock("@chatcenter/shared", () => {
   };
 
   const mockPrisma = {
+    // The first-reply metric is a raw SQL query now. It replaced a Redis list of
+    // claim-to-reply intervals, which measured from the moment a human CLAIMED a
+    // conversation rather than from the customer's message, counted every reply
+    // rather than the first, excluded AI-answered conversations, and drifted
+    // upward with conversation length because the claim key was never deleted.
+    $queryRaw: vi.fn().mockResolvedValue([{ avg_ms: 19000, pairs: 7n }]),
     conversation: {
       count: vi.fn().mockResolvedValue(5),
       findMany: vi.fn().mockResolvedValue([]),
@@ -86,7 +92,13 @@ describe("Analytics Service", () => {
       expect(res.body.data).toBeDefined();
       expect(res.body.data.activeConversations).toBe(5);
       expect(res.body.data.totalMessagesToday).toBe(42);
-      expect(res.body.data.avgResponseTimeMs).toBe(2000);
+      // Was 2000 - the mean of the Redis fixture ["1000","2000","3000"]. That
+      // list is no longer the source: this is now the average time from a
+      // customer's message to the first reply after it, from the messages table.
+      expect(res.body.data.avgResponseTimeMs).toBe(19000);
+      // And the sample size comes with it, so a screen can tell a real 19s from
+      // an average of one message.
+      expect(res.body.data.avgResponseSampleSize).toBe(7);
     });
   });
 

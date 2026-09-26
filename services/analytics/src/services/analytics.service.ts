@@ -29,23 +29,112 @@ function priorPeriod(fromDate: Date, toDate: Date): { priorFrom: Date; priorTo: 
   return { priorFrom, priorTo };
 }
 
+
+/**
+ * Average time from a customer's message to the first reply after it.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * WHAT THIS REPLACES, AND WHY THE OLD NUMBER WAS NOT A RESPONSE TIME
+ *
+ * `analytics.worker.ts` computed `now - claim_time` on every `agent_response`.
+ * So the figure behind "average response time" was:
+ *
+ *   · measured from the moment a HUMAN CLAIMED the conversation, not from the
+ *     customer's message - a conversation that sat unclaimed for forty minutes
+ *     and was then answered in ten seconds reported 10s, and the customer's real
+ *     wait was invisible to it
+ *   · an average over EVERY agent reply, not the first
+ *   · blind to AI-answered conversations entirely, because they have no claim
+ *   · and drifting UPWARD with conversation length, because `claim_time` is SET
+ *     with a 7-day TTL and never deleted, so the fifth reply in a thread
+ *     measured from the original claim
+ *
+ * This measures the thing the label claims: for each inbound message, how long
+ * until the next outbound. It covers AI replies, needs no event stream and no
+ * Redis, and cannot drift.
+ *
+ * ── Exclusions are deliberate, and each has cost something before ──
+ *
+ * `origin = LIVE` on both sides: imported history would otherwise contribute
+ * years-old gaps. `isTest = false` and `customerExternalId NOT LIKE 'sandbox:%'`
+ * because sandbox rows carry `isTest = false` and two analytics figures have
+ * already counted rehearsals as business by filtering only the flag.
+ *
+ * Raw SQL because the shape is a correlated MIN per inbound, which Prisma cannot
+ * express - and note `applyLiveByDefault` does NOT apply to $queryRaw, so the
+ * origin filter here is mandatory rather than inherited.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+export async function getAvgFirstReplyMs(
+  tenantId: string,
+  since: Date,
+): Promise<{ avgMs: number | null; pairs: number }> {
+  // A metric must not take the dashboard down. The old figure came from a Redis
+  // list read that degraded to null when Redis was empty; this one is a SQL
+  // query, and an unavailable database or a schema surprise would otherwise turn
+  // the whole dashboard into a 500 over one number. Found by an existing test
+  // that started failing for exactly that reason.
+  let rows: Array<{ avg_ms: number | null; pairs: bigint }> = [];
+  try {
+    rows = await prisma.$queryRaw<Array<{ avg_ms: number | null; pairs: bigint }>>`
+    SELECT avg(reply_ms)::float8 AS avg_ms, count(*)::bigint AS pairs FROM (
+      SELECT EXTRACT(EPOCH FROM (MIN(o.created_at) - i.created_at)) * 1000 AS reply_ms
+      FROM messages i
+      JOIN conversations c ON c.id = i.conversation_id
+      JOIN messages o ON o.conversation_id = i.conversation_id
+                     AND o.direction = 'OUTBOUND'::"MessageDirection"
+                     AND o.created_at > i.created_at
+                     AND o.origin = 'LIVE'::"RecordOrigin"
+      WHERE i.tenant_id = ${tenantId}
+        AND i.direction = 'INBOUND'::"MessageDirection"
+        AND i.origin = 'LIVE'::"RecordOrigin"
+        AND i.created_at >= ${since}
+        AND c.is_test = false
+        AND c.customer_external_id NOT LIKE 'sandbox:%'
+      GROUP BY i.id, i.created_at
+    ) t
+  `;
+  } catch (err: any) {
+    console.warn(`[analytics] first-reply metric unavailable for ${tenantId}: ${err?.message}`);
+    // Null, not zero: the number is unknown, and "we replied instantly" is a
+    // claim this has no basis to make.
+    return { avgMs: null, pairs: 0 };
+  }
+  const row = rows[0];
+  const avg = row?.avg_ms;
+  return {
+    // Null rather than zero when nothing matched: "no customer wrote today" and
+    // "we replied instantly" are different facts.
+    avgMs: typeof avg === "number" && Number.isFinite(avg) ? Math.round(avg) : null,
+    pairs: Number(row?.pairs ?? 0),
+  };
+}
+
 export async function getDashboardStats(tenantId: string) {
   const redis = getRedis();
   const today = new Date().toISOString().slice(0, 10);
-  const [activeConversations, waitingConversations, dailyData, responseTimes, resolutionTimes] = await Promise.all([
+  const [activeConversations, waitingConversations, dailyData, resolutionTimes, firstReply] = await Promise.all([
     prisma.conversation.count({ where: { tenantId, isTest: false, status: "OPEN" } }),
     prisma.conversation.count({ where: { tenantId, isTest: false, status: "WAITING" } }),
     redis.hgetall(`analytics:${tenantId}:${today}`),
-    redis.lrange(`analytics:${tenantId}:response_times:${today}`, 0, -1),
     redis.lrange(`analytics:${tenantId}:resolution_times:${today}`, 0, -1),
+    // Replaces the claim-based figure. Same field name because the NAME was
+    // always right - "average response time" is the time from a customer's
+    // message to a reply - and only the computation was wrong. Four live screens
+    // read this field; changing the number under it is the fix, and removing the
+    // field would break them while leaving the wrong figure in the last place
+    // nobody has looked.
+    getAvgFirstReplyMs(tenantId, new Date(`${today}T00:00:00.000Z`)),
   ]);
-  const avgResponseTimeMs = responseTimes.length ? responseTimes.reduce((sum, t) => sum + parseInt(t, 10), 0) / responseTimes.length : null;
   const avgResolutionTimeMs = resolutionTimes.length ? resolutionTimes.reduce((sum, t) => sum + parseInt(t, 10), 0) / resolutionTimes.length : null;
   return {
     activeConversations, waitingConversations,
     closedToday: parseInt(dailyData.conversations_closed || "0", 10),
     totalMessagesToday: parseInt(dailyData.messages_total || "0", 10),
-    avgResponseTimeMs: avgResponseTimeMs ? Math.round(avgResponseTimeMs) : null,
+    avgResponseTimeMs: firstReply.avgMs,
+    // How many inbound/outbound pairs the average is built from, so a screen can
+    // tell a real 4s from an average of one message.
+    avgResponseSampleSize: firstReply.pairs,
     avgResolutionTimeMs: avgResolutionTimeMs ? Math.round(avgResolutionTimeMs) : null,
   };
 }
