@@ -147,6 +147,24 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // The rule itself now lives in lib/conversation-visibility.ts so the socket
   // room join asks the identical question - see the header there for the two
   // holes it preserves.
+  /**
+   * Sandbox rehearsals are not inbox items.
+   *
+   * ★ IDENTIFIED BY THE `sandbox:` PREFIX, NOT BY `isTest`. The row that exposed
+   * this has `is_test = false`, `status = OPEN` and two messages, so an `isTest`
+   * filter would not have caught it - and the same confusion has already produced
+   * two counting bugs in analytics, where a figure filtered `isTest` and counted
+   * every rehearsal as business.
+   *
+   * Filtering on the thing that is actually true rather than on the thing that
+   * sounds like it. Whether `isTest` SHOULD also be set on these rows is a
+   * separate question and not folded in here.
+   *
+   * Pushed into AND, like everything else that is not the visibility clause.
+   */
+  where.AND = where.AND || [];
+  (where.AND as unknown[]).push({ NOT: { customerExternalId: { startsWith: "sandbox:" } } });
+
   const visibility = visibilityClause({ userId: userId!, role: userRole, departmentId: userDepartmentId });
   if (visibility) where.OR = visibility;
 

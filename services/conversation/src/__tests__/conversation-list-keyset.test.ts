@@ -440,3 +440,53 @@ describe("★ the undated count", () => {
     expect(res.undatedCount).toBe(0);
   });
 });
+
+/**
+ * ★ Sandbox rehearsals are not inbox items — and are identified by the PREFIX.
+ *
+ * The row that exposed this has `is_test = false`, `status = OPEN` and two
+ * messages, so an `isTest` filter would not have caught it. The same confusion
+ * has already produced two counting bugs in analytics, where a figure filtered
+ * `isTest` and counted every rehearsal as business. Filtering on the thing that
+ * is actually true rather than the thing that sounds like it.
+ */
+describe("★ sandbox conversations are excluded", () => {
+  it("★ excludes them by the customerExternalId prefix", async () => {
+    state.rows = [conv("c1", 1)];
+
+    await list("t1", { ...AGENT, cursor: "" });
+
+    const andClauses = JSON.stringify(state.seenWhere.AND);
+    expect(andClauses).toContain("sandbox:");
+    expect(andClauses).toContain("startsWith");
+    expect(andClauses).toContain("NOT");
+  });
+
+  it("★ does NOT filter on isTest, which would miss them", async () => {
+    state.rows = [conv("c1", 1)];
+
+    await list("t1", { ...AGENT, cursor: "" });
+
+    // The dev row is `is_test = false`. An isTest filter is the plausible-looking
+    // one that does not work, and choosing it would have looked correct.
+    expect(JSON.stringify(state.seenWhere)).not.toContain("isTest");
+  });
+
+  it("★ the undated count inherits the exclusion", async () => {
+    state.rows = [conv("n1", null)];
+
+    await list("t1", { ...AGENT, cursor: "" });
+
+    // Built from `where` AFTER the sandbox push, so a rehearsal cannot inflate
+    // the instrument that measures forgetful writers.
+    expect(JSON.stringify(state.undatedWheres[0].AND)).toContain("sandbox:");
+  });
+
+  it("applies on the legacy offset path too", async () => {
+    state.rows = [conv("c1", 1)];
+
+    await list("t1", { ...AGENT, page: 1 });
+
+    expect(JSON.stringify(state.seenWhere.AND)).toContain("sandbox:");
+  });
+});
