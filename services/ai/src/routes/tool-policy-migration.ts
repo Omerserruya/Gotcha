@@ -48,6 +48,8 @@ import {
   writeAudit,
   AuditAction,
   buildMigrationReport,
+  mayBeAlwaysAllowed,
+  riskGroupFor,
   migrationWrites,
   type LegacyPolicy,
 } from "@chatcenter/shared";
@@ -180,6 +182,34 @@ router.post("/apply", requirePermissionOrRole("ai:tools:manage", "ADMIN"), async
       if (!target) continue;
       const enabled = w.state !== "disabled";
       const requiresApproval = w.state === "hitl";
+
+      /**
+       * ★ THE SAME RISK CEILING THE SINGLE-TOOL WRITER ENFORCES.
+       *
+       * `w.state` comes from the client, so `state: "autonomous"` on
+       * `shopify.process_refund` reached `mode: "never"` here without challenge -
+       * the same hole as `PUT /api/tool-permissions/:toolName`, through a
+       * different endpoint, and in a BULK loop that could strip approval from
+       * many tools in one request.
+       *
+       * The bitter part: `buildMigrationReport` in the shared lib already
+       * imports `mayBeAlwaysAllowed` and consults it to build the REPORT. So the
+       * same feature computed the verdict for display and ignored it on write.
+       *
+       * Refused per-tool rather than failing the batch, matching the existing
+       * contract two lines down: one tool failing must not truncate the rest and
+       * must not be reported as success.
+       */
+      if (!requiresApproval) {
+        const riskGroup = riskGroupFor(w.toolName);
+        if (!mayBeAlwaysAllowed(riskGroup, false)) {
+          failures.push({
+            toolName: w.toolName,
+            error: `approval_cannot_be_removed (${riskGroup})`,
+          });
+          continue;
+        }
+      }
       try {
         if (target.kind === "internal") {
           await prisma.tenantToolPermission.updateMany({

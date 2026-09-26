@@ -10,7 +10,7 @@ import {
   AuditAction,
 } from "@chatcenter/shared";
 import { getAvailableTools, TOOL_REGISTRY } from "../services/tool-registry";
-import { riskGroupFor, type RiskGroup } from "@chatcenter/shared";
+import { riskGroupFor, mayBeAlwaysAllowed, type RiskGroup } from "@chatcenter/shared";
 import {
   capabilityStateFromConfig,
   missingScopesFromConfig,
@@ -301,6 +301,47 @@ router.put("/:toolName", requirePermissionOrRole("ai:tools:manage", "ADMIN"), as
 
     const { enabled, requiresApproval, approverRole, expiresAfterMin, allowModification } =
       req.body ?? {};
+
+    /**
+     * ★ THE RISK CEILING, ENFORCED HERE BECAUSE THIS IS WHERE IT IS DECIDED.
+     *
+     * `mayBeAlwaysAllowed` existed in the shared lib and this write path never
+     * called it - so `requiresApproval: false` on `shopify.process_refund` was
+     * stored on request. The screen offers the choice only for low-risk actions,
+     * but a UI-only guard is one anybody with curl steps over, and this is the
+     * endpoint that decides whether money can move with nobody watching.
+     *
+     * Placed BEFORE the integration/static branch on purpose. There are TWO
+     * writers below and the same request body drives both - integration tools
+     * write `configOverrides.hitlPolicy.mode = "never"` on TenantTool, static
+     * tools write `requiresApproval` on TenantToolPermission. Guarding one would
+     * have left the other, and the second is the one nobody remembers.
+     *
+     * `NEVER_AUTO_APPROVE` is {delete, financial, administrative}, and its own
+     * comment is the reason: "the default answer for irreversible and
+     * money-moving operations is no: the cost of a wrong always-allow there is a
+     * refund nobody authorised."
+     *
+     * ── Why `productPolicyPermits` is false rather than absent ──
+     *
+     * The guard's second parameter exists so a tenant policy CAN permit an
+     * always-allow. That policy table has zero rows today, so passing false is
+     * the honest current answer rather than a permanent one: when
+     * BusinessActionPolicy is populated, this is where it plugs in.
+     */
+    if (requiresApproval === false) {
+      const riskGroup = riskGroupFor(toolName);
+      if (!mayBeAlwaysAllowed(riskGroup, false)) {
+        res.status(422).json({
+          error: "approval_cannot_be_removed",
+          riskGroup,
+          // A reason the screen can render, not a bare refusal.
+          message:
+            `"${toolName}" is classified ${riskGroup}. Approval cannot be removed for irreversible or money-moving actions.`,
+        });
+        return;
+      }
+    }
 
     // Integration tools store their HITL override on TenantTool.configOverrides.hitlPolicy -
     // that's where the gate reads it from. Writing to TenantToolPermission for an
