@@ -293,27 +293,82 @@ describe('★★ an unsettled charge is not a failure', () => {
   });
 });
 
-describe('★ one purchase, one intent key', () => {
-  it('sends the SAME key when the same choice is bought twice', async () => {
+describe('★★ one purchase, one intent key — and when it is released', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE TWO FAILURES ARE NOT SYMMETRIC, AND THAT DECIDES EVERY CASE HERE.
+   * ════════════════════════════════════════════════════════════════════════
+   * Reusing the key too long: a customer who wants two packs presses twice
+   * and gets one. Visible, and they can press again once the first settles.
+   *
+   * Minting it too eagerly: a retry after a charge whose outcome is unknown
+   * is charged twice. Invisible until the statement, and not recoverable by
+   * pressing anything.
+   *
+   * So the key is held while the outcome is unknown and released only when
+   * the attempt is finished.
+   */
+
+  it('★★ a retry after an UNSETTLED charge carries the same key', async () => {
     /*
-     * The server turns a double-click into one charge by this key. Minted
-     * per click it would be a new purchase each time — identical code,
-     * identical appearance, protection silently gone.
+     * THE CASE THE KEY EXISTS FOR. The outcome is unknown and the card may
+     * already have been charged; the same key is what makes the server treat
+     * a second press as the same purchase rather than a second one.
      */
+    buyCreditPack.mockResolvedValue({ ok: false, kind: 'unsettled', invoiceId: 'inv_7' });
     const user = userEvent.setup();
     show();
     await user.click(screen.getByTestId('buy-button'));
     await user.click(screen.getByTestId('buy-button'));
 
     expect(buyCreditPack).toHaveBeenCalledTimes(2);
-    const first = buyCreditPack.mock.calls[0]![2];
-    const second = buyCreditPack.mock.calls[1]![2];
-    expect(first).toBe(second);
+    expect(buyCreditPack.mock.calls[0]![2]).toBe(buyCreditPack.mock.calls[1]![2]);
+  });
+
+  it('★★ a retry after an UNKNOWN failure carries the same key too', async () => {
+    // `failed` includes a contract failure, which can follow a 200 in which
+    // the card WAS charged. Same reasoning, arriving by a different route.
+    buyCreditPack.mockResolvedValue({ ok: false, kind: 'failed' });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('buy-button'));
+    await user.click(screen.getByTestId('buy-button'));
+
+    expect(buyCreditPack.mock.calls[0]![2]).toBe(buyCreditPack.mock.calls[1]![2]);
+  });
+
+  it('★★ a press after a SETTLED success is a new purchase and gets a new key', async () => {
+    // The first purchase is finished. Reusing the key here would make the
+    // server collapse a genuine second pack into the first one.
+    buyCreditPack.mockResolvedValue({ ok: true, units: 1000, invoiceId: 'inv_1' });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('buy-button'));
+    await user.click(screen.getByTestId('buy-button'));
+
+    expect(buyCreditPack.mock.calls[0]![2]).not.toBe(buyCreditPack.mock.calls[1]![2]);
+  });
+
+  it('★★ a press after a DECLINE gets a new key, because the refusal is cached', async () => {
+    /*
+     * An idempotency key caches the provider's answer, including a refusal.
+     * Somebody who fixes their card and presses again must not be handed the
+     * decline that was recorded against the old key.
+     */
+    buyCreditPack.mockResolvedValue({ ok: false, kind: 'declined', code: 'card_declined' });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('buy-button'));
+    await user.click(screen.getByTestId('buy-button'));
+
+    expect(buyCreditPack.mock.calls[0]![2]).not.toBe(buyCreditPack.mock.calls[1]![2]);
   });
 
   it('sends a DIFFERENT key when the quantity changes', async () => {
-    // Because that genuinely is a different purchase, and reusing the key
-    // would make the server collapse it into the first one.
+    // A change of intent, which is the customer saying this is a different
+    // purchase. Held while unsettled, so the outcome here is the one that
+    // would otherwise keep the key.
+    buyCreditPack.mockResolvedValue({ ok: false, kind: 'unsettled', invoiceId: null });
     const user = userEvent.setup();
     show();
     await user.click(screen.getByTestId('buy-button'));
@@ -323,5 +378,22 @@ describe('★ one purchase, one intent key', () => {
     await user.click(screen.getByTestId('buy-button'));
 
     expect(buyCreditPack.mock.calls[0]![2]).not.toBe(buyCreditPack.mock.calls[1]![2]);
+  });
+
+  it('★ the key is not a clock: two presses in one attempt are one purchase', async () => {
+    /*
+     * The key used to carry `Math.floor(Date.now() / 60_000)`. Two deliberate
+     * presses either side of a minute boundary were two purchases and two
+     * presses within one minute were one — and neither edge is where the
+     * customer's intent changed. Nothing about time appears in it now.
+     */
+    buyCreditPack.mockResolvedValue({ ok: false, kind: 'unsettled', invoiceId: null });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('buy-button'));
+
+    const key = buyCreditPack.mock.calls[0]![2] as string;
+    expect(key).toMatch(/^buy:/);
+    expect(key).not.toMatch(/\d{8,}/);
   });
 });

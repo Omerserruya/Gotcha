@@ -1,7 +1,7 @@
 'use client';
 
 import { useFormatter, useTranslations } from 'next-intl';
-import { useMemo, useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 
 import {
   chargeable,
@@ -48,9 +48,43 @@ import styles from './Billing.module.css';
  * ── WHY `intentKey` IS MINTED WITH THE CHOICE AND NOT WITH THE CLICK ──
  * The server turns a double-click into ONE charge by that key. Generated per
  * click it would be a new purchase each time — identical code, identical
- * appearance, and the protection silently gone. So it is memoised against
- * the package and quantity: change either and it is genuinely a different
- * purchase.
+ * appearance, and the protection silently gone.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ AND WHY IT IS A REF AND NOT A `useMemo`
+ * ════════════════════════════════════════════════════════════════════════════
+ * **React may discard a memo whenever it likes** — that is documented, not a
+ * bug — and this key used to be `useMemo(() => …Date.now()…)`. A discard at a
+ * minute boundary minted a new key for a purchase already in flight, so the
+ * double-charge guard rested on a cache React is free to throw away. Nothing
+ * would have shown it: identical code, identical appearance, and the second
+ * charge only visible on a statement.
+ *
+ * The rule, which is about money rather than about React:
+ *
+ *   REUSE while the outcome is PENDING or UNKNOWN. A retry after `unsettled`
+ *   must carry the same key. That is the entire reason the key exists, and it
+ *   is the case where a fresh one charges a card twice for one intent.
+ *
+ *   MINT on a SETTLED outcome — a confirmed success, or a confirmed failure in
+ *   which nothing was charged. The attempt is finished and the next press is a
+ *   new purchase. It matters on a decline too: an idempotency key caches the
+ *   provider's answer, so reusing it after a card was refused can hand back
+ *   the cached refusal to somebody who has since fixed their card.
+ *
+ *   MINT on a change of intent — a different pack, a different quantity, or
+ *   leaving and coming back. The customer is saying this is a different
+ *   purchase.
+ *
+ *   NEVER mint on a timer, a re-render or a memo discard inside one pending
+ *   purchase.
+ *
+ * The two failures are not symmetric, which is what decides every unclear
+ * case. Reusing too long means a customer who wants two packs presses twice
+ * and gets one — visible, and they can press again once the first settles.
+ * Minting too eagerly means a retry after an unsettled charge is charged
+ * twice — invisible until the statement, and unrecoverable by pressing
+ * anything. **Take the recoverable failure.**
  */
 export function BuyCredits({
   packages,
@@ -105,10 +139,13 @@ export function BuyCredits({
    */
   const quantity = pkg ? Math.min(typed, maxQuantity(pkg)) : typed;
 
-  const intentKey = useMemo(
-    () => `buy:${chosen}:${quantity}:${Math.floor(Date.now() / 60_000)}`,
-    [chosen, quantity],
-  );
+  /*
+   * The purchase this key belongs to. Not a dependency array: a ref survives
+   * exactly the events a memo does not, and it is replaced only by the two
+   * rules above.
+   */
+  const intent = `${chosen}:${quantity}`;
+  const intentKeyRef = useRef<{ readonly intent: string; readonly key: string } | null>(null);
 
   if (!packages || sellable.length === 0) return null;
 
@@ -117,9 +154,28 @@ export function BuyCredits({
 
   function buy() {
     if (!pkg || blocked) return;
+    /*
+     * Minted here, in an event handler, so nothing impure runs during a
+     * render — and read from the ref, so a re-render between this press and
+     * the next cannot change it.
+     */
+    if (intentKeyRef.current?.intent !== intent) {
+      intentKeyRef.current = { intent, key: `buy:${intent}:${crypto.randomUUID()}` };
+    }
+    const intentKey = intentKeyRef.current.key;
+
     setOutcome(null);
     startTransition(async () => {
-      setOutcome(await buyCreditPack(pkg!.key, quantity, intentKey));
+      const result = await buyCreditPack(pkg!.key, quantity, intentKey);
+      setOutcome(result);
+      /*
+       * ★★ THE KEY IS RELEASED ONLY BY A SETTLED OUTCOME.
+       * `unsettled` and `failed` both mean we do not know whether the card
+       * was charged, so a retry has to carry the same key — which is the one
+       * case the key exists for. Everything else is finished: the next press
+       * is a new purchase and gets a new key.
+       */
+      if (isSettled(result)) intentKeyRef.current = null;
     });
   }
 
@@ -329,6 +385,25 @@ function outcomeSentence(
     case 'failed':
       return t('buy.failed');
   }
+}
+
+/**
+ * Is this attempt over, one way or the other?
+ *
+ * Deliberately a whitelist rather than `kind !== 'unsettled'`: a new outcome
+ * added to `BuyOutcome` defaults to NOT settled, so an unknown state keeps the
+ * key instead of releasing it. The wrong answer in that direction costs a
+ * purchase somebody can repeat; the wrong answer in the other direction
+ * charges a card twice.
+ */
+function isSettled(outcome: BuyOutcome): boolean {
+  if (outcome.ok) return true;
+  return (
+    outcome.kind === 'declined' ||
+    outcome.kind === 'no_billable_entity' ||
+    outcome.kind === 'too_many' ||
+    outcome.kind === 'not_purchasable'
+  );
 }
 
 function money(

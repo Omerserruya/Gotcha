@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useMemo, useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 
 import {
   didExecute,
@@ -56,15 +56,25 @@ export function OrderActions({
   const [isPending, startTransition] = useTransition();
 
   /*
-   * One key per (order, action set). The service uses it to make a
-   * double-click one charge — the same mechanism as 17d's `intentKey`, and
+   * One key per attempt on this order. The service uses it to make a
+   * double-click one operation — the same mechanism as 17d's `intentKey`, and
    * the same trap: minted per click it would be a new operation every time,
    * with identical code and identical appearance.
+   *
+   * ★★ AND THE CLOCK IS GONE, BECAUSE IT FAILED ON BOTH EDGES.
+   * This was `useMemo(() => …Math.floor(Date.now() / 60_000)…)`. A minute
+   * bucket collapses two DELIBERATE presses seconds apart into one refund —
+   * and lets the same press a minute later through as a second one. Neither
+   * edge is where the customer's intent changes, and React may discard the
+   * memo and re-cross either edge on its own.
+   *
+   * A ref seeded once per mount is what "one attempt" actually means here:
+   * every button is disabled as soon as anything is attempted (see below), so
+   * one mount is one decision. Coming back to the order later and pressing
+   * again is a new decision and gets a new key — which is a person deciding,
+   * not a clock.
    */
-  const idempotencyKey = useMemo(
-    () => `order:${order.orderId}:${Math.floor(Date.now() / 60_000)}`,
-    [order.orderId],
-  );
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const possible: readonly OrderAction[] = [
     order.eligibility.cancellable ? 'cancel' : null,
@@ -82,6 +92,11 @@ export function OrderActions({
   }
 
   function run(action: OrderAction) {
+    // Minted in the handler, so nothing impure runs during a render, and kept
+    // in the ref so a retry — if one ever becomes possible here — carries it.
+    idempotencyKeyRef.current ??= `order:${order.orderId}:${crypto.randomUUID()}`;
+    const idempotencyKey = idempotencyKeyRef.current;
+
     setAttempted(true);
     setResult(null);
     startTransition(async () => {
