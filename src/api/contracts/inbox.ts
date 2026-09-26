@@ -446,3 +446,60 @@ export function resolveExternal(
   if (!externalId) return null;
   return messages.find((m) => m.externalMessageId === externalId) ?? null;
 }
+
+/* ── Who a conversation can be handed to ─────────────────────────────────── */
+
+/**
+ * A colleague, from `GET /api/agents`.
+ *
+ * `looseObject` because the route sends a good deal more — departments,
+ * counts, phone — and none of it is wanted here. A strict object would strip
+ * silently and a required field we do not need would fail the whole read.
+ */
+export const colleagueSchema = z.looseObject({
+  id: z.string().min(1),
+  name: z.string().nullish(),
+  email: z.string().nullish(),
+  /**
+   * ★★ THE FILTER THE PLATFORM DOES NOT APPLY.
+   *
+   * `reassign` checks only that the user exists in the tenant, so a transfer
+   * to a deactivated colleague SUCCEEDS — and leaves the conversation
+   * assigned to somebody who cannot sign in, with no unassign to recover it.
+   * Required, not defaulted: a route that stopped sending this must fail the
+   * read rather than quietly treat everybody as available.
+   */
+  isActive: z.boolean(),
+});
+export type Colleague = z.infer<typeof colleagueSchema>;
+export const colleagueListSchema = z.array(colleagueSchema);
+
+/**
+ * The people this viewer may hand a conversation to.
+ *
+ * Excludes themselves — "transfer to me" is what holding it already means —
+ * and anybody deactivated. Named rather than displayed nameless: the route's
+ * `name` is optional and a blank option in a select is a transfer to nobody
+ * in particular.
+ */
+export function transferableTo(
+  colleagues: readonly Colleague[],
+  meId: string | null,
+): readonly { readonly id: string; readonly name: string }[] {
+  return colleagues
+    .filter((c) => c.isActive && c.id !== meId)
+    .map((c) => ({ id: c.id, name: (c.name ?? c.email ?? '').trim() }))
+    .filter((c) => c.name !== '');
+}
+
+/**
+ * `GET /api/agents/settings/auto-greeting`.
+ *
+ * `template` is required and `""` is a real answer — the route writes
+ * `(await readDurableSetting(...)) || ""`, so "no greeting configured" and
+ * "a greeting configured" are the same field with different contents. A
+ * default here would turn a route that stopped sending it into a confident
+ * "nothing will be sent", which is the one thing the screen must not say
+ * without knowing.
+ */
+export const autoGreetingSchema = z.object({ template: z.string() });

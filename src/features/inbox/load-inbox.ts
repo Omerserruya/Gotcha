@@ -2,8 +2,12 @@ import 'server-only';
 
 import { serverApi } from '@/api/client/server-api';
 import {
+  autoGreetingSchema,
+  colleagueListSchema,
   conversationRowSchema,
   messageSchema,
+  transferableTo,
+  type Colleague,
   type ConversationRow,
   type InboxMessage,
 } from '@/api/contracts/inbox';
@@ -12,7 +16,8 @@ import {
   commerceContextSchema,
   type CommerceContextResponse,
 } from '@/api/contracts/customer-orders';
-import { customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
+import { currentUserSchema } from '@/api/contracts/identity';
+import { authEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { z } from 'zod';
 
@@ -116,6 +121,15 @@ export interface InboxData {
   readonly messages: readonly InboxMessage[] | null;
   readonly timeline: CustomerTimeline | null;
   readonly orders: CommerceContextResponse | null;
+  /** `User.id` of the person looking, or `null` when we could not read it. */
+  readonly meId: string | null;
+  /** Active colleagues this viewer may transfer to. Never includes them. */
+  readonly colleagues: readonly { readonly id: string; readonly name: string }[];
+  /**
+   * Does the workspace have an auto-greeting? `null` = we could not ask.
+   * The read is ADMIN-only, so `null` is the ordinary answer for an agent.
+   */
+  readonly greeting: boolean | null;
 }
 
 export async function loadInbox(conversationId?: string, cursor?: string): Promise<InboxData> {
@@ -165,8 +179,66 @@ export async function loadInbox(conversationId?: string, cursor?: string): Promi
     undatedCount: queue?.undatedCount,
   };
 
+  /*
+   * ★ WHO IS LOOKING, WHO THEY CAN HAND IT TO, AND WHETHER THE CUSTOMER GETS
+   *   A MESSAGE. All three degrade to "we do not know" rather than to a
+   *   confident answer, and each one is a different question:
+   *
+   *     meId      null → nothing is "mine", so no transfer control is drawn.
+   *                      Withholding a control on an unknown is right here:
+   *                      the route would 403 anyway.
+   *     colleagues empty → the transfer control is not drawn at all. A select
+   *                      with no options is a control that cannot be used.
+   *     greeting  null → the hedged sentence. NOT `false`, which would
+   *                      promise the customer hears nothing.
+   */
+  const [me, colleagues, greeting] = await Promise.all([
+    api
+      .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
+      .then((it) => it.user.id)
+      .catch((cause: unknown) => {
+        logger.warn('inbox.me_failed', { cause });
+        return null;
+      }),
+    api
+      .get({ endpoint: inboxEndpoints.agents(), payload: colleagueListSchema })
+      .catch((cause: unknown) => {
+        logger.warn('inbox.colleagues_failed', { cause });
+        return [] as Colleague[];
+      }),
+    api
+      .get({ endpoint: inboxEndpoints.autoGreeting(), payload: autoGreetingSchema })
+      /*
+       * A template that is present and non-empty. The route answers
+       * `{ template: "" }` for "none configured", so the empty string is a
+       * real answer and not a missing one.
+       */
+      .then((it) => it.template.trim() !== '')
+      .catch((cause: unknown) => {
+        // 403 for anybody who is not an ADMIN, which is most of the people
+        // who will press "take control". Not logged as a warning-worthy
+        // failure, because it is the expected answer.
+        logger.debug?.('inbox.greeting_unreadable', { cause });
+        return null;
+      }),
+  ]);
+
+  const viewer = {
+    meId: me,
+    colleagues: transferableTo(colleagues, me),
+    greeting,
+  };
+
   if (!open) {
-    return { rows, ...paging, open: null, messages: null, timeline: null, orders: null };
+    return {
+      rows,
+      ...paging,
+      ...viewer,
+      open: null,
+      messages: null,
+      timeline: null,
+      orders: null,
+    };
   }
 
   const [messages, timeline, orders] = await Promise.all([
@@ -213,5 +285,5 @@ export async function loadInbox(conversationId?: string, cursor?: string): Promi
       }),
   ]);
 
-  return { rows, ...paging, open, messages, timeline, orders };
+  return { rows, ...paging, ...viewer, open, messages, timeline, orders };
 }

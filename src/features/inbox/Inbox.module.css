@@ -223,4 +223,32 @@
     color: var(--text-muted);
     font-size: var(--font-size-caption);
   }
+
+  /* ── Screen 02's three columns ────────────────────────────────────────── */
+  .screen {
+    display: grid;
+    grid-template-columns: var(--size-rail) minmax(0, 1fr) var(--size-reading-half);
+    gap: var(--space-16);
+    align-items: start;
+  }
+
+  /*
+   * One column on a phone, in reading order: the queue, then the conversation
+   * it opens, then its context. The design puts them side by side and there
+   * is no width for that at 390.
+   */
+  @media (max-width: 900px) {
+    .screen {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .queueColumn,
+  .conversationColumn,
+  .contextColumn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    min-inline-size: 0;
+  }
 }

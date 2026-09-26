@@ -1087,6 +1087,40 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/reassign', { conversationId }),
 
   /**
+   * The people a conversation can be transferred to.
+   *
+   * ★ UNGATED BEYOND SIGNING IN. `services/auth/src/routes/agents.ts:29` has
+   * no `requirePermission` — only `authenticate`, `resolveTenant` and MFA. So
+   * unlike `/api/analytics/agents` (which needs `analytics:workspace:read`
+   * and would be empty for most of the people who need to transfer), every
+   * member can read it.
+   *
+   * ⚠ TWO THINGS IT DOES AND DOES NOT CONTAIN.
+   * `where: { role: "AGENT" }` — **admins are not in this list**, so a
+   * conversation cannot be transferred to one from screen 02, although
+   * `reassign` would accept them.
+   *
+   * And it includes DEACTIVATED people. `reassign` checks only that the user
+   * exists in the tenant, so transferring to somebody who cannot sign in
+   * succeeds and strands the conversation — assigned to nobody who can act,
+   * with no unassign to recover it. The screen filters on `isActive`; the
+   * platform will not.
+   *
+   * Answers a bare array, no envelope.
+   */
+  agents: () => endpoint('/api/agents'),
+
+  /**
+   * Is an auto-greeting configured? ADMIN only (`requireRole("ADMIN")`).
+   *
+   * Read so screen 02 can tell an agent whether taking control will message
+   * the customer — and a 403 here is the ordinary case, not a fault, because
+   * most people pressing that button are agents. It becomes "we could not
+   * ask", which is its own sentence.
+   */
+  autoGreeting: () => endpoint('/api/agents/settings/auto-greeting'),
+
+  /**
    * ⚠⚠ `POST /:id/release` EXISTS AND IS DELIBERATELY NOT LISTED ABOVE.
    *
    * It is the "put back in the queue" the design drew, and Omer ruled it out:

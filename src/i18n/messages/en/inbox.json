@@ -1,4 +1,6 @@
 {
+  "title": "Inbox",
+  "description": "Every conversation, and what GOTCHA knows about the person on the other end.",
   "stream": {
     "unavailable": "We couldn't read this conversation just now.",
     "empty": "Nothing has been said here yet.",
@@ -35,7 +37,8 @@
     "undated": "{count, plural, =1 {One conversation has no last-message time, so we can't place it in the order above} other {# conversations have no last-message time, so we can't place them in the order above}}",
     "capAll": "{count, plural, =0 {} =1 {One conversation, and that's all of them.} other {# conversations, and that's all of them.}}",
     "undatedThisPage": "{count, plural, =1 {One conversation on this page has no last-message time} other {# conversations on this page have no last-message time}} — and any others are at the very end of the queue, past the pages you've loaded.",
-    "undatedInView": "{count, plural, =0 {No conversation here is missing a last-message time.} =1 {One conversation in this view has no last-message time, so we can't place it in the order} other {# conversations in this view have no last-message time, so we can't place them in the order}}"
+    "undatedInView": "{count, plural, =0 {No conversation here is missing a last-message time.} =1 {One conversation in this view has no last-message time, so we can't place it in the order} other {# conversations in this view have no last-message time, so we can't place them in the order}}",
+    "label": "Waiting"
   },
   "identity": {
     "unnamed": "Someone",
@@ -60,5 +63,13 @@
       "not_found": "This conversation, or the person you picked, isn't there any more. Reload to see where things stand.",
       "failed": "That didn't go through, and nothing changed. Try again in a moment."
     }
+  },
+  "open": {
+    "label": "This conversation",
+    "none": "Nothing is open. Pick a conversation from the list to see it here.",
+    "unavailable": "We couldn't read the queue, so there's no conversation to show. This is our side, not yours."
+  },
+  "context": {
+    "label": "About this customer"
   }
 }
