@@ -15,6 +15,22 @@ interface CreateMessageData {
   fileName?: string;
   /** The message this one replies to, when the agent quoted one. */
   replyToMessageId?: string;
+  /**
+   * The send outcome, when the caller already knows it.
+   *
+   * ★ THIS IS WHY 17 OF 18 WRITERS COULD NOT USE THIS FUNCTION. `create` decided
+   * `status` for them - PENDING for outbound, DELIVERED for inbound - and a
+   * writer that has already called the provider knows better: the flow executor
+   * writes SENT or FAILED depending on whether an external id came back, and the
+   * sandbox writes SENT for a message no provider ever saw.
+   *
+   * Omitted keeps the old behaviour exactly, so existing callers are unaffected.
+   */
+  status?: "PENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  /** The provider's own words when a send failed. */
+  errorMessage?: string;
+  /** The provider's id for the quoted message, when ours could not be resolved. */
+  replyToExternalId?: string;
 }
 
 /**
@@ -79,10 +95,30 @@ export async function create(data: CreateMessageData) {
         // here; the provider's id is stamped by the outgoing worker once the
         // send returns, because it does not exist until then.
         replyToMessageId: data.replyToMessageId ?? undefined,
-        status: data.direction === "OUTBOUND" ? "PENDING" : "DELIVERED",
+        replyToExternalId: data.replyToExternalId ?? undefined,
+        errorMessage: data.errorMessage ?? undefined,
+        // The caller's outcome when it has one, else the old default.
+        status: data.status ?? (data.direction === "OUTBOUND" ? "PENDING" : "DELIVERED"),
       },
     });
-    await tx.conversation.update({ where: { id: data.conversationId }, data: { lastMessageAt: msg.createdAt } });
+
+    /**
+     * ★ A FAILED SEND DOES NOT MOVE THE CONVERSATION'S SORT KEY.
+     *
+     * The inbox orders by `lastMessageAt`, and a message the customer never
+     * received must not make the conversation look answered: the last real thing
+     * that happened is still their inbound, and moving the column would demote a
+     * customer who is still waiting on the strength of a delivery that did not
+     * happen.
+     *
+     * This lives HERE rather than at each call site on purpose. The rule was
+     * found while fixing the flow executor, and if it stayed at that one site
+     * then every writer moved into this function afterwards would reintroduce the
+     * bug - which is the opposite of what consolidating the writers is for.
+     */
+    if (msg.status !== "FAILED") {
+      await tx.conversation.update({ where: { id: data.conversationId }, data: { lastMessageAt: msg.createdAt } });
+    }
     return msg;
   });
 
