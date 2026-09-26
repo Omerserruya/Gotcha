@@ -10,7 +10,9 @@ export async function analyzeConversation(tenantId: string, conversationId: stri
   const messages = await prisma.message.findMany({
     where: { conversationId, tenantId },
     orderBy: { createdAt: "asc" },
-    select: { direction: true, body: true, senderName: true, createdAt: true, metadata: true, messageType: true },
+    // `id` is selected so the intent this function already computes can be
+    // written back to the message it was computed FROM - see below.
+    select: { id: true, direction: true, body: true, senderName: true, createdAt: true, metadata: true, messageType: true },
   });
 
   // Classify intent from last inbound message
@@ -22,6 +24,49 @@ export async function analyzeConversation(tenantId: string, conversationId: stri
       const classification = await classifyMessage(lastInbound.body);
       detectedIntent = classification.intent;
       intentConfidence = classification.confidence;
+
+      /**
+       * ★ PERSIST IT ON THE MESSAGE IT WAS COMPUTED FROM.
+       *
+       * This classification is already per-MESSAGE - `classifyMessage` was
+       * handed one specific inbound body - and the result was kept only at
+       * conversation level. So the message-level fact was computed and thrown
+       * away on every analysis.
+       *
+       * `Message.metadata.intent` is not a new convention: `conversation-memory
+       * .service.ts:125` READS it and documents "BEL/runtime-tagged metadata
+       * wins - explicit > heuristic", falling back to keyword matching at :146
+       * "only if metadata didn't already say". Nothing has ever written it - no
+       * such column exists in any of 207 migrations and no writer sets it - so
+       * that precedence has never fired and the consumer has run on heuristics
+       * 100% of the time, silently.
+       *
+       * This is STORAGE, not a new classifier: no extra model call, and the
+       * value is the one this function already has in hand.
+       *
+       * Merged into existing metadata rather than replacing it, and never
+       * allowed to fail the analysis: the intent is already recorded on
+       * ConversationIntelligence below, so a failed message write costs history
+       * rather than correctness.
+       */
+      const priorMeta =
+        lastInbound.metadata && typeof lastInbound.metadata === "object"
+          ? (lastInbound.metadata as Record<string, unknown>)
+          : {};
+      await prisma.message
+        .update({
+          where: { id: lastInbound.id },
+          data: {
+            metadata: {
+              ...priorMeta,
+              intent: classification.intent,
+              intentConfidence: classification.confidence,
+            },
+          },
+        })
+        .catch((err: any) =>
+          console.warn(`[conversation-intelligence] could not persist intent on message ${lastInbound.id}: ${err?.message}`),
+        );
     } catch {
       detectedIntent = "general";
       intentConfidence = 0;
