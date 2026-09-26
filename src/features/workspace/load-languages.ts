@@ -17,7 +17,10 @@ import { z } from 'zod';
 
 /** `GET /api/account` — bare, not enveloped. */
 const accountSchema = z.object({
-  user: z.object({ locale: z.string().nullable().default(null) }).nullable().default(null),
+  user: z
+    .object({ locale: z.string().nullable().default(null) })
+    .nullable()
+    .default(null),
   tenantDefaultLocale: z.string().nullable().default(null),
 });
 

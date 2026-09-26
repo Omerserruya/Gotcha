@@ -60,11 +60,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         resolves merges. Passing the resolved one would write a note against
         a different id than the page the author is looking at.
       */}
-      <CustomerNotes
-        notes={detail.notes}
-        contactId={id}
-        viewerUserId={detail.viewerUserId}
-      />
+      <CustomerNotes notes={detail.notes} contactId={id} viewerUserId={detail.viewerUserId} />
     </PageContainer>
   );
 }

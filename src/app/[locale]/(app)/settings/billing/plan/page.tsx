@@ -74,7 +74,6 @@ export default async function Page() {
         <h2 className={styles.sectionHeading}>{t('heading.packages')}</h2>
         <CreditPackagesSection packages={packages} />
       </section>
-
     </SettingsSection>
   );
 }

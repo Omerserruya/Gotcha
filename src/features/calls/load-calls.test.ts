@@ -96,7 +96,9 @@ describe('★★ three answers, because "we could not ask" is one of them', () =
      * two empty screens say different things: "calls appear here as they
      * happen" is a promise that cannot come true without a number.
      */
-    get.mockResolvedValueOnce(settings({ voiceCopilotEnabled: true, hasActiveVoiceChannel: false }));
+    get.mockResolvedValueOnce(
+      settings({ voiceCopilotEnabled: true, hasActiveVoiceChannel: false }),
+    );
     get.mockResolvedValue({ data: [] });
     const { loadCalls } = await import('./load-calls');
     expect((await loadCalls()).hasNumber).toBe(false);
