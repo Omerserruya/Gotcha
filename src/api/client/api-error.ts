@@ -56,8 +56,24 @@ export interface ApiErrorInit {
   readonly method?: string;
   /** Endpoint path with parameters still templated, safe for grouping. */
   readonly route?: string;
-  /** Machine-readable reason from the tenant gate (402). */
+  /**
+   * Machine-readable reason from the tenant gate (402) and from the routes
+   * that send a `code` field — the entitlement envelope in
+   * `packages/shared`, and `auth`'s workspace routes.
+   *
+   * ⚠ MOST ROUTE-LEVEL REFUSALS DO NOT SEND ONE. A service that answers
+   * `{ error: "no_knowledge_base" }` puts its reason in `developerMessage`,
+   * and the billing services put theirs in `failureCode`. Matching `code`
+   * against a route that sends neither compiles and never fires. Read the
+   * route's own `json()` before choosing the field.
+   */
   readonly code?: string;
+  /** The billing services' reason. See `errorEnvelopeSchema.failureCode`. */
+  readonly failureCode?: string;
+  /** Per-code payload for `failureCode`; shape depends on the code. */
+  readonly failureDetail?: Readonly<Record<string, unknown>>;
+  /** Set only where a charge was actually attempted. */
+  readonly invoiceId?: string | null;
   /** Tenant lifecycle status the gate reported (402). */
   readonly tenantStatus?: string;
   /** In-app path that would lift a 402, when the backend names one. */
@@ -74,6 +90,9 @@ export class ApiError extends Error {
   readonly method?: string;
   readonly route?: string;
   readonly code?: string;
+  readonly failureCode?: string;
+  readonly failureDetail?: Readonly<Record<string, unknown>>;
+  readonly invoiceId?: string | null;
   readonly tenantStatus?: string;
   readonly checkoutPath?: string;
 
@@ -88,6 +107,9 @@ export class ApiError extends Error {
     this.method = init.method;
     this.route = init.route;
     this.code = init.code;
+    this.failureCode = init.failureCode;
+    this.failureDetail = init.failureDetail;
+    this.invoiceId = init.invoiceId;
     this.tenantStatus = init.tenantStatus;
     this.checkoutPath = init.checkoutPath;
   }

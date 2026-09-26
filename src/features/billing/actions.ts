@@ -34,9 +34,41 @@ export type BuyOutcome =
   | { readonly ok: false; readonly kind: 'unsettled'; readonly invoiceId: string | null }
   /** There is nothing to bill. A different repair entirely. */
   | { readonly ok: false; readonly kind: 'no_billable_entity' }
-  /** The server's own per-package cap. */
+  /** The server's own per-package cap, and the cap itself when it sends it. */
   | { readonly ok: false; readonly kind: 'too_many'; readonly max: number | null }
+  /**
+   * The pack cannot be bought on this plan, or is no longer sold. Nothing was
+   * charged and trying again will not help — a different repair from either.
+   */
+  | { readonly ok: false; readonly kind: 'not_purchasable' }
+  /**
+   * ★★ WE DO NOT KNOW WHAT HAPPENED, WHICH IS NOT "NOTHING HAPPENED".
+   *
+   * This used to render `buy.declined` — *"The payment didn't go through,
+   * and nothing was charged."* A network drop, a 500, or a response that
+   * failed its contract all land here, and **a contract failure can happen
+   * after a 200 in which the card was charged and the credits granted**.
+   * Telling that customer nothing was charged is the same harm `unsettled`
+   * exists to prevent, arriving through the parse instead of the provider.
+   */
   | { readonly ok: false; readonly kind: 'failed' };
+
+/**
+ * Refusals that mean "not this pack, not on this plan" rather than "not now".
+ *
+ * Four of them are the package's own availability window
+ * (`checkPackageAvailability`) and two are the plan's eligibility. They share
+ * a repair — the list the customer is looking at is out of date, or this plan
+ * cannot buy packs — and none of them is helped by trying again.
+ */
+const NOT_PURCHASABLE: ReadonlySet<string> = new Set([
+  'unknown_package',
+  'package_inactive',
+  'package_not_yet_active',
+  'package_expired',
+  'package_not_eligible_for_plan',
+  'plan_not_eligible_for_packages',
+]);
 
 /**
  * `intentKey` identifies ONE purchase the customer decided on, so the server
@@ -56,16 +88,19 @@ export async function buyCreditPack(
       payload: buyResultSchema,
     });
 
-    if (result.success) {
-      revalidatePath('/[locale]/(app)/settings/billing', 'page');
-      return { ok: true, units: result.units, invoiceId: result.invoiceId };
-    }
-    // A 200 that is not a success. Read the code rather than the status.
-    if (result.outcomeUnknown) return { ok: false, kind: 'unsettled', invoiceId: result.invoiceId };
-    if (result.failureCode === 'no_billable_entity') {
-      return { ok: false, kind: 'no_billable_entity' };
-    }
-    return { ok: false, kind: 'declined', code: result.failureCode };
+    /*
+     * ★★ A NON-SUCCESS NEVER ARRIVES HERE.
+     *
+     * The route is `res.status(result.success ? 200 : 402).json(result)`, so
+     * every refusal is a 402 and every 402 throws. The branches that used to
+     * follow this one — `outcomeUnknown`, `no_billable_entity`, `declined` —
+     * read the body of a 200 that cannot be a failure, and **all three were
+     * unreachable**, including the sentence about a declined card, which is
+     * the one this screen most needs to be able to say. They live in the
+     * catch now, which is where the refusal actually lands.
+     */
+    revalidatePath('/[locale]/(app)/settings/billing', 'page');
+    return { ok: true, units: result.units, invoiceId: result.invoiceId };
   } catch (cause: unknown) {
     /*
      * The 409 arrives as a thrown API error, so the unsettled case has TWO
@@ -87,10 +122,49 @@ export async function buyCreditPack(
        */
       if (cause.status === 409) {
         logger.warn('billing.buy_outcome_unknown', { packageKey });
-        return { ok: false, kind: 'unsettled', invoiceId: null };
+        // ★ AND NOW WITH THE REFERENCE. The 409 body carries `invoiceId` and
+        // the error envelope used to strip it, so a merchant ringing about a
+        // charge whose outcome is unknown could not be given anything to
+        // quote. `null` stays null — an absent id is not printed as one.
+        return { ok: false, kind: 'unsettled', invoiceId: cause.invoiceId ?? null };
       }
-      if (cause.code === 'quantity_exceeds_maximum') {
-        return { ok: false, kind: 'too_many', max: null };
+
+      /*
+       * ★★ `failureCode`, NOT `code`. This was `cause.code`, the idiom every
+       * other action here uses, and it could not fire: the billing services
+       * answer `{ success: false, failureCode, detail }` with no `code` and
+       * no `error` — and `error` being required meant the envelope parse
+       * failed outright, so the whole body was discarded. Every refusal on
+       * the screen that charges a card rendered as the same generic sentence.
+       */
+      const failure = cause.failureCode;
+      if (failure === 'quantity_exceeds_maximum') {
+        const max = cause.failureDetail?.max;
+        return { ok: false, kind: 'too_many', max: typeof max === 'number' ? max : null };
+      }
+      if (failure === 'no_billable_entity') return { ok: false, kind: 'no_billable_entity' };
+      if (failure !== undefined && NOT_PURCHASABLE.has(failure)) {
+        return { ok: false, kind: 'not_purchasable' };
+      }
+      /*
+       * ★★ THE CARD WAS REACHED, SO THIS IS A DECLINE AND NOT A REFUSAL.
+       * `buyCredits` sets `invoiceId` on a failure only from `chargeFor`'s
+       * result — every earlier refusal returns without one. So its presence
+       * is the platform's own record that the charge was attempted, which is
+       * the difference between "we declined to charge you" and "your card
+       * said no". `unsettled` has already been taken out above.
+       */
+      if (cause.invoiceId) {
+        logger.warn('billing.buy_declined', { packageKey, failure });
+        return { ok: false, kind: 'declined', code: failure ?? null };
+      }
+      /*
+       * A refusal this build has not seen. It falls through to `failed`,
+       * which no longer claims nothing was charged — and the code is logged,
+       * so the next one is a name rather than a mystery.
+       */
+      if (failure !== undefined) {
+        logger.warn('billing.buy_unmapped_failure', { packageKey, failure });
       }
     }
     logger.warn('billing.buy_failed', { cause, packageKey });

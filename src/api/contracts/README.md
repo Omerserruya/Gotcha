@@ -225,3 +225,42 @@ The vocabulary in `design-system/tokens/tokens.css` is semantic
 primitive-sounding name next to it (`--radius-8`, `--surface-base`) produces a
 plausible declaration that does nothing. `scripts/css-token-sweep.sh` lists
 every use with no definition.
+
+## A required field in an error envelope is a bet on every handler
+
+`errorEnvelopeSchema.error` was `z.string()`. `readErrorBody` answers `{}` when
+the parse fails, so a refusal that did not happen to carry an `error` key lost
+**every** field, not just that one — the code, the detail, the invoice id.
+
+`POST /billing/credits/buy` refuses with `{ success: false, failureCode,
+detail }`. So on the screen that charges a card, the reason for every refusal
+was discarded inside the client, and the screen said the same generic sentence
+to everybody.
+
+An error envelope's fields are all optional, because a handler that forgot one
+is exactly the case the envelope exists to survive.
+
+## Where the discriminator lives, by service
+
+Three places, and copying the wrong one compiles:
+
+  `code`              the entitlement envelope in `packages/shared`, and
+                      `auth`'s workspace routes. `PLAN_LIMIT_REACHED`,
+                      `STALE_WRITE`, `NO_BUSINESS_PROFILE`.
+  `error`             most route-level refusals, e.g. `historical-import`'s
+                      `no_knowledge_base`. Arrives as `developerMessage`.
+  `failureCode`       the billing services, with a per-code `detail`.
+
+Six `cause.code` matches were checked against the routes that answer them.
+Five were right. The sixth was on the buy action and could never fire.
+
+## An outcome that cannot be produced still has copy
+
+`BuyOutcome` declared `declined`, `no_billable_entity` and `too_many`, all
+decided from the body of a 200 — and the route sends every refusal as a 402,
+which throws. Three declared outcomes, three written sentences, none reachable,
+and the tests passed because they handed the component an outcome directly.
+
+When an outcome is decided in a `catch`, the test that proves it exists has to
+throw. A test that constructs the outcome proves only that the renderer has a
+branch for it.

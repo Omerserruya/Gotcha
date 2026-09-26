@@ -237,6 +237,60 @@ describe('★★ an unsettled charge is not a failure', () => {
     expect(error).toHaveTextContent(/nothing was charged/i);
     expect(error).toHaveTextContent(/try again/i);
   });
+
+  it('★★ `failed` must NOT say nothing was charged, because we do not know', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════
+     * THE DEFECT THIS ASSERTION GUARDS, AND IT SURVIVED EVERY OTHER TEST.
+     * ════════════════════════════════════════════════════════════════════
+     * `t('buy.declined')` was the fallback of the ternary that chose this
+     * sentence, so `failed` inherited *"The payment didn't go through, and
+     * nothing was charged. You can try again."*
+     *
+     * `failed` is a network drop, a 500, or a response that failed its
+     * contract — **and a contract failure can follow a 200 in which the card
+     * was charged and the credits granted.** Telling that customer nothing
+     * was charged, and inviting a retry, is the same harm the `unsettled`
+     * branch two tests above exists to prevent, arriving through the parse
+     * instead of through the provider.
+     *
+     * Mutating the sentence back turns this red and nothing else.
+     */
+    buyCreditPack.mockResolvedValue({ ok: false, kind: 'failed' });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('buy-button'));
+
+    const error = await screen.findByTestId('buy-error');
+    expect(error).not.toHaveTextContent(/nothing was charged/i);
+    expect(error).toHaveTextContent(/can.t tell you whether your card was charged/i);
+    // And it sends them to look before pressing anything again.
+    expect(error).toHaveTextContent(/check your invoices/i);
+  });
+
+  it('★★ a cap names the cap when the platform sends one', async () => {
+    // `detail: { max }` travels on the 402 and used to be stripped by the
+    // error envelope, so the number was always null and never said.
+    buyCreditPack.mockResolvedValue({ ok: false, kind: 'too_many', max: 10 });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('buy-button'));
+
+    const error = await screen.findByTestId('buy-error');
+    expect(error).toHaveTextContent(/at most 10/i);
+    expect(error).toHaveTextContent(/nothing was charged/i);
+  });
+
+  it('★ a pack that is not for sale says a retry will not help', async () => {
+    buyCreditPack.mockResolvedValue({ ok: false, kind: 'not_purchasable' });
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('buy-button'));
+
+    const error = await screen.findByTestId('buy-error');
+    expect(error).toHaveTextContent(/isn.t available on your plan|no longer sold/i);
+    expect(error).toHaveTextContent(/won.t change it/i);
+  });
 });
 
 describe('★ one purchase, one intent key', () => {

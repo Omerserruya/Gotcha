@@ -288,17 +288,47 @@ export function BuyCredits({
             try again, and offers no button that would. Flattening these into
             "Something went wrong, try again" takes money twice.
           */}
-          {outcome.kind === 'unsettled'
-            ? t('buy.unsettled')
-            : outcome.kind === 'no_billable_entity'
-              ? t('buy.blocked.noAccount')
-              : outcome.kind === 'too_many'
-                ? t('buy.tooMany')
-                : t('buy.declined')}
+          {/*
+            ★★ AND `failed` NO LONGER BORROWS THE DECLINED SENTENCE.
+            It used to be the fallback, so a network drop, a 500 and a
+            response that failed its contract all said *"nothing was
+            charged"* — a claim about the customer's money made from an error
+            that says nothing about it. A contract failure can follow a 200 in
+            which the card WAS charged.
+          */}
+          {outcomeSentence(outcome, t)}
         </p>
       ) : null}
     </section>
   );
+}
+
+/**
+ * One sentence per outcome, and every outcome named.
+ *
+ * A `switch` with no default, so a new `BuyOutcome` member fails the build
+ * here instead of silently inheriting whichever branch happens to be last —
+ * which is how `failed` came to tell people their card was not charged.
+ */
+function outcomeSentence(
+  outcome: Extract<BuyOutcome, { ok: false }>,
+  t: ReturnType<typeof useTranslations<'billing'>>,
+): string {
+  switch (outcome.kind) {
+    case 'unsettled':
+      return t('buy.unsettled');
+    case 'no_billable_entity':
+      return t('buy.blocked.noAccount');
+    case 'too_many':
+      // The cap travels with the refusal now, so the sentence can name it.
+      return outcome.max === null ? t('buy.tooMany') : t('buy.tooManyMax', { max: outcome.max });
+    case 'not_purchasable':
+      return t('buy.notPurchasable');
+    case 'declined':
+      return t('buy.declined');
+    case 'failed':
+      return t('buy.failed');
+  }
 }
 
 function money(

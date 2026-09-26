@@ -87,6 +87,9 @@ async function readErrorBody(response: Response): Promise<{
   developerMessage?: string;
   fieldErrors?: FieldError[];
   code?: string;
+  failureCode?: string;
+  failureDetail?: Readonly<Record<string, unknown>>;
+  invoiceId?: string | null;
   tenantStatus?: string;
   checkoutPath?: string;
 }> {
@@ -102,6 +105,9 @@ async function readErrorBody(response: Response): Promise<{
     developerMessage: parsed.data.error,
     fieldErrors: parsed.data.details,
     code: parsed.data.code,
+    failureCode: parsed.data.failureCode,
+    failureDetail: parsed.data.detail,
+    invoiceId: parsed.data.invoiceId,
     tenantStatus: parsed.data.tenantStatus,
     checkoutPath: parsed.data.checkoutPath,
   };
@@ -156,8 +162,16 @@ export class HttpClient {
     const effectiveRequestId = response.headers.get(REQUEST_ID_HEADER) ?? requestId;
 
     if (!response.ok) {
-      const { developerMessage, fieldErrors, code, tenantStatus, checkoutPath } =
-        await readErrorBody(response);
+      const {
+        developerMessage,
+        fieldErrors,
+        code,
+        failureCode,
+        failureDetail,
+        invoiceId,
+        tenantStatus,
+        checkoutPath,
+      } = await readErrorBody(response);
       const error = fail({
         /*
          * A `TENANT_*` code means the ORGANIZATION is gated, not that this
@@ -172,6 +186,9 @@ export class HttpClient {
         developerMessage,
         fieldErrors,
         code,
+        failureCode,
+        failureDetail,
+        invoiceId,
         tenantStatus,
         checkoutPath,
         requestId: effectiveRequestId,
