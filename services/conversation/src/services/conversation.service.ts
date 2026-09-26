@@ -225,7 +225,34 @@ export async function list(tenantId: string, filters: ConversationFilters) {
     assignedAgent: { select: { id: true, name: true, email: true } },
     department: { select: { id: true, name: true } },
     _count: { select: { messages: true } },
-    messages: { orderBy: { createdAt: "desc" as const }, take: 1, select: { direction: true, body: true, createdAt: true } },
+    /**
+     * ★ THE LAST MESSAGE, NOT THE LAST ROW.
+     *
+     * A FAILED outbound is a message the customer never received, and taking it
+     * as the conversation's last message broke the inbox in two ways at once:
+     *
+     *  - `lastMessageDirection` came back OUTBOUND, and the list's `isUnread`
+     *    returns false for anything not INBOUND. So a customer whose question
+     *    the bot failed to answer STOPPED SHOWING AS UNREAD - the row went
+     *    quiet at the exact moment it needed attention.
+     *  - `lastMessageBody` previewed text that was never delivered, so the row
+     *    read as answered.
+     *
+     * The same rule already governs `lastMessageAt` (a failed send does not
+     * advance the sort key). Without it here the two disagreed: the column
+     * skipped the failed row and this projection did not, which is worse than
+     * either behaviour on its own.
+     *
+     * The thread itself is unaffected - `listByConversation` still returns the
+     * failed message, because the AGENT does need to see that a send failed.
+     * It is only the summary of what the CUSTOMER has seen that excludes it.
+     */
+    messages: {
+      where: { status: { not: "FAILED" as const } },
+      orderBy: { createdAt: "desc" as const },
+      take: 1,
+      select: { direction: true, body: true, createdAt: true },
+    },
   };
   // id breaks ties so two conversations sharing a millisecond cannot straddle a
   // page boundary and reproduce the skip in a rarer form.
