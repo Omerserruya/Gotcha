@@ -71,7 +71,14 @@
   "open": {
     "label": "This conversation",
     "none": "Nothing is open. Pick a conversation from the list to see it here.",
-    "unavailable": "We couldn't read the queue, so there's no conversation to show. This is our side, not yours."
+    "unavailable": "We couldn't read the queue, so there's no conversation to show. This is our side, not yours.",
+    "status": {
+      "OPEN": "Open",
+      "WAITING": "Waiting on them",
+      "CLOSED": "Closed"
+    },
+    "waitingUnknown": "No last-message time, so we can’t say how long they have waited.",
+    "noName": "No name yet"
   },
   "context": {
     "label": "About this customer"

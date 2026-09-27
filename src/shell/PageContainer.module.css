@@ -17,6 +17,18 @@
     min-inline-size: 0;
   }
 
+  /*
+   * Columns rather than prose. The cap above is a READING measure — right for a
+   * settings page, wrong for a screen that is three panels side by side, where
+   * it left the middle one at about 500px on a 1440 display.
+   *
+   * Still capped, because a grid stretched across an ultrawide display puts the
+   * queue and the context panel a head-turn apart.
+   */
+  .wide {
+    max-inline-size: 1600px;
+  }
+
   /* Full-bleed: for pages that manage their own scrolling, such as the Inbox. */
   .bleed {
     max-inline-size: none;

@@ -252,3 +252,64 @@
     min-inline-size: 0;
   }
 }
+
+@layer features {
+  /*
+   * ── Who this conversation is with ──────────────────────────────────────
+   *
+   * A bar, because the verbs inside it were floating: "Take control" and its
+   * siblings sat loose above the stream with nothing around them, so they read
+   * as the first thing IN the conversation rather than as controls over it.
+   */
+  .openHeader {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-8);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .openWho {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .openName {
+    margin: 0;
+    font-size: var(--font-size-body);
+    font-weight: 500;
+  }
+
+  /* No name is an ordinary state, not an error. */
+  .openUnnamed {
+    color: var(--text-subtle);
+    font-style: italic;
+  }
+
+  .openFacts {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .openWaiting {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  /* We cannot say. Said quietly, but said. */
+  .openWaitingUnknown {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    max-inline-size: var(--size-reading-half);
+  }
+}

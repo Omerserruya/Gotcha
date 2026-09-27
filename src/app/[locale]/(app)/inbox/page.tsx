@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
+import { ConversationHeader } from '@/features/inbox/ConversationHeader';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
@@ -52,7 +53,7 @@ export default async function Page({
   const now = new Date();
 
   return (
-    <PageContainer title={t('title')} description={t('description')}>
+    <PageContainer title={t('title')} description={t('description')} wide>
       <div className={styles.screen} data-testid="inbox-screen">
         <section className={styles.queueColumn} aria-label={t('queue.label')}>
           <ConversationList
@@ -90,6 +91,19 @@ export default async function Page({
               transfer route would refuse it anyway, and a control that always
               403s is worse than one that is absent.
             */}
+            {/*
+              ★★ WHO THIS IS, ABOVE WHO IS DRIVING.
+              The column used to begin at the verbs and go straight into
+              messages, so an agent arriving from the queue read a wall of text
+              with no statement of who it is with, on what channel, or how long
+              they have waited — the three facts that decide how the first
+              sentence should be written.
+
+              A sibling, not a parent: both are async server components and
+              nesting one inside the other renders nothing.
+            */}
+            <ConversationHeader conversation={data.open} now={now} />
+
             <ConversationVerbs
               conversationId={data.open.id}
               mine={data.meId !== null && data.open.assignedAgentId === data.meId}
