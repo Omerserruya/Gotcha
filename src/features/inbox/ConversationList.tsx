@@ -9,6 +9,7 @@ import {
 } from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * Screen 02's queue.
@@ -108,7 +109,14 @@ export async function ConversationList({
           Ten of ten rows in the capture read the fallback, and it looked like
           the security fixtures redacting.
         */}
-        <span className={styles.who}>{conversation.customerName ?? t('queue.unnamed')}</span>
+        <span className={styles.who}>
+          {conversation.customerName === null ? (
+            t('queue.unnamed')
+          ) : (
+            /* A name is the data's direction, not the layout's. */
+            <UserText>{conversation.customerName}</UserText>
+          )}
+        </span>
         {/*
           ★★ THE CHANNEL'S NAME, NOT ITS ENUM. `SHOPIFY_LIVE_CHAT` was on
           screen; `channels.name.SHOPIFY_LIVE_CHAT` has said "Shopify live

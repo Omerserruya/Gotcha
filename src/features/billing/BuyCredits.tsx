@@ -279,7 +279,29 @@ export function BuyCredits({
               */}
               {pkg.taxed.exempt
                 ? t('buy.exempt')
-                : (pkg.taxed.label ?? t('buy.taxFallback', { pct: pkg.taxed.percent }))}
+                : /*
+                   * ════════════════════════════════════════════════════════
+                   * ★★ OUR LABEL, NOT THE PLATFORM'S — IT IS LOCALISED TO THE
+                   *    TENANT AND NOT TO THE READER
+                   * ════════════════════════════════════════════════════════
+                   * `taxed.label` was preferred, and for an Israeli tenant the
+                   * platform sends **`מע"מ`** — so a browser walk found Hebrew
+                   * in the money summary of the English screen. It is not a
+                   * hardcoded string in this app: it is a correct label for
+                   * the wrong audience.
+                   *
+                   * The reader chose this page's language. A label the
+                   * platform localised for the ACCOUNT cannot be the primary
+                   * display string on a screen whose language the reader
+                   * picked, so our own translation leads and carries the rate.
+                   *
+                   * The platform's label is not discarded, because a
+                   * jurisdiction whose tax is not VAT would be mislabelled by
+                   * ours: it is shown beside the rate when it says something
+                   * our translation does not, and isolated, because by then it
+                   * is text in an unknown language.
+                   */
+                  t('buy.taxFallback', { pct: pkg.taxed.percent })}
             </dt>
             <dd data-testid="buy-tax">{money(format, total.tax, pkg.price.currency)}</dd>
           </div>

@@ -411,3 +411,47 @@ describe('★★ one purchase, one intent key — and when it is released', () =
     expect(key).not.toContain(String(Math.floor(Date.now() / 60_000)));
   });
 });
+
+describe('★★ the tax label is in the reader’s language, not the tenant’s', () => {
+  it('★★ never shows the platform’s own label, which arrives as Hebrew', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * A BROWSER WALK FOUND `מע"מ` IN THE MONEY SUMMARY OF THE ENGLISH SCREEN
+     * ════════════════════════════════════════════════════════════════════════
+     * `taxed.label` is the platform's, localised to the ACCOUNT — correct for
+     * an Israeli tenant and wrong for a reader who chose English. It was
+     * preferred over our own translation, so the label came through in Hebrew.
+     *
+     * The rate still has to be there: dropping the platform's string must not
+     * drop what it was telling somebody.
+     */
+    /*
+     * Built through `packagesResponseSchema`, like `PACKS`. A first version
+     * hand-rolled the object and the component threw on a missing
+     * `expiryPolicy` — a fixture is a claim that the platform can produce it,
+     * and that one could not have come from anywhere.
+     */
+    const hebrewLabel = packagesResponseSchema.parse({
+      eligible: true,
+      tax: { ratePct: 18, label: 'מע"מ' },
+      packages: [
+        {
+          key: 'pack_1k',
+          name: 'Starter',
+          credits: 1000,
+          price: { amount: 100, currency: 'ILS' },
+          expiryPolicy: 'NEVER',
+          taxed: { net: '100.00', tax: '18.00', gross: '118.00', percent: 18, label: 'מע"מ' },
+          maxPurchaseQuantity: 3,
+        },
+      ],
+    });
+    show({ packages: hebrewLabel });
+
+    const label = await screen.findByTestId('buy-tax-label');
+    expect(label).toHaveTextContent(/VAT/i);
+    expect(label).toHaveTextContent(/18/);
+    // The Hebrew block — nothing in it should reach an English screen here.
+    expect(label.textContent ?? '').not.toMatch(/[֐-׿]/);
+  });
+});

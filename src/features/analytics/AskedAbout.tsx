@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { namedTopics, type AskedAbout as Topic } from '@/api/contracts/analytics';
 
 import styles from './Analytics.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * 06's "What people ask about".
@@ -72,7 +73,10 @@ export async function AskedAbout({
               className={styles.topic}
               data-testid={`topic-${topic.question}`}
             >
-              <span className={styles.topicName}>{topic.question}</span>
+              {/* Model-written, in whatever language the customer asked in. */}
+              <span className={styles.topicName}>
+                <UserText>{topic.question}</UserText>
+              </span>
               <span className={styles.topicCount}>
                 {t('asked.asked', { count: format.number(topic.count) })}
               </span>

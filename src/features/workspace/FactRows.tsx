@@ -10,6 +10,7 @@ import { Input } from '@/design-system/primitives/input/Input';
 import { saveWorkspaceFacts, type WriteResult } from './actions';
 import { hoursPatch, summariseWeek, weekOf, type DayHours } from './hours';
 import styles from './Workspace.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * The six facts an AI employee quotes to a customer.
@@ -187,7 +188,13 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
               className={[styles.value, value ? '' : styles.unset].join(' ').trim()}
               data-testid={`fact-value-${key}`}
             >
-              {value ?? t('unset')}
+              {/*
+                ★★ ISOLATED: a Hebrew value with embedded Latin reordered on
+                the English screen — the sentence started in Hebrew, jumped to
+                English, and the closing bracket landed on the wrong side. The
+                data was right and the rendering was not.
+              */}
+              {value === null ? t('unset') : <UserText>{value}</UserText>}
               {/*
                 The badge INLINE, where the design puts it. The separate
                 provenance panel below stays — it accounts for all seven

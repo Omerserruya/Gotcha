@@ -12,6 +12,7 @@ import {
 } from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * Screen 02's message stream.
@@ -233,7 +234,10 @@ export async function MessageStream({
                 {t('stream.unsupported', { type: unsupported })}
               </p>
             ) : message.body.trim() !== '' ? (
-              <p className={styles.body}>{message.body}</p>
+              /* Isolated: a customer writes in their language, not the page's. */
+              <p className={styles.body}>
+                <UserText>{message.body}</UserText>
+              </p>
             ) : !rendered ? (
               <p className={styles.mediaNote} data-testid={`unknown-${message.id}`}>
                 {t('stream.unknownType')}

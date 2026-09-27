@@ -14,6 +14,7 @@ import { lastHeardFor, variantsOf, type Candidate } from '@/api/contracts/knowle
 
 import { ResolveConflict } from './ResolveConflict';
 import styles from './Knowledge.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * Screen 08 — what GOTCHA knows, and what it does not.
@@ -224,7 +225,10 @@ export async function KnowledgeScreen({
                           className={styles.variant}
                           data-testid={`variant-${candidate.id}-${variant.key}`}
                         >
-                          <p className={styles.variantAnswer}>{variant.answer}</p>
+                          {/* One of the business's own past answers, verbatim. */}
+                          <p className={styles.variantAnswer}>
+                            <UserText>{variant.answer}</UserText>
+                          </p>
                           <p className={styles.variantMeta}>
                             {t('conflicts.said', { count: variant.occurrenceCount })}
                             {/*
