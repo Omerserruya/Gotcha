@@ -3,6 +3,7 @@ import 'server-only';
 import { z } from 'zod';
 
 import { APP_ENVIRONMENTS } from './app-env';
+import { emptyIsUnset } from './empty-is-unset';
 
 /**
  * Server-only configuration.
@@ -90,7 +91,14 @@ let cached: ServerEnv | undefined;
 export function serverEnv(): ServerEnv {
   if (cached) return cached;
 
-  const parsed = serverEnvSchema.safeParse(process.env);
+  /*
+   * ★★ EMPTY IS UNSET. A compose file's `${V2_OIDC_CLIENT_SECRET:-}` — the
+   * documented way to make a variable optional — supplies an empty string,
+   * and `z.string().min(1).optional()` rejects it. Every request reading the
+   * server config then fails validation while pages that do not read it still
+   * return 200: a container that looks healthy and whose login route 500s.
+   */
+  const parsed = serverEnvSchema.safeParse(emptyIsUnset({ ...process.env }));
 
   if (!parsed.success) {
     const issues = parsed.error.issues

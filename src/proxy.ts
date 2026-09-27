@@ -133,6 +133,31 @@ export const config = {
   /*
    * Skip Next internals, the auth and BFF routes (which manage their own
    * authentication), and anything with a file extension.
+   *
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE BARE `'/'` LOOKS REDUNDANT AND IS NOT. DO NOT REMOVE IT.
+   * ════════════════════════════════════════════════════════════════════════
+   * At the root it IS redundant: `/((?!…).*)` matches `/` with an empty tail,
+   * which is why nothing was wrong for months.
+   *
+   * Under a base path Next prefixes each matcher, so the second entry becomes
+   * `/v2/((?!…).*)` — and **`/v2` has no slash after `v2`, so it does not
+   * match.** The middleware never ran, nothing redirected the base-path root
+   * to a locale, and `/v2` returned a bare 404: the exact URL somebody would
+   * type.
+   *
+   * Verified by building with the prefix and probing:
+   *
+   *   before   /v2 → 404
+   *   after    /v2 → 307 /v2/en   ·   Accept-Language: he → 307 /v2/he
+   *            /en → 404 still, so nothing bleeds into the legacy namespace
+   *
+   * ── AND WHY IT IS HERE RATHER THAN IN THE GATEWAY ──
+   * nginx could rewrite `/v2` to `/v2/en` and it would be wrong twice: it
+   * would put locale policy in the gateway and hardcode a default language
+   * for a bilingual product, and the app would still 404 at its own root for
+   * anyone arriving another way. Here, next-intl negotiates — a Hebrew
+   * browser lands on `/v2/he`.
    */
-  matcher: ['/((?!api|_next|_vercel|.*\\..*).*)'],
+  matcher: ['/', '/((?!api|_next|_vercel|.*\\..*).*)'],
 };

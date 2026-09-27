@@ -178,6 +178,67 @@ stage and **passed this very defect**, since the runtime stage declared it — t
 gate now splits on stage boundaries and reads only the stage that runs the
 build.
 
+## The base-path root was a 404, and the matcher entry that fixes it looks redundant
+
+`/v2` returned a bare 404 — the exact URL somebody types — while `/v2/en`
+worked. The cause is the middleware matcher:
+
+    matcher: ['/((?!api|_next|_vercel|.*\..*).*)']
+
+At the root that matches `/` with an empty tail. **Next prefixes each matcher
+with the base path**, so it becomes `/v2/((?!…).*)` — and `/v2` has no slash
+after `v2`, so the middleware never ran and nothing redirected the root to a
+locale.
+
+Adding a bare `'/'` entry fixes it, and that entry is **redundant at the root**,
+which is the trap: it reads as removable.
+
+Verified by building with the prefix and probing:
+
+| | before | after |
+| --- | --- | --- |
+| `/v2` | 404 | 307 → `/v2/en` |
+| `/v2` with `Accept-Language: he` | 404 | 307 → `/v2/he` |
+| `/en` | 404 | 404 — nothing bleeds into the legacy namespace |
+
+**In the middleware rather than the gateway**, deliberately: nginx could rewrite
+`/v2` to `/v2/en` and it would put locale policy in the gateway, hardcode a
+default language for a bilingual product, and leave the app 404ing at its own
+root for anyone arriving another way. Here next-intl negotiates.
+
+## Empty is not absent, and `ARG X=""` is set
+
+`ARG X=""` declares an arg that **is set**, to the empty string, and `ENV X=$X`
+sets it whether or not the arg was passed. Zod's `.optional()` and `.default()`
+fire on `undefined` only, so an empty value does three different things —
+measured, not reasoned:
+
+| Shape | `''` | `undefined` |
+| --- | --- | --- |
+| `z.enum([…]).default('local')` | **throws** | `'local'` |
+| `z.url().optional()` | **throws** | `undefined` |
+| `z.coerce.number().min(0).max(1).default(0.1)` | **`0`, silently** | `0.1` |
+| `z.string().min(1).optional()` | **throws** | `undefined` |
+| `z.string().optional()` | `''` | `undefined` |
+
+The first two take the browser bundle down at module load, so a healthy
+container serves a blank app. The third turns tracing off and says nothing. The
+fourth is the server-side one: a container whose sign-in page returns 200 and
+whose login route 500s.
+
+Fixed in two places, because either alone would leave the trap for the next
+person:
+
+- **`src/config/empty-is-unset.ts`** normalises empty to `undefined` for the
+  whole object before either schema sees it. Only the empty *string* — `0` and
+  `false` are values somebody set.
+- **The Dockerfile** declares each `ARG` with no default and no build-stage
+  `ENV`, so an unpassed variable is genuinely unset. Docker exposes arg values
+  to `RUN`, so the build still sees them.
+
+`src/config/env-shapes.test.ts` pins a test per *shape* rather than per
+variable, and drives the real client module for the end-to-end case.
+
 ## What a running container does not prove
 
 `serverEnv()` is memoised on first access, so a container starts happily with a

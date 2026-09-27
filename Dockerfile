@@ -53,18 +53,28 @@ COPY . .
 # `scripts/public-env-sweep.ts` rather than kept in step by hand. An empty
 # default is deliberate: the app treats each as optional and says so at the
 # point of use, which is better than a container that will not start.
-ARG NEXT_PUBLIC_BASE_PATH=""
-ARG NEXT_PUBLIC_REALTIME_URL=""
-ARG NEXT_PUBLIC_APP_ENV=""
-ARG NEXT_PUBLIC_RELEASE=""
-ARG NEXT_PUBLIC_SENTRY_DSN=""
-ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=""
-ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
-ENV NEXT_PUBLIC_REALTIME_URL=$NEXT_PUBLIC_REALTIME_URL
-ENV NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
-ENV NEXT_PUBLIC_RELEASE=$NEXT_PUBLIC_RELEASE
-ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
-ENV NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=$NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
+# ★★ NO DEFAULTS, AND NO `ENV` LINES — BOTH WOULD SET THESE TO EMPTY.
+#
+# `ARG X=""` declares an arg that **is set**, to the empty string, and
+# `ENV X=$X` sets it whether or not the arg was passed. Empty is not the same
+# as absent to a schema: `z.enum().default('local')` and `z.url().optional()`
+# both **throw** on `''`, and `z.coerce.number().default(0.1)` silently becomes
+# **0**. The first two take the browser bundle down at module load, so a
+# healthy container serves a blank app to anyone who builds without passing
+# every variable.
+#
+# An `ARG` with no default and no `ENV` is genuinely unset unless passed, and
+# Docker exposes arg values to `RUN` as environment variables, so the build
+# still sees them. `src/config/empty-is-unset.ts` covers the case anyway —
+# belt and braces, because the next person to write a compose file will use
+# `${X:-}`, which is the documented way to make a variable optional and also
+# supplies empty.
+ARG NEXT_PUBLIC_BASE_PATH
+ARG NEXT_PUBLIC_REALTIME_URL
+ARG NEXT_PUBLIC_APP_ENV
+ARG NEXT_PUBLIC_RELEASE
+ARG NEXT_PUBLIC_SENTRY_DSN
+ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
 
 # No server environment is needed here, and that is checked rather than
 # assumed: building with `API_BASE_URL` set to an invalid value still produces
@@ -93,8 +103,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 #                  origin, so the connection the bundle attempts is blocked.
 #
 # Both come from the same build args, so the two halves cannot drift.
-ARG NEXT_PUBLIC_BASE_PATH=""
-ARG NEXT_PUBLIC_REALTIME_URL=""
+# These two DO get `ENV`, because server code reads them at runtime. An empty
+# value is safe for both: `next.config.ts` treats `''` as the root, and the CSP
+# builder tests `realtimeUrl` for truthiness, so `''` behaves as absent there.
+ARG NEXT_PUBLIC_BASE_PATH
+ARG NEXT_PUBLIC_REALTIME_URL
 ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 ENV NEXT_PUBLIC_REALTIME_URL=$NEXT_PUBLIC_REALTIME_URL
 

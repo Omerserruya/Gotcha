@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { APP_ENVIRONMENTS } from './app-env';
+import { emptyIsUnset } from './empty-is-unset';
 
 /**
  * Browser-visible configuration.
@@ -23,13 +24,23 @@ const clientEnvSchema = z.object({
 
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
 
-const parsed = clientEnvSchema.safeParse({
-  APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
-  REALTIME_URL: process.env.NEXT_PUBLIC_REALTIME_URL,
-  SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  SENTRY_TRACES_SAMPLE_RATE: process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE,
-  RELEASE: process.env.NEXT_PUBLIC_RELEASE,
-});
+/*
+ * ★★ EMPTY IS UNSET, BEFORE THE SCHEMA SEES IT.
+ *
+ * `.default()` and `.optional()` fire on `undefined` only, and a Dockerfile
+ * `ARG X=""` or a compose `${X:-}` supplies an empty string. Without this,
+ * `APP_ENV: ''` throws the enum and takes the entire browser bundle down at
+ * module load — a healthy container serving a blank app.
+ */
+const parsed = clientEnvSchema.safeParse(
+  emptyIsUnset({
+    APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
+    REALTIME_URL: process.env.NEXT_PUBLIC_REALTIME_URL,
+    SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    SENTRY_TRACES_SAMPLE_RATE: process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE,
+    RELEASE: process.env.NEXT_PUBLIC_RELEASE,
+  }),
+);
 
 if (!parsed.success) {
   const issues = parsed.error.issues
