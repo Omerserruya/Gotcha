@@ -346,3 +346,27 @@ label was still displayed, which it never was.
 And when a platform string doubles as a signal, dropping the string drops the
 signal: `tax?.label` was the test for "tax applies". The guard is now "we were
 told a rate or a label", so a tenant with a rate and no label keeps the sentence.
+
+## A strict schema makes "we were not sent this" and "we discard this" identical
+
+`z.object` strips keys it does not name, silently. From inside this codebase the
+result is indistinguishable from the platform not sending the field at all — so
+the absence of a capability in our UI becomes evidence that the capability does
+not exist, and it is not.
+
+Three times in one week:
+
+- `Message.status` — `PENDING · SENT · DELIVERED · READ · FAILED`, returned by
+  `GET /api/conversations/:id/messages` with no `select` on the row, stripped
+  here. A composer built over a stream that cannot report `FAILED` tells an
+  operator a message arrived when the customer never got it.
+- `packagesResponseSchema.taxed` — the tax travelled with every price all along,
+  and screen 17 could only ever show the net figure.
+- `pricing.price` / `currency` — flat siblings on the wire, read as a nested
+  object, so every package showed no price.
+
+**How to act on it:** when a screen appears to be missing data, read the route's
+`select` (or its absence) before concluding the platform does not send it. Naming
+a field `.optional()` rather than leaving it out costs one line and preserves the
+difference between "absent" and "discarded" — which is the same distinction as
+`empty / absent / literal` and the same one as the three-state rule.

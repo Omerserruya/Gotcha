@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { AuditEntry, AuditFacet, LoginEvent } from '@/api/contracts/security';
 
 import styles from './Security.module.css';
+import { auditVerdict, describeAuditAction } from '@/api/contracts/security';
 
 /**
  * Recent sign-ins.
@@ -140,12 +141,38 @@ export async function AuditSection({
       */}
       {facets.length > 0 ? (
         <div className={styles.facets} data-testid="audit-facets">
-          {facets.slice(0, 8).map((facet) => (
-            <span key={facet.action} className={styles.facet}>
-              <span className={styles.facetName}>{facet.action}</span>
-              <span className={styles.facetCount}>{facet.count}</span>
-            </span>
-          ))}
+          {facets.slice(0, 8).map((facet) => {
+            const { name, outcome } = describeAuditAction(facet.action);
+            return (
+              <span
+                key={facet.action}
+                className={styles.facet}
+                data-outcome={outcome ?? 'unrecorded'}
+              >
+                {/*
+                  ★★ THIS PRINTED `adapter.err.shopify.get_customer_by_phone`
+                  under a heading reading "Everything that happened", on a page
+                  an account owner opens.
+
+                  The prefix is consumed rather than spelled out: nobody needs to
+                  read the word "adapter", they need the tool and whether it
+                  worked. And `err` buried mid-string is how 742 failures read as
+                  noise, so it is a state on the row instead of part of its name.
+                */}
+                <span
+                  className={[styles.facetName, outcome === 'err' ? styles.failed : '']
+                    .join(' ')
+                    .trim()}
+                >
+                  {name}
+                </span>
+                {outcome === 'err' ? (
+                  <span className={styles.facetOutcome}>{t('audit.didNotWork')}</span>
+                ) : null}
+                <span className={styles.facetCount}>{facet.count}</span>
+              </span>
+            );
+          })}
           {facetsTruncated ? (
             <span className={styles.facetNote} data-testid="audit-facets-truncated">
               {t('audit.moreActions')}
@@ -162,16 +189,33 @@ export async function AuditSection({
             data-testid={`audit-${entry.id}`}
             data-actor={entry.actorType}
             data-succeeded={
-              entry.succeeded === true ? 'yes' : entry.succeeded === false ? 'no' : 'unrecorded'
+              auditVerdict(entry.succeeded, entry.action) === true
+                ? 'yes'
+                : auditVerdict(entry.succeeded, entry.action) === false
+                  ? 'no'
+                  : 'unrecorded'
             }
           >
             <div className={styles.identity}>
+              {/*
+                ★★ AND THE ROWS WERE THROWING A VERDICT AWAY. `succeeded` is
+                `null` on every `adapter.*` row — nothing recorded one — while the
+                action name said `err` in so many words. So 742 known failures
+                were filed as "we did not record whether this worked".
+
+                `auditVerdict` reads both and prefers the column, because an
+                explicit field beats a substring. The three states survive: a row
+                with neither source still says nothing rather than guessing.
+              */}
               <span
-                className={[styles.name, entry.succeeded === false ? styles.failed : '']
+                className={[
+                  styles.name,
+                  auditVerdict(entry.succeeded, entry.action) === false ? styles.failed : '',
+                ]
                   .join(' ')
                   .trim()}
               >
-                {entry.action}
+                {describeAuditAction(entry.action).name}
               </span>
               <span className={styles.detail}>
                 {[
@@ -183,7 +227,9 @@ export async function AuditSection({
                    * reassuring-direction error inverted: alarming a reader about
                    * things that did not go wrong.
                    */
-                  entry.succeeded === false ? t('audit.didNotWork') : null,
+                  auditVerdict(entry.succeeded, entry.action) === false
+                    ? t('audit.didNotWork')
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(' · ')}

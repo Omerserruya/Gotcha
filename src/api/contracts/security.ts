@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { humaniseCode } from './capabilities';
 
 /**
  * Settings · Security — screen 16.
@@ -174,6 +175,78 @@ export const auditPageSchema = z.object({
  * disagree with the rows in front of the reader. `action` is deliberately NOT
  * applied, so the facet still shows what you could switch to.
  */
+/**
+ * What an audit action is, in words, plus the verdict its name carries.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ "EVERYTHING THAT HAPPENED" WAS A PLAIN-ENGLISH HEADING OVER MACHINE KEYS
+ * ════════════════════════════════════════════════════════════════════════════
+ * A browser walk read this, verbatim, on a page an account owner opens:
+ *
+ *     Everything that happened
+ *     ai.responded                              1083
+ *     adapter.ok.shopify.get_customer_by_phone  1081
+ *     adapter.err.shopify.get_customer_by_phone  742
+ *
+ * It qualifies by the criterion the assertion sweep produced: **a name exists
+ * and the code refuses it.** `shopify.get_customer_by_phone` is a tool name and
+ * `humaniseCode` already names tools.
+ *
+ * ── TWO KINDS OF ROW, DELIBERATELY NOT ONE HUMANISER OVER BOTH ──
+ * `adapter.*` is the AI calling out to somebody else's system. `ai.*` is the AI
+ * acting on its own. Those are different events to a reader deciding whether to
+ * worry, so the prefix is consumed rather than spelled out: nobody needs to read
+ * the word "adapter", they need to read which tool and whether it worked.
+ *
+ * ── AND `err` IS AN OUTCOME, NOT PART OF A NAME ──
+ * Buried mid-string, it is how 742 failures read as noise. Returned separately
+ * so the row can show it as a state.
+ *
+ * ★ THIS IS ALSO A VERDICT WE WERE THROWING AWAY. `AuditEntry.succeeded` is
+ *   three-state and is `null` on these rows — no verdict recorded — while the
+ *   action name says `err` in so many words. Preferring `succeeded` and ignoring
+ *   the name would file 742 known failures as "we did not record whether this
+ *   worked". The name's outcome is a recorded verdict; it is just encoded in a
+ *   string. `auditVerdict` below combines them, and `succeeded` wins where both
+ *   exist, because an explicit column beats a substring.
+ */
+export function describeAuditAction(action: string): {
+  readonly name: string;
+  readonly outcome: 'ok' | 'err' | null;
+} {
+  const adapter = /^adapter\.(ok|err)\.(.+)$/.exec(action);
+  if (adapter) {
+    return { name: humaniseCode(adapter[2]!), outcome: adapter[1] as 'ok' | 'err' };
+  }
+  /*
+   * An `adapter.*` with no outcome segment, which the emitter is free to send.
+   * The prefix still says nothing a reader needs, so it goes, and the outcome is
+   * genuinely unknown rather than assumed good.
+   */
+  const bare = /^adapter\.(.+)$/.exec(action);
+  if (bare) return { name: humaniseCode(bare[1]!), outcome: null };
+
+  return { name: humaniseCode(action), outcome: null };
+}
+
+/**
+ * Did this action work? Three states, and the third is not a missing second.
+ *
+ * `null` means nothing recorded a verdict — which is not "it failed" and not
+ * "it worked". Collapsing it either way is a claim about an action nobody
+ * instrumented.
+ */
+export function auditVerdict(
+  succeeded: boolean | null | undefined,
+  action: string,
+): boolean | null {
+  if (succeeded === true || succeeded === false) return succeeded;
+  const { outcome } = describeAuditAction(action);
+  if (outcome === 'ok') return true;
+  if (outcome === 'err') return false;
+  return null;
+}
+
 export const auditFacetSchema = z.object({
   action: z.string().min(1),
   count: z.number().default(0),

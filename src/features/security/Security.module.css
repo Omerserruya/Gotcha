@@ -254,3 +254,15 @@
     flex-wrap: wrap;
   }
 }
+
+@layer features {
+  /*
+   * The outcome on a facet, as a word rather than an `err` buried in a key.
+   * Only on failures: marking the successes too would be noise on six of seven
+   * rows and would make the one that matters harder to see.
+   */
+  .facetOutcome {
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+}
