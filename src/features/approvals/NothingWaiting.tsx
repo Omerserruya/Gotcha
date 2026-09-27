@@ -83,15 +83,42 @@ export async function NothingWaiting({
                     <p className={styles.decidedSummary}>{approval.summary}</p>
 
                     <p className={styles.decidedMeta}>
-                      {t(`decided.${stance}` as 'decided.approved', {
-                        who: approval.decidedByName ?? t('decided.someone'),
-                        when: approval.decidedAt
-                          ? format.dateTime(new Date(approval.decidedAt), {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : '',
-                      })}
+                      {/*
+                        ══════════════════════════════════════════════════════
+                        ★★ A TIME WITH NO DATE, ON A LIST SPANNING DAYS
+                        ══════════════════════════════════════════════════════
+                        A browser walk found 29 rows here reading "Approved by
+                        someone at 12:43 AM", cycling through morning and
+                        afternoon across what must be several days. `dateStyle`
+                        was absent, so every row claimed a time and none said
+                        which day.
+
+                        ★ AND THE QUEUE'S REASONING DOES NOT APPLY HERE. I
+                          argued against paging the pending queue because the
+                          oldest item is the one that most needs deciding and
+                          hiding it is the failure. **This is not a work queue,
+                          it is a reference list** — the decisions are made, and
+                          what a reader wants from it is when. Different list,
+                          different answer.
+
+                        ★★ AND AN ABSENT `decidedAt` RENDERED AS `''`, so the
+                        row read "Approved by someone at " with a dangling
+                        preposition. `decidedAt` is nullable on the contract, so
+                        that is a real row and not a defensive branch. It now
+                        takes a message with no time clause in it, rather than a
+                        sentence with a hole.
+                      */}
+                      {approval.decidedAt
+                        ? t(`decided.${stance}` as 'decided.approved', {
+                            who: approval.decidedByName ?? t('decided.someone'),
+                            when: format.dateTime(new Date(approval.decidedAt), {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            }),
+                          })
+                        : t(`decided.${stance}NoTime` as 'decided.approvedNoTime', {
+                            who: approval.decidedByName ?? t('decided.someone'),
+                          })}
                       {requesterNames[approval.id]
                         ? ` · ${t('decided.askedBy', { who: requesterNames[approval.id]! })}`
                         : null}

@@ -226,3 +226,119 @@ describe('★★ the suggestions themselves', () => {
     expect(screen.getByTestId('copilot-panel').querySelectorAll('button')).toHaveLength(0);
   });
 });
+
+describe('★★ the provider reports its own failures inside the list, as a 200', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * A SUPPORT AGENT WAS BEING TOLD TO CHECK AN API KEY
+   * ════════════════════════════════════════════════════════════════════════════
+   * A browser walk read this out of the live panel, in the position where a draft
+   * reply goes:
+   *
+   *     Failed to get AI suggestions. Check API key and model configuration.
+   *
+   * Not an envelope, not a status, not a 402 — a one-item list with a sentinel id,
+   * on a 200 with content, so the four empty states above were structurally unable
+   * to see it. Six sentinels exist; they were found by grepping the provider rather
+   * than by fixing the one string in the screenshot.
+   */
+  const sentinel = (id: string, text: string, over: Record<string, unknown> = {}): CopilotRead =>
+    ok({ data: [{ id, text, confidence: 0, type: 'info', ...over }] });
+
+  it('★★ never shows the operational error, and says nothing is wrong with the conversation', async () => {
+    await show(
+      sentinel('error', 'Failed to get AI suggestions. Check API key and model configuration.'),
+    );
+    const note = screen.getByTestId('copilot-sentinel-note');
+    expect(note).not.toHaveTextContent(/API key/i);
+    expect(note).not.toHaveTextContent(/model configuration/i);
+    expect(note).toHaveTextContent(/nothing is wrong with the conversation/i);
+  });
+
+  it('★★ tells apart the five sentinels, because they want different actions', async () => {
+    /*
+     * A failed provider is nobody's fault; a switched-off Copilot and a missing
+     * employee are somebody's setting. Folding them into one "unavailable" would
+     * leave an admin unable to tell a fault from a switch.
+     */
+    const cases: [string, RegExp][] = [
+      ['error', /couldn’t draft a reply just now/i],
+      ['stub-1', /no AI provider set up/i],
+      ['disabled', /switched off for this workspace/i],
+      ['no-config', /no AI employee to draft with/i],
+      ['no-match', /write the reply yourself/i],
+    ];
+    for (const [id, expected] of cases) {
+      const { unmount } = await show(sentinel(id, 'whatever the provider wrote'));
+      expect(screen.getByTestId('copilot-sentinel-note'), id).toHaveTextContent(expected);
+      unmount();
+    }
+  });
+
+  it('★★ names who can act, and never hands over an operational instruction', async () => {
+    /*
+     * "Ask somebody who can change this" is advice a support agent can use.
+     * "Check API key and model configuration" is not, and it is what shipped.
+     */
+    for (const id of ['stub-1', 'disabled']) {
+      const { unmount } = await show(sentinel(id, 'x'));
+      expect(screen.getByTestId('copilot-sentinel-note'), id).toHaveTextContent(/admin role/i);
+      unmount();
+    }
+  });
+
+  it('★★ never renders the provider’s own sentence, whatever it says', async () => {
+    // The text is not paraphrased, it is discarded. A future wording change at the
+    // provider cannot leak through, because nothing here reads the string.
+    await show(sentinel('error', 'Set OPENAI_API_KEY in the environment'));
+    expect(screen.queryByText(/OPENAI_API_KEY/)).toBeNull();
+  });
+
+  it('★★ a REAL draft the provider could not structure is kept, and called a reply', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE SIXTH SENTINEL IS NOT A SENTINEL
+     * ════════════════════════════════════════════════════════════════════════
+     * `openai-text` carries the model's own content with `confidence: 0.5`; the
+     * provider emits it when ITS structured parse failed, not when the model did.
+     * Suppressing it throws away a usable reply, and honouring its `type: info`
+     * labels a draft as "an action it would take" — the opposite of true.
+     */
+    await show(
+      ok({
+        data: [
+          { id: 'openai-text', text: 'We posted it this morning.', confidence: 0.5, type: 'info' },
+        ],
+      }),
+    );
+    expect(screen.queryByTestId('copilot-sentinel')).toBeNull();
+    const item = screen.getByTestId('suggestion-openai-text');
+    expect(item).toHaveTextContent('We posted it this morning.');
+    expect(item).toHaveAttribute('data-draft', 'yes');
+    expect(item).not.toHaveTextContent(/an action it would take/i);
+  });
+
+  it('★★ a sentinel id beside real suggestions does not swallow them', async () => {
+    /*
+     * The provider returns a sentinel INSTEAD of suggestions, never beside them, so
+     * detection requires a list of exactly one. A genuine suggestion that happened
+     * to carry one of these ids must not be able to hide the others.
+     */
+    await show(
+      ok({
+        data: [
+          { id: 'error', text: 'Some reply', type: 'reply' },
+          { id: 's2', text: 'Another reply', type: 'reply' },
+        ],
+      }),
+    );
+    expect(screen.queryByTestId('copilot-sentinel')).toBeNull();
+    /*
+     * The lookahead matters: `/^suggestion-/` also matches `suggestion-meta-*`
+     * and `suggestion-approach-*`, so the first version of this counted four and
+     * read as the code keeping too much. The assertion was imprecise, not the
+     * component — the same shape as the textarea that carried its own text.
+     */
+    expect(screen.getAllByTestId(/^suggestion-(?!meta-|approach-)/)).toHaveLength(2);
+  });
+});

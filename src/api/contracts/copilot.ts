@@ -68,8 +68,80 @@ export const suggestionsResponseSchema = z.object({
 });
 export type SuggestionsResponse = z.infer<typeof suggestionsResponseSchema>;
 
-/** Only a `reply` is a draft somebody could send. Everything else is a note. */
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE PROVIDER REPORTS ITS OWN FAILURES *INSIDE* THE SUGGESTION LIST
+ * ════════════════════════════════════════════════════════════════════════════
+ * A browser walk read this off the live panel, in the position where a draft
+ * reply goes:
+ *
+ *     Failed to get AI suggestions. Check API key and model configuration.
+ *
+ * A support agent deciding whether to trust the AI's draft was being told to go
+ * and check an API key. It is not an error envelope, not a status, and not a 402 —
+ * it is a one-item list with a sentinel id, so the panel's four honest empty
+ * states could not see it. The response was a 200 with content.
+ *
+ * ── AND THERE ARE SIX OF THEM, NOT ONE ──
+ * Found by grepping the provider rather than fixing the string in the
+ * screenshot. Five are not suggestions at all and mean genuinely different
+ * things to a reader, so they map to different sentences:
+ *
+ *     error       the provider call failed or is misconfigured
+ *     stub-1      no provider is configured at all
+ *     disabled    Copilot is switched off for this tenant
+ *     no-config   no AI employee exists to draft with
+ *     no-match    nothing relevant to suggest — the genuine empty case
+ *
+ * ★ AND THE SIXTH IS A REAL DRAFT AND MUST NOT BE SUPPRESSED. `openai-text`
+ *   carries the model's own content with `confidence: 0.5`; the provider emits it
+ *   when its structured parse failed, not when the model did. Discarding it would
+ *   throw away a usable reply, and treating it as an `info` note — which its
+ *   `type` says — labels a draft as "an action it would take", which is the
+ *   opposite of true.
+ *
+ * ⚠ ITS BLIND SPOT, STATED: a sentinel id added later renders its text verbatim,
+ * exactly as `error` did. A closed set is the only honest option from this side —
+ * the real fix is for these not to travel inside the payload — so the set is here,
+ * in one place, for the next one to be added to.
+ */
+const SENTINELS = new Map<string, CopilotSentinel>([
+  ['error', 'provider_failed'],
+  ['stub-1', 'no_provider'],
+  ['disabled', 'switched_off'],
+  ['no-config', 'no_employee'],
+  ['no-match', 'nothing_relevant'],
+]);
+
+export type CopilotSentinel =
+  'provider_failed' | 'no_provider' | 'switched_off' | 'no_employee' | 'nothing_relevant';
+
+/** A real draft the provider could not structure. Rendered, not suppressed. */
+const UNSTRUCTURED_DRAFT = 'openai-text';
+
+/**
+ * The sentinel this list is, or `null` when it holds real suggestions.
+ *
+ * Only for a list of exactly one: the provider returns a sentinel *instead of*
+ * suggestions, never beside them. Requiring that means a genuine suggestion which
+ * happened to carry one of these ids — vanishingly unlikely, but the kind of
+ * coincidence that eats a real draft — cannot hide four others.
+ */
+export function copilotSentinel(suggestions: readonly Suggestion[]): CopilotSentinel | null {
+  if (suggestions.length !== 1) return null;
+  return SENTINELS.get(suggestions[0]!.id.trim()) ?? null;
+}
+
+/**
+ * Only a `reply` is a draft somebody could send. Everything else is a note.
+ *
+ * `openai-text` is the exception and it is the provider's, not ours: its `type` is
+ * `info` because the structured parse failed, while its text is the model's actual
+ * reply. Filing it as a note would tell an agent that a usable draft is something
+ * the AI would *do*.
+ */
 export function isDraft(suggestion: Suggestion): boolean {
+  if (suggestion.id.trim() === UNSTRUCTURED_DRAFT) return true;
   return suggestion.type.trim().toLowerCase() === 'reply';
 }
 

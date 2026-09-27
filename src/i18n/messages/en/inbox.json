@@ -102,7 +102,11 @@
       "medium": "Fairly confident",
       "low": "Unsure",
       "unstated": "Confidence not reported"
-    }
+    },
+    "providerFailed": "GOTCHA couldn’t draft a reply just now. Nothing is wrong with the conversation, and this is our side rather than yours.",
+    "noProvider": "GOTCHA has no AI provider set up, so it cannot draft replies yet. Someone with an admin role can connect one.",
+    "switchedOff": "Suggested replies are switched off for this workspace. Someone with an admin role can turn them on.",
+    "noEmployee": "There is no AI employee to draft with. One can be created under Studio · Employees."
   },
   "composer": {
     "label": "Your reply",

@@ -8,13 +8,6 @@
     gap: var(--space-16);
   }
 
-  .lead {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    color: var(--text-subtle);
-    max-inline-size: var(--size-reading);
-  }
-
   .none {
     margin: 0;
     font-size: var(--font-size-meta);

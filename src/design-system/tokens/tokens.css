@@ -141,6 +141,13 @@
      * empty - its longest label is "Waiting in queue".
      */
     --size-rail: clamp(210px, 14.6%, 300px);
+    /*
+     * The inbox queue, which is not the navigation rail. It carries customer
+     * names, channel names and shop domains — values whose length nobody
+     * controls — so it is wider than a column of navigation labels, and its
+     * percentage is of a page that is already allowed to be 1600px.
+     */
+    --size-inbox-queue: clamp(260px, 21%, 360px);
     --size-frame-inset: 12px;
     --size-control: 44px;
     --size-control-sm: 34px;

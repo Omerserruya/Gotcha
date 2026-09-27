@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
-import { confidenceBand, isDraft } from '@/api/contracts/copilot';
+import { confidenceBand, copilotSentinel, isDraft } from '@/api/contracts/copilot';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 import type { CopilotRead } from './load-copilot';
@@ -95,6 +95,46 @@ export async function CopilotPanel({ read }: { readonly read: CopilotRead }) {
           configuration did not ask for, which is worse than saying so.
         */}
         <p className={styles.copilotNote}>{t('otherMode')}</p>
+      </section>
+    );
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * ★★ THE PROVIDER REPORTS ITS OWN FAILURES INSIDE THE LIST, AS A 200
+   * ════════════════════════════════════════════════════════════════════════════
+   * A browser walk read *"Failed to get AI suggestions. Check API key and model
+   * configuration."* out of this panel, in the position where a draft reply goes.
+   * A support agent was being told to check an API key.
+   *
+   * It is not an envelope, not a status and not a 402 — it is a one-item list with
+   * a sentinel id, so the four honest empty states above could not see it. There
+   * are five such sentinels and they mean different things: a failed provider, no
+   * provider, Copilot switched off, no employee to draft with, and nothing
+   * relevant. Only the last is the ordinary empty case.
+   *
+   * ★ None of these sentences hands the reader an operational instruction. Two of
+   *   them are genuinely actionable and say who can act — an admin — because
+   *   "ask somebody who can change this" is advice a support agent can use and
+   *   "check API key and model configuration" is not.
+   */
+  const sentinel = copilotSentinel(suggestions);
+  if (sentinel !== null) {
+    return (
+      <section className={styles.copilot} data-testid="copilot-sentinel" data-sentinel={sentinel}>
+        <h3 className={styles.copilotHeading}>{t('heading')}</h3>
+        <p className={styles.copilotNote} data-testid="copilot-sentinel-note">
+          {sentinel === 'provider_failed'
+            ? t('providerFailed')
+            : sentinel === 'no_provider'
+              ? t('noProvider')
+              : sentinel === 'switched_off'
+                ? t('switchedOff')
+                : sentinel === 'no_employee'
+                  ? t('noEmployee')
+                  : /* `no-match`: asked, answered, nothing to say. */
+                    t('none')}
+        </p>
       </section>
     );
   }

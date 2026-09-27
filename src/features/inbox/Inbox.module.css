@@ -96,12 +96,37 @@
     border-block-end: 1px solid var(--border-subtle);
   }
 
+  /*
+   * ★★ ONE LINE, TRUNCATED, AND THE REASON IT IS SAFE IS THE NEW HEADER.
+   * A Shopify live-chat `customerName` is "Shopper on
+   * urban-supply-gotcha-demo.myshopify.com" — a forty-character unbroken token
+   * that wrapped to three lines in a queue row, three times over on one screen.
+   *
+   * Truncating an identifier normally hides the thing that tells two customers
+   * apart, which is why the queue previously let it wrap. **The conversation
+   * header now carries the full name, the channel and the handle**, so the queue
+   * only has to be enough to recognise and click — and the value it truncates is
+   * one click from being read in full.
+   *
+   * `min-inline-size: 0` because a flex item will not shrink below its content
+   * without it, and `text-overflow` then never fires.
+   */
   .who {
     flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .channel,
+  /*
+   * Never wrapped. "60 days waiting" broke across three lines in the narrow
+   * column, which is the one value on the row whose whole purpose is to be read
+   * at a glance.
+   */
   .waiting {
+    white-space: nowrap;
     font-size: var(--font-size-caption);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
@@ -172,7 +197,6 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-8);
-    padding-block: var(--space-8);
   }
 
   .verbTransfer {
@@ -225,9 +249,21 @@
   }
 
   /* ── Screen 02's three columns ────────────────────────────────────────── */
+  /*
+   * ★★ THE CONVERSATION COLUMN GOT THE EXTRA WIDTH AND THE QUEUE GOT NONE.
+   * `--size-rail` is `clamp(210px, 14.6%, 300px)` — a percentage of the
+   * container, so raising the page cap to 1600px moved it by about twelve
+   * pixels while the middle column gained four hundred. A walk found every
+   * Shopify row breaking its shop domain across three lines and "60 days
+   * waiting" across three more.
+   *
+   * The queue gets its own measure rather than borrowing the sidebar's: a rail
+   * of navigation labels and a rail of customer names and channel names are
+   * different jobs, and only one of them has arbitrary-length values in it.
+   */
   .screen {
     display: grid;
-    grid-template-columns: var(--size-rail) minmax(0, 1fr) var(--size-reading-half);
+    grid-template-columns: var(--size-inbox-queue) minmax(0, 1fr) var(--size-reading-half);
     gap: var(--space-16);
     align-items: start;
   }
@@ -261,17 +297,30 @@
    * siblings sat loose above the stream with nothing around them, so they read
    * as the first thing IN the conversation rather than as controls over it.
    */
+  /*
+   * ★★ THE BAR IS THE CONTAINER, NOT THE HEADER.
+   * The border used to sit on `.openHeader`, so the verbs rendered outside the
+   * card and "Take control" still read as detached — which is what a walk
+   * reported, and my commit message had already claimed was fixed. The card is
+   * now the thing that holds both.
+   */
+  .openBar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
   .openHeader {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
     gap: var(--space-8);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
   }
 
   .openWho {

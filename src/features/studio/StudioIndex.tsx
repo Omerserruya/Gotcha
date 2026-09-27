@@ -102,9 +102,18 @@ export function StudioIndex({ areas }: { readonly areas: readonly StudioArea[] }
   }
 
   return (
-    <div className={styles.index} data-testid="studio-index">
-      <p className={styles.lead}>{t('index.lead')}</p>
+    /*
+      ★★ NO LEAD SENTENCE. It read "Where GOTCHA is taught what to know, what it
+      may do, and who does it." directly under a page description reading "Where
+      GOTCHA is taught." — **the second contained the first verbatim**, which is
+      the one shape of duplication that is not a judgement call.
 
+      The page description is now the informative one and this says nothing,
+      because four cards naming four areas do not need an introduction. The
+      alternative — two sentences doing one job — is how the Automations screen
+      was misread as duplicated when it was not.
+    */
+    <div className={styles.index} data-testid="studio-index">
       <ul className={styles.areas}>
         {visible.map((section) => {
           const namespace = NAMESPACE[section.id];

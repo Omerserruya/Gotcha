@@ -1,8 +1,7 @@
 {
   "title": "Studio",
-  "description": "Where GOTCHA is taught.",
+  "description": "Where GOTCHA is taught what to know, what it may do, and who does it.",
   "index": {
-    "lead": "Where GOTCHA is taught what to know, what it may do, and who does it.",
     "noAccess": "Your role does not include any of the Studio areas. Someone with an admin role can change that under Settings · People."
   },
   "sections": {

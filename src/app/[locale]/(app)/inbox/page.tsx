@@ -107,22 +107,35 @@ export default async function Page({
               A sibling, not a parent: both are async server components and
               nesting one inside the other renders nothing.
             */}
-            <ConversationHeader conversation={data.open} now={now} />
+            {/*
+              ★★ ONE BAR, WHICH IS WHAT I SAID AND NOT WHAT SHIPPED.
+              I described the header and the verbs as "one bordered bar". They
+              were siblings: the header had the border and the verbs sat outside
+              it, so "Take control" still read as detached — a walk said so, and
+              it was right. The description was of the intent, not the markup.
 
-            <ConversationVerbs
-              conversationId={data.open.id}
-              mine={data.meId !== null && data.open.assignedAgentId === data.meId}
-              handedOver={data.open.isHandedOver}
-              /*
-               * Two-state rather than three, and only because it was
-               * checked: the list route puts no `select` on the conversation,
-               * so `assignedAiAgentId` is genuinely on the wire and `null`
-               * means no AI employee rather than "not sent".
-               */
-              hasAiEmployee={data.open.assignedAiAgentId !== null}
-              greeting={data.greeting}
-              colleagues={data.colleagues}
-            />
+              A plain `div` again, so both stay siblings of each other and of
+              `MessageStream`: all three are async or client components and none
+              may contain another.
+            */}
+            <div className={styles.openBar}>
+              <ConversationHeader conversation={data.open} now={now} />
+
+              <ConversationVerbs
+                conversationId={data.open.id}
+                mine={data.meId !== null && data.open.assignedAgentId === data.meId}
+                handedOver={data.open.isHandedOver}
+                /*
+                 * Two-state rather than three, and only because it was
+                 * checked: the list route puts no `select` on the conversation,
+                 * so `assignedAiAgentId` is genuinely on the wire and `null`
+                 * means no AI employee rather than "not sent".
+                 */
+                hasAiEmployee={data.open.assignedAiAgentId !== null}
+                greeting={data.greeting}
+                colleagues={data.colleagues}
+              />
+            </div>
 
             {/*
               Renders nothing. It keeps this conversation current as delivery

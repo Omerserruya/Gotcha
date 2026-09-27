@@ -61,7 +61,11 @@
     "because": "Reason given: {reason}",
     "didNotRun": "You approved this, but it didn't run. Open it to try again.",
     "outcomeUnknown": "Approved before GOTCHA recorded what happened next, so we can't say whether it ran.",
-    "incomplete": "This shows your most recent decisions, not all of them — GOTCHA can only hand back the last hundred of each kind."
+    "incomplete": "This shows your most recent decisions, not all of them — GOTCHA can only hand back the last hundred of each kind.",
+    "approvedNoTime": "Approved by {who}",
+    "rejectedNoTime": "Rejected by {who}",
+    "lapsedNoTime": "Deadline passed — handed to a person",
+    "cancelledNoTime": "Cancelled"
   },
   "moment": {
     "decided": "Decided: {summary}",
