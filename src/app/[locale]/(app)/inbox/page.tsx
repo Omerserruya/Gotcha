@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { ConversationHeader } from '@/features/inbox/ConversationHeader';
+import { Composer } from '@/features/inbox/Composer';
 import { CopilotPanel } from '@/features/inbox/CopilotPanel';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
@@ -11,6 +12,7 @@ import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { MessageStream } from '@/features/inbox/MessageStream';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
+import { channelName } from '@/api/contracts/inbox';
 
 /**
  * Inbox — screen 02.
@@ -44,6 +46,7 @@ export default async function Page({
   readonly searchParams: Promise<{ readonly c?: string; readonly cursor?: string }>;
 }) {
   const t = await getTranslations('inbox');
+  const channelNames = await getTranslations('channels');
   const { c, cursor } = await searchParams;
   const data = await loadInbox(c, cursor);
   /*
@@ -133,6 +136,22 @@ export default async function Page({
               conversation down with it.
             */}
             <CopilotPanel read={data.copilot} />
+
+            {/*
+              ⚠⚠ THE ONE CONTROL ON THIS PROJECT WHOSE PURPOSE IS TO BE PRESSED.
+              It sends a message to a real person on a tenant whose WhatsApp
+              channel reaches real handsets, and this platform has no undo
+              anywhere. No automated run presses it; no human presses it on dev
+              until Omer has said so.
+
+              Last in the column, so the order reading down is: who this is · who
+              is driving · what was said · what GOTCHA would say · what you are
+              about to say.
+            */}
+            <Composer
+              conversationId={data.open.id}
+              channelName={channelName(data.open.channel, channelNames)}
+            />
           </section>
         )}
 

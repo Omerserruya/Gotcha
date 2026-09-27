@@ -103,5 +103,19 @@
       "low": "Unsure",
       "unstated": "Confidence not reported"
     }
+  },
+  "composer": {
+    "label": "Your reply",
+    "labelOn": "Your reply, on {channel}",
+    "placeholder": "Write the reply. Enter makes a new line.",
+    "send": "Send to the customer",
+    "sending": "Sending…",
+    "queued": "Queued. It will show above as it goes out, and say so if it fails.",
+    "error": {
+      "channelGone": "This channel is no longer connected, so nothing can be sent on it. Your reply is still here.",
+      "gone": "This conversation is no longer there.",
+      "empty": "There is nothing to send yet.",
+      "failed": "That didn’t go through. Your reply is still here."
+    }
   }
 }

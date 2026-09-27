@@ -1057,6 +1057,28 @@ export const inboxEndpoints = {
   suggestions: (conversationId: string) =>
     endpoint('/api/ai-assist/{conversationId}/suggestions', { conversationId }),
 
+  /**
+   * ⚠⚠ SENDS A MESSAGE TO A REAL PERSON. `POST` on the same path as the stream.
+   *
+   * `{ body, replyToMessageId?, emailReplyMode?, subject? }`, `body` min 1.
+   *
+   * ★★ A 201 MEANS QUEUED, NOT DELIVERED. The route enqueues onto
+   * `outgoingMessageQueue` and answers; delivery happens later, asynchronously,
+   * through a path this response cannot see. The row lands as `PENDING` and
+   * becomes `SENT`/`DELIVERED`/`FAILED` afterwards, which is why `Message.status`
+   * had to reach the contract before this endpoint was worth having.
+   *
+   * ★★ AND THE ROUTE CHECKS LESS THAN YOU WOULD EXPECT. No assignment check —
+   * an agent who has not taken the conversation can send. No send-window check;
+   * WhatsApp's 24-hour rule is enforced by the provider, after the queue, so a
+   * refusal for it never reaches the caller of this endpoint.
+   *
+   * Its four outcomes: 201; 404 no such conversation; 400 the quoted message is
+   * not in this conversation; 400 the channel is not configured for this tenant.
+   */
+  sendMessage: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/messages', { conversationId }),
+
   /* ── Screen 02's three verbs ─────────────────────────────────────────── */
 
   /**

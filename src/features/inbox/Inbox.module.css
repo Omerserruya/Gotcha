@@ -404,3 +404,57 @@
     color: var(--text-subtle);
   }
 }
+
+@layer features {
+  /* ── The reply box ───────────────────────────────────────────────────────
+   *
+   * At the bottom of the conversation column, below the copilot panel, so the
+   * order down the column is: who this is · who is driving · what was said ·
+   * what GOTCHA would say · what you are about to say.
+   */
+  .composer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .composerLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .composerInput {
+    inline-size: 100%;
+    min-inline-size: 0;
+    resize: vertical;
+    padding: var(--space-12);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+  }
+
+  .composerActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .composerNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    max-inline-size: var(--size-reading);
+  }
+
+  .composerProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+    max-inline-size: var(--size-reading);
+  }
+}
