@@ -1,4 +1,7 @@
 {
+  "title": "Analytics",
+  "description": "What people ask about, and how the work is spread across your team.",
+  "noGotchaSection": "There is no “what GOTCHA did” section yet. It needs a breakdown of why the AI handed a conversation to a person, and the platform records the handover without recording the cause — so any chart here would be invented rather than measured.",
   "team": {
     "heading": "Who is holding what",
     "today": "These are today's numbers. They reset at midnight, and they are not the seven days shown above.",

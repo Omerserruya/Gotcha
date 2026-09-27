@@ -136,6 +136,16 @@ export const analyticsEndpoints = {
   /** Per-agent open counts and reply times. Carries no presence. */
   agents: () => endpoint('/api/analytics/agents'),
   /**
+   * Screen 06's "what people ask about" — `analytics:dashboard:read`.
+   *
+   * ★ A "TOPIC" IS A `groupBy`, NOT A THING THE PRODUCT HOLDS.
+   * `getTopQuestions` groups `conversationIntelligence` by `detectedIntent`
+   * over a date range, with a fallback that scans 1,000 inbound bodies. There
+   * is no `Topic` model, which is why 06e became a panel: a rename has nowhere
+   * to persist and the next request regroups from the raw column.
+   */
+  topQuestions: () => endpoint('/api/analytics/top-questions'),
+  /**
    * Screen 10 — how often each tool has actually run.
    *
    * ★ IT UNIONS TWO TABLES AND THAT IS THE POINT. `getToolUsageStats` reads

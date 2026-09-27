@@ -143,14 +143,32 @@ const STUDIO_SECTIONS: readonly NavigationChild[] = [
 
 /**
  * Analytics is organised "around business questions", not chart types.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ AND IT IS ONE SCREEN, BECAUSE FOUR OF THE FIVE SECTIONS HAVE NO DATA
+ * ════════════════════════════════════════════════════════════════════════════
+ * This listed five children, each pointing at an untouched placeholder route —
+ * five navigable rooms with a heading and nothing in them, which is what
+ * screen 06 was until it was assembled.
+ *
+ *   overview  nothing of its own. The headline figures are `MetricStrip`, live
+ *             on screen 01; a second rendering would be two screens to keep in
+ *             step and one to contradict the other.
+ *   ai        held on an escalation aggregation that does not exist.
+ *             `ConversationHandover.reason` is a four-value code with no route
+ *             over it, and nothing counts machine causes.
+ *   humans    the team panel, now on `/analytics`.
+ *   topics    a panel, not a section: a "topic" is a `groupBy` over one
+ *             unconstrained column with no model behind it, so a rename has
+ *             nowhere to persist.
+ *   sales     cancelled.
+ *
+ * So the entry has no children and `/analytics` is the destination. A link to
+ * a room with nothing in it is the same promise as an empty tab, made in the
+ * navigation instead of on the page — and it survives longer there, because
+ * nobody opens every item in a sub-nav.
  */
-const ANALYTICS_SECTIONS: readonly NavigationChild[] = [
-  { id: 'overview', labelKey: 'analytics.overview', href: '/analytics/overview' },
-  { id: 'ai', labelKey: 'analytics.ai', href: '/analytics/ai' },
-  { id: 'humans', labelKey: 'analytics.humans', href: '/analytics/humans' },
-  { id: 'sales', labelKey: 'analytics.sales', href: '/analytics/sales' },
-  { id: 'topics', labelKey: 'analytics.topics', href: '/analytics/topics' },
-];
+const ANALYTICS_SECTIONS: readonly NavigationChild[] = [];
 
 /**
  * Settings' eight sections, from the brief.
