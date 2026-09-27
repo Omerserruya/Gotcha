@@ -93,7 +93,10 @@ export async function kernelApprovalGate(
     conversationId,
     tool: map.policyTool,
     params: map.args,
-    summary: `Approve: ${contract.meaning}`,
+    // `contract.meaning` is already a business sentence; the "Approve: " prefix
+    // turned it into an instruction and made this producer disagree with the
+    // other two about what a summary is.
+    summary: contract.meaning,
     reason: gate.reason,
     riskLevel: "medium",
     requestedBy: `agent-loop:${aiAgentId ?? "unknown"}`,

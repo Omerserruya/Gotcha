@@ -3,6 +3,7 @@ import {
   publishEvent,
   evaluatePolicies,
   createApprovalRequest,
+  describeApprovalAction,
   getRedis,
   actionKindForTool,
   evaluateBusinessPolicy,
@@ -432,7 +433,12 @@ export class ActionOrchestrator {
         conversationId: action.conversationId || undefined,
         tool: action.tool,
         params: action.args,
-        summary: action.rationale || `Approve ${action.tool}`,
+        // ★ NOT `action.rationale`. That is the CALLER's note to itself - the
+        // inbox path passes the literal string "ai-bot inbox tool call" - and it
+        // was landing in the one field an operator reads while deciding whether
+        // to move money. 27 of 54 rows said exactly that. The rationale belongs
+        // in `reason`, which is a separate column that exists for it.
+        summary: describeApprovalAction(action.tool, action.args as Record<string, unknown>),
         reason: gate.reason,
         riskLevel: action.urgency === "high" ? "high" : action.urgency === "medium" ? "medium" : "low",
         requestedBy: `${action.proposedBy.system}:${action.proposedBy.mode}`,

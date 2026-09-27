@@ -1434,10 +1434,11 @@ async function dispatchToolCallInner(
   }
 
   try {
-    const { evaluateToolGate, createApprovalRequest } = await import("./tool-gate").then(
+    const { evaluateToolGate, createApprovalRequest, describeApprovalAction } = await import("./tool-gate").then(
       async (g) => ({
         evaluateToolGate: g.evaluateToolGate,
         createApprovalRequest: (await import("./approval-requests")).createApprovalRequest,
+        describeApprovalAction: (await import("./approval-requests")).describeApprovalAction,
       }),
     );
     const gate = await evaluateToolGate(ctx.tenantId, name);
@@ -1563,7 +1564,9 @@ async function dispatchToolCallInner(
         messageId: ctx.messageId,
         tool: name,
         params: args,
-        summary: summarizeToolCall(name, args),
+        // Was `summarizeToolCall`, which rendered "issue_refund()" - the call,
+        // not the act. Nine rows read like that.
+        summary: describeApprovalAction(name, args),
         reason: gate.reason,
         // riskLevel here is a display field on the ApprovalRequest row, not a
         // gating signal - the gate decision lives in tool-gate.ts. Tag as
@@ -2237,11 +2240,4 @@ function str(raw: unknown): string | null {
   return v ? v.slice(0, 200) : null;
 }
 
-function summarizeToolCall(name: string, args: Record<string, unknown>): string {
-  const preview = Object.entries(args)
-    .filter(([, v]) => v !== undefined && v !== null && v !== "")
-    .slice(0, 3)
-    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
-    .join(", ");
-  return preview ? `${name}(${preview})` : `${name}()`;
-}
+

@@ -206,6 +206,7 @@ export {
   recordExecutionOutcome,
   claimCustomerNotification,
   linkCustomerMessage,
+  describeApprovalAction,
 } from "./lib/approval-requests";
 export type { CreateApprovalRequestInput } from "./lib/approval-requests";
 export { sanitizeCustomerText, hasAiSignaturePunctuation, withProtectedAtoms } from "./lib/customer-text";

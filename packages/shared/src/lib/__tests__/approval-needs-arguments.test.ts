@@ -27,7 +27,20 @@ vi.mock("../tool-gate", () => ({
   evaluateToolGate: async () => ({ decision: H.gateDecision, reason: "high risk tool" }),
 }));
 
-vi.mock("../approval-requests", () => ({
+/**
+ * ★ `importOriginal` RATHER THAN A HAND-WRITTEN STUB.
+ *
+ * Only `createApprovalRequest` needs replacing - it is the write. Everything
+ * else in this module is pure, and spreading the real exports means a function
+ * added to it later cannot be missing here. That is exactly how this mock broke:
+ * `describeApprovalAction` was added, `agent-tools` called it, and these seven
+ * tests failed on "No export is defined on the mock" while the code was correct.
+ *
+ * A double that lists exports by hand has to be maintained in step with the
+ * module; one that spreads the original does not.
+ */
+vi.mock("../approval-requests", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../approval-requests")>()),
   createApprovalRequest: async (input: any) => {
     H.created.push({ tool: input.tool, params: input.params });
     return { id: "appr_1" };
