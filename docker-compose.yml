@@ -1092,6 +1092,27 @@ services:
         # root. The Dockerfile re-declares it in the runtime stage from this same
         # arg so the two halves cannot drift apart.
         NEXT_PUBLIC_BASE_PATH: /v2
+        # Every NEXT_PUBLIC_* the source reads is inlined by `next build`, so
+        # each one that matters has to be here. The Dockerfile repeats only
+        # BASE_PATH and REALTIME_URL in the runtime stage, and that asymmetry is
+        # deliberate: `next.config.ts` re-reads the first on `next start` and
+        # `proxy.ts` re-reads the second per request for the CSP. The others are
+        # consumed by the bundle, where they are already baked.
+        NEXT_PUBLIC_REALTIME_URL: ${V2_REALTIME_URL:-https://dev.gotcha.co.il}
+        # ★ MUST BE PASSED, AND AN EMPTY VALUE IS NOT THE SAME AS NO VALUE.
+        #
+        # The schema is `z.enum([...]).default('local')`, and a zod default
+        # applies to `undefined` only. The Dockerfile declares
+        # `ARG NEXT_PUBLIC_APP_ENV=""`, and a Docker ARG WITH a default is SET -
+        # measured, not assumed:
+        #
+        #   ARG WITH_DEFAULT=""   -> set=yes, value []
+        #   ARG NO_DEFAULT        -> set=no
+        #
+        # So leaving this out hands the client schema an empty string instead of
+        # nothing, the enum rejects it, and `clientEnv` throws at module load in
+        # the BROWSER - a blank app served by a healthy-looking container.
+        NEXT_PUBLIC_APP_ENV: ${V2_APP_ENV:-local}
     environment:
       APP_ENV: ${V2_APP_ENV:-local}
       # Server-to-server only, and never sent to the browser: every browser call
@@ -1103,22 +1124,28 @@ services:
       # there is one place to change it.
       OIDC_ISSUER: ${NEXT_PUBLIC_OIDC_ISSUER:-}
       OIDC_CLIENT_ID: ${V2_OIDC_CLIENT_ID:-${NEXT_PUBLIC_OIDC_CLIENT_ID:-gotcha-app}}
-      OIDC_CLIENT_SECRET: ${V2_OIDC_CLIENT_SECRET:-}
+      # ★ OIDC_CLIENT_SECRET IS ABSENT, NOT EMPTY, AND THE DIFFERENCE IS A 500.
+      #
+      # Its schema is `z.string().min(1).optional()`. Optional permits the
+      # variable to be MISSING; it does not permit an empty string. Declaring it
+      # here as `${V2_OIDC_CLIENT_SECRET:-}` supplied "" and every request that
+      # read the server config failed validation - the sign-in page still
+      # rendered, because it does not read it, so the app looked healthy and only
+      # the login route 500'd.
+      #
+      # This client is public and uses PKCE, so there is no secret to carry. A
+      # confidential client adds the line back WITH a value; it must never be
+      # present and empty.
       # Reduced to its origin by `appUrl`, which then rebuilds the path from the
       # base path - so whether this carries /v2 makes no difference to the
       # redirect_uri. It is written as a bare origin because that is what the
       # schema calls it.
       APP_ORIGIN: ${V2_APP_ORIGIN:-https://dev.gotcha.co.il}
-      # ★ NOT SUFFICIENT ON ITS OWN, AND THE FAILURE IS SILENT.
-      #
-      # `proxy.ts` reads this at RUNTIME to put the socket origin in the CSP,
-      # which is why it belongs here. But `realtime-provider.tsx` reads it from
-      # `clientEnv`, which Next inlines at BUILD time, and returns null when it
-      # is undefined - so with only this half the CSP permits a connection the
-      # browser never attempts, and realtime is simply dead with no error.
-      # It needs the same ARG+ENV pair the base path has; the Dockerfile does
-      # not declare one yet.
-      NEXT_PUBLIC_REALTIME_URL: ${V2_REALTIME_URL:-https://dev.gotcha.co.il}
+      # NEXT_PUBLIC_REALTIME_URL is deliberately NOT here. The runtime stage
+      # declares it as ARG+ENV from the same build arg above, so the image
+      # already carries it and the bundle and the CSP cannot disagree. Setting it
+      # here as well would let somebody change the CSP's origin at runtime while
+      # the bundle kept connecting to the baked one.
       # 32+ bytes. Deliberately left empty: this is the one value that is
       # identity material, it is nobody's to mint on another team's behalf, and
       # an empty default fails at the first request naming this variable rather
