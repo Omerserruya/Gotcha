@@ -3,13 +3,20 @@ import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import { conversationRowSchema, queueOrder, type ConversationRow } from '@/api/contracts/inbox';
+import channels from '@/i18n/messages/en/channels.json';
 import messages from '@/i18n/messages/en/inbox.json';
 
 import { ConversationList } from './ConversationList';
 
+/*
+ * ★ BOTH NAMESPACES, BECAUSE THE ROW READS BOTH.
+ * The channel's display name lives in `channels`, where screen 13 already
+ * maintains it in two languages — copying ten names into `inbox` would be a
+ * second set of words for one set of things.
+ */
 vi.mock('next-intl/server', () => ({
-  getTranslations: async (namespace: 'inbox') =>
-    createTranslator({ locale: 'en', messages: { inbox: messages }, namespace }),
+  getTranslations: async (namespace: 'inbox' | 'channels') =>
+    createTranslator({ locale: 'en', messages: { inbox: messages, channels }, namespace }),
 }));
 
 const NOW = new Date('2026-09-25T12:00:00.000Z');
@@ -18,7 +25,16 @@ const row = (over: Record<string, unknown> = {}): ConversationRow =>
   conversationRowSchema.parse({
     id: 'c1',
     status: 'OPEN',
-    contactName: 'Dana',
+    /*
+     * ★★ `customerName`, AND THE OLD FIXTURE SAID `contactName`.
+     *
+     * A fixture is a claim that the platform can produce this object. This one
+     * claimed a field the platform has never sent — the same invention the
+     * contract carried — and **no assertion looked at the rendered name**, so
+     * the row printed "Someone" and every test passed. Ten of ten rows in the
+     * capture, read as redaction by the security fixtures.
+     */
+    customerName: 'Dana',
     channel: 'WHATSAPP',
     lastMessageAt: '2026-09-25T11:46:00.000Z',
     ...over,
@@ -121,6 +137,85 @@ describe('★★ rows the ordering cannot place are shown, not sunk', () => {
       row({ id: 'new', lastMessageAt: '2026-09-25T11:00:00.000Z' }),
     ]);
     expect(dated.map((r) => r.id)).toEqual(['new', 'old']);
+  });
+});
+
+describe('★★ what the row actually says about the customer', () => {
+  it('★★ shows the name, and does not fall back to "Someone" when there is one', async () => {
+    /*
+     * THE ASSERTION THAT WAS MISSING. The fallback is correct where there is
+     * genuinely no name; it was rendering on every row because the contract
+     * named a field that does not exist, and nothing checked the output.
+     */
+    await show([row({ customerName: 'Dana' })]);
+    expect(screen.getByText('Dana')).toBeInTheDocument();
+    expect(screen.queryByText(/someone/i)).toBeNull();
+  });
+
+  it('★ still says "Someone" when the platform really sends no name', async () => {
+    // `customerName` is nullable on the model. An unnamed customer is a real
+    // state and the fallback is for that, not for a contract mistake.
+    await show([row({ customerName: null })]);
+    expect(screen.getByText(/someone/i)).toBeInTheDocument();
+  });
+
+  it('★★ names the channel instead of printing its enum', async () => {
+    /*
+     * `SHOPIFY_LIVE_CHAT` was on screen in the capture. The label has existed
+     * in `channels.name.*` in both languages the whole time.
+     */
+    await show([row({ channel: 'SHOPIFY_LIVE_CHAT' })]);
+    expect(screen.getByText(/shopify live chat/i)).toBeInTheDocument();
+    expect(screen.queryByText(/SHOPIFY_LIVE_CHAT/)).toBeNull();
+  });
+
+  it('★★ no screaming-snake value reaches the screen, whatever the channel is', async () => {
+    /*
+     * The durable form of the rule: an unconstrained column can hold a value
+     * this build has never seen, and the answer is "another channel" — not the
+     * raw string, which every other screen here strips.
+     */
+    await show([row({ channel: 'SOME_NEW_CHANNEL' })]);
+    expect(screen.getByText(/another channel/i)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[A-Z]{2,}_[A-Z]{2,}/);
+  });
+});
+
+describe('★★ a wait at a scale somebody can read', () => {
+  it('★★ hours, not 47061m', async () => {
+    /*
+     * THE DEFECT THE CAPTURE FOUND. The row printed raw minutes, so a
+     * thirty-two-day wait rendered as `47061m` on the column an agent triages
+     * on — and it was illegible enough to be reported as a possible
+     * identifier rather than a duration.
+     */
+    await show([row({ lastMessageAt: '2026-09-25T09:00:00.000Z' })]);
+    const waiting = screen.getByTestId('waiting-c1');
+    expect(waiting).toHaveTextContent(/3 hours waiting/i);
+    expect(waiting).not.toHaveTextContent(/180m/);
+  });
+
+  it('★★ days for the ones that have been there a month', async () => {
+    await show([row({ lastMessageAt: '2026-08-24T12:00:00.000Z' })]);
+    const waiting = screen.getByTestId('waiting-c1');
+    expect(waiting).toHaveTextContent(/32 days waiting/i);
+    expect(waiting).not.toHaveTextContent(/\d{4,}/);
+  });
+
+  it('★ minutes below the hour, which is the case that was always right', async () => {
+    await show([row({ lastMessageAt: '2026-09-25T11:46:00.000Z' })]);
+    expect(screen.getByTestId('waiting-c1')).toHaveTextContent('14m');
+  });
+
+  it('★★ nothing in the queue is ever a bare four-digit number', async () => {
+    // The shape of the defect rather than one instance of it: any wait long
+    // enough to need another unit must have been given one.
+    await show([
+      row({ id: 'a', lastMessageAt: '2026-09-25T11:00:00.000Z' }),
+      row({ id: 'b', lastMessageAt: '2026-09-20T12:00:00.000Z' }),
+      row({ id: 'c', lastMessageAt: '2026-06-01T12:00:00.000Z' }),
+    ]);
+    expect(document.body.textContent).not.toMatch(/\b\d{4,}m\b/);
   });
 });
 

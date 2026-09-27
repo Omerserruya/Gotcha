@@ -113,7 +113,20 @@ export default async function Page({
           <IdentityPanel
             timeline={data.timeline}
             conversation={
-              data.open ? { contactName: data.open.contactName, channel: data.open.channel } : null
+              data.open
+                ? {
+                    contactName: data.open.customerName,
+                    channel: data.open.channel,
+                    /*
+                     * ★ THE HANDLE, WHICH THE PANEL WAS SAYING IT DID NOT HAVE.
+                     * It rendered *"No channel handle is recorded for this
+                     * person"* beside a row showing a channel, because nothing
+                     * passed one. Two true sentences about different things,
+                     * reading as a contradiction.
+                     */
+                    customerExternalId: data.open.customerExternalId,
+                  }
+                : null
             }
           />
           {/*

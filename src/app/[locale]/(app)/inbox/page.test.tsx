@@ -96,7 +96,10 @@ const row = (over: Record<string, unknown> = {}) => ({
   assignedAiAgentId: 'ai1',
   isHandedOver: false,
   lastMessageAt: '2026-09-26T08:00:00.000Z',
-  contactName: 'Noa',
+  customerName: 'Noa',
+  customerExternalId: '+972500000000',
+  lastMessageBody: 'Where is my order?',
+  lastMessageDirection: 'INBOUND' as const,
   ...over,
 });
 

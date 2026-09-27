@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { CHANNEL_TYPES } from './channels';
+
 /**
  * Screens 02 and 02b — the Inbox.
  *
@@ -79,7 +81,50 @@ export const conversationRowSchema = z.object({
   isHandedOver: z.boolean().default(false),
   /** Drives "waiting 14m". Required: a row with no last message cannot be aged. */
   lastMessageAt: z.string().nullable().default(null),
-  contactName: z.string().nullable().default(null),
+  /**
+   * ★★ `customerName`, WHICH IS THE COLUMN'S NAME. NOT `contactName`.
+   *
+   * This said `contactName`, a field the platform has never sent. `z.object`
+   * stripped the real one, the invented one defaulted to `null`, and **every
+   * row in the queue read "Someone"** — ten of ten in the capture, which read
+   * as redaction by the security fixtures and was neither redaction nor
+   * fixtures.
+   *
+   * The list route puts no `select` on the conversation, so every scalar on
+   * the model arrives. The field was there the whole time under the name the
+   * schema gives it.
+   */
+  customerName: z.string().nullable().default(null),
+  /**
+   * The handle this conversation arrived on — a phone number on WhatsApp, a
+   * PSID on Messenger. Required on the model, so nullable only for a route
+   * that does not send it.
+   *
+   * ★ AND ITS ABSENCE WAS VISIBLE: `IdentityPanel` said *"No channel handle is
+   * recorded for this person"* while the row beside it showed a channel,
+   * because the page had no handle to pass it. Two true sentences about
+   * different things, reading as a contradiction.
+   */
+  customerExternalId: z.string().nullable().default(null),
+  /**
+   * The last message the CUSTOMER could have seen, flattened by the route
+   * from a `take: 1` — and excluding FAILED sends, deliberately: *"a failed
+   * outbound is a message the customer never received"*, so previewing it
+   * would make the row read as answered.
+   */
+  lastMessageBody: z.string().nullable().default(null),
+  /**
+   * ★★ WHO SPOKE LAST, WHICH IS NOT THE SAME AS "UNREAD" AND IS STILL USEFUL.
+   *
+   * `agentUnreadIsUnknown()` remains true: there is no per-user read marker in
+   * the schema and `Message.readAt` is the customer's receipt. But the route
+   * projects this, and INBOUND-last is a fact — **the customer spoke and
+   * nobody has answered** — which is the thing the queue is actually for.
+   *
+   * It is not "you have not read this". Two people looking at the same queue
+   * see the same value, and that is correct for what it claims.
+   */
+  lastMessageDirection: z.enum(['INBOUND', 'OUTBOUND']).nullable().default(null),
 });
 export type ConversationRow = z.infer<typeof conversationRowSchema>;
 
@@ -91,6 +136,48 @@ export type ConversationRow = z.infer<typeof conversationRowSchema>;
  * message either way, so it cannot say how long the FIRST reply took, and it
  * does not distinguish waiting-on-us from waiting-on-them.
  */
+/**
+ * How to say a wait, at a scale a person can read.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ `47061m` WAS ON SCREEN, AND IT IS THIRTY-TWO DAYS
+ * ════════════════════════════════════════════════════════════════════════════
+ * The row printed `{minutes}m` unconditionally, so the capture showed `47061m`,
+ * `86110m`, `86409m` — and the wait column is the thing an agent triages on.
+ * It was not even legible as a duration: read quickly, `47061m` looks like an
+ * identifier, which is how it was first reported.
+ *
+ * Minutes below an hour, hours below a day, days beyond that. The unit is
+ * chosen here rather than in the component so the queue and anything else that
+ * ages a row cannot disagree.
+ */
+export type WaitingScale = 'minutes' | 'hours' | 'days';
+
+export function waitingScale(minutes: number): { scale: WaitingScale; value: number } {
+  if (minutes < 60) return { scale: 'minutes', value: minutes };
+  if (minutes < 60 * 24) return { scale: 'hours', value: Math.floor(minutes / 60) };
+  return { scale: 'days', value: Math.floor(minutes / (60 * 24)) };
+}
+
+/**
+ * The channel's own name, or `null` when the platform sends one we do not know.
+ *
+ * ★ `Conversation.channel` IS AN UNCONSTRAINED STRING and the capture showed
+ * `SHOPIFY_LIVE_CHAT` and `WHATSAPP` on screen — a screaming-snake enum on the
+ * operational screen, where `channels.name.*` has carried both labels in both
+ * languages all along.
+ *
+ * `null` for an unrecognised value rather than the raw string: every other
+ * screen in this product strips raw identifiers, and an agent cannot act on an
+ * enum name. The caller says "another channel" and the value goes to the log,
+ * which is where a new channel type should surface.
+ */
+export function channelLabelKey(channel: string | null): string | null {
+  if (!channel) return null;
+  const known = (CHANNEL_TYPES as readonly string[]).includes(channel);
+  return known ? channel : null;
+}
+
 export function waitingMinutes(row: ConversationRow, now: Date): number | null {
   if (!row.lastMessageAt) return null;
   const at = Date.parse(row.lastMessageAt);

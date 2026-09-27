@@ -1,4 +1,4 @@
-import { closeSync, mkdirSync, openSync, readSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect, type Page } from '@playwright/test';
@@ -184,6 +184,21 @@ export async function shoot(page: Page, evidenceDir: string, name: string): Prom
  */
 export function recordUnreached(evidenceDir: string, name: string, reason: string): void {
   mkdirSync(evidenceDir, { recursive: true });
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ A STALE PNG MUST NOT SURVIVE ITS OWN "NOT PHOTOGRAPHED" NOTE
+   * ════════════════════════════════════════════════════════════════════════
+   * `s02/390-3-greeting.png` was written at 09:03 by a run that later failed on
+   * a spent session, and `390-3-greeting.unreached.txt` at 09:09 by the run
+   * that replaced it. **The directory then held a photograph and, beside it, a
+   * note saying no photograph was taken** — and a reviewer believes the
+   * picture. It had to be deleted by hand.
+   *
+   * The marker exists to replace a shot, so it removes the shot. This matters
+   * most exactly when it fires: after a failure, which is when stale files are
+   * there to be believed.
+   */
+  rmSync(join(evidenceDir, `${name}.png`), { force: true });
   writeFileSync(
     join(evidenceDir, `${name}.unreached.txt`),
     `${name}\n\nNOT PHOTOGRAPHED.\n\n${reason.trim()}\n`,

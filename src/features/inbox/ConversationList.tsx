@@ -1,6 +1,12 @@
 import { getTranslations } from 'next-intl/server';
 
-import { queueOrder, waitingMinutes, type ConversationRow } from '@/api/contracts/inbox';
+import {
+  channelLabelKey,
+  queueOrder,
+  waitingMinutes,
+  waitingScale,
+  type ConversationRow,
+} from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
 
@@ -63,6 +69,12 @@ export async function ConversationList({
   readonly undatedCount?: number;
 }) {
   const t = await getTranslations('inbox');
+  /*
+   * The channel labels live in `channels`, where screen 13 already maintains
+   * them in both languages. Reading them from there rather than copying ten
+   * names into `inbox` keeps one set of words for one set of things.
+   */
+  const channelNames = await getTranslations('channels');
 
   if (rows === null) {
     return (
@@ -86,10 +98,33 @@ export async function ConversationList({
 
   const row = (conversation: ConversationRow, testid: string) => {
     const waiting = waitingMinutes(conversation, now);
+    const channel = channelLabelKey(conversation.channel);
     return (
       <li key={conversation.id} className={styles.queueRow} data-testid={testid}>
-        <span className={styles.who}>{conversation.contactName ?? t('queue.unnamed')}</span>
-        <span className={styles.channel}>{conversation.channel ?? t('queue.unknownChannel')}</span>
+        {/*
+          ★★ THE CUSTOMER'S NAME, WHICH WAS "Someone" ON EVERY ROW.
+          The contract named a field the platform does not send, so the real
+          `customerName` was stripped and the invented one defaulted to null.
+          Ten of ten rows in the capture read the fallback, and it looked like
+          the security fixtures redacting.
+        */}
+        <span className={styles.who}>{conversation.customerName ?? t('queue.unnamed')}</span>
+        {/*
+          ★★ THE CHANNEL'S NAME, NOT ITS ENUM. `SHOPIFY_LIVE_CHAT` was on
+          screen; `channels.name.SHOPIFY_LIVE_CHAT` has said "Shopify live
+          chat" in both languages all along.
+
+          An unrecognised value gets "another channel" rather than its raw
+          string: `channel` is an unconstrained column, every other screen
+          here strips raw identifiers, and an agent cannot act on an enum name.
+        */}
+        <span className={styles.channel}>
+          {conversation.channel === null
+            ? t('queue.unknownChannel')
+            : channel === null
+              ? t('queue.otherChannel')
+              : channelNames(`name.${channel}` as 'name.WHATSAPP')}
+        </span>
         {/*
           ★ NULL IS NOT ZERO. A row we cannot age says nothing rather than
           claiming it has been waiting no time at all, which would sort it
@@ -97,7 +132,16 @@ export async function ConversationList({
         */}
         {waiting === null ? null : (
           <span className={styles.waiting} data-testid={`waiting-${conversation.id}`}>
-            {t('queue.waiting', { minutes: waiting })}
+            {/*
+              ★★ AT A SCALE SOMEBODY CAN READ. This printed raw minutes, so
+              the capture showed `47061m` — thirty-two days, on the column an
+              agent triages on, and illegible enough to be reported as a
+              possible identifier.
+            */}
+            {(() => {
+              const { scale, value } = waitingScale(waiting);
+              return t(`queue.waitingFor.${scale}` as 'queue.waitingFor.minutes', { value });
+            })()}
           </span>
         )}
       </li>
