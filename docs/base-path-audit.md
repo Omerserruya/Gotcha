@@ -147,6 +147,43 @@ exception and it now sits under the prefix.
 connect latency. If `/socket.io/` ever loses its upgrade headers, v2's realtime
 fails outright where a polling client would degrade.
 
+## Every `NEXT_PUBLIC_*` is inlined at build, not just the prefix
+
+Found by Backend while wiring the service, and it is the same trap as the base
+path with a worse symptom.
+
+`NEXT_PUBLIC_REALTIME_URL` is read in two places that fail in opposite
+directions, and **both look fine**:
+
+| Where | When | Missing there means |
+| --- | --- | --- |
+| `realtime-provider.tsx` | **build** (inlined) | `undefined` → the provider returns `null` → **no socket is ever opened** |
+| `proxy.ts` | runtime | the CSP omits the origin → the browser's connection is blocked |
+
+Runtime-only is the dangerous one: the policy permits a connection nobody
+attempts. No error, no console warning, no failed request — because there is no
+request. Every screen renders, every navigation works, and the inbox never
+updates.
+
+All six public variables are now build args, and the placement is reasoned
+rather than blanket: **all six** in the build stage because all six are inlined,
+and **two** in the runtime stage because only those have a server-side runtime
+reader — `NEXT_PUBLIC_BASE_PATH` (`next.config.ts` on `next start`) and
+`NEXT_PUBLIC_REALTIME_URL` (the CSP). Repeating the other four at runtime would
+imply an effect they do not have.
+
+`scripts/public-env-sweep.ts` fails the run if a variable the source reads is
+missing from the **build** stage. Its first version matched an `ARG` in any
+stage and **passed this very defect**, since the runtime stage declared it — the
+gate now splits on stage boundaries and reads only the stage that runs the
+build.
+
+## What a running container does not prove
+
+`serverEnv()` is memoised on first access, so a container starts happily with a
+missing secret and fails on the first request that needs it. A process that is
+up is not evidence of an app that works; probe a page that exercises a read.
+
 ## Not verified, and why
 
 - **The image has not been built.** Disk is at 90% with 7.8G free, and a build

@@ -32,14 +32,39 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# ★★ THE MOUNT POINT IS A BUILD ARG, NOT A RUNTIME VARIABLE.
+# ══════════════════════════════════════════════════════════════════════════════
+# ★★ EVERY `NEXT_PUBLIC_*` VARIABLE IS INLINED HERE, AT BUILD, AND NOWHERE ELSE
+# ══════════════════════════════════════════════════════════════════════════════
+# Next replaces `process.env.NEXT_PUBLIC_X` with a literal when it compiles the
+# client bundle. **A value supplied only at runtime does not exist for the
+# browser** — and the failures are silent in both directions:
 #
-# `basePath` is applied when `next build` runs and is INLINED into the client
-# bundle. Supplying it only at runtime does nothing at all — the server would
-# route under the prefix while the browser's own JavaScript fetched the root.
-# That is the failure this line exists to prevent, and it is silent.
+#   BASE_PATH      runtime only → the server routes under the prefix while the
+#                  browser's own JavaScript fetches the root.
+#   REALTIME_URL   runtime only → `realtime-provider` reads `undefined` and
+#                  returns `null`, so **no socket is ever opened**. The CSP
+#                  (read at runtime) permits a connection nobody attempts:
+#                  no error, no console warning, no failed request, because
+#                  there is no request. Every screen renders and the inbox
+#                  never updates.
+#                  Build only → the browser connects and the CSP blocks it.
+#
+# So this list is every `NEXT_PUBLIC_*` the source reads, checked by
+# `scripts/public-env-sweep.ts` rather than kept in step by hand. An empty
+# default is deliberate: the app treats each as optional and says so at the
+# point of use, which is better than a container that will not start.
 ARG NEXT_PUBLIC_BASE_PATH=""
+ARG NEXT_PUBLIC_REALTIME_URL=""
+ARG NEXT_PUBLIC_APP_ENV=""
+ARG NEXT_PUBLIC_RELEASE=""
+ARG NEXT_PUBLIC_SENTRY_DSN=""
+ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=""
 ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
+ENV NEXT_PUBLIC_REALTIME_URL=$NEXT_PUBLIC_REALTIME_URL
+ENV NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV
+ENV NEXT_PUBLIC_RELEASE=$NEXT_PUBLIC_RELEASE
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=$NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
 
 # No server environment is needed here, and that is checked rather than
 # assumed: building with `API_BASE_URL` set to an invalid value still produces
@@ -54,15 +79,24 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# ★★ THE SAME MOUNT POINT AT RUNTIME, BECAUSE `next start` RE-READS THE CONFIG.
+# ★★ THE TWO PUBLIC VARIABLES THAT ALSO HAVE A RUNTIME READER ON THE SERVER.
 #
-# `next.config.ts` computes `basePath` from this variable. If the build had it
-# and the running container did not, the server would serve at the root while
-# `.next` and the client bundle were built for the prefix — a disagreement
-# between two halves of the same image. Declared from the same build arg so
-# they cannot drift.
+# The other four are consumed only by the client bundle, where they are already
+# inlined; repeating them here would suggest a runtime effect they do not have.
+# These two genuinely have one:
+#
+#   BASE_PATH      `next.config.ts` recomputes `basePath` when `next start`
+#                  re-reads it. Build and runtime disagreeing would serve a
+#                  different prefix from the one the bundle carries.
+#   REALTIME_URL   `proxy.ts` puts the socket origin in the Content-Security-
+#                  Policy on every request. Missing here and the CSP omits the
+#                  origin, so the connection the bundle attempts is blocked.
+#
+# Both come from the same build args, so the two halves cannot drift.
 ARG NEXT_PUBLIC_BASE_PATH=""
+ARG NEXT_PUBLIC_REALTIME_URL=""
 ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
+ENV NEXT_PUBLIC_REALTIME_URL=$NEXT_PUBLIC_REALTIME_URL
 
 # Production dependencies only. The build's devDependencies — the compiler, the
 # test runner, the linters — have no business in a running container.
