@@ -109,6 +109,23 @@ const DEFAULT_PIXEL_ID = '1366778975443279';
 export const META_PIXEL_ID: string | null =
   process.env.NEXT_PUBLIC_META_PIXEL_ID || DEFAULT_PIXEL_ID;
 
+/**
+ * How this campaign's leads are tagged in the leads table and the Telegram
+ * alert. Anything but 'early-access-form', which puts the endpoint into a
+ * stricter mode that rejects a lead with no email address - and this form asks
+ * for email optionally.
+ */
+export const LEAD_SOURCE = 'campaign-one-dollar-offer';
+
+/**
+ * Where a successful submit lands.
+ *
+ * A route rather than a state flag, so the thank-you has an address of its own:
+ * one URL that is only ever reached by someone who actually submitted, which is
+ * what makes it usable as a conversion page and as something to link back to.
+ */
+export const THANK_YOU_PATH = '/one-dollar-offer/thanks';
+
 export type Locale = 'en' | 'he';
 
 export const dirOf = (l: Locale) => (l === 'he' ? 'rtl' : 'ltr');

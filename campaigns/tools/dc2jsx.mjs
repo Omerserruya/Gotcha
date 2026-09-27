@@ -37,9 +37,37 @@ import { execFileSync } from 'node:child_process';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DESIGN = path.join(ROOT, 'design');
-const SRC = path.join(DESIGN, 'GOTCHA Campaign Landing.dc.html');
+
+/**
+ * The designs this app compiles, and what each one produces.
+ *
+ * Two now, and the second is why this is a table rather than three constants:
+ * the campaign's form navigates to a thank-you page on success, so that page is
+ * part of the same flow and has to be built from the same pipeline. A hand
+ * written thank-you page would drift from the design the moment either changed.
+ */
+const DESIGNS = {
+  campaign: {
+    src: 'GOTCHA Campaign Landing.dc.html',
+    component: 'Template',
+    css: 'src/app/campaign.css',
+  },
+  thanks: {
+    src: 'GOTCHA Thank You.dc.html',
+    component: 'ThanksTemplate',
+    css: 'src/app/thanks.css',
+  },
+};
+
+const which = process.argv[2] || 'campaign';
+const DESIGN_CFG = DESIGNS[which];
+if (!DESIGN_CFG) {
+  throw new Error(`unknown design "${which}". Known: ${Object.keys(DESIGNS).join(', ')}`);
+}
+
+const SRC = path.join(DESIGN, DESIGN_CFG.src);
 const OUT_DIR = path.join(ROOT, 'src/generated');
-const CSS_OUT = path.join(ROOT, 'src/app/campaign.css');
+const CSS_OUT = path.join(ROOT, DESIGN_CFG.css);
 
 /**
  * parse5, from wherever this repo happens to have it.
@@ -197,16 +225,19 @@ const LITERAL = /^(true|false|null|undefined|-?\d+(\.\d+)?|'[^']*'|"[^"]*")$/;
  * Everything reads from `v`, and every hop is optional.
  *
  * support.js's resolvePath walks with `cur == null ? undefined : cur[key]`, and
- * the design leans on that: `form.eName` is asked for before `renderVals` has
- * ever put an `errors` entry there, and must come back undefined rather than
- * throw. There are no loop variables in this design (no sc-for), so there is no
- * scope to carry.
+ * the design leans on that: `fa.eName` is asked for before `renderVals` has ever
+ * put an error there, and must come back undefined rather than throw.
+ *
+ * A path rooted in an sc-for variable stays bare - it is a real JavaScript
+ * binding in the emitted `.map()`, not a lookup on `v`. `$index` is the same.
  */
-function expr(raw) {
+function expr(raw, scope) {
   const e = raw.trim();
   if (LITERAL.test(e)) return e;
   if (!SIMPLE_PATH.test(e)) throw new Error(`unsupported expression: {{ ${e} }}`);
-  return '$v?.' + e.split('.').join('?.');
+  const parts = e.split('.');
+  if (scope.has(parts[0]) || parts[0] === '$index') return parts.join('?.');
+  return '$v?.' + parts.join('?.');
 }
 
 const jsStr = (s) => JSON.stringify(s);
@@ -237,6 +268,12 @@ const ASSET_FORMAT = {
 };
 const assetFormatHits = Object.fromEntries(Object.keys(ASSET_FORMAT).map((k) => [k, 0]));
 
+/** Which re-encodings this particular design is expected to reference. */
+const EXPECTED_FORMAT_HITS = {
+  campaign: ['assets/team/founder-1.png'],
+  thanks: [],
+};
+
 /**
  * The design lives at a single URL, so it references assets relatively. Served
  * at /<campaign>/, `assets/x.svg` would resolve to /<campaign>/assets/x.svg.
@@ -254,25 +291,25 @@ function rootAssets(raw) {
 }
 
 /** support.js: compileAttr */
-function attrValue(raw) {
+function attrValue(raw, scope) {
   raw = rootAssets(raw);
   const whole = raw.match(/^\s*\{\{([\s\S]+?)\}\}\s*$/);
-  if (whole) return `{${expr(whole[1])}}`;
+  if (whole) return `{${expr(whole[1], scope)}}`;
   if (!raw.includes('{{')) return jsStr(raw);
   const parts = raw.split(INTERP_G);
   const body = parts
-    .map((p, i) => (i & 1 ? '${$A(' + expr(p) + ')}' : p.replace(/[\\`$]/g, '\\$&')))
+    .map((p, i) => (i & 1 ? '${$A(' + expr(p, scope) + ')}' : p.replace(/[\\`$]/g, '\\$&')))
     .join('');
   return '{`' + body + '`}';
 }
 
 /** A style attribute always goes through st(); only its argument differs. */
-function styleValue(raw) {
+function styleValue(raw, scope) {
   raw = rootAssets(raw);
   if (!raw.includes('{{')) return `{$st(${jsStr(raw)})}`;
   const parts = raw.split(INTERP_G);
   const body = parts
-    .map((p, i) => (i & 1 ? '${$A(' + expr(p) + ')}' : p.replace(/[\\`$]/g, '\\$&')))
+    .map((p, i) => (i & 1 ? '${$A(' + expr(p, scope) + ')}' : p.replace(/[\\`$]/g, '\\$&')))
     .join('');
   return '{$st(`' + body + '`)}';
 }
@@ -282,7 +319,7 @@ const warnings = [];
 /** How many times each DROPPED element was actually found, asserted after the walk. */
 const droppedCount = {};
 
-function emitText(text) {
+function emitText(text, scope) {
   // support.js: walkText - whitespace-only text with no space character is
   // dropped, everything else is preserved verbatim.
   if (!INTERP.test(text)) {
@@ -293,19 +330,19 @@ function emitText(text) {
     .split(INTERP_G)
     .map((p, i) => {
       if (!(i & 1)) return p === '' ? '' : `{${jsStr(p)}}`;
-      return `{$I(${expr(p)})}`;
+      return `{$I(${expr(p, scope)})}`;
     })
     .join('');
 }
 
-const emitChildren = (node, indent) =>
-  (node.childNodes || []).map((c) => emitNode(c, indent)).filter(Boolean).join('\n');
+const emitChildren = (node, scope, indent) =>
+  (node.childNodes || []).map((c) => emitNode(c, scope, indent)).filter(Boolean).join('\n');
 
-function emitNode(node, indent) {
+function emitNode(node, scope, indent) {
   const pad = '  '.repeat(indent);
 
   if (node.nodeName === '#text') {
-    const out = emitText(node.value);
+    const out = emitText(node.value, scope);
     return out ? pad + out : '';
   }
   if (node.nodeName === '#comment') return '';
@@ -313,30 +350,38 @@ function emitNode(node, indent) {
   const tag = node.tagName;
   const attrs = Object.fromEntries((node.attrs || []).map((a) => [a.name, a.value]));
 
+  /**
+   * sc-for -> .map()
+   *
+   * The loop variable becomes a real binding, so paths rooted in it are emitted
+   * bare rather than as lookups on `v` - which is the whole reason `expr` needs
+   * to know the scope. `$L` coerces a non-array to an empty one, exactly as
+   * support.js's walkFor does, so a list that has not loaded yet renders
+   * nothing instead of throwing.
+   */
   if (tag === 'sc-for') {
-    throw new Error(
-      'sc-for found. This compiler deliberately does not implement it - see the ' +
-        'header. Port the loop branch from landing/tools/dc2jsx.mjs if the design starts using it.',
+    const as = attrs.as || 'item';
+    const listRaw = (attrs.list || '').match(/^\s*\{\{([\s\S]+?)\}\}\s*$/);
+    if (!listRaw) throw new Error(`sc-for without an interpolated list: ${attrs.list}`);
+    const inner = new Set([...scope, as]);
+    const kids = emitChildren(node, inner, indent + 2);
+    return (
+      `${pad}{$L(${expr(listRaw[1], scope)}).map((${as}, $index) => (\n` +
+      `${pad}  <React.Fragment key={$index}>\n${kids}\n${pad}  </React.Fragment>\n` +
+      `${pad}))}`
     );
   }
 
   /**
    * Elements the port deliberately does not render.
    *
-   * ONE entry. The mobile sticky bar shipped with a WhatsApp button beside the
-   * "book a meeting" call to action, and the page ALSO carries a floating
-   * WhatsApp widget a few pixels above it. Two buttons for the same channel,
-   * stacked in the same corner of a phone screen, is not a choice a visitor
-   * benefits from - and the widget is the better of the two, because it opens a
-   * message box rather than throwing you into another app.
-   *
-   * So the bar keeps only the meeting. Its remaining link already carries
-   * `flex:1`, so it simply fills the bar.
-   *
-   * Asserted below: if the design drops or renames this button the build fails
-   * rather than silently keeping a rule that no longer matches anything.
+   * EMPTY, and that is the point of leaving the mechanism in place. It held one
+   * entry - the mobile bar's WhatsApp button, which sat a few pixels from the
+   * floating WhatsApp widget - until the design removed that button itself. The
+   * assertion below then failed the build rather than letting a stale rule sit
+   * there matching nothing, which is exactly what it is for.
    */
-  const DROPPED = { 'פנייה בוואטסאפ': 'the sticky bar\'s WhatsApp button' };
+  const DROPPED = {};
   if (attrs['aria-label'] && DROPPED[attrs['aria-label']]) {
     droppedCount[attrs['aria-label']] = (droppedCount[attrs['aria-label']] || 0) + 1;
     return '';
@@ -346,8 +391,8 @@ function emitNode(node, indent) {
   if (tag === 'sc-if') {
     const valRaw = (attrs.value || '').match(/^\s*\{\{([\s\S]+?)\}\}\s*$/);
     if (!valRaw) throw new Error(`sc-if without an interpolated value: ${attrs.value}`);
-    const kids = emitChildren(node, indent + 1);
-    return `${pad}{${expr(valRaw[1])} ? (\n${pad}  <>\n${kids}\n${pad}  </>\n${pad}) : null}`;
+    const kids = emitChildren(node, scope, indent + 1);
+    return `${pad}{${expr(valRaw[1], scope)} ? (\n${pad}  <>\n${kids}\n${pad}  </>\n${pad}) : null}`;
   }
 
   /* ordinary element */
@@ -357,7 +402,7 @@ function emitNode(node, indent) {
     if (DROP.has(name)) continue;
 
     if (name === 'style') {
-      props.push(`style=${styleValue(value)}`);
+      props.push(`style=${styleValue(value, scope)}`);
       continue;
     }
 
@@ -380,13 +425,13 @@ function emitNode(node, indent) {
     if (name.startsWith('on')) key = EVENT_MAP[name] || 'on' + name[2].toUpperCase() + name.slice(3);
     else if (REACT_ATTR[name]) key = REACT_ATTR[name];
 
-    props.push(`${key}=${attrValue(value)}`);
+    props.push(`${key}=${attrValue(value, scope)}`);
   }
 
   if (classes.length) props.unshift(`className=${jsStr(classes.join(' '))}`);
 
   const head = `<${tag}${props.length ? ' ' + props.join(' ') : ''}`;
-  const kids = emitChildren(node, indent + 1);
+  const kids = emitChildren(node, scope, indent + 1);
 
   if (VOID.has(tag)) return `${pad}${head} />`;
   if (!kids.trim()) return `${pad}${head}></${tag}>`;
@@ -408,17 +453,17 @@ if (!hostNode.attrs.some((a) => a.name === 'id')) {
   hostNode.attrs.unshift({ name: 'id', value: 'dc-root' });
 }
 
-const body = frag.childNodes.map((n) => emitNode(n, 2)).filter(Boolean).join('\n');
+const body = frag.childNodes.map((n) => emitNode(n, new Set(), 2)).filter(Boolean).join('\n');
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
-const tsx = `/* GENERATED by tools/dc2jsx.mjs from "GOTCHA Campaign Landing.dc.html".
+const tsx = `/* GENERATED by tools/dc2jsx.mjs from "${DESIGN_CFG.src}".
    Do not edit: re-run \`npm run design:sync\` after changing the design. */
 /* eslint-disable */
 import React from 'react';
-import { st as $st, I as $I, A as $A } from '@/lib/dc';
+import { st as $st, I as $I, L as $L, A as $A } from '@/lib/dc';
 
-export default function Template({ v: $v }) {
+export default function ${DESIGN_CFG.component}({ v: $v }) {
   return (
     <>
 ${body}
@@ -426,7 +471,7 @@ ${body}
   );
 }
 `;
-fs.writeFileSync(path.join(OUT_DIR, 'Template.jsx'), tsx);
+fs.writeFileSync(path.join(OUT_DIR, `${DESIGN_CFG.component}.jsx`), tsx);
 
 /* ─────────── the design's global CSS ─────────── */
 
@@ -523,25 +568,18 @@ fs.writeFileSync(
     '\n',
 );
 
-if (droppedCount['פנייה בוואטסאפ'] !== 1) {
-  throw new Error(
-    `expected exactly one sticky-bar WhatsApp button to drop, found ` +
-      `${droppedCount['פנייה בוואטסאפ'] || 0}. The design changed; update DROPPED in tools/dc2jsx.mjs.`,
-  );
-}
-
-for (const [from, n] of Object.entries(assetFormatHits)) {
-  if (n === 0) {
+for (const from of EXPECTED_FORMAT_HITS[which]) {
+  if (!assetFormatHits[from]) {
     throw new Error(
-      `ASSET_FORMAT has an entry for "${from}" but the design no longer references it. ` +
-        'Drop the entry, and the converted file with it.',
+      `ASSET_FORMAT has an entry for "${from}" and the ${which} design no longer ` +
+        'references it. Drop the entry, and the converted file with it.',
     );
   }
 }
 
-console.log('Template.jsx :', tsx.split('\n').length, 'lines');
+console.log(`${DESIGN_CFG.component}.jsx`.padEnd(20), tsx.split('\n').length, 'lines');
 console.log('re-encoded   :', Object.entries(assetFormatHits).map(([k, n]) => `${k.split('/').pop()} x${n}`).join(', ') || 'none');
-console.log('campaign.css :', pseudoRules.length, 'pseudo rules +', designCss.split('\n').length, 'lines of design CSS');
+console.log(path.basename(CSS_OUT).padEnd(20), pseudoRules.length, 'pseudo rules +', designCss.split('\n').length, 'lines of design CSS');
 console.log('[style*=]    :', styleSelectors.length, 'selectors,', expanded, 'expanded to both spellings');
 if (warnings.length) {
   console.log('\nwarnings:');

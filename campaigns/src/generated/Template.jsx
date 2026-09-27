@@ -2,144 +2,88 @@
    Do not edit: re-run `npm run design:sync` after changing the design. */
 /* eslint-disable */
 import React from 'react';
-import { st as $st, I as $I, A as $A } from '@/lib/dc';
+import { st as $st, I as $I, L as $L, A as $A } from '@/lib/dc';
 
 export default function Template({ v: $v }) {
   return (
     <>
-    <div id="dc-root" data-bg="" aria-hidden="true" style={$st("position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;background:#F3EFE6")}>
+    <div id="dc-root" data-bg="" aria-hidden="true" style={$st("position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;background:#F5F1E9")}>
       {"\n  "}
-      <div data-bg-tint="" style={$st("position:absolute;inset:0;opacity:0;background:#E9E3D6")}></div>
-      {"\n  "}
-      <svg width="0" height="0" style={$st("position:absolute;width:0;height:0;overflow:hidden")} aria-hidden="true">
-        <filter id="gsharp" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
-          <feComponentTransfer in="SourceAlpha" result="hard">
-            <feFuncA type="discrete" tableValues="0 1"></feFuncA>
-          </feComponentTransfer>
-          <feFlood flood-color="#16150F" result="ink"></feFlood>
-          <feComposite in="ink" in2="hard" operator="in"></feComposite>
-        </filter>
-      </svg>
-      {"\n  "}
-      <div data-bg-glow="a" style={$st("position:absolute;top:50%;inset-inline-start:50%;width:230vmax;height:230vmax;margin:-115vmax 0 0 -115vmax;will-change:transform;opacity:.12")}>
+      <div data-bg-glow="" style={$st("position:absolute;top:50%;inset-inline-start:50%;width:150vmax;height:150vmax;margin:-75vmax 0 0 -75vmax;opacity:.07")}>
         {"\n    "}
-        <img src="/assets/logo/solid-icon-dark.png" alt="" style={$st("width:100%;height:100%;object-fit:contain;display:block;filter:url(#gsharp)")} />
+        <img src="/assets/logo/solid-icon-dark.png" alt="" style={$st("width:100%;height:100%;object-fit:contain;display:block")} />
         {"\n  "}
       </div>
       {"\n  "}
-      <div data-bg-dots="" style={$st("position:absolute;inset:-6vh -6vw;opacity:.3;will-change:background-position;background-image:radial-gradient(rgba(22,21,15,.08) .9px,transparent 1px);background-size:46px 46px")}></div>
+      <div data-bg-dots="" style={$st("position:absolute;inset:-6vh -6vw;opacity:.26;background-image:radial-gradient(rgba(22,21,15,.08) .9px,transparent 1px);background-size:46px 46px")}></div>
     </div>
-    <div dir="rtl" lang="he" style={$st("position:relative;z-index:1;max-width:100%;overflow-x:hidden;padding-bottom:96px")}>
+    <div dir="rtl" lang="he" style={$st("position:relative;z-index:1;max-width:100%;overflow-x:clip")}>
       {"\n\n  "}
-      <header data-focus="40,36,.98" data-part="ראש הדף" style={$st("max-width:1200px;margin:0 auto;padding:26px 22px 0;display:flex;align-items:center;gap:16px")}>
-        {"\n    "}
-        <img src="/assets/logo/line-horizontal-dark.png" alt="GOTCHA" style={$st("width:132px;height:auto;display:block")} />
-        {"\n    \n  "}
-      </header>
-      {"\n\n  "}
-      <section data-part="הכותרת" style={$st("max-width:1200px;margin:0 auto;padding:clamp(56px,9vh,110px) 22px clamp(24px,4vh,48px);display:flex;flex-direction:column;align-items:center;text-align:center")}>
-        {"\n    "}
-        <h1 style={$st("font-size:clamp(40px,7.4vw,92px);line-height:1.04;letter-spacing:-0.035em;font-weight:600;margin:0;max-width:min(100%,20em);text-wrap:balance")}>
-          {"כל השיחות עם הלקוחות"}
-          <br />
-          {"כל הטיפול -> במקום אחד"}
-        </h1>
-        {"\n    "}
-        <p style={$st("font-size:clamp(18px,2.2vw,24px);line-height:1.55;color:#4A4741;margin:clamp(18px,2.6vw,30px) 0 0;max-width:44ch;text-wrap:pretty")}>
-          {"GOTCHA מרכזת את שיחות הלקוחות ומאפשרת לעובדי AI לענות, לבדוק מידע ולבצע פעולות במערכות המחוברות. הצוות שלכם רואה הכול ויכול להצטרף בכל רגע"}
-        </p>
+      <div data-sticky-head="">
         {"\n  "}
-      </section>
+        <header style={$st("max-width:1200px;margin:0 auto;padding:22px 22px 0;display:flex;align-items:center;gap:16px")}>
+          {"\n    "}
+          <img src="/assets/logo/line-horizontal-dark.png" alt="GOTCHA" style={$st("width:126px;height:auto;display:block")} />
+          {"\n    "}
+          <a className="cmp0" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoHeader} data-desk="" style={$st("margin-inline-start:auto;display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 20px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FFFFFF;color:#16150F;font-size:15px;font-weight:600;white-space:nowrap")}>
+            {"לתיאום הדגמה אישית"}
+          </a>
+          {"\n  "}
+        </header>
+        {"\n  "}
+      </div>
       {"\n\n  "}
-      <section data-focus="34,30,1" data-part="הפנייה נכנסת" style={$st("max-width:1200px;margin:0 auto;padding:clamp(16px,3vh,40px) 22px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:clamp(32px,5vw,64px);align-items:center")}>
-        {"\n    "}
-        <div>
-          <div data-gift-hero={$v?.gift?.show} style={$st("position:relative;display:flex;flex-direction:column;align-items:center;margin-top:4px")}>
+      <section style={$st("max-width:1200px;margin:0 auto;padding:clamp(24px,4vw,44px) 22px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:clamp(24px,3.4vw,48px);align-items:start")}>
+        {"\n\n    "}
+        <div style={$st("display:flex;flex-direction:column;align-items:flex-start")}>
+          {"\n      "}
+          <h1 style={$st("font-size:clamp(31px,4.6vw,56px);line-height:1.09;letter-spacing:-0.032em;font-weight:600;margin:0;max-width:20ch;text-wrap:balance")}>
+            {"כל השיחות עם הלקוחות."}
+            <br />
+            {"כל הטיפול במקום אחד."}
+          </h1>
+          {"\n      "}
+          <p style={$st("font-size:clamp(16px,1.8vw,19px);line-height:1.6;color:#4A4741;margin:16px 0 0;max-width:48ch;text-wrap:pretty")}>
+            {"עובדי ה־AI של GOTCHA עונים ללקוחות, בודקים מידע ומבצעים פעולות במערכות המחוברות. הכול בסביבת עבודה אחת, לצד הצוות שלכם ובשליטתו"}
+          </p>
+          {"\n\n      "}
+          <div style={$st("margin-top:20px;width:min(100%,460px);border:1.5px solid #E6BCA9;background:#FFFFFF;border-radius:18px;padding:18px 20px;display:flex;flex-direction:column;gap:8px")}>
             {"\n        "}
-            <span aria-hidden="true" style={$st(`display:${$A($v?.gift?.cardDisplay)};position:absolute;bottom:44px;inset-inline-start:calc(50% + 26px);width:12px;height:12px;border-radius:50%;background:linear-gradient(170deg,#FFFFFF 0%,#F4F0E8 100%);border:1.5px solid #E8E2D6;animation:puff .4s cubic-bezier(.2,.9,.25,1) .1s both`)}></span>
-            {"\n        "}
-            <span aria-hidden="true" style={$st(`display:${$A($v?.gift?.cardDisplay)};position:absolute;bottom:62px;inset-inline-start:calc(50% + 44px);width:8px;height:8px;border-radius:50%;background:linear-gradient(170deg,#FFFFFF 0%,#F4F0E8 100%);border:1.5px solid #E8E2D6;animation:puff .4s cubic-bezier(.2,.9,.25,1) .22s both`)}></span>
-            {"\n\n        "}
-            <div style={$st(`display:${$A($v?.gift?.cardDisplay)};flex-direction:column;align-items:center;text-align:center;gap:10px;width:min(100%,330px);position:relative;z-index:1;margin-bottom:-82px;padding:22px 22px 96px;border-radius:26px 26px 18px 18px;background:linear-gradient(170deg,#FFFFFF 0%,#F4F0E8 100%);border:1.5px solid #E8E2D6;box-shadow:0 -10px 26px rgba(22,21,15,.10);transform-origin:50% 100%;animation:bubbleOut .8s cubic-bezier(.2,.9,.25,1) .34s both`)}>
-              {"\n          "}
-              <div style={$st("font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.2em;color:#8E3418")}>
-                {"מתנה · 50 העסקים הראשונים"}
-              </div>
-              {"\n          "}
-              <div style={$st("display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;justify-content:center;font-size:clamp(17px,2vw,20px);font-weight:600")}>
-                {"\n            "}
-                <span style={$st("font:500 clamp(34px,4vw,46px) 'IBM Plex Mono',monospace;direction:ltr")}>
-                  {"3"}
-                </span>
-                {"\n            "}
-                <span>
-                  {"חודשים ב-"}
-                </span>
-                {"\n            "}
-                <span style={$st("font:500 clamp(34px,4vw,46px) 'IBM Plex Mono',monospace;direction:ltr")}>
-                  {"$1"}
-                </span>
-                {"\n            "}
-                <span>
-                  {"בלבד!"}
-                </span>
-                {"\n          "}
-              </div>
-              {"\n          "}
-              <div style={$st("font-size:15px;line-height:1.5;color:#4A4741")}>
-                {"חיבור, אונבורדינג וליווי אישי כלולים · "}
-                <span style={$st("direction: ltr; unicode-bidi: isolate; display: inline-block;")}>
-                  {"1,000"}
-                </span>
-                {" קרדיטים בכל חודש מחדש!"}
-                <br />
-              </div>
-              {"\n          "}
-              <a className="cmp0" data-guard="" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoHero} style={$st("margin-top:6px;display:flex;align-items:center;justify-content:center;width:100%;min-height:52px;border-radius:15px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
-                {"קבעו פגישת דמו של 15 דק׳ עכשיו!"}
-              </a>
-              {"\n        "}
+            <div style={$st("font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.2em;color:#8E3418")}>
+              {"ההטבה · 50 העסקים הראשונים"}
             </div>
-            {"\n\n        "}
-            <button className="cmp1" type="button" onClick={$v?.ev?.giftOpen} style={$st("position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;border:0;background:transparent;padding:0 0 6px;cursor:pointer")}>
-              {"\n          "}
-              <span data-box="" aria-hidden="true" style={$st("position:relative;display:block;width:124px;height:119px;flex:none")}>
-                {"\n            "}
-                <span style={$st("position:absolute;z-index:2;left:0;right:0;bottom:0;height:60px;border-radius:5px;background:linear-gradient(160deg,#FFFFFF 0%,#F2EEE6 100%);box-shadow:0 8px 20px rgba(22,21,15,.14),inset 0 -6px 14px rgba(22,21,15,.05)")}></span>
-                {"\n            "}
-                <span style={$st("position:absolute;z-index:3;bottom:0;left:50%;margin-left:-7px;width:14px;height:60px;background:#C4552F")}></span>
-                {"\n            "}
-                <span data-lid="" style={$st("position:absolute;z-index:0;left:-3px;right:-3px;bottom:57px;height:19px;border-radius:6px;background:linear-gradient(160deg,#FFFFFF 0%,#EFEAE1 100%);box-shadow:0 6px 14px rgba(22,21,15,.13);transform-origin:50% 100%")}>
-                  {"\n              "}
-                  <span style={$st("position:absolute;top:0;bottom:0;left:50%;margin-left:-7px;width:14px;background:#C4552F")}></span>
-                  {"\n              "}
-                  <span style={$st("position:absolute;bottom:16px;left:50%;margin-left:-25px;width:50px;height:29px")}>
-                    {"\n                "}
-                    <span style={$st("position:absolute;bottom:0;left:0;width:26px;height:26px;border:5px solid #C4552F;border-radius:60% 60% 8% 60%;transform:rotate(-10deg)")}></span>
-                    {"\n                "}
-                    <span style={$st("position:absolute;bottom:0;right:0;width:26px;height:26px;border:5px solid #C4552F;border-radius:60% 60% 60% 8%;transform:rotate(10deg)")}></span>
-                    {"\n                "}
-                    <span style={$st("position:absolute;bottom:-2px;left:50%;margin-left:-4px;width:7px;height:7px;border-radius:50%;background:#8E3418")}></span>
-                    {"\n              "}
-                  </span>
-                  {"\n            "}
-                </span>
-                {"\n          "}
-              </span>
-              {"\n          "}
-              <span style={$st(`display:${$A($v?.gift?.boxDisplay)};font-size:17px;font-weight:600;color:#8E3418;animation:nudge 1.8s ease-in-out infinite`)}>
-                {"לחצו עליי לפתיחה"}
-              </span>
-              {"\n        "}
-            </button>
+            {"\n        "}
+            <div style={$st("font-size:clamp(18px,2.1vw,22px);font-weight:600;line-height:1.3")}>
+              {"3 חודשים ב-1$ בסך הכול!"}
+            </div>
+            {"\n        "}
+            <div style={$st("font-size:15.5px;line-height:1.55;color:#4A4741")}>
+              {"כולל חיבור, ליווי אישי ו־1,000 קרדיטים בכל חודש"}
+            </div>
+            {"\n        "}
+            <div style={$st("font-size:13px;line-height:1.55;color:#6B6660")}>
+              {"בתוספת מע״מ. ל־50 העסקים הראשונים ובכפוף לתנאי ההטבה."}
+            </div>
             {"\n      "}
           </div>
-          {"\n\n    "}
+          {"\n\n      "}
+          <div style={$st("margin-top:20px;display:flex;flex-wrap:wrap;align-items:center;gap:14px")}>
+            {"\n        "}
+            <a className="cmp1" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoHero} style={$st("display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:0 28px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:17px;font-weight:600;white-space:nowrap")}>
+              {"לתיאום הדגמה אישית"}
+            </a>
+            {"\n        "}
+            <a className="cmp2" href="#form" onClick={$v?.ev?.toForm} style={$st("font-size:16px;font-weight:600;border-bottom:1.5px solid #C4552F;white-space:nowrap")}>
+              {"מעדיפים שנחזור אליכם?"}
+            </a>
+            {"\n      "}
+          </div>
+          {"\n    "}
         </div>
         {"\n\n    "}
-        <div data-guard="" data-glass="" style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:24px;box-shadow:0 20px 50px rgba(22,21,15,.08);padding:clamp(20px,2.6vw,28px)")}>
+        <div data-desk="" style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:22px;box-shadow:0 18px 44px rgba(22,21,15,.07);padding:clamp(20px,2.4vw,26px)")}>
           {"\n      "}
-          <div style={$st("font-size:clamp(19px,2.2vw,23px);font-weight:600;line-height:1.3")}>
+          <div style={$st("font-size:20px;font-weight:600;line-height:1.3")}>
             {"השאירו פרטים ונחזור אליכם"}
           </div>
           {"\n      "}
@@ -147,30 +91,747 @@ export default function Template({ v: $v }) {
             {"נכיר את העסק ונראה לכם את GOTCHA בפעולה"}
           </p>
           {"\n      "}
-          {$v?.form?.sent ? (
-            <>
+          <form onSubmit={$v?.fa?.submit} noValidate="novalidate" style={$st("margin-top:16px;display:flex;flex-direction:column;gap:12px")}>
             {"\n        "}
-            <div role="status" style={$st("margin-top:18px;background:#E7F0D4;border-radius:16px;padding:18px 20px")}>
+            <label htmlFor="a-name" style={$st("display:block")}>
               {"\n          "}
-              <div style={$st("font-size:17px;font-weight:600;color:#243318")}>
-                {"תודה, הפרטים התקבלו — נחזור אליכם לתיאום הדגמה"}
+              <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
+                {"שם מלא "}
+                <span style={$st("color:#A8441F")}>
+                  {"*"}
+                </span>
+              </span>
+              {"\n          "}
+              <input id="a-name" type="text" name="name" autoComplete="name" onInput={$v?.fa?.onName} aria-invalid={$v?.fa?.hasName} style={$st("width:100%;min-height:50px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px")} />
+              {"\n          "}
+              {$v?.fa?.hasName ? (
+                <>
+                <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
+                  {$I($v?.fa?.eName)}
+                </span>
+                </>
+              ) : null}
+              {"\n        "}
+            </label>
+            {"\n        "}
+            <label htmlFor="a-phone" style={$st("display:block")}>
+              {"\n          "}
+              <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
+                {"טלפון "}
+                <span style={$st("color:#A8441F")}>
+                  {"*"}
+                </span>
+              </span>
+              {"\n          "}
+              <input id="a-phone" type="tel" name="phone" inputmode="tel" autoComplete="tel" dir="ltr" onInput={$v?.fa?.onPhone} aria-invalid={$v?.fa?.hasPhone} style={$st("width:100%;min-height:50px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
+              {"\n          "}
+              {$v?.fa?.hasPhone ? (
+                <>
+                <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
+                  {$I($v?.fa?.ePhone)}
+                </span>
+                </>
+              ) : null}
+              {"\n        "}
+            </label>
+            {"\n        "}
+            <label htmlFor="a-site" style={$st("display:block")}>
+              {"\n          "}
+              <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
+                {"אתר העסק "}
+                <span style={$st("color:#A8441F")}>
+                  {"*"}
+                </span>
+              </span>
+              {"\n          "}
+              <input id="a-site" type="text" name="site" inputmode="url" autoComplete="url" dir="ltr" onInput={$v?.fa?.onSite} aria-invalid={$v?.fa?.hasSite} style={$st("width:100%;min-height:50px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
+              {"\n          "}
+              {$v?.fa?.hasSite ? (
+                <>
+                <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
+                  {$I($v?.fa?.eSite)}
+                </span>
+                </>
+              ) : null}
+              {"\n        "}
+            </label>
+            {"\n        "}
+            <label htmlFor="a-email" style={$st("display:block")}>
+              {"\n          "}
+              <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
+                {"מייל"}
+              </span>
+              {"\n          "}
+              <input id="a-email" type="email" name="email" inputmode="email" autoComplete="email" dir="ltr" onInput={$v?.fa?.onEmail} aria-invalid={$v?.fa?.hasEmail} style={$st("width:100%;min-height:50px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
+              {"\n          "}
+              {$v?.fa?.hasEmail ? (
+                <>
+                <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
+                  {$I($v?.fa?.eEmail)}
+                </span>
+                </>
+              ) : null}
+              {"\n        "}
+            </label>
+            {"\n        "}
+            {$v?.fa?.hasForm ? (
+              <>
+              {"\n          "}
+              <div role="alert" style={$st("background:#F6E3DC;border-radius:13px;padding:13px 15px;font-size:14px;line-height:1.55;color:#7E2F18")}>
+                {$I($v?.fa?.eForm)}
+              </div>
+              {"\n        "}
+              </>
+            ) : null}
+            {"\n        "}
+            <button className="cmp3" type="submit" disabled={$v?.fa?.busy} style={$st("min-height:54px;border:0;border-radius:15px;background:#A8441F;color:#FFFFFF;font-size:17px;font-weight:600;cursor:pointer;white-space:nowrap")}>
+              {$I($v?.fa?.cta)}
+            </button>
+            {"\n        "}
+            <div style={$st("font-size:13px;line-height:1.6;color:#6B6660")}>
+              {"נשתמש בפרטים כדי לחזור אליכם בנוגע להדגמה · "}{$I($v?.legal?.privacy)}
+            </div>
+            {"\n      "}
+          </form>
+          {"\n    "}
+        </div>
+        {"\n  "}
+      </section>
+      {"\n\n  "}
+      <section style={$st("max-width:1200px;margin:0 auto;padding:clamp(30px,4.4vw,52px) 22px 0")}>
+        {"\n    "}
+        <div style={$st("text-align:center;font-size:clamp(17px,2vw,21px);font-weight:600;letter-spacing:-0.015em")}>
+          {"כל הערוצים שלכם במקום אחד"}
+        </div>
+        {"\n    "}
+        <div data-marquee="" dir="ltr" style={$st("margin-top:14px;border-top:1.5px solid #E6E2DA;border-bottom:1.5px solid #E6E2DA;padding:14px 0;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)")}>
+          {"\n      "}
+          <div data-track="" dir="ltr" style={$st("display:flex;align-items:center;gap:var(--mq);width:max-content;--mq:clamp(26px,4.4vw,56px)")}>
+            {"\n        "}
+            <span data-grp="" style={$st("display:flex;align-items:center;gap:var(--mq)")}>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/whatsapp.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"WhatsApp"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/instagram.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Instagram"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/facebook.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Messenger"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/gmail.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Gmail"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/outlook.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Outlook"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/slack.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Slack"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap;direction:rtl")}>
+                <img src="/assets/icons/globe.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"צ׳אט באתר"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap;direction:rtl")}>
+                <img src="/assets/icons/phone.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"טלפון"}
+              </span>
+              {"\n        "}
+            </span>
+            {"\n        "}
+            <span data-grp="" aria-hidden="true" style={$st("display:flex;align-items:center;gap:var(--mq)")}>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/whatsapp.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"WhatsApp"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/instagram.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Instagram"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/facebook.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Messenger"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/gmail.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Gmail"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/outlook.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Outlook"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap")}>
+                <img src="/assets/icons/slack.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"Slack"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap;direction:rtl")}>
+                <img src="/assets/icons/globe.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"צ׳אט באתר"}
+              </span>
+              {"\n          "}
+              <span style={$st("display:flex;align-items:center;gap:9px;font-size:15.5px;font-weight:500;white-space:nowrap;direction:rtl")}>
+                <img src="/assets/icons/phone.svg" alt="" width="21" height="21" style={$st("display:block")} />
+                {"טלפון"}
+              </span>
+              {"\n        "}
+            </span>
+            {"\n      "}
+          </div>
+          {"\n    "}
+        </div>
+        {"\n  "}
+      </section>
+      {"\n\n  "}
+      <section style={$st("max-width:1200px;margin:0 auto;padding:clamp(38px,5.4vw,70px) 22px 0")}>
+        {"\n    "}
+        <div style={$st("font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.2em;color:#8E3418")}>
+          {"המחשת תהליך"}
+        </div>
+        {"\n    "}
+        <h2 style={$st("font-size:clamp(24px,3.3vw,38px);line-height:1.16;letter-spacing:-0.026em;font-weight:600;margin:10px 0 0;max-width:24ch")}>
+          {"מההודעה של הלקוח ועד לטיפול בבקשה."}
+        </h2>
+        {"\n\n    "}
+        <div data-demo="" style={$st("margin-top:18px;border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:22px;overflow:hidden;box-shadow:0 16px 40px rgba(22,21,15,.06)")}>
+          {"\n      \n\n      "}
+          <div data-still="" style={$st("display:none;padding:20px;font-size:15.5px;line-height:1.75;color:#16150F")}>
+            {"\n        "}
+            <div style={$st("font-weight:600;margin-bottom:8px")}>
+              {"שלבי הטיפול"}
+            </div>
+            {"\n        "}
+            <div>
+              {"1 · דנה כהן כותבת בוואטסאפ שההזמנה לא הגיעה. הפנייה מסומנת ״בטיפול עובד AI״."}
+            </div>
+            {"\n        "}
+            <div>
+              {"2 · נשלף המידע: לקוחה קיימת, היסטוריית שיחה, הזמנה 1842# ב־Shopify, עיכוב במרכז המיון."}
+            </div>
+            {"\n        "}
+            <div>
+              {"3 · עובד ה־AI מעדכן את דנה באותה שיחה."}
+            </div>
+            {"\n        "}
+            <div>
+              {"4 · נפתח בירור 582# מול חברת המשלוחים, וממתין לתשובה."}
+            </div>
+            {"\n        "}
+            <div>
+              {"5 · דנה מבקשת נציג. הנציג מקבל את השיחה, הקופיילוט מסכם ומציע תשובה שהוא שולח בעצמו."}
+            </div>
+            {"\n        "}
+            <div>
+              {"6 · השיחה, המידע והפעולות נשארים מול הצוות."}
+            </div>
+            {"\n      "}
+          </div>
+          {"\n\n      "}
+          <div role="tablist" aria-label="בחירת פלטפורמה" style={$st("display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px clamp(14px,2.2vw,22px) 0;background:#FBFAF7")}>
+            {"\n        "}
+            {$L($v?.demo?.plats).map((p, $index) => (
+              <React.Fragment key={$index}>
+                {"\n          "}
+                <button type="button" role="tab" aria-selected={p?.on} onClick={p?.pick} style={$st(`${$A(p?.style)}`)}>
+                  {"\n            "}
+                  <span aria-hidden="true" style={$st(`${$A(p?.iconStyle)}`)}></span>
+                  {$I(p?.name)}{"\n          "}
+                </button>
+                {"\n        "}
+              </React.Fragment>
+            ))}
+            {"\n        "}
+            <span style={$st("font-size:13px;color:#6B6660;margin-inline-start:auto")}>
+              {"אותו טיפול, בכל ערוץ"}
+            </span>
+            {"\n      "}
+          </div>
+          {"\n\n      "}
+          <div data-motion="" data-stage="" style={$st("display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:clamp(14px,2vw,22px);padding:clamp(14px,2.2vw,22px);background:#FBFAF7;align-items:stretch")}>
+            {"\n\n        "}
+            <div style={$st(`min-width:0;height:var(--h);border:1.5px solid #E2DCD2;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;background:${$A($v?.demo?.chatBg)}`)}>
+              {"\n          "}
+              <div style={$st(`display:flex;align-items:center;gap:11px;padding:10px 13px;background:${$A($v?.demo?.headBg)};color:${$A($v?.demo?.headFg)};border-bottom:1px solid ${$A($v?.demo?.headLine)}`)}>
+                {"\n            "}
+                <span aria-hidden="true" style={$st(`width:38px;height:38px;border-radius:50%;background:${$A($v?.demo?.avaBg)};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex:none`)}>
+                  {"ח"}
+                </span>
+                {"\n            "}
+                <div style={$st("flex:1;min-width:0")}>
+                  {"\n              "}
+                  <div style={$st("font-size:15.5px;font-weight:500;line-height:1.2")}>
+                    {"החנות שלי"}
+                  </div>
+                  {"\n              "}
+                  <div style={$st("font-size:12.5px;opacity:.88;margin-top:2px")}>
+                    {$I($v?.demo?.waSub)}
+                  </div>
+                  {"\n            "}
+                </div>
+                {"\n            "}
+                <span role="img" aria-label={$v?.demo?.platName} style={$st(`${$A($v?.demo?.headIcon)}`)}></span>
+                {"\n          "}
               </div>
               {"\n          "}
-              <a className="cmp0" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoForm} style={$st("margin-top:12px;display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:0 24px;border-radius:14px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
-                {"קבעו פגישת דמו של 15 דק׳ עכשיו!"}
-              </a>
+              <div style={$st(`flex:1;min-height:0;padding:14px 12px;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;background:${$A($v?.demo?.chatBg)};overflow:hidden;mask-image:linear-gradient(180deg,transparent 0,#000 22px);-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 22px)`)}>
+                {"\n            "}
+                {$L($v?.demo?.msgs).map((m, $index) => (
+                  <React.Fragment key={$index}>
+                    {"\n              "}
+                    <div style={$st(`${$A(m?.row)}`)}>
+                      {"\n                "}
+                      <div style={$st(`${$A(m?.bubble)}`)}>
+                        {"\n                  "}
+                        <div style={$st("font-size:14.5px;line-height:1.45")}>
+                          {$I(m?.t)}
+                        </div>
+                        {"\n                  "}
+                        <div style={$st(`${$A(m?.linkStyle)}`)}>
+                          {"\n                    "}
+                          <span aria-hidden="true" style={$st("width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:15px;flex:none")}>
+                            {"◆"}
+                          </span>
+                          {"\n                    "}
+                          <span style={$st("flex:1;min-width:0")}>
+                            {"\n                      "}
+                            <span style={$st("display:block;font-size:13.5px;font-weight:600;line-height:1.3")}>
+                              {$I(m?.linkTitle)}
+                            </span>
+                            {"\n                      "}
+                            <span style={$st("display:block;font-size:12px;opacity:.85;margin-top:1px;direction:ltr;unicode-bidi:isolate")}>
+                              {$I(m?.linkUrl)}
+                            </span>
+                            {"\n                    "}
+                          </span>
+                          {"\n                    "}
+                          <span style={$st("font-size:14px;font-weight:600;flex:none")}>
+                            {$I(m?.linkPrice)}
+                          </span>
+                          {"\n                  "}
+                        </div>
+                        {"\n                  "}
+                        <div style={$st(`${$A(m?.meta)}`)}>
+                          {$I(m?.time)}
+                        </div>
+                        {"\n                "}
+                      </div>
+                      {"\n              "}
+                    </div>
+                    {"\n            "}
+                  </React.Fragment>
+                ))}
+                {"\n            "}
+                {$v?.demo?.typing ? (
+                  <>
+                  {"\n              "}
+                  <div style={$st(`${$A($v?.demo?.typeBox)}`)}>
+                    {"\n                "}
+                    <span style={$st("display:inline-flex;align-items:center;gap:4px")}>
+                      {"\n                  "}
+                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8696A0;animation:dotJump 1s ease-in-out infinite")}></span>
+                      {"\n                  "}
+                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8696A0;animation:dotJump 1s ease-in-out .15s infinite")}></span>
+                      {"\n                  "}
+                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8696A0;animation:dotJump 1s ease-in-out .3s infinite")}></span>
+                      {"\n                "}
+                    </span>
+                    {"\n              "}
+                  </div>
+                  {"\n            "}
+                  </>
+                ) : null}
+                {"\n          "}
+              </div>
+              {"\n          "}
+              <div style={$st(`display:flex;align-items:center;gap:8px;padding:8px 10px;background:${$A($v?.demo?.barBg)}`)}>
+                {"\n            "}
+                <div style={$st(`flex:1;min-height:38px;border-radius:19px;background:${$A($v?.demo?.fieldBg)};display:flex;align-items:center;padding:0 14px;font-size:14px;color:${$A($v?.demo?.fieldInk)}`)}>
+                  {$I($v?.demo?.placeholder)}
+                </div>
+                {"\n            "}
+                <span aria-hidden="true" style={$st(`width:38px;height:38px;border-radius:50%;background:${$A($v?.demo?.sendColor)};color:#FFFFFF;display:flex;align-items:center;justify-content:center;flex:none;font-size:15px`)}>
+                  {"➤"}
+                </span>
+                {"\n          "}
+              </div>
+              {"\n        "}
+            </div>
+            {"\n\n        "}
+            <div style={$st("min-width:0;height:var(--h);display:flex;flex-direction:column;gap:11px;overflow:hidden")}>
+              {"\n          "}
+              <div style={$st("display:flex;align-items:center;gap:10px;flex-wrap:wrap")}>
+                {"\n            "}
+                <img src="/assets/logo/line-icon-dark.png" alt="GOTCHA" style={$st("width:22px;height:auto;display:block")} />
+                {"\n            "}
+                <span style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#6B6660")}>
+                  {"מרכז הטיפול של GOTCHA"}
+                </span>
+                {"\n            "}
+                <span style={$st(`${$A($v?.demo?.statusStyle)}`)}>
+                  {$I($v?.demo?.status)}
+                </span>
+                {"\n          "}
+              </div>
+              {"\n\n          "}
+              <div style={$st("flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:11px")}>
+                {"\n          "}
+                {$v?.demo?.showOps ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("border:1.5px solid #E6E2DA;border-radius:16px;background:#FFFFFF;padding:15px 17px;flex:none")}>
+                    {"\n              "}
+                    <div style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#6B6660")}>
+                      {$I($v?.demo?.opsTitle)}
+                    </div>
+                    {"\n              "}
+                    {$L($v?.demo?.ops).map((o, $index) => (
+                      <React.Fragment key={$index}>
+                        {"\n                "}
+                        <div style={$st(`display:flex;align-items:center;gap:10px;margin-top:11px;${$A(o?.delay)}`)}>
+                          {"\n                  "}
+                          <span aria-hidden="true" style={$st(`${$A(o?.dot)}`)}>
+                            {$I(o?.mark)}
+                          </span>
+                          {"\n                  "}
+                          <span style={$st("font-size:14.5px;line-height:1.4")}>
+                            {$I(o?.t)}
+                          </span>
+                          {"\n                "}
+                        </div>
+                        {"\n              "}
+                      </React.Fragment>
+                    ))}
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {"\n\n          "}
+                {$v?.demo?.showInfo ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("border:1.5px solid #E6E2DA;border-radius:16px;background:#FFFFFF;padding:15px 17px;animation:cardIn .3s cubic-bezier(.22,.68,.16,1) both")}>
+                    {"\n              "}
+                    <div style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#6B6660")}>
+                      {$I($v?.demo?.infoTitle)}
+                    </div>
+                    {"\n              "}
+                    {$L($v?.demo?.infoRows).map((r, $index) => (
+                      <React.Fragment key={$index}>
+                        {"\n                "}
+                        <div style={$st("display:flex;align-items:baseline;gap:10px;margin-top:9px")}>
+                          {"\n                  "}
+                          <span style={$st("font-size:14px;color:#6B6660;min-width:96px;flex:none")}>
+                            {$I(r?.l)}
+                          </span>
+                          {"\n                  "}
+                          <span style={$st(`${$A(r?.vStyle)}`)}>
+                            {$I(r?.v)}
+                          </span>
+                          {"\n                  "}
+                          <span style={$st("font-size:12px;color:#6B6660;margin-inline-start:auto")}>
+                            {$I(r?.tag)}
+                          </span>
+                          {"\n                "}
+                        </div>
+                        {"\n              "}
+                      </React.Fragment>
+                    ))}
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {"\n\n          "}
+                {$v?.demo?.showNote ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;line-height:1.55;color:#6B6660;animation:cardIn .3s cubic-bezier(.22,.68,.16,1) both")}>
+                    {$I($v?.demo?.note)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {"\n\n          "}
+                {$v?.demo?.showCopilot ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("border:1.5px solid #DED6F7;background:#F3F0FB;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:9px;animation:cardIn .3s cubic-bezier(.22,.68,.16,1) both")}>
+                    {"\n              "}
+                    <div style={$st("display:flex;align-items:center;gap:9px")}>
+                      <span style={$st("width:9px;height:9px;border-radius:50%;background:#8B76E8;flex:none")}></span>
+                      <span style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#5B4BA8")}>
+                        {"קופיילוט · אורי קיבל את השיחה"}
+                      </span>
+                    </div>
+                    {"\n              "}
+                    <div style={$st("background:#FFFFFF;border-radius:12px;padding:12px 14px")}>
+                      {"\n                "}
+                      <div style={$st("font-size:12.5px;color:#5B4BA8")}>
+                        {"סיכום הטיפול"}
+                      </div>
+                      {"\n                "}
+                      <div style={$st("font-size:14.5px;line-height:1.5;color:#2C2545;margin-top:3px")}>
+                        {$I($v?.demo?.copSum)}
+                      </div>
+                      {"\n              "}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("background:#FFFFFF;border-radius:12px;padding:12px 14px")}>
+                      {"\n                "}
+                      <div style={$st("font-size:12.5px;color:#5B4BA8")}>
+                        {"הצעת תשובה"}
+                      </div>
+                      {"\n                "}
+                      <div style={$st("font-size:14.5px;line-height:1.5;margin-top:3px")}>
+                        {$I($v?.demo?.copSug)}
+                      </div>
+                      {"\n                "}
+                      <button className="cmp4" type="button" onClick={$v?.demo?.useAnswer} style={$st("margin-top:11px;min-height:40px;padding:0 16px;border:0;border-radius:10px;background:#16150F;color:#FAF8F4;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap")}>
+                        {"שימוש בתשובה"}
+                      </button>
+                      {"\n              "}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("display:flex;align-items:center;gap:9px;background:#FFFFFF;border:1.5px solid #DED6F7;border-radius:12px;padding:10px 12px")}>
+                      {"\n                "}
+                      <span style={$st(`flex:1;min-width:0;font-size:14px;line-height:1.4;color:${$A($v?.demo?.draftColor)}`)}>
+                        {$I($v?.demo?.draftText)}
+                      </span>
+                      {"\n                "}
+                      <button type="button" onClick={$v?.demo?.sendRep} aria-label="שליחה" style={$st(`width:38px;height:38px;border:0;border-radius:50%;background:${$A($v?.demo?.sendBg)};color:#FAF8F4;font-size:15px;cursor:pointer;flex:none`)}>
+                        {"➤"}
+                      </button>
+                      {"\n              "}
+                    </div>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {"\n\n          "}
+                {$v?.demo?.showEnd ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:16px;padding:16px 18px;font-size:clamp(16px,1.8vw,19px);font-weight:600;line-height:1.4;animation:cardIn .3s cubic-bezier(.22,.68,.16,1) both")}>
+                    {"השיחה, המידע והפעולות. הכול מול הצוות שלכם."}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {"\n          "}
+              </div>
               {"\n        "}
             </div>
             {"\n      "}
-            </>
-          ) : null}
+          </div>
+          {"\n    "}
+        </div>
+        {"\n\n    \n  "}
+      </section>
+      {"\n\n  "}
+      <section style={$st("max-width:1200px;margin:0 auto;padding:clamp(38px,5.4vw,70px) 22px 0;text-align:center;display:flex;flex-direction:column;align-items:center")}>
+        {"\n    "}
+        <h2 style={$st("font-size:clamp(24px,3.3vw,38px);line-height:1.16;letter-spacing:-0.026em;font-weight:600;margin:0;max-width:26ch")}>
+          {"למי זה מתאים?"}
+        </h2>
+        {"\n    "}
+        <p style={$st("font-size:clamp(16px,1.9vw,20px);line-height:1.6;color:#4A4741;margin:14px 0 0;max-width:56ch;text-wrap:pretty")}>
+          {"לחנויות אונליין ולעסקים שמנהלים פניות לקוחות, מבעל עסק שעונה בעצמו ועד צוות שירות ומכירות."}
+        </p>
+        {"\n    "}
+        <p style={$st("font-size:clamp(15px,1.7vw,18px);line-height:1.6;color:#4A4741;margin:10px 0 0;max-width:56ch;text-wrap:pretty")}>
+          {"מענה לשאלות, טיפול בהזמנות, מעקב אחר פניות ותיאום פגישות, בהתאם למערכות ולתהליכים שלכם."}
+        </p>
+        {"\n  "}
+      </section>
+      {"\n\n  "}
+      <section style={$st("max-width:1200px;margin:0 auto;padding:clamp(30px,4.4vw,56px) 22px 0")}>
+        {"\n    "}
+        <div style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:22px;padding:clamp(20px,2.6vw,30px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:clamp(20px,3vw,40px);align-items:center")}>
           {"\n      "}
-          {$v?.form?.editing ? (
-            <>
+          <div>
             {"\n        "}
-            <form onSubmit={$v?.form?.submit} noValidate="novalidate" style={$st("margin-top:18px;display:flex;flex-direction:column;gap:12px")}>
+            <h2 style={$st("font-size:clamp(21px,2.8vw,32px);line-height:1.2;letter-spacing:-0.024em;font-weight:600;margin:0")}>
+              {"אנחנו כאן גם כדי לעזור לכם להתחיל"}
+            </h2>
+            {"\n        "}
+            <p style={$st("font-size:clamp(15px,1.7vw,18px);line-height:1.65;color:#4A4741;margin:14px 0 0;max-width:40ch;text-wrap:pretty")}>
+              {"אנחנו המייסדים של GOTCHA. נלווה אתכם בחיבור, בהגדרת תהליכי העבודה ובתחילת השימוש, כדי שהמערכת תשתלב ביום־יום של העסק"}
+            </p>
+            {"\n        "}
+            <div style={$st("margin-top:18px;display:flex;flex-wrap:wrap;gap:8px")}>
               {"\n          "}
-              <label data-field="name" style={$st("display:block")}>
+              <span dir="ltr" style={$st("display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;border:1.5px solid #E6E2DA;border-radius:11px;padding:8px 12px;white-space:nowrap")}>
+                <img src="/assets/icons/meta.svg" alt="" width="19" height="13" style={$st("display:block")} />
+                {"Meta Partners"}
+              </span>
+              {"\n          "}
+              <span dir="ltr" style={$st("display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;border:1.5px solid #E6E2DA;border-radius:11px;padding:8px 12px;white-space:nowrap")}>
+                <img src="/assets/icons/shopify.svg" alt="" width="16" height="16" style={$st("display:block")} />
+                {"Shopify Partners"}
+              </span>
+              {"\n          "}
+              <span dir="ltr" style={$st("display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;border:1.5px solid #E6E2DA;border-radius:11px;padding:8px 12px;white-space:nowrap")}>
+                <img src="/assets/icons/shield.svg" alt="" width="16" height="16" style={$st("display:block")} />
+                {"GDPR Aligned"}
+              </span>
+              {"\n        "}
+            </div>
+            {"\n      "}
+          </div>
+          {"\n      "}
+          <div style={$st("display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:340px;width:100%;justify-self:center")}>
+            {"\n        "}
+            <figure style={$st("margin:0")}>
+              {"\n          "}
+              <div style={$st("aspect-ratio:4/5;border-radius:16px;background:#F1EEE7;border:1.5px solid #E6E2DA;overflow:hidden")}>
+                <img src="/assets/team/founder-1.jpg" alt="מתן, שותף-מייסד ב-GOTCHA" style={$st("width:100%;height:100%;object-fit:cover;object-position:50% 20%;display:block")} />
+              </div>
+              {"\n          "}
+              <figcaption style={$st("margin-top:8px")}>
+                <span style={$st("display:block;font-size:15px;font-weight:600")}>
+                  {"מתן"}
+                </span>
+                <span style={$st("display:block;font-size:13.5px;color:#6B6660;margin-top:1px")}>
+                  {"שותף-מייסד"}
+                </span>
+              </figcaption>
+              {"\n        "}
+            </figure>
+            {"\n        "}
+            <figure style={$st("margin:0")}>
+              {"\n          "}
+              <div style={$st("aspect-ratio:4/5;border-radius:16px;background:#F1EEE7;border:1.5px solid #E6E2DA;overflow:hidden")}>
+                <img src="/assets/team/founder-2.jpg" alt="עומר, שותף-מייסד ב-GOTCHA" style={$st("width:100%;height:100%;object-fit:cover;object-position:50% 20%;display:block")} />
+              </div>
+              {"\n          "}
+              <figcaption style={$st("margin-top:8px")}>
+                <span style={$st("display:block;font-size:15px;font-weight:600")}>
+                  {"עומר"}
+                </span>
+                <span style={$st("display:block;font-size:13.5px;color:#6B6660;margin-top:1px")}>
+                  {"שותף-מייסד"}
+                </span>
+              </figcaption>
+              {"\n        "}
+            </figure>
+            {"\n      "}
+          </div>
+          {"\n    "}
+        </div>
+        {"\n  "}
+      </section>
+      {"\n\n  "}
+      <section id="form" style={$st("max-width:1200px;margin:0 auto;padding:clamp(38px,5.4vw,70px) 22px 0;scroll-margin-top:20px")}>
+        {"\n    "}
+        <h2 style={$st("font-size:clamp(23px,3.1vw,34px);line-height:1.18;letter-spacing:-0.025em;font-weight:600;margin:0;max-width:28ch")}>
+          {"מתחילים עם GOTCHA: שלושה חודשים בדולר אחד"}
+        </h2>
+        {"\n\n    "}
+        <div style={$st("margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:clamp(16px,2.4vw,26px);align-items:start")}>
+          {"\n\n      "}
+          <div style={$st("border:2px solid #E6BCA9;background:#FFFFFF;border-radius:20px;padding:clamp(20px,2.6vw,28px)")}>
+            {"\n        "}
+            <div style={$st("font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.2em;color:#8E3418")}>
+              {"ההטבה · 50 העסקים הראשונים"}
+            </div>
+            {"\n        "}
+            <div style={$st("margin-top:12px;font-size:clamp(19px,2.2vw,24px);font-weight:600;line-height:1.3")}>
+              {"שלושה חודשים בדולר אחד בסך הכול, בחיוב אחד"}
+            </div>
+            {"\n        "}
+            <div style={$st("margin-top:16px;display:flex;flex-direction:column;gap:10px")}>
+              {"\n          "}
+              <div style={$st("display:flex;align-items:center;gap:11px")}>
+                <span aria-hidden="true" style={$st("width:21px;height:21px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none")}>
+                  {"✓"}
+                </span>
+                <span style={$st("font-size:15.5px")}>
+                  <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
+                    {"1,000"}
+                  </span>
+                  {" קרדיטים כלולים בכל חודש"}
+                </span>
+              </div>
+              {"\n          "}
+              <div style={$st("display:flex;align-items:center;gap:11px")}>
+                <span aria-hidden="true" style={$st("width:21px;height:21px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none")}>
+                  {"✓"}
+                </span>
+                <span style={$st("font-size:15.5px")}>
+                  {"חיבור, אונבורדינג וליווי אישי כלולים"}
+                </span>
+              </div>
+              {"\n          "}
+              <div style={$st("display:flex;align-items:center;gap:11px")}>
+                <span aria-hidden="true" style={$st("width:21px;height:21px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none")}>
+                  {"✓"}
+                </span>
+                <span style={$st("font-size:15.5px")}>
+                  {"ל־50 העסקים הראשונים"}
+                </span>
+              </div>
+              {"\n        "}
+            </div>
+            {"\n        "}
+            <div style={$st("margin-top:18px;padding-top:15px;border-top:1.5px solid #F0EDE7;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.55;color:#4A4741")}>
+              {"\n          "}
+              <div>
+                {"ההטבה מסתיימת ב־31 באוקטובר 2026 או בהצטרפות 50 עסקים, המוקדם מביניהם"}
+              </div>
+              {"\n          "}
+              <div>
+                {"לאחר שלושה חודשים המחיר נקבע לפי התוכנית והשימוש שנבחרו, החל מ־39 דולר לחודש"}
+              </div>
+              {"\n          "}
+              <div>
+                {"החיוב ותקופת ההטבה מתחילים לאחר החיבור"}
+              </div>
+              {"\n          "}
+              <div>
+                {"המחירים בדולרים ואינם כוללים מע״מ "}
+                <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
+                  {"18%"}
+                </span>
+              </div>
+              {"\n        "}
+            </div>
+            {"\n      "}
+          </div>
+          {"\n\n      "}
+          <div style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:20px;padding:clamp(20px,2.6vw,28px)")}>
+            {"\n        "}
+            <div style={$st("font-size:clamp(18px,2.1vw,22px);font-weight:600;line-height:1.3")}>
+              {"בואו נראה איך GOTCHA יכולה לעבוד בעסק שלכם"}
+            </div>
+            {"\n        "}
+            <p style={$st("font-size:15.5px;line-height:1.6;color:#4A4741;margin:10px 0 0")}>
+              {"השאירו פרטים ונחזור אליכם להכיר את העסק ולהראות לכם את GOTCHA בפעולה"}
+            </p>
+            {"\n        "}
+            <form onSubmit={$v?.fb?.submit} noValidate="novalidate" style={$st("margin-top:18px;display:flex;flex-direction:column;gap:12px")}>
+              {"\n          "}
+              <label htmlFor="b-name" style={$st("display:block")}>
                 {"\n            "}
                 <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
                   {"שם מלא "}
@@ -179,19 +840,19 @@ export default function Template({ v: $v }) {
                   </span>
                 </span>
                 {"\n            "}
-                <input type="text" name="name" autoComplete="name" value={$v?.form?.name} onInput={$v?.form?.onName} aria-invalid={$v?.form?.hasName} style={$st("width:100%;min-height:50px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px")} />
+                <input id="b-name" type="text" name="name" autoComplete="name" onInput={$v?.fb?.onName} aria-invalid={$v?.fb?.hasName} style={$st("width:100%;min-height:52px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px")} />
                 {"\n            "}
-                {$v?.form?.hasName ? (
+                {$v?.fb?.hasName ? (
                   <>
                   <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
-                    {$I($v?.form?.eName)}
+                    {$I($v?.fb?.eName)}
                   </span>
                   </>
                 ) : null}
                 {"\n          "}
               </label>
               {"\n          "}
-              <label data-field="phone" style={$st("display:block")}>
+              <label htmlFor="b-phone" style={$st("display:block")}>
                 {"\n            "}
                 <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
                   {"טלפון "}
@@ -200,19 +861,19 @@ export default function Template({ v: $v }) {
                   </span>
                 </span>
                 {"\n            "}
-                <input type="tel" name="phone" inputmode="tel" autoComplete="tel" dir="ltr" value={$v?.form?.phone} onInput={$v?.form?.onPhone} aria-invalid={$v?.form?.hasPhone} style={$st("width:100%;min-height:50px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
+                <input id="b-phone" type="tel" name="phone" inputmode="tel" autoComplete="tel" dir="ltr" onInput={$v?.fb?.onPhone} aria-invalid={$v?.fb?.hasPhone} style={$st("width:100%;min-height:52px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
                 {"\n            "}
-                {$v?.form?.hasPhone ? (
+                {$v?.fb?.hasPhone ? (
                   <>
                   <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
-                    {$I($v?.form?.ePhone)}
+                    {$I($v?.fb?.ePhone)}
                   </span>
                   </>
                 ) : null}
                 {"\n          "}
               </label>
               {"\n          "}
-              <label data-field="site" style={$st("display:block")}>
+              <label htmlFor="b-site" style={$st("display:block")}>
                 {"\n            "}
                 <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
                   {"אתר העסק "}
@@ -221,1125 +882,149 @@ export default function Template({ v: $v }) {
                   </span>
                 </span>
                 {"\n            "}
-                <input type="text" name="site" inputmode="url" autoComplete="url" dir="ltr" value={$v?.form?.site} onInput={$v?.form?.onSite} aria-invalid={$v?.form?.hasSite} style={$st("width:100%;min-height:50px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
+                <input id="b-site" type="text" name="site" inputmode="url" autoComplete="url" dir="ltr" onInput={$v?.fb?.onSite} aria-invalid={$v?.fb?.hasSite} style={$st("width:100%;min-height:52px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
                 {"\n            "}
-                {$v?.form?.hasSite ? (
+                {$v?.fb?.hasSite ? (
                   <>
                   <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
-                    {$I($v?.form?.eSite)}
+                    {$I($v?.fb?.eSite)}
                   </span>
                   </>
                 ) : null}
                 {"\n          "}
               </label>
               {"\n          "}
-              <label data-field="email" style={$st("display:block")}>
+              <label htmlFor="b-email" style={$st("display:block")}>
                 {"\n            "}
                 <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
                   {"מייל"}
                 </span>
                 {"\n            "}
-                <input type="email" name="email" inputmode="email" autoComplete="email" dir="ltr" value={$v?.form?.email} onInput={$v?.form?.onEmail} aria-invalid={$v?.form?.hasEmail} style={$st("width:100%;min-height:50px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
+                <input id="b-email" type="email" name="email" inputmode="email" autoComplete="email" dir="ltr" onInput={$v?.fb?.onEmail} aria-invalid={$v?.fb?.hasEmail} style={$st("width:100%;min-height:52px;border-radius:13px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
                 {"\n            "}
-                {$v?.form?.hasEmail ? (
+                {$v?.fb?.hasEmail ? (
                   <>
                   <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
-                    {$I($v?.form?.eEmail)}
+                    {$I($v?.fb?.eEmail)}
                   </span>
                   </>
                 ) : null}
                 {"\n          "}
               </label>
               {"\n          "}
-              {$v?.form?.hasForm ? (
+              {$v?.fb?.hasForm ? (
                 <>
                 {"\n            "}
-                <div role="alert" style={$st("background:#F6E3DC;border-radius:14px;padding:13px 15px;font-size:14px;line-height:1.55;color:#7E2F18")}>
-                  {$I($v?.form?.eForm)}
+                <div role="alert" style={$st("background:#F6E3DC;border-radius:13px;padding:13px 15px;font-size:14px;line-height:1.55;color:#7E2F18")}>
+                  {$I($v?.fb?.eForm)}
                 </div>
                 {"\n          "}
                 </>
               ) : null}
               {"\n          "}
-              <button className="cmp2" type="submit" style={$st("min-height:54px;border:0;border-radius:16px;background:#A8441F;color:#FFFFFF;font-size:17px;font-weight:600;cursor:pointer")}>
-                {$I($v?.form?.cta)}
+              <button className="cmp3" type="submit" disabled={$v?.fb?.busy} style={$st("min-height:56px;border:0;border-radius:15px;background:#A8441F;color:#FFFFFF;font-size:17px;font-weight:600;cursor:pointer;white-space:nowrap")}>
+                {$I($v?.fb?.cta)}
               </button>
-              {"\n          \n          "}
+              {"\n          "}
+              <a className="cmp5" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoForm} style={$st("display:flex;align-items:center;justify-content:center;min-height:52px;border-radius:15px;border:1.5px solid #16150F;background:#FFFFFF;color:#16150F;font-size:16px;font-weight:600;white-space:nowrap")}>
+                {"לתיאום הדגמה אישית"}
+              </a>
+              {"\n          "}
               <div style={$st("font-size:13px;line-height:1.6;color:#6B6660")}>
                 {"נשתמש בפרטים כדי לחזור אליכם בנוגע להדגמה · "}{$I($v?.legal?.privacy)}
               </div>
               {"\n        "}
             </form>
             {"\n      "}
-            </>
-          ) : null}
+          </div>
           {"\n    "}
         </div>
         {"\n  "}
       </section>
       {"\n\n  "}
-      <section data-focus="20,26,1.02" data-part="הערוצים" id="channels" style={$st("max-width:1200px;margin:0 auto;padding:clamp(34px,5vw,56px) 22px 0")}>
+      <section style={$st("max-width:820px;margin:0 auto;padding:clamp(34px,4.8vw,60px) 22px 0")}>
         {"\n    "}
-        <div style={$st("text-align:center;font-size:clamp(18px,2.2vw,24px);font-weight:600;letter-spacing:-0.015em")}>
-          {"כל הערוצים שלכם במקום אחד"}
-        </div>
-        {"\n    "}
-        <div data-marquee="" dir="ltr" style={$st("margin-top:18px;border-top:1.5px solid #E6E2DA;border-bottom:1.5px solid #E6E2DA;padding:16px 0;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)")}>
-          {"\n      "}
-          <div data-track="" dir="ltr" style={$st("display:flex;align-items:center;gap:var(--mq,44px);width:max-content;--mq:clamp(28px,4.8vw,60px)")}>
-            {"\n        "}
-            <span data-grp="" style={$st("display:flex;align-items:center;gap:var(--mq,44px)")}>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/whatsapp.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"WhatsApp"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/instagram.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Instagram"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/facebook.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Messenger"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/gmail.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Gmail"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/outlook.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Outlook"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/slack.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Slack"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/globe.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"צ׳אט באתר"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/phone.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"טלפון"}
-              </span>
-            </span>
-            <span data-grp="" style={$st("display:flex;align-items:center;gap:var(--mq,44px)")}>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/whatsapp.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"WhatsApp"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/instagram.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Instagram"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/facebook.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Messenger"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/gmail.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Gmail"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/outlook.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Outlook"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/slack.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Slack"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/globe.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"צ׳אט באתר"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/phone.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"טלפון"}
-              </span>
-            </span>
-            <span data-grp="" style={$st("display:flex;align-items:center;gap:var(--mq,44px)")}>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/whatsapp.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"WhatsApp"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/instagram.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Instagram"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/facebook.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Messenger"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/gmail.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Gmail"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/outlook.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Outlook"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/slack.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"Slack"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/globe.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"צ׳אט באתר"}
-              </span>
-              <span style={$st("display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;white-space:nowrap")}>
-                <img src="/assets/icons/phone.svg" alt="" width="22" height="22" style={$st("display:block")} />
-                {"טלפון"}
-              </span>
-            </span>
-            {"\n      "}
-          </div>
-          {"\n    "}
-        </div>
-        {"\n    \n  "}
-      </section>
-      {"\n\n  "}
-      {"\n  "}
-      <section data-focus="0,0,1.08" data-part="מרכז הטיפול" style={$st("max-width:1200px;margin:0 auto;padding:clamp(48px,7vw,86px) 22px 0")}>
-        {"\n    "}
-        <h2 style={$st("font-size:clamp(26px,3.6vw,40px);line-height:1.18;letter-spacing:-0.025em;font-weight:600;margin:0;max-width:22em")}>
-          {"עובדי AI לצד הנציגים האנושיים, לאורך כל הדרך! "}
+        <h2 style={$st("font-size:clamp(22px,2.9vw,32px);line-height:1.2;letter-spacing:-0.024em;font-weight:600;margin:0")}>
+          {"שאלות נפוצות"}
         </h2>
         {"\n    "}
-        <p style={$st("font-size:clamp(16px,1.8vw,19px);line-height:1.6;color:#4A4741;margin:16px 0 0;max-width:38em;text-wrap:pretty")}>
-          {"עובד ה־AI מוצא את המידע, מבצע פעולות ומעדכן את הלקוח. הנציג רואה את התהליך ויכול להצטרף עם כל ההקשר מולו"}
-        </p>
-        {"\n\n    "}
-        <div data-watch="anim" data-anim={$v?.anim?.state} style={$st("margin-top:26px;border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:24px;box-shadow:0 18px 44px rgba(22,21,15,.07);overflow:hidden")}>
+        <div style={$st("margin-top:16px;display:flex;flex-direction:column;gap:9px")}>
           {"\n      "}
-          <div style={$st("display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1.5px solid #F0EDE7;background:#FAF8F4")}>
+          <div style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:15px;overflow:hidden")}>
             {"\n        "}
-            <span style={$st("font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#6B6660")}>
-              {"המחשת תהליך"}
-            </span>
-            {"\n        \n        \n      "}
-          </div>
-          {"\n\n      "}
-          <div data-still="" style={$st("display:none;padding:22px;font-size:16px;line-height:1.7;color:#16150F")}>
-            {"\n        "}
-            <div style={$st("font-weight:600;margin-bottom:10px")}>
-              {"שלבי הטיפול"}
-            </div>
-            {"\n        "}
-            <div>
-              {"1 · הודעה נכנסת בוואטסאפ מדנה כהן ומסומנת ״בטיפול עובד AI״."}
-            </div>
-            {"\n        "}
-            <div>
-              {"2 · המידע נשלף: לקוחה קיימת, הזמנה #1842 ב־Shopify, סטטוס משלוח — עיכוב במרכז המיון."}
-            </div>
-            {"\n        "}
-            <div>
-              {"3 · עובד ה־AI מעדכן את דנה באותה שיחה."}
-            </div>
-            {"\n        "}
-            <div>
-              {"4 · נפתח בירור #582 מול חברת המשלוחים. מצב הטיפול: ממתין לתשובה."}
-            </div>
-            {"\n        "}
-            <div>
-              {"5 · דנה מבקשת נציג; הנציג מקבל את השיחה והקופיילוט מציע לו תשובה שהוא שולח בעצמו."}
-            </div>
-            {"\n        "}
-            <div>
-              {"6 · השיחה, ההזמנה וסיכום הטיפול — הכול מול הצוות."}
-            </div>
-            {"\n      "}
-          </div>
-          {"\n\n      "}
-          <div data-motion="" data-scene="" style={$st("position:relative;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:clamp(14px,2vw,22px);padding:clamp(16px,2.4vw,24px);background:#FBFAF7")}>
-            {"\n        "}
-            <span data-demo-tk="" aria-hidden="true" style={$st("position:absolute;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;animation:prog 38s linear 0s both")}></span>
-            {"\n\n        "}
-            {"\n        "}
-            <div style={$st("display:flex;flex-direction:column;gap:10px;min-width:0;max-width:400px;width:100%")}>
-              {"\n          "}
-              <div style={$st("display:flex;align-items:center;gap:11px;padding-bottom:12px;border-bottom:1.5px solid #F0EDE7")}>
-                {"\n            "}
-                <span style={$st("width:38px;height:38px;border-radius:50%;background:#EFE9DF;display:flex;align-items:center;justify-content:center;flex:none")}>
-                  <img src="/assets/icons/whatsapp.svg" alt="" width="20" height="20" style={$st("display:block")} />
-                </span>
-                {"\n            "}
-                <div style={$st("flex:1;min-width:0")}>
-                  {"\n              "}
-                  <div style={$st("font-size:16px;font-weight:600")}>
-                    {"דנה כהן"}
-                  </div>
-                  {"\n              "}
-                  <span style={$st("position:relative;display:block;height:18px;font-size:13px;color:#6B6660")}>
-                    {"\n                "}
-                    <span style={$st("position:absolute;inset-inline-start:0;top:0")}>
-                      {"WhatsApp · לקוחה"}
-                    </span>
-                    {"\n                "}
-                    <span style={$st("position:absolute;inset-inline-start:0;top:0;color:#8E3418;font-weight:600;background:#FBFAF7;padding-inline-end:6px;animation:fIn .3s ease 9.9s both, fOut .3s ease 11.35s forwards")}>
-                      {"GOTCHA מקלידה…"}
-                    </span>
-                    {"\n                "}
-                    <span style={$st("position:absolute;inset-inline-start:0;top:0;color:#8E3418;font-weight:600;background:#FBFAF7;padding-inline-end:6px;animation:fIn .3s ease 18.8s both, fOut .3s ease 20.15s forwards")}>
-                      {"GOTCHA מקלידה…"}
-                    </span>
-                    {"\n                "}
-                    <span style={$st("position:absolute;inset-inline-start:0;top:0;color:#3D3470;font-weight:600;background:#FBFAF7;padding-inline-end:6px;animation:fIn .3s ease 30.9s both, fOut .3s ease 32.35s forwards")}>
-                      {"אורי מקליד…"}
-                    </span>
-                    {"\n              "}
-                  </span>
-                  {"\n            "}
-                </div>
-                {"\n            "}
-                <span style={$st("position:relative;display:block;width:104px;height:28px;flex:none")}>
-                  {"\n              "}
-                  <span style={$st("position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#8E3418;background:#FBEEE8;border-radius:8px;animation:fIn .5s ease .4s both, fOut .3s ease 25.4s forwards")}>
-                    {"בטיפול עובד AI"}
-                  </span>
-                  {"\n              "}
-                  <span style={$st("position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#3D3470;background:#F3F0FB;border-radius:8px;animation:pop .5s cubic-bezier(.2,.8,.2,1) 25.5s both")}>
-                    {"בטיפול נציג"}
-                  </span>
-                  {"\n            "}
-                </span>
-                {"\n          "}
-              </div>
-              {"\n\n          "}
-              <div style={$st("display:flex;flex-direction:column;gap:8px")}>
-                {"\n            "}
-                <div style={$st("align-self:flex-start;max-width:92%;overflow:hidden;flex:none;animation:grow .55s cubic-bezier(.2,.8,.2,1) .6s both")}>
-                  <div style={$st("background:#E7F0D4;border-radius:14px 14px 4px 14px;padding:10px 13px")}>
-                    <div style={$st("font-size:14px;line-height:1.45;color:#243318")}>
-                      {"היי, ההזמנה שלי עדיין לא הגיעה. אפשר לבדוק?"}
-                    </div>
-                    <div style={$st("font:500 11px 'IBM Plex Mono',monospace;color:#465231;margin-top:5px;direction:ltr;text-align:left")}>
-                      {"09:12 ✓✓"}
-                    </div>
-                  </div>
-                </div>
-                {"\n            "}
-                <div style={$st("align-self:flex-end;overflow:hidden;flex:none;animation:grow .4s cubic-bezier(.2,.8,.2,1) 9.9s both, shrink .25s ease 11.35s forwards")}>
-                  <div style={$st("background:#16150F;border-radius:14px 14px 14px 4px;padding:11px 14px;display:flex;align-items:center")}>
-                    <span style={$st("display:inline-flex;align-items:center;gap:4px")}>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8E8A83;animation:dotJump 1s ease-in-out infinite")}></span>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8E8A83;animation:dotJump 1s ease-in-out .15s infinite")}></span>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8E8A83;animation:dotJump 1s ease-in-out .3s infinite")}></span>
-                    </span>
-                  </div>
-                </div>
-                {"\n            "}
-                <div style={$st("align-self:flex-end;max-width:92%;overflow:hidden;flex:none;animation:grow .55s cubic-bezier(.2,.8,.2,1) 11.4s both")}>
-                  <div style={$st("background:#16150F;border-radius:14px 14px 14px 4px;padding:10px 13px")}>
-                    <div style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#8E8A83;direction:ltr;text-align:left")}>
-                      {"GOTCHA · עובד AI"}
-                    </div>
-                    <div style={$st("font-size:14px;line-height:1.45;color:#F7F5F1;margin-top:4px")}>
-                      {"בדקתי את הזמנה "}
-                      <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                        {"#1842"}
-                      </span>
-                      {". המשלוח מתעכב במרכז המיון."}
-                    </div>
-                  </div>
-                </div>
-                {"\n            "}
-                <div style={$st("align-self:flex-start;max-width:92%;overflow:hidden;flex:none;animation:grow .55s cubic-bezier(.2,.8,.2,1) 13.4s both")}>
-                  <div style={$st("background:#E7F0D4;border-radius:14px 14px 4px 14px;padding:10px 13px")}>
-                    <div style={$st("font-size:14px;line-height:1.45;color:#243318")}>
-                      {"זה כבר עבר את מועד האספקה שהובטח."}
-                    </div>
-                  </div>
-                </div>
-                {"\n            "}
-                <div style={$st("align-self:flex-end;overflow:hidden;flex:none;animation:grow .4s cubic-bezier(.2,.8,.2,1) 18.8s both, shrink .25s ease 20.15s forwards")}>
-                  <div style={$st("background:#16150F;border-radius:14px 14px 14px 4px;padding:11px 14px;display:flex;align-items:center")}>
-                    <span style={$st("display:inline-flex;align-items:center;gap:4px")}>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8E8A83;animation:dotJump 1s ease-in-out infinite")}></span>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8E8A83;animation:dotJump 1s ease-in-out .15s infinite")}></span>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#8E8A83;animation:dotJump 1s ease-in-out .3s infinite")}></span>
-                    </span>
-                  </div>
-                </div>
-                {"\n            "}
-                <div style={$st("align-self:flex-end;max-width:92%;overflow:hidden;flex:none;animation:grow .55s cubic-bezier(.2,.8,.2,1) 20.2s both")}>
-                  <div style={$st("background:#16150F;border-radius:14px 14px 14px 4px;padding:10px 13px")}>
-                    <div style={$st("font-size:14px;line-height:1.45;color:#F7F5F1")}>
-                      {"פתחתי בירור מול חברת המשלוחים. אעדכן אותך כאן כשנקבל תשובה."}
-                    </div>
-                  </div>
-                </div>
-                {"\n            "}
-                <div style={$st("align-self:flex-start;max-width:92%;overflow:hidden;flex:none;animation:grow .55s cubic-bezier(.2,.8,.2,1) 23.4s both")}>
-                  <div style={$st("background:#E7F0D4;border-radius:14px 14px 4px 14px;padding:10px 13px")}>
-                    <div style={$st("font-size:14px;line-height:1.45;color:#243318")}>
-                      {"אפשר לדבר עם נציג?"}
-                    </div>
-                  </div>
-                </div>
-                {"\n            "}
-                <div style={$st("align-self:flex-end;overflow:hidden;flex:none;animation:grow .4s cubic-bezier(.2,.8,.2,1) 30.9s both, shrink .25s ease 32.35s forwards")}>
-                  <div style={$st("background:#3D3470;border-radius:14px 14px 14px 4px;padding:11px 14px;display:flex;align-items:center")}>
-                    <span style={$st("display:inline-flex;align-items:center;gap:4px")}>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#C9BCF7;animation:dotJump 1s ease-in-out infinite")}></span>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#C9BCF7;animation:dotJump 1s ease-in-out .15s infinite")}></span>
-                      <span style={$st("width:6px;height:6px;border-radius:50%;background:#C9BCF7;animation:dotJump 1s ease-in-out .3s infinite")}></span>
-                    </span>
-                  </div>
-                </div>
-                {"\n            "}
-                <div style={$st("align-self:flex-end;max-width:92%;overflow:hidden;flex:none;animation:grow .55s cubic-bezier(.2,.8,.2,1) 32.4s both")}>
-                  <div style={$st("background:#3D3470;border-radius:14px 14px 14px 4px;padding:10px 13px")}>
-                    <div style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#C9BCF7")}>
-                      {"אורי · נציג"}
-                    </div>
-                    <div style={$st("font-size:14px;line-height:1.45;color:#F7F5F1;margin-top:4px")}>
-                      {"היי דנה, אני מצטרף לטיפול. אני רואה שהבירור כבר נפתח ואמשיך לעקוב אחריו מול חברת המשלוחים."}
-                    </div>
-                  </div>
-                </div>
-                {"\n          "}
-              </div>
-              {"\n        "}
-            </div>
-            {"\n\n        "}
-            {"\n        "}
-            <div data-steps="" style={$st("position:relative;min-height:clamp(400px,40vw,520px);min-width:0")}>
-              {"\n\n          "}
-              <div style={$st("position:absolute;inset:0;animation:fIn .5s ease .9s both, fOut .4s ease 5.0s forwards")}>
-                {"\n            "}
-                <div style={$st("border:1.5px solid #E6E2DA;border-radius:18px;background:#FFFFFF;padding:18px;animation:pop .6s cubic-bezier(.2,.8,.2,1) 1.6s both")}>
-                  {"\n              "}
-                  <div style={$st("font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#6B6660")}>
-                    {"כרטיס לקוחה נפתח"}
-                  </div>
-                  {"\n              "}
-                  <div style={$st("display:flex;align-items:center;gap:12px;margin-top:14px")}>
-                    {"\n                "}
-                    <span style={$st("width:42px;height:42px;border-radius:50%;background:#EFE9DF;color:#55524C;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none")}>
-                      {"דכ"}
-                    </span>
-                    {"\n                "}
-                    <div>
-                      <div style={$st("font-size:17px;font-weight:600")}>
-                        {"דנה כהן"}
-                      </div>
-                      <div style={$st("font-size:14px;color:#6B6660")}>
-                        {"פנייה חדשה · WhatsApp"}
-                      </div>
-                    </div>
-                    {"\n              "}
-                  </div>
-                  {"\n              "}
-                  <div style={$st("margin-top:16px;padding-top:14px;border-top:1.5px solid #F0EDE7;font-size:14px;color:#6B6660;animation:fUp .5s ease 2.6s both")}>
-                    {"עובד ה־AI מתחיל לטפל ומחפש את ההקשר במערכות המחוברות"}
-                  </div>
-                  {"\n            "}
-                </div>
-                {"\n          "}
-              </div>
-              {"\n\n          "}
-              <div style={$st("position:absolute;inset:0;animation:fIn .5s ease 5.2s both, fOut .4s ease 16.0s forwards")}>
-                {"\n            "}
-                <div style={$st("display:flex;flex-direction:column;gap:12px")}>
-                  {"\n              "}
-                  <div style={$st("border:1.5px solid #E6E2DA;border-radius:18px;background:#FFFFFF;padding:16px 18px")}>
-                    {"\n                "}
-                    <div style={$st("font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#6B6660")}>
-                      {"פעולות במערכות המחוברות"}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:10px;margin-top:14px;animation:fUp .45s ease 5.8s both")}>
-                      <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;animation:tick .4s cubic-bezier(.2,.8,.2,1) 6.1s both")}>
-                        {"✓"}
-                      </span>
-                      <span style={$st("font-size:15px")}>
-                        {"נמצאה לקוחה קיימת"}
-                      </span>
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:10px;margin-top:11px;animation:fUp .45s ease 7.1s both")}>
-                      <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;animation:tick .4s cubic-bezier(.2,.8,.2,1) 7.5s both")}>
-                        {"✓"}
-                      </span>
-                      <span style={$st("font-size:15px")}>
-                        {"נמצאה הזמנה "}
-                        <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                          {"#1842"}
-                        </span>
-                        {" ב־Shopify"}
-                      </span>
-                      <img src="/assets/icons/shopify.svg" alt="" width="17" height="17" style={$st("display:block;margin-inline-start:auto")} />
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:10px;margin-top:11px;animation:fUp .45s ease 8.4s both")}>
-                      <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;animation:tick .4s cubic-bezier(.2,.8,.2,1) 8.8s both")}>
-                        {"✓"}
-                      </span>
-                      <span style={$st("font-size:15px")}>
-                        {"נבדק סטטוס המשלוח"}
-                      </span>
-                    </div>
-                    {"\n              "}
-                  </div>
-                  {"\n              "}
-                  <div style={$st("border:1.5px solid #E6E2DA;border-radius:18px;background:#FFFFFF;padding:16px 18px;animation:pop .6s cubic-bezier(.2,.8,.2,1) 9.4s both")}>
-                    {"\n                "}
-                    <div style={$st("font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#6B6660")}>
-                      {"כרטיס מידע"}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:baseline;gap:10px;margin-top:12px")}>
-                      <span style={$st("font-size:14px;color:#6B6660;min-width:96px")}>
-                        {"לקוחה"}
-                      </span>
-                      <span style={$st("font-size:15px;font-weight:500")}>
-                        {"דנה כהן"}
-                      </span>
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:baseline;gap:10px;margin-top:8px")}>
-                      <span style={$st("font-size:14px;color:#6B6660;min-width:96px")}>
-                        {"הזמנה"}
-                      </span>
-                      <span style={$st("font:500 15px 'IBM Plex Mono',monospace;direction:ltr")}>
-                        {"#1842"}
-                      </span>
-                      <span style={$st("font-size:12px;color:#6B6660;margin-inline-start:auto")}>
-                        {"Shopify"}
-                      </span>
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:baseline;gap:10px;margin-top:8px")}>
-                      <span style={$st("font-size:14px;color:#6B6660;min-width:96px")}>
-                        {"סטטוס הזמנה"}
-                      </span>
-                      <span style={$st("font-size:15px;font-weight:500")}>
-                        {"נשלחה"}
-                      </span>
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:baseline;gap:10px;margin-top:8px")}>
-                      <span style={$st("font-size:14px;color:#6B6660;min-width:96px")}>
-                        {"סטטוס משלוח"}
-                      </span>
-                      <span style={$st("font-size:15px;font-weight:600;color:#8E3418")}>
-                        {"עיכוב במרכז המיון"}
-                      </span>
-                      <span style={$st("font-size:12px;color:#6B6660;margin-inline-start:auto")}>
-                        {"חברת המשלוחים"}
-                      </span>
-                    </div>
-                    {"\n              "}
-                  </div>
-                  {"\n            "}
-                </div>
-                {"\n          "}
-              </div>
-              {"\n\n          "}
-              <div style={$st("position:absolute;inset:0;animation:fIn .5s ease 16.2s both, fOut .4s ease 23.6s forwards")}>
-                {"\n            "}
-                <div style={$st("display:flex;flex-direction:column;gap:12px")}>
-                  {"\n              "}
-                  <div style={$st("border:1.5px solid #E6E2DA;border-radius:18px;background:#FFFFFF;padding:16px 18px")}>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:10px")}>
-                      <span style={$st("width:9px;height:9px;border-radius:50%;background:#4F7A2E;flex:none")}></span>
-                      <span style={$st("font-size:15px;font-weight:600")}>
-                        {"חברת המשלוחים מחוברת"}
-                      </span>
-                    </div>
-                    {"\n                "}
-                    <div style={$st("font-size:15px;margin-top:14px")}>
-                      {"פתיחת בירור על עיכוב"}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("position:relative;height:30px;margin-top:10px")}>
-                      {"\n                  "}
-                      <span style={$st("position:absolute;inset-inline-start:0;top:0;display:flex;align-items:center;height:30px;font-size:13px;font-weight:500;color:#7E5410;background:#F6EFD8;border-radius:8px;padding:0 12px;animation:fIn .4s ease 17.2s both, fOut .3s ease 19.2s forwards")}>
-                        {"נשלח…"}
-                      </span>
-                      {"\n                  "}
-                      <span style={$st("position:absolute;inset-inline-start:0;top:0;display:flex;align-items:center;height:30px;font-size:13px;font-weight:600;color:#3F6323;background:#E7F0D4;border-radius:8px;padding:0 12px;animation:pop .45s cubic-bezier(.2,.8,.2,1) 19.3s both")}>
-                        {"התקבל ✓"}
-                      </span>
-                      {"\n                "}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1.5px solid #F0EDE7;animation:fUp .5s ease 19.8s both")}>
-                      <span style={$st("font-size:15px;font-weight:600")}>
-                        {"בירור "}
-                        <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                          {"#582"}
-                        </span>
-                        {" נפתח"}
-                      </span>
-                    </div>
-                    {"\n              "}
-                  </div>
-                  {"\n              "}
-                  <div style={$st("display:flex;align-items:center;gap:10px;background:#F6EFD8;border-radius:14px;padding:13px 16px;animation:fUp .5s ease 21.0s both")}>
-                    <span style={$st("width:9px;height:9px;border-radius:50%;background:#E0B341;flex:none")}></span>
-                    <span style={$st("font-size:15px;font-weight:600;color:#7E5410")}>
-                      {"ממתין לתשובת חברת המשלוחים"}
-                    </span>
-                  </div>
-                  {"\n              "}
-                  <div style={$st("font-size:13px;line-height:1.55;color:#6B6660;animation:fUp .5s ease 21.8s both")}>
-                    {"הפעולות הזמינות תלויות בחיבור לחברת המשלוחים ובהרשאות שהוגדרו"}
-                  </div>
-                  {"\n            "}
-                </div>
-                {"\n          "}
-              </div>
-              {"\n\n          "}
-              <div style={$st("position:absolute;inset:0;animation:fIn .5s ease 23.8s both, fOut .4s ease 34.4s forwards")}>
-                {"\n            "}
-                <div style={$st("border:1.5px solid #DED6F7;background:#F3F0FB;border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:12px")}>
-                  {"\n              "}
-                  <div style={$st("display:flex;align-items:center;gap:10px")}>
-                    <span style={$st("width:9px;height:9px;border-radius:50%;background:#8B76E8;flex:none")}></span>
-                    <span style={$st("font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#5B4BA8")}>
-                      {"קופיילוט"}
-                    </span>
-                  </div>
-                  {"\n              "}
-                  <div style={$st("position:relative;height:46px")}>
-                    {"\n                "}
-                    <span style={$st("position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#16150F;color:#FAF8F4;border-radius:12px;font-size:15px;font-weight:600;animation:ring 1.3s ease 24.4s 1, fOut .3s ease 25.4s forwards")}>
-                      {"קבלת שיחה"}
-                    </span>
-                    {"\n                "}
-                    <span style={$st("position:absolute;inset:0;display:flex;align-items:center;gap:9px;background:#FFFFFF;border:1.5px solid #DED6F7;border-radius:12px;padding:0 14px;animation:pop .5s cubic-bezier(.2,.8,.2,1) 25.5s both")}>
-                      <span style={$st("width:9px;height:9px;border-radius:50%;background:#8B76E8;flex:none")}></span>
-                      <span style={$st("font-size:14px;font-weight:600;color:#3D3470")}>
-                        {"אורי קיבל את השיחה"}
-                      </span>
-                    </span>
-                    {"\n              "}
-                  </div>
-                  {"\n              "}
-                  <div style={$st("animation:fUp .5s ease 26.0s both;background:#FFFFFF;border-radius:14px;padding:12px 14px")}>
-                    {"\n                "}
-                    <div style={$st("font-size:13px;color:#5B4BA8")}>
-                      {"מה עובד ה־AI אסף עד כה"}
-                    </div>
-                    {"\n                "}
-                    <div style={$st("display:grid;grid-template-columns:auto 1fr;gap:5px 12px;margin-top:8px;font-size:14px;line-height:1.4")}>
-                      {"\n                  "}
-                      <span style={$st("color:#6B6660")}>
-                        {"לקוחה"}
-                      </span>
-                      <span style={$st("font-weight:500")}>
-                        {"דנה כהן · לקוחה קיימת"}
-                      </span>
-                      {"\n                  "}
-                      <span style={$st("color:#6B6660")}>
-                        {"הזמנה"}
-                      </span>
-                      <span style={$st("font-weight:500")}>
-                        <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                          {"#1842"}
-                        </span>
-                        {" · Shopify · נשלחה"}
-                      </span>
-                      {"\n                  "}
-                      <span style={$st("color:#6B6660")}>
-                        {"משלוח"}
-                      </span>
-                      <span style={$st("font-weight:500;color:#8E3418")}>
-                        {"עיכוב במרכז המיון"}
-                      </span>
-                      {"\n                  "}
-                      <span style={$st("color:#6B6660")}>
-                        {"פעולה"}
-                      </span>
-                      <span style={$st("font-weight:500")}>
-                        {"בירור "}
-                        <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                          {"#582"}
-                        </span>
-                        {" נפתח · ממתין לתשובה"}
-                      </span>
-                      {"\n                  "}
-                      <span style={$st("color:#6B6660")}>
-                        {"הודעות"}
-                      </span>
-                      <span style={$st("font-weight:500")}>
-                        {"2 מהלקוחה · 2 מעובד ה־AI"}
-                      </span>
-                      {"\n                "}
-                    </div>
-                    {"\n              "}
-                  </div>
-                  {"\n              "}
-                  <div style={$st("animation:fUp .5s ease 27.0s both")}>
-                    <div style={$st("font-size:13px;color:#5B4BA8")}>
-                      {"סיכום הטיפול"}
-                    </div>
-                    <div style={$st("font-size:15px;line-height:1.5;color:#2C2545;margin-top:3px")}>
-                      {"הזמנה "}
-                      <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                        {"#1842"}
-                      </span>
-                      {" מתעכבת במרכז המיון. נפתח בירור "}
-                      <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                        {"#582"}
-                      </span>
-                      {" מול חברת המשלוחים. ממתינים לתשובה."}
-                    </div>
-                  </div>
-                  {"\n              "}
-                  <div style={$st("background:#FFFFFF;border-radius:14px;padding:13px 15px;animation:fUp .5s ease 28.2s both")}>
-                    <div style={$st("font-size:13px;color:#5B4BA8")}>
-                      {"הצעת תשובה"}
-                    </div>
-                    <div style={$st("font-size:15px;line-height:1.5;margin-top:3px")}>
-                      {"היי דנה, אני מצטרף לטיפול. אני רואה שהבירור כבר נפתח ואמשיך לעקוב אחריו מול חברת המשלוחים."}
-                    </div>
-                    <div style={$st("margin-top:11px")}>
-                      <span style={$st("display:inline-flex;align-items:center;justify-content:center;height:38px;padding:0 16px;background:#16150F;color:#FAF8F4;border-radius:10px;font-size:14px;font-weight:600;animation:ring 1.2s ease 28.8s 1")}>
-                        {"שימוש בתשובה"}
-                      </span>
-                    </div>
-                  </div>
-                  {"\n              "}
-                  <div style={$st("display:flex;align-items:center;gap:9px;background:#FFFFFF;border:1.5px solid #DED6F7;border-radius:12px;padding:10px 13px;animation:fUp .5s ease 30.0s both")}>
-                    <span style={$st("flex:1;min-width:0;font-size:14px;line-height:1.4;color:#16150F")}>
-                      {"היי דנה, אני מצטרף לטיפול…"}
-                    </span>
-                    <span style={$st("display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:#16150F;color:#FAF8F4;font-size:17px;flex:none;animation:ring 1.1s ease 31.4s 1")}>
-                      {"←"}
-                    </span>
-                  </div>
-                  {"\n              "}
-                  <div style={$st("display:flex;align-items:center;gap:9px;animation:fIn .4s ease 32.6s both")}>
-                    <span style={$st("font-size:13px;font-weight:600;color:#3F6323")}>
-                      {"✓ הנציג שלח את התשובה"}
-                    </span>
-                  </div>
-                  {"\n            "}
-                </div>
-                {"\n          "}
-              </div>
-              {"\n\n          "}
-              <div style={$st("position:absolute;inset:0;animation:fIn .6s ease 34.6s both")}>
-                {"\n            "}
-                <div style={$st("height:100%;display:flex;flex-direction:column;justify-content:center;gap:12px;border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:18px;padding:20px")}>
-                  {"\n              "}
-                  <div style={$st("display:flex;align-items:center;gap:10px;animation:fUp .5s ease 34.9s both")}>
-                    <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none")}>
-                      {"✓"}
-                    </span>
-                    <span style={$st("font-size:15px")}>
-                      {"השיחה — במקום אחד"}
-                    </span>
-                  </div>
-                  {"\n              "}
-                  <div style={$st("display:flex;align-items:center;gap:10px;animation:fUp .5s ease 35.3s both")}>
-                    <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none")}>
-                      {"✓"}
-                    </span>
-                    <span style={$st("font-size:15px")}>
-                      {"ההזמנה והמידע — לצד השיחה"}
-                    </span>
-                  </div>
-                  {"\n              "}
-                  <div style={$st("display:flex;align-items:center;gap:10px;animation:fUp .5s ease 35.7s both")}>
-                    <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none")}>
-                      {"✓"}
-                    </span>
-                    <span style={$st("font-size:15px")}>
-                      {"בירור "}
-                      <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                        {"#582"}
-                      </span>
-                      {" — ממתין לתשובה"}
-                    </span>
-                  </div>
-                  {"\n              "}
-                  <div style={$st("font-size:clamp(17px,2vw,20px);font-weight:600;line-height:1.35;margin-top:8px;padding-top:14px;border-top:1.5px solid #F0EDE7;animation:fUp .6s ease 36.2s both")}>
-                    {"השיחה, המידע והפעולות — הכול מול הצוות שלכם"}
-                  </div>
-                  {"\n            "}
-                </div>
-                {"\n          "}
-              </div>
-              {"\n        "}
-            </div>
-            {"\n\n        \n      "}
-          </div>
-          {"\n    "}
-        </div>
-        {"\n\n    "}
-        <div style={$st("margin-top:26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px")}>
-          {"\n      \n      \n      \n    "}
-        </div>
-        {"\n\n    "}
-        <div style={$st("margin-top:clamp(40px,6vw,64px);display:flex;flex-direction:column;align-items:center;text-align:center")}>
-          {"\n      "}
-          <h2 style={$st("font-size:clamp(32px,5.4vw,64px);line-height:1.08;letter-spacing:-0.03em;font-weight:600;margin:0")}>
-            {"למי זה מתאים?"}
-          </h2>
-          {"\n      "}
-          <p style={$st("font-size:clamp(17px,2vw,22px);line-height:1.6;color:#4A4741;margin:18px 0 0;max-width:42ch;text-wrap:pretty")}>
-            {"לעסקים קטנים ובינוניים - מחנות Shopify שמנוהלת על ידי אדם אחד, ועד חנויות עם כמה נציגי מכירות שמטפלים במאות פניות ביום. בגדול: לכל מי שמדבר עם הלקוחות שלו"}
-          </p>
-          {"\n\n      "}
-          <div style={$st("margin-top:clamp(26px,3.4vw,38px);font-size:15px;font-weight:600;color:#55524C")}>
-            {"איך זה נראה אצלכם?"}
-          </div>
-          {"\n      "}
-          <div role="radiogroup" aria-label="גודל העסק" style={$st("margin-top:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:10px")}>
-            {"\n        "}
-            <button className="cmp3" type="button" role="radio" aria-checked={$v?.fit?.is0} onClick={$v?.fit?.pick0} data-on={$v?.fit?.is0} style={$st("min-height:48px;padding:0 18px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FFFFFF;font-size:15px;font-weight:500;cursor:pointer")}>
-              {"אני לבד מול הלקוחות"}
+            <button className="cmp6" type="button" onClick={$v?.faq?.q0} aria-expanded={$v?.faq?.is0} style={$st("width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:16px 18px;text-align:right;font-size:16px;font-weight:600;cursor:pointer")}>
+              {"האם זה מתאים גם לעסק עם מעט פניות?"}
+              <span aria-hidden="true" style={$st("margin-inline-start:auto;font-size:19px;color:#6B6660;flex:none")}>
+                {$I($v?.faq?.s0)}
+              </span>
             </button>
             {"\n        "}
-            <button className="cmp3" type="button" role="radio" aria-checked={$v?.fit?.is1} onClick={$v?.fit?.pick1} data-on={$v?.fit?.is1} style={$st("min-height:48px;padding:0 18px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FFFFFF;font-size:15px;font-weight:500;cursor:pointer")}>
-              {"צוות קטן, 2–3 אנשים"}
-            </button>
-            {"\n        "}
-            <button className="cmp3" type="button" role="radio" aria-checked={$v?.fit?.is2} onClick={$v?.fit?.pick2} data-on={$v?.fit?.is2} style={$st("min-height:48px;padding:0 18px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FFFFFF;font-size:15px;font-weight:500;cursor:pointer")}>
-              {"כמה נציגים, מאות פניות ביום"}
-            </button>
-            {"\n      "}
-          </div>
-          {"\n\n      "}
-          <div style={$st("margin-top:24px;font-size:clamp(17px,2vw,21px);line-height:1.55;color:#16150F;max-width:46ch")}>
-            {$I($v?.fit?.line)}
-          </div>
-          {"\n      "}
-          <a className="cmp0" data-guard="" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoAnim} style={$st("margin-top:22px;display:inline-flex;align-items:center;justify-content:center;min-height:58px;padding:0 30px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:17px;font-weight:600")}>
-            {$I($v?.fit?.cta)}
-          </a>
-          {"\n    "}
-        </div>
-        {"\n  "}
-      </section>
-      {"\n\n  "}
-      {"\n  "}
-      <section data-focus="-26,18,1.04" data-part="האנשים" style={$st("max-width:1200px;margin:0 auto;padding:clamp(48px,7vw,86px) 22px 0")}>
-        {"\n    "}
-        <div data-glass="" style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:24px;padding:clamp(22px,3vw,34px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:clamp(24px,3.5vw,44px);align-items:center")}>
-          {"\n      "}
-          <div>
-            {"\n        "}
-            <h2 style={$st("font-size:clamp(24px,3.2vw,36px);line-height:1.2;letter-spacing:-0.025em;font-weight:600;margin:0")}>
-              {"אנחנו כאן גם כדי לעזור לכם להתחיל"}
-            </h2>
-            {"\n        "}
-            <p style={$st("font-size:clamp(16px,1.8vw,19px);line-height:1.65;color:#4A4741;margin:16px 0 0;max-width:36em;text-wrap:pretty")}>
-              {"אנחנו המייסדים של GOTCHA. נלווה אתכם בחיבור, בהגדרת תהליכי העבודה ובתחילת השימוש, כדי שהמערכת תשתלב ביום־יום של העסק שלכם"}
-            </p>
-            {"\n        "}
-            <div style={$st("margin-top:22px;display:flex;flex-wrap:wrap;gap:10px")}>
-              {"\n          "}
-              <span dir="ltr" style={$st("display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;border:1.5px solid #E6E2DA;border-radius:12px;padding:9px 14px")}>
-                <img src="/assets/icons/meta.svg" alt="" width="20" height="14" style={$st("display:block")} />
-                {"Meta Business Partner"}
-              </span>
-              {"\n          "}
-              <span dir="ltr" style={$st("display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;border:1.5px solid #E6E2DA;border-radius:12px;padding:9px 14px")}>
-                <img src="/assets/icons/shopify.svg" alt="" width="17" height="17" style={$st("display:block")} />
-                {"Shopify Partner"}
-              </span>
-              {"\n          "}
-              <span dir="ltr" style={$st("display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;border:1.5px solid #E6E2DA;border-radius:12px;padding:9px 14px")}>
-                <img src="/assets/icons/shield.svg" alt="" width="17" height="17" style={$st("display:block")} />
-                {"GDPR aligned"}
-              </span>
-              {"\n        "}
-            </div>
-            {"\n      "}
-          </div>
-          {"\n      "}
-          <div style={$st("display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:14px")}>
-            {"\n        "}
-            <figure style={$st("margin:0")}>
-              {"\n          "}
-              <div data-photo="founder-1" style={$st("aspect-ratio:4/5;border-radius:18px;background:#F1EEE7;border:1.5px solid #E6E2DA;overflow:hidden")}>
-                <img src="/assets/team/founder-1.jpg" alt="מתן, שותף-מייסד ב-GOTCHA" style={$st("width:100%;height:100%;object-fit:cover;display:block")} />
-              </div>
-              {"\n          "}
-              <figcaption style={$st("margin-top:10px")}>
-                <span data-edit="founder-1-name" style={$st("display:block;font-size:16px;font-weight:600")}>
-                  {"מתן"}
-                </span>
-                <span data-edit="founder-1-role" style={$st("display:block;font-size:14px;color:#6B6660;margin-top:2px")}>
-                  {"שותף-מייסד"}
-                </span>
-              </figcaption>
-              {"\n        "}
-            </figure>
-            {"\n        "}
-            <figure style={$st("margin:0")}>
-              {"\n          "}
-              <div data-photo="founder-2" style={$st("aspect-ratio:4/5;border-radius:18px;background:#F1EEE7;border:1.5px solid #E6E2DA;overflow:hidden")}>
-                <img src="/assets/team/founder-2.jpg" alt="עומר, שותף-מייסד ב-GOTCHA" style={$st("width:100%;height:100%;object-fit:cover;display:block")} />
-              </div>
-              {"\n          "}
-              <figcaption style={$st("margin-top:10px")}>
-                <span data-edit="founder-2-name" style={$st("display:block;font-size:16px;font-weight:600")}>
-                  {"עומר"}
-                </span>
-                <span data-edit="founder-2-role" style={$st("display:block;font-size:14px;color:#6B6660;margin-top:2px")}>
-                  {"שותף-מייסד"}
-                </span>
-              </figcaption>
-              {"\n        "}
-            </figure>
-            {"\n      "}
-          </div>
-          {"\n    "}
-        </div>
-        {"\n  "}
-      </section>
-      {"\n\n  "}
-      {"\n  "}
-      <section id="form" data-focus="-30,-24,1" data-part="ההצעה" style={$st("max-width:1200px;margin:0 auto;padding:clamp(48px,7vw,86px) 22px 0;scroll-margin-top:24px")}>
-        {"\n    "}
-        <h2 style={$st("font-size:clamp(24px,3.4vw,38px);line-height:1.18;letter-spacing:-0.025em;font-weight:600;margin:0;max-width:26em")}>
-          {"מתחילים עם GOTCHA בשלושה חודשים ב"}
-          <span style={$st("direction: ltr; unicode-bidi: isolate; display: inline-block;")}>
-            {"$1-"}
-          </span>
-        </h2>
-        {"\n\n    "}
-        <div style={$st("margin-top:26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:clamp(18px,2.6vw,28px);align-items:start")}>
-          {"\n\n      "}
-          <div data-guard="" data-glass="" style={$st("border:2px solid #E6BCA9;background:#FFFFFF;border-radius:22px;padding:clamp(22px,2.8vw,30px);box-shadow:inset 0 0 0 6px #FFFFFF,inset 0 0 0 7.5px #F6E1D6,0 12px 30px rgba(196,85,47,.10)")}>
-            {"\n        "}
-            <div style={$st("font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.2em;color:#8E3418")}>
-              {"ההטבה · 50 העסקים הראשונים"}
-            </div>
-            {"\n        "}
-            <div style={$st("display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:14px;font-size:clamp(18px,2.2vw,22px);font-weight:600")}>
-              {"\n          "}
-              <span style={$st("font:500 clamp(34px,4vw,48px) 'IBM Plex Mono',monospace;direction:ltr")}>
-                {"3"}
-              </span>
-              {"\n          "}
-              <span>
-                {"חודשים ב-"}
-              </span>
-              {"\n          "}
-              <span style={$st("font:500 clamp(34px,4vw,48px) 'IBM Plex Mono',monospace;direction:ltr")}>
-                {"$1"}
-              </span>
-              {"\n          "}
-              <span>
-                {"בלבד!"}
-              </span>
-              {"\n        "}
-            </div>
-            {"\n        "}
-            <div style={$st("margin-top:20px;display:flex;flex-direction:column;gap:11px")}>
-              {"\n          "}
-              <div style={$st("display:flex;align-items:center;gap:11px")}>
-                <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none")}>
-                  {"✓"}
-                </span>
-                <span style={$st("font-size:16px")}>
-                  <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                    {"1,000"}
-                  </span>
-                  {" קרדיטים בכל חודש"}
-                </span>
-              </div>
-              {"\n          "}
-              <div style={$st("display:flex;align-items:center;gap:11px")}>
-                <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none")}>
-                  {"✓"}
-                </span>
-                <span style={$st("font-size:16px")}>
-                  {"חיבור, אונבורדינג וליווי אישי כלולים"}
-                </span>
-              </div>
-              {"\n          "}
-              <div style={$st("display:flex;align-items:center;gap:11px")}>
-                <span style={$st("width:22px;height:22px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none")}>
-                  {"✓"}
-                </span>
-                <span style={$st("font-size:16px")}>
-                  {"ביטול בכל שלב, בלי התחייבות"}
-                </span>
-              </div>
-              {"\n        "}
-            </div>
-            {"\n        "}
-            <div style={$st("margin-top:20px;padding-top:16px;border-top:1.5px solid #F0EDE7;display:flex;flex-direction:column;gap:7px;font-size:14px;line-height:1.55;color:#4A4741")}>
-              {"\n          "}
-              <div>
-                {"המחירים בדולרים ואינם כוללים מע״מ "}
-                <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                  {"18%"}
-                </span>
-              </div>
-              {"\n          "}
-              <div>
-                {"ההטבה מסתיימת ב־31 באוקטובר 2026 או בהצטרפות 50 עסקים, המוקדם מביניהם"}
-              </div>
-              {"\n          "}
-              <div>
-                {"לאחר שלושה חודשים המחיר נקבע לפי התוכנית והשימוש שתבחרו. המחיר הרגיל מתחיל ב־"}
-                <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                  {"$39"}
-                </span>
-                {" לחודש"}
-              </div>
-              {"\n          "}
-              <div>
-                {"החיוב ותקופת שלושת החודשים מתחילים לאחר החיבור"}
-              </div>
-              {"\n        "}
-            </div>
-            {"\n      "}
-          </div>
-          {"\n\n      "}
-          <div data-guard="" data-glass="" style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:22px;padding:clamp(20px,2.6vw,28px)")}>
-            {"\n        "}
-            <div style={$st("font-size:clamp(19px,2.2vw,23px);font-weight:600;line-height:1.3")}>
-              {"בואו נראה איך GOTCHA יכולה לעבוד בעסק שלכם"}
-            </div>
-            {"\n        "}
-            <p style={$st("font-size:16px;line-height:1.6;color:#4A4741;margin:12px 0 0")}>
-              {"השאירו פרטים ונחזור אליכם להכיר את העסק ולהראות לכם את GOTCHA בפעולה"}
-            </p>
-            {"\n\n        "}
-            <div data-thanks={$v?.form?.sent} style={$st("display:none")}></div>
-            {"\n        "}
-            {$v?.form?.sent ? (
+            {$v?.faq?.is0 ? (
               <>
-              {"\n          "}
-              <div role="status" style={$st("margin-top:20px;background:#E7F0D4;border-radius:16px;padding:18px 20px")}>
-                {"\n            "}
-                <div style={$st("font-size:17px;font-weight:600;color:#243318")}>
-                  {"תודה, הפרטים התקבלו — נחזור אליכם לתיאום הדגמה"}
-                </div>
-                {"\n            "}
-                <div style={$st("font-size:15px;color:#3F6323;margin-top:14px")}>
-                  {"רוצים כבר לבחור מועד?"}
-                </div>
-                {"\n            "}
-                <a className="cmp0" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoForm} style={$st("margin-top:12px;display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:0 24px;border-radius:14px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
-                  {"קבעו פגישת דמו של 15 דק׳ עכשיו!"}
-                </a>
-                {"\n          "}
+              <div style={$st("padding:0 18px 18px;font-size:15.5px;line-height:1.65;color:#4A4741")}>
+                {"כן. גם כשיש מעט פניות, הטיפול דורש מעבר בין שיחות, הזמנות ומערכות. בהדגמה נבדוק יחד איך GOTCHA משתלבת בתהליך שלכם."}
               </div>
-              {"\n        "}
               </>
             ) : null}
-            {"\n\n        "}
-            {$v?.form?.editing ? (
+            {"\n      "}
+          </div>
+          {"\n      "}
+          <div style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:15px;overflow:hidden")}>
+            {"\n        "}
+            <button className="cmp6" type="button" onClick={$v?.faq?.q1} aria-expanded={$v?.faq?.is1} style={$st("width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:16px 18px;text-align:right;font-size:16px;font-weight:600;cursor:pointer")}>
+              {"האם הנציגים נשארים בשליטה?"}
+              <span aria-hidden="true" style={$st("margin-inline-start:auto;font-size:19px;color:#6B6660;flex:none")}>
+                {$I($v?.faq?.s1)}
+              </span>
+            </button>
+            {"\n        "}
+            {$v?.faq?.is1 ? (
               <>
-              {"\n          "}
-              <form onSubmit={$v?.form?.submit} noValidate="novalidate" style={$st("margin-top:20px;display:flex;flex-direction:column;gap:14px")}>
-                {"\n            "}
-                <label data-field="name" style={$st("display:block")}>
-                  {"\n              "}
-                  <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
-                    {"שם מלא "}
-                    <span style={$st("color:#A8441F")}>
-                      {"*"}
-                    </span>
-                  </span>
-                  {"\n              "}
-                  <input type="text" name="name" autoComplete="name" value={$v?.form?.name} onInput={$v?.form?.onName} aria-invalid={$v?.form?.hasName} style={$st("width:100%;min-height:52px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px")} />
-                  {"\n              "}
-                  {$v?.form?.hasName ? (
-                    <>
-                    <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
-                      {$I($v?.form?.eName)}
-                    </span>
-                    </>
-                  ) : null}
-                  {"\n            "}
-                </label>
-                {"\n            "}
-                <label data-field="phone" style={$st("display:block")}>
-                  {"\n              "}
-                  <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
-                    {"טלפון "}
-                    <span style={$st("color:#A8441F")}>
-                      {"*"}
-                    </span>
-                  </span>
-                  {"\n              "}
-                  <input type="tel" name="phone" inputmode="tel" autoComplete="tel" dir="ltr" value={$v?.form?.phone} onInput={$v?.form?.onPhone} aria-invalid={$v?.form?.hasPhone} style={$st("width:100%;min-height:52px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
-                  {"\n              "}
-                  {$v?.form?.hasPhone ? (
-                    <>
-                    <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
-                      {$I($v?.form?.ePhone)}
-                    </span>
-                    </>
-                  ) : null}
-                  {"\n            "}
-                </label>
-                {"\n            "}
-                <label data-field="site" style={$st("display:block")}>
-                  {"\n              "}
-                  <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
-                    {"אתר העסק "}
-                    <span style={$st("color:#A8441F")}>
-                      {"*"}
-                    </span>
-                  </span>
-                  {"\n              "}
-                  <input type="text" name="site" inputmode="url" autoComplete="url" dir="ltr" value={$v?.form?.site} onInput={$v?.form?.onSite} aria-invalid={$v?.form?.hasSite} style={$st("width:100%;min-height:52px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
-                  {"\n              "}
-                  {$v?.form?.hasSite ? (
-                    <>
-                    <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
-                      {$I($v?.form?.eSite)}
-                    </span>
-                    </>
-                  ) : null}
-                  {"\n            "}
-                </label>
-                {"\n            "}
-                <label data-field="email" style={$st("display:block")}>
-                  {"\n              "}
-                  <span style={$st("display:block;font-size:14px;font-weight:600;margin-bottom:6px")}>
-                    {"מייל"}
-                  </span>
-                  {"\n              "}
-                  <input type="email" name="email" inputmode="email" autoComplete="email" dir="ltr" value={$v?.form?.email} onInput={$v?.form?.onEmail} aria-invalid={$v?.form?.hasEmail} style={$st("width:100%;min-height:52px;border-radius:14px;border:1.5px solid #D8D3C9;background:#FBFAF7;padding:0 14px;font-size:16px;text-align:left")} />
-                  {"\n              "}
-                  {$v?.form?.hasEmail ? (
-                    <>
-                    <span style={$st("display:block;font-size:13px;color:#B0472A;margin-top:6px")}>
-                      {$I($v?.form?.eEmail)}
-                    </span>
-                    </>
-                  ) : null}
-                  {"\n            "}
-                </label>
-                {"\n\n            "}
-                {$v?.form?.hasForm ? (
-                  <>
-                  {"\n              "}
-                  <div role="alert" style={$st("background:#F6E3DC;border-radius:14px;padding:13px 15px;font-size:14px;line-height:1.55;color:#7E2F18")}>
-                    {$I($v?.form?.eForm)}
-                  </div>
-                  {"\n            "}
-                  </>
-                ) : null}
-                {"\n\n            "}
-                <button className="cmp2" type="submit" style={$st("min-height:56px;border:0;border-radius:16px;background:#A8441F;color:#FFFFFF;font-size:18px;font-weight:600;cursor:pointer")}>
-                  {$I($v?.form?.cta)}
-                </button>
-                {"\n            "}
-                <a className="cmp0" data-guard="" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoHero} style={$st("display:flex;align-items:center;justify-content:center;min-height:56px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:18px;font-weight:600")}>
-                  {"קבעו פגישת דמו של 15 דק׳ עכשיו!"}
-                </a>
-                {"\n\n            "}
-                <div style={$st("font-size:13px;line-height:1.6;color:#6B6660")}>
-                  {"נשתמש בפרטים כדי לחזור אליכם בנוגע להדגמה · "}{$I($v?.legal?.privacy)}
-                </div>
-                {"\n          "}
-              </form>
-              {"\n        "}
+              <div style={$st("padding:0 18px 18px;font-size:15.5px;line-height:1.65;color:#4A4741")}>
+                {"כן. אפשר להגדיר מה עובד ה־AI מבצע, אילו פעולות דורשות אישור ומתי נציג מצטרף. כשהנציג מנהל את השיחה, הקופיילוט מסייע לו במידע, בסיכום ובהצעות לתשובה."}
+              </div>
+              </>
+            ) : null}
+            {"\n      "}
+          </div>
+          {"\n      "}
+          <div style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:15px;overflow:hidden")}>
+            {"\n        "}
+            <button className="cmp6" type="button" onClick={$v?.faq?.q2} aria-expanded={$v?.faq?.is2} style={$st("width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:16px 18px;text-align:right;font-size:16px;font-weight:600;cursor:pointer")}>
+              {"אפשר לבצע פעולות גם מול חברת המשלוחים שלנו?"}
+              <span aria-hidden="true" style={$st("margin-inline-start:auto;font-size:19px;color:#6B6660;flex:none")}>
+                {$I($v?.faq?.s2)}
+              </span>
+            </button>
+            {"\n        "}
+            {$v?.faq?.is2 ? (
+              <>
+              <div style={$st("padding:0 18px 18px;font-size:15.5px;line-height:1.65;color:#4A4741")}>
+                {"היכולת תלויה בחברת המשלוחים, בחיבור הזמין אליה ובהרשאות. בהדגמה נבדוק את המערכות שלכם ואת הפעולות שאפשר לבצע דרך GOTCHA."}
+              </div>
+              </>
+            ) : null}
+            {"\n      "}
+          </div>
+          {"\n      "}
+          <div style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:15px;overflow:hidden")}>
+            {"\n        "}
+            <button className="cmp6" type="button" onClick={$v?.faq?.q3} aria-expanded={$v?.faq?.is3} style={$st("width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:16px 18px;text-align:right;font-size:16px;font-weight:600;cursor:pointer")}>
+              {"איך מתחילים ומה קורה אחרי שלושת החודשים?"}
+              <span aria-hidden="true" style={$st("margin-inline-start:auto;font-size:19px;color:#6B6660;flex:none")}>
+                {$I($v?.faq?.s3)}
+              </span>
+            </button>
+            {"\n        "}
+            {$v?.faq?.is3 ? (
+              <>
+              <div style={$st("padding:0 18px 18px;font-size:15.5px;line-height:1.65;color:#4A4741")}>
+                {"ההטבה כוללת חיבור, אונבורדינג וליווי אישי, וכן "}
+                <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
+                  {"1,000"}
+                </span>
+                {" קרדיטים בכל חודש. החיוב ותקופת ההטבה מתחילים לאחר החיבור. לאחר שלושה חודשים המחיר נקבע לפי התוכנית והשימוש שנבחרו, החל מ־39 דולר לחודש, לפני מע״מ."}
+              </div>
               </>
             ) : null}
             {"\n      "}
@@ -1348,290 +1033,175 @@ export default function Template({ v: $v }) {
         </div>
         {"\n  "}
       </section>
-    </div>
-    {"\n\n  "}
-    {"\n  "}
-    <section data-focus="-8,-30,1.02" data-part="שאלות" style={$st("max-width:820px;margin:0 auto;padding:clamp(48px,7vw,86px) 22px 0")}>
-      {"\n    "}
-      <h2 style={$st("font-size:clamp(24px,3.2vw,34px);line-height:1.2;letter-spacing:-0.025em;font-weight:600;margin:0")}>
-        {"שאלות נפוצות"}
-      </h2>
-      {"\n    "}
-      <div style={$st("margin-top:20px;display:flex;flex-direction:column;gap:10px")}>
-        {"\n\n      "}
-        <div data-glass="" style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:16px;overflow:hidden")}>
-          {"\n        "}
-          <button className="cmp4" type="button" onClick={$v?.faq?.q0} aria-expanded={$v?.faq?.is0} style={$st("width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:18px 20px;text-align:right;font-size:17px;font-weight:600;cursor:pointer")}>
-            {"האם זה מתאים גם לעסק עם מעט פניות?"}
-            <span style={$st("margin-inline-start:auto;font-size:20px;color:#6B6660;flex:none")}>
-              {"+"}
-            </span>
-          </button>
-          {"\n        "}
-          {$v?.faq?.is0 ? (
-            <>
-            <div style={$st("padding:0 20px 20px;font-size:16px;line-height:1.65;color:#4A4741")}>
-              {"כן. גם כשיש מעט פניות, הטיפול יכול לדרוש מעבר בין שיחות, הזמנות ומערכות. בהדגמה נבדוק יחד איך GOTCHA יכולה להשתלב בתהליך שלכם."}
-            </div>
-            </>
-          ) : null}
-          {"\n      "}
-        </div>
-        {"\n\n      "}
-        <div data-glass="" style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:16px;overflow:hidden")}>
-          {"\n        "}
-          <button className="cmp4" type="button" onClick={$v?.faq?.q1} aria-expanded={$v?.faq?.is1} style={$st("width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:18px 20px;text-align:right;font-size:17px;font-weight:600;cursor:pointer")}>
-            {"האם הנציגים נשארים בשליטה?"}
-            <span style={$st("margin-inline-start:auto;font-size:20px;color:#6B6660;flex:none")}>
-              {"+"}
-            </span>
-          </button>
-          {"\n        "}
-          {$v?.faq?.is1 ? (
-            <>
-            <div style={$st("padding:0 20px 20px;font-size:16px;line-height:1.65;color:#4A4741")}>
-              {"כן. אפשר להגדיר מה עובד ה־AI מבצע, אילו פעולות דורשות אישור ומתי נציג מצטרף. כשהנציג מנהל את השיחה, הקופיילוט יכול לסייע לו עם מידע, סיכום והצעות לתשובה."}
-            </div>
-            </>
-          ) : null}
-          {"\n      "}
-        </div>
-        {"\n\n      "}
-        <div data-glass="" style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:16px;overflow:hidden")}>
-          {"\n        "}
-          <button className="cmp4" type="button" onClick={$v?.faq?.q2} aria-expanded={$v?.faq?.is2} style={$st("width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:18px 20px;text-align:right;font-size:17px;font-weight:600;cursor:pointer")}>
-            {"האם אפשר לטפל גם מול חברת המשלוחים שלנו?"}
-            <span style={$st("margin-inline-start:auto;font-size:20px;color:#6B6660;flex:none")}>
-              {"+"}
-            </span>
-          </button>
-          {"\n        "}
-          {$v?.faq?.is2 ? (
-            <>
-            <div style={$st("padding:0 20px 20px;font-size:16px;line-height:1.65;color:#4A4741")}>
-              {"היכולת תלויה בחברת המשלוחים ובחיבור הזמין אליה. בהדגמה נבדוק את החברה והמערכות שלכם ואת הפעולות שאפשר לבצע דרך GOTCHA."}
-            </div>
-            </>
-          ) : null}
-          {"\n      "}
-        </div>
-        {"\n\n      "}
-        <div data-glass="" style={$st("border:1.5px solid #E6E2DA;background:#FFFFFF;border-radius:16px;overflow:hidden")}>
-          {"\n        "}
-          <button className="cmp4" type="button" onClick={$v?.faq?.q3} aria-expanded={$v?.faq?.is3} style={$st("width:100%;display:flex;align-items:center;gap:14px;background:none;border:0;padding:18px 20px;text-align:right;font-size:17px;font-weight:600;cursor:pointer")}>
-            {"איך מתחילים ומה קורה אחרי שלושת החודשים?"}
-            <span style={$st("margin-inline-start:auto;font-size:20px;color:#6B6660;flex:none")}>
-              {"+"}
-            </span>
-          </button>
-          {"\n        "}
-          {$v?.faq?.is3 ? (
-            <>
-            <div style={$st("padding:0 20px 20px;font-size:16px;line-height:1.65;color:#4A4741")}>
-              {"ההטבה כוללת חיבור, אונבורדינג וליווי אישי, וכן "}
-              <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                {"1,000"}
-              </span>
-              {" קרדיטים בכל חודש. תקופת ההטבה והחיוב מתחילים לאחר החיבור. לאחר שלושה חודשים המחיר נקבע לפי התוכנית והשימוש שתבחרו, החל מ־39 דולר לחודש, לפני מע״מ."}
-            </div>
-            </>
-          ) : null}
-          {"\n      "}
-        </div>
+      {"\n\n  "}
+      <footer style={$st("margin-top:clamp(40px,6vw,76px);background:#16150F;color:#FAF8F4")}>
         {"\n    "}
-      </div>
-      {"\n  "}
-    </section>
-    {"\n\n  "}
-    {"\n  "}
-    <footer dir="rtl" style={$st("position:relative;z-index:1;margin-top:clamp(56px,8vw,100px);background:#16150F;color:#FAF8F4")}>
-      {"\n    "}
-      <div style={$st("max-width:1200px;margin:0 auto;padding:clamp(36px,5vw,64px) 22px clamp(28px,4vw,44px);display:flex;flex-direction:column;gap:clamp(26px,4vw,44px)")}>
-        {"\n\n      "}
-        <div style={$st("display:flex;flex-wrap:wrap;gap:clamp(24px,4vw,48px);justify-content:space-between;align-items:flex-start")}>
-          {"\n\n        "}
-          <div style={$st("flex:1 1 320px;min-width:min(100%,280px)")}>
-            {"\n          "}
-            <div style={$st("font-size:clamp(24px,3.2vw,36px);line-height:1.15;letter-spacing:-0.025em;font-weight:600;text-wrap:balance")}>
-              {"רוצים לראות את זה על העסק שלכם?"}
+        <div style={$st("max-width:1200px;margin:0 auto;padding:clamp(30px,4.4vw,56px) 22px clamp(24px,3.4vw,40px);display:flex;flex-direction:column;gap:clamp(22px,3.4vw,38px)")}>
+          {"\n      "}
+          <div style={$st("display:flex;flex-wrap:wrap;gap:clamp(22px,4vw,44px);justify-content:space-between;align-items:flex-start")}>
+            {"\n        "}
+            <div style={$st("flex:1 1 320px;min-width:min(100%,280px)")}>
+              {"\n          "}
+              <div style={$st("font-size:clamp(22px,3vw,32px);line-height:1.15;letter-spacing:-0.024em;font-weight:600;text-wrap:balance")}>
+                {"רוצים לראות את זה על העסק שלכם?"}
+              </div>
+              {"\n          "}
+              <div style={$st("font-size:15.5px;line-height:1.6;color:#B8B3AA;margin-top:10px;max-width:36ch")}>
+                {"נכיר את תהליכי העבודה שלכם ונראה איך עובד ה־AI מטפל בפניות"}
+              </div>
+              {"\n          "}
+              <div style={$st("margin-top:18px;display:flex;flex-wrap:wrap;gap:10px")}>
+                {"\n            "}
+                <a className="cmp7" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoFooter} style={$st("display:inline-flex;align-items:center;justify-content:center;min-height:54px;padding:0 24px;border-radius:15px;background:#FAF8F4;color:#16150F;font-size:16px;font-weight:600;white-space:nowrap")}>
+                  {"לתיאום הדגמה אישית"}
+                </a>
+                {"\n            "}
+                <a className="cmp8" href={$v?.cfg?.wa} target="_blank" rel="noopener" onClick={$v?.ev?.waFooter} style={$st("display:inline-flex;align-items:center;gap:9px;min-height:54px;padding:0 20px;border-radius:15px;background:#25D366;color:#0B2818;font-size:16px;font-weight:600;white-space:nowrap")}>
+                  {"כתבו לנו בוואטסאפ"}
+                </a>
+                {"\n          "}
+              </div>
+              {"\n        "}
             </div>
-            {"\n          "}
-            <div style={$st("font-size:16px;line-height:1.6;color:#B8B3AA;margin-top:12px;max-width:34ch")}>
-              {"פגישה קצרה של "}
-              <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                {"15"}
-              </span>
-              {" דקות, בלי התחייבות. נראה לכם איך עובד ה-AI מטפל בפניות שלכם"}
-            </div>
-            {"\n          "}
-            <div style={$st("margin-top:22px;display:flex;flex-wrap:wrap;gap:12px")}>
-              {"\n            "}
-              <a className="cmp5" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoFooter} style={$st("display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:0 26px;border-radius:16px;background:#FAF8F4;color:#16150F;font-size:17px;font-weight:600")}>
-                {"קבעו פגישת דמו של "}
-                <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                  {"15"}
-                </span>
-                {" דק׳ עכשיו!"}
-              </a>
-              {"\n            "}
-              <a className="cmp6" href={$v?.cfg?.wa} target="_blank" rel="noopener" onClick={$v?.ev?.waFooter} style={$st("display:inline-flex;align-items:center;gap:10px;min-height:56px;padding:0 22px;border-radius:16px;background:#25D366;color:#FFFFFF;font-size:17px;font-weight:600")}>
-                {"כתבו לנו בוואטסאפ"}
+            {"\n        "}
+            <div style={$st("flex:0 1 280px;min-width:min(100%,240px);display:flex;flex-direction:column;gap:10px")}>
+              {"\n          "}
+              <div style={$st("font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.2em;color:#8E8A83")}>
+                {"יצירת קשר"}
+              </div>
+              {"\n          "}
+              <a className="cmp9" href={$v?.cfg?.tel} onClick={$v?.ev?.telFooter} style={$st("font-size:17px;font-weight:500;color:#FAF8F4;direction:ltr;unicode-bidi:plaintext;text-align:start")}>
+                {$I($v?.cfg?.waDisplay)}
               </a>
               {"\n          "}
+              <a className="cmp9" href={$v?.cfg?.mailto} onClick={$v?.ev?.mailFooter} style={$st("font-size:17px;font-weight:500;color:#FAF8F4;direction:ltr;unicode-bidi:isolate;text-align:start")}>
+                {$I($v?.cfg?.email)}
+              </a>
+              {"\n        "}
             </div>
-            {"\n        "}
-          </div>
-          {"\n\n        "}
-          <div style={$st("flex:0 1 300px;min-width:min(100%,260px);display:flex;flex-direction:column;gap:12px")}>
-            {"\n          "}
-            <div style={$st("font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.2em;color:#8E8A83")}>
-              {"יצירת קשר"}
-            </div>
-            {"\n          "}
-            <a className="cmp7" href={$v?.cfg?.tel} onClick={$v?.ev?.telFooter} style={$st("font-size:18px;font-weight:500;color:#FAF8F4;direction:ltr;unicode-bidi:plaintext;text-align:start")}>
-              {$I($v?.cfg?.waDisplay)}
-            </a>
-            {"\n          "}
-            <a className="cmp7" href={$v?.cfg?.mailto} onClick={$v?.ev?.mailFooter} style={$st("font-size:18px;font-weight:500;color:#FAF8F4;direction:ltr;unicode-bidi:isolate;text-align:start")}>
-              {$I($v?.cfg?.email)}
-            </a>
-            {"\n          "}
-            <div style={$st("font-size:15px;line-height:1.6;color:#B8B3AA")}>
-              {"ימים א׳ עד ה׳, בשעות "}
-              <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                {"9:00"}
-              </span>
-              {" עד "}
-              <span style={$st("direction:ltr;unicode-bidi:isolate;display:inline-block")}>
-                {"18:00"}
-              </span>
-              <br />
-              {"בוואטסאפ עונים גם אחרי"}
-            </div>
-            {"\n        "}
+            {"\n      "}
           </div>
           {"\n      "}
-        </div>
-        {"\n\n      "}
-        <div style={$st("padding-top:22px;border-top:1.5px solid #2A2A2A;display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px")}>
-          {"\n        "}
-          <img src="/assets/logo/line-horizontal-light.png" alt="GOTCHA" style={$st("width:110px;height:auto;display:block")} />
-          {"\n        "}
-          <span style={$st("font-size:13px;color:#8E8A83")}>
-            {"© 2026 GOTCHA"}
-          </span>
-          {"\n        "}
-          <span style={$st("display:flex;flex-wrap:wrap;gap:14px;margin-inline-start:auto;font-size:13px")}>
-            {$I($v?.legal?.footer)}
-          </span>
-          {"\n      "}
-        </div>
-        {"\n    "}
-      </div>
-      {"\n  "}
-    </footer>
-    {"\n\n\n  "}
-    {"\n  "}
-    <div data-only="mobile" data-bar={$v?.bar?.hidden} style={$st("position:fixed;bottom:0;right:0;left:0;z-index:40;gap:10px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:rgba(250,248,244,.96);border-top:1.5px solid #E6E2DA;backdrop-filter:blur(8px)")}>
-      {"\n    "}
-      <a className="cmp8" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoBar} style={$st("flex:1;display:flex;align-items:center;justify-content:center;min-height:50px;border-radius:14px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
-        {"קבעו דמו של 15 דק׳"}
-      </a>
-      {"\n    "}
-      {"\n  "}
-    </div>
-    {"\n\n  "}
-    {"\n  "}
-    <div data-widget="" data-hide={$v?.wa?.hide} style={$st("position:fixed;inset-inline-end:18px;z-index:50;display:flex;flex-direction:column;align-items:flex-end;gap:10px")}>
-      {"\n    "}
-      {$v?.wa?.open ? (
-        <>
-        {"\n      "}
-        <div role="dialog" aria-label="דברו איתנו" dir="rtl" style={$st("width:min(92vw,340px);border-radius:14px;box-shadow:0 12px 40px rgba(11,20,26,.28);overflow:hidden;background:#EFEAE2;font-family:Heebo,'Segoe UI',Helvetica,sans-serif")}>
-          {"\n        "}
-          <div style={$st("display:flex;align-items:center;gap:12px;padding:10px 14px;background:#008069;color:#FFFFFF")}>
-            {"\n          "}
-            <span style={$st("width:40px;height:40px;border-radius:50%;background:#FFFFFF;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden")}>
-              <img src="/assets/logo/line-icon-dark.png" alt="GOTCHA" style={$st("display:block;width:29px;height:auto")} />
+          <div style={$st("padding-top:20px;border-top:1.5px solid #2A2A2A;display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px")}>
+            {"\n        "}
+            <img src="/assets/logo/line-horizontal-light.png" alt="GOTCHA" style={$st("width:104px;height:auto;display:block")} />
+            {"\n        "}
+            <span style={$st("font-size:13px;color:#8E8A83")}>
+              {"© 2026 GOTCHA"}
             </span>
-            {"\n          "}
-            <div style={$st("flex:1;min-width:0")}>
-              <div style={$st("font-size:16px;font-weight:500;line-height:1.2")}>
-                {"GOTCHA"}
+            {"\n        "}
+            <span style={$st("display:flex;flex-wrap:wrap;gap:14px;margin-inline-start:auto;font-size:13px")}>
+              {$I($v?.legal?.footer)}
+            </span>
+            {"\n      "}
+          </div>
+          {"\n    "}
+        </div>
+        {"\n  "}
+      </footer>
+      {"\n\n  "}
+      <div data-mob="" data-bar={$v?.bar?.state} style={$st("position:fixed;bottom:0;right:0;left:0;z-index:40;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:rgba(250,248,244,.97);border-top:1.5px solid #E6E2DA")}>
+        {"\n    "}
+        <a className="cmp2" href={$v?.cfg?.demo} target="_blank" rel="noopener" onClick={$v?.ev?.demoBar} style={$st("display:flex;align-items:center;justify-content:center;min-height:52px;border-radius:14px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600;white-space:nowrap")}>
+          {"לתיאום הדגמה"}
+        </a>
+        {"\n  "}
+      </div>
+      {"\n\n  "}
+      <div data-widget="" style={$st("position:fixed;inset-inline-start:18px;z-index:50;display:flex;flex-direction:column;align-items:flex-start;gap:10px")}>
+        {"\n    "}
+        {$v?.wa?.open ? (
+          <>
+          {"\n      "}
+          <div role="dialog" aria-label="דברו איתנו" dir="rtl" style={$st("width:min(92vw,330px);border-radius:14px;box-shadow:0 12px 40px rgba(11,20,26,.28);overflow:hidden;background:#EFEAE2")}>
+            {"\n        "}
+            <div style={$st("display:flex;align-items:center;gap:11px;padding:10px 13px;background:#008069;color:#FFFFFF")}>
+              {"\n          "}
+              <span style={$st("width:38px;height:38px;border-radius:50%;background:#FFFFFF;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden")}>
+                <img src="/assets/logo/line-icon-dark.png" alt="GOTCHA" style={$st("display:block;width:26px;height:auto")} />
+              </span>
+              {"\n          "}
+              <div style={$st("flex:1;min-width:0")}>
+                <div style={$st("font-size:15.5px;font-weight:600;line-height:1.2")}>
+                  {"דברו איתנו"}
+                </div>
+                <div style={$st("font-size:12.5px;opacity:.9;margin-top:2px")}>
+                  {"כתבו כאן ונמשיך בוואטסאפ."}
+                </div>
               </div>
-              <div style={$st("font-size:13px;opacity:.9;margin-top:2px")}>
-                {"כתבו כאן ונמשיך בוואטסאפ"}
-              </div>
+              {"\n          "}
+              <button className="cmpa" type="button" onClick={$v?.wa?.close} aria-label="סגירת החלון" style={$st("width:32px;height:32px;border:0;border-radius:50%;background:transparent;color:#FFFFFF;font-size:17px;cursor:pointer;flex:none")}>
+                {"✕"}
+              </button>
+              {"\n        "}
             </div>
-            {"\n          "}
-            <button className="cmp9" type="button" onClick={$v?.wa?.close} aria-label="סגירה" style={$st("width:34px;height:34px;border:0;border-radius:50%;background:transparent;color:#FFFFFF;font-size:18px;cursor:pointer;flex:none")}>
+            {"\n        "}
+            <div style={$st("padding:16px 12px 14px;background:#EFEAE2;display:flex;flex-direction:column;align-items:flex-start;gap:6px")}>
+              {"\n          "}
+              <div style={$st("max-width:85%;background:#FFFFFF;border-radius:0 10px 10px 10px;padding:7px 10px 6px;box-shadow:0 1px 0.5px rgba(11,20,26,.13);font-size:14.5px;line-height:1.4;color:#111B21")}>
+                {"היי! איך אפשר לעזור?"}
+                <span style={$st("display:block;text-align:left;font-size:11px;color:#667781;margin-top:2px")} dir="ltr">
+                  {"now"}
+                </span>
+              </div>
+              {"\n        "}
+            </div>
+            {"\n        "}
+            <div style={$st("padding:6px 8px 8px;background:#F0F2F5;display:flex;align-items:flex-end;gap:6px")}>
+              {"\n          "}
+              <textarea onChange={$v?.wa?.type} value={$v?.wa?.draft} placeholder="הקלידו הודעה" rows="1" aria-label="הודעה" style={$st("flex:1;min-width:0;min-height:44px;max-height:120px;border-radius:22px;border:0;background:#FFFFFF;padding:11px 16px;font-size:15px;line-height:1.4;resize:none;color:#111B21;box-shadow:0 1px 0.5px rgba(11,20,26,.1);outline:none;font-family:inherit")}></textarea>
+              {"\n          "}
+              <button className="cmpb" type="button" onClick={$v?.wa?.send} aria-label="שליחה בוואטסאפ" style={$st("width:44px;height:44px;flex:none;border:0;border-radius:50%;background:#00A884;color:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0")}>
+                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" style={$st("display:block;transform:scaleX(-1)")}>
+                  <path fill="currentColor" d="M1.101 21.757 23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z" />
+                </svg>
+              </button>
+              {"\n        "}
+            </div>
+            {"\n        "}
+            <a href="https://gotcha.co.il" target="_blank" rel="noopener" aria-label="Powered by GOTCHA" dir="ltr" style={$st("display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 0 8px;background:#F0F2F5;font-size:11px;color:#667781;text-decoration:none")}>
+              <span>
+                {"Powered by"}
+              </span>
+              <img src="/assets/logo/line-horizontal-dark.png" alt="GOTCHA" style={$st("height:36px;width:auto;display:block;margin:-11px -9px")} />
+            </a>
+            {"\n      "}
+          </div>
+          {"\n    "}
+          </>
+        ) : null}
+        {"\n\n    "}
+        {$v?.wa?.teased ? (
+          <>
+          {"\n      "}
+          <div style={$st("display:flex;align-items:center;gap:10px;background:#FFFFFF;border-radius:12px;padding:10px 13px;box-shadow:0 8px 24px rgba(11,20,26,.16);animation:fUp .4s ease both")}>
+            {"\n        "}
+            <button type="button" onClick={$v?.wa?.openIt} style={$st("border:0;background:none;padding:0;font-size:14px;font-weight:500;color:#111B21;cursor:pointer;white-space:nowrap")}>
+              {"יש שאלה? אנחנו כאן."}
+            </button>
+            {"\n        "}
+            <button type="button" onClick={$v?.wa?.dismiss} aria-label="סגירת ההזמנה" style={$st("width:24px;height:24px;border:0;border-radius:50%;background:#F0F2F5;color:#54656F;font-size:11px;cursor:pointer;flex:none")}>
               {"✕"}
             </button>
-            {"\n        "}
+            {"\n      "}
           </div>
-          {"\n        "}
-          <div style={$st("padding:16px 12px 8px;display:flex;flex-direction:column;gap:8px;min-height:120px;background:#EFEAE2 radial-gradient(rgba(0,0,0,.035) 1px,transparent 1.2px) 0 0/18px 18px")}>
-            {"\n          "}
-            <div style={$st("align-self:flex-start;max-width:86%;background:#FFFFFF;border-radius:0 8px 8px 8px;padding:8px 10px 6px;box-shadow:0 1px .5px rgba(11,20,26,.13);font-size:14.5px;line-height:1.4;color:#111B21")}>
-              {"היי, כאן GOTCHA. מה תרצו לדעת?"}
-              <div style={$st("font-size:11px;color:#667781;text-align:left;margin-top:3px;direction:ltr")}>
-                {"עכשיו"}
-              </div>
-            </div>
-            {"\n        "}
-          </div>
-          {"\n        "}
-          <div style={$st("display:flex;align-items:flex-end;gap:8px;padding:8px 10px 10px;background:#F0F2F5")}>
-            {"\n          "}
-            <textarea onInput={$v?.wa?.type} value={$v?.wa?.draft} placeholder="הקלידו הודעה" rows="1" style={$st("flex:1;min-height:42px;max-height:110px;border-radius:21px;border:0;background:#FFFFFF;padding:11px 14px;font-size:15px;line-height:1.35;resize:none;color:#111B21;outline-offset:-2px")}></textarea>
-            {"\n          "}
-            <button className="cmpa" type="button" onClick={$v?.wa?.send} aria-label="שליחה בוואטסאפ" style={$st("width:42px;height:42px;border:0;border-radius:50%;background:#00A884;color:#FFFFFF;cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center")}>
-              <svg viewBox="0 0 24 24" width="22" height="22" style={$st("transform:scaleX(-1)")} aria-hidden="true">
-                <path fill="currentColor" d="M1.1 21.8L23.4 12 1.1 2.2 1 9.8l15.5 2.2L1 14.2z" />
-              </svg>
-            </button>
-            {"\n        "}
-          </div>
-          {"\n        "}
-          <div style={$st("padding:6px 0 8px;background:#F0F2F5;text-align:center;font-size:11px;color:#667781")} dir="ltr">
-            {"Powered by GOTCHA"}
-          </div>
+          {"\n    "}
+          </>
+        ) : null}
+        {"\n\n    "}
+        <button type="button" onClick={$v?.wa?.toggle} aria-label={$v?.wa?.fabLabel} aria-expanded={$v?.wa?.open} style={$st("width:58px;height:58px;display:flex;align-items:center;justify-content:center;border:0;border-radius:50%;background:#25D366;cursor:pointer;box-shadow:0 10px 26px rgba(37,211,102,.34),0 2px 6px rgba(11,20,26,.12);flex:none;padding:0")}>
           {"\n      "}
-        </div>
-        {"\n    "}
-        </>
-      ) : null}
-      {"\n\n    "}
-      {$v?.wa?.teased ? (
-        <>
-        {"\n      "}
-        <div style={$st("display:flex;align-items:center;gap:10px;background:#FFFFFF;border-radius:12px;padding:10px 14px;box-shadow:0 8px 24px rgba(11,20,26,.16);animation:fUp .5s cubic-bezier(.22,.61,.36,1) both")}>
-          {"\n        "}
-          <span style={$st("font-size:14px;font-weight:500;color:#111B21")}>
-            {"יש שאלה? אנחנו כאן"}
+          <span style={$st(`display:${$A($v?.wa?.iconChat)};align-items:center;justify-content:center`)}>
+            <img src="/assets/icons/whatsapp.svg" alt="" width="32" height="32" style={$st("display:block;filter:brightness(0) invert(1)")} />
           </span>
-          {"\n        "}
-          <button type="button" onClick={$v?.wa?.close} aria-label="סגירת ההזמנה" style={$st("width:24px;height:24px;border:0;border-radius:50%;background:#F0F2F5;color:#54656F;font-size:12px;cursor:pointer;flex:none")}>
-            {"✕"}
-          </button>
           {"\n      "}
-        </div>
-        {"\n    "}
-        </>
-      ) : null}
-      {"\n\n    "}
-      <button data-fab="" type="button" onClick={$v?.wa?.toggle} aria-label={$v?.wa?.fabLabel} aria-expanded={$v?.wa?.open} title={$v?.wa?.fabLabel} style={$st("width:60px;height:60px;display:flex;align-items:center;justify-content:center;border:0;border-radius:50%;background:#25D366;color:#FFFFFF;cursor:pointer;box-shadow:0 10px 26px rgba(37,211,102,.34),0 2px 6px rgba(11,20,26,.12);flex:none;padding:0;overflow:hidden")}>
-        {"\n      "}
-        <span style={$st(`display:${$A($v?.wa?.iconChat)};align-items:center;justify-content:center`)}>
-          <img src="/assets/icons/whatsapp.svg" alt="WhatsApp" width="34" height="34" style={$st("display:block;filter:brightness(0) invert(1)")} />
-        </span>
-        {"\n      "}
-        <span style={$st(`display:${$A($v?.wa?.iconClose)};align-items:center;justify-content:center;width:34px;height:34px;font-size:22px;line-height:1`)}>
-          {"✕"}
-        </span>
-        {"\n    "}
-      </button>
-      {"\n  "}
+          <span style={$st(`display:${$A($v?.wa?.iconClose)};align-items:center;justify-content:center;width:32px;height:32px;font-size:21px;line-height:1;color:#FFFFFF`)}>
+            {"✕"}
+          </span>
+          {"\n    "}
+        </button>
+        {"\n  "}
+      </div>
     </div>
     </>
   );

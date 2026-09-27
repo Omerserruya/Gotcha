@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #FAF8F4; color: #16150F; font-family: Heebo, sans-serif; -webkit-font-smoothing: antialiased; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  a { color: #8E3418; text-decoration: none; }
+  a:hover { color: #C4552F; text-decoration: underline; }
+  :focus-visible { outline: 3px solid #C4552F; outline-offset: 2px; }
+</style>
+</helmet>
+
+<div dir="rtl" lang="he" style="min-height:100vh;display:flex;flex-direction:column;background:#FAF8F4">
+
+  <header style="max-width:760px;width:100%;margin:0 auto;padding:26px 22px 0">
+    <img src="assets/logo/line-horizontal-dark.png" alt="GOTCHA" style="width:128px;height:auto;display:block" />
+  </header>
+
+  <main style="flex:1;max-width:760px;width:100%;margin:0 auto;padding:clamp(28px,6vh,64px) 22px 48px;display:flex;flex-direction:column;align-items:flex-start">
+
+    <span aria-hidden="true" style="width:56px;height:56px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center;font-size:26px;flex:none">✓</span>
+
+    <h1 style="font-size:clamp(28px,4.4vw,44px);line-height:1.15;letter-spacing:-0.028em;font-weight:600;margin:20px 0 0;text-wrap:balance">תודה, הפרטים שלכם התקבלו!</h1>
+
+    <p style="font-size:clamp(17px,2vw,20px);line-height:1.6;color:#4A4741;margin:14px 0 0;max-width:44ch;text-wrap:pretty">נחזור אליכם לתיאום הדגמה אישית. רוצים כבר לבחור מועד שנוח לכם?</p>
+
+    <a href="{{ cfg.demo }}" target="_blank" rel="noopener" onClick="{{ ev.demo }}" style="margin-top:26px;display:inline-flex;align-items:center;justify-content:center;min-height:58px;padding:0 30px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:17px;font-weight:600;white-space:nowrap" style-hover="background:#2E2C26;text-decoration:none">לבחירת מועד ביומן</a>
+
+    <p style="font-size:16px;line-height:1.65;color:#4A4741;margin:18px 0 0;max-width:46ch">בפגישה נכיר את תהליכי העבודה שלכם ונראה איך GOTCHA יכולה להשתלב בעסק.</p>
+
+    <p style="font-size:14px;line-height:1.6;color:#6B6660;margin:10px 0 0;max-width:46ch">הפגישה תיקבע לאחר השלמת ההזמנה ביומן Google.</p>
+
+    <div style="margin-top:clamp(28px,4vw,40px);padding-top:22px;border-top:1.5px solid #E6E2DA;width:100%;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+      <div style="font-size:16px;font-weight:600">יש שאלה לפני הפגישה?</div>
+      <a href="{{ cfg.waAsk }}" target="_blank" rel="noopener" onClick="{{ ev.wa }}" style="display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:0 22px;border-radius:15px;border:1.5px solid #D8D3C9;background:#FFFFFF;color:#16150F;font-size:16px;font-weight:600;white-space:nowrap" style-hover="border-color:#16150F;text-decoration:none"><img src="assets/icons/whatsapp.svg" alt="" width="21" height="21" style="display:block" />כתבו לנו בוואטסאפ</a>
+    </div>
+  </main>
+
+  <footer style="background:#16150F;color:#FAF8F4">
+    <div style="max-width:760px;margin:0 auto;padding:26px 22px;display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px">
+      <img src="assets/logo/line-horizontal-light.png" alt="GOTCHA" style="width:104px;height:auto;display:block" />
+      <span style="font-size:13px;color:#8E8A83">© 2026 GOTCHA</span>
+      <span style="display:flex;flex-wrap:wrap;gap:16px;margin-inline-start:auto;font-size:13px">{{ legal.links }}</span>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:860}}">
+class Component extends DCLogic {
+  CFG = {
+    demo: 'https://calendar.app.google/5YgBtZFPCDbUpskA7',
+    waNumber: '972552633304',
+    privacyUrl: null,
+    termsUrl: null
+  };
+
+  track(name) {
+    const payload = { event: name };
+    (window.dataLayer = window.dataLayer || []).push(payload);
+    console.info('[measurement]', payload);
+  }
+
+  legalLink(label, url) {
+    if (url) return React.createElement('a', { href: url, target: '_blank', rel: 'noopener', style: { color: '#B8B3AA', fontWeight: 500 } }, label);
+    return React.createElement('span', { title: 'המסמך יחובר לפני הפרסום', style: { color: '#B8B3AA', borderBottom: '1px dotted #55524C', cursor: 'default' } }, label);
+  }
+
+  renderVals() {
+    const ask = 'היי, השארתי פרטים באתר ויש לי שאלה לפני ההדגמה.';
+    return {
+      cfg: {
+        demo: this.CFG.demo,
+        waAsk: 'https://wa.me/' + this.CFG.waNumber + '?text=' + encodeURIComponent(ask)
+      },
+      ev: {
+        demo: () => this.track('calendar_click_thankyou'),
+        wa: () => this.track('whatsapp_click_thankyou')
+      },
+      legal: {
+        links: [
+          this.legalLink('מדיניות פרטיות', this.CFG.privacyUrl),
+          this.legalLink('תנאי שימוש', this.CFG.termsUrl)
+        ].map((el, i) => React.cloneElement(el, { key: i }))
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>
