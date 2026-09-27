@@ -57,11 +57,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
    * thing that matters: `/api/auth/callback` and the BFF both sit under the
    * prefix, but a cookie written at `/v2` is not sent to `/` — and nothing
    * here needs it to be. What decides it is the other direction: the two
-   * applications use DIFFERENT cookie names (`gotcha_session` here,
-   * `__Host-gotcha_session` there), so a root-scoped cookie cannot collide
-   * with the legacy session, and narrowing the path would buy isolation that
-   * the name already provides while adding a way to lose the session on a
-   * path this app does not control.
+   * applications use DIFFERENT cookie names, so a root-scoped cookie cannot
+   * collide with the legacy session — and the whole safety argument rests on
+   * those names, so they are worth getting right:
+   *
+   *     this app      gotcha_session            (both environments)
+   *     the platform  __Host-gotcha_session     in PRODUCTION
+   *                   gotcha_session_dev        in DEV
+   *
+   * An earlier version of this comment named only the production one, which
+   * would have left somebody checking dev against the wrong string. The pair
+   * is distinct in both, so the conclusion holds.
+   *
+   * Narrowing the path would buy isolation the name already provides, while
+   * adding a way to lose the session on a path this app does not control.
    */
   response.cookies.delete({ name: sessionCookieOptions().name, path: '/' });
   return response;

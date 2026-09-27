@@ -195,11 +195,20 @@ which is the trap: it reads as removable.
 
 Verified by building with the prefix and probing:
 
-| | before | after |
+| request | before | after |
 | --- | --- | --- |
-| `/v2` | 404 | 307 → `/v2/en` |
-| `/v2` with `Accept-Language: he` | 404 | 307 → `/v2/he` |
+| `/v2`, no session | 404 | 307 → `/v2/api/auth/login?returnTo=%2F` |
+| `/v2`, no session, `Accept-Language: he` | 404 | the same — **the auth gate answers before locale negotiation** |
+| `/v2`, with a session | 404 | 307 → `/v2/en` |
+| `/v2`, with a session, `he` | 404 | 307 → `/v2/he` |
+| `/v2/sign-in` (public), `he` / `en` / none | — | `/v2/he/sign-in` / `/v2/en/sign-in` / `/v2/en/sign-in` |
 | `/en` | 404 | 404 — nothing bleeds into the legacy namespace |
+
+An earlier version of this table reported the Hebrew redirect without saying the
+request carried a session, which made it look like unauthenticated negotiation.
+Backend could not reproduce it and was right to say so: the gate fires first.
+The conclusion is unchanged — negotiation happens in the middleware — and the
+public-path row is where it is visible without a session.
 
 **In the middleware rather than the gateway**, deliberately: nginx could rewrite
 `/v2` to `/v2/en` and it would put locale policy in the gateway, hardcode a
@@ -238,6 +247,33 @@ person:
 
 `src/config/env-shapes.test.ts` pins a test per *shape* rather than per
 variable, and drives the real client module for the end-to-end case.
+
+## A cookie `Path` is not a URL this app emits
+
+`gotcha_login` was scoped to a hardcoded `/api/auth`. Authentik returns to
+`/v2/api/auth/callback`, the browser **declines to send a cookie scoped to a
+different path**, and the callback finds no PKCE verifier and reports
+`sign-in?error=expired` — which reads as a timeout.
+
+**Every layer reported success**: the gateway route, the registered redirect URI,
+the `Location` headers, the prefixed bundle, `/en` still 404ing. A 307 with the
+right `Location` is not a completed exchange.
+
+And it was **invisible to every instrument built for this deployment**. The
+build-arg sweep checks args; this audit walks redirect call sites; the config
+tests check env shapes. A cookie `Path` is a constraint on which URLs the
+*browser* will send a cookie to, so none of them can see it. It was found by
+walking a real browser.
+
+`LOGIN_STATE_COOKIE_PATH` now lives beside the cookie's name, and the setter and
+the deleter read the same constant — a delete whose path does not match the set
+is a **no-op**, which leaves a stale sealed state for the next attempt to pick
+up, and that failure would come and go.
+
+Swept the rest rather than reasoning about them: the only other cookie paths are
+the session cookie at `/`, one setter and three deleters, all consistent and all
+deliberately `/`. `NEXT_LOCALE` is written by next-intl, which prefixes it
+itself.
 
 ## What a running container does not prove
 

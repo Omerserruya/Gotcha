@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { LOGIN_STATE_COOKIE, unsealLoginState } from '@/auth/login-state';
+import { LOGIN_STATE_COOKIE, LOGIN_STATE_COOKIE_PATH, unsealLoginState } from '@/auth/login-state';
 import { authorizationCodeGrant, oidcConfiguration } from '@/auth/oidc';
 import { sealSession, sessionCookieOptions, type Session } from '@/auth/session';
 import { serverEnv } from '@/config/env.server';
@@ -100,6 +100,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const response = NextResponse.redirect(appUrl(loginState.r as `/${string}`, env.APP_ORIGIN));
   const cookieOptions = sessionCookieOptions();
   response.cookies.set(cookieOptions.name, sealed, cookieOptions);
-  response.cookies.delete({ name: LOGIN_STATE_COOKIE, path: '/api/auth' });
+  // Same constant as the setter: a delete whose path does not match is a
+  // no-op, and a stale sealed state can be picked up by the next attempt.
+  response.cookies.delete({ name: LOGIN_STATE_COOKIE, path: LOGIN_STATE_COOKIE_PATH });
   return response;
 }

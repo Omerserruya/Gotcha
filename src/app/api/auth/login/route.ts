@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import {
   LOGIN_STATE_COOKIE,
+  LOGIN_STATE_COOKIE_PATH,
   LOGIN_STATE_MAX_AGE_SECONDS,
   safeReturnPath,
   sealLoginState,
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       httpOnly: true,
       secure: !env.APP_ORIGIN.startsWith('http://'),
       sameSite: 'lax',
-      path: '/api/auth',
+      path: LOGIN_STATE_COOKIE_PATH,
       maxAge: LOGIN_STATE_MAX_AGE_SECONDS,
     },
   );

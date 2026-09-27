@@ -146,11 +146,22 @@ export const config = {
    * to a locale, and `/v2` returned a bare 404: the exact URL somebody would
    * type.
    *
-   * Verified by building with the prefix and probing:
+   * Verified by building with the prefix and probing. Note which requests
+   * carry a session, because the auth gate fires BEFORE locale negotiation and
+   * an earlier version of this note conflated the two:
    *
-   *   before   /v2 → 404
-   *   after    /v2 → 307 /v2/en   ·   Accept-Language: he → 307 /v2/he
-   *            /en → 404 still, so nothing bleeds into the legacy namespace
+   *   before                     /v2 → 404
+   *   after, no session          /v2 → 307 /v2/api/auth/login?returnTo=%2F
+   *                              — the same for any Accept-Language, because
+   *                                the gate answers first
+   *   after, with a session      /v2 → 307 /v2/en
+   *                              Accept-Language: he → 307 /v2/he
+   *   negotiation on a PUBLIC path, where it is visible unauthenticated:
+   *                              /v2/sign-in  he → /v2/he/sign-in
+   *                                           en → /v2/en/sign-in
+   *                                         none → /v2/en/sign-in
+   *   and throughout             /en → 404, so nothing bleeds into the legacy
+   *                                namespace
    *
    * ── AND WHY IT IS HERE RATHER THAN IN THE GATEWAY ──
    * nginx could rewrite `/v2` to `/v2/en` and it would be wrong twice: it

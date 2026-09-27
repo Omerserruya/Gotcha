@@ -4,6 +4,7 @@ import { CompactEncrypt, compactDecrypt } from 'jose';
 import { z } from 'zod';
 
 import { serverEnv } from '@/config/env.server';
+import { appPath } from '@/lib/base-path';
 
 /**
  * The short-lived state carried across the redirect to Authentik and back.
@@ -24,6 +25,38 @@ const loginStateSchema = z.object({
 export type LoginState = z.infer<typeof loginStateSchema>;
 
 export const LOGIN_STATE_COOKIE = 'gotcha_login';
+
+/**
+ * Where the login-state cookie is scoped — and it must carry the base path.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THIS WAS HARDCODED `/api/auth` AND IT BROKE SIGN-IN UNDER `/v2`
+ * ════════════════════════════════════════════════════════════════════════════
+ * A cookie `Path` is not a URL this app emits — it is a constraint on which
+ * URLs the **browser** will send the cookie to. Nothing in a redirect chain
+ * reveals it: every `Location` header was right, the provider accepted the
+ * redirect URI, credentials were accepted, and the callback still found no
+ * state, because the browser declined to send a cookie scoped to `/api/auth`
+ * to `/v2/api/auth/callback`. The result was `sign-in?error=expired` — a
+ * failure that reads as a timeout.
+ *
+ * Found by walking a real browser, and **invisible to every instrument built
+ * for this deployment**: the build-arg sweep checks args, the audit walks
+ * redirect call sites, the config tests check env shapes. None of them can see
+ * a cookie's scope.
+ *
+ * ── AND IT IS ONE CONSTANT BECAUSE THE SETTER AND THE DELETER MUST AGREE ──
+ * `login/route.ts` sets it and `callback/route.ts` deletes it. A delete whose
+ * path does not match the set is a no-op, which leaves a stale sealed state
+ * that the next attempt may pick up — a failure that would come and go. They
+ * read the same value from here rather than each writing a literal.
+ *
+ * Narrow rather than `/` on purpose: this cookie carries a PKCE verifier and
+ * exists for one round trip, so it should not be attached to every request the
+ * app makes. The session cookie is the opposite case and is scoped to `/`
+ * deliberately — see `sessionCookieOptions`.
+ */
+export const LOGIN_STATE_COOKIE_PATH = appPath('/api/auth');
 /** The user has ten minutes to finish signing in. */
 export const LOGIN_STATE_MAX_AGE_SECONDS = 600;
 
