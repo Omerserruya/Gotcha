@@ -198,6 +198,60 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
   });
 
   if (status === "SENT") {
+    /**
+     * ★ THE SORT KEY MOVES HERE, BECAUSE THIS IS WHERE THE SEND BECAME TRUE.
+     *
+     * No queued outbound ever advanced `lastMessageAt`. Every path through this
+     * worker - scheduled sends, `contacts.ts`, approvals, the idle nudges,
+     * voice-callback - creates its Message row as PENDING and hands off, and the
+     * word `lastMessageAt` did not appear anywhere in this service. So a
+     * scheduled message really delivered to a real customer left the
+     * conversation sitting wherever it already was in the inbox.
+     *
+     * It does NOT belong at the site that creates the row. Advancing the key
+     * there would claim a delivery that has not happened yet - the same defect
+     * as advancing it on a FAILED send, just earlier. The rule belongs where the
+     * fact becomes true, which is here, on the success branch.
+     *
+     * ★★ `updateMany` WITH A `lt` PREDICATE, NOT `update`, AND THE PREDICATE IS
+     * THE POINT.
+     *
+     * The row is created at T0 and this runs at T1. A customer inbound arriving
+     * between them is NEWER than this message, so writing our timestamp
+     * unconditionally would drag the key BACKWARDS and bury someone who has just
+     * written in. The predicate makes the write a max() and does it in one
+     * statement, so there is no read-modify-write race between two workers.
+     *
+     * It also makes the double-write idempotent: `approvals.ts` already sets the
+     * key at enqueue time with `new Date()`, which is later than this row's
+     * `createdAt`, so this call correctly does nothing there.
+     *
+     * `tenantId` is required: the tenant guard blocks any bulk write whose where
+     * clause omits it. And `origin` is deliberately NOT mentioned - the
+     * live-by-default guard injects `origin: "LIVE"`, so an imported
+     * conversation can never have its key moved by a live send. That is the
+     * origin rule enforced for free rather than restated here.
+     *
+     * Never throws. The message is already on the wire; failing the job would
+     * retry the SEND and deliver the customer a second copy, which is a far
+     * worse outcome than a stale sort key.
+     */
+    if (updatedMessage?.conversationId) {
+      await prisma.conversation.updateMany({
+        where: {
+          id: updatedMessage.conversationId,
+          tenantId,
+          OR: [
+            { lastMessageAt: null },
+            { lastMessageAt: { lt: updatedMessage.createdAt } },
+          ],
+        },
+        data: { lastMessageAt: updatedMessage.createdAt },
+      }).catch((err: any) =>
+        console.warn("[outgoing] conversation sort-key update failed:", err?.message),
+      );
+    }
+
     prisma.usageLog.create({
       data: {
         tenantId,

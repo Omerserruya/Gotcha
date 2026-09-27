@@ -31,7 +31,10 @@ const { prisma, adapter, getOutboundAdapter } = vi.hoisted(() => {
     prisma: {
       channelAccount: { findUnique: vi.fn() },
       message: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-      conversation: { update: vi.fn() },
+      // `updateMany` is the conversation sort-key bump on the success branch.
+      // Absent, every case here died on a TypeError - which is what these 13
+      // tests caught, correctly, when that call was added.
+      conversation: { update: vi.fn(), updateMany: vi.fn(async () => ({ count: 1 })) },
       usageLog: { create: vi.fn(async () => ({})) },
       auditLog: { create: vi.fn(async () => ({})) },
       scheduledMessage: { update: vi.fn(async () => ({})), findUnique: vi.fn(async () => null) },
