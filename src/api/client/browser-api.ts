@@ -3,6 +3,7 @@
 import { logger } from '@/observability/logger';
 
 import { HttpClient } from './http-client';
+import { appPath } from '@/lib/base-path';
 
 /**
  * The API client for the browser.
@@ -16,7 +17,13 @@ import { HttpClient } from './http-client';
  * intent survives a future change of default.
  */
 export const browserApi = new HttpClient({
-  baseUrl: '/api/bff',
+  /*
+   * ★★ EVERY CLIENT-SIDE REQUEST THIS APP MAKES. Unprefixed under a base
+   * path, all of them would go to `/api/bff/…` at the root — carrying this
+   * app's session cookie, since it is scoped to `/`, to an origin serving a
+   * different application.
+   */
+  baseUrl: appPath('/api/bff'),
   defaultTimeoutMs: 20_000,
   fetchOptions: { credentials: 'same-origin', cache: 'no-store' },
   onError(error) {

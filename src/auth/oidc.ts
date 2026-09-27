@@ -3,6 +3,7 @@ import 'server-only';
 import * as oidc from 'openid-client';
 
 import { serverEnv } from '@/config/env.server';
+import { appUrl } from '@/lib/base-path';
 
 /**
  * The OIDC relying-party setup.
@@ -37,8 +38,26 @@ export function oidcConfiguration(): Promise<oidc.Configuration> {
   return configPromise;
 }
 
+/**
+ * The `redirect_uri` handed to the identity provider, and registered with it.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THIS USED TO DROP THE MOUNT POINT SILENTLY
+ * ════════════════════════════════════════════════════════════════════════════
+ * It was `new URL('/api/auth/callback', APP_ORIGIN)`. An **absolute path
+ * discards the base's path** — with or without a trailing slash — so an
+ * `APP_ORIGIN` of `https://host/v2` produced `https://host/api/auth/callback`.
+ *
+ * Beside the legacy product that is not a 404: it is the other application's
+ * route, and the provider would be sent a redirect target this app does not
+ * own. Either the flow fails on a mismatch, or it succeeds against something
+ * else — and the first is much the better outcome.
+ *
+ * `appUrl` rebuilds the path from `BASE_PATH`, so the result no longer depends
+ * on whether whoever set `APP_ORIGIN` happened to include the prefix.
+ */
 export function redirectUri(): string {
-  return new URL('/api/auth/callback', serverEnv().APP_ORIGIN).toString();
+  return appUrl('/api/auth/callback', serverEnv().APP_ORIGIN);
 }
 
 export {

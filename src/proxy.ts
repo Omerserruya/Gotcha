@@ -69,9 +69,32 @@ export default function proxy(request: NextRequest): NextResponse {
       // Hand off to the platform's own login when configured; otherwise this
       // app's, which drives the OIDC flow itself.
       const platformLogin = process.env.PLATFORM_LOGIN_URL;
+      /*
+       * ★★ THE MOUNT POINT, FROM THE REQUEST ITSELF.
+       *
+       * `new URL('/api/auth/login', request.url)` resolves an ABSOLUTE path
+       * against the request, which discards the prefix — so under `/v2` this
+       * redirected to `/api/auth/login` at the root, which beside the legacy
+       * product is another application's login rather than a 404.
+       *
+       * `nextUrl.basePath` is Next's own value for where this app is mounted,
+       * so it is read from the request rather than from an environment
+       * variable that could disagree with the build.
+       */
+      const mount = request.nextUrl.basePath;
       const loginUrl = platformLogin
         ? new URL(platformLogin)
-        : new URL('/api/auth/login', request.url);
+        : new URL(`${mount}/api/auth/login`, request.url);
+      /*
+       * `pathname` is already stripped of the prefix by Next, and it is stored
+       * that way on purpose: the callback re-prefixes it with `appUrl` when it
+       * sends the user back. Carrying an already-prefixed path would produce
+       * `/v2/v2/…`.
+       *
+       * (An earlier draft of this comment said the callback used `redirect()`,
+       * which prefixes on its own. It uses `NextResponse.redirect`, which does
+       * not — checked, because the difference is the whole behaviour.)
+       */
       loginUrl.searchParams.set('returnTo', `${pathname}${request.nextUrl.search}`);
       return withSecurityHeaders(NextResponse.redirect(loginUrl));
     }

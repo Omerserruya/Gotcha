@@ -16,6 +16,7 @@ import { logger } from '@/observability/logger';
 import type { RealtimeEventType } from './events';
 import { SocketTransport } from './socket-transport';
 import type { ConnectionState, RealtimeListener, RealtimeTransport } from './transport';
+import { appPath } from '@/lib/base-path';
 
 const RealtimeContext = createContext<RealtimeTransport | null>(null);
 
@@ -40,7 +41,8 @@ export function RealtimeProvider({
        */
       credentials: async () => {
         try {
-          const response = await fetch('/api/realtime/ticket', {
+          // Prefixed: `fetch` has no knowledge of where the app is mounted.
+          const response = await fetch(appPath('/api/realtime/ticket'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'content-type': 'application/json' },

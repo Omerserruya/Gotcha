@@ -6,6 +6,7 @@ import { streamServerSentEvents } from '@/api/client/sse-client';
 import { agentEndpoints } from '@/api/endpoints/registry';
 import { agentEventSchema, type AgentEvent } from '@/api/contracts/agent';
 import { logger } from '@/observability/logger';
+import { appPath } from '@/lib/base-path';
 
 /**
  * What the surface shows while the agent is working.
@@ -82,7 +83,14 @@ export function useAgentRun() {
       const stream = streamServerSentEvents({
         // Through the BFF, like every other browser call: the bearer token is
         // attached server-side and never reaches the page.
-        url: `/api/bff${agentEndpoints.run().path}`,
+        /*
+         * ★ THE SECOND BFF CALLER, AND IT DOES NOT GO THROUGH `browserApi`.
+         * An SSE stream built as a template literal, which is why a search for
+         * `fetch('/…')` did not find it. Under a base path it would have
+         * streamed from the root — the legacy application's origin for that
+         * path — while every other client call went to the right place.
+         */
+        url: appPath(`/api/bff${agentEndpoints.run().path}` as `/${string}`),
         body: { message, sessionId: sessionRef.current },
         signal: controller.signal,
       });

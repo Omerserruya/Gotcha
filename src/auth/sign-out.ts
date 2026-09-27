@@ -1,5 +1,7 @@
 'use client';
 
+import { appPath } from '@/lib/base-path';
+
 /**
  * Ends the session from the browser.
  *
@@ -11,7 +13,13 @@
  * ended, so the next sign-in would silently skip the login screen.
  */
 export async function signOut(): Promise<void> {
-  const response = await fetch('/api/auth/logout', {
+  /*
+   * ★ `fetch` DOES NOT GET THE BASE PATH. `next/link` and `redirect()` do;
+   * this is a plain web API and would post to `/api/auth/logout` at the root
+   * — which, beside the legacy product, is another application's route rather
+   * than a 404.
+   */
+  const response = await fetch(appPath('/api/auth/logout'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'same-origin',

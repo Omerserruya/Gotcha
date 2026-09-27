@@ -394,6 +394,20 @@ describe('★★ one purchase, one intent key — and when it is released', () =
 
     const key = buyCreditPack.mock.calls[0]![2] as string;
     expect(key).toMatch(/^buy:/);
-    expect(key).not.toMatch(/\d{8,}/);
+    /*
+     * ★★ THE SPECIFIC VALUE THE OLD CODE EMBEDDED, NOT A SHAPE.
+     *
+     * This asserted `not.toMatch(/\d{8,}/)` — "no long number" — and a v4
+     * UUID contains a run of eight digits **8% of the time**, measured over
+     * 20,000 samples. So the test failed about one run in twelve with nothing
+     * wrong, which is almost certainly the single unexplained failure reported
+     * after a bulk reformat earlier today and never identified.
+     *
+     * A flaky assertion is worse than no assertion: it teaches everybody that
+     * a red run might be noise. What it MEANT was that the key carries no
+     * clock, so it now looks for the exact minute bucket the previous
+     * implementation embedded — a value that cannot appear by chance.
+     */
+    expect(key).not.toContain(String(Math.floor(Date.now() / 60_000)));
   });
 });

@@ -5,6 +5,7 @@ import { authorizationCodeGrant, oidcConfiguration } from '@/auth/oidc';
 import { sealSession, sessionCookieOptions, type Session } from '@/auth/session';
 import { serverEnv } from '@/config/env.server';
 import { logger } from '@/observability/logger';
+import { appUrl } from '@/lib/base-path';
 
 /**
  * Completes sign-in.
@@ -15,7 +16,8 @@ import { logger } from '@/observability/logger';
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const env = serverEnv();
-  const signInUrl = new URL('/sign-in', env.APP_ORIGIN);
+  // See `redirectUri`: an absolute path would discard the mount point.
+  const signInUrl = new URL(appUrl('/sign-in', env.APP_ORIGIN));
 
   const loginState = await unsealLoginState(request.cookies.get(LOGIN_STATE_COOKIE)?.value);
   if (!loginState) {
@@ -83,7 +85,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(signInUrl.toString());
   }
 
-  const response = NextResponse.redirect(new URL(loginState.r, env.APP_ORIGIN).toString());
+  /*
+   * ★★ AND THIS ONE IS WHERE THE USER ACTUALLY LANDS AFTER SIGNING IN.
+   *
+   * `NextResponse.redirect` builds a raw `Response` and **does not apply the
+   * base path** — unlike `redirect()` from `next/navigation`. `loginState.r`
+   * is an unprefixed in-app path (`safeReturnPath` guarantees a leading slash
+   * or `/`), so under a mount point this sent people to the root after a
+   * successful sign-in: the legacy product, with a valid session for this one.
+   *
+   * The most invisible failure of the whole set, because it only happens after
+   * a login that worked.
+   */
+  const response = NextResponse.redirect(appUrl(loginState.r as `/${string}`, env.APP_ORIGIN));
   const cookieOptions = sessionCookieOptions();
   response.cookies.set(cookieOptions.name, sealed, cookieOptions);
   response.cookies.delete({ name: LOGIN_STATE_COOKIE, path: '/api/auth' });

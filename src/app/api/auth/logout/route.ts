@@ -6,6 +6,7 @@ import { sessionCookieOptions } from '@/auth/session';
 import { serverEnv } from '@/config/env.server';
 import { assertSameOrigin } from '@/api/client/csrf';
 import { logger } from '@/observability/logger';
+import { appUrl } from '@/lib/base-path';
 
 /**
  * Ends the session.
@@ -25,7 +26,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const env = serverEnv();
   const session = await readSession();
 
-  let redirectTo = new URL('/sign-in', env.APP_ORIGIN).toString();
+  // `appUrl`, not `new URL('/sign-in', …)`: an absolute path discards the
+  // origin's own path, which is where this app is mounted.
+  let redirectTo = appUrl('/sign-in', env.APP_ORIGIN);
   if (session) {
     try {
       /*
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
        */
       redirectTo = buildEndSessionUrl(await oidcConfiguration(), {
         client_id: env.OIDC_CLIENT_ID,
-        post_logout_redirect_uri: new URL('/sign-in', env.APP_ORIGIN).toString(),
+        post_logout_redirect_uri: appUrl('/sign-in', env.APP_ORIGIN),
       }).toString();
     } catch {
       // No end-session endpoint advertised; local sign-out is enough.
@@ -47,6 +50,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   logger.info('auth.logout', { sessionId: session?.sid });
 
   const response = NextResponse.json({ redirectTo });
+  /*
+   * ★ THE COOKIE PATH STAYS `/`, DELIBERATELY.
+   *
+   * Scoping it to the mount point would look tidier and would break the one
+   * thing that matters: `/api/auth/callback` and the BFF both sit under the
+   * prefix, but a cookie written at `/v2` is not sent to `/` — and nothing
+   * here needs it to be. What decides it is the other direction: the two
+   * applications use DIFFERENT cookie names (`gotcha_session` here,
+   * `__Host-gotcha_session` there), so a root-scoped cookie cannot collide
+   * with the legacy session, and narrowing the path would buy isolation that
+   * the name already provides while adding a way to lose the session on a
+   * path this app does not control.
+   */
   response.cookies.delete({ name: sessionCookieOptions().name, path: '/' });
   return response;
 }
