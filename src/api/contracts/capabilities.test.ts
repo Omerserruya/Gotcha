@@ -9,6 +9,8 @@ import {
   capabilityStance,
   groupByCategory,
   isUniform,
+  looksLikeCode,
+  readableValues,
   RISK_GROUPS,
   type Capability,
 } from './capabilities';
@@ -169,5 +171,120 @@ describe("the platform's own descriptions never reach the screen", () => {
     expect(humaniseToolName('shopify.cancel_order')).toBe('Shopify cancel order');
     expect(humaniseToolName('close_conversation')).toBe('Close conversation');
     expect(hasOwnWords('some_tool_added_next_quarter')).toBe(false);
+  });
+});
+
+describe('★★ looksLikeCode separates a machine value from something a person wrote', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * THE PROPERTY IS "ONE TOKEN, NO SPACES" — NOT "HAS AN UNDERSCORE"
+   * ════════════════════════════════════════════════════════════════════════════
+   * Two instruments missed `WHATSAPP` on the same day. One swept where text
+   * appears rather than what it does. The other REQUIRED an underscore, for the
+   * sound reason that a bare run of capitals is how `CRM` and `VAT` legitimately
+   * render — and that is exactly how a screaming identifier which happens to be
+   * one word walked past it, reporting green.
+   *
+   * Both matched the shape in front of them (`SHOPIFY_LIVE_CHAT`) instead of the
+   * property they meant. So these cases are chosen to disagree with the
+   * underscore rule and with the upper-case rule in both directions.
+   */
+  it('★★ matches a one-word screaming identifier, which has no underscore', () => {
+    expect(looksLikeCode('WHATSAPP')).toBe(true);
+  });
+
+  it('★★ matches a lowercase code, which has no capitals either', () => {
+    // `crm` reached the DOM lowercase and a stylesheet made it `Crm`.
+    expect(looksLikeCode('crm')).toBe(true);
+    expect(looksLikeCode('he')).toBe(true);
+  });
+
+  it('matches the snake and dotted forms', () => {
+    expect(looksLikeCode('SHOPIFY_LIVE_CHAT')).toBe(true);
+    expect(looksLikeCode('intent.automatable')).toBe(true);
+    expect(looksLikeCode('ai-bot')).toBe(true);
+  });
+
+  it('★★ leaves anything with a space alone — prose and names are not ours', () => {
+    expect(looksLikeCode('Urban Supply - GOTCHA Demo')).toBe(false);
+    expect(looksLikeCode('A Shopify storefront')).toBe(false);
+    expect(looksLikeCode('חנות מקוונת')).toBe(false);
+  });
+
+  it('★★ leaves an address, a URL and a date alone', () => {
+    /*
+     * These are the values `humaniseCode` would DAMAGE: it replaces dots with
+     * spaces, so an email becomes two words. The guard exists for them, not for
+     * the codes.
+     */
+    expect(looksLikeCode('avery@example.com')).toBe(false);
+    expect(looksLikeCode('https://example.com/a')).toBe(false);
+    expect(looksLikeCode('2026-09-27')).toBe(false);
+    expect(looksLikeCode('19%')).toBe(false);
+  });
+});
+
+describe('★★ readableValues closes the spread, not the placeholder', () => {
+  it('★★ humanises every string key, including ones nobody anticipated', () => {
+    /*
+     * The defect was `71 conversations came through WHATSAPP`. Repairing
+     * `{channel}` would have fixed that sentence and left every future key with
+     * the same free pass — which is the difference between a site and a hole.
+     * `department` has no resolver and no catalogue and must still be readable.
+     */
+    expect(readableValues({ channel: 'WHATSAPP', department: 'customer_success' })).toEqual({
+      channel: 'WhatsApp',
+      department: 'Customer success',
+    });
+  });
+
+  it('★★ passes numbers through untouched', () => {
+    // `30` is not a code, and humanising a formatted number would be a second
+    // formatter fighting the locale's.
+    expect(readableValues({ count: 71, days: 30, percent: 0 })).toEqual({
+      count: 71,
+      days: 30,
+      percent: 0,
+    });
+  });
+
+  it('★★ drops a non-scalar rather than printing [object Object]', () => {
+    expect(readableValues({ nested: { a: 1 }, list: [1], ok: 'a plain sentence' })).toEqual({
+      ok: 'a plain sentence',
+    });
+  });
+
+  it('★ capitalises a single lowercase word, which is the cost of the rule', () => {
+    /*
+     * `fine` is indistinguishable from `refunds` by any rule that does not know
+     * the domain, so a one-word value arrives capitalised. That is right for the
+     * taxonomy values these two call sites carry and it is a real cost
+     * elsewhere: this asserts it so the next caller reads it as a decision
+     * rather than discovering it.
+     */
+    expect(readableValues({ topic: 'refunds' })).toEqual({ topic: 'Refunds' });
+  });
+
+  it('★★ leaves a value a person wrote exactly as they wrote it', () => {
+    const written = 'Urban Supply - GOTCHA Demo';
+    expect(readableValues({ name: written })).toEqual({ name: written });
+  });
+
+  it('★★ prefers a resolver, because the humaniser answers in English only', () => {
+    /*
+     * `humaniseCode('SHOPIFY_LIVE_CHAT')` is "Shopify live chat" — right in
+     * English and English on a Hebrew screen. Where a translated catalogue
+     * exists the caller supplies it; the fallback is what cannot go stale.
+     */
+    const out = readableValues({ channel: 'SHOPIFY_LIVE_CHAT', other: 'read_orders' }, (key, v) =>
+      key === 'channel' ? `צ'אט ${v}` : null,
+    );
+    expect(out.channel).toBe("צ'אט SHOPIFY_LIVE_CHAT");
+    // And a key the resolver declines still goes through the fallback.
+    expect(out.other).toBe('Read orders');
+  });
+
+  it('★ falls back when the resolver returns null for a key it does not know', () => {
+    expect(readableValues({ channel: 'WHATSAPP' }, () => null)).toEqual({ channel: 'WhatsApp' });
   });
 });

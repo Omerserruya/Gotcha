@@ -3,13 +3,14 @@ import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import { timelineSchema } from '@/api/contracts/customer-detail';
+import channels from '@/i18n/messages/en/channels.json';
 import messages from '@/i18n/messages/en/inbox.json';
 
 import { IdentityPanel } from './IdentityPanel';
 
 vi.mock('next-intl/server', () => ({
-  getTranslations: async (namespace: 'inbox') =>
-    createTranslator({ locale: 'en', messages: { inbox: messages }, namespace }),
+  getTranslations: async (namespace: 'inbox' | 'channels') =>
+    createTranslator({ locale: 'en', messages: { inbox: messages, channels }, namespace }),
 }));
 
 const timeline = (
@@ -131,5 +132,70 @@ describe('★★ from a conversation there is no join to show, and it says so', 
     );
     expect(screen.getByTestId('identity-caption')).toHaveTextContent(/her channels/i);
     expect(screen.queryByTestId('handle-SMS')).toBeNull();
+  });
+});
+
+describe('★★ the channel is a name, not the platform’s enum', () => {
+  it('★★ renders WHATSAPP as WhatsApp, like the queue row already did', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE SIBLING RENDERER, AND THE REASON IT SURVIVED WAVE 1
+     * ════════════════════════════════════════════════════════════════════════
+     * A browser walk photographed Home, found `SHOPIFY_LIVE_CHAT` on the queue
+     * rows and the channel bar, and both were fixed. The walk reached this
+     * panel later and read:
+     *
+     *     WHATSAPP
+     *     972525401686
+     *
+     * Same value, same shape, a component nobody had photographed. All THREE of
+     * that report's findings had two renderers and one of each was fixed —
+     * because the repair was organised by screen, because the report was, and
+     * because the report came from walking screens.
+     *
+     * ★ So the lesson is not "sweep harder". A fix organised by where a defect
+     *   was SEEN inherits the blind spots of whatever saw it. The sweep has to
+     *   be organised by the VALUE: every renderer of `channel`, found by
+     *   grepping the field.
+     */
+    render(
+      await IdentityPanel({
+        timeline: timeline({ id: 'c1', displayName: 'Avery Stone' }, [
+          { channel: 'WHATSAPP', externalId: '+972525401686', source: 'merged' },
+        ]),
+      }),
+    );
+    const handle = screen.getByTestId('handle-WHATSAPP');
+    expect(handle).toHaveTextContent('WhatsApp');
+    expect(handle).not.toHaveTextContent('WHATSAPP');
+  });
+
+  it('★ uses the catalogue’s wording, which is not the humaniser’s', async () => {
+    render(
+      await IdentityPanel({
+        timeline: timeline({ id: 'c1', displayName: 'Avery Stone' }, [
+          { channel: 'SHOPIFY_LIVE_CHAT', externalId: 'gid://1', source: 'merged' },
+        ]),
+      }),
+    );
+    expect(screen.getByTestId('handle-SHOPIFY_LIVE_CHAT')).toHaveTextContent('Shopify live chat');
+  });
+
+  it('★★ says "another channel" for one the catalogue has never heard of', async () => {
+    /*
+     * The honest third state. A channel the platform adds tomorrow must not
+     * arrive as its own enum, and it must not vanish either — the handle below
+     * it is the thing that makes two identities tellable apart.
+     */
+    render(
+      await IdentityPanel({
+        timeline: timeline({ id: 'c1', displayName: 'Avery Stone' }, [
+          { channel: 'TELEGRAM', externalId: '@avery', source: 'merged' },
+        ]),
+      }),
+    );
+    const handle = screen.getByTestId('handle-TELEGRAM');
+    expect(handle).not.toHaveTextContent('TELEGRAM');
+    expect(handle).toHaveTextContent('@avery');
   });
 });

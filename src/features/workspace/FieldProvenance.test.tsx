@@ -19,6 +19,12 @@ import { FieldProvenance } from './FieldProvenance';
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'workspace.provenance') =>
     createTranslator({ locale: 'en', messages: { workspace: messages }, namespace }),
+  /*
+   * The panel names country, language and currency codes in the reader's
+   * language, so it needs to know which language that is. `en` here: the
+   * defect this covers was a code rendered on the ENGLISH screen.
+   */
+  getLocale: async () => 'en',
 }));
 
 const ws = (over: Record<string, unknown> = {}) =>
@@ -118,11 +124,34 @@ describe('★ “unknown” is not a country', () => {
     expect(within(countryRow!).getByTestId('provenance-unset')).toHaveTextContent(/not set/i);
   });
 
-  it('leaves a real value alone', async () => {
+  it('★★ names a real country instead of printing its code', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THIS ASSERTION USED TO REQUIRE `IL` ON THE SCREEN
+     * ════════════════════════════════════════════════════════════════════════
+     * It read `expect(countryRow).toHaveTextContent('IL')` under the heading
+     * "leaves a real value alone", and it was right that a usable value must
+     * not be swallowed by the unset branch — that is what the second assertion
+     * checks. It was wrong about what the reader should see.
+     *
+     * Which made it a PIN: naming the country turns this test red, and the
+     * next person to fix the panel gets a red build and backs the fix out.
+     * The criterion that catches it is not "a code appeared" — `write_orders`
+     * on the capabilities screen is a code a merchant must match against
+     * Shopify's own consent screen, and any paraphrase there is worse. It is
+     * **is there a name available that the assertion is refusing?** For a
+     * country there is, in the runtime, in both our languages.
+     *
+     * Asserted in both directions, so it cannot pass a panel that shows the
+     * name AND the code, or one that shows neither.
+     */
     await renderPanel({ country: 'IL' });
     const rows = screen.getAllByTestId('provenance-row');
     const countryRow = rows.find((r) => within(r).queryByText('Country'));
-    expect(countryRow).toHaveTextContent('IL');
+    expect(countryRow).toHaveTextContent('Israel');
+    expect(countryRow).not.toHaveTextContent('IL');
+    // The original point of this test, and still true: a usable value is not
+    // filed under "we could not use it".
     expect(within(countryRow!).queryByTestId('provenance-unset')).toBeNull();
   });
 });
@@ -146,10 +175,55 @@ describe('★ one reply language, said rather than offered', () => {
     expect(note).toHaveTextContent(/tag your knowledge documents/i);
   });
 
-  it('renders the stored language as the value for that field', async () => {
+  it('★★ names the reply language, two rows under a sentence about Hebrew', async () => {
+    /*
+     * A browser walk read *"Reply language · he"* on this list while the fact
+     * table above it said **"GOTCHA runs in Hebrew."** Same page, same fact,
+     * one of them in the platform's vocabulary.
+     *
+     * The old assertion required the code, the same way the country one did.
+     * Two pins in one file, and both were written by someone (me) checking
+     * that the field was WIRED — which the code assertion does prove. Wiring
+     * and reading are different claims and the first is cheaper to assert,
+     * which is how a test ends up making the second one impossible.
+     */
     await renderPanel({ languages: ['he'] });
     const rows = screen.getAllByTestId('provenance-row');
     const langRow = rows.find((r) => within(r).queryByText('Reply language'));
-    expect(langRow).toHaveTextContent('he');
+    expect(langRow).toHaveTextContent('Hebrew');
+  });
+
+  it('★ falls back to the code for a language nobody can name', async () => {
+    /*
+     * `Intl.DisplayNames.of` returns its input for a well-formed code it does
+     * not know. Showing `zz` is the honest end of that road — the alternative
+     * is a blank row on a panel whose entire subject is where values came from.
+     */
+    await renderPanel({ languages: ['zz'] });
+    const rows = screen.getAllByTestId('provenance-row');
+    const langRow = rows.find((r) => within(r).queryByText('Reply language'));
+    expect(langRow).toHaveTextContent('zz');
+  });
+
+  it('★ isolates the value, because this list renders the same strings as the facts table', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * ONE SCREENSHOT HELD THE SAME STRING FIXED AND BROKEN, 500 PIXELS APART
+     * ════════════════════════════════════════════════════════════════════════
+     * Wave 1 put `UserText` on `FactRows` and four other surfaces. This list
+     * shows the SAME workspace strings and was not touched, because the walk
+     * that found the defect photographed the table. So Settings · Workspace
+     * rendered "What you sell" correctly at the top and scrambled below.
+     *
+     * ⚠ This asserts the isolate is PRESENT. It cannot see visual order — no
+     * test in this repo can, which is how it shipped the first time and how it
+     * shipped again in the sibling.
+     */
+    await renderPanel({ description: "חנות מקוונת בשם 'Urban Supply'" });
+    const rows = screen.getAllByTestId('provenance-row');
+    const row = rows.find((r) => within(r).queryByText('What you sell'));
+    const isolate = row!.querySelector('bdi');
+    expect(isolate).not.toBeNull();
+    expect(isolate).toHaveAttribute('dir', 'auto');
   });
 });

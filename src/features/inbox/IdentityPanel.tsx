@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { channelHandles, type CustomerTimeline } from '@/api/contracts/customer-detail';
+import { channelLabelKey } from '@/api/contracts/inbox';
 import type { ChannelHandle } from '@/api/contracts/customer-detail';
 
 import styles from './Inbox.module.css';
@@ -68,6 +69,7 @@ export async function IdentityPanel({
   } | null;
 }) {
   const t = await getTranslations('inbox');
+  const channelNames = await getTranslations('channels');
 
   if (timeline === null && !conversation) {
     return (
@@ -119,7 +121,26 @@ export async function IdentityPanel({
                 className={styles.handle}
                 data-testid={`handle-${handle.channel}`}
               >
-                <span className={styles.handleChannel}>{handle.channel}</span>
+                {/*
+                  ════════════════════════════════════════════════════════════
+                  ★★ THE SIBLING RENDERER. THIS IS THE SAME DEFECT AS THE HOME
+                     QUEUE ROW, IN THE COMPONENT NOBODY PHOTOGRAPHED.
+                  ════════════════════════════════════════════════════════════
+                  It read `WHATSAPP`. The queue row and the metric strip were
+                  fixed in Wave 1 because a browser walk photographed Home; the
+                  walk reached this panel later, and by then the report had
+                  already been organised by screen and so had the repair.
+
+                  **Every value with two renderers had one fixed.** Three of
+                  three, in one batch. The lesson is not "sweep harder": it is
+                  that a fix organised by where a defect was SEEN inherits the
+                  blind spots of the thing that saw it.
+                */}
+                <span className={styles.handleChannel}>
+                  {channelLabelKey(handle.channel)
+                    ? channelNames(`name.${handle.channel}` as 'name.WHATSAPP')
+                    : channelNames('name.other')}
+                </span>
                 {/*
                   The raw identifier — a phone number or an email — is what
                   makes two handles tellable apart, which is the panel's

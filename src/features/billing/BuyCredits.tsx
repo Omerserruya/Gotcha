@@ -324,11 +324,19 @@ export function BuyCredits({
                    * display string on a screen whose language the reader
                    * picked, so our own translation leads and carries the rate.
                    *
-                   * The platform's label is not discarded, because a
-                   * jurisdiction whose tax is not VAT would be mislabelled by
-                   * ours: it is shown beside the rate when it says something
-                   * our translation does not, and isolated, because by then it
-                   * is text in an unknown language.
+                   * ⚠ AND THE FIRST VERSION OF THIS COMMENT DESCRIBED A
+                   * SECOND BEHAVIOUR THE CODE DOES NOT HAVE. It said the
+                   * platform's label "is shown beside the rate when it says
+                   * something our translation does not, and isolated". It is
+                   * not shown at all — `taxed.label` appears nowhere in this
+                   * file but in this comment. I wrote the mitigation into the
+                   * prose and not into the code, and a reader checking whether
+                   * a non-VAT jurisdiction is handled would have been told yes.
+                   *
+                   * The real position: we discard it. A jurisdiction whose tax
+                   * is not VAT is mislabelled by `buy.taxFallback`, the rate
+                   * stays correct, and that is a known limitation rather than a
+                   * handled case. Recorded in `contracts/README.md`.
                    */
                   t('buy.taxFallback', { pct: pkg.taxed.percent })}
             </dt>

@@ -145,6 +145,67 @@ describe('the price shown is not always the price charged', () => {
     await renderPlan({}, { tax: { ratePct: 18, label: 'VAT' } });
     expect(screen.getByTestId('pricing-net')).toHaveTextContent(/before VAT \(18%\)/);
   });
+
+  it('★★ never shows the platform’s own tax label, which arrives as Hebrew', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * ★★ THE TEST ABOVE WAS GREEN THROUGH THE ENTIRE DEFECT
+     * ════════════════════════════════════════════════════════════════════════
+     * It passes `label: 'VAT'`. **The platform does not send that.** For this
+     * tenant `/billing/pricing` sends `מע"מ`, and the sentence was
+     * `t('netOfTaxRate', { label: tax.label })` — so a browser at `/v2` read
+     * *"Prices are before מע"מ."* on the English screen, and this assertion
+     * matched anyway, because its fixture was the one value where the two
+     * behaviours agree.
+     *
+     * ★ A FIXTURE IS A CLAIM THAT THE PLATFORM CAN SEND THAT OBJECT. This one
+     *   claimed an English label for an Israeli account. That is the same
+     *   mistake as choosing counts where two rules agree: the test was not
+     *   weak, it was aimed at a case that could not discriminate.
+     *
+     * Kept above rather than rewritten, because "the sentence names the rate"
+     * is a real assertion and still true.
+     */
+    await renderPlan({}, { tax: { ratePct: 18, label: 'מע"מ' } });
+    const note = screen.getByTestId('pricing-net');
+    expect(note).toHaveTextContent(/before VAT \(18%\)/);
+    expect(note).not.toHaveTextContent('מע"מ');
+  });
+
+  it('★★ keeps the sentence when the platform sends a rate and no label', async () => {
+    /*
+     * The guard used to be `tax?.label` — the platform's STRING doubled as the
+     * signal that tax applies. Dropping the string from the sentence without
+     * moving the guard would have dropped the whole sentence for a tenant whose
+     * rate we know, which is a worse defect than the one being fixed: a net
+     * price presented as a total.
+     */
+    await renderPlan({}, { tax: { ratePct: 17, label: null } });
+    expect(screen.getByTestId('pricing-net')).toHaveTextContent(/before VAT \(17%\)/);
+  });
+
+  it('★ says prices are net without a rate when that is all we were told', async () => {
+    await renderPlan({}, { tax: { ratePct: null, label: 'מע"מ' } });
+    const note = screen.getByTestId('pricing-net');
+    expect(note).toHaveTextContent(/before VAT/);
+    expect(note).not.toHaveTextContent('%');
+    expect(note).not.toHaveTextContent('מע"מ');
+  });
+
+  it('★★ says nothing about tax when the platform said nothing', async () => {
+    /*
+     * Three states, not two. `tax: null` is "we were not told", and inventing
+     * "prices are before VAT" from it would be a claim about somebody's
+     * invoice that nothing on the wire supports.
+     */
+    await renderPlan({}, { tax: null });
+    expect(screen.queryByTestId('pricing-net')).toBeNull();
+  });
+
+  it('★ and says nothing when the object arrives empty', async () => {
+    await renderPlan({}, { tax: { ratePct: null, label: null } });
+    expect(screen.queryByTestId('pricing-net')).toBeNull();
+  });
 });
 
 describe('the disclaimer is the platform’s, not ours', () => {

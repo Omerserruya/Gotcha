@@ -52,7 +52,31 @@ describe('eventMessage', () => {
   it('falls back to the tool slug for a tool nobody mapped', () => {
     const message = eventMessage(event({ kind: 'add_contact_note.completed' }));
     expect(message.key).toBe('event.fallback.completed');
-    expect(message.values.action).toBe('add contact note');
+    /*
+     * Capitalised, because `{action}` opens the `completed` and `failed`
+     * sentences and follows a colon in `awaiting_approval`. This asserted
+     * `'add contact note'` while the slug was de-snaked by hand here.
+     */
+    expect(message.values.action).toBe('Add contact note');
+  });
+
+  it('★ humanises the slug with the shared helper, brand map and all', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE HAND-ROLLED VERSION WAS `humaniseCode` MINUS THE MAPS
+     * ════════════════════════════════════════════════════════════════════════
+     * `noun.replace(/_/g, ' ')` gave "historical whatsapp import" on a product
+     * that writes WhatsApp with two capitals on every other screen. It was not
+     * a shortcut that needed refining; it was a second, worse copy of a
+     * function that already existed two imports away.
+     *
+     * This is the assertion the old one could not make: it fails for any
+     * implementation that splits on underscores without consulting the brand
+     * map, which is precisely the code that was here.
+     */
+    expect(
+      eventMessage(event({ kind: 'historical_whatsapp_import.completed' })).values.action,
+    ).toBe('Historical WhatsApp import');
   });
 
   it('keeps the outcome on the fallback, so a failure still reads as one', () => {

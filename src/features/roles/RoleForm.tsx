@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
+import { humaniseCode } from '@/api/contracts/capabilities';
 import { groupByDomain, type PermissionDef } from '@/api/contracts/permission-catalog';
 import { gridCanRepresent, wildcardsIn, type Role } from '@/api/contracts/roles';
 import { Button } from '@/design-system/primitives/button/Button';
@@ -170,7 +171,11 @@ export function RoleForm({
       */}
       {groupByDomain(permissions).map((domain) => (
         <fieldset key={domain.domain} className={styles.formDomain} data-testid="role-domain">
-          <legend className={styles.formLegend}>{domain.domain}</legend>
+          {/*
+            The THIRD renderer of `domain`, behind an interaction and so not on
+            any screenshot. Found by grepping the field rather than the screen.
+          */}
+          <legend className={styles.formLegend}>{humaniseCode(domain.domain)}</legend>
           {domain.permissions.map((permission) => (
             <label key={permission.key} className={styles.formPermission}>
               <input

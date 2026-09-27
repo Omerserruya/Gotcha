@@ -99,8 +99,8 @@
       "MONTH": "month",
       "YEAR": "year"
     },
-    "netOfTax": "Prices are before {label}.",
-    "netOfTaxRate": "Prices are before {label} ({rate}%).",
+    "netOfTax": "Prices are before VAT.",
+    "netOfTaxRate": "Prices are before VAT ({rate}%).",
     "converted": "Shown in {display}. You are charged in {charged}.",
     "convertedFallback": "Shown in {display}, converted at a fallback rate. You are charged in {charged}, and that amount is the one that will match your statement.",
     "discount": "{label}: you pay {payable} while it lasts. The plan's price is {list}.",

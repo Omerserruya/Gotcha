@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
+import { humaniseCode } from '@/api/contracts/capabilities';
 import { groupByDomain, takesScope, type PermissionDef } from '@/api/contracts/permission-catalog';
 
 import styles from './Roles.module.css';
@@ -44,7 +45,7 @@ export async function PermissionCatalog({
           className={styles.domain}
           data-testid={`domain-${group.domain}`}
         >
-          <h3 className={styles.domainHeading}>{group.domain}</h3>
+          <h3 className={styles.domainHeading}>{humaniseCode(group.domain)}</h3>
 
           <ul className={styles.permissions}>
             {group.permissions.map((permission) => (

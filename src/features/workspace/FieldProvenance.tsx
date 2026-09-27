@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 import {
   anyFieldAttributed,
@@ -8,6 +8,9 @@ import {
   type FieldOrigin,
   type Workspace,
 } from '@/api/contracts/workspace';
+
+import { humaniseCode, looksLikeCode } from '@/api/contracts/capabilities';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 import styles from './Workspace.module.css';
 
@@ -54,17 +57,46 @@ import styles from './Workspace.module.css';
  */
 export async function FieldProvenance({ workspace }: { readonly workspace: Workspace }) {
   const t = await getTranslations('workspace.provenance');
+  const locale = await getLocale();
   const attributed = anyFieldAttributed(workspace);
+  const named = displayName(locale);
 
-  /** Field key → the value the workspace actually holds for it. */
+  /**
+   * Field key → the value the workspace actually holds for it, in the reader's
+   * language.
+   *
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ FOUR OF THESE SEVEN FIELDS HELD A CODE, AND THE PANEL PRINTED IT
+   * ════════════════════════════════════════════════════════════════════════
+   * A browser walk found *"Reply language · he"* here, two rows under a fact
+   * table that says **"GOTCHA runs in Hebrew."** Going looking for its
+   * siblings — the discipline this batch exists to teach — found `country` as
+   * `IL` and `currency` as `ILS` on the same list.
+   *
+   * `Intl.DisplayNames` is the right instrument and not a lookup table of our
+   * own: it is already in the runtime, it is translated for both locales, and
+   * the day the platform stores a country we have never seen it still answers.
+   * `industry` has no standard to name it, so it goes through `humaniseCode`.
+   *
+   * ⚠ Converted only when the value is USABLE. `country` arrives as the
+   * literal string `"unknown"` on this tenant; naming it first would hand
+   * `Intl` a malformed code and hide the third state the row below exists to
+   * report.
+   */
   const values: Record<string, string | null | undefined> = {
     organizationName: workspace.name,
     businessDescription: workspace.description,
-    industry: workspace.industry,
-    country: workspace.country,
-    primaryLanguage: workspace.languages[0] ?? null,
+    industry: usable(workspace.industry)
+      ? named('industry', workspace.industry)
+      : workspace.industry,
+    country: usable(workspace.country) ? named('region', workspace.country) : workspace.country,
+    primaryLanguage: usable(workspace.languages[0])
+      ? named('language', workspace.languages[0])
+      : (workspace.languages[0] ?? null),
     address: workspace.address,
-    currency: workspace.currency,
+    currency: usable(workspace.currency)
+      ? named('currency', workspace.currency)
+      : workspace.currency,
   };
 
   return (
@@ -128,6 +160,30 @@ export async function FieldProvenance({ workspace }: { readonly workspace: Works
   );
 }
 
+/** A value worth naming: present, non-blank, and not the platform's `unknown`. */
+function usable(value: string | null | undefined): value is string {
+  return value != null && value.trim() !== '' && !isUnusableValue(value);
+}
+
+/**
+ * A platform code in the reader's language.
+ *
+ * Every branch falls back to the code itself. `Intl.DisplayNames.of` returns
+ * its input for a well-formed code it does not know and **throws** on a
+ * malformed one, so an unrecognised country shows the country rather than
+ * taking the panel down — the same call `money()` makes on an unknown currency.
+ */
+function displayName(locale: string) {
+  return (kind: 'region' | 'language' | 'currency' | 'industry', code: string): string => {
+    if (kind === 'industry') return looksLikeCode(code) ? humaniseCode(code) : code;
+    try {
+      return new Intl.DisplayNames([locale], { type: kind }).of(code) ?? code;
+    } catch {
+      return code;
+    }
+  };
+}
+
 /**
  * One field, its value and where it came from.
  *
@@ -168,7 +224,15 @@ function FieldRow({
             {value != null && value.trim() !== '' ? unusableLabel : notSetLabel}
           </span>
         ) : (
-          <span>{value}</span>
+          /*
+            ★★ THE SIBLING OF `FactRows`. The fact table 500 pixels above this
+            list renders the same strings inside an isolate; this one did not,
+            so one page showed "What you sell" correct and scrambled at once.
+            One screenshot held both. Wave 1 applied `UserText` at five
+            surfaces and this was the sixth, missed because the walk that found
+            the defect photographed the table and not the list.
+          */
+          <UserText>{value}</UserText>
         )}
         <span className={styles.provenanceOrigin} data-testid="provenance-origin">
           {originLabel}

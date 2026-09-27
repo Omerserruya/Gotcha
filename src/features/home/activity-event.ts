@@ -1,4 +1,5 @@
 import type { ActivityEvent } from '@/api/contracts/analytics';
+import { humaniseCode } from '@/api/contracts/capabilities';
 
 /**
  * Choosing the message and the blanks for one activity event.
@@ -55,11 +56,20 @@ export function eventMessage(event: ActivityEvent): EventMessage {
 
   if (KNOWN_NOUNS.has(noun)) return { key: `event.${noun}.${outcome}`, values };
 
-  // Unmapped: the backend sends the tool's own slug rather than guessing, and
-  // showing it is more honest than filing it under a familiar heading.
+  /*
+   * Unmapped: the backend sends the tool's own slug rather than guessing, and
+   * showing it is more honest than filing it under a familiar heading.
+   *
+   * ★ But `get_customer_orders` is the slug, not the showing of it. This used
+   * to swap underscores for spaces by hand, which is `humaniseCode` minus the
+   * brand and acronym maps — so `historical_whatsapp_import` read as
+   * "historical whatsapp import" on a screen that says WhatsApp everywhere
+   * else. The shared helper is not a refinement here; the hand-rolled version
+   * was a second, worse copy of it.
+   */
   return {
     key: `event.fallback.${outcome}`,
-    values: { ...values, action: noun.replace(/_/g, ' ') },
+    values: { ...values, action: humaniseCode(noun) },
   };
 }
 

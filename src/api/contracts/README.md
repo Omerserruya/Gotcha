@@ -328,3 +328,21 @@ And where the absence needs explaining, **require the explanation in the same
 test**. The `/rename|merge/i` guard could be satisfied by deleting the caption;
 its replacement fails if the caption is gone. A test about a missing control
 should demand the sentence, not punish it.
+
+## A label the platform localised for the account is not a display string
+
+`taxSchema.label` and `packagesResponseSchema.taxed.label` both arrive localised
+to the **tenant** — `מע"מ` for an Israeli account — and both were preferred over
+our own translation, so Hebrew appeared in the money summary of the English
+screen. Twice, on one screen, in two components: `BuyCredits` was fixed in Wave 1
+and `Pricing` a batch later, because the walk that found it photographed one.
+
+Our translation leads and carries the rate. **The platform's label is discarded,
+not shown beside ours** — a jurisdiction whose tax is not VAT is mislabelled by
+`buy.taxFallback` and the rate stays correct. That is a known limitation, and it
+is written here because the code's own comment claimed for one commit that the
+label was still displayed, which it never was.
+
+And when a platform string doubles as a signal, dropping the string drops the
+signal: `tax?.label` was the test for "tax applies". The guard is now "we were
+told a rate or a label", so a tenant with a rate and no label keeps the sentence.

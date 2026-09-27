@@ -21,6 +21,13 @@ import { waitLabel } from './queue-row';
  * So these tests are about the two SHAPES rather than the six sites: a code
  * that must become a name, and a count that must change unit before it stops
  * being readable.
+ *
+ * ── AND A THIRD DISGUISE, FOUND LATER AND ONLY BY A PERSON ──
+ * `Roles.module.css` held `text-transform: capitalize` on the domain heading,
+ * so `crm` reached the DOM lowercase and reached the READER as `Crm`. The
+ * source was innocent, the value was innocent, and the rendering was wrong.
+ * That one is guarded at the bottom of this file, across every stylesheet,
+ * because the place it will come back is not this file.
  */
 
 describe('★★ a duration that outgrows its unit changes unit', () => {
@@ -106,5 +113,58 @@ describe('★★ acronyms in platform identifiers are acronyms', () => {
     // Which is why the list is closed: "upper-case anything short" turns Tag
     // into TAG.
     expect(humaniseCode('tag')).toBe('Tag');
+  });
+});
+
+describe("★★ no stylesheet capitalises a value on the product's behalf", () => {
+  it('★★ has no `text-transform: capitalize` anywhere in the CSS', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * A PRESENTATIONAL TRANSFORM THAT CHANGES WHAT A WORD SAYS IS NOT
+     * PRESENTATIONAL
+     * ════════════════════════════════════════════════════════════════════════
+     * Permissions showed `Crm` and `Ai` as headings. Three instruments were
+     * structurally unable to see it: a source sweep, because the source says
+     * `crm`; a screaming-identifier probe, because `crm` has no underscore and
+     * no capitals; and any value-side helper, because none was called. Only a
+     * person reading the page found it.
+     *
+     * ★ `capitalize` is the dangerous one and `uppercase` is not, which is why
+     * this forbids exactly one. `capitalize` LOOKS LIKE NAMING — it turns
+     * `crm` into something that reads as a word and is not one. `uppercase` on
+     * a platform value produces SHOUTING, which is conspicuous, caught by a
+     * different check, and the reason eight section labels legitimately use it.
+     *
+     * A comment asking the next person not to add it back is not a check.
+     */
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+
+    const walk = async (dir: string): Promise<string[]> => {
+      const entries = await readdir(dir, { withFileTypes: true });
+      const out: string[] = [];
+      for (const entry of entries) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...(await walk(full)));
+        else if (entry.name.endsWith('.css')) out.push(full);
+      }
+      return out;
+    };
+
+    const files = await walk(join(process.cwd(), 'src'));
+    /*
+     * ⚠ The guard on the guard. A path that resolves to nothing makes this test
+     * pass for ever, and a check that cannot fail is worse than no check —
+     * a failed read is not a flake, it is a failed read.
+     */
+    expect(files.length).toBeGreaterThan(10);
+
+    const offenders: string[] = [];
+    for (const file of files) {
+      const css = await readFile(file, 'utf8');
+      /* Declarations only. The word appears in prose explaining its absence. */
+      if (/text-transform:\s*capitalize/.test(css)) offenders.push(file);
+    }
+    expect(offenders).toEqual([]);
   });
 });

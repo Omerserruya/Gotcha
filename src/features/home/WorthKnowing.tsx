@@ -1,6 +1,8 @@
 import { getTranslations } from 'next-intl/server';
 
+import { readableValues } from '@/api/contracts/capabilities';
 import type { Insight } from '@/api/contracts/analytics';
+import { channelLabelKey } from '@/api/contracts/inbox';
 
 import styles from './Home.module.css';
 
@@ -27,6 +29,7 @@ const KNOWN_KINDS = new Set([
 
 export async function WorthKnowing({ insights }: { insights: readonly Insight[] | null }) {
   const t = await getTranslations('home.insight');
+  const channelNames = await getTranslations('channels');
 
   // Highest impact first, and only then the order the backend returned.
   const rank = { high: 0, medium: 1, low: 2 } as const;
@@ -45,7 +48,11 @@ export async function WorthKnowing({ insights }: { insights: readonly Insight[] 
       ) : (
         <p className={styles.insightBody}>
           {t.rich(kindKey(top.kind), {
-            ...scalarsOf(top.values),
+            ...readableValues(top.values, (key, value) =>
+              key === 'channel' && channelLabelKey(value)
+                ? channelNames(`name.${value}` as 'name.WHATSAPP')
+                : null,
+            ),
             b: (chunks) => <b>{chunks}</b>,
           })}
         </p>
@@ -58,17 +65,31 @@ function kindKey(kind: string): string {
   return KNOWN_KINDS.has(kind) ? `kind.${kind}` : 'kind.fallback';
 }
 
-/**
- * The values ICU can interpolate.
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE SPREAD WAS THE DEFECT, NOT THE SENTENCE
+ * ════════════════════════════════════════════════════════════════════════════
+ * This card used to spread the backend's bag into the sentence through a local
+ * `scalarsOf`, which dropped non-scalars and passed every string through
+ * verbatim. A browser at `/v2` read:
  *
- * `values` is `Record<string, unknown>` by contract — the backend allow-lists
- * what goes in, but the type cannot say so. Anything that is not a scalar is
- * dropped rather than stringified into `[object Object]`.
+ *     71 conversations came through WHATSAPP in the last 30 days.
+ *
+ * `readableValues` replaces it and lives in `contracts/capabilities` on
+ * purpose: **the hole is the spread, and the spread is a pattern, not a site.**
+ * Repairing `{channel}` here would have fixed today's screenshot and left the
+ * next `kind` — and the next placeholder added to an existing message — with
+ * the same free pass.
+ *
+ * The resolver is only for `channel`, because `channels.json` is translated and
+ * `humaniseCode('SHOPIFY_LIVE_CHAT')` is English on a Hebrew screen. Every
+ * other key falls back to `humaniseCode`, which is the part that cannot go
+ * stale.
+ *
+ * ── ONE CORRECTION TO THE REPORT THAT FOUND THIS ──
+ * `department.load_imbalance` was expected to carry a department identifier the
+ * same way. Its message says "one department" and interpolates no name, so it
+ * does not — today. That is a fact about one string in one catalogue, which is
+ * exactly the kind of thing that changes without anyone thinking about this
+ * file, and it is why the fix is at the spread anyway.
  */
-function scalarsOf(values: Record<string, unknown>): Record<string, string | number> {
-  const out: Record<string, string | number> = {};
-  for (const [key, value] of Object.entries(values)) {
-    if (typeof value === 'string' || typeof value === 'number') out[key] = value;
-  }
-  return out;
-}

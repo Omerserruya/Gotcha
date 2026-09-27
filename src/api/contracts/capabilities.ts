@@ -270,6 +270,84 @@ const BRANDS = new Map([
  * this is for the cases where there is nothing to translate against, and it is
  * strictly better than printing the code.
  */
+/**
+ * Does this string look like a machine value rather than something a person
+ * wrote?
+ *
+ * A single token of letters, digits and separators, starting with a letter:
+ * `WHATSAPP`, `shopify_live_chat`, `intent.refund`, `ai-bot`. Anything with a
+ * space in it is prose or a name and is left alone; an address or a URL fails
+ * on its `@`, `:` or `/`; a date or a percentage fails on its leading digit.
+ *
+ * This is the property, not the instance. Two instruments missed `WHATSAPP`
+ * this week — mine because I swept where text appears rather than what it
+ * does, the supervisor's because its pattern **required an underscore**, which
+ * is sound reasoning about acronyms and is exactly how a screaming identifier
+ * that happens to be one word walks through. So the rule here is not "has an
+ * underscore" or "is upper-case". It is "is a single token with no spaces",
+ * which is the thing all of them share.
+ */
+export function looksLikeCode(value: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*$/.test(value);
+}
+
+/**
+ * Prepare a backend-supplied bag of values for interpolation into a sentence.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THIS EXISTS BECAUSE A SPREAD IS A HOLE, NOT A SITE
+ * ════════════════════════════════════════════════════════════════════════════
+ * `t(key, { ...values })` puts whatever the platform sent between the reader
+ * and the sentence with nothing in between. On 2026-09-27 that produced, on
+ * Home, in a page of otherwise finished English:
+ *
+ *     71 conversations came through WHATSAPP in the last 30 days.
+ *
+ * Fixing the channel in that one sentence fixes today's screenshot. The next
+ * `kind` the analytics service adds, and the next placeholder added to an
+ * existing message, would each get the same free pass — so the humanising
+ * belongs at the spread, where every key goes through it, rather than at the
+ * placeholder somebody noticed.
+ *
+ * ⚠ ONE COST, STATED RATHER THAN DISCOVERED. A single lowercase word arrives
+ * capitalised, because `refunds` and `fine` are indistinguishable to any rule
+ * that does not know the domain. That is right for the taxonomy values the two
+ * current callers carry and wrong for free text that happens to be one word, so
+ * a caller handling free text should not route it through here.
+ *
+ * Non-scalars are dropped rather than stringified into `[object Object]`.
+ * Numbers pass through untouched: `30` is not a code, and `humaniseCode` on a
+ * formatted number would be a second formatter fighting the locale's.
+ *
+ * ── WHY `resolve` EXISTS ──
+ * `humaniseCode('SHOPIFY_LIVE_CHAT')` gives "Shopify live chat", which is
+ * right in English and **English on a Hebrew screen**. Where a translated
+ * catalogue exists for a key's domain, the caller passes a resolver and the
+ * reader gets their own language. Where one does not, the fallback still
+ * closes the hole. The default is the one that cannot go stale; the resolver
+ * is the improvement on top of it.
+ */
+export function readableValues(
+  values: Record<string, unknown>,
+  resolve?: (key: string, value: string) => string | null,
+): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === 'number') {
+      out[key] = value;
+      continue;
+    }
+    if (typeof value !== 'string') continue;
+    if (!looksLikeCode(value)) {
+      /* Prose, a name, an address, a date. Not ours to rewrite. */
+      out[key] = value;
+      continue;
+    }
+    out[key] = resolve?.(key, value) ?? humaniseCode(value);
+  }
+  return out;
+}
+
 export function humaniseCode(code: string): string {
   const spaced = code.replace(/[._]+/g, ' ').trim();
   if (spaced === '') return code;

@@ -56,11 +56,30 @@ export async function CurrentPlanSection({
 
   return (
     <div className={styles.pricing} data-testid="pricing-current">
-      {tax?.label ? (
+      {/*
+        ════════════════════════════════════════════════════════════════════
+        ★★ THE SIBLING OF THE `BuyCredits` TAX DEFECT, ON THE SAME SCREEN
+        ════════════════════════════════════════════════════════════════════
+        This read *"Prices are before מע\"מ."* in English, and it was the same
+        `label` from the same platform, localised to the ACCOUNT and not to the
+        reader — the defect Wave 1 reasoned about at length and fixed in one of
+        its two renderers. It was also OUTSIDE an isolate, so the Hebrew
+        reordered the English sentence around it: two defects on one line.
+
+        Our own word leads, so there is nothing left in an unknown language to
+        isolate and the second defect goes with the first.
+
+        ── AND THE TRIGGER CHANGED, WHICH IS THE PART TO READ ──
+        The guard was `tax?.label` — the platform's string doubled as the
+        signal that tax applies. Dropping the string would have dropped the
+        whole sentence for a tenant whose rate we know and whose label we do
+        not. So the guard is now "the platform said SOMETHING about tax", and
+        the rate is preferred because it is the part a person can check.
+        Neither field present means we were told nothing, and we say nothing.
+      */}
+      {tax && (tax.ratePct != null || tax.label != null) ? (
         <p className={styles.pricingNote} data-testid="pricing-net">
-          {tax.ratePct != null
-            ? t('netOfTaxRate', { label: tax.label, rate: tax.ratePct })
-            : t('netOfTax', { label: tax.label })}
+          {tax.ratePct != null ? t('netOfTaxRate', { rate: tax.ratePct }) : t('netOfTax')}
         </p>
       ) : null}
 

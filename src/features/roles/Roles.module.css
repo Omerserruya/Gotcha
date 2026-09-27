@@ -121,11 +121,20 @@
     gap: var(--space-8);
   }
 
+  /*
+   * ★★ NO `text-transform`. IT WAS CAPITALISING A PLATFORM IDENTIFIER.
+   * `group.domain` reached the DOM as `crm` and this rule rendered it as
+   * `Crm` — so the source was lowercase (a source sweep saw nothing), it had
+   * no underscore (a screaming-identifier probe saw nothing), and the only
+   * instrument that could see it was a person looking at the page.
+   *
+   * A presentational transform that changes what a word SAYS is not
+   * presentational. `humaniseCode` knows `crm` is CRM; CSS cannot.
+   */
   .domainHeading {
     margin: 0;
     font-size: var(--font-size-meta);
     font-weight: 500;
-    text-transform: capitalize;
   }
 
   .permissions {
