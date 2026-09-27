@@ -297,3 +297,47 @@
     color: var(--text-body);
   }
 }
+
+@layer features {
+  /*
+   * What an employee IS, above what it has done. Every row renders even when its
+   * value is empty: an omitted row reads as a concept the product does not have.
+   */
+  .profile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+  }
+
+  .profileRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+  }
+
+  .profileRow dt {
+    min-inline-size: var(--size-label-column);
+    color: var(--text-subtle);
+  }
+
+  .profileRow dd {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  /* Nobody filled this in — distinct from a value, and not an error either. */
+  .unset {
+    color: var(--text-subtle);
+    font-style: italic;
+  }
+
+  /* Attached and unreadable. Said out loud rather than styled onto one name. */
+  .warn {
+    color: var(--intent-urgent-text);
+  }
+}

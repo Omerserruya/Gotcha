@@ -1,6 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { aloneRate, type Employee } from '@/api/contracts/employees';
+import { humaniseCode } from '@/api/contracts/capabilities';
+import { aloneRate, inactiveSources, roleKeyOf, type Employee } from '@/api/contracts/employees';
 import { channelNameList } from '@/api/contracts/inbox';
 
 import styles from './Employees.module.css';
@@ -30,6 +31,7 @@ export async function EmployeeList({ employees }: { readonly employees: readonly
   const t = await getTranslations('employees');
   const channelNames = await getTranslations('channels');
   const format = await getFormatter();
+  const when = (iso: string) => format.dateTime(new Date(iso), { dateStyle: 'medium' });
 
   return (
     <ul className={styles.list} data-testid="employee-list">
@@ -69,6 +71,90 @@ export async function EmployeeList({ employees }: { readonly employees: readonly
                   })
                 : t('noChannels')}
             </p>
+
+            {/*
+              ════════════════════════════════════════════════════════════════
+              ★★ THREE FIELDS WE PARSED AND DROPPED ON THE FLOOR
+              ════════════════════════════════════════════════════════════════
+              A browser walk read this screen as "a name and three numbers".
+              `role`, `knowledgeSources` and `lastTestedAt` were all in the
+              contract, all on the wire, and rendered nowhere — so the screen
+              described an AI colleague by its throughput and nothing else.
+
+              ★ EVERY ROW IS RENDERED EVEN WHEN ITS VALUE IS EMPTY, and that is
+                the decision worth reading twice. An omitted row says "this
+                product has no such concept"; a row that says nobody filled it
+                in says "this one is unfinished". Only the second is true, and
+                the second is the useful one — an employee nobody has described,
+                with nothing attached, that nobody has ever opened in the test
+                chat, is a draft somebody walked away from. That is the row a
+                reader most needs to see, and it was the row rendering nothing.
+            */}
+            <dl className={styles.profile} data-testid={`profile-${employee.id}`}>
+              <div className={styles.profileRow}>
+                <dt>{t('role.label')}</dt>
+                <dd data-testid={`role-${employee.id}`}>
+                  {roleKeyOf(employee) ? (
+                    t(`role.${roleKeyOf(employee)}` as 'role.sales')
+                  ) : employee.role.trim() !== '' ? (
+                    /*
+                     * A role the platform has added since this catalogue was
+                     * written. Humanised rather than dropped: the value is true
+                     * and the only thing missing is our word for it.
+                     */
+                    humaniseCode(employee.role)
+                  ) : (
+                    <span className={styles.unset}>{t('role.unset')}</span>
+                  )}
+                </dd>
+              </div>
+
+              <div className={styles.profileRow}>
+                <dt>{t('knowledge.label')}</dt>
+                <dd data-testid={`knowledge-${employee.id}`}>
+                  {employee.knowledgeSources.length === 0 ? (
+                    <span className={styles.unset}>{t('knowledge.none')}</span>
+                  ) : (
+                    <>
+                      <span>
+                        {employee.knowledgeSources
+                          .map((source) => source.name || humaniseCode(source.id))
+                          .join(' · ')}
+                      </span>
+                      {/*
+                        ★ A SOURCE ATTACHED AND TURNED OFF IS THE STATE THAT
+                          MISLEADS. The list reads as "it knows these things"
+                          while one of them is unreadable, so the count of
+                          unreadable ones is said out loud rather than shown as
+                          a subtle style on one name.
+                      */}
+                      {inactiveSources(employee) > 0 ? (
+                        <span className={styles.warn} data-testid={`knowledge-off-${employee.id}`}>
+                          {t('knowledge.someInactive', { count: inactiveSources(employee) })}
+                        </span>
+                      ) : null}
+                    </>
+                  )}
+                </dd>
+              </div>
+
+              <div className={styles.profileRow}>
+                <dt>{t('tested.label')}</dt>
+                <dd data-testid={`tested-${employee.id}`}>
+                  {employee.lastTestedAt ? (
+                    t('tested.at', { when: when(employee.lastTestedAt) })
+                  ) : (
+                    /*
+                     * The contract's own words: "last time someone opened the
+                     * test chat". Not "never tested" — that would be a claim
+                     * about whether anybody checked this employee at all, and
+                     * opening a chat window is not the same as testing.
+                     */
+                    <span className={styles.unset}>{t('tested.never')}</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
 
             <dl className={styles.counts}>
               <div className={styles.count}>

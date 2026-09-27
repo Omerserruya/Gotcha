@@ -47,5 +47,25 @@
   },
   "deleted": {
     "done": "{name} is gone. {released, plural, =0 {No conversation needed releasing.} =1 {One conversation was released and is waiting for someone to claim it.} other {# conversations were released and are waiting for someone to claim them.}}"
+  },
+  "role": {
+    "label": "Responsible for",
+    "customer_support": "Customer support",
+    "sales": "Sales",
+    "booking": "Bookings",
+    "billing": "Billing",
+    "custom": "Something of its own",
+    "unset": "Nobody has said what this one is for."
+  },
+  "knowledge": {
+    "label": "Reads from",
+    "none": "Nothing attached. It answers from its instructions and nothing else.",
+    "inactive": "turned off",
+    "someInactive": "{count, plural, one {One of these is turned off, so it cannot read it.} other {# of these are turned off, so it cannot read them.}}"
+  },
+  "tested": {
+    "label": "Test chat",
+    "never": "Nobody has opened the test chat for this one.",
+    "at": "Last opened {when}"
   }
 }

@@ -66,6 +66,7 @@ export const NAMESPACES = [
   'systems',
   /** Settings · Security — screen 16. */
   'security',
+  'studio',
   /** Settings · Usage & billing — screen 17. */
   'billing',
   /** Settings · Notifications — screen 15. Not `notifications`, which is 01d. */

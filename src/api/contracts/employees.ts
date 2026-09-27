@@ -85,6 +85,32 @@ export const employeeListSchema = z.array(employeeSchema);
  * opposite facts, and 0% would state the second about an employee in the
  * first position.
  */
+/** The five roles the platform names. Anything else is humanised. */
+const NAMED_ROLES = new Set(['customer_support', 'sales', 'booking', 'billing', 'custom']);
+
+/**
+ * The message key for an employee's role, or `null` when there is no role.
+ *
+ * Three states, and the third is the one the screen was missing entirely:
+ * a named role, a role the platform has added since this list was written, and
+ * **no role at all** — which is a real state, because `role` defaults to `''`.
+ *
+ * An employee nobody has said anything about is the interesting row on that
+ * screen; it is usually a draft somebody abandoned. Rendering the row and
+ * saying it is unset is the point. Omitting the row would read as "this product
+ * has no such concept", which is a different sentence and not a true one.
+ */
+export function roleKeyOf(employee: Employee): string | null {
+  const role = employee.role.trim();
+  if (role === '') return null;
+  return NAMED_ROLES.has(role) ? role : null;
+}
+
+/** Knowledge sources this employee is attached to but cannot actually read. */
+export function inactiveSources(employee: Employee): number {
+  return employee.knowledgeSources.filter((source) => !source.isActive).length;
+}
+
 export function aloneRate(employee: Employee): number | null {
   return employee.handledConversations > 0
     ? employee.resolvedAlone / employee.handledConversations

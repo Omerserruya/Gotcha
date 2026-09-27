@@ -114,7 +114,15 @@ const OUTREACH_SECTIONS: readonly NavigationChild[] = [
   },
 ];
 
-const STUDIO_SECTIONS: readonly NavigationChild[] = [
+/**
+ * Studio's four areas.
+ *
+ * Exported because the Studio index page is built from this list rather than
+ * from a second hand-written one. A fifth area added here appears on the index
+ * without anybody remembering to go and add it, which is the only arrangement
+ * that survives somebody adding a fifth area.
+ */
+export const STUDIO_SECTIONS: readonly NavigationChild[] = [
   {
     id: 'employees',
     labelKey: 'studio.employees',
