@@ -5,7 +5,7 @@
   "description": "GOTCHA marketing site (/) - separate from the application frontend.",
   "scripts": {
     "dev": "next dev -p 3100",
-    "build": "next build && node tools/build-sitemaps.mjs",
+    "build": "next build && node tools/sync-html-lang.mjs && node tools/build-sitemaps.mjs",
     "start": "next start -p 3100",
     "lint": "next lint",
     "design:sync": "node tools/dc2jsx.mjs && node tools/build-logic.mjs && node tools/build-he.mjs && node tools/extract-slots.mjs",
