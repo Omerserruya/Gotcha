@@ -130,11 +130,23 @@ function clockTime(at: string, format: Format): string {
  */
 function formatDuration(seconds: number, t: Translate, format: Format): string {
   const minutes = Math.max(0, Math.round(seconds / 60));
-  const hours = Math.floor(minutes / 60);
+  /*
+   * ★★ DAYS, BECAUSE HOURS DID NOT STOP. This capped at hours, so a browser
+   * walk found **`1444h`** on Home — sixty days, printed as a four-digit hour
+   * count on the card a person reads first. The same defect as the inbox
+   * queue's `47061m`, in a different unit, found on a different screen after
+   * the first was fixed.
+   */
+  const days = Math.floor(minutes / (60 * 24));
+  const hours = Math.floor((minutes % (60 * 24)) / 60);
   const rest = minutes % 60;
   const parts = [
+    days > 0 ? t('duration.days', { count: String(days) }) : null,
     hours > 0 ? t('duration.hours', { count: String(hours) }) : null,
-    rest > 0 || hours === 0 ? t('duration.minutes', { count: String(rest) }) : null,
+    /* Minutes are dropped once there are days: "60d 4h 12m" is not a reading. */
+    (rest > 0 && days === 0) || minutes === 0
+      ? t('duration.minutes', { count: String(rest) })
+      : null,
   ].filter((part): part is string => part !== null);
   return format.list(parts, { type: 'unit' });
 }

@@ -3,6 +3,8 @@ import { getTranslations } from 'next-intl/server';
 import { byCategory, splitCatalogue, type Integration } from '@/api/contracts/integrations';
 
 import styles from './Capabilities.module.css';
+import { humaniseCode } from '@/api/contracts/capabilities';
+import { isIntegrationState } from '@/api/contracts/integrations';
 
 /**
  * Screen 10's left rail — what is connected, and what could be.
@@ -80,7 +82,17 @@ export async function IntegrationRail({
                     data-state={entry.tenantConnection.status}
                     data-testid={`connected-state-${entry.slug}`}
                   >
-                    {entry.tenantConnection.status}
+                    {/*
+                      ★★ THE STATE'S NAME, NOT ITS ENUM. This rendered
+                      `CONNECTED` / `ERROR` / `PENDING` verbatim on an
+                      operational screen. `INTEGRATION_STATES` has five
+                      members, so the mapping is closed; anything outside it
+                      says "status unknown" rather than printing a code, since
+                      a reader cannot act on a value we do not recognise.
+                    */}
+                    {isIntegrationState(entry.tenantConnection.status)
+                      ? t(`rail.state.${entry.tenantConnection.status}` as 'rail.state.CONNECTED')
+                      : t('rail.stateUnknown')}
                   </span>
                 ) : null}
               </li>
@@ -101,7 +113,17 @@ export async function IntegrationRail({
         */}
         {byCategory(available).map((group) => (
           <div key={group.category ?? 'uncategorised'} className={styles.railGroup}>
-            <h3 className={styles.railGroupHeading}>{group.category ?? t('rail.uncategorised')}</h3>
+            {/*
+              ★★ AND THE CATEGORY, WHICH ARRIVED AS `PROJECT_MANAGEMENT`.
+              A free-text column with no catalogue behind it, so there is no
+              label to look up — it is made readable rather than translated,
+              and that is stated because a reader will wonder why this one is
+              not in the message file. `humaniseCode` is shared with the tool
+              names for exactly that reason.
+            */}
+            <h3 className={styles.railGroupHeading}>
+              {group.category ? humaniseCode(group.category) : t('rail.uncategorised')}
+            </h3>
             <ul className={styles.railList}>
               {group.entries.map((entry) => (
                 <li

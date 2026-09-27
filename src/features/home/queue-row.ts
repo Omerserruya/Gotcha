@@ -22,9 +22,21 @@ export function waitLabel(
   if (Number.isNaN(since)) return '';
   // Clamped: clock skew between services must not render a negative wait.
   const minutes = Math.max(0, Math.floor((now - since) / 60_000));
-  return minutes < 60
-    ? t('wait.minutes', { count: minutes })
-    : t('wait.hours', { count: Math.floor(minutes / 60) });
+  /*
+   * ★★ DAYS, BECAUSE HOURS DO NOT STOP AT TWENTY-FOUR.
+   *
+   * This capped at hours, so a row waiting two months read as a three- or
+   * four-digit hour count. The same defect as the inbox queue's `47061m` and
+   * Home's activity card `1444h` — third unit, third screen, one cause: a
+   * scale that ends at the largest unit somebody happened to need.
+   *
+   * On the first screen a merchant opens, where the whole point of the number
+   * is to be read at a glance.
+   */
+  if (minutes < 60) return t('wait.minutes', { count: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return t('wait.hours', { count: hours });
+  return t('wait.days', { count: Math.floor(hours / 24) });
 }
 
 /**

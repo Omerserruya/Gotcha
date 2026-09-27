@@ -46,8 +46,21 @@ describe('★★ the list is whatever the table holds', () => {
      */
     await show([entry({ slug: 'shopify', tenantConnection: { id: 'c1', status: 'ERROR' } })]);
     expect(screen.getByTestId('connected-shopify')).toBeInTheDocument();
-    expect(screen.getByTestId('connected-state-shopify')).toHaveTextContent('ERROR');
     expect(screen.queryByTestId('available-shopify')).toBeNull();
+
+    /*
+     * ★★ THE STATE'S NAME, AND THIS ASSERTION USED TO REQUIRE THE ENUM.
+     *
+     * It read `toHaveTextContent('ERROR')` — so the raw code on screen was
+     * pinned by a test, and a browser walk found it there. The rule this test
+     * means is that a broken connection stays in the connected group AND says
+     * what is wrong with it; the code was never the point.
+     */
+    const state = screen.getByTestId('connected-state-shopify');
+    expect(state).toHaveTextContent(/needs attention/i);
+    expect(state).not.toHaveTextContent('ERROR');
+    /* The durable form: no screaming-snake value anywhere on the rail. */
+    expect(document.body.textContent).not.toMatch(/[A-Z]{2,}_[A-Z]{2,}/);
   });
 
   it('★★ never prints a date beside a connection', async () => {

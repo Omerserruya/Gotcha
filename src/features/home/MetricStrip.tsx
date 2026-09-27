@@ -5,6 +5,7 @@ import { Text } from '@/design-system/primitives/text/Text';
 
 import styles from './Home.module.css';
 import { CHANNEL_SPLIT_DAYS } from './load-home-data';
+import { channelLabelKey } from '@/api/contracts/inbox';
 
 /**
  * The day in four figures, and where it came from.
@@ -31,6 +32,12 @@ export async function MetricStrip({
   isQuiet: boolean;
 }) {
   const t = await getTranslations('home.metrics');
+  /*
+   * The channel labels live in `channels`, where screen 13 maintains them in
+   * both languages. Read from there rather than copied, so one set of words
+   * names one set of things.
+   */
+  const channelNames = await getTranslations('channels');
   /*
    * ★ THE PAGE'S LOCALE, NOT THE PROCESS'S.
    *
@@ -90,6 +97,7 @@ export async function MetricStrip({
 
       {channels && channels.length > 0 ? (
         <ChannelSplit
+          channelNames={channelNames}
           channels={channels}
           label={t('whereItCameFrom', { days: CHANNEL_SPLIT_DAYS })}
         />
@@ -121,7 +129,16 @@ function Metric({ label, value, share }: { label: string; value: string; share?:
  * of six slices does neither. Each channel keeps a fixed colour so the same
  * hue means the same channel wherever it appears.
  */
-function ChannelSplit({ channels, label }: { channels: ChannelPerformance; label: string }) {
+function ChannelSplit({
+  channels,
+  label,
+  channelNames,
+}: {
+  channels: ChannelPerformance;
+  label: string;
+  /** The `channels` namespace, so a code becomes the name screen 13 already has. */
+  channelNames: Awaited<ReturnType<typeof getTranslations<'channels'>>>;
+}) {
   const total = channels.reduce((sum, channel) => sum + channel.conversationCount, 0);
   if (total === 0) return null;
 
@@ -145,11 +162,24 @@ function ChannelSplit({ channels, label }: { channels: ChannelPerformance; label
       </div>
       <div className={styles.legend}>
         {channels.map((channel) => (
-          // The channel code is a backend identifier, shown as-is: a
-          // translation key per channel would go stale the moment a new one
-          // is connected.
+          /*
+           * ★★ THE CHANNEL'S NAME. The previous comment here argued that the
+           * code should be shown as-is because "a translation key per channel
+           * would go stale the moment a new one is connected" — and
+           * `channels.name.*` has had all ten in both languages since screen
+           * 13 was built. The comment argued for the defect, and a browser
+           * walk found `SHOPIFY_LIVE_CHAT` on the strip.
+           *
+           * An unrecognised code gets "another channel" rather than itself:
+           * the going-stale worry was real, and the answer to it is a named
+           * fallback, not a raw identifier. The same decision as the inbox
+           * queue.
+           */
           <span key={channel.channel}>
-            {channel.channel} {share(channel.conversationCount)}%
+            {channelLabelKey(channel.channel)
+              ? channelNames(`name.${channel.channel}` as 'name.WHATSAPP')
+              : channelNames('name.other')}{' '}
+            {share(channel.conversationCount)}%
           </span>
         ))}
       </div>

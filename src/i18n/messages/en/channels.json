@@ -15,7 +15,8 @@
     "SLACK": "Slack",
     "VOICE": "Phone calls",
     "WEBCHAT": "Web chat",
-    "SHOPIFY_LIVE_CHAT": "Shopify live chat"
+    "SHOPIFY_LIVE_CHAT": "Shopify live chat",
+    "other": "Another channel"
   },
   "pitch": {
     "WHATSAPP": "Connect your WhatsApp Business number",

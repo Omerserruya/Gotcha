@@ -15,7 +15,8 @@
     "SLACK": "Slack",
     "VOICE": "שיחות טלפון",
     "WEBCHAT": "צ'אט באתר",
-    "SHOPIFY_LIVE_CHAT": "צ'אט Shopify"
+    "SHOPIFY_LIVE_CHAT": "צ'אט Shopify",
+    "other": "ערוץ אחר"
   },
   "pitch": {
     "WHATSAPP": "חברו את מספר ה‑WhatsApp Business שלכם",

@@ -51,7 +51,8 @@
     "more": "{count, plural, one {עוד אחד ממתין} two {עוד # ממתינים} other {עוד # ממתינים}} · פתחו את התיבה",
     "wait": {
       "minutes": "{count} דק׳",
-      "hours": "{count} ש׳"
+      "hours": "{count} ש׳",
+      "days": "{count} ימ׳"
     },
     "intent": {
       "FRUSTRATED": "מתוסכל",
@@ -177,7 +178,8 @@
     "timeSavedDefault": "מבוסס על ממוצע הפלטפורמה, לא על ההיסטוריה שלכם",
     "duration": {
       "hours": "{count} ש׳",
-      "minutes": "{count} דק׳"
+      "minutes": "{count} דק׳",
+      "days": "{count} ימ׳"
     },
     "now": {
       "lead": "כרגע: {summary}.",

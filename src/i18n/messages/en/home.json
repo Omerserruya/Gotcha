@@ -51,7 +51,8 @@
     "more": "{count, plural, one {# more waiting} other {# more waiting}} · open Inbox",
     "wait": {
       "minutes": "{count}m",
-      "hours": "{count}h"
+      "hours": "{count}h",
+      "days": "{count}d"
     },
     "intent": {
       "FRUSTRATED": "Frustrated",
@@ -177,7 +178,8 @@
     "timeSavedDefault": "Based on a platform average, not your own history",
     "duration": {
       "hours": "{count}h",
-      "minutes": "{count}m"
+      "minutes": "{count}m",
+      "days": "{count}d"
     },
     "now": {
       "lead": "Right now: {summary}.",

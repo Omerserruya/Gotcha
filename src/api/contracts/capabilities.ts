@@ -208,9 +208,99 @@ export function hasOwnWords(toolName: string): boolean {
  * short, true, and leaks no implementation prose — and a missing translation
  * looks like a missing translation rather than like documentation.
  */
+/**
+ * Acronyms the platform's identifiers are full of.
+ *
+ * ★★ WITHOUT THIS, THREE SCREENS PRINTED MANGLED WORDS.
+ * `humaniseCode` used to upper-case the first letter and nothing else, so a
+ * browser walk found **`Crm`** and **`Ai`** as section headings on Permissions
+ * and **`Ai-bot inbox tool call`** as the title of twenty-six rows on
+ * Approvals. Each is a real acronym rendered as if it were a word.
+ *
+ * Closed list on purpose: a rule like "upper-case anything under four letters"
+ * would turn `Tag` into `TAG`. These are the ones the platform's own column
+ * values contain.
+ */
+const ACRONYMS = new Set([
+  'ai',
+  'api',
+  'bff',
+  'crm',
+  'csv',
+  'faq',
+  'id',
+  'oidc',
+  'pdf',
+  'sla',
+  'sms',
+  'url',
+  'vat',
+]);
+
+/**
+ * Brands whose casing is theirs, not a rule.
+ *
+ * `whatsapp` was in the acronym list for one draft and came out `WHATSAPP`,
+ * which is a different kind of wrong from `Whatsapp` and worse: it looks like
+ * shouting rather than like a missing capital. A brand's spelling is a fact
+ * about the brand.
+ *
+ * Channels have real labels in `channels.name.*` and should use those. This is
+ * for a brand appearing inside a category or a tool name, where there is no
+ * catalogue to look up.
+ */
+const BRANDS = new Map([
+  ['whatsapp', 'WhatsApp'],
+  ['shopify', 'Shopify'],
+  ['instagram', 'Instagram'],
+  ['messenger', 'Messenger'],
+  ['gmail', 'Gmail'],
+  ['outlook', 'Outlook'],
+  ['slack', 'Slack'],
+  ['woocommerce', 'WooCommerce'],
+]);
+
+/**
+ * A backend identifier made readable: `crm` → `CRM`, `ai-bot.inbox.tool_call`
+ * → `AI-bot inbox tool call`, `PROJECT_MANAGEMENT` → `Project management`.
+ *
+ * Shared by the tool names and the integration categories, because both are
+ * free-text platform columns with no catalogue to look a label up in. Where a
+ * catalogue DOES exist — channels, integration states, permissions — use it;
+ * this is for the cases where there is nothing to translate against, and it is
+ * strictly better than printing the code.
+ */
+export function humaniseCode(code: string): string {
+  const spaced = code.replace(/[._]+/g, ' ').trim();
+  if (spaced === '') return code;
+
+  const words = spaced.split(' ').map((word, index) => {
+    /* `ai-bot` is one word with a hyphen: each part is considered. */
+    const parts = word.split('-').map((part) => {
+      const lower = part.toLowerCase();
+      const brand = BRANDS.get(lower);
+      if (brand !== undefined) return brand;
+      if (ACRONYMS.has(lower)) return lower.toUpperCase();
+      /* SCREAMING_SNAKE arrives here as whole upper-case words. */
+      return part === part.toUpperCase() ? lower : part;
+    });
+    const joined = parts.join('-');
+    /* Only the first word is capitalised — a sentence, not a title. */
+    if (index > 0) return joined;
+    const head = parts[0]!;
+    return ACRONYMS.has(head.toLowerCase()) ||
+      BRANDS.has(head.toLowerCase()) ||
+      head === head.toUpperCase()
+      ? joined
+      : joined.charAt(0).toUpperCase() + joined.slice(1);
+  });
+
+  return words.join(' ');
+}
+
+/** @deprecated Kept as the previous name; `humaniseCode` is shared now. */
 export function humaniseToolName(toolName: string): string {
-  const words = toolName.replace(/[._]+/g, ' ').trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  return humaniseCode(toolName);
 }
 
 export interface CategoryGroup {

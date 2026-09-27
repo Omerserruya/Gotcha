@@ -5,6 +5,7 @@ import { Link } from '@/i18n/navigation';
 
 import styles from './Home.module.css';
 import { initials, waitLabel } from './queue-row';
+import { channelLabelKey } from '@/api/contracts/inbox';
 
 /**
  * "Needs you now" — the ranked queue on Home.
@@ -72,6 +73,8 @@ export async function QueueList({
   now: Date;
 }) {
   const t = await getTranslations('home.needsYou');
+  /* The channel labels screen 13 already maintains, in both languages. */
+  const channelNames = await getTranslations('channels');
   const remaining = Math.max(0, totalWaiting - items.length);
 
   return (
@@ -99,7 +102,19 @@ export async function QueueList({
                    */}
                   {item.customer.name ?? item.customer.id}
                 </span>
-                <span className={styles.queueRowChannel}>{item.channel}</span>
+                {/*
+                  ★★ THE CHANNEL'S NAME, ON EVERY ROW OF THE FIRST SCREEN.
+                  This printed `SHOPIFY_LIVE_CHAT` verbatim. Same fix as the
+                  inbox queue and the metric strip, and this site was missed by
+                  `raw-value-sweep` because the line also assigns a className —
+                  the blind spot that script now documents. A browser walk
+                  found it.
+                */}
+                <span className={styles.queueRowChannel}>
+                  {channelLabelKey(item.channel)
+                    ? channelNames(`name.${item.channel}` as 'name.WHATSAPP')
+                    : channelNames('name.other')}
+                </span>
               </span>
               <span className={styles.queueRowPreview}>{item.preview}</span>
             </span>

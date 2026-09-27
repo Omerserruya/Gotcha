@@ -60,7 +60,15 @@
     "available": "{count, plural, =0 {Nothing else available yet} =1 {Available · 1} other {Available · #}}",
     "noneConnected": "Nothing is connected yet.",
     "uncategorised": "Everything else",
-    "unavailable": "We couldn't read what's connected just now."
+    "unavailable": "We couldn't read what's connected just now.",
+    "state": {
+      "PENDING": "Not connected yet",
+      "TESTING": "Being tested",
+      "CONNECTED": "Connected",
+      "ERROR": "Needs attention",
+      "DISCONNECTED": "Disconnected"
+    },
+    "stateUnknown": "Status unknown"
   },
   "choice": {
     "label": "What GOTCHA may do with this",

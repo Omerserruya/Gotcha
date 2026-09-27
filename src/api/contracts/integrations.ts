@@ -41,6 +41,18 @@ export const INTEGRATION_STATES = [
 export type IntegrationState = (typeof INTEGRATION_STATES)[number];
 
 /**
+ * Is this one of the five states we have a name for?
+ *
+ * The column is `z.enum(...).catch('PENDING')`, so a parsed value is always in
+ * range — but the rail also renders connections from a second read whose shape
+ * is looser, and an unrecognised value must say "status unknown" rather than
+ * print itself. A reader cannot act on a code.
+ */
+export function isIntegrationState(value: string): value is IntegrationState {
+  return (INTEGRATION_STATES as readonly string[]).includes(value);
+}
+
+/**
  * What a capability is allowed to do, as the design's tri-state.
  *
  * Not an approximation of a boolean — the model really does store three
