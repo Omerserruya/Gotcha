@@ -117,6 +117,20 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=build /app/.next ./.next
+# ★ `public/` IS EMPTY, AND IT IS TRACKED ONLY BY A `.gitkeep`.
+#
+# Git cannot store an empty directory. This COPY therefore depended on a
+# directory that existed on one developer's box — created by `create-next-app`
+# on 1 September and never committed — and on 2026-09-27 the first build from a
+# clean `git archive` failed here with `"/app/public": not found`.
+#
+# Every build until then had used `context: ../redesign`, the working tree, so
+# the stray directory was always present and the dependency was invisible. A
+# clone, a CI runner, or any build that is not somebody's laptop would have hit
+# this on its first attempt. Same shape as the `.next` cache that kept a wrong
+# font config compiling: it worked until the local thing was gone.
+#
+# Deleting `public/.gitkeep` breaks the image, so the file is load-bearing.
 COPY --from=build /app/public ./public
 COPY --from=build /app/next.config.ts ./next.config.ts
 
