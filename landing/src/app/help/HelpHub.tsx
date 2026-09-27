@@ -3,6 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import { LandingChrome } from '@/components/Landing';
 import { useLocale } from '@/lib/use-locale';
+import { localeHref } from '@/lib/locale-url';
+import type { Locale } from '@/lib/site';
 import { C, F, MAXW, isHe } from '@/lib/site';
 import { HELP_CATEGORIES, popularArticles } from '@/content/help';
 
@@ -46,8 +48,13 @@ const TINT: Record<string, [string, string]> = {
   users: [C.sand, C.clay],
 };
 
-export default function HelpHub() {
-  const [locale, setLocale] = useLocale();
+export default function HelpHub({ pinned }: {
+  /**
+   * Set when this page's language is part of its address.
+   */
+  pinned?: Locale;
+}) {
+  const [locale, setLocale] = useLocale(pinned);
   const [q, setQ] = useState('');
   const i = isHe(locale) ? 1 : 0;
   const p = (k: keyof typeof COPY) => COPY[k][i];
@@ -86,7 +93,19 @@ export default function HelpHub() {
   );
 
   return (
-    <LandingChrome initialLang={locale} onLang={(l: string) => setLocale(l === 'he' ? 'he' : 'en')}>
+    <LandingChrome
+      initialLang={locale}
+      onLang={(l: string) => {
+        const next = l === 'he' ? 'he' : 'en';
+        // On a language-pinned page the two languages are two addresses, so
+        // switching is a navigation rather than a swap in place.
+        if (pinned) {
+          window.location.href = localeHref(window.location.pathname, next);
+          return;
+        }
+        setLocale(next);
+      }}
+    >
       <div data-no-translate style={{ padding: '98px 0 0' }}>
       <div style={{ maxWidth: MAXW, margin: '0 auto', padding: '8px 24px 0' }}>
         <div style={{ font: `500 11px ${F.mono}`, letterSpacing: '.18em', textTransform: 'uppercase', color: C.accent }}>
@@ -126,7 +145,7 @@ export default function HelpHub() {
               results.map(({ cat, art }) => (
                 <Card
                   key={`${cat.slug}/${art.slug}`}
-                  href={`/help/${cat.slug}/${art.slug}`}
+                  href={localeHref(`/help/${cat.slug}/${art.slug}`, locale)}
                   title={art.title[i]}
                   body={art.excerpt[i]}
                   note={cat.title[i]}
@@ -146,7 +165,7 @@ export default function HelpHub() {
               {HELP_CATEGORIES.map((c) => {
                 const [wash, ink] = TINT[c.icon] ?? TINT.rocket;
                 return (
-                  <a key={c.slug} href={`/help/${c.slug}`} className="trust-card" style={{ display: 'block', padding: '22px 24px', background: C.card, border: `1px solid ${C.line}`, borderRadius: 18 }}>
+                  <a key={c.slug} href={localeHref(`/help/${c.slug}`, locale)} className="trust-card" style={{ display: 'block', padding: '22px 24px', background: C.card, border: `1px solid ${C.line}`, borderRadius: 18 }}>
                     <span style={{ display: 'inline-flex', width: 30, height: 30, borderRadius: 9, background: wash, alignItems: 'center', justifyContent: 'center' }}>
                       <span style={{ width: 9, height: 9, borderRadius: 3, background: ink, display: 'block' }} />
                     </span>
@@ -165,7 +184,7 @@ export default function HelpHub() {
               {popularArticles().map(({ category, article }) => (
                 <Card
                   key={`${category.slug}/${article.slug}`}
-                  href={`/help/${category.slug}/${article.slug}`}
+                  href={localeHref(`/help/${category.slug}/${article.slug}`, locale)}
                   title={article.title[i]}
                   body={article.excerpt[i]}
                   note={category.title[i]}

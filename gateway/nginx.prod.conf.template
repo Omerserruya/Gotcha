@@ -1896,6 +1896,21 @@ http {
         # and the documents keep being served from here: a legal document is the
         # last thing that may become unreachable because a DNS record is
         # missing. Set it to https://trust.gotcha.co.il to move them.
+        # The apex's own sitemap and robots.
+        #
+        # They need naming explicitly: this vhost's catch-all is a 301 to the
+        # application, so anything not matched by a location above leaves the
+        # marketing site entirely. A crawler asking for /robots.txt would have
+        # been redirected to app.gotcha.co.il and read ITS rules instead.
+        location = /sitemap.xml {
+            try_files /sitemap.xml =404;
+            types { } default_type application/xml;
+        }
+        location = /robots.txt {
+            try_files /robots.txt =404;
+            types { } default_type text/plain;
+        }
+
         location ^~ /legal {
             if ($trust_public_url != "") {
                 rewrite ^/legal/?(.*)$ $trust_public_url/$1 redirect;
@@ -2171,15 +2186,28 @@ http {
         # each resolved to a help article that does not exist and quietly
         # rendered the help index instead. They belong to the apex; send them
         # there, and let it decide where /legal itself lives.
-        location ~ ^/(about|blog|careers|contact|legal|offer|product|security|solutions|why-gotcha|early-access|pricing|privacy-policy|terms|en|he)(/|$) {
+        # `he` was removed from this list. It used to be here because the shared
+        # marketing chrome links to /he/... pages that live on the apex - but the
+        # Help Center now has its own Hebrew articles at /he/<category>/<article>,
+        # and bouncing them to the apex would have made every one of them
+        # unreachable on the host that is supposed to own them.
+        location ~ ^/(about|blog|careers|contact|legal|offer|product|security|solutions|why-gotcha|early-access|pricing|privacy-policy|terms|en)(/|$) {
             return 302 https://gotcha.co.il$request_uri;
         }
 
         # In-page links already carry the /help prefix. The export writes
         # /help.html rather than /help/index.html - trailingSlash is off, so a
         # section index is a sibling file, not a directory index.
+        # A mistyped address gets the site's own 404, not nginx's bare one.
+        # It is a real 404 either way - the status is what a crawler reads - but
+        # a reader who mistypes deserves the page with a way back.
+        error_page 404 /404.html;
+        location = /404.html {
+            internal;
+        }
+
         location /help {
-            try_files $uri $uri.html $uri/index.html /help.html;
+            try_files $uri $uri.html $uri/index.html =404;
         }
 
         # The bare root serves the help index directly.
@@ -2187,9 +2215,28 @@ http {
             try_files /help.html =404;
         }
 
+        # This host's own sitemap and robots, generated into the section.
+        # They cannot live at the tree root: one build serves three hostnames
+        # and a sitemap may only list URLs on its own host.
+        location = /sitemap.xml {
+            try_files /help/sitemap.xml =404;
+            types { } default_type application/xml;
+        }
+        location = /robots.txt {
+            try_files /help/robots.txt =404;
+            types { } default_type text/plain;
+        }
+
         # Unprefixed paths land on the help section.
+        # A path this host does not have is a 404, not the index.
+        #
+        # It used to fall back to /help.html, so EVERY unknown address answered
+        # 200 with the Help Center front page - `/robots.txt` included, which is
+        # how a crawler ends up reading an HTML page as a robots file. Worse, it
+        # means an infinite supply of distinct URLs that all look like real
+        # pages, which is exactly what a sitemap is supposed to prevent.
         location / {
-            try_files /help$uri /help$uri.html /help$uri/index.html /help.html;
+            try_files /help$uri /help$uri.html /help$uri/index.html =404;
         }
     }
 
@@ -2228,16 +2275,36 @@ http {
             return 302 https://gotcha.co.il$request_uri;
         }
 
+        # A mistyped address gets the site's own 404, not nginx's bare one.
+        # It is a real 404 either way - the status is what a crawler reads - but
+        # a reader who mistypes deserves the page with a way back.
+        error_page 404 /404.html;
+        location = /404.html {
+            internal;
+        }
+
         location /legal {
-            try_files $uri $uri.html $uri/index.html /legal.html;
+            try_files $uri $uri.html $uri/index.html =404;
         }
 
         location = / {
             try_files /legal.html =404;
         }
 
+        # This host's own sitemap and robots, generated into the section.
+        location = /sitemap.xml {
+            try_files /legal/sitemap.xml =404;
+            types { } default_type application/xml;
+        }
+        location = /robots.txt {
+            try_files /legal/robots.txt =404;
+            types { } default_type text/plain;
+        }
+
+        # A path this host does not have is a 404, not the index - see the same
+        # note on the Help Center above.
         location / {
-            try_files /legal$uri /legal$uri.html /legal$uri/index.html /legal.html;
+            try_files /legal$uri /legal$uri.html /legal$uri/index.html =404;
         }
     }
 
