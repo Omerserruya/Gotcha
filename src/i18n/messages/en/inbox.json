@@ -25,7 +25,11 @@
       "toEarlier": "They reacted {emoji} to an earlier message",
       "removed": "They took their reaction back"
     },
-    "unsupported": "They sent something GOTCHA can't show. WhatsApp calls it a “{type}”."
+    "unsupported": "They sent something GOTCHA can't show. WhatsApp calls it a “{type}”.",
+    "pending": "Still sending",
+    "sent": "Handed to the channel, not confirmed delivered",
+    "failed": "This did not send. The customer never received it.",
+    "deliveryUnknown": "We can’t tell whether this arrived."
   },
   "queue": {
     "cap": "Showing the {count} most recent.",

@@ -313,3 +313,15 @@
     max-inline-size: var(--size-reading-half);
   }
 }
+
+@layer features {
+  /*
+   * A message the customer never received. The only delivery state on this
+   * screen that is a problem, so the only one that is coloured — if every state
+   * were marked, the one that matters would be as quiet as the rest.
+   */
+  .streamFailed {
+    color: var(--intent-urgent-text);
+    font-weight: 500;
+  }
+}

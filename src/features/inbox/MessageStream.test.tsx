@@ -144,3 +144,77 @@ describe('★ what the design draws and the stream does not', () => {
     expect(screen.getByTestId('stream-unavailable')).toHaveTextContent(/couldn't read/i);
   });
 });
+
+describe('★★ a message the customer never received', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * PENDING AND FAILED WERE THE SAME RENDERING, AND THE RENDERING WAS SILENCE
+   * ════════════════════════════════════════════════════════════════════════════
+   * The stream read `readAt`, then `deliveredAt`, then showed nothing. So an
+   * outbound reply the provider rejected looked exactly like one sent a second
+   * ago — and the operator, told nothing, stops watching.
+   *
+   * `Message.status` was on the wire the whole time and our `z.object` stripped
+   * it. These are the assertions that make the difference visible.
+   */
+  it('★★ says a failed message did not send, and that nobody received it', async () => {
+    await show([message({ id: 'm1', direction: 'OUTBOUND', status: 'FAILED' })]);
+    expect(screen.getByTestId('failed-m1')).toHaveTextContent(/did not send/i);
+    expect(screen.getByTestId('failed-m1')).toHaveTextContent(/never received it/i);
+  });
+
+  it('★★ a failure outranks a delivery timestamp recorded before it', async () => {
+    await show([
+      message({
+        id: 'm1',
+        direction: 'OUTBOUND',
+        status: 'FAILED',
+        deliveredAt: '2026-09-27T10:00:00.000Z',
+      }),
+    ]);
+    expect(screen.getByTestId('failed-m1')).toBeInTheDocument();
+    expect(screen.queryByTestId('delivered-m1')).toBeNull();
+  });
+
+  it('★★ distinguishes still-sending from handed-to-the-channel', async () => {
+    /*
+     * Two different promises. `PENDING` is ours — the row is in a queue we own.
+     * `SENT` means the provider has it and has not confirmed delivery, which is
+     * as far as our knowledge goes and is therefore what it says.
+     */
+    await show([
+      message({ id: 'm1', direction: 'OUTBOUND', status: 'PENDING' }),
+      message({ id: 'm2', direction: 'OUTBOUND', status: 'SENT' }),
+    ]);
+    expect(screen.getByTestId('pending-m1')).toHaveTextContent(/still sending/i);
+    expect(screen.getByTestId('sent-m2')).toHaveTextContent(/not confirmed delivered/i);
+  });
+
+  it('★★ says it cannot tell, rather than falling through to silence', async () => {
+    /*
+     * A status from a newer platform than this catalogue. Silence here is what
+     * hid every failure, so an unrecognised value says so out loud — the safe
+     * default for "did this arrive" is no.
+     */
+    await show([message({ id: 'm1', direction: 'OUTBOUND', status: 'SOMETHING_NEW' })]);
+    expect(screen.getByTestId('delivery-unknown-m1')).toHaveTextContent(/can’t tell/i);
+  });
+
+  it('★★ marks nothing on an inbound message', async () => {
+    await show([message({ id: 'm1', direction: 'INBOUND', status: 'FAILED' })]);
+    expect(screen.queryByTestId('failed-m1')).toBeNull();
+    expect(screen.queryByTestId('delivery-unknown-m1')).toBeNull();
+  });
+
+  it('keeps the read receipt as the strongest state', async () => {
+    await show([
+      message({
+        id: 'm1',
+        direction: 'OUTBOUND',
+        status: 'SENT',
+        readAt: '2026-09-27T10:00:00.000Z',
+      }),
+    ]);
+    expect(screen.getByTestId('read-m1')).toBeInTheDocument();
+  });
+});

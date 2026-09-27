@@ -284,6 +284,70 @@ export const KNOWN_MESSAGE_TYPES = [
 ] as const;
 export type KnownMessageType = (typeof KNOWN_MESSAGE_TYPES)[number];
 
+/**
+ * `Message.status`, which this contract did not name until 2026-09-27.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ PENDING AND FAILED WERE INDISTINGUISHABLE, AND THAT IS THE WHOLE POINT
+ * ════════════════════════════════════════════════════════════════════════════
+ * The schema has carried `deliveredAt` and `readAt` all along, so a delivered
+ * message could be told from an undelivered one. **A FAILED message has no
+ * timestamp either** — it looks exactly like one still on its way. So an
+ * outbound reply that the customer never received rendered identically to one
+ * sent a second ago.
+ *
+ * `GET /api/conversations/:id/messages` puts no `select` on the row, so `status`
+ * has been on the wire the entire time and `z.object` was stripping it. Third
+ * time this week; see `contracts/README.md`.
+ *
+ * ── WHY `z.string()` AND NOT `z.enum(...).catch('PENDING')` ──
+ * The house pattern for a status column is an enum with a catch, and it is wrong
+ * here. Catching an unrecognised value to `PENDING` would render a failure we do
+ * not recognise as **"on its way"** — the reassuring direction, on the one field
+ * whose entire job is to stop somebody believing a message arrived. So the raw
+ * value is kept, never rendered, and `deliveryOf` maps it to a closed set with
+ * an explicit `unknown`.
+ */
+export const MESSAGE_STATUSES = ['PENDING', 'SENT', 'DELIVERED', 'READ', 'FAILED'] as const;
+export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
+
+export type Delivery = 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'unknown';
+
+/**
+ * What happened to an outbound message, from every source we hold.
+ *
+ * `null` for an inbound message: `status` on one of those describes OUR
+ * ingestion, not anything the reader can act on, and a "delivered" marker beside
+ * the customer's own words would be nonsense.
+ *
+ * The order is evidence-strength, and the first line is the one that matters:
+ *
+ *   · `FAILED` wins over any timestamp. A failure is not undone by a `sentAt`
+ *     recorded before the provider rejected it.
+ *   · then `readAt`, then `deliveredAt` — a specific timestamp beats a column
+ *     that may not have caught up.
+ *   · then the status itself, if we recognise it.
+ *   · then `unknown`, which the stream says out loud rather than treating as
+ *     "fine". **The safe default for "did this arrive" is no.**
+ */
+export function deliveryOf(message: {
+  readonly direction: 'INBOUND' | 'OUTBOUND';
+  readonly status?: string | undefined;
+  readonly deliveredAt?: string | null;
+  readonly readAt?: string | null;
+}): Delivery | null {
+  if (message.direction === 'INBOUND') return null;
+
+  const status = message.status?.trim().toUpperCase();
+  if (status === 'FAILED') return 'failed';
+  if (message.readAt) return 'read';
+  if (message.deliveredAt) return 'delivered';
+  if (status !== undefined && (MESSAGE_STATUSES as readonly string[]).includes(status)) {
+    return status.toLowerCase() as Delivery;
+  }
+  return 'unknown';
+}
+
 export const messageSchema = z.object({
   id: z.string(),
   direction: z.enum(['INBOUND', 'OUTBOUND']),
@@ -292,6 +356,14 @@ export const messageSchema = z.object({
   messageType: z.string().default('text'),
   mediaUrl: z.string().nullable().default(null),
   createdAt: z.string(),
+  /**
+   * `PENDING · SENT · DELIVERED · READ · FAILED`. Read through `deliveryOf`,
+   * never directly — see the note above `MESSAGE_STATUSES`.
+   *
+   * `.optional()` rather than `.default('PENDING')`: a deploy that does not send
+   * it must not be indistinguishable from one reporting a message on its way.
+   */
+  status: z.string().optional(),
   deliveredAt: z.string().nullable().default(null),
   /** The CUSTOMER's read receipt. Never the agent's. */
   readAt: z.string().nullable().default(null),

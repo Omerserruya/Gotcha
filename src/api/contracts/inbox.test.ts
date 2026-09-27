@@ -12,6 +12,7 @@ import {
   type InboxMessage,
   channelName,
   channelNameList,
+  deliveryOf,
 } from './inbox';
 
 const NOW = new Date('2026-09-25T12:00:00.000Z');
@@ -214,5 +215,121 @@ describe('★★ channelName — one function, because this defect was found twe
 
   it('★ drops an empty entry from a list rather than rendering a gap', () => {
     expect(channelNameList(['', 'WHATSAPP'], t)).toEqual(['«WHATSAPP»']);
+  });
+});
+
+describe('★★ deliveryOf — pending and failed were the same rendering: silence', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * THE CONTRACT CARRIED THE TIMESTAMPS AND NOT THE STATUS
+   * ════════════════════════════════════════════════════════════════════════════
+   * `deliveredAt` and `readAt` have always been named, so a delivered message
+   * could be told from an undelivered one. **A FAILED message has no timestamp
+   * either**, so it looked exactly like one still on its way — and the stream
+   * showed nothing for both.
+   *
+   * `Message.status` was on the wire the entire time: the list route puts no
+   * `select` on the row and `z.object` stripped it. Third time this week.
+   */
+  const out = (over: Record<string, unknown> = {}) =>
+    ({ direction: 'OUTBOUND' as const, ...over }) as Parameters<typeof deliveryOf>[0];
+
+  it('★★ FAILED wins over any timestamp', () => {
+    /*
+     * A failure is not undone by a timestamp recorded before the provider
+     * rejected it. This is the assertion that would catch somebody "simplifying"
+     * the order to read the timestamps first.
+     */
+    expect(deliveryOf(out({ status: 'FAILED', deliveredAt: '2026-09-27T10:00:00Z' }))).toBe(
+      'failed',
+    );
+    expect(deliveryOf(out({ status: 'FAILED', readAt: '2026-09-27T10:00:00Z' }))).toBe('failed');
+  });
+
+  it('prefers a specific timestamp over a column that may not have caught up', () => {
+    expect(deliveryOf(out({ status: 'SENT', readAt: '2026-09-27T10:00:00Z' }))).toBe('read');
+    expect(deliveryOf(out({ status: 'PENDING', deliveredAt: '2026-09-27T10:00:00Z' }))).toBe(
+      'delivered',
+    );
+  });
+
+  it('reads the status when there is no timestamp yet', () => {
+    expect(deliveryOf(out({ status: 'PENDING' }))).toBe('pending');
+    expect(deliveryOf(out({ status: 'SENT' }))).toBe('sent');
+  });
+
+  it('★★ an unrecognised status is UNKNOWN, never "on its way"', () => {
+    /*
+     * The house pattern for a status column is `z.enum(...).catch('PENDING')`,
+     * and it is wrong on this field: catching an unrecognised failure to
+     * `PENDING` renders it as **"still sending"** — the reassuring direction, on
+     * the one field whose job is to stop somebody believing a message arrived.
+     */
+    expect(deliveryOf(out({ status: 'REJECTED_BY_PROVIDER' }))).toBe('unknown');
+    expect(deliveryOf(out({ status: '' }))).toBe('unknown');
+  });
+
+  it('★★ an ABSENT status is unknown, not pending', () => {
+    /*
+     * A deploy that does not send the field must not be indistinguishable from
+     * one reporting a message on its way. `.optional()` rather than a default is
+     * what preserves that, and this is the assertion that keeps somebody from
+     * adding the default back.
+     */
+    expect(deliveryOf(out({}))).toBe('unknown');
+    expect(deliveryOf(out({ status: undefined }))).toBe('unknown');
+  });
+
+  it('★★ says nothing at all about an inbound message', () => {
+    /*
+     * `status` on an inbound row describes OUR ingestion, not anything a reader
+     * can act on, and a "delivered" marker beside the customer's own words would
+     * be nonsense.
+     */
+    expect(deliveryOf({ direction: 'INBOUND', status: 'PENDING' })).toBeNull();
+    expect(deliveryOf({ direction: 'INBOUND', status: 'FAILED' })).toBeNull();
+  });
+
+  it('★ tolerates a lower-case status from a service that sends one', () => {
+    expect(deliveryOf(out({ status: 'failed' }))).toBe('failed');
+    expect(deliveryOf(out({ status: ' Delivered ' }))).toBe('delivered');
+  });
+
+  it('★★ the schema leaves an absent status ABSENT, and does not default it', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * A MUTATION SURVIVED HERE, AND THIS IS THE TEST IT SURVIVED THROUGH
+     * ════════════════════════════════════════════════════════════════════════
+     * Changing `.optional()` to `.default('PENDING')` passed every other test in
+     * this file, because they all call `deliveryOf` with a hand-built object and
+     * never go through the schema. So the one place the default would take
+     * effect was the one place nothing looked.
+     *
+     * A deploy that does not send the field must not be indistinguishable from
+     * one reporting a message on its way. Absent is not pending.
+     */
+    const parsed = messageSchema.parse({
+      id: 'm1',
+      direction: 'OUTBOUND',
+      createdAt: '2026-09-27T10:00:00Z',
+    });
+    expect(parsed.status).toBeUndefined();
+    expect(deliveryOf(parsed)).toBe('unknown');
+  });
+
+  it('★★ the schema keeps the status instead of stripping it', () => {
+    /*
+     * The defect itself, asserted at the boundary. A `z.object` that does not
+     * name the field drops it silently, and from inside this codebase that is
+     * indistinguishable from the platform not sending it.
+     */
+    const parsed = messageSchema.parse({
+      id: 'm1',
+      direction: 'OUTBOUND',
+      createdAt: '2026-09-27T10:00:00Z',
+      status: 'FAILED',
+    });
+    expect(parsed.status).toBe('FAILED');
+    expect(deliveryOf(parsed)).toBe('failed');
   });
 });

@@ -9,6 +9,7 @@ import {
   systemEventOf,
   unsupportedType,
   type InboxMessage,
+  deliveryOf,
 } from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
@@ -254,11 +255,50 @@ export async function MessageStream({
                 collapsing them would empty a queue as customers open their
                 phones.
               */}
-              {message.direction === 'OUTBOUND' && message.readAt ? (
-                <span data-testid={`read-${message.id}`}>{t('stream.customerRead')}</span>
-              ) : message.direction === 'OUTBOUND' && message.deliveredAt ? (
-                <span data-testid={`delivered-${message.id}`}>{t('stream.delivered')}</span>
-              ) : null}
+              {/*
+                ══════════════════════════════════════════════════════════════
+                ★★ A FAILED MESSAGE USED TO RENDER AS NOTHING AT ALL
+                ══════════════════════════════════════════════════════════════
+                This read `readAt` then `deliveredAt` and showed nothing
+                otherwise — so `PENDING` and `FAILED` were the same rendering:
+                silence. An outbound reply the customer never received looked
+                exactly like one sent a second ago.
+
+                `Message.status` was on the wire the whole time and our
+                `z.object` stripped it. `deliveryOf` reads it together with both
+                timestamps, and its order matters: **a failure is not undone by a
+                timestamp recorded before the provider rejected it.**
+
+                A status we do not recognise says so rather than falling through
+                to silence. The safe default for "did this arrive" is no, and
+                this is the one field where the reassuring default would tell
+                somebody a customer has their answer.
+              */}
+              {(() => {
+                const delivery = deliveryOf(message);
+                if (delivery === null) return null;
+                if (delivery === 'read')
+                  return <span data-testid={`read-${message.id}`}>{t('stream.customerRead')}</span>;
+                if (delivery === 'delivered')
+                  return (
+                    <span data-testid={`delivered-${message.id}`}>{t('stream.delivered')}</span>
+                  );
+                if (delivery === 'failed')
+                  return (
+                    <span className={styles.streamFailed} data-testid={`failed-${message.id}`}>
+                      {t('stream.failed')}
+                    </span>
+                  );
+                if (delivery === 'sent')
+                  return <span data-testid={`sent-${message.id}`}>{t('stream.sent')}</span>;
+                if (delivery === 'pending')
+                  return <span data-testid={`pending-${message.id}`}>{t('stream.pending')}</span>;
+                return (
+                  <span data-testid={`delivery-unknown-${message.id}`}>
+                    {t('stream.deliveryUnknown')}
+                  </span>
+                );
+              })()}
             </p>
           </li>
         );
