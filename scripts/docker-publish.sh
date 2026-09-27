@@ -248,6 +248,28 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICE
     exit 1
   fi
 
+  # Campaign landings: the gateway's third static root, go.gotcha.co.il.
+  #
+  # Unlike the marketing site this one DOES care about NEXT_PUBLIC_* URLs, and
+  # they are inlined here at build time. go.gotcha.co.il is a separate hostname
+  # with no /login and no /pricing of its own, so every link out of a campaign
+  # page has to be absolute; campaigns/src/lib/site.ts defaults them to the
+  # production hostnames, and the variables below only need setting to point a
+  # build somewhere else (staging, or a local run).
+  if [ "${SKIP_CAMPAIGNS_BUILD:-0}" != "1" ]; then
+    echo "── campaign static export (host build) ──────────"
+    (
+      cd campaigns
+      [ -d node_modules ] || npm ci
+      NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export npm run build
+    )
+  fi
+  if [ ! -d campaigns/out ]; then
+    echo "ERROR: campaigns/out is missing after build step."
+    echo "       If you set SKIP_CAMPAIGNS_BUILD=1, supply a prebuilt campaigns/out."
+    exit 1
+  fi
+
   push_image gateway gateway/Dockerfile.prod .
 fi
 

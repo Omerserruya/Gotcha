@@ -1,0 +1,11 @@
+# go.gotcha.co.il serves paid-traffic campaign pages.
+#
+# Nothing here should be in a search index. These pages exist for the duration
+# of an ad flight, repeat the marketing site's claims in campaign-specific
+# wording, and are deleted when the flight ends. Indexing them would compete
+# with gotcha.co.il for our own terms and leave dead pages in results long
+# after the campaign is over.
+#
+# A page that genuinely SHOULD be indexed belongs on gotcha.co.il, not here.
+User-agent: *
+Disallow: /
