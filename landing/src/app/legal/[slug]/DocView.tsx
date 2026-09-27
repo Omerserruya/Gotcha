@@ -4,6 +4,8 @@ import React from 'react';
 import { LandingChrome } from '@/components/Landing';
 import Markdown, { anchorFor } from '@/components/Markdown';
 import { useLocale } from '@/lib/use-locale';
+import { localeHref } from '@/lib/locale-url';
+import type { Locale } from '@/lib/site';
 import { C, F, isHe } from '@/lib/site';
 
 type Doc = { title: string; effectiveDate: string; placeholders: string[]; blocks: any[] };
@@ -27,15 +29,45 @@ function outline(blocks: any[]): string[] {
   return out;
 }
 
-export default function DocView({ en, he, slug }: { en: Doc; he: Doc; slug: string }) {
-  const [locale, setLocale] = useLocale();
+export default function DocView({
+  en,
+  he,
+  slug,
+  pinned,
+}: {
+  en: Doc;
+  he: Doc;
+  slug: string;
+  /**
+   * Set when this document's language is part of its address.
+   *
+   * With it the language switch NAVIGATES to the sibling document rather than
+   * swapping the text in place. That is the entire point of having two
+   * addresses: each language becomes a page a search engine can hold and show,
+   * and someone who sends the Hebrew link sends the Hebrew page.
+   */
+  pinned?: Locale;
+}) {
+  const [locale, setLocale] = useLocale(pinned);
   const i = isHe(locale) ? 1 : 0;
   const doc = isHe(locale) ? he : en;
   const p = (k: keyof typeof COPY) => COPY[k][i];
   const headings = outline(doc.blocks);
 
   return (
-    <LandingChrome initialLang={locale} onLang={(l: string) => setLocale(l === 'he' ? 'he' : 'en')}>
+    <LandingChrome
+      initialLang={locale}
+      onLang={(l: string) => {
+        const next = l === 'he' ? 'he' : 'en';
+        if (pinned) {
+          // Derived from the live path: the same page has a different
+          // shape on the apex and on its own subdomain.
+          window.location.href = localeHref(window.location.pathname, next);
+          return;
+        }
+        setLocale(next);
+      }}
+    >
       <div data-no-translate style={{ padding: '98px 0 0' }}>
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '8px 24px 0' }}>
         <a href="/legal" style={{ font: `500 11px ${F.mono}`, letterSpacing: '.16em', textTransform: 'uppercase', color: C.accent }}>
