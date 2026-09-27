@@ -45,6 +45,29 @@ http {
         server frontend:${FRONTEND_PORT};
     }
 
+    # The redesigned app, running beside the one above and sharing nothing with
+    # it. Reached at /v2.
+    #
+    # ★ THE PORT IS HARDCODED, AND THAT IS NOT LAZINESS.
+    #
+    # This file is rendered by `envsubst` with an EXPLICIT variable whitelist
+    # (see the gateway's command in docker-compose.yml). A variable that is not
+    # on that list is passed through LITERALLY - measured, not assumed:
+    #
+    #   printf 'server x:$SOME_UNLISTED_VAR;' | envsubst '<the whitelist>'
+    #   -> server x:$SOME_UNLISTED_VAR;      (passed through verbatim)
+    #
+    # The example deliberately names no real variable: written with one that IS
+    # on the whitelist, this comment got substituted in the rendered file and
+    # illustrated the opposite of its point.
+    #
+    # nginx rejects that as an invalid port and REFUSES TO START, which takes
+    # every route in this file down, not just /v2. The app's Dockerfile pins
+    # `ENV PORT=3000` and `EXPOSE 3000`, so there was never a knob here.
+    upstream frontend_v2 {
+        server frontend-v2:3000;
+    }
+
     # API documentation UI. DEV ONLY - gateway/nginx.prod.conf.template has no
     # equivalent upstream or location, so /api/docs simply does not exist in
     # production. That is a structural absence, not a runtime flag that could be
@@ -1721,6 +1744,45 @@ http {
         location /api/docs/ {
             proxy_pass http://swagger_ui/;
             proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── The redesigned app, mounted beside the existing one ──────────
+        #
+        # Nothing existing moves. Every /api/... prefix above is longer and more
+        # specific than this one, and the legacy catch-all below still takes
+        # everything else, so this adds a namespace rather than redirecting one.
+        #
+        # ★ `^~`, NOT A BARE PREFIX. In nginx a REGEX location beats a prefix
+        # location. A bare `/v2` would be safe here only because every regex in
+        # this block happens to be anchored at `^/t/` and the one matching
+        # `_next` lives in the help server block - true today, not true by
+        # construction. `^~` stops regex evaluation once this prefix wins, so the
+        # next unanchored regex somebody adds cannot quietly take /v2 paths.
+        #
+        # ★★ AND NO TRAILING SLASH ON proxy_pass. `http://frontend_v2;` forwards
+        # the URI unchanged, which is what the app needs: it was BUILT with
+        # basePath=/v2 and serves its own routes under that prefix, including
+        # /v2/_next/... for its bundle. Writing `http://frontend_v2/` would strip
+        # /v2 and hand the app paths it does not serve - a 404 that reads as a
+        # broken container.
+        #
+        # The app owns its own locale negotiation: /v2/sign-in with
+        # Accept-Language: he answers 307 -> /v2/he/sign-in. A rewrite here would
+        # have pinned one language for a bilingual product, which is why there is
+        # no rewrite here.
+        location ^~ /v2 {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            # Socket.IO does not arrive here - the browser connects to
+            # /socket.io/ at the root, which is the platform's own service and
+            # already routed above. This upgrade is for Next's own streaming.
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
