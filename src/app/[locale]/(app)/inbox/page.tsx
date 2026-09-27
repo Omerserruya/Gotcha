@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { ConversationHeader } from '@/features/inbox/ConversationHeader';
+import { CopilotPanel } from '@/features/inbox/CopilotPanel';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
@@ -120,6 +121,18 @@ export default async function Page({
             />
 
             <MessageStream messages={data.messages} channel={data.open.channel} />
+
+            {/*
+              ★★ BELOW THE STREAM, AND A SIBLING OF IT.
+              A suggested reply belongs next to where a reply gets written, which
+              is the bottom of this column. And both are async server components,
+              so neither may contain the other.
+
+              `loadCopilot` is awaited in `loadInbox` alongside every other read:
+              a 402 here is an ordinary commercial state and must not take the
+              conversation down with it.
+            */}
+            <CopilotPanel read={data.copilot} />
           </section>
         )}
 

@@ -1043,6 +1043,20 @@ export const inboxEndpoints = {
   messages: (conversationId: string) =>
     endpoint('/api/conversations/{conversationId}/messages', { conversationId }),
 
+  /**
+   * The AI's suggested replies for one conversation.
+   *
+   * ⚠ ENTITLEMENT-GATED on `ai.copilot`, so a **402** here is an ordinary state
+   * and not a fault — Foundation denies Copilot. Its neighbour `/summary` is
+   * gated on a DIFFERENT key (`communication.crm_summaries`), so having one and
+   * not the other is a plan combination the product sells.
+   *
+   * A read. It costs a model call, which is why the route dedupes on
+   * `x-request-instance-id`, but it writes nothing.
+   */
+  suggestions: (conversationId: string) =>
+    endpoint('/api/ai-assist/{conversationId}/suggestions', { conversationId }),
+
   /* ── Screen 02's three verbs ─────────────────────────────────────────── */
 
   /**

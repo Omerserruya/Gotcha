@@ -86,5 +86,22 @@
   },
   "context": {
     "label": "About this customer"
+  },
+  "copilot": {
+    "heading": "What GOTCHA would say",
+    "none": "GOTCHA has nothing to suggest for this one. Write the reply yourself.",
+    "unavailable": "We couldn’t reach GOTCHA for a suggestion just now. Nothing is wrong with the conversation.",
+    "notOnPlan": "Suggested replies are not part of your plan, so GOTCHA is not drafting for this conversation.",
+    "limitReached": "You have used all the suggested replies your plan includes for now.",
+    "notBuilt": "GOTCHA does not offer suggested replies. This is not something a plan change would add.",
+    "whereToChange": "Someone with an admin role can change the plan under Settings · Plan & pricing.",
+    "otherMode": "This workspace has GOTCHA set up to be asked questions rather than to draft replies, and that panel is not built yet.",
+    "proposal": "an action it would take, not a reply",
+    "confidence": {
+      "high": "Confident",
+      "medium": "Fairly confident",
+      "low": "Unsure",
+      "unstated": "Confidence not reported"
+    }
   }
 }

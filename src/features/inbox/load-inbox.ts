@@ -20,6 +20,7 @@ import { currentUserSchema } from '@/api/contracts/identity';
 import { authEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { z } from 'zod';
+import { loadCopilot, type CopilotRead } from './load-copilot';
 
 /**
  * What screen 02 reads.
@@ -121,6 +122,8 @@ export interface InboxData {
   readonly messages: readonly InboxMessage[] | null;
   readonly timeline: CustomerTimeline | null;
   readonly orders: CommerceContextResponse | null;
+  /** Never `null`: `loadCopilot` returns which KIND of nothing it got. */
+  readonly copilot: CopilotRead;
   /** `User.id` of the person looking, or `null` when we could not read it. */
   readonly meId: string | null;
   /** Active colleagues this viewer may transfer to. Never includes them. */
@@ -238,10 +241,16 @@ export async function loadInbox(conversationId?: string, cursor?: string): Promi
       messages: null,
       timeline: null,
       orders: null,
+      /*
+       * Nothing is open, so nothing was asked. Not a failure and not a refusal —
+       * `unavailable` is the closest honest answer and the panel is not rendered
+       * in this branch anyway.
+       */
+      copilot: { state: 'unavailable' },
     };
   }
 
-  const [messages, timeline, orders] = await Promise.all([
+  const [messages, timeline, orders, copilot] = await Promise.all([
     api
       .get({ endpoint: inboxEndpoints.messages(open.id), payload: streamPageSchema, raw: true })
       .then((page) => page.data)
@@ -283,7 +292,19 @@ export async function loadInbox(conversationId?: string, cursor?: string): Promi
         logger.warn('inbox.orders_failed', { cause });
         return null;
       }),
+    /*
+     * ★★ A PEER, AND ITS 402 IS AN ORDINARY STATE.
+     *
+     * `requireEntitlement('ai.copilot')` refuses this for any tenant whose plan
+     * does not include Copilot — which is Foundation, a plan the company sells.
+     * So the read must not take the conversation down with it, and its refusal
+     * must not be read as the whole tenant being gated, which is what
+     * `tenantGateFrom` used to do with it.
+     *
+     * `loadCopilot` owns that distinction and never throws.
+     */
+    loadCopilot(open.id),
   ]);
 
-  return { rows, ...paging, ...viewer, open, messages, timeline, orders };
+  return { rows, ...paging, ...viewer, open, messages, timeline, orders, copilot };
 }
