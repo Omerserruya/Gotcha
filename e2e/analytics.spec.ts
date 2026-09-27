@@ -243,15 +243,96 @@ for (const size of SIZES) {
      * would show the old name back. The control's absence is the ruling, and
      * this is where it is pinned in a browser rather than in a unit test.
      */
-    test('4 · no rename, no merge, nothing to press', async ({ page }) => {
+    test('4 · the screen offers to do nothing, and says why it cannot', async ({ page }) => {
       if (onlyOneProject()) return;
 
       await openAnalytics(page, 'en');
-
       const main = page.locator('main');
-      await expect(main.getByRole('button')).toHaveCount(0);
-      await expect(main.locator('input, textarea, select')).toHaveCount(0);
-      await expect(main).not.toHaveText(/rename|merge|combine these/i);
+
+      /*
+       * ★★ THE CONTROL, NOT THE VOCABULARY. THIS GUARD USED TO FORBID THE WORD.
+       *
+       * It asserted `not.toHaveText(/rename|merge|combine these/i)` and failed
+       * on the caption that makes the panel shippable:
+       *
+       *   "GOTCHA grouped these questions itself. Two lines can be the same
+       *    question worded differently — it hasn't learned to merge them yet."
+       *
+       * A reader who sees two rows that look like one question has to learn
+       * that WE KNOW, or they learn instead that our counts are unreliable.
+       * **The guard forbade the word; the screen needs the word to tell the
+       * truth** — and "merge" is the only honest way to deny merging.
+       *
+       * Fourth assertion this week aimed at wording when it meant a claim,
+       * after the textarea, `/past conversations/i` and `TeamLoad`'s "not the
+       * seven days above". Every one fired on copy that had got MORE truthful,
+       * which is the tell: a claim can always be made in other words, while
+       * the forbidden words are often the only way to refuse it.
+       *
+       * So what is forbidden is an affordance. A rename that cannot be
+       * persisted must not be offered — a "topic" is a `groupBy` recomputed
+       * per request over `detectedIntent` with no model behind it, so the next
+       * request would show the old name back.
+       */
+      const interactive = main.locator(
+        [
+          'button',
+          '[role="button"]',
+          '[role="menuitem"]',
+          '[role="checkbox"]',
+          '[role="textbox"]',
+          'input',
+          'textarea',
+          'select',
+          '[contenteditable="true"]',
+          /* A merge offered by dragging one row onto another. */
+          '[draggable="true"]',
+        ].join(', '),
+      );
+      await expect(
+        interactive,
+        'this screen is read-only by construction: two panels of figures. A control ' +
+          'here is either a write with nothing behind it, or a rename with nowhere ' +
+          'to persist.',
+      ).toHaveCount(0);
+
+      /*
+       * ★★ AND THE HONESTY IS REQUIRED, NOT MERELY PERMITTED.
+       *
+       * The old guard could be satisfied by DELETING the caption. This one
+       * cannot: the sentence explaining why the grouping is imperfect has to be
+       * there. The inversion is the point — a test about an absent control
+       * should demand the explanation, not punish it.
+       *
+       * ── AND IT IS CONDITIONAL ON THE PANEL BEING READABLE, WHICH THE
+       *    ASSERTION ABOVE IS NOT ──
+       * "Nothing can be pressed" is true in every state, including a failed
+       * read. The caption only exists when the panel rendered — it is outside
+       * the empty branch, so an empty tenant still has it, but a 403 on
+       * `analytics:dashboard:read` replaces the whole panel with its own
+       * sentence. Asserting it unconditionally would fail this test for a
+       * permission, which is the same mistake one layer along.
+       */
+      if ((await page.getByTestId('asked-about').count()) === 0) {
+        recordUnreached(
+          EVIDENCE,
+          `${size.name}-4-read-only`,
+          'Shot skipped, but the read-only assertion above passed: nothing on this ' +
+            'screen can be pressed in any state. The questions panel itself could not ' +
+            'be read — `analytics:dashboard:read` is a permission this session may not ' +
+            'hold — so the caption that explains the grouping is not on the page to ' +
+            'check. Shot 1 shows the panel saying so.',
+        );
+        test.skip();
+        return;
+      }
+
+      await expect(
+        page.getByTestId('asked-caption'),
+        'the caption explaining that GOTCHA did the grouping and cannot yet merge ' +
+          'near-duplicates is missing. Without it, two rows that look like one ' +
+          'question read as broken counts rather than as a known limit.',
+      ).toHaveText(/grouped these questions itself/i);
 
       await shoot(page, `${size.name}-4-read-only`);
     });

@@ -290,3 +290,41 @@ The same payload carries every other type the adapter cannot model — `revoke`,
 `edit`, `unsupported` — as `[<type> message]`. Naming the provider's type is
 all that can honestly be said about those: unlike a reaction, nobody here has
 read their payloads.
+
+## An assertion aimed at a phrase forbids the words, not the claim
+
+Four times in one week a negative assertion was written against wording and
+went red on copy that had got **more** truthful:
+
+  a textarea         asserted on the control when the rule was about a stored
+                     value, and failed when a backed control arrived
+  `/past conversations/i`  forbade the invented *"Learned from 1,248
+                     conversations"*, and caught the honest caption naming the
+                     conflict panel's real axis
+  `not the seven days above`  required a sentence denying a header, and broke
+                     when the header was removed and the denial became a
+                     reference to nothing
+  `/rename|merge/i`  forbade offering a merge, and caught *"it hasn't learned
+                     to merge them yet"* — the sentence that makes the panel
+                     shippable, because a reader seeing two near-identical rows
+                     has to learn that we know rather than that the counts are
+                     broken
+
+The asymmetry is the whole thing: **a claim can be made in other words, while
+the forbidden words are often the only honest way to refuse it.** So a
+phrase-level `not.toHaveText` is weak against the defect and strong against the
+fix — it fails exactly when somebody explains a limit.
+
+Aim at what the claim is made OF:
+
+  an invented number  → forbid a digit in that context, not the noun
+  an offered action   → forbid the affordance — `button`, `[role="button"]`,
+                        `input`, `[contenteditable]`, `[draggable]` — and let
+                        the prose say anything true
+  a period            → assert the period that IS covered, and forbid the
+                        others by name
+
+And where the absence needs explaining, **require the explanation in the same
+test**. The `/rename|merge/i` guard could be satisfied by deleting the caption;
+its replacement fails if the caption is gone. A test about a missing control
+should demand the sentence, not punish it.
