@@ -5,7 +5,7 @@ import { Link } from '@/i18n/navigation';
 
 import styles from './Home.module.css';
 import { initials, waitLabel } from './queue-row';
-import { channelLabelKey } from '@/api/contracts/inbox';
+import { channelName } from '@/api/contracts/inbox';
 
 /**
  * "Needs you now" — the ranked queue on Home.
@@ -111,9 +111,7 @@ export async function QueueList({
                   found it.
                 */}
                 <span className={styles.queueRowChannel}>
-                  {channelLabelKey(item.channel)
-                    ? channelNames(`name.${item.channel}` as 'name.WHATSAPP')
-                    : channelNames('name.other')}
+                  {channelName(item.channel, channelNames) ?? channelNames('name.other')}
                 </span>
               </span>
               <span className={styles.queueRowPreview}>{item.preview}</span>

@@ -172,6 +172,60 @@ export function waitingScale(minutes: number): { scale: WaitingScale; value: num
  * enum name. The caller says "another channel" and the value goes to the log,
  * which is where a new channel type should surface.
  */
+/**
+ * A channel in the reader's language, or `null` when there is no channel.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ ONE FUNCTION, BECAUSE THIS DEFECT HAS NOW BEEN FOUND TEN TIMES
+ * ════════════════════════════════════════════════════════════════════════════
+ * A raw channel enum reaching a reader has been fixed at ten separate sites:
+ * the inbox queue, Home's queue rows, Home's channel bar, Home's "worth
+ * knowing" sentence, the inbox identity panel, the automations list, the AI
+ * employees list, the campaign card, the customer timeline, and the channels
+ * screen. Six of those were found only after the first three were "fixed".
+ *
+ * Every one of them had written the same three lines by hand:
+ *
+ *     channelLabelKey(x) ? t(`name.${x}`) : t('name.other')
+ *
+ * A pattern copied at ten sites is a function that has not been written yet,
+ * and the eleventh site will be written by somebody who has not read any of
+ * this. So this is the only place that shape exists now.
+ *
+ * `t` is the `channels` namespace translator, passed in rather than resolved
+ * here: this module is a contract and must not reach for a framework.
+ */
+export function channelName(
+  channel: string | null | undefined,
+  /*
+   * Typed as the two keys this function can ask for. next-intl's namespace
+   * translator accepts every key in `channels.json`, and a function that
+   * accepts more is assignable where one accepting fewer is wanted — so callers
+   * pass `channelNames` straight in, with no cast at the call site. The cast
+   * that used to sit at each of those sites is the thing being removed.
+   */
+  t: (key: 'name.WHATSAPP' | 'name.other') => string,
+): string | null {
+  if (!channel) return null;
+  return channelLabelKey(channel)
+    ? t(`name.${channel}` as 'name.WHATSAPP')
+    : /*
+       * A channel the platform added after this catalogue was written. Naming it
+       * "another channel" keeps the sentence true; printing the enum would make
+       * the reader do the translating.
+       */
+      t('name.other');
+}
+
+/** Every channel in a list, named. Unknown ones collapse to one "another channel". */
+export function channelNameList(
+  channels: readonly string[],
+  t: (key: 'name.WHATSAPP' | 'name.other') => string,
+): string[] {
+  const named = channels.map((channel) => channelName(channel, t)).filter((x): x is string => !!x);
+  return [...new Set(named)];
+}
+
 export function channelLabelKey(channel: string | null): string | null {
   if (!channel) return null;
   const known = (CHANNEL_TYPES as readonly string[]).includes(channel);

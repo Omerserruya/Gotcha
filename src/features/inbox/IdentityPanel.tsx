@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { channelHandles, type CustomerTimeline } from '@/api/contracts/customer-detail';
-import { channelLabelKey } from '@/api/contracts/inbox';
+import { channelName } from '@/api/contracts/inbox';
 import type { ChannelHandle } from '@/api/contracts/customer-detail';
 
 import styles from './Inbox.module.css';
@@ -137,9 +137,7 @@ export async function IdentityPanel({
                   blind spots of the thing that saw it.
                 */}
                 <span className={styles.handleChannel}>
-                  {channelLabelKey(handle.channel)
-                    ? channelNames(`name.${handle.channel}` as 'name.WHATSAPP')
-                    : channelNames('name.other')}
+                  {channelName(handle.channel, channelNames) ?? channelNames('name.other')}
                 </span>
                 {/*
                   The raw identifier — a phone number or an email — is what

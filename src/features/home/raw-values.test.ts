@@ -168,3 +168,60 @@ describe("★★ no stylesheet capitalises a value on the product's behalf", () 
     expect(offenders).toEqual([]);
   });
 });
+
+describe('★★ nobody writes the thirteenth channel renderer by hand', () => {
+  it('★★ no component builds a `channels` message key by interpolation', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE PATTERN THAT EXISTED TWELVE TIMES
+     * ════════════════════════════════════════════════════════════════════════
+     *     channelLabelKey(x) ? t(`name.${x}` as 'name.WHATSAPP') : t('name.other')
+     *
+     * Copied at twelve sites, three of which dropped the guard and the fallback
+     * and so rendered `name.TELEGRAM` — the message KEY — for any channel the
+     * catalogue had not heard of. `channelName` is now the only place that shape
+     * lives.
+     *
+     * This forbids the SHAPE rather than auditing the behaviour, which is a
+     * weaker kind of check and is the right one here: the behaviour is covered by
+     * unit tests on the helper, and what this catches is a future author writing
+     * the line again in a new file, where no test of mine is looking.
+     *
+     * ⚠ Its blind spots, stated: it cannot see a key built through a variable, a
+     * helper, or string concatenation, and it says nothing about files that
+     * render a channel with no translator at all. It is a tripwire on one idiom.
+     */
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+
+    const walk = async (dir: string): Promise<string[]> => {
+      const entries = await readdir(dir, { withFileTypes: true });
+      const out: string[] = [];
+      for (const entry of entries) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...(await walk(full)));
+        else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) out.push(full);
+      }
+      return out;
+    };
+
+    const files = await walk(join(process.cwd(), 'src'));
+    /* A path that resolves to nothing makes this pass for ever. */
+    expect(files.length).toBeGreaterThan(100);
+
+    /*
+     * The one place allowed to build the key — `channelName` itself. Named
+     * rather than pattern-excluded, so moving the helper makes this fail and the
+     * next person has to decide deliberately where the idiom lives.
+     */
+    const HOME = join('src', 'api', 'contracts', 'inbox.ts');
+
+    const offenders = [];
+    for (const file of files) {
+      if (file.endsWith(HOME)) continue;
+      const source = await readFile(file, 'utf8');
+      if (/[`'"]name\.\$\{/.test(source)) offenders.push(file.replace(process.cwd(), '.'));
+    }
+    expect(offenders).toEqual([]);
+  });
+});

@@ -9,6 +9,7 @@ import { Input } from '@/design-system/primitives/input/Input';
 
 import { connectEmail, connectWebChat, setResponseMode, type ChannelWriteResult } from './actions';
 import styles from './Channels.module.css';
+import { channelName } from '@/api/contracts/inbox';
 
 /**
  * *"Connecting is a two-step task, not an integration form."*
@@ -45,7 +46,7 @@ export function ConnectPanel({
 }) {
   const t = useTranslations('channels');
   const shape = shapeOf(channel);
-  const name = t(`name.${channel}` as 'name.WHATSAPP');
+  const name = channelName(channel, t) ?? t('name.other');
 
   return (
     <div className={styles.connect} data-testid="connect-panel" data-shape={shape}>

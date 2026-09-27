@@ -5,7 +5,7 @@ import { Text } from '@/design-system/primitives/text/Text';
 
 import styles from './Home.module.css';
 import { CHANNEL_SPLIT_DAYS } from './load-home-data';
-import { channelLabelKey } from '@/api/contracts/inbox';
+import { channelName } from '@/api/contracts/inbox';
 
 /**
  * The day in four figures, and where it came from.
@@ -176,9 +176,7 @@ function ChannelSplit({
            * queue.
            */
           <span key={channel.channel}>
-            {channelLabelKey(channel.channel)
-              ? channelNames(`name.${channel.channel}` as 'name.WHATSAPP')
-              : channelNames('name.other')}{' '}
+            {channelName(channel.channel, channelNames) ?? channelNames('name.other')}{' '}
             {share(channel.conversationCount)}%
           </span>
         ))}

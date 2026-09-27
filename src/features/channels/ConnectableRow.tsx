@@ -7,6 +7,7 @@ import type { ChannelType } from '@/api/contracts/channels';
 
 import styles from './Channels.module.css';
 import { ConnectPanel } from './ConnectPanel';
+import { channelName } from '@/api/contracts/inbox';
 
 /**
  * A channel that could be connected, and the panel that connects it.
@@ -31,7 +32,8 @@ export function ConnectableRow({ channel }: { readonly channel: ChannelType }) {
       data-kind="connectable"
     >
       <div className={styles.identity}>
-        <span className={styles.name}>{t(`name.${channel}` as 'name.WHATSAPP')}</span>
+        {/* No fallback here either: an unlisted channel rendered `name.X`. */}
+        <span className={styles.name}>{channelName(channel, t) ?? t('name.other')}</span>
         <span className={styles.detail}>{t(`pitch.${channel}` as 'pitch.WHATSAPP')}</span>
       </div>
 

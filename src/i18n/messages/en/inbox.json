@@ -38,7 +38,6 @@
     "undatedThisPage": "{count, plural, =1 {One conversation on this page has no last-message time} other {# conversations on this page have no last-message time}} — and any others are at the very end of the queue, past the pages you've loaded.",
     "undatedInView": "{count, plural, =0 {No conversation here is missing a last-message time.} =1 {One conversation in this view has no last-message time, so we can't place it in the order} other {# conversations in this view have no last-message time, so we can't place them in the order}}",
     "label": "Waiting",
-    "otherChannel": "Another channel",
     "waitingFor": {
       "minutes": "{value}m waiting",
       "hours": "{value, plural, =1 {1 hour waiting} other {# hours waiting}}",

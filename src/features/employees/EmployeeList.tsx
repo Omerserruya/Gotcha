@@ -1,6 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { aloneRate, type Employee } from '@/api/contracts/employees';
+import { channelNameList } from '@/api/contracts/inbox';
 
 import styles from './Employees.module.css';
 import { DeleteEmployee } from './DeleteEmployee';
@@ -27,6 +28,7 @@ import { PauseEmployee } from './PauseEmployee';
  */
 export async function EmployeeList({ employees }: { readonly employees: readonly Employee[] }) {
   const t = await getTranslations('employees');
+  const channelNames = await getTranslations('channels');
   const format = await getFormatter();
 
   return (
@@ -54,9 +56,17 @@ export async function EmployeeList({ employees }: { readonly employees: readonly
               Where it answers. Channels are the employee's reach, and an
               employee with none answers nowhere — which is worth seeing.
             */}
+            {/*
+              ★★ THE FIFTH RENDERER OF A CHANNEL ENUM. This read
+              `employee.channels.join(' · ')`, so an employee on two channels
+              said "WHATSAPP · INSTAGRAM". Found by grepping `.channels`, not by
+              looking at a screen — the same sweep found three more in one pass.
+            */}
             <p className={styles.channels} data-testid={`channels-${employee.id}`}>
               {employee.channels.length > 0
-                ? t('onChannels', { channels: employee.channels.join(' · ') })
+                ? t('onChannels', {
+                    channels: channelNameList(employee.channels, channelNames).join(' · '),
+                  })
                 : t('noChannels')}
             </p>
 

@@ -10,6 +10,8 @@ import {
   waitingMinutes,
   CONVERSATION_STATUSES,
   type InboxMessage,
+  channelName,
+  channelNameList,
 } from './inbox';
 
 const NOW = new Date('2026-09-25T12:00:00.000Z');
@@ -123,5 +125,94 @@ describe('★★ the voice note cannot be read out', () => {
     expect(hasTranscript(message({ messageType: 'audio', mediaUrl: 'https://x/a.ogg' }))).toBe(
       false,
     );
+  });
+});
+
+describe('★★ channelName — one function, because this defect was found twelve times', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * TWELVE SITES, SIX OF THEM FOUND AFTER THE FIRST THREE WERE "FIXED"
+   * ════════════════════════════════════════════════════════════════════════════
+   * A raw channel enum reaching a reader was repaired at the inbox queue, Home's
+   * rows, Home's channel bar, Home's insight sentence, the inbox identity panel,
+   * the automations list, the AI employees list, the campaign card, the customer
+   * timeline, the channels screen, the connect panel and the connectable row.
+   *
+   * Every one of them had hand-written the same three lines. **A pattern copied
+   * at twelve sites is a function nobody wrote yet**, and the thirteenth would be
+   * written by somebody who had read none of the comments.
+   *
+   * The translator is passed in because this module is a contract and must not
+   * reach for a framework — which is also what makes it testable here with a
+   * plain function instead of a renderer.
+   */
+  const catalogue = new Set([
+    'WHATSAPP',
+    'MESSENGER',
+    'INSTAGRAM',
+    'EMAIL',
+    'GMAIL',
+    'OUTLOOK',
+    'SLACK',
+    'VOICE',
+    'WEBCHAT',
+    'SHOPIFY_LIVE_CHAT',
+    'other',
+  ]);
+  /** Stands in for the `channels` namespace translator, and fails loudly. */
+  const t = (key: 'name.WHATSAPP' | 'name.other'): string => {
+    const value = key.slice('name.'.length);
+    if (!catalogue.has(value)) throw new Error(`no such key: ${key}`);
+    return `«${value}»`;
+  };
+
+  it('names a channel the catalogue knows', () => {
+    expect(channelName('WHATSAPP', t)).toBe('«WHATSAPP»');
+    expect(channelName('SHOPIFY_LIVE_CHAT', t)).toBe('«SHOPIFY_LIVE_CHAT»');
+  });
+
+  it('★★ says "another channel" for one it does not, rather than asking for a key', () => {
+    /*
+     * ★ THIS IS THE ASSERTION THAT COVERS THE THREE WORST SITES. `ChannelList`,
+     *   `ConnectPanel` and `ConnectableRow` called the translator with an
+     *   unguarded key, and next-intl returns the KEY it could not resolve — so an
+     *   unlisted channel rendered `name.TELEGRAM`, which is worse than the enum.
+     *
+     * The stub throws on an unknown key for exactly that reason: a stub that
+     * politely returned something would let the defect pass.
+     */
+    expect(channelName('TELEGRAM', t)).toBe('«other»');
+    expect(() => t('name.TELEGRAM' as 'name.WHATSAPP')).toThrow();
+  });
+
+  it('★★ returns null for absent, which is not "another channel"', () => {
+    /*
+     * Three states. "We were not told which channel" is not "a channel we do not
+     * recognise", and the inbox queue distinguishes them in its own words — it
+     * can only do that if this returns something distinguishable.
+     */
+    expect(channelName(null, t)).toBeNull();
+    expect(channelName(undefined, t)).toBeNull();
+    expect(channelName('', t)).toBeNull();
+  });
+
+  it('names every channel in a list', () => {
+    expect(channelNameList(['WHATSAPP', 'EMAIL'], t)).toEqual(['«WHATSAPP»', '«EMAIL»']);
+  });
+
+  it('★★ collapses several unknown channels into one "another channel"', () => {
+    /*
+     * An employee on three channels the catalogue has never heard of should not
+     * read "Another channel · Another channel · Another channel", which says
+     * three times over that we do not know something.
+     */
+    expect(channelNameList(['TELEGRAM', 'SIGNAL', 'WHATSAPP'], t)).toEqual([
+      '«other»',
+      '«WHATSAPP»',
+    ]);
+  });
+
+  it('★ drops an empty entry from a list rather than rendering a gap', () => {
+    expect(channelNameList(['', 'WHATSAPP'], t)).toEqual(['«WHATSAPP»']);
   });
 });

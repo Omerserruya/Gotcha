@@ -1,7 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { hasEverRun, type Automation } from '@/api/contracts/automations';
-import { channelLabelKey } from '@/api/contracts/inbox';
+import { channelName } from '@/api/contracts/inbox';
 
 import styles from './Automations.module.css';
 
@@ -71,11 +71,7 @@ export async function AutomationList({
           */}
           <p className={styles.where} data-testid={`where-${automation.id}`}>
             {automation.channel
-              ? t('where.one', {
-                  channel: channelLabelKey(automation.channel)
-                    ? channelNames(`name.${automation.channel}` as 'name.WHATSAPP')
-                    : channelNames('name.other'),
-                })
+              ? t('where.one', { channel: channelName(automation.channel, channelNames)! })
               : t('where.all')}
           </p>
 

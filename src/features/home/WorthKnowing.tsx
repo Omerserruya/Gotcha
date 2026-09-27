@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { readableValues } from '@/api/contracts/capabilities';
 import type { Insight } from '@/api/contracts/analytics';
-import { channelLabelKey } from '@/api/contracts/inbox';
+import { channelName } from '@/api/contracts/inbox';
 
 import styles from './Home.module.css';
 
@@ -49,9 +49,7 @@ export async function WorthKnowing({ insights }: { insights: readonly Insight[] 
         <p className={styles.insightBody}>
           {t.rich(kindKey(top.kind), {
             ...readableValues(top.values, (key, value) =>
-              key === 'channel' && channelLabelKey(value)
-                ? channelNames(`name.${value}` as 'name.WHATSAPP')
-                : null,
+              key === 'channel' ? channelName(value, channelNames) : null,
             ),
             b: (chunks) => <b>{chunks}</b>,
           })}

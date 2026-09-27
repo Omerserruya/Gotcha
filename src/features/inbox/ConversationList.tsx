@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import {
-  channelLabelKey,
+  channelName,
   queueOrder,
   waitingMinutes,
   waitingScale,
@@ -99,7 +99,6 @@ export async function ConversationList({
 
   const row = (conversation: ConversationRow, testid: string) => {
     const waiting = waitingMinutes(conversation, now);
-    const channel = channelLabelKey(conversation.channel);
     return (
       <li key={conversation.id} className={styles.queueRow} data-testid={testid}>
         {/*
@@ -127,11 +126,16 @@ export async function ConversationList({
           here strips raw identifiers, and an agent cannot act on an enum name.
         */}
         <span className={styles.channel}>
-          {conversation.channel === null
-            ? t('queue.unknownChannel')
-            : channel === null
-              ? t('queue.otherChannel')
-              : channelNames(`name.${channel}` as 'name.WHATSAPP')}
+          {/*
+            Three states through one helper. `channelName` returns `null` only
+            for an absent channel — a recognised one gets its name and an
+            unrecognised one gets "another channel" — so the distinction this
+            row needs is the distinction the helper already draws.
+
+            This used `channels.name.other` under a local key of its own; the
+            two said the same thing in two places, which is one of them too many.
+          */}
+          {channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel')}
         </span>
         {/*
           ★ NULL IS NOT ZERO. A row we cannot age says nothing rather than

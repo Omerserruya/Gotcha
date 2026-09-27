@@ -12,6 +12,7 @@ import {
 import type { CustomerDetail as Detail } from './load-customer';
 
 import styles from './Customers.module.css';
+import { channelName } from '@/api/contracts/inbox';
 
 /**
  * Screen 04b — one customer.
@@ -77,6 +78,7 @@ import styles from './Customers.module.css';
  */
 export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
   const t = await getTranslations('customers');
+  const channelNames = await getTranslations('channels');
   const format = await getFormatter();
 
   if (!detail.timeline) {
@@ -265,7 +267,10 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
                 <span className={styles.eventMeta}>
                   {format.dateTime(new Date(event.createdAt), { dateStyle: 'medium' })}
                   {' · '}
-                  {event.channel ? `${event.channel} · ` : ''}
+                  {/* The seventh renderer, in a timeline row's meta line. */}
+                  {channelName(event.channel, channelNames)
+                    ? `${channelName(event.channel, channelNames)} · `
+                    : ''}
                   {/* Direction is a property of a message, not of an action. */}
                   {event.direction
                     ? t(`detail.timeline.${event.direction}` as 'detail.timeline.INBOUND')

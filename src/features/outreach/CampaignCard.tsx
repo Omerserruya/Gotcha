@@ -1,6 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { isStoppable, type Campaign } from '@/api/contracts/outreach';
+import { channelName } from '@/api/contracts/inbox';
 
 import styles from './Outreach.module.css';
 import { StopCampaign } from './StopCampaign';
@@ -47,6 +48,7 @@ export async function CampaignCard({
   readonly detailed: boolean;
 }) {
   const t = await getTranslations('outreach');
+  const channelNames = await getTranslations('channels');
   const format = await getFormatter();
 
   return (
@@ -59,7 +61,10 @@ export async function CampaignCard({
         <h3 className={styles.cardName}>{campaign.name}</h3>
         <p className={styles.cardMeta}>
           {t(`status.${campaign.status}` as 'status.SENDING')}
-          {campaign.channel ? ` · ${campaign.channel}` : null}
+          {/* The sixth renderer: this appended the raw enum after the status. */}
+          {channelName(campaign.channel, channelNames)
+            ? ` · ${channelName(campaign.channel, channelNames)}`
+            : null}
         </p>
       </header>
 

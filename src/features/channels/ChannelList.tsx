@@ -5,6 +5,7 @@ import type { Channel, VoiceChannel } from '@/api/contracts/channels';
 import styles from './Channels.module.css';
 import { ConnectableRow } from './ConnectableRow';
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
+import { channelName } from '@/api/contracts/inbox';
 
 /**
  * *"Each channel shows its identity and its real volume, so the list doubles
@@ -83,7 +84,13 @@ export async function ChannelList({
             data-troubled={troubled ? 'yes' : 'no'}
           >
             <div className={styles.identity}>
-              <span className={styles.name}>{t(`name.${row.channel}` as 'name.WHATSAPP')}</span>
+              {/*
+                ★★ THIS HAD NO FALLBACK AT ALL. A channel absent from
+                `channels.json` rendered `name.TELEGRAM` — the KEY, not even the
+                enum — because next-intl returns the key it could not resolve.
+                The other nine sites at least degraded to the platform's word.
+              */}
+              <span className={styles.name}>{channelName(row.channel, t) ?? t('name.other')}</span>
               <span className={styles.detail} data-testid={`channel-detail-${row.id}`}>
                 {detail(row)}
               </span>
