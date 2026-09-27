@@ -286,7 +286,7 @@ for (const size of SIZES) {
  *
  * Once, not per viewport: it is a fact about the source.
  */
-test('5 · this spec contains no click', async () => {
+test('5 · this spec presses nothing, by any of the verbs that press', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(join('e2e', 'inbox.spec.ts'), 'utf8');
 
@@ -302,17 +302,61 @@ test('5 · this spec contains no click', async () => {
    * So the needle never appears as text in this file, and the prose that
    * discusses it lives in comments, which come out before the count.
    */
-  const needle = ['.', 'click', '('].join('');
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const clicks = code.split(needle).length - 1;
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ `.click(` WAS THE ONLY VERB THIS FORBADE, AND IT IS NOT THE ONLY ONE
+   * ════════════════════════════════════════════════════════════════════════
+   * Screen 02 now carries a COMPOSER, whose whole purpose is to be pressed and
+   * which sends a message to a real person with no undo anywhere. A form can be
+   * submitted without clicking its button — `.press('Enter')` on a focused
+   * control, a dispatched event, `requestSubmit()` from an `evaluate` — and this
+   * guard saw none of those.
+   *
+   * It was not a weak guard. It was written when the only hazard on this screen
+   * was a button, and it encoded the hazard rather than the property, which is
+   * the same mistake every other check in this repository made on its first
+   * version. The property is "this spec causes no interaction".
+   *
+   * ⚠ Its remaining blind spot, stated: a verb reached through a variable, or
+   * assembled from parts the way these needles are. Somebody determined to press
+   * something can; somebody adding a click to "just check the button works"
+   * cannot, and that is who this is for.
+   */
+  const needles = [
+    ['.', 'click', '('],
+    ['.', 'dblclick', '('],
+    ['.', 'tap', '('],
+    ['.', 'press', '('],
+    ['.', 'pressSequentially', '('],
+    ['.', 'dispatchEvent', '('],
+    ['.', 'selectOption', '('],
+    ['.', 'setChecked', '('],
+    ['.', 'check', '('],
+    ['requestSubmit', '('],
+  ].map((parts) => parts.join(''));
+
+  const found = needles
+    .map((needle) => ({ needle, count: code.split(needle).length - 1 }))
+    .filter((hit) => hit.count > 0);
+
+  /*
+   * ★ The guard on the guard. If the needles stop matching the file's own
+   * vocabulary — a Playwright rename, say — this test passes for ever while
+   * reading nothing. Asserting the source was actually read is cheap and it is
+   * the failure that would otherwise be silent.
+   */
+  expect(code.length, 'the spec source was not read').toBeGreaterThan(1000);
 
   expect(
-    clicks,
-    'A press was added to the inbox spec. Screen 02 has no safe button: ' +
-      '"take control" sends the workspace greeting to a real customer and seizes ' +
-      'a live conversation with no way to put it back, and the commerce panel ' +
-      'cancels orders and issues refunds. If a control genuinely needs proving, ' +
-      'prove it in a component test with the action mocked — Verbs.test.tsx ' +
-      'mocks it to throw — and leave the capture to photograph.',
-  ).toBe(0);
+    found,
+    'An interaction was added to the inbox spec. Screen 02 has no safe control: ' +
+      'the COMPOSER sends a message to a real person and there is no undo anywhere ' +
+      'in this platform; "take control" sends the workspace greeting and seizes a ' +
+      'live conversation with no way to put it back; and the commerce panel cancels ' +
+      'orders and issues refunds. If a control genuinely needs proving, prove it in ' +
+      'a component test with the action mocked — Composer.test.tsx and ' +
+      'Verbs.test.tsx both do — and leave the capture to photograph.',
+  ).toEqual([]);
 });
