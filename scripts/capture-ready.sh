@@ -130,9 +130,27 @@ case "$code" in
     echo '           docker compose up -d recreates service containers with new IPs and' >&2
     echo "           leaves the gateway addressing the old ones. Every screen will read as" >&2
     echo "           broken and none of them is." >&2
-    echo "             docker compose restart gateway" >&2
+    echo "             docker exec chatcenter-gateway-1 nginx -s reload" >&2
     echo "             curl -o /dev/null -w '%{http_code}' $API_BASE/api/permissions/me" >&2
     echo "           401 means it reached the service. 502 means it did not." >&2
+    #
+    # ★★ A RELOAD IS ENOUGH, AND THE OBVIOUS DIAGNOSTIC PROVES NOTHING.
+    #
+    # 2026-09-27: recreating `frontend-v2` moved it to 172.19.0.22 and /v2
+    # answered 502. Inside the gateway container:
+    #
+    #   getent hosts frontend-v2   ->  172.19.0.22  frontend-v2   (CORRECT)
+    #
+    # **DNS was right the whole time.** nginx resolves an upstream once, at
+    # config load, and keeps the address; the resolver it would ask is not
+    # the thing that is stale. So "check that the name resolves" returns the
+    # right answer and disproves nothing - it is the same class as a health
+    # check whose BUILD_SHA matches itself.
+    #
+    # `nginx -s reload` re-reads the config and re-resolves, in place, with
+    # no new container and no new IP for anything else behind this gateway.
+    # `docker compose restart gateway` also works and is heavier: it stops
+    # the process that is currently serving every other path on this host.
     exit 1 ;;
   000)
     echo "NOT READY  nothing answered at $API_BASE — the platform is not up." >&2
