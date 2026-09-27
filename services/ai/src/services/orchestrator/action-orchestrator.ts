@@ -457,8 +457,18 @@ export class ActionOrchestrator {
         //
         // `restart: unless-stopped` means a daemon restart or a host reboot arms
         // that without anybody deciding to. A stale title is recoverable; a lost
-        // approval row is not. Delete this guard once `ai` is rebuilt against
-        // current shared.
+        // approval row is not.
+        //
+        // ★★★ AND THIS GUARD IS PERMANENT, NOT TEMPORARY. I first wrote "delete
+        // it once `ai` is rebuilt" - which was wrong, because the condition is
+        // STRUCTURAL to the mount/bake split rather than a one-off.
+        //
+        // `ai` mounts its own source and bakes `packages/shared`. So the moment
+        // anybody edits `services/ai/src` again - which happens continuously -
+        // the mounted source is newer than the image once more, and any shared
+        // export added in the meantime is missing from it again. The rebuild on
+        // 2026-09-27 (BUILD_SHA 37285241) closed this instance; it did not close
+        // the class. Removing the guard would just re-arm it on the next edit.
         summary:
           typeof describeApprovalAction === "function"
             ? describeApprovalAction(action.tool, action.args as Record<string, unknown>)

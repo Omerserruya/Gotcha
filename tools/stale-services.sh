@@ -4,10 +4,23 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # WHY /health's BUILD_SHA CANNOT ANSWER THIS ON DEV
 #
-# Every dev service reports build:"dev", because docker-compose.yml passes
-# BUILD_SHA:${BUILD_SHA:-dev} and nothing sets it. The string is identical
-# before and after any rebuild, so a gate comparing it would pass every time
-# and catch nothing - a control that cannot fail.
+# Every dev service reports build:"dev", and for TWO different reasons - which
+# is worth knowing, because it makes the gate even less useful than it looks:
+#
+#   conversation, ai, billing   receive `BUILD_SHA: ${BUILD_SHA:-dev}` and the
+#                               host variable is unset, so the default fires
+#   the other eight            never receive the variable at all, so the
+#                               `|| "dev"` fallback in service-app.ts fires
+#
+# Either way the string is identical before and after any rebuild, so a gate
+# comparing it would pass every time and catch nothing - a control that cannot
+# fail.
+#
+# ★ AS OF 2026-09-27 THIS IS NO LONGER UNIFORM. The `ai` image is now built with
+# the real short sha, so `/health` on `ai` answers with something that means
+# something while every other service still says "dev". That asymmetry is
+# deliberate and visible, which beats uniform and useless - but it means "they
+# all say dev" has become a claim to re-check rather than a standing fact.
 #
 # And for a BIND-MOUNTED service the image sha is the wrong question anyway.
 # `ai` mounts services/ai/src into the container, so the CHECKOUT decides what
