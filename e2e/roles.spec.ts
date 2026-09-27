@@ -106,12 +106,50 @@ async function shoot(page: Page, name: string) {
   await captureScreen(page, EVIDENCE, name);
 }
 
+/**
+ * ★★ ONE PROJECT CAPTURES, BECAUSE BOTH WOULD WRITE THE SAME FILES.
+ *
+ * `ltr` and `rtl` differ only in the browser's `locale`, and every screen here
+ * takes its direction from the URL — `/en/…` and `/he/…` — which is what
+ * next-intl reads. So the two projects rendered identical pixels into
+ * identical filenames and, with `fullyParallel: true`, raced to write them.
+ *
+ * Two costs, and the second is why this landed before a shoot:
+ *   · a torn PNG is not a missing shot, it is a corrupt one, and it reads as
+ *     a rendering defect;
+ *   · it doubled the request budget. The limit is 1,000 requests per fifteen
+ *     minutes per IP per service — see `missingIds` — and half of every run
+ *     was a re-run of the English tests under a Hebrew locale that changes
+ *     nothing.
+ *
+ * Hebrew is not lost: the specs that cover it navigate to `/he/…` themselves.
+ *
+ * ── AND THE GUARD IS THE FIRST STATEMENT INSIDE EACH TEST, NOT AT DESCRIBE
+ *    SCOPE ──
+ * `settings-notifications-seeded.spec.ts` records the trap and it was
+ * re-verified before this change: a describe-scope
+ * `test.skip(({}, testInfo) => …)` receives FIXTURES ONLY — there is no
+ * second argument — so `testInfo` is `undefined` and reading `.project`
+ * throws **in both projects**. The guard meant to separate them runs in both
+ * and crashes on the value it exists to read.
+ */
+const CAPTURING_PROJECT = 'ltr';
+
+function onlyOneProject(): boolean {
+  const project = test.info().project.name;
+  if (project === CAPTURING_PROJECT) return false;
+  test.skip(true, `Captured by the ${CAPTURING_PROJECT} project; direction comes from the URL.`);
+  return true;
+}
+
 for (const size of SIZES) {
   test.describe(`${size.name}px`, () => {
     test.use({ viewport: { width: size.width, height: size.height } });
 
     /* 1 · the roles, with what each allows counted. */
     test('1 · the roles', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openRoles(page, 'en');
 
       await expect(page.getByTestId('role-list')).toBeVisible();
@@ -145,6 +183,8 @@ for (const size of SIZES) {
      * with no other columns, so no amount is stored or enforced anywhere.
      */
     test('2 · roles carry no money limits, and the screen says so', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openRoles(page, 'en');
 
       const note = page.getByTestId('no-limits');
@@ -166,6 +206,8 @@ for (const size of SIZES) {
 
     /* 3 · no custom roles, said as a state. */
     test('3 · the custom half is empty and says so', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openRoles(page, 'en');
 
       const none = page.getByTestId('no-custom-roles');
@@ -177,6 +219,8 @@ for (const size of SIZES) {
 
     /* 4 · Hebrew, right to left. */
     test('4 · Hebrew, right to left', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openRoles(page, 'he');
 
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
@@ -187,6 +231,8 @@ for (const size of SIZES) {
 
     /* 5 · the two standing shell rules. */
     test('5 · content above the fold, no placeholders', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openRoles(page, 'en');
 
       const box = await page.getByRole('heading', { level: 1 }).boundingBox();

@@ -130,6 +130,42 @@ async function shoot(page: Page, name: string) {
   await captureScreen(page, EVIDENCE, name);
 }
 
+/**
+ * ★★ ONE PROJECT CAPTURES, BECAUSE BOTH WOULD WRITE THE SAME FILES.
+ *
+ * `ltr` and `rtl` differ only in the browser's `locale`, and every screen here
+ * takes its direction from the URL — `/en/…` and `/he/…` — which is what
+ * next-intl reads. So the two projects rendered identical pixels into
+ * identical filenames and, with `fullyParallel: true`, raced to write them.
+ *
+ * Two costs, and the second is why this landed before a shoot:
+ *   · a torn PNG is not a missing shot, it is a corrupt one, and it reads as
+ *     a rendering defect;
+ *   · it doubled the request budget. The limit is 1,000 requests per fifteen
+ *     minutes per IP per service — see `missingIds` — and half of every run
+ *     was a re-run of the English tests under a Hebrew locale that changes
+ *     nothing.
+ *
+ * Hebrew is not lost: the specs that cover it navigate to `/he/…` themselves.
+ *
+ * ── AND THE GUARD IS THE FIRST STATEMENT INSIDE EACH TEST, NOT AT DESCRIBE
+ *    SCOPE ──
+ * `settings-notifications-seeded.spec.ts` records the trap and it was
+ * re-verified before this change: a describe-scope
+ * `test.skip(({}, testInfo) => …)` receives FIXTURES ONLY — there is no
+ * second argument — so `testInfo` is `undefined` and reading `.project`
+ * throws **in both projects**. The guard meant to separate them runs in both
+ * and crashes on the value it exists to read.
+ */
+const CAPTURING_PROJECT = 'ltr';
+
+function onlyOneProject(): boolean {
+  const project = test.info().project.name;
+  if (project === CAPTURING_PROJECT) return false;
+  test.skip(true, `Captured by the ${CAPTURING_PROJECT} project; direction comes from the URL.`);
+  return true;
+}
+
 for (const size of SIZES) {
   test.describe(`${size.name}px`, () => {
     test.use({ viewport: { width: size.width, height: size.height } });
@@ -142,6 +178,8 @@ for (const size of SIZES) {
      * than checking that two rows exist.
      */
     test('1 · sessions, and this device is marked', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSecurity(page, 'en');
 
       await expect(page.locator('[data-current="yes"]')).toHaveCount(1);
@@ -162,6 +200,8 @@ for (const size of SIZES) {
      * somebody else tried.
      */
     test('2 · the failed sign-in stands out', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSecurity(page, 'en');
 
       const failed = page.locator('[data-failed="yes"]');
@@ -188,6 +228,8 @@ for (const size of SIZES) {
     test('3 · the activity log, with failures marked and unrecorded left alone', async ({
       page,
     }) => {
+      if (onlyOneProject()) return;
+
       await openSecurity(page, 'en');
 
       await expect(page.getByTestId('audit-list')).toBeVisible();
@@ -216,6 +258,8 @@ for (const size of SIZES) {
      * categories we chose. A new tool appears here on its own.
      */
     test('3b · the action facet shows real actions with counts', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSecurity(page, 'en');
 
       const facets = page.getByTestId('audit-facets');
@@ -234,6 +278,8 @@ for (const size of SIZES) {
      * saying why reads as broken.
      */
     test('4 · the MFA switches explain the one they disable', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSecurity(page, 'en');
 
       /*
@@ -255,6 +301,8 @@ for (const size of SIZES) {
 
     /* 5 · Hebrew, selected by test id. */
     test('5 · Hebrew, right to left', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSecurity(page, 'he');
 
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
@@ -282,6 +330,8 @@ for (const size of SIZES) {
 
     /* 6 · the two standing shell rules. */
     test('6 · content above the fold, no placeholders', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSecurity(page, 'en');
 
       const box = await page.getByRole('heading', { level: 1 }).boundingBox();

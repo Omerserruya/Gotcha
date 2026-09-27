@@ -109,6 +109,42 @@ async function shoot(page: Page, name: string) {
   await captureScreen(page, EVIDENCE, name);
 }
 
+/**
+ * ★★ ONE PROJECT CAPTURES, BECAUSE BOTH WOULD WRITE THE SAME FILES.
+ *
+ * `ltr` and `rtl` differ only in the browser's `locale`, and every screen here
+ * takes its direction from the URL — `/en/…` and `/he/…` — which is what
+ * next-intl reads. So the two projects rendered identical pixels into
+ * identical filenames and, with `fullyParallel: true`, raced to write them.
+ *
+ * Two costs, and the second is why this landed before a shoot:
+ *   · a torn PNG is not a missing shot, it is a corrupt one, and it reads as
+ *     a rendering defect;
+ *   · it doubled the request budget. The limit is 1,000 requests per fifteen
+ *     minutes per IP per service — see `missingIds` — and half of every run
+ *     was a re-run of the English tests under a Hebrew locale that changes
+ *     nothing.
+ *
+ * Hebrew is not lost: the specs that cover it navigate to `/he/…` themselves.
+ *
+ * ── AND THE GUARD IS THE FIRST STATEMENT INSIDE EACH TEST, NOT AT DESCRIBE
+ *    SCOPE ──
+ * `settings-notifications-seeded.spec.ts` records the trap and it was
+ * re-verified before this change: a describe-scope
+ * `test.skip(({}, testInfo) => …)` receives FIXTURES ONLY — there is no
+ * second argument — so `testInfo` is `undefined` and reading `.project`
+ * throws **in both projects**. The guard meant to separate them runs in both
+ * and crashes on the value it exists to read.
+ */
+const CAPTURING_PROJECT = 'ltr';
+
+function onlyOneProject(): boolean {
+  const project = test.info().project.name;
+  if (project === CAPTURING_PROJECT) return false;
+  test.skip(true, `Captured by the ${CAPTURING_PROJECT} project; direction comes from the URL.`);
+  return true;
+}
+
 for (const size of SIZES) {
   test.describe(`${size.name}px`, () => {
     test.use({ viewport: { width: size.width, height: size.height } });
@@ -117,6 +153,8 @@ for (const size of SIZES) {
      * 1 · the plan, by name, at the price actually contracted.
      */
     test('1 · the plan line', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openPlan(page, 'en');
 
       const plan = page.getByTestId('plan-line');
@@ -146,6 +184,8 @@ for (const size of SIZES) {
      * screen 08.
      */
     test('2 · a change waits eleven months, and the screen says which year', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openPlan(page, 'en');
 
       const deferred = page.getByTestId('change-deferred');
@@ -185,6 +225,8 @@ for (const size of SIZES) {
      * with no exit is the thing this project keeps refusing to ship.
      */
     test('3 · the upgrade that would be declined, and how to fix it', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openPlan(page, 'en');
 
       const noCard = page.getByTestId('change-no-card');
@@ -206,6 +248,8 @@ for (const size of SIZES) {
      * pass on four tiles that all said nothing.
      */
     test('4 · every package says what happens to the credits', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openPlan(page, 'en');
 
       const packages = page.getByTestId('package');
@@ -234,6 +278,8 @@ for (const size of SIZES) {
      * so the screen renders theirs.
      */
     test('5 · the disclaimer is the platform’s', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openPlan(page, 'en');
 
       const disclaimer = page.getByTestId('pricing-disclaimer');
@@ -252,6 +298,8 @@ for (const size of SIZES) {
      * platform ships translated.
      */
     test('6 · Hebrew', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openPlan(page, 'he');
 
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');

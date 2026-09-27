@@ -134,6 +134,42 @@ async function shoot(page: Page, name: string) {
   await captureScreen(page, EVIDENCE, name);
 }
 
+/**
+ * ★★ ONE PROJECT CAPTURES, BECAUSE BOTH WOULD WRITE THE SAME FILES.
+ *
+ * `ltr` and `rtl` differ only in the browser's `locale`, and every screen here
+ * takes its direction from the URL — `/en/…` and `/he/…` — which is what
+ * next-intl reads. So the two projects rendered identical pixels into
+ * identical filenames and, with `fullyParallel: true`, raced to write them.
+ *
+ * Two costs, and the second is why this landed before a shoot:
+ *   · a torn PNG is not a missing shot, it is a corrupt one, and it reads as
+ *     a rendering defect;
+ *   · it doubled the request budget. The limit is 1,000 requests per fifteen
+ *     minutes per IP per service — see `missingIds` — and half of every run
+ *     was a re-run of the English tests under a Hebrew locale that changes
+ *     nothing.
+ *
+ * Hebrew is not lost: the specs that cover it navigate to `/he/…` themselves.
+ *
+ * ── AND THE GUARD IS THE FIRST STATEMENT INSIDE EACH TEST, NOT AT DESCRIBE
+ *    SCOPE ──
+ * `settings-notifications-seeded.spec.ts` records the trap and it was
+ * re-verified before this change: a describe-scope
+ * `test.skip(({}, testInfo) => …)` receives FIXTURES ONLY — there is no
+ * second argument — so `testInfo` is `undefined` and reading `.project`
+ * throws **in both projects**. The guard meant to separate them runs in both
+ * and crashes on the value it exists to read.
+ */
+const CAPTURING_PROJECT = 'ltr';
+
+function onlyOneProject(): boolean {
+  const project = test.info().project.name;
+  if (project === CAPTURING_PROJECT) return false;
+  test.skip(true, `Captured by the ${CAPTURING_PROJECT} project; direction comes from the URL.`);
+  return true;
+}
+
 for (const size of SIZES) {
   test.describe(`${size.name}px`, () => {
     test.use({ viewport: { width: size.width, height: size.height } });
@@ -150,6 +186,8 @@ for (const size of SIZES) {
      * Includes a never-saved `hours` as "Not set".
      */
     test('1 · facts, read-only', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
       for (const key of [
         'name',
@@ -178,6 +216,8 @@ for (const size of SIZES) {
     /* 2 · one row open. The name row: the simplest shape, so the row's own
        editing chrome is what the shot shows rather than a form. */
     test('2 · a row open for editing', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-name').click();
       await expect(page.getByTestId('fact-save-name')).toBeVisible();
@@ -188,6 +228,8 @@ for (const size of SIZES) {
        show all seven rows — a form that only rendered the open days would be
        the bug this screen was warned about. */
     test('3 · the hours form', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-hours').click();
       await expect(page.getByTestId('fact-save-hours')).toBeVisible();
@@ -240,6 +282,8 @@ for (const size of SIZES) {
      * version went wrong.
      */
     test('4 · language', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-language').click();
       await expect(page.getByTestId('fact-save-language')).toBeVisible();
@@ -266,6 +310,8 @@ for (const size of SIZES) {
     /* 5 · below the minimum: counter in the alert tone, Save unavailable. The
        point of the shot is that the limit is caught here and not by a 422. */
     test('5 · voice below the minimum', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
       await page.getByTestId('voice-field').fill('too short');
       await expect(page.getByTestId('voice-save')).toBeDisabled();
@@ -288,6 +334,8 @@ for (const size of SIZES) {
      * side — the picture cannot tell you.
      */
     test('6 · voice with the sample panel', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
       await page
         .getByTestId('voice-field')
@@ -305,6 +353,8 @@ for (const size of SIZES) {
 
     /* 7 · the rules, and the field that adds one. */
     test('7 · prohibited claims', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
       await expect(page.getByTestId('claims-list')).toBeVisible();
       await expect(page.getByTestId('claims-add')).toBeVisible();
@@ -314,6 +364,8 @@ for (const size of SIZES) {
     /* 8 · Hebrew. The fact-row label column and the counter both mirror, and
        both are where an RTL layout usually breaks first. */
     test('8 · Hebrew, facts and the counter', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'he');
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
       await shoot(page, `${size.name}-08a-facts-he`);
@@ -331,6 +383,8 @@ for (const size of SIZES) {
      * form submits with the `If-Match` it was rendered from.
      */
     test('9 · a stale write is answered in the row', async ({ page, request }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-name').click();
 
@@ -474,6 +528,8 @@ for (const size of SIZES) {
     /* 10 · an empty state in Hebrew. "Not set" in an RTL label column is where
        the mirroring of the fact row is most likely to be wrong. */
     test('10 · a never-saved fact in Hebrew', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'he');
       await expect(page.getByTestId('fact-hours')).toBeVisible();
       await page.getByTestId('fact-hours').scrollIntoViewIfNeeded();
@@ -490,6 +546,8 @@ for (const size of SIZES) {
      * page they asked for.
      */
     test('11 · content starts above the fold', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
 
       /*
@@ -522,6 +580,8 @@ for (const size of SIZES) {
      * the line instead of sitting above it.
      */
     test('12 · a fact value gets the width of the row', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
 
       const row = await page.getByTestId('fact-name').boundingBox();
@@ -558,6 +618,8 @@ for (const size of SIZES) {
      * any tenant anyway — it lives in FieldProvenance.test.tsx.
      */
     test('13 · the panel explains whichever state it is in', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
 
       const panel = page.getByTestId('provenance');
@@ -618,6 +680,8 @@ for (const size of SIZES) {
      * that does not decide anything.
      */
     test('15 · languages, with the reassurance before the numbers', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
 
       const panel = page.getByTestId('languages');
@@ -663,6 +727,8 @@ for (const size of SIZES) {
      * substituted. That is a gap in the evidence and it is named, not papered.
      */
     test('16 · the scan panel, unfired', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
 
       await expect(page.getByTestId('scan-run')).toBeVisible();
@@ -680,6 +746,8 @@ for (const size of SIZES) {
     });
 
     test('14 · one reply language, and the screen says so', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openWorkspace(page, 'en');
 
       const note = page.getByTestId('provenance-one-language');

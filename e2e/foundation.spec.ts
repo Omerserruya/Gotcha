@@ -43,7 +43,45 @@ import { expect, test } from '@playwright/test';
  *   A · a protected page hands an unauthenticated visitor to `/api/auth/login`
  *   B · that route issues a real Authorization Code + PKCE handoff
  */
+/**
+ * ★★ ONE PROJECT CAPTURES, BECAUSE BOTH WOULD WRITE THE SAME FILES.
+ *
+ * `ltr` and `rtl` differ only in the browser's `locale`, and every screen here
+ * takes its direction from the URL — `/en/…` and `/he/…` — which is what
+ * next-intl reads. So the two projects rendered identical pixels into
+ * identical filenames and, with `fullyParallel: true`, raced to write them.
+ *
+ * Two costs, and the second is why this landed before a shoot:
+ *   · a torn PNG is not a missing shot, it is a corrupt one, and it reads as
+ *     a rendering defect;
+ *   · it doubled the request budget. The limit is 1,000 requests per fifteen
+ *     minutes per IP per service — see `missingIds` — and half of every run
+ *     was a re-run of the English tests under a Hebrew locale that changes
+ *     nothing.
+ *
+ * Hebrew is not lost: the specs that cover it navigate to `/he/…` themselves.
+ *
+ * ── AND THE GUARD IS THE FIRST STATEMENT INSIDE EACH TEST, NOT AT DESCRIBE
+ *    SCOPE ──
+ * `settings-notifications-seeded.spec.ts` records the trap and it was
+ * re-verified before this change: a describe-scope
+ * `test.skip(({}, testInfo) => …)` receives FIXTURES ONLY — there is no
+ * second argument — so `testInfo` is `undefined` and reading `.project`
+ * throws **in both projects**. The guard meant to separate them runs in both
+ * and crashes on the value it exists to read.
+ */
+const CAPTURING_PROJECT = 'ltr';
+
+function onlyOneProject(): boolean {
+  const project = test.info().project.name;
+  if (project === CAPTURING_PROJECT) return false;
+  test.skip(true, `Captured by the ${CAPTURING_PROJECT} project; direction comes from the URL.`);
+  return true;
+}
+
 test('a protected page hands an unauthenticated visitor to sign-in', async ({ page }) => {
+  if (onlyOneProject()) return;
+
   // No redirect following: the thing under test IS the redirect, and letting
   // the browser chase it is what hid the defect above.
   const response = await page.request.get('/en/home', { maxRedirects: 0 });
@@ -56,6 +94,8 @@ test('a protected page hands an unauthenticated visitor to sign-in', async ({ pa
 });
 
 test('the handoff is Authorization Code + PKCE, not something weaker', async ({ page }) => {
+  if (onlyOneProject()) return;
+
   /*
    * Asserted on the `Location` OUR route sets, so this says nothing about
    * Authentik and cannot be broken by Authentik changing what it shows.
@@ -95,6 +135,8 @@ test('the handoff is Authorization Code + PKCE, not something weaker', async ({ 
 });
 
 test('the sign-in page renders in English', async ({ page }) => {
+  if (onlyOneProject()) return;
+
   await page.goto('/en/sign-in');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
@@ -102,12 +144,16 @@ test('the sign-in page renders in English', async ({ page }) => {
 });
 
 test('Hebrew renders as a right-to-left document', async ({ page }) => {
+  if (onlyOneProject()) return;
+
   await page.goto('/he/sign-in');
   await expect(page.locator('html')).toHaveAttribute('lang', 'he');
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 });
 
 test('the two locales render different copy from the same route', async ({ page }) => {
+  if (onlyOneProject()) return;
+
   await page.goto('/en/sign-in');
   const english = await page.getByRole('heading').textContent();
   await page.goto('/he/sign-in');
@@ -117,6 +163,8 @@ test('the two locales render different copy from the same route', async ({ page 
 });
 
 test('the rail holds the design proportion across viewport widths', async ({ page }) => {
+  if (onlyOneProject()) return;
+
   /*
    * The design draws a 210px rail on a 1440px frame - 14.6%. A fixed 210px
    * would honour that at exactly 1440 and nowhere else, so the rail is a
@@ -154,6 +202,8 @@ test('the rail holds the design proportion across viewport widths', async ({ pag
 });
 
 test('an unrecognised locale segment is never treated as a locale', async ({ page }) => {
+  if (onlyOneProject()) return;
+
   // next-intl prefixes the default locale rather than accepting `zz`, so the
   // document must never claim to be in a language the app does not have.
   await page.goto('/zz/sign-in');

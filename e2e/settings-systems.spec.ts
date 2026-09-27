@@ -98,6 +98,42 @@ async function shoot(page: Page, name: string) {
   await captureScreen(page, EVIDENCE, name);
 }
 
+/**
+ * ★★ ONE PROJECT CAPTURES, BECAUSE BOTH WOULD WRITE THE SAME FILES.
+ *
+ * `ltr` and `rtl` differ only in the browser's `locale`, and every screen here
+ * takes its direction from the URL — `/en/…` and `/he/…` — which is what
+ * next-intl reads. So the two projects rendered identical pixels into
+ * identical filenames and, with `fullyParallel: true`, raced to write them.
+ *
+ * Two costs, and the second is why this landed before a shoot:
+ *   · a torn PNG is not a missing shot, it is a corrupt one, and it reads as
+ *     a rendering defect;
+ *   · it doubled the request budget. The limit is 1,000 requests per fifteen
+ *     minutes per IP per service — see `missingIds` — and half of every run
+ *     was a re-run of the English tests under a Hebrew locale that changes
+ *     nothing.
+ *
+ * Hebrew is not lost: the specs that cover it navigate to `/he/…` themselves.
+ *
+ * ── AND THE GUARD IS THE FIRST STATEMENT INSIDE EACH TEST, NOT AT DESCRIBE
+ *    SCOPE ──
+ * `settings-notifications-seeded.spec.ts` records the trap and it was
+ * re-verified before this change: a describe-scope
+ * `test.skip(({}, testInfo) => …)` receives FIXTURES ONLY — there is no
+ * second argument — so `testInfo` is `undefined` and reading `.project`
+ * throws **in both projects**. The guard meant to separate them runs in both
+ * and crashes on the value it exists to read.
+ */
+const CAPTURING_PROJECT = 'ltr';
+
+function onlyOneProject(): boolean {
+  const project = test.info().project.name;
+  if (project === CAPTURING_PROJECT) return false;
+  test.skip(true, `Captured by the ${CAPTURING_PROJECT} project; direction comes from the URL.`);
+  return true;
+}
+
 for (const size of SIZES) {
   test.describe(`${size.name}px`, () => {
     test.use({ viewport: { width: size.width, height: size.height } });
@@ -113,6 +149,8 @@ for (const size of SIZES) {
      * perform, so the number AND the sentence are both absent.
      */
     test('1 · the failure banner', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       const banner = page.getByTestId('banner-shopify');
@@ -158,6 +196,8 @@ for (const size of SIZES) {
      * because the check FAILED, the banner says that too.
      */
     test('2 · the timestamp is a check, not a sync', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       const banner = page.getByTestId('banner-shopify');
@@ -190,6 +230,8 @@ for (const size of SIZES) {
      * data does not support.
      */
     test('3 · a disconnected system reports unknown, not allowed', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       // We were told nothing about these tools, so we claim nothing.
@@ -243,6 +285,8 @@ for (const size of SIZES) {
      * stripped at the API boundary rather than hidden at the leaf.
      */
     test('4 · capabilities are named, never scoped', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       const body = page.locator('main');
@@ -261,6 +305,8 @@ for (const size of SIZES) {
      * same answer: say so, offer nothing.
      */
     test('5 · no button that would start something it cannot finish', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       const action = page.getByTestId('banner-action-shopify');
@@ -274,6 +320,8 @@ for (const size of SIZES) {
 
     /* 6 · Hebrew, selected by test id. */
     test('6 · Hebrew, right to left', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'he');
 
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
@@ -285,6 +333,8 @@ for (const size of SIZES) {
 
     /* 7 · the shell rule, carried to every Settings screen. */
     test('7 · content starts above the fold', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       const box = await page.getByRole('heading', { level: 1 }).boundingBox();
@@ -306,6 +356,8 @@ for (const size of SIZES) {
      * — and the two sentences that must differ.
      */
     test('business core · a broken connection is not an empty one', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       const core = page.getByTestId('business-core');
@@ -334,6 +386,8 @@ for (const size of SIZES) {
      * ★ The two sentences that keep this screen honest.
      */
     test('business core · the CRM lives elsewhere, and the save is unproven', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       // One place for the CRM decision, so this screen can never disagree
@@ -409,6 +463,8 @@ for (const size of SIZES) {
      * product and needs no connection.
      */
     test('core · what is written back, and why an absence is not a gap', async ({ page }) => {
+      if (onlyOneProject()) return;
+
       await openSystems(page, 'en');
 
       const block = page.getByTestId('core-writeback');
