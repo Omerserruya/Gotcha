@@ -21,6 +21,28 @@
 #   bind-mounted  source newer than the PROCESS START  -> restart  (cheap)
 #   baked image   source newer than the IMAGE BUILD    -> rebuild  (a deploy
 #                                                          decision, not ours)
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ★★ AND THE FIRST VERSION OF THIS SCRIPT NAMED A REMEDY THAT WAS THE DISEASE.
+#
+# It lumped `packages/shared` in with each service's own source and then
+# prescribed RESTART for every mounted service. But NO service mounts
+# `packages/shared` - it is a symlink to the BAKED copy inside the image. So a
+# restart cannot pick up a shared change, and worse:
+#
+#   `ai` mounts services/ai/src, so a restart runs the CURRENT source against
+#   the image's FROZEN shared. On 2026-09-27 the mounted orchestrator called
+#   `describeApprovalAction` and the baked August shared did not export it.
+#   CommonJS makes a missing named export `undefined` rather than a load error
+#   (measured in the image), so the call threw, a catch swallowed it, and no
+#   approval row was written. The script said "needs RESTART" and the restart
+#   was the harmful act.
+#
+# So a diagnostic that answers "is the source current" when the question is
+# "can this source RUN" is worse than silence, because its output is what an
+# operator does next. This now asks the second question: it compares the change
+# set against what each container actually MOUNTS, and reports MISMATCH when a
+# mounted service's source has moved ahead of the image its dependencies live in.
 # ─────────────────────────────────────────────────────────────────────────────
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
@@ -69,13 +91,31 @@ for dir in services/*/; do
     kind=baked;   ref=$built_s;   fix="REBUILD"
   fi
 
-  src_s=$(newest_change "$dir/src" "$SHARED")
-  if [ "$src_s" -gt "$ref" ]; then
-    verdict="STALE - needs $fix"
-    stale=$((stale + 1))
+  # The two sources are kept SEPARATE, because only one of them can be mounted.
+  own_s=$(newest_change "$dir/src")
+  shared_s=$(newest_change "$SHARED")
+  src_s=$own_s; [ "$shared_s" -gt "$src_s" ] && src_s=$shared_s
+
+  if [ "$kind" = mounted ]; then
+    if [ "$own_s" -gt "$built_s" ] || [ "$shared_s" -gt "$built_s" ]; then
+      # The mounted source, or the shared package it imports, has moved since
+      # this image was built. A restart pairs current source with the image's
+      # frozen packages/shared - which is how a new call reaches an old export.
+      verdict="MISMATCH - needs REBUILD (a restart runs new src on the image's old shared)"
+    elif [ "$own_s" -gt "$started_s" ]; then
+      verdict="STALE - needs RESTART"
+    else
+      verdict="current"
+    fi
   else
-    verdict="current"
+    if [ "$src_s" -gt "$built_s" ]; then
+      verdict="STALE - needs REBUILD"
+    else
+      verdict="current"
+    fi
   fi
+  case "$verdict" in current) ;; *) stale=$((stale + 1)) ;; esac
+
   printf '%-18s %-9s %-20s %-20s %s\n' "$svc" "$kind" \
     "$(date -d "@$ref" '+%Y-%m-%d %H:%M:%S')" "$(date -d "@$src_s" '+%Y-%m-%d %H:%M:%S')" "$verdict"
 done
@@ -85,6 +125,12 @@ if [ "$stale" -gt 0 ]; then
   echo "$stale service(s) are not running this checkout. A capture against them verifies the OLD code."
   echo "A RESTART is cheap and reversible. A REBUILD picks up every uncommitted change in the tree"
   echo "and is a deployment decision on a shared box - ask before doing one."
+  echo
+  echo "MISMATCH is not ordinary staleness: the mounted source has moved ahead of the image its"
+  echo "packages/shared lives in, so a RESTART would run new code against old dependencies. A"
+  echo "missing named export is \`undefined\` under CommonJS, not a load error, so that failure is"
+  echo "silent. Do not restart a MISMATCH service - rebuild it, and from \`git archive <ref>\`"
+  echo "rather than from this tree, which two sessions edit."
   exit 1
 fi
 echo "Every running service matches this checkout."
