@@ -38,6 +38,28 @@ export const errorEnvelopeSchema = z.object({
   /** Where the user must go to lift the block, when there is such a place. */
   checkoutPath: z.string().optional(),
   /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE ENTITLEMENT GATE SENDS `upgradePath`, NOT `checkoutPath`
+   * ════════════════════════════════════════════════════════════════════════
+   * Two different 402s share this envelope and they do not share field names.
+   * The TENANT gate sends `checkoutPath`; `EntitlementDeniedError` — the
+   * feature-level refusal in `packages/shared` — sends `upgradePath`, `feature`,
+   * `currentPlan`, and `limit`/`current` on a limit breach.
+   *
+   * None of those were declared, so `z.object` stripped every one of them. The
+   * fourth time this week a field on the wire was invisible from inside this
+   * codebase, and this one cost the only link that would have told somebody
+   * where to go.
+   */
+  upgradePath: z.string().optional(),
+  /** The feature key that was refused, e.g. `ai.copilot`. */
+  feature: z.string().optional(),
+  /** The plan the tenant is on, or `null` when it has none. */
+  currentPlan: z.string().nullable().optional(),
+  /** Limit breaches only. */
+  limit: z.number().optional(),
+  current: z.number().optional(),
+  /**
    * The billing services' machine-readable reason, which is **not** `code`.
    *
    * `purchase.service.ts` returns `failureCode` on every refusal —

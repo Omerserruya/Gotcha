@@ -78,6 +78,19 @@ export interface ApiErrorInit {
   readonly tenantStatus?: string;
   /** In-app path that would lift a 402, when the backend names one. */
   readonly checkoutPath?: string;
+  /**
+   * The FEATURE-level 402's own path, which is a different field from
+   * `checkoutPath` and arrives from a different middleware. See
+   * `errorEnvelopeSchema.upgradePath`.
+   */
+  readonly upgradePath?: string;
+  /** The refused feature key, e.g. `ai.copilot`. */
+  readonly feature?: string;
+  /** The plan the tenant is on, `null` when it has none. */
+  readonly currentPlan?: string | null;
+  /** Limit breaches only. */
+  readonly limit?: number;
+  readonly current?: number;
   readonly cause?: unknown;
 }
 
@@ -95,6 +108,11 @@ export class ApiError extends Error {
   readonly invoiceId?: string | null;
   readonly tenantStatus?: string;
   readonly checkoutPath?: string;
+  readonly upgradePath?: string;
+  readonly feature?: string;
+  readonly currentPlan?: string | null;
+  readonly limit?: number;
+  readonly current?: number;
 
   constructor(init: ApiErrorInit) {
     super(init.developerMessage ?? init.kind, { cause: init.cause });
@@ -112,6 +130,11 @@ export class ApiError extends Error {
     this.invoiceId = init.invoiceId;
     this.tenantStatus = init.tenantStatus;
     this.checkoutPath = init.checkoutPath;
+    this.upgradePath = init.upgradePath;
+    this.feature = init.feature;
+    this.currentPlan = init.currentPlan;
+    this.limit = init.limit;
+    this.current = init.current;
   }
 
   /**

@@ -92,6 +92,11 @@ async function readErrorBody(response: Response): Promise<{
   invoiceId?: string | null;
   tenantStatus?: string;
   checkoutPath?: string;
+  upgradePath?: string;
+  feature?: string;
+  currentPlan?: string | null;
+  limit?: number;
+  current?: number;
 }> {
   let raw: unknown;
   try {
@@ -110,6 +115,11 @@ async function readErrorBody(response: Response): Promise<{
     invoiceId: parsed.data.invoiceId,
     tenantStatus: parsed.data.tenantStatus,
     checkoutPath: parsed.data.checkoutPath,
+    upgradePath: parsed.data.upgradePath,
+    feature: parsed.data.feature,
+    currentPlan: parsed.data.currentPlan,
+    limit: parsed.data.limit,
+    current: parsed.data.current,
   };
 }
 
@@ -171,6 +181,11 @@ export class HttpClient {
         invoiceId,
         tenantStatus,
         checkoutPath,
+        upgradePath,
+        feature,
+        currentPlan,
+        limit,
+        current,
       } = await readErrorBody(response);
       const error = fail({
         /*
@@ -191,6 +206,11 @@ export class HttpClient {
         invoiceId,
         tenantStatus,
         checkoutPath,
+        upgradePath,
+        feature,
+        currentPlan,
+        limit,
+        current,
         requestId: effectiveRequestId,
       });
       if (error.kind === 'authentication') {

@@ -123,3 +123,52 @@ describe('★★ a refusal with no `error` key keeps everything else', () => {
     expect(api.developerMessage).toBeUndefined();
   });
 });
+
+describe('★★ the entitlement gate’s own fields survive the envelope', () => {
+  it('★★ keeps `upgradePath`, `feature`, `currentPlan` — none of which were declared', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * TWO DIFFERENT 402s SHARE THIS ENVELOPE AND DO NOT SHARE FIELD NAMES
+     * ════════════════════════════════════════════════════════════════════════
+     * The tenant gate sends `checkoutPath`. `EntitlementDeniedError` — the
+     * feature-level refusal in `packages/shared` — sends **`upgradePath`**, plus
+     * `feature` and `currentPlan`. Only the first was declared, so `z.object`
+     * stripped the rest and the panel had nothing to say and nowhere to point.
+     *
+     * The exact body from `entitlementErrorResponse`.
+     */
+    respond(402, {
+      code: 'PLAN_FEATURE_REQUIRED',
+      feature: 'ai.copilot',
+      currentPlan: 'foundation',
+      upgradePath: '/settings/billing/plan',
+    });
+
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.code).toBe('PLAN_FEATURE_REQUIRED');
+    expect(api.feature).toBe('ai.copilot');
+    expect(api.currentPlan).toBe('foundation');
+    expect(api.upgradePath).toBe('/settings/billing/plan');
+    // And it is NOT the tenant gate's field, which is the distinction that was
+    // being lost.
+    expect(api.checkoutPath).toBeUndefined();
+  });
+
+  it('★★ keeps the numbers on a limit breach', async () => {
+    respond(402, { code: 'PLAN_LIMIT_REACHED', feature: 'ai.employee', limit: 3, current: 3 });
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.limit).toBe(3);
+    expect(api.current).toBe(3);
+  });
+
+  it('★ keeps a null `currentPlan`, which means the tenant has no plan at all', async () => {
+    /*
+     * `.nullable()` and not just `.optional()`: the resolver sends an explicit
+     * `null` for a tenant with no subscription, and that is a different fact from
+     * the field being absent.
+     */
+    respond(402, { code: 'PLAN_FEATURE_REQUIRED', feature: 'ai.copilot', currentPlan: null });
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.currentPlan).toBeNull();
+  });
+});
