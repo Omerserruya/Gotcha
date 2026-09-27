@@ -62,8 +62,7 @@ function payloadSchemas(): ReadonlySet<string> {
    a stray console in shipped code can leak a customer's message. A build
    script writes to a terminal, so it writes to the stream directly — the same
    choice `probe-contracts.ts` made. */
-const out = (text: string, err = false) =>
-  (err ? process.stderr : process.stdout).write(text);
+const out = (text: string, err = false) => (err ? process.stderr : process.stdout).write(text);
 
 async function main() {
   const wanted = payloadSchemas();
@@ -80,7 +79,9 @@ async function main() {
     }
     for (const [name, value] of Object.entries(mod)) {
       if (!wanted.has(name)) continue;
-      const schema = value as { safeParse?: (input: unknown) => { success: boolean; data?: unknown } };
+      const schema = value as {
+        safeParse?: (input: unknown) => { success: boolean; data?: unknown };
+      };
       if (typeof schema?.safeParse !== 'function') continue;
       const result = schema.safeParse({});
       if (result.success) {
