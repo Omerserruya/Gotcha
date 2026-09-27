@@ -548,7 +548,7 @@
 
   .buyQuantity input {
     font: inherit;
-    width: 4rem;
+    inline-size: 4rem;
     padding: var(--space-4);
   }
 

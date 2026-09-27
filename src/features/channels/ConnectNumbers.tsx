@@ -68,7 +68,11 @@ export function ConnectNumbers({
   }
 
   return (
-    <section className={styles.connect} data-testid="connect">
+    /*
+      `connectNumbers`, not `connect`: this shared a class with `ConnectPanel` and
+      silently inherited its card styling. Same rendering, one owner.
+    */
+    <section className={styles.connectNumbers} data-testid="connect">
       <h2 className={styles.sectionHeading}>{t('connect.heading')}</h2>
       <p className={styles.deliveryDetail}>{t('connect.intro')}</p>
 

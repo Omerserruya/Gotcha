@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { StudioIndex } from '@/features/studio/StudioIndex';
+import { STUDIO_SECTIONS } from '@/shell/navigation';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -26,7 +27,13 @@ export default async function Page() {
   const t = await getTranslations('studio');
   return (
     <PageContainer title={t('title')} description={t('description')}>
-      <StudioIndex />
+      {/*
+        The page hands the index the sidebar's own list. `features` may not import
+        `shell` and vice versa, so the composition root is where the two meet —
+        which is also where a dependency between an area's navigation and its
+        landing page belongs.
+      */}
+      <StudioIndex areas={STUDIO_SECTIONS} />
     </PageContainer>
   );
 }

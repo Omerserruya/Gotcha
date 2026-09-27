@@ -71,8 +71,36 @@ export function isMetaOrigin(origin: string): boolean {
  * unrecognised event as a cancellation would break the flow the day Meta ships
  * one.
  */
+/**
+ * One field of a value that may not be an object, without `any`.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ WHY NOT `any`, WHICH IS WHAT THIS FILE USED
+ * ════════════════════════════════════════════════════════════════════════════
+ * Everything here reads a payload Meta's SDK hands over, whose shape this build
+ * has never been promised. `as any` expresses that honestly and then **turns off
+ * the checking for everything downstream**: a typo in `authResponse` compiles,
+ * and on this path a silently-undefined field is the difference between "the
+ * customer declined" and "we lost the authorization code".
+ *
+ * `unknown` plus this accessor keeps the honesty and keeps the checking. Every
+ * read is explicit about the level it is at, and nothing narrows a value without
+ * saying so.
+ */
+function field(value: unknown, key: string): unknown {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+
+/** A string field, or undefined — never an empty string masquerading as one. */
+function text(value: unknown, key: string): string | undefined {
+  const found = field(value, key);
+  return typeof found === 'string' && found !== '' ? found : undefined;
+}
+
 export function interpretSignupMessage(raw: unknown): SignupMessage {
-  let payload: any = raw;
+  let payload: unknown = raw;
   if (typeof raw === 'string') {
     try {
       payload = JSON.parse(raw);
@@ -80,21 +108,34 @@ export function interpretSignupMessage(raw: unknown): SignupMessage {
       return { kind: 'ignore' };
     }
   }
-  if (!payload || payload.type !== 'WA_EMBEDDED_SIGNUP') return { kind: 'ignore' };
+  if (field(payload, 'type') !== 'WA_EMBEDDED_SIGNUP') return { kind: 'ignore' };
 
-  if (payload.event === 'CANCEL') {
-    return { kind: 'cancel', step: payload.data?.current_step };
+  const data = field(payload, 'data');
+  const event = field(payload, 'event');
+
+  if (event === 'CANCEL') {
+    return { kind: 'cancel', step: text(data, 'current_step') };
   }
 
-  const businessPortfolioId = payload.data?.business_id;
-  const wabaIds: string[] =
-    payload.data?.waba_ids || (payload.data?.waba_id ? [payload.data.waba_id] : []);
+  const businessPortfolioId = text(data, 'business_id');
+  /*
+   * `waba_ids` when Meta sends a list, `waba_id` when it sends one. Filtered to
+   * strings rather than trusted: a list with a null in it used to become a waba
+   * id of `null` further down, and this is the only place that can be caught.
+   */
+  const list = field(data, 'waba_ids');
+  const wabaIds: string[] = Array.isArray(list)
+    ? list.filter((id): id is string => typeof id === 'string' && id !== '')
+    : (() => {
+        const single = text(data, 'waba_id');
+        return single ? [single] : [];
+      })();
 
   if (!businessPortfolioId && wabaIds.length === 0) return { kind: 'ignore' };
   return {
     kind: 'assets',
     assets: { businessPortfolioId, wabaIds },
-    event: String(payload.event || ''),
+    event: typeof event === 'string' ? event : '',
   };
 }
 
@@ -120,8 +161,7 @@ export function mergeSignupAssets(prev: SignupAssets, next: SignupAssets): Signu
  * normal outcome and not an error.
  */
 export function readAuthCode(response: unknown): string | null {
-  const code = (response as any)?.authResponse?.code;
-  return typeof code === 'string' && code.length > 0 ? code : null;
+  return text(field(response, 'authResponse'), 'code') ?? null;
 }
 
 /**
@@ -144,9 +184,9 @@ export function readAuthCode(response: unknown): string | null {
 export type SignupAbort = 'DISMISSED' | 'NO_CODE';
 
 export function classifySignupAbort(response: unknown): SignupAbort {
-  const r = response as any;
-  const hasAuthResponse = r?.authResponse != null && typeof r.authResponse === 'object';
-  if (hasAuthResponse || r?.status === 'connected') return 'NO_CODE';
+  const auth = field(response, 'authResponse');
+  const hasAuthResponse = auth != null && typeof auth === 'object';
+  if (hasAuthResponse || field(response, 'status') === 'connected') return 'NO_CODE';
   return 'DISMISSED';
 }
 
@@ -157,12 +197,11 @@ export function classifySignupAbort(response: unknown): SignupAbort {
  * which is all that is needed to tell the two aborts apart after the fact.
  */
 export function describeSignupResponse(response: unknown): string {
-  const r = response as any;
-  const auth = r?.authResponse;
+  const auth = field(response, 'authResponse');
   return [
-    `status=${r?.status ?? '-'}`,
+    `status=${text(response, 'status') ?? '-'}`,
     `authResponse=${auth ? 'present' : 'absent'}`,
-    `code=${typeof auth?.code === 'string' && auth.code.length > 0 ? 'present' : 'absent'}`,
+    `code=${text(auth, 'code') ? 'present' : 'absent'}`,
     `keys=${auth && typeof auth === 'object' ? Object.keys(auth).join('|') || '-' : '-'}`,
   ].join(' ');
 }

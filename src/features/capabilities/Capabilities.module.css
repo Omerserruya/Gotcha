@@ -268,7 +268,7 @@
     align-items: start;
   }
 
-  @media (min-width: 60rem) {
+  @media (width >= 60rem) {
     .split {
       grid-template-columns: var(--size-rail) minmax(0, 1fr);
     }

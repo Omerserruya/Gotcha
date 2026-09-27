@@ -184,19 +184,35 @@ describe('outcome copy is translated', () => {
      * `outcomeMessageKey` can emit four keys including a fallback, and a
      * missing one renders as the key itself, which looks deliberate.
      */
-    const en = {
+    /*
+     * `unknown` rather than `any`, walked one level at a time. `any` here turned
+     * the checking off for the whole reduce, so a key that resolved to an object
+     * instead of a string would still have satisfied `acc?.[k]` at every step and
+     * only the final `typeof` would have noticed — which is the assertion, so it
+     * happened to work. The narrower form fails at the level that is wrong.
+     */
+    const at = (root: unknown, key: string): unknown =>
+      key
+        .split('.')
+        .reduce<unknown>(
+          (acc, k) =>
+            typeof acc === 'object' && acc !== null
+              ? (acc as Record<string, unknown>)[k]
+              : undefined,
+          root,
+        );
+
+    const en: unknown = {
       whatsappNumbers: (await import('@/i18n/messages/en/whatsappNumbers.json')).default,
-    } as any;
-    const he = {
+    };
+    const he: unknown = {
       whatsappNumbers: (await import('@/i18n/messages/he/whatsappNumbers.json')).default,
-    } as any;
+    };
     const reasons = ['NO_CANDIDATES', 'ALL_ALREADY_CONNECTED', 'ALL_BLOCKED', 'SOMETHING_NEW'];
     for (const reason of reasons) {
       const key = outcomeMessageKey(reason);
-      const leaf = key.split('.').reduce<any>((acc, k) => acc?.[k], en);
-      const leafHe = key.split('.').reduce<any>((acc, k) => acc?.[k], he);
-      expect(typeof leaf, `${key} missing in en`).toBe('string');
-      expect(typeof leafHe, `${key} missing in he`).toBe('string');
+      expect(typeof at(en, key), `${key} missing in en`).toBe('string');
+      expect(typeof at(he, key), `${key} missing in he`).toBe('string');
     }
   });
 });

@@ -24,7 +24,7 @@
   }
 
   .table {
-    width: 100%;
+    inline-size: 100%;
     border-collapse: collapse;
     text-align: start;
   }
@@ -34,7 +34,7 @@
     padding: var(--space-8);
     /* `--row-divider` is named for exactly this and is lighter than a card
        border, which is what a dense table wants. */
-    border-bottom: 1px solid var(--row-divider);
+    border-block-end: 1px solid var(--row-divider);
     text-align: start;
     /* Tabular figures so columns line up without implying a ranking. */
     font-variant-numeric: tabular-nums;

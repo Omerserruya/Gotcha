@@ -393,7 +393,19 @@ for (const size of SIZES) {
       if ((await unknown.count()) > 0) {
         // The payment-methods read lost. Say so, do not silently pass.
         await expect(unknown).toHaveText(/charges will fail/i);
-        console.warn('payment-methods read failed this run — the warning is the unread form');
+        /*
+         * An annotation, not a `console.warn`. Two reasons, and the second is the
+         * one that matters: `no-console` exists here because a stray log leaks
+         * whatever was in scope, and in this product that can be a customer's
+         * message — so the rule is not worth an exemption for a diagnostic. And a
+         * console line in a Playwright run scrolls past, while an annotation lands
+         * in the report somebody actually reads when they wonder why a run took
+         * the other branch.
+         */
+        test.info().annotations.push({
+          type: 'degraded',
+          description: 'payment-methods read failed this run — the warning is the unread form',
+        });
       } else {
         await expect(nothing).toHaveText(/no payment method on file/i);
         // Either the count, or an admission that it could not be counted —

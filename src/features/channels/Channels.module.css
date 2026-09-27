@@ -437,7 +437,34 @@
 
   /* ── Screens 13c/13d · connecting a number ───────────────────────────── */
 
-  .connect {
+  /*
+   * ★★ THIS WAS A SECOND `.connect` BLOCK, AND TWO COMPONENTS WERE SHARING THE
+   *    CLASS.
+   *
+   * `ConnectPanel` (13a/b) and `ConnectNumbers` (13c/d) both used `styles.connect`.
+   * The block here declared only flex/column/gap, which is what its author
+   * believed the number step got — but the earlier `.connect` rule applies too, so
+   * it has always also carried `grid-column: 1 / -1`, a card background, a border
+   * and padding it never asked for.
+   *
+   * stylelint's `no-duplicate-selectors` was the only thing that could see this:
+   * both declarations are valid, the values that overlap are identical, and the
+   * ones that do not overlap are invisible unless you read both blocks together.
+   *
+   * ⚠ RENAMED WITHOUT CHANGING WHAT RENDERS. The merged set below is exactly what
+   * the number step has been getting all along, so this commit is a
+   * de-duplication and not a redesign. Whether the number step *should* be a card
+   * is a question for somebody looking at it — and now it can be answered in one
+   * place instead of two.
+   */
+  .connectNumbers {
+    grid-column: 1 / -1;
+    margin-block-start: var(--space-12);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
     display: flex;
     flex-direction: column;
     gap: var(--space-12);
@@ -493,6 +520,7 @@
     font-size: var(--font-size-meta);
     font-weight: 500;
   }
+
   .reviewAnswer {
     margin: 0;
     max-inline-size: var(--size-reading);

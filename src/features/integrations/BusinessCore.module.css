@@ -19,6 +19,7 @@
     font-size: var(--font-size-body-lg);
     font-weight: 500;
   }
+
   .notesHeading {
     margin: 0 0 var(--space-6);
     font-size: var(--font-size-caption);
@@ -113,6 +114,7 @@
     flex-direction: column;
     gap: var(--space-4);
   }
+
   .note {
     max-inline-size: var(--size-reading);
     font-size: var(--font-size-caption);
@@ -130,7 +132,7 @@
 
   .writeback {
     margin-block-start: var(--space-24);
-    border-top: 1px solid var(--border-subtle);
+    border-block-start: 1px solid var(--border-subtle);
     padding-block-start: var(--space-16);
   }
 

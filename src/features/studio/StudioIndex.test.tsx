@@ -23,8 +23,6 @@ import capabilities from '@/i18n/messages/en/capabilities.json';
 import employees from '@/i18n/messages/en/employees.json';
 import knowledge from '@/i18n/messages/en/knowledge.json';
 import studio from '@/i18n/messages/en/studio.json';
-import { STUDIO_SECTIONS } from '@/shell/navigation';
-
 import { StudioIndex } from './StudioIndex';
 
 /**
@@ -41,6 +39,18 @@ import { StudioIndex } from './StudioIndex';
  * drift it exists to prevent.
  */
 
+/*
+ * The real list, copied rather than imported: a test file is also `features` and
+ * may not reach into `shell`. Copying it would normally be a drift hazard, so the
+ * last test in this file asserts the two are the same.
+ */
+const STUDIO_SECTIONS = [
+  { id: 'employees', href: '/studio/employees', permission: 'ai:employees:read' },
+  { id: 'knowledge', href: '/studio/knowledge', permission: 'ai:knowledge:read' },
+  { id: 'automations', href: '/studio/automations', permission: 'ai:workflows:read' },
+  { id: 'capabilities', href: '/studio/capabilities', permission: 'ai:tools:read' },
+] as const;
+
 const ALL = [
   'ai:employees:read',
   'ai:knowledge:read',
@@ -55,7 +65,7 @@ const show = (permissions: readonly string[], status: 'loaded' | 'unavailable' =
       messages={{ studio, employees, knowledge, automations, capabilities }}
     >
       <PermissionsProvider permissions={permissions as never} status={status} tenantId="t1">
-        <StudioIndex />
+        <StudioIndex areas={STUDIO_SECTIONS} />
       </PermissionsProvider>
     </NextIntlClientProvider>,
   );
@@ -123,5 +133,38 @@ describe('★★ permissions, and the state where a role has none of them', () =
     expect(screen.getAllByTestId(/^studio-area-/)).toHaveLength(
       STUDIO_SECTIONS.filter((s) => s.href !== undefined).length,
     );
+  });
+});
+
+describe('★★ the copied list has not drifted from the real one', () => {
+  it('★★ matches `STUDIO_SECTIONS` in the shell, id for id', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE GUARD ON THE COPY, AND IT IS HERE BECAUSE I CLAIMED IT IN A COMMENT
+     * ════════════════════════════════════════════════════════════════════════
+     * This file cannot import `@/shell/navigation` — a test file is `features`
+     * and the boundary forbids it — so the list above is a copy, and a copy
+     * drifts. The comment beside it says the two are asserted to be the same,
+     * and a comment claiming a check that does not exist is the exact defect I
+     * fixed twice today in other people's words and my own.
+     *
+     * So it reads the shell's source as text. That is a blunt instrument and its
+     * blind spot is stated: it compares IDS and nothing else, so a changed
+     * `href` or `permission` passes. Ids are what the index keys on and what a
+     * fifth area would add, which is the drift that matters here.
+     */
+    const { readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const source = await readFile(join(process.cwd(), 'src/shell/navigation.ts'), 'utf8');
+
+    const block = source.slice(
+      source.indexOf('export const STUDIO_SECTIONS'),
+      source.indexOf('/**', source.indexOf('export const STUDIO_SECTIONS') + 1),
+    );
+    /* A path that resolves to nothing makes this pass for ever. */
+    expect(block.length).toBeGreaterThan(100);
+
+    const ids = [...block.matchAll(/id: '([^']+)'/g)].map((m) => m[1]);
+    expect(ids).toEqual(STUDIO_SECTIONS.map((section) => section.id));
   });
 });

@@ -4,7 +4,6 @@ import { useTranslations } from 'next-intl';
 
 import { Link } from '@/i18n/navigation';
 import { usePermissions } from '@/permissions/permissions-context';
-import { STUDIO_SECTIONS } from '@/shell/navigation';
 
 import styles from './Studio.module.css';
 
@@ -25,10 +24,17 @@ import styles from './Studio.module.css';
  * It also means the index cannot describe an area wrongly, because it is not
  * describing anything.
  *
- * ── AND IT IS BUILT FROM THE NAVIGATION, NOT FROM A LIST OF ITS OWN ──
- * `STUDIO_SECTIONS` is what the sidebar renders. A fifth area appears here
- * without anybody remembering this file exists — which is the only arrangement
- * that survives somebody adding a fifth area.
+ * ── AND IT IS GIVEN THE NAVIGATION, NOT A LIST OF ITS OWN ──
+ * The page passes `STUDIO_SECTIONS` — what the sidebar renders — so a fifth area
+ * appears here without anybody remembering this file exists, which is the only
+ * arrangement that survives somebody adding a fifth area.
+ *
+ * ★ PASSED IN RATHER THAN IMPORTED, AND THE REASON IS A BOUNDARY I BROKE FIRST.
+ * `features` may not import `shell` and `shell` may not import `features`; both
+ * may import `lib`, but `lib` may only import `lib`, so a shared list there could
+ * not carry `PermissionString`. The page is in `app`, which may import both, and
+ * a composition root is where a dependency like this belongs anyway. The prop
+ * type is declared here structurally so this file names nothing from `shell`.
  *
  * ── PERMISSIONS ──
  * Filtered with the same `canSee` the sidebar uses, so the index and the
@@ -51,7 +57,19 @@ const NAMESPACE: Record<string, 'employees' | 'knowledge' | 'automations' | 'cap
   capabilities: 'capabilities',
 };
 
-export function StudioIndex() {
+/**
+ * One Studio area, as much of `NavigationChild` as this panel uses.
+ *
+ * Declared structurally rather than imported from `shell`, so the boundary holds
+ * and the page is free to pass its own list in a test.
+ */
+export interface StudioArea {
+  readonly id: string;
+  readonly href?: string;
+  readonly permission?: string;
+}
+
+export function StudioIndex({ areas }: { readonly areas: readonly StudioArea[] }) {
   const t = useTranslations('studio');
   const { canSee } = usePermissions();
   const employees = useTranslations('employees');
@@ -66,7 +84,7 @@ export function StudioIndex() {
    * than rendered as dead text: a card that does not go anywhere reads as a
    * broken link, which is a worse report than not being listed.
    */
-  const visible = STUDIO_SECTIONS.filter(
+  const visible = areas.filter(
     (section) => section.href !== undefined && canSee(section.permission),
   );
 

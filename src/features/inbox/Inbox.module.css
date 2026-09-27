@@ -93,7 +93,7 @@
     align-items: baseline;
     gap: var(--space-8);
     padding: var(--space-8) 0;
-    border-bottom: 1px solid var(--border-subtle);
+    border-block-end: 1px solid var(--border-subtle);
   }
 
   .who {
@@ -237,7 +237,7 @@
    * it opens, then its context. The design puts them side by side and there
    * is no width for that at 390.
    */
-  @media (max-width: 900px) {
+  @media (width <= 900px) {
     .screen {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -426,7 +426,7 @@
   .composerInput {
     inline-size: 100%;
     min-inline-size: 0;
-    resize: vertical;
+    resize: block;
     padding: var(--space-12);
     font: inherit;
     font-size: var(--font-size-meta);
