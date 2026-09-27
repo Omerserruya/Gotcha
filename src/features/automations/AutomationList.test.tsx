@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Automation } from '@/api/contracts/automations';
 import messages from '@/i18n/messages/en/automations.json';
+import channels from '@/i18n/messages/en/channels.json';
 
 import { AutomationList } from './AutomationList';
 
@@ -43,8 +44,8 @@ import { AutomationList } from './AutomationList';
  * never shows, and a date assertion can pass while the screen is a day out.
  */
 vi.mock('next-intl/server', () => ({
-  getTranslations: async (namespace: 'automations') =>
-    createTranslator({ locale: 'en', messages: { automations: messages }, namespace }),
+  getTranslations: async (namespace: 'automations' | 'channels') =>
+    createTranslator({ locale: 'en', messages: { automations: messages, channels }, namespace }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
@@ -100,9 +101,36 @@ describe('never-run is a sentence, not a zero', () => {
 });
 
 describe('one channel, or all of them', () => {
-  it('names the single channel when there is one', async () => {
+  it('★★ names the single channel and never prints its enum', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * ★★ THE FOURTH RENDERER OF `channel`, FOUND BY GREPPING THE FIELD
+     * ════════════════════════════════════════════════════════════════════════
+     * This said `Runs on WHATSAPP` on any channel-scoped automation. Three
+     * browser walks did not find it, and not because it is subtle: **every
+     * automation on the dev tenant has `channel: null`**, so the page can only
+     * ever render the `where.all` branch. Tenant state foreclosed it, the same
+     * way it foreclosed five other branches this week.
+     *
+     * ── AND THE OLD ASSERTION WAS NOT A PIN, WHICH IS WORTH RECORDING ──
+     * It read `toHaveTextContent(/runs on WHATSAPP/i)`. The `/i` makes it match
+     * "Runs on WhatsApp" just as happily, so it permitted both behaviours
+     * rather than requiring the broken one. It did not pin the defect — it was
+     * simply unable to see it, which is a different fault with a different fix:
+     * a case-insensitive match on a value whose CASE is the whole question.
+     *
+     * So this now asserts in both directions.
+     */
     await renderList([automation({ channel: 'WHATSAPP' })]);
-    expect(screen.getByTestId('where-f1')).toHaveTextContent(/runs on WHATSAPP/i);
+    const where = screen.getByTestId('where-f1');
+    expect(where).toHaveTextContent('Runs on WhatsApp');
+    expect(where).not.toHaveTextContent('WHATSAPP');
+  });
+
+  it('★ says "another channel" for one the catalogue has never heard of', async () => {
+    // A channel the platform adds tomorrow must not arrive as its own enum.
+    await renderList([automation({ channel: 'TELEGRAM' })]);
+    expect(screen.getByTestId('where-f1')).not.toHaveTextContent('TELEGRAM');
   });
 
   it('says "every channel" for null rather than listing the eight we know', async () => {

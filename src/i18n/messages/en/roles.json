@@ -33,9 +33,9 @@
   "elsewhere": "Passwords and signed-in sessions live in your identity provider, not in GOTCHA — we don't hold either. Deactivating someone here keeps their history and stops them signing in.",
   "catalog": {
     "heading": "What a role can allow",
-    "scoped": "How far this reaches depends on the role's setting",
     "scopeIsPerRole": "A role has one reach, and it applies to everything the role does — not to each permission separately. Choose it once for the role.",
-    "notLevels": "Each line here is its own switch. There is no \"view / edit / manage\" ladder: reading a conversation and closing one are separate permissions, and someone can have either without the other."
+    "notLevels": "Each line here is its own switch. There is no \"view / edit / manage\" ladder: reading a conversation and closing one are separate permissions, and someone can have either without the other.",
+    "scopedMark": "Limited by the role’s reach"
   },
   "remove": {
     "start": "Take this away",

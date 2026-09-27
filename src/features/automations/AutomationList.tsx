@@ -1,6 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { hasEverRun, type Automation } from '@/api/contracts/automations';
+import { channelLabelKey } from '@/api/contracts/inbox';
 
 import styles from './Automations.module.css';
 
@@ -24,6 +25,7 @@ export async function AutomationList({
   readonly automations: readonly Automation[];
 }) {
   const t = await getTranslations('automations');
+  const channelNames = await getTranslations('channels');
   const format = await getFormatter();
 
   return (
@@ -51,9 +53,30 @@ export async function AutomationList({
             field, so "WhatsApp, Instagram and email" is not expressible —
             and listing every known channel for a null would invent a
             specificity the flow does not have.
+
+            ══════════════════════════════════════════════════════════════════
+            ★★ THE FOURTH RENDERER OF `channel`, AND IT IS DORMANT ON DEV
+            ══════════════════════════════════════════════════════════════════
+            This read `Runs on {channel}` with the platform's enum in it, so a
+            channel-scoped automation would say **"Runs on WHATSAPP"**. No
+            browser walk found it, and not because it is subtle: every
+            automation on the dev tenant has `channel: null`, so the page only
+            ever renders the `where.all` branch.
+
+            ★ So the defect was invisible to the instrument that found its three
+              siblings, for the same reason five other branches were invisible
+              to captures this week — **tenant state forecloses the branch.** It
+              was found by grepping the FIELD, which is the only method that
+              does not care whether today's data reaches the code.
           */}
           <p className={styles.where} data-testid={`where-${automation.id}`}>
-            {automation.channel ? t('where.one', { channel: automation.channel }) : t('where.all')}
+            {automation.channel
+              ? t('where.one', {
+                  channel: channelLabelKey(automation.channel)
+                    ? channelNames(`name.${automation.channel}` as 'name.WHATSAPP')
+                    : channelNames('name.other'),
+                })
+              : t('where.all')}
           </p>
 
           {/*

@@ -71,13 +71,33 @@ export async function PermissionCatalog({
                   Only where the dimension applies. Most permissions do not
                   take one, and showing a disabled control on those rows would
                   imply a setting exists and is turned off.
+
+                  ════════════════════════════════════════════════════════════
+                  ★★ A MARKER, NOT A SENTENCE — THE SENTENCE IS ALREADY ON THE
+                     PAGE, ONCE
+                  ════════════════════════════════════════════════════════════
+                  This read *"How far this reaches depends on the role's
+                  setting"* under every scoped row, and a browser walk found it
+                  repeated under twenty-plus of them. The page above the
+                  catalogue already says it properly, once, in
+                  `catalog.scopeIsPerRole`: "A role has one reach, and it
+                  applies to everything the role does."
+
+                  So the row no longer explains; it MARKS. An explanation
+                  repeated per row is not emphasis — it becomes wallpaper, and
+                  the reader stops seeing the rows it is attached to, which are
+                  the ones it is trying to distinguish.
+
+                  The marker still has to mean something on its own to somebody
+                  who skipped the paragraph, which is why it is
+                  "Limited by the role's reach" and not "Scoped".
                 */}
                 {takesScope(permission) ? (
                   <span
                     className={styles.permissionScoped}
                     data-testid={`scoped-${permission.key}`}
                   >
-                    {t('catalog.scoped')}
+                    {t('catalog.scopedMark')}
                   </span>
                 ) : null}
               </li>

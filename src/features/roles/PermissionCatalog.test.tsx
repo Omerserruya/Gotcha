@@ -89,3 +89,54 @@ describe('★★ a domain heading is a name, not an identifier', () => {
     expect(screen.getByText('See contact details')).toBeInTheDocument();
   });
 });
+
+describe('★★ the scope note is a marker, not the explanation repeated per row', () => {
+  const scopedRows = () =>
+    Array.from({ length: 6 }, (_, i) =>
+      perm({ key: `crm:contacts:a${i}`, domain: 'crm', scoped: true, displayName: `Do ${i}` }),
+    );
+
+  it('★★ never repeats the page’s own explanation under the rows', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * AN EXPLANATION REPEATED PER ROW IS NOT EMPHASIS, IT IS WALLPAPER
+     * ════════════════════════════════════════════════════════════════════════
+     * Each scoped row said *"How far this reaches depends on the role's
+     * setting"*, and a browser walk found it under twenty-plus rows. The page
+     * above the catalogue already says it once and better, in
+     * `catalog.scopeIsPerRole`.
+     *
+     * Asserted as an absence of the SENTENCE rather than a count of the marker,
+     * because a count cannot tell one long caption from six short ones — and a
+     * count is what I would have reached for.
+     */
+    render(await PermissionCatalog({ permissions: scopedRows() }));
+    expect(screen.queryByText(/depends on the role/i)).toBeNull();
+    expect(screen.queryByText(/how far this reaches/i)).toBeNull();
+  });
+
+  it('★★ marks every scoped row, and the marker stands alone', async () => {
+    /*
+     * The marker still has to mean something to a reader who skipped the
+     * paragraph, which is why it names the thing that limits the permission
+     * rather than saying "Scoped".
+     */
+    render(await PermissionCatalog({ permissions: scopedRows() }));
+    const marks = screen.getAllByText(/limited by the role/i);
+    expect(marks).toHaveLength(6);
+    expect(marks[0]!.textContent!.length).toBeLessThan(40);
+  });
+
+  it('★★ marks nothing on a permission that takes no scope', async () => {
+    /*
+     * A marker on every row would say the dimension always applies, which is
+     * the same lie as a disabled control on a row that has none.
+     */
+    render(
+      await PermissionCatalog({
+        permissions: [perm({ key: 'crm:contacts:read', domain: 'crm', scoped: false })],
+      }),
+    );
+    expect(screen.queryByText(/limited by the role/i)).toBeNull();
+  });
+});
