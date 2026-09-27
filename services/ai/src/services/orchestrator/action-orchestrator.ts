@@ -438,7 +438,31 @@ export class ActionOrchestrator {
         // was landing in the one field an operator reads while deciding whether
         // to move money. 27 of 54 rows said exactly that. The rationale belongs
         // in `reason`, which is a separate column that exists for it.
-        summary: describeApprovalAction(action.tool, action.args as Record<string, unknown>),
+        //
+        // ★★ AND THE FALLBACK IS NOT DEAD CODE, unlike most `typeof` guards.
+        //
+        // This service mounts `services/ai/src` but NOT `packages/shared`, which
+        // is a symlink to the BAKED copy. So this file can be newer than the
+        // shared package the container loads - and as of 2026-09-27 it is: the
+        // mounted source calls `describeApprovalAction`, the baked August shared
+        // does not export it (verified inside the container: file present,
+        // 0 matches).
+        //
+        // Neither package declares `"type": "module"`, so tsx emits CommonJS and
+        // a missing named import is a property read yielding `undefined` rather
+        // than a load error. Unguarded, the call throws, the catch below turns it
+        // into a warning, and NO APPROVAL ROW IS WRITTEN - a gated tool made
+        // invisible to the person who has to approve it. Under ESM the service
+        // would have crash-looped instead, which is louder and safer.
+        //
+        // `restart: unless-stopped` means a daemon restart or a host reboot arms
+        // that without anybody deciding to. A stale title is recoverable; a lost
+        // approval row is not. Delete this guard once `ai` is rebuilt against
+        // current shared.
+        summary:
+          typeof describeApprovalAction === "function"
+            ? describeApprovalAction(action.tool, action.args as Record<string, unknown>)
+            : action.rationale || `Approve ${action.tool}`,
         reason: gate.reason,
         riskLevel: action.urgency === "high" ? "high" : action.urgency === "medium" ? "medium" : "low",
         requestedBy: `${action.proposedBy.system}:${action.proposedBy.mode}`,
