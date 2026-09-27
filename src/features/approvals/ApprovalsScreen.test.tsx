@@ -292,3 +292,114 @@ describe('nothing on this screen promises a reversal', () => {
     expect(document.body.textContent).not.toMatch(/edit amount/i);
   });
 });
+
+describe('★★ 28 rows in one column, given structure rather than pages', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * ★★ PAGINATION WAS ASKED FOR AND IS DELIBERATELY NOT HERE
+   * ════════════════════════════════════════════════════════════════════════════
+   * A browser walk found 28 rows unbroken and reported two things missing:
+   * separators and paging. Only one belongs on a work queue.
+   *
+   * The oldest request is the one that most needs deciding and it sorts to the
+   * far end. Behind a "show more", the item nobody has looked at becomes the item
+   * nobody will look at — and `expiresAt` is real here, so a request that lapses
+   * because it was on page two would be a defect we chose to build.
+   *
+   * These tests therefore assert BOTH: that the structure arrived, and that
+   * nothing got hidden. The second is the one that would catch a future
+   * well-meaning "improvement".
+   */
+
+  it('★★ shows every waiting request, with no page to turn', async () => {
+    const many = Array.from({ length: 28 }, (_, i) =>
+      approval({ id: `a${i}`, summary: `Refund ${i}` }),
+    );
+    renderScreen(many);
+    expect(screen.getAllByTestId(/^queue-a\d+$/)).toHaveLength(28);
+  });
+
+  it('★★ says how many are waiting, as a number', async () => {
+    renderScreen(Array.from({ length: 28 }, (_, i) => approval({ id: `a${i}` })));
+    expect(screen.getByTestId('approval-queue-count')).toHaveTextContent('28 requests waiting');
+  });
+
+  it('★ counts one request without saying "1 requests"', async () => {
+    renderScreen([approval()]);
+    expect(screen.getByTestId('approval-queue-count')).toHaveTextContent('1 request waiting');
+  });
+
+  it('★★ heads each day, so age is legible without reading a timestamp', async () => {
+    renderScreen([
+      approval({ id: 'a1', createdAt: '2026-09-19T09:00:00.000Z' }),
+      approval({ id: 'a2', createdAt: '2026-09-18T09:00:00.000Z' }),
+      approval({ id: 'a3', createdAt: '2026-09-15T09:00:00.000Z' }),
+    ]);
+    expect(screen.getByText('Today')).toBeInTheDocument();
+    expect(screen.getByText('Yesterday')).toBeInTheDocument();
+    /*
+     * The third is neither, so it gets the date itself — asserted through its
+     * group key rather than the formatted string. `Intl` decides whether `en`
+     * medium reads "Sep 15, 2026" or "15 Sep 2026", and pinning one of those
+     * would make this test a claim about a locale database.
+     */
+    const older = screen.getByTestId('queue-day-2026-9-15');
+    expect(older).toBeInTheDocument();
+    expect(older).toHaveTextContent('2026');
+    expect(older.textContent).not.toMatch(/Today|Yesterday/);
+  });
+
+  it('★★ puts several requests from one day under one heading', async () => {
+    renderScreen([
+      approval({ id: 'a1', createdAt: '2026-09-19T09:00:00.000Z' }),
+      approval({ id: 'a2', createdAt: '2026-09-19T08:00:00.000Z' }),
+      approval({ id: 'a3', createdAt: '2026-09-19T07:00:00.000Z' }),
+    ]);
+    expect(screen.getAllByText('Today')).toHaveLength(1);
+    expect(screen.getAllByTestId(/^queue-a\d+$/)).toHaveLength(3);
+  });
+
+  it('★★ says a date was not recorded rather than calling it today', async () => {
+    /*
+     * The reassuring direction is the wrong one: an unreadable date labelled
+     * "Today" puts an old request at the top of today's group and hides the one
+     * thing these headings exist to surface.
+     */
+    renderScreen([approval({ id: 'a1', createdAt: 'not-a-date' })]);
+    expect(screen.getByText('Date not recorded')).toBeInTheDocument();
+    expect(screen.queryByText('Today')).toBeNull();
+  });
+
+  it('★★ never reorders the queue to tidy up the groups', async () => {
+    /*
+     * The server ranked this list. Re-sorting by date to avoid splitting a day
+     * would silently reorder a decision queue, which is worse than a day
+     * appearing twice — so the groups are cut in the order given, and this
+     * asserts the order survives.
+     */
+    renderScreen([
+      approval({ id: 'a1', createdAt: '2026-09-19T09:00:00.000Z' }),
+      approval({ id: 'a2', createdAt: '2026-09-15T09:00:00.000Z' }),
+      approval({ id: 'a3', createdAt: '2026-09-19T08:00:00.000Z' }),
+    ]);
+    const ids = screen.getAllByTestId(/^queue-a\d+$/).map((el) => el.getAttribute('data-id'));
+    expect(ids).toEqual(['a1', 'a2', 'a3']);
+    // And "Today" appears twice, because splitting it is the honest outcome.
+    expect(screen.getAllByText('Today')).toHaveLength(2);
+  });
+
+  it('★★ keeps the keyboard walk working across a day boundary', async () => {
+    /*
+     * The separators are nested lists, so `move()` — which finds rows by
+     * `data-id` — is unaffected by construction. Asserted anyway: "by
+     * construction" is what I would have said about five other things this week.
+     */
+    const user = userEvent.setup();
+    renderScreen([
+      approval({ id: 'a1', createdAt: '2026-09-19T09:00:00.000Z' }),
+      approval({ id: 'a2', createdAt: '2026-09-18T09:00:00.000Z' }),
+    ]);
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByTestId('queue-a2')).toHaveFocus();
+  });
+});

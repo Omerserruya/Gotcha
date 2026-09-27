@@ -213,3 +213,44 @@
     }
   }
 }
+
+@layer features {
+  /*
+   * The count of what a collapsed list is holding back, beside the control that
+   * reveals it. Without it the first five rows read as all of them.
+   */
+  .hiddenNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    align-self: center;
+  }
+
+  /*
+   * The confirm for "sign out every other device". Inline rather than an
+   * overlay: the action is recoverable, so the guard only has to stop a stray
+   * click, and an inline panel cannot be dismissed by one.
+   */
+  /*
+   * `.blockActions` lays its children in a row, which is right for buttons and
+   * wrong for a sentence above them.
+   */
+  .confirmBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    align-items: flex-start;
+  }
+
+  .confirmNote {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-snug);
+    max-inline-size: var(--size-reading);
+  }
+
+  .confirmActions {
+    display: flex;
+    gap: var(--space-8);
+    flex-wrap: wrap;
+  }
+}

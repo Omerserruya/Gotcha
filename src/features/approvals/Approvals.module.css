@@ -416,3 +416,49 @@
     color: var(--text-subtle);
   }
 }
+
+@layer features {
+  .queueColumn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  /*
+   * The size of the queue as a fact. A reader who cannot see how much is waiting
+   * judges it from the scroll bar, which is not a number.
+   */
+  .queueCount {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * One day, as a group. `.queue` keeps its own dividers between items, so the
+   * day wrapper adds none of its own.
+   */
+  .queueDay {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .queueDayLabel {
+    margin: 0;
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+    font-size: var(--font-size-caption);
+    font-weight: 500;
+    color: var(--text-subtle);
+    background-color: var(--panel-field);
+    position: sticky;
+    inset-block-start: 0;
+  }
+
+  .queueDayItems {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+}

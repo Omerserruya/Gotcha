@@ -17,7 +17,13 @@
     "revokeOthers": "{count, plural, one {Sign out the other device} other {Sign out all # other devices}}",
     "idpDown": "The identity provider didn't answer, so nothing was signed out. Try again shortly.",
     "revokeFailed": "That didn't sign out. Try again.",
-    "revokeUnconfirmed": "We couldn't confirm that signed out. It may have worked — signing out again is safe either way."
+    "revokeUnconfirmed": "We couldn't confirm that signed out. It may have worked — signing out again is safe either way.",
+    "showAll": "Show all {count} devices",
+    "showFewer": "Show fewer",
+    "hiddenNote": "{count, plural, one {# more device} other {# more devices}} not shown",
+    "revokeOthersConfirm": "This will sign out {count, plural, one {# other device} other {# other devices}}. You will stay signed in here.",
+    "revokeOthersGo": "Sign out {count, plural, one {# device} other {# devices}}",
+    "cancel": "Keep them signed in"
   },
   "logins": {
     "unavailable": "We couldn't reach the identity provider, so we can't show recent sign-ins.",

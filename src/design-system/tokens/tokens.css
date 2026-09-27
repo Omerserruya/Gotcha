@@ -160,6 +160,16 @@
     --size-reading-half: 300px;
     /* The label column in the workspace fact list. */
     --size-fact-label: 190px;
+    /*
+     * The narrow label column inside a scan row — not `--size-fact-label`,
+     * which is twice as wide and belongs to the facts tables.
+     *
+     * It existed only as `var(--size-label-column, 6rem)`, so every screen
+     * rendered the fallback and the token itself was never defined. A fallback
+     * is not a default; it is a value that works until someone tries to change
+     * the token and finds nothing responds.
+     */
+    --size-label-column: 96px;
     /* The day column in the opening-hours grid: fits the longest weekday. */
     --size-hours-day: 128px;
     /* Settings · People: the three fixed columns beside the flexible name. */

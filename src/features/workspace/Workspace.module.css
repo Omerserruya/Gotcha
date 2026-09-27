@@ -624,7 +624,7 @@
   }
 
   .scanValueLabel {
-    min-inline-size: var(--size-label-column, 6rem);
+    min-inline-size: var(--size-label-column);
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }

@@ -6,7 +6,11 @@
   "queue": {
     "label": "Waiting for a decision",
     "awaiting": "Waiting on you",
-    "lapsed": "Deadline passed"
+    "lapsed": "Deadline passed",
+    "waiting": "{count, plural, one {# request waiting} other {# requests waiting}}",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "dayUnknown": "Date not recorded"
   },
   "detail": {
     "requestedBy": "Requested by {who}",

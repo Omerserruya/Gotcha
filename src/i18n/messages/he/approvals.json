@@ -6,7 +6,11 @@
   "queue": {
     "label": "ממתינים להחלטה",
     "awaiting": "ממתין לך",
-    "lapsed": "המועד חלף"
+    "lapsed": "המועד חלף",
+    "waiting": "{count, plural, one {בקשה אחת ממתינה} other {# בקשות ממתינות}}",
+    "today": "היום",
+    "yesterday": "אתמול",
+    "dayUnknown": "התאריך לא נרשם"
   },
   "detail": {
     "requestedBy": "התבקש על ידי {who}",

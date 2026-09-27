@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 
 import {
   decisionStance,
@@ -80,6 +80,7 @@ export function ApprovalsScreen({
    * route's 409 is the real backstop either way. **This computation decides
    * what to OFFER; it never decides what is permitted.**
    */
+  const locale = useLocale();
   const [nowMs, setNowMs] = useState(serverNow);
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 15_000);
@@ -109,6 +110,43 @@ export function ApprovalsScreen({
   const queueRef = useRef<HTMLUListElement>(null);
 
   const selected = pending.find((a) => a.id === selectedId) ?? pending[0] ?? null;
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * ★★ DAY SEPARATORS, AND DELIBERATELY NOT PAGINATION
+   * ════════════════════════════════════════════════════════════════════════════
+   * A browser walk found 28 rows in one unbroken column and reported two things
+   * missing: separators and paging. **Only one of them belongs on this screen.**
+   *
+   * Paging a reference list is kind. Paging a WORK QUEUE hides work: the oldest
+   * request is the one that most needs deciding, it sorts to the far end, and
+   * putting it behind "show more" means the item nobody has looked at is the
+   * item nobody will look at. `expiresAt` is real on these rows — a request that
+   * lapses because it was on page two is a defect we would have built.
+   *
+   * So the list stays whole and gains structure instead: a count at the top, so
+   * the size is a fact rather than a scroll bar, and a heading per day, so "this
+   * has been sitting here since Tuesday" is legible without reading timestamps.
+   *
+   * ⚠ The groups are cut in the order the queue already has. Re-sorting by date
+   * would fight whatever ranking the server applied and silently reorder a
+   * decision queue, which is a worse thing to do than leaving a day split in two.
+   */
+  const days = useMemo(() => {
+    const groups: { key: string; label: string; items: Approval[] }[] = [];
+    for (const approval of pending) {
+      const key = dayKey(approval.createdAt);
+      const last = groups.at(-1);
+      if (last?.key === key) last.items.push(approval);
+      else
+        groups.push({
+          key,
+          label: dayLabel(approval.createdAt, now, locale, t),
+          items: [approval],
+        });
+    }
+    return groups;
+  }, [pending, now, locale, t]);
   const decidable = selected !== null && isDecidable(selected, now);
 
   const move = useCallback(
@@ -239,39 +277,63 @@ export function ApprovalsScreen({
       {moment ? <MomentAfter outcome={moment} onRetry={onRetry} busy={busy} /> : null}
 
       <div className={styles.layout}>
-        <ul
-          ref={queueRef}
-          className={styles.queue}
-          data-testid="approval-queue"
-          aria-label={t('queue.label')}
-        >
-          {pending.map((approval) => {
-            const lapsed = decisionStance(approval, now) === 'lapsed';
-            const current = approval.id === selected?.id;
-            return (
-              <li key={approval.id} className={styles.queueItem}>
-                <button
-                  type="button"
-                  data-id={approval.id}
-                  data-testid={`queue-${approval.id}`}
-                  data-lapsed={lapsed ? 'yes' : 'no'}
-                  aria-current={current ? 'true' : undefined}
-                  tabIndex={current ? 0 : -1}
-                  className={styles.queueButton}
-                  onClick={() => {
-                    setSelectedId(approval.id);
-                    setReason('');
-                  }}
-                >
-                  <span className={styles.queueSummary}>{approval.summary}</span>
-                  <span className={styles.queueMeta}>
-                    {lapsed ? t('queue.lapsed') : t('queue.awaiting')}
-                  </span>
-                </button>
+        <div className={styles.queueColumn}>
+          {/*
+            The size of the queue as a fact, at the top, rather than something a
+            reader infers from how far the scroll bar has left to go.
+          */}
+          <p className={styles.queueCount} data-testid="approval-queue-count">
+            {t('queue.waiting', { count: pending.length })}
+          </p>
+
+          <ul
+            ref={queueRef}
+            className={styles.queue}
+            data-testid="approval-queue"
+            aria-label={t('queue.label')}
+          >
+            {days.map((day) => (
+              <li key={day.key} className={styles.queueDay}>
+                {/*
+                  A heading and a nested list, so the day is announced as the
+                  group it is. A bare separator row inside the flat list would be
+                  read out as an item somebody can decide.
+                */}
+                <h3 className={styles.queueDayLabel} data-testid={`queue-day-${day.key}`}>
+                  {day.label}
+                </h3>
+                <ul className={styles.queueDayItems} aria-label={day.label}>
+                  {day.items.map((approval) => {
+                    const lapsed = decisionStance(approval, now) === 'lapsed';
+                    const current = approval.id === selected?.id;
+                    return (
+                      <li key={approval.id} className={styles.queueItem}>
+                        <button
+                          type="button"
+                          data-id={approval.id}
+                          data-testid={`queue-${approval.id}`}
+                          data-lapsed={lapsed ? 'yes' : 'no'}
+                          aria-current={current ? 'true' : undefined}
+                          tabIndex={current ? 0 : -1}
+                          className={styles.queueButton}
+                          onClick={() => {
+                            setSelectedId(approval.id);
+                            setReason('');
+                          }}
+                        >
+                          <span className={styles.queueSummary}>{approval.summary}</span>
+                          <span className={styles.queueMeta}>
+                            {lapsed ? t('queue.lapsed') : t('queue.awaiting')}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </li>
-            );
-          })}
-        </ul>
+            ))}
+          </ul>
+        </div>
 
         {selected ? (
           <section className={styles.detail} data-testid="approval-detail" aria-live="off">
@@ -387,4 +449,38 @@ export function ApprovalsScreen({
       </div>
     </div>
   );
+}
+
+/**
+ * Which of the reader's days this timestamp falls on.
+ *
+ * Local date components on purpose: "which day is this?" is a question about the
+ * reader's calendar, and `getFullYear`/`getMonth`/`getDate` answer it in their
+ * timezone without an `Intl` round-trip whose output format I would then be
+ * parsing.
+ *
+ * An unparseable date gets its own key rather than being folded into today.
+ */
+function dayKey(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return 'unknown';
+  return `${at.getFullYear()}-${at.getMonth() + 1}-${at.getDate()}`;
+}
+
+/**
+ * The heading for a day: "Today", "Yesterday", or the date.
+ *
+ * ⚠ A date we cannot read says so. Labelling it "Today" would put an old request
+ * at the top of today's group and hide exactly the thing these headings exist to
+ * surface, and it is the reassuring direction — which is the one to refuse.
+ */
+function dayLabel(iso: string, now: Date, locale: string, t: (key: string) => string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return t('queue.dayUnknown');
+
+  const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const daysAgo = Math.round((midnight(now) - midnight(at)) / 86_400_000);
+  if (daysAgo === 0) return t('queue.today');
+  if (daysAgo === 1) return t('queue.yesterday');
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(at);
 }
