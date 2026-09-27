@@ -59,13 +59,20 @@ export default async function Page() {
   return (
     <PageContainer title={t('title')} description={t('description')}>
       {/*
+        ★★ A SPLIT, AND THE WRAPPER IS A PLAIN `div` ON PURPOSE.
         The rail is a SIBLING of the permissions panel, not a child — both are
-        async server components, and nesting one in the other yields a tree
-        with an unresolved node that renders nothing. Fifth screen placed
-        this way.
+        async server components, and nesting one in the other yields a tree with
+        an unresolved node that renders nothing. Fifth screen placed this way.
+
+        A `div` is not a component, so wrapping both in one changes nothing about
+        that: they are still siblings. Before this they were siblings in document
+        order and the page was one long column — seventeen systems in full, and
+        only then the thing the reader came for.
       */}
-      <IntegrationRail integrations={integrations} />
-      <CapabilityScreen capabilities={capabilities} usage={usage} />
+      <div className={styles.split}>
+        <IntegrationRail integrations={integrations} />
+        <CapabilityScreen capabilities={capabilities} usage={usage} />
+      </div>
     </PageContainer>
   );
 }

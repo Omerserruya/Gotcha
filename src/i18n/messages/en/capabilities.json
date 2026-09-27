@@ -68,7 +68,12 @@
       "ERROR": "Needs attention",
       "DISCONNECTED": "Disconnected"
     },
-    "stateUnknown": "Status unknown"
+    "stateUnknown": "Status unknown",
+    "searchLabel": "Find a system",
+    "searchPlaceholder": "Name, what it does, or its category",
+    "searchNone": "Nothing here matches “{term}”.",
+    "connectedOf": "Connected · {count} of {total}",
+    "availableOf": "Available · {count} of {total}"
   },
   "choice": {
     "label": "What GOTCHA may do with this",

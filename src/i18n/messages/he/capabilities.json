@@ -68,7 +68,12 @@
       "ERROR": "דורש טיפול",
       "DISCONNECTED": "מנותק"
     },
-    "stateUnknown": "מצב לא ידוע"
+    "stateUnknown": "מצב לא ידוע",
+    "searchLabel": "חיפוש מערכת",
+    "searchPlaceholder": "שם, מה היא עושה, או הקטגוריה שלה",
+    "searchNone": "שום דבר כאן לא תואם ל־„{term}”.",
+    "connectedOf": "מחוברות · {count} מתוך {total}",
+    "availableOf": "זמינות · {count} מתוך {total}"
   },
   "choice": {
     "label": "מה GOTCHA רשאית לעשות עם זה",
