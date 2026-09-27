@@ -213,8 +213,30 @@ for (const size of SIZES) {
       await expect(main).not.toHaveText(/answers confidently|guesses sometimes|topic strength/i);
       // "Contradicts itself · 2" — the mechanism is real, this tenant has zero.
       await expect(main).not.toHaveText(/contradicts itself/i);
-      // Learned-from-N-conversations has no source.
-      await expect(main).not.toHaveText(/past conversations/i);
+      /*
+       * ════════════════════════════════════════════════════════════════════
+       * ★★ RE-AIMED: THIS FORBIDS AN INVENTED COUNT, NOT THE WORDS
+       * ════════════════════════════════════════════════════════════════════
+       * It was `/past conversations/i`, and it went red when the conflict
+       * panel shipped — on three sentences that are true and deliberate:
+       *
+       *   "These come from reading past conversations — each answer is one
+       *    your team actually gave…"
+       *   "This runs when past conversations are imported, and that hasn't
+       *    happened for this workspace…"
+       *
+       * The design's claim was *"Learned from 1,248 conversations"*, which has
+       * no source: nothing counts the conversations a document came from. The
+       * honest caption that names the panel's real axis happens to use the
+       * same two words, so the guard was aimed at a phrase when it meant a
+       * claim — the same mistake as asserting on a textarea when the rule was
+       * about a stored value.
+       *
+       * So what is forbidden is a NUMBER attached to conversations, and the
+       * "learned from" framing itself. Checked against the live copy: the two
+       * sentences above pass, and all three fabricated forms are rejected.
+       */
+      await expect(main).not.toHaveText(/learned from|\d[\d,]*\s+(?:past\s+)?conversations/i);
 
       await expect(main).not.toHaveText(/\{[a-zA-Z]+\}/);
 

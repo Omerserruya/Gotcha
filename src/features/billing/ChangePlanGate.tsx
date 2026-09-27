@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 
 import { isEnabled } from '@/permissions/capability';
 import { useCapability } from '@/permissions/permissions-context';
@@ -46,6 +46,7 @@ export function ChangePlanGate({
   readonly hasPaymentMethod: boolean;
 }) {
   const t = useTranslations('billing.pricing');
+  const format = useFormatter();
   const capability = useCapability('settings:billing:manage', 'disable');
 
   return (
@@ -57,9 +58,17 @@ export function ChangePlanGate({
             September" is read as this year by everybody who sees it.
           */}
           {t('change.deferred', {
-            date: new Intl.DateTimeFormat(undefined, { dateStyle: 'long' }).format(
-              new Date(effectiveAt),
-            ),
+            /*
+             * ★ THE PAGE'S LOCALE, NOT THE BROWSER'S.
+             *
+             * This was `new Intl.DateTimeFormat(undefined, …)` in a CLIENT
+             * component, so the date followed the reader's browser rather than
+             * the page — a Hebrew user with an English browser got one English
+             * date inside a Hebrew page, and it differed per user rather than
+             * per deploy. Every other formatter in this directory already
+             * passes the locale.
+             */
+            date: format.dateTime(new Date(effectiveAt), { dateStyle: 'long' }),
           })}
         </p>
       ) : null}

@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getFormatter, getTranslations } from 'next-intl/server';
 
 import type { AgentPresence } from '@/api/contracts/presence';
 import type { Team } from '@/api/contracts/team';
@@ -33,6 +33,7 @@ export async function TeamPanel({
   presence: ReadonlyMap<string, AgentPresence>;
 }) {
   const t = await getTranslations('home.team');
+  const format = await getFormatter();
   const imbalance = findImbalance(team);
   const online = team.filter((member) => presence.get(member.agentId)?.status === 'ONLINE').length;
 
@@ -59,7 +60,7 @@ export async function TeamPanel({
                   {member.name ?? member.email ?? member.agentId}
                 </Text>
                 <Text role="micro" tone="subtle" as="span">
-                  {secondLine(t, member, presence.get(member.agentId))}
+                  {secondLine(t, format, member, presence.get(member.agentId))}
                 </Text>
               </span>
               {/*
@@ -120,6 +121,7 @@ function findImbalance(team: Team): { name: string } | null {
  */
 function secondLine(
   t: Awaited<ReturnType<typeof getTranslations<'home.team'>>>,
+  format: Awaited<ReturnType<typeof getFormatter>>,
   member: Team[number],
   presence: AgentPresence | undefined,
 ): string {
@@ -127,7 +129,21 @@ function secondLine(
     const until = new Date(presence.awayUntil);
     if (!Number.isNaN(until.getTime())) {
       return t('awayUntil', {
-        time: until.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+        /*
+         * ★★ THE PAGE'S CLOCK, NOT THE SERVER'S.
+         *
+         * This was `toLocaleTimeString(undefined, …)` in a SERVER component,
+         * so `undefined` resolved to Node's locale — `en-US` here — for every
+         * reader. On a Hebrew page it printed **`02:30 PM`** beside `14:30`
+         * times drawn through this same formatter elsewhere on the screen.
+         *
+         * And it would not have been read as a bug: a 12-hour clock next to
+         * 24-hour ones inside one Hebrew screenshot looks like an
+         * inconsistent design, and it would have been filed against the
+         * panel. That is the expensive kind of wrong evidence — not obviously
+         * broken, quietly wrong in a way a reviewer rationalises.
+         */
+        time: format.dateTime(until, { hour: '2-digit', minute: '2-digit' }),
       });
     }
   }

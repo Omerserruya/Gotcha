@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getFormatter, getTranslations } from 'next-intl/server';
 
 import type { AnalyticsOverview, ChannelPerformance } from '@/api/contracts/analytics';
 import { Text } from '@/design-system/primitives/text/Text';
@@ -31,7 +31,21 @@ export async function MetricStrip({
   isQuiet: boolean;
 }) {
   const t = await getTranslations('home.metrics');
-  const format = new Intl.NumberFormat();
+  /*
+   * ★ THE PAGE'S LOCALE, NOT THE PROCESS'S.
+   *
+   * This was `new Intl.NumberFormat()` with no locale at all. In a server
+   * component that means Node's default — `en-US` here — for every reader in
+   * every language, and it would follow whatever `LANG` the container happens
+   * to be started with.
+   *
+   * Invisible in this case rather than harmless: `1,234,567.5` is identical in
+   * `en-US` and `he-IL`, so nothing on screen disagreed. It is the same defect
+   * as the two loud ones next door (`TeamPanel`'s clock, `ChangePlanGate`'s
+   * date) and it was found by the same sweep, which is why it is fixed rather
+   * than excused.
+   */
+  const format = await getFormatter();
 
   /*
    * The labels change with the day.
@@ -49,12 +63,12 @@ export async function MetricStrip({
     <div className={styles.strip}>
       <Metric
         label={isQuiet ? t('conversationsSoFar') : t('conversations')}
-        value={format.format(overview.totalConversations)}
+        value={format.number(overview.totalConversations)}
       />
 
       <Metric
         label={t('handledByGotcha')}
-        value={format.format(overview.aiHandledCount)}
+        value={format.number(overview.aiHandledCount)}
         share={
           everythingHandled
             ? t('allOfThem')
@@ -66,12 +80,12 @@ export async function MetricStrip({
 
       <Metric
         label={isQuiet ? t('needingYou') : t('byYourTeam')}
-        value={format.format(overview.humanHandledCount)}
+        value={format.number(overview.humanHandledCount)}
       />
 
       <Metric
         label={t('waitingOnApproval')}
-        value={pendingApproval === null ? '—' : format.format(pendingApproval)}
+        value={pendingApproval === null ? '—' : format.number(pendingApproval)}
       />
 
       {channels && channels.length > 0 ? (
