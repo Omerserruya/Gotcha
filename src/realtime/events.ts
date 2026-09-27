@@ -113,6 +113,60 @@ function str(payload: unknown, key: string): string | null {
 }
 
 export const translators: readonly EventTranslator[] = [
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * ★★ TWO EVENT TYPES WERE DECLARED AND NEITHER HAD A TRANSLATOR
+   * ════════════════════════════════════════════════════════════════════════════
+   * `message.received` and `message.delivery_changed` have been in the union at
+   * the top of this file since it was written. **Nothing translated them and
+   * nothing subscribed to them**, so the socket delivered the frames and this
+   * layer dropped every one — a reader with no writer, which is the same shape as
+   * an endpoint whose declared events are written nowhere.
+   *
+   * It only became load-bearing when the composer shipped: its copy says *"it
+   * will show above as it goes out, and say so if it fails"*, and without these
+   * the stream shows `PENDING` for ever until somebody reloads. A sentence in the
+   * product promising a behaviour the code does not have is worse than a comment
+   * doing it, because a comment only misleads the next developer.
+   *
+   * ── AND THE WIRE NAMES ARE COLON-SEPARATED, NOT DOTTED ──
+   * `message:status` and `message:new`, from `message.service.ts`. Our own type
+   * names are dotted, and matching our name against the wire would have compiled
+   * and never fired — the same trap as matching `cause.code` on a route that
+   * sends none. Read from the emitter, not from our own vocabulary.
+   */
+  (wireEvent, payload) => {
+    if (wireEvent !== 'message:status') return null;
+    /* The publisher sends the fields flat, and also nests them under `data`. */
+    const data = field(payload, 'data') ?? payload;
+    const tenantId = str(payload, 'tenantId') ?? str(data, 'tenantId');
+    const conversationId = str(data, 'conversationId');
+    const messageId = str(data, 'messageId');
+    /*
+     * A frame we cannot attribute to a conversation could refresh the wrong one.
+     * Dropped rather than guessed — the same rule the transcript translator
+     * applies, and for the same reason.
+     */
+    if (!tenantId || !conversationId || !messageId) return null;
+    return {
+      type: 'message.delivery_changed',
+      tenantId,
+      at: Date.now(),
+      conversationId,
+      messageId,
+    };
+  },
+
+  (wireEvent, payload) => {
+    if (wireEvent !== 'message:new') return null;
+    const data = field(payload, 'data') ?? payload;
+    const tenantId = str(payload, 'tenantId') ?? str(data, 'tenantId');
+    const conversationId = str(data, 'conversationId');
+    const messageId = str(data, 'messageId') ?? str(data, 'id');
+    if (!tenantId || !conversationId || !messageId) return null;
+    return { type: 'message.received', tenantId, at: Date.now(), conversationId, messageId };
+  },
+
   (wireEvent, payload) => {
     if (wireEvent !== 'voice.transcript') return null;
     // The publisher nests the utterance under `data`.
