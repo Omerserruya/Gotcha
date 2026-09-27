@@ -1,350 +1,405 @@
-/* Ported from the "GOTCHA Campaign Landing.dc.html" script block by
-   tools/build-logic.mjs. The class body is the design's own source - keep edits
-   there, not here. Re-run the design:sync npm script. */
+/* Ported from the "GOTCHA Campaign Landing.dc.html" script block by tools/build-logic.mjs.
+   The class body is the design's own source - keep edits there, not here.
+   Re-run the design:sync npm script. */
 /* eslint-disable */
 'use client';
 
 import React from 'react';
 import Template from '@/generated/Template';
-import { links, META_PIXEL_ID } from '@/lib/site';
-
-/**
- * How this campaign's leads are tagged in the admin leads table.
- *
- * Anything but 'early-access-form', which the endpoint treats as the full
- * wizard and holds to a stricter rule (email AND phone both required). This
- * form makes email optional.
- */
-const LEAD_SOURCE = 'campaign-one-dollar-offer';
+import { links, META_PIXEL_ID, LEAD_SOURCE, THANK_YOU_PATH } from '@/lib/site';
 
 class CampaignLogic extends React.Component {
-  // ── כל הקישורים וההגדרות במקום אחד ─────────────────────────────
   CFG = {
     demo: 'https://calendar.app.google/5YgBtZFPCDbUpskA7',
     waNumber: '972552633304',
     waDisplay: '055-263-3304',
     email: 'support@gotcha.co.il',
+    thankYou: THANK_YOU_PATH,
     leadEndpoint: '/api/waitlist',
     metaPixelId: META_PIXEL_ID,
-    privacyUrl: links.trust('privacy-policy'),
-    termsUrl: links.trust('terms-of-service'),
-    offerTermsUrl: null,
-    accessibilityUrl: null,
-    offerActive: true,           // כיבוי המבצע כשהמכסה מתמלאת
-    offerEnds: '2026-10-31'
+    privacyUrl: links.trust('privacy-policy'), termsUrl: links.trust('terms-of-service'),
+    offerTermsUrl: null, accessibilityUrl: null
   };
 
-  state = { errors: {}, values: { name: '', phone: '', site: '', email: '' }, sent: false, sending: false,
-            open: null, anim: 'paused', wa: 'closed', waDraft: '', waTeased: false, barHidden: false, gift: false };
+  // ── תסריטי ההמחשה: פנייה אופיינית לכל ערוץ, נתוני דמו מקומיים ──
+  SCRIPTS = {
+    wa: [
+      { label: 'הודעה נכנסת', dur: 2500, msgs: [{ who: 'c', t: 'היי, ההזמנה שלי עדיין לא הגיעה. אפשר לבדוק?', time: '09:12' }], ops: ['הפנייה נפתחה ב־WhatsApp'] },
+      { label: 'איסוף מידע', dur: 3600, ops: ['זוהתה לקוחה קיימת', 'נמצאה הזמנה #1842 ב־Shopify', 'נבדק סטטוס המשלוח'],
+        info: { title: 'כרטיס הזמנה', rows: [{ l: 'הזמנה', v: '#1842', tag: 'Shopify', ltr: true }, { l: 'סטטוס הזמנה', v: 'נשלחה' }, { l: 'סטטוס משלוח', v: 'עיכוב במרכז המיון', hot: true }] } },
+      { label: 'תשובה', dur: 3100, typingBefore: true, ops: ['נוסחה תשובה מהמידע שנאסף'], msgs: [{ who: 'b', t: 'בדקתי את ההזמנה. המשלוח מתעכב במרכז המיון.', time: '09:13' }, { who: 'c', t: 'זה כבר עבר את מועד האספקה שהובטח.', time: '09:14' }] },
+      { label: 'ביצוע פעולה', dur: 3600, ops: ['חברת המשלוחים מחוברת', 'נפתח בירור #582', 'ממתין לתשובה'], note: 'הפעולות הזמינות תלויות בחברת המשלוחים, בחיבור ובהרשאות.', msgs: [{ who: 'b', t: 'פתחתי בירור מול חברת המשלוחים. אעדכן אותך כאן כשנקבל תשובה.', time: '09:15' }] },
+      { label: 'נציג מצטרף', dur: 3900, msgs: [{ who: 'c', t: 'אפשר לדבר עם נציג?', time: '09:16' }],
+        copilot: { sum: 'הזמנה #1842 מתעכבת. בירור #582 נפתח מול חברת המשלוחים וממתין לתשובה.', sug: 'היי דנה, אני מצטרף לטיפול. אני רואה שהבירור כבר נפתח ואמשיך לעקוב אחריו.' } },
+      { label: 'סיום', dur: 2300, end: true }
+    ],
+    ig: [
+      { label: 'הודעה נכנסת', dur: 2500, msgs: [{ who: 'c', t: 'ראיתי את הסרום בסטורי — מתאים לעור שמן?', time: '20:41' }], ops: ['הפנייה נפתחה ב־Instagram'] },
+      { label: 'איסוף מידע', dur: 3600, ops: ['זוהתה תגובה לסטורי', 'אותר המוצר בקטלוג', 'נבדקו מלאי ומחיר'],
+        info: { title: 'כרטיס מוצר', rows: [{ l: 'מוצר', v: 'סרום ניאצינמיד 10%' }, { l: 'מחיר', v: '₪129', tag: 'Shopify' }, { l: 'מלאי', v: '7 יחידות' }, { l: 'מתאים ל', v: 'עור שמן ומעורב', hot: true }] } },
+      { label: 'תשובה', dur: 3100, typingBefore: true, ops: ['נוסחה תשובה מנתוני הקטלוג'], msgs: [{ who: 'b', t: 'כן, הסרום מיועד לעור שמן ומעורב. ניאצינמיד 10%, ‎129 ₪.', time: '20:42' }, { who: 'c', t: 'אפשר קישור להזמנה?', time: '20:43' }] },
+      { label: 'ביצוע פעולה', dur: 3600, ops: ['אותר המוצר המתאים בקטלוג', 'נשלח קישור למוצר'], note: 'הקישורים והפעולות תלויים בחיבור לחנות ובהרשאות.',
+        msgs: [{ who: 'b', t: 'זה הסרום שמתאים לך — הקישור למוצר:', time: '20:43', link: { title: 'סרום ניאצינמיד 10%', price: '₪129', url: 'shop.co.il/niacinamide' } }] },
+      { label: 'נציג מצטרף', dur: 3900, msgs: [{ who: 'c', t: 'יש גם משהו לעור יבש? אפשר לדבר עם מישהי?', time: '20:45' }],
+        copilot: { sum: 'פנייה מסטורי על סרום ניאצינמיד. נשלח קישור למוצר, והלקוחה מתעניינת גם בטיפוח לעור יבש.', sug: 'היי, אני מצטרפת לשיחה. אשמח להמליץ על סרום לעור יבש ולשלוח השוואה בין השניים.' } },
+      { label: 'סיום', dur: 2300, end: true }
+    ],
+    ms: [
+      { label: 'הודעה נכנסת', dur: 2500, msgs: [{ who: 'c', t: 'שלום, אפשר להחזיר מוצר שלא נפתח? ועד מתי אתם פתוחים היום?', time: '11:08' }], ops: ['הפנייה נפתחה ב־Messenger'] },
+      { label: 'איסוף מידע', dur: 3600, ops: ['אותרה מדיניות ההחזרות', 'נבדקו שעות הפעילות', 'נמצא הסניף הקרוב'],
+        info: { title: 'מידע מהמערכות', rows: [{ l: 'החזרות', v: 'עד 14 יום, באריזה מקורית' }, { l: 'פתוח היום', v: '09:00–18:00', ltr: true }, { l: 'סניף קרוב', v: 'תל אביב · אבן גבירול 71' }] } },
+      { label: 'תשובה', dur: 3100, typingBefore: true, ops: ['נוסחה תשובה ממדיניות החנות'], msgs: [{ who: 'b', t: 'אפשר להחזיר מוצר שלא נפתח עד 14 יום מקבלתו. היום אנחנו פתוחים עד 18:00.', time: '11:09' }, { who: 'c', t: 'איך מתחילים החזרה?', time: '11:10' }] },
+      { label: 'ביצוע פעולה', dur: 3600, ops: ['נפתחה בקשת החזרה #341', 'נשלחה תווית משלוח'], note: 'הפעולות הזמינות תלויות במערכות המחוברות ובהרשאות.', msgs: [{ who: 'b', t: 'פתחתי בקשת החזרה ושלחתי תווית משלוח למייל. אפשר גם להחזיר בסניף.', time: '11:10' }] },
+      { label: 'נציג מצטרף', dur: 3900, msgs: [{ who: 'c', t: 'אפשר לדבר עם נציג לגבי החלפה במקום החזרה?', time: '11:12' }],
+        copilot: { sum: 'שאלה על החזרה ושעות פעילות. נפתחה בקשת החזרה #341 ונשלחה תווית, והלקוח מתעניין בהחלפה.', sug: 'היי, אני מצטרף לשיחה. אפשר להחליף את המוצר בסניף — אעזור לך לבחור פריט חלופי.' } },
+      { label: 'סיום', dur: 2300, end: true }
+    ]
+  };
+
+  get STEPS() { return this.SCRIPTS[(this.PLATS[this.state.plat] || this.PLATS[0]).id]; }
+  get REP_ANSWER() { return ((this.STEPS[4] || {}).copilot || {}).sug || ''; }
+
+  // ממשק הערוץ מתחלף יחד עם התסריט
+  PLATS = [
+    { id: 'wa', name: 'WhatsApp', icon: '/assets/icons/whatsapp.svg', invertIcon: true,
+      headBg: '#008069', headFg: '#FFFFFF', avaBg: 'rgba(255,255,255,.22)', chatBg: '#EFEAE2',
+      barBg: '#F0F2F5', fieldBg: '#FFFFFF', send: '#00A884', online: 'מחובר', ph: 'הקלידו הודעה',
+      inBg: '#D9FDD3', outBg: '#FFFFFF', radiusIn: '0 8px 8px 8px', radiusOut: '8px 0 8px 8px', ink: '#111B21' },
+    { id: 'ig', name: 'Instagram', icon: '/assets/icons/instagram.svg', invertIcon: true,
+      headBg: '#0A0A0A', headFg: '#FFFFFF', avaBg: 'rgba(255,255,255,.14)', chatBg: '#000000',
+      barBg: '#000000', fieldBg: '#1C1C1C', send: '#3B5AFB', online: 'shirel_cosmetics', ph: 'הודעה…',
+      inBg: '#3B5AFB', outBg: '#262626', outFg: '#F5F5F5', radiusIn: '20px', radiusOut: '20px', ink: '#FFFFFF' },
+    { id: 'ms', name: 'Messenger', icon: '/assets/icons/messenger.svg', invertIcon: true,
+      headBg: '#FFFFFF', headFg: '#16150F', avaBg: '#E7EBF0', chatBg: '#FFFFFF',
+      barBg: '#FFFFFF', fieldBg: '#F0F2F5', send: '#0084FF', online: 'פעיל כעת', ph: 'הודעה…',
+      inBg: '#F0F2F5', outBg: '#0084FF', outFg: '#FFFFFF', radiusIn: '18px', radiusOut: '18px', ink: '#050505' }
+  ];
+
+
+  state = {
+    plat: 0, step: 0, playing: false, started: false, repDraft: '', repSent: false,
+    open: null, wa: 'closed', waDraft: '', waTeased: false, kbd: false,
+    fa: { err: {}, busy: false }, fb: { err: {}, busy: false }
+  };
+
+  vals = { fa: { name: '', phone: '', site: '', email: '' }, fb: { name: '', phone: '', site: '', email: '' } };
 
   get cfg() {
     const c = this.CFG;
-    return { demo: c.demo, wa: 'https://wa.me/' + c.waNumber, waDisplay: c.waDisplay,
-             tel: 'tel:+' + c.waNumber, email: c.email, mailto: 'mailto:' + c.email,
-             privacy: c.privacyUrl || '#form', terms: c.termsUrl || '#form', offerTerms: c.offerTermsUrl || '#form',
-             accessibility: c.accessibilityUrl || '#form', cookies: c.cookiesUrl || '#form' };
+    return {
+      demo: c.demo, wa: 'https://wa.me/' + c.waNumber, waDisplay: c.waDisplay,
+      tel: 'tel:+' + c.waNumber, email: c.email, mailto: 'mailto:' + c.email
+    };
   }
 
-  // ── מדידה: אירוע אחד לכל פעולה, בלי כפילויות ובלי פרטים אישיים ──
   fired = {};
   track(name, once) {
     if (once && this.fired[name]) return;
     this.fired[name] = true;
     const utm = {};
-    try {
-      new URLSearchParams(location.search).forEach((v, k) => { if (/^utm_|^gclid$|^fbclid$/.test(k)) utm[k] = v; });
-    } catch (e) {}
+    try { new URLSearchParams(location.search).forEach((v, k) => { if (/^utm_|^gclid$|^fbclid$/.test(k)) utm[k] = v; }); } catch (e) {}
     const payload = { event: name, utm: utm };
     (window.dataLayer = window.dataLayer || []).push(payload);
-    if (window.fbq && this.CFG.metaPixelId) {
-      // 'lead' is Meta's standard Lead event; the rest are ours.
-      if (name === 'lead') window.fbq('track', 'Lead');
-      else window.fbq('trackCustom', name);
-    }
+    if (window.fbq && this.CFG.metaPixelId) window.fbq(name === 'lead' ? 'track' : 'trackCustom', name === 'lead' ? 'Lead' : name);
     if (!this.CFG.metaPixelId) console.info('[measurement pending pixel id]', payload);
   }
 
   componentDidMount() {
+    this.onStick = () => { const el = document.querySelector('[data-sticky-head]'); if (el) el.toggleAttribute('data-stuck', window.scrollY > 8); };
+    window.addEventListener('scroll', this.onStick, { passive: true }); this.onStick();
     this.track('page_view', true);
     this.runMarquee();
-    // הרוחב משתנה כשהאייקונים והפונטים נטענים — מודדים שוב ומסנכרנים
-    this.mqRO = new ResizeObserver(() => this.runMarquee());
     const tr = document.querySelector('[data-track]');
-    if (tr) { this.mqRO.observe(tr.querySelector('[data-grp]')); this.mqRO.observe(tr.parentElement); }
-    addEventListener('load', () => this.runMarquee());
+    if (tr && window.ResizeObserver) {
+      this.mqRO = new ResizeObserver(() => this.runMarquee());
+      this.mqRO.observe(tr.querySelector('[data-grp]'));
+      this.mqRO.observe(tr.parentElement);
+    }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.runMarquee());
-    [400, 1200, 3000].forEach((ms) => setTimeout(() => this.runMarquee(), ms));
-    this.io = new IntersectionObserver((es) => {
-      es.forEach(e => {
-        if (e.target.getAttribute('data-watch') === 'anim') {
-          if (e.isIntersecting && e.intersectionRatio > 0.5) { if (!this.userPaused) this.setState({ anim: 'playing' }); }
-          else if (this.state.anim === 'playing') this.setState({ anim: 'paused' });
-        }
-      });
-    }, { threshold: [0, 0.5, 0.75] });
+    [400, 1500, 3000].forEach(ms => setTimeout(() => this.runMarquee(), ms));
+
+    this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // ההמחשה מתחילה כשהיא נכנסת למסך, נעצרת כשהיא יוצאת וממשיכה בחזרה
     const watch = () => {
-      const t = document.querySelector('[data-watch="anim"]');
-      if (t) this.io.observe(t);
-      else setTimeout(watch, 300);
+      const el = document.querySelector('[data-demo]');
+      if (!el) return setTimeout(watch, 300);
+      if (!this.state.started && !this.reduce) { this.stepAt = Date.now(); this.setState({ started: true, playing: true }); }
     };
     watch();
+    if (!this.reduce) { this.stepAt = Date.now(); this.ensureClock(); this.setState({ playing: true, started: true }); }
+    this.rmq = matchMedia('(prefers-reduced-motion: reduce)');
+    if (this.rmq.addEventListener) this.rmq.addEventListener('change', (e) => { this.reduce = e.matches; });
 
-    // הווידג׳ט נסוג רק כשהוא באמת מכסה כפתור פעולה, תנאי הטבה או שדה בטופס
-    this.checkGuards = () => {
-      const w = document.querySelector('[data-widget]');
-      const fab = w && w.querySelector('button[aria-label]');
-      if (!fab) return;
-      const b = fab.getBoundingClientRect();
-      const pad = 14;
-      const box = { left: b.left - pad, right: b.right + pad, top: b.top - pad, bottom: b.bottom + pad };
-      let covers = false;
-      document.querySelectorAll('[data-guard]').forEach(el => {
-        if (covers) return;
-        const r = el.getBoundingClientRect();
-        if (r.bottom < 0 || r.top > innerHeight) return;
-        if (!(box.right < r.left || box.left > r.right || box.bottom < r.top || box.top > r.bottom)) covers = true;
-      });
-      const hide = covers && this.state.wa !== 'open';
-      if (hide !== !!this.state.waHidden) this.setState({ waHidden: hide });
+    // הפס הדביק נסוג כשמקלדת פתוחה או כשחלון הווידג׳ט פתוח
+    this.onFocusIn = (e) => {
+      const t = e.target;
+      if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) this.setState({ kbd: true });
     };
-    // ── הרקע נע עם הגלילה: מנוע אחד שמחשב התקדמות ומזיז את השכבות ──
-    this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.bg = {};
-    const grab = () => {
-      const b = document.querySelector('[data-bg]');
-      if (!b) return setTimeout(grab, 300);
-      this.bg = {
-        tint: b.querySelector('[data-bg-tint]'),
-        a: b.querySelector('[data-bg-glow="a"]'),
-        bb: b.querySelector('[data-bg-glow="b"]'),
-        c: b.querySelector('[data-bg-glow="c"]'),
-        arcs: b.querySelector('[data-bg-arcs]'),
-        dots: b.querySelector('[data-bg-dots]'),
-        lines: b.querySelector('[data-bg-lines]')
-      };
+    this.onFocusOut = (e) => {
+      const t = e.target;
+      if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) setTimeout(() => {
+        const a = document.activeElement;
+        if (!a || !/^(INPUT|TEXTAREA)$/.test(a.tagName)) this.setState({ kbd: false });
+      }, 80);
     };
-    grab();
-    this.paintBg = () => {
-      const g = this.bg;
-      if (!g.a) return;
-      const d = document.documentElement;
-      const max = Math.max(1, d.scrollHeight - d.clientHeight);
-      const p = Math.max(0, Math.min(1, (d.scrollTop || document.body.scrollTop) / max));
-      const ease = p * p * (3 - 2 * p);
-      const t = this.reduce ? 0 : performance.now() / 1000;
-      const br = (hz, amp) => Math.sin(t * hz) * amp;
-      // סימן אחד עצום, והדף הוא הריבוע שנע עליו — רצוף לגמרי עם הגלילה:
-      // נקודות המוקד של האזורים הן תחנות, והמסך נע ביניהן לפי מיקום הגלילה בפועל
-      const secs = Array.from(document.querySelectorAll('[data-focus]'));
-      const mid = innerHeight * 0.42;
-      const stops = secs.map(s => {
-        const r = s.getBoundingClientRect();
-        const v = (s.getAttribute('data-focus') || '').split(',').map(Number);
-        // ראש הדף הוא תחנה בקצה העליון של המסמך, כך שכל פיקסל גלילה כבר מזיז
-        const anchor = s.tagName === 'HEADER' ? r.top - (mid - 0) : r.top + r.height * 0.5 - mid;
-        return { y: anchor, x: v[0] || 0, fy: v[1] || 0, s: v[2] || 1 };
-      }).sort((p, q) => p.y - q.y);
-      let cur = { x: 34, y: 30, s: 1 }, active = 0;
-      if (stops.length) {
-        if (stops[0].y >= 0) { cur = { x: stops[0].x, y: stops[0].fy, s: stops[0].s }; active = 0; }
-        else if (stops[stops.length - 1].y <= 0) { const l = stops[stops.length - 1]; cur = { x: l.x, y: l.fy, s: l.s }; active = stops.length - 1; }
-        else {
-          for (let i = 0; i < stops.length - 1; i++) {
-            const A = stops[i], B = stops[i + 1];
-            if (A.y <= 0 && B.y >= 0) {
-              const t = (0 - A.y) / Math.max(1, B.y - A.y);
-              const e = t * t * (3 - 2 * t);
-              cur = { x: A.x + (B.x - A.x) * e, y: A.fy + (B.fy - A.fy) * e, s: A.s + (B.s - A.s) * e };
-              active = t < .5 ? i : i + 1;
-              break;
-            }
-          }
-        }
-      }
-      this.bgCur = cur;
-      g.a.style.transform = 'translate3d(' + cur.x.toFixed(2) + 'vmax,' + cur.y.toFixed(2) + 'vmax,0) scale(' + cur.s.toFixed(3) + ')';
-      // מסילת המספרים מסמנת את האזור הפעיל
-      if (g.arcs && active !== this.bgActive) {
-        this.bgActive = active;
-        Array.prototype.forEach.call(g.arcs.children, (el, i) => {
-          const on = i === active;
-          el.style.color = on ? '#16150F' : '#B3ADA1';
-          const tick = el.firstElementChild;
-          if (tick) { tick.style.width = on ? '40px' : (i % 2 ? '26px' : '16px'); tick.style.background = on ? '#C4552F' : '#D8D3C9'; }
-        });
-      }
-      g.arcs.style.transform = 'translate3d(0,0,0)';
-      g.dots.style.backgroundPosition = '0 ' + (-120 * ease) + 'px';
-      g.dots.style.opacity = String(.3 - .12 * ease);
-      g.tint.style.opacity = String(Math.max(0, ease * 1.05 - .05));
-    };
-    // הלופ קורא למתודה, כך שעדכוני קוד חיים נתפסים בלי לטעון מחדש את הדף
-    this.guardLoop = () => { try { this.frame(); } catch (e) { if (!this.warned) { this.warned = true; console.warn(e); } } this.guardRaf = requestAnimationFrame(this.guardLoop); };
-    this.onResizeH = () => { this.placed = false; };
-    window.addEventListener('resize', this.onResizeH);
-    this.guardRaf = requestAnimationFrame(this.guardLoop);
+    document.addEventListener('focusin', this.onFocusIn);
+    document.addEventListener('focusout', this.onFocusOut);
+
     this.onScroll = () => {
       const d = document.documentElement;
-      const r = (d.scrollTop || document.body.scrollTop) / Math.max(1, d.scrollHeight - d.clientHeight);
-      if (r > 0.25 && !this.state.waTeased && this.state.wa === 'closed' && !this.waDismissed) this.setState({ waTeased: true });
+      const max = Math.max(1, d.scrollHeight - d.clientHeight);
+      const p = (d.scrollTop || document.body.scrollTop) / max;
+      const g = document.querySelector('[data-bg-glow]');
+      if (g) g.style.transform = 'translate3d(0,' + (-5 + 10 * p).toFixed(2) + 'vmax,0)';
+      if (p > 0.25 && !this.teaseShown && this.state.wa === 'closed' && !this.state.kbd) {
+        this.teaseShown = true;
+        this.setState({ waTeased: true });
+        this.teaseTimer = setTimeout(() => { if (this.state.wa !== 'open') this.setState({ waTeased: false }); }, 7000);
+      }
     };
     window.addEventListener('scroll', this.onScroll, { passive: true });
   }
 
   componentWillUnmount() {
-    if (this.io) this.io.disconnect();
-    if (this.guardRaf) cancelAnimationFrame(this.guardRaf);
+    window.removeEventListener('scroll', this.onStick);
+    if (this.mqRO) this.mqRO.disconnect();
+    if (this.raf) cancelAnimationFrame(this.raf);
+    clearInterval(this.timer);
+    clearInterval(window.__gotchaDemoClock);
+    window.__gotchaDemoClock = null;
+    clearTimeout(this.typeT);
+    clearTimeout(this.teaseTimer);
     window.removeEventListener('scroll', this.onScroll);
+    document.removeEventListener('focusin', this.onFocusIn);
+    document.removeEventListener('focusout', this.onFocusOut);
+    if (this.mqAnim) this.mqAnim.cancel();
   }
 
-  root() { return document; }
+  // ── שעון ההמחשה ───────────────────────────────────────────────
+  inView = true;   // עד שה-observer מדווח אחרת, ההמחשה יכולה לרוץ
 
-  // ── הנפשה ─────────────────────────────────────────────────────
-  animEls() {
-    const host = document.querySelector('[data-watch="anim"]');
-    return host ? host.getAnimations({ subtree: true }) : [];
+  // ── שעון ההמחשה ───────────────────────────────────────────────
+  // הזמן נמדד בשעון קיר (Date.now) ולא בהפרשי פריימים, כי בתצוגות
+  // מוטמעות/מוסתרות rAF לא נקרא בכלל וה-setInterval מווסת לכ-700ms.
+  // השעון נבנה מחדש בכל רינדור אם חסר, כך שהוא שורד גם remount/hot-reload.
+  // שעון יחיד לכל הדף: כל יצירה מחליפה את הקודם, כך שגם remount או
+  // טעינת קוד חיה לא משאירים שני שעונים שמרנדרים את העץ במקביל
+  ensureClock() {
+    if (this.timer && window.__gotchaDemoClock === this.timer) return;
+    clearInterval(window.__gotchaDemoClock);
+    window.__gotchaDemoClock = this.timer = setInterval(this.tick, 90);
   }
-  toggleAnim = () => {};
-  replay = () => {
-    this.animEls().forEach(a => { try { a.currentTime = 0; a.play(); } catch (e) {} });
-    this.setState({ anim: 'playing' });
+
+  // הנראות נמדדת בכל פעימה מול המסך, ולא נשמרת מדיווח חד-פעמי
+  visible() {
+    if (document.hidden) return true;
+    const el = document.querySelector('[data-demo]');
+    if (!el) return true;
+    const r = el.getBoundingClientRect();
+    const h = window.innerHeight || document.documentElement.clientHeight || 0;
+    if (!h || !r.height) return true;
+    return r.bottom > -r.height * 0.5 && r.top < h + r.height * 0.5;
+  }
+
+  tick = () => {
+    const s = this.state;
+    if (this.ticking || !s.playing || !this.visible()) return;
+    this.ticking = true;
+    try { this.step(s); } finally { this.ticking = false; }
   };
-  // עמודת השלבים גדלה לגובה השכבה הגבוהה ביותר, כך ששום שלב לא גולש מהבמה
-  fitSteps() {
-    const col = document.querySelector('[data-steps]');
-    if (!col) return;
-    const w = col.clientWidth;
-    if (this.stepsW === w) return;
-    let max = 0;
-    Array.prototype.forEach.call(col.children, (layer) => {
-      const inner = layer.firstElementChild;
-      if (inner) max = Math.max(max, inner.scrollHeight);
+
+  step(s) {
+    const d = (this.STEPS[s.step] || {}).dur || 4000;
+    const el = Date.now() - (this.stepAt || Date.now());
+    if (s.step === 4) {
+      if (el > d * 0.38 && !s.repDraft) this.useAnswer();
+      else if (el > d * 0.72 && !s.repSent) this.sendRep();
+    }
+    if (el >= d) {
+      // לופ: בסוף הרצף חוזרים להתחלה, כמו GIF
+      if (s.step >= this.STEPS.length - 1) {
+        this.stepAt = Date.now();
+        this.setState({ step: 0, typing: false, repDraft: '', repSent: false });
+      } else this.goStep(s.step + 1);
+    }
+  }
+
+  goStep = (i) => {
+    const n = Math.max(0, Math.min(this.STEPS.length - 1, i));
+    this.stepAt = Date.now();
+    this.inView = true;
+    this.ensureClock();
+    clearTimeout(this.typeT);
+    const typing = !!(this.STEPS[n] && this.STEPS[n].typingBefore);
+    if (typing) this.typeT = setTimeout(() => this.setState({ typing: false }), 700);
+    this.setState({ step: n, started: true, typing: typing, repDraft: n > 4 ? this.REP_ANSWER : '', repSent: n > 4 });
+  };
+  toggleDemo = () => {
+    this.inView = true;
+    this.userPlay = true;
+    this.ensureClock();
+    if (!this.state.playing && this.state.step >= this.STEPS.length - 1) return this.replay();
+    this.stepAt = Date.now();
+    this.setState({ playing: !this.state.playing, started: true });
+  };
+  replay = () => {
+    this.stepAt = Date.now();
+    this.inView = true;
+    this.userPlay = true;
+    this.ensureClock();
+    this.setState({ step: 0, playing: true, started: true, typing: false, repDraft: '', repSent: false });
+  };
+  useAnswer = () => this.setState({ repDraft: this.REP_ANSWER });
+  sendRep = () => {
+    if (!this.state.repDraft) return;
+    this.setState({ repSent: true });
+  };
+
+  demoVals() {
+    const s = this.state, cur = s.step;
+    const msgs = [];
+    this.STEPS.forEach((st, i) => {
+      if (i > cur || !st.msgs) return;
+      st.msgs.forEach(m => msgs.push(m));
     });
-    if (max > 0) { col.style.minHeight = (max + 8) + 'px'; this.stepsW = w; }
-  }
-
-  frame() {
-    this.fitSteps();
-    // Deliberately not called: see build-logic.mjs. The widget stays put.
-    this.paintBg && this.paintBg();
-    this.loopDemo();
-    this.placeHeadline();
-  }
-
-  // לופ אינסופי: כשהתסריט (38 שניות) מסתיים, הכול חוזר להתחלה
-  DEMO_LEN = 38;                                  // אורך פס ההתקדמות
-  loopDemo() {
-    const host = document.querySelector('[data-watch="anim"]');
-    if (!host) return;
-    const tk = host.querySelector('[data-demo-tk]');
-    const a = tk && tk.getAnimations()[0];
-    if (!a) return;
-    // אנימציה שהסתיימה נעצרת על זמן הסיום — זה הרגע להתחיל מחדש (עם שנייה של מנוחה)
-    if (a.playState === 'finished' || Number(a.currentTime) >= this.DEMO_LEN * 1000 - 5) {
-      if (!this.loopAt) this.loopAt = performance.now() + 1200;
-      if (performance.now() >= this.loopAt) { this.loopAt = 0; this.replay(); }
+    if (s.repSent) {
+      const last = (this.STEPS[4] || {}).msgs;
+      const t = last && last[0] ? last[0].time : '';
+      msgs.push({ who: 'b', t: this.REP_ANSWER, time: t, rep: true });
     }
-  }
-
-  // ── למי זה מתאים · הבחירה מכוונת את שורת ההסבר ואת הכפתור ─────
-  FIT = [
-    { line: 'אדם אחד מול כל הפניות? עובד ה־AI עונה, בודק ומבצע — ואתם מצטרפים רק כשצריך', cta: 'הראו לי איך זה עובד לעסק של אחד' },
-    { line: 'צוות קטן שמתחלק בין וואטסאפ, אינסטגרם ומייל? הכול מתרכז לתיבה אחת, עם קופיילוט לכל אחד', cta: 'קבעו דמו של 15 דק׳ לצוות שלכם' },
-    { line: 'מאות פניות ביום? עובדי ה־AI סוגרים את החוזרות, והנציגים מקבלים רק את מה שדורש אדם — עם כל ההקשר', cta: 'קבעו דמו של 15 דק׳ לצוות המכירות' }
-  ];
-  pickFit = (i) => () => { this.track('fit_pick_' + i, false); this.setState({ fit: i }); };
-
-  // ── הכותרת הראשית יושבת על החלק הבהיר של הסימן ───────────────
-  placeHeadline() {
-    if (true) return;   // הכותרת יושבת בסקשן משלה, אין צורך במיקום דינמי
-    const h1 = document.querySelector('h1');
-    const mark = document.querySelector('[data-bg-glow="a"] img');
-    if (!h1 || !mark || !mark.complete || !mark.naturalWidth || this.placed) return;
-    if (scrollY > 4 || !this.bgCur) return;        // רק במצב ההתחלתי, ואחרי שהסימן כבר במקומו
-    const col = h1.parentElement;
-    const cw = col.clientWidth, hw = Math.min(595, cw), hh = h1.offsetHeight || 260;
-    if (!this.alpha) {
-      const c = document.createElement('canvas'); c.width = 128; c.height = 128;
-      const x = c.getContext('2d'); x.drawImage(mark, 0, 0, 128, 128);
-      this.alpha = x.getImageData(0, 0, 128, 128).data;
-    }
-    const mr = mark.getBoundingClientRect();
-    const ink = (px, py) => {
-      const u = Math.floor(((px - mr.left) / mr.width) * 128), v = Math.floor(((py - mr.top) / mr.height) * 128);
-      if (u < 0 || v < 0 || u > 127 || v > 127) return 0;
-      return this.alpha[(v * 128 + u) * 4 + 3] / 255;
+    // מציגים רק את ההודעות שנכנסות בשלמותן בחלון בגובה הקבוע
+    const narrow = (typeof innerWidth === 'number' ? innerWidth : 1200) < 620;
+    const shown = msgs.slice(narrow ? -2 : -4);
+    const st = this.STEPS[cur] || {};
+    const ops = st.ops || [];   // רק הפעולה של השלב הנוכחי
+    const info = st.info || (cur === 2 ? (this.STEPS[1] || {}).info : null);
+    const cop = st.copilot;
+    const rep = cur >= 4;
+    const P = this.PLATS[s.plat] || this.PLATS[0];
+    const dotStyle = (on) => 'width:' + (on ? '26px' : '9px') + ';height:9px;border-radius:5px;border:0;padding:0;cursor:pointer;background:' + (on ? '#C4552F' : '#D8D3C9');
+    return {
+      msgs: shown.map((m, i) => ({
+        t: m.t, time: m.time, key: i,
+        row: 'display:flex;justify-content:' + (m.who === 'c' ? 'flex-start' : 'flex-end') + ';animation:bubbleIn .26s cubic-bezier(.22,.68,.16,1) both',
+        bubble: 'max-width:88%;padding:8px 11px 6px;border-radius:' + (m.who === 'c' ? P.radiusIn : P.radiusOut)
+          + ';background:' + (m.who === 'c' ? P.inBg : P.outBg)
+          + ';color:' + (m.who === 'c' ? P.ink : (P.outFg || P.ink))
+          + (P.id === 'wa' ? ';box-shadow:0 1px .5px rgba(11,20,26,.13)' : ''),
+        meta: 'font-size:11px;text-align:left;margin-top:3px;direction:ltr;opacity:.7;color:' + (m.who === 'c' ? '#667781' : (P.outFg || '#667781')),
+        linkStyle: m.link
+          ? 'display:flex;align-items:center;gap:9px;margin-top:7px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22)'
+          : 'display:none',
+        linkTitle: m.link ? m.link.title : '',
+        linkPrice: m.link ? m.link.price : '',
+        linkUrl: m.link ? m.link.url : ''
+      })),
+      plats: this.PLATS.map((p, i) => ({
+        key: p.id, name: p.name, icon: p.icon, on: i === s.plat,
+        pick: () => {
+          if (i === s.plat) return;
+          this.stepAt = Date.now();
+          this.ensureClock();
+          this.setState({ plat: i, step: 0, playing: true, typing: false, repDraft: '', repSent: false });
+        },
+        iconStyle: 'width:18px;height:18px;flex:none;background:center/contain no-repeat url(' + p.icon + ')'
+          + (i === s.plat && p.invertIcon ? ';filter:brightness(0) invert(1)' : ''),
+        style: 'display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .18s ease,border-color .18s ease;'
+          + (i === s.plat ? 'border:1.5px solid #16150F;background:#16150F;color:#FAF8F4' : 'border:1.5px solid #D8D3C9;background:#FFFFFF;color:#16150F')
+      })),
+      platIcon: P.icon, platName: P.name,
+      headBg: P.headBg, headFg: P.headFg, avaBg: P.avaBg, chatBg: P.chatBg,
+      headLine: P.id === 'ms' ? '#DDE0E4' : 'rgba(255,255,255,.18)',
+      barBg: P.barBg, fieldBg: P.fieldBg, sendColor: P.send, placeholder: P.ph,
+      fieldInk: P.id === 'ig' ? '#8E8E8E' : '#8696A0',
+      headIcon: 'width:19px;height:19px;flex:none;opacity:.9;background:center/contain no-repeat url(' + P.icon + ')'
+        + (P.invertIcon ? ';filter:brightness(0) invert(1)' : ''),
+      typeBox: 'align-self:flex-end;padding:10px 13px;background:' + P.outBg + ';border-radius:' + P.radiusOut
+        + (P.id === 'wa' ? ';box-shadow:0 1px .5px rgba(11,20,26,.13)' : ''),
+      typing: !!s.typing && s.playing,
+      ops: ops.map((t, i) => ({
+        t: t, key: i, mark: '✓',
+        dot: 'width:20px;height:20px;border-radius:50%;background:#E7F0D4;color:#3F6323;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none',
+        delay: 'animation:cardIn .28s cubic-bezier(.22,.68,.16,1) both;animation-delay:' + (i * 0.12).toFixed(2) + 's'
+      })),
+      opsTitle: rep ? 'הפעולה שמתבצעת · נציג' : 'הפעולה שמתבצעת · עובד AI',
+      status: rep ? 'בטיפול נציג' : 'בטיפול עובד AI',
+      statusStyle: 'margin-inline-start:auto;font-size:12px;font-weight:600;border-radius:8px;padding:5px 10px;white-space:nowrap;' + (rep ? 'color:#3D3470;background:#F3F0FB' : 'color:#8E3418;background:#FBEEE8'),
+      waSub: rep ? 'אורי מהחנות מצטרף לשיחה' : P.online,
+      showOps: ops.length > 0 && !cop,   // בשלב הנציג הכרטיס הסגול מדווח בעצמו
+      showInfo: !!info,
+      infoTitle: info ? info.title : '',
+      infoRows: info ? info.rows.map((r, i) => ({
+        key: i, l: r.l, v: r.v, tag: r.tag || '',
+        vStyle: 'font-size:14.5px;font-weight:' + (r.hot ? '600' : '500') + (r.hot ? ';color:#8E3418' : '')
+          + (r.ltr ? ';direction:ltr;unicode-bidi:isolate' : '')
+      })) : [],
+      showNote: !!st.note, note: st.note || '',
+      showCopilot: !!cop,
+      copSum: cop ? cop.sum : '',
+      copSug: cop ? cop.sug : '',
+      showEnd: !!st.end,
+      draftText: s.repDraft || 'שדה ההקלדה של הנציג',
+      draftColor: s.repDraft ? '#16150F' : '#8E8A83',
+      sendBg: s.repDraft && !s.repSent ? '#16150F' : '#B4AFA5',
+      playLabel: s.playing ? 'עצירה' : 'הפעלה',
+      playAria: s.playing ? 'עצירת ההמחשה' : 'הפעלת ההמחשה',
+      stepLabel: 'שלב ' + (cur + 1) + ' מתוך ' + this.STEPS.length + ' · ' + this.STEPS[cur].label,
+      toggle: this.toggleDemo, replay: this.replay,
+      prev: () => this.goStep(cur - 1), next: () => this.goStep(cur + 1),
+      useAnswer: this.useAnswer, sendRep: this.sendRep,
+      dots: this.STEPS.map((st, i) => ({
+        key: i, on: i === cur, aria: 'שלב ' + (i + 1) + ': ' + st.label,
+        go: () => this.goStep(i), style: dotStyle(i === cur)
+      }))
     };
-    const cr = col.getBoundingClientRect();
-    const baseTop = cr.top;
-    let best = { score: Infinity, dx: 0, dy: 0 };
-    for (let dy = 0; dy <= 260; dy += 20) for (let dx = 0; dx <= Math.max(0, cw - hw); dx += 40) {
-      let s = 0, n = 0;
-      for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) {
-        s += ink(cr.right - dx - hw + (hw * i) / 4, baseTop + dy + (hh * j) / 4); n++;
-      }
-      const score = s / n + dy * 0.0006 + dx * 0.0004;   // עדיפות קלה למקום המקורי
-      if (score < best.score) best = { score, dx, dy };
-    }
-    // הסימן מכסה את כל עמודת הפתיחה בנקודת ההתחלה, כך שאין "חלק בהיר" גדול
-    // מספיק לכותרת — במקום להזיז אותה, הכותרת יושבת על לוח נייר בהיר משלה
-    this.placed = true;
   }
 
-  // ── רצועת הערוצים: הזזה מדודה בדיוק ברוחב קבוצה אחת + מרווח אחד,
-  //    כך שהתפר בין הסוף להתחלה נופל בדיוק על אותו מרחק כמו כל השאר ─
+  // ── רצועת הערוצים ─────────────────────────────────────────────
   runMarquee() {
     const track = document.querySelector('[data-track]');
     const grp = track && track.querySelector('[data-grp]');
     if (!track || !grp) return;
     const w = grp.getBoundingClientRect().width;
     if (w < 10) { requestAnimationFrame(() => this.runMarquee()); return; }
-    const gap = parseFloat(getComputedStyle(track).columnGap) || 44;
+    const gap = parseFloat(getComputedStyle(track).columnGap) || 40;
     const shift = w + gap;
     if (this.mqShift === shift && this.mqAnim && this.mqAnim.playState === 'running') return;
     this.mqShift = shift;
-    const at = this.mqAnim ? Number(this.mqAnim.currentTime) || 0 : 0;
     if (this.mqAnim) this.mqAnim.cancel();
     this.mqAnim = track.animate(
       [{ transform: 'translateX(0)' }, { transform: 'translateX(-' + shift + 'px)' }],
       { duration: (shift / 55) * 1000, iterations: Infinity, easing: 'linear' }
     );
-    if (at) this.mqAnim.currentTime = at % ((shift / 55) * 1000);
   }
 
-  // ── שאלות נפוצות ──────────────────────────────────────────────
   ask = (i) => () => this.setState({ open: this.state.open === i ? null : i });
 
   // ── ווידג׳ט WhatsApp ──────────────────────────────────────────
-  waOpen = () => { this.track('widget_open', false); this.setState({ wa: 'open', waTeased: false }); };
-  waClose = () => { this.waDismissed = true; this.setState({ wa: 'closed', waTeased: false }); };
-  waType = (e) => { this.setState({ waDraft: e.target.value }); };
-
-  // מסמכי האתר עוד לא סופקו: מציגים טקסט מסומן ולא קישור שמתחזה לעבוד
-  legalLink(label, url) {
-    // הפוטר יושב ישירות על הסימן הענק — הטוקן הכהה הוא היחיד שעומד ב-AA שם
-    if (url) return React.createElement('a', { href: url, target: '_blank', rel: 'noopener', style: { color: '#B8B3AA', fontWeight: 500 } }, label);
-    // אין כתובת: טקסט נגיש שאינו קישור. מצב ההשלמה נשמר ב-title וב-CFG בלבד.
-    return React.createElement('span', {
-      title: 'המסמך יחובר לפני הפרסום',
-      style: { color: '#B8B3AA', borderBottom: '1px dotted #55524C', cursor: 'default' }
-    }, label);
-  }
+  waOpen = () => { this.track('widget_open', false); clearTimeout(this.teaseTimer); this.setState({ wa: 'open', waTeased: false }); };
+  waClose = () => this.setState({ wa: 'closed', waTeased: false });
+  waDismiss = () => { clearTimeout(this.teaseTimer); this.setState({ waTeased: false }); };
+  waType = (e) => this.setState({ waDraft: e.target.value });
   waSend = () => {
     const msg = (this.state.waDraft || '').trim() || 'היי, הגעתי מדף הקמפיין של GOTCHA ויש לי שאלה.';
     this.track('whatsapp_click', false);
     window.open('https://wa.me/' + this.CFG.waNumber + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
   };
 
-  // ── טופס ──────────────────────────────────────────────────────
-  set = (f) => (e) => {
-    const v = e.target.value;
-    this.vals = Object.assign({}, this.vals || this.state.values); this.vals[f] = v;
+  legalLink(label, url) {
+    if (url) return React.createElement('a', { href: url, target: '_blank', rel: 'noopener', style: { color: '#B8B3AA', fontWeight: 500 } }, label);
+    return React.createElement('span', { title: 'המסמך יחובר לפני הפרסום', style: { color: '#B8B3AA', borderBottom: '1px dotted #55524C', cursor: 'default' } }, label);
+  }
+
+  // ── טפסים · שני טפסים עם מזהים וערכים נפרדים ──────────────────
+  setField = (key, f) => (e) => {
+    this.vals[key][f] = e.target.value;
     this.track('form_start', true);
-    // A controlled input needs a render to show what was typed, so this goes
-    // through setState on every keystroke, error or not.
-    const errs = Object.assign({}, this.state.errors);
-    delete errs[f];
-    this.setState({ errors: errs, values: this.vals });
+    const fs = this.state[key];
+    if (fs.err[f]) {
+      const err = Object.assign({}, fs.err); delete err[f];
+      this.setState({ [key]: { err: err, busy: fs.busy } });
+    }
   };
 
   normSite(v) {
@@ -366,28 +421,25 @@ class CampaignLogic extends React.Component {
     return e;
   }
 
-  submit = (ev) => {
+  submitForm = (key) => (ev) => {
     ev.preventDefault();
-    // The form that was submitted, captured before any setState, so an error is
-    // reported inside it rather than in whichever form happens to be first.
-    const submittedForm = ev && ev.currentTarget && ev.currentTarget.querySelector ? ev.currentTarget : null;
-    const v = Object.assign({}, this.state.values, this.vals || {});
-    const errs = this.validate(v);
-    if (Object.keys(errs).length) {
-      this.setState({ errors: errs, values: v });
-      const scope = submittedForm || this.root();
-      const el = scope && scope.querySelector('[data-field="' + Object.keys(errs)[0] + '"] input');
+    if (this.state[key].busy) return;
+    const v = Object.assign({}, this.vals[key]);
+    const err = this.validate(v);
+    if (Object.keys(err).length) {
+      this.setState({ [key]: { err: err, busy: false } });
+      const el = document.getElementById((key === 'fa' ? 'a-' : 'b-') + Object.keys(err)[0]);
       if (el) el.focus();
       return;
     }
     this.track('demo_form_submit_attempt', false);
     if (!this.CFG.leadEndpoint) {
-      // אין יעד מחובר: לא מציגים הצלחה ולא יורים אירוע ליד
-      this.setState({ values: v, errors: { form: 'החיבור לשליחת הטופס ממתין להגדרה. עד אז אפשר לתאם הדגמה ביומן או לכתוב לנו בוואטסאפ.' } });
+      // אין יעד מחובר: לא מציגים הצלחה, לא יורים אירוע ליד ולא עוברים לדף התודה
+      this.setState({ [key]: { err: { form: 'החיבור לשליחת הטופס ממתין להגדרה. עד אז אפשר לתאם הדגמה ביומן או לכתוב לנו בוואטסאפ.' }, busy: false } });
       console.warn('[lead endpoint not configured] CFG.leadEndpoint');
       return;
     }
-    this.setState({ sending: true, values: v, errors: {} });
+    this.setState({ [key]: { err: {}, busy: true } });
     fetch(this.CFG.leadEndpoint, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -399,68 +451,60 @@ class CampaignLogic extends React.Component {
       })
     }).then(r => {
       if (r.status === 409) {
-        // Already on the list: same outcome for them, no second conversion.
-        this.setState({ sent: true, sending: false });
+        // Already on the list: same destination, no second conversion.
+        location.href = this.CFG.thankYou;
         return;
       }
       if (!r.ok) throw new Error('save failed');
-      this.track('lead', false);
-      this.setState({ sent: true, sending: false });
-    }).catch(() => this.setState({ sending: false, errors: { form: 'השליחה נכשלה. נסו שוב, או תאמו הדגמה ביומן.' } }));
+      this.track('lead', true);
+      location.href = this.CFG.thankYou;
+    }).catch(() => this.setState({ [key]: { err: { form: 'השליחה נכשלה. נסו שוב, או תאמו הדגמה ביומן.' }, busy: false } }));
   };
 
+  formVals(key) {
+    const fs = this.state[key], e = fs.err;
+    return {
+      onName: this.setField(key, 'name'), onPhone: this.setField(key, 'phone'),
+      onSite: this.setField(key, 'site'), onEmail: this.setField(key, 'email'),
+      submit: this.submitForm(key), busy: fs.busy,
+      cta: fs.busy ? 'שולח…' : 'חזרו אליי להדגמה',
+      eName: e.name || '', ePhone: e.phone || '', eSite: e.site || '', eEmail: e.email || '', eForm: e.form || '',
+      hasName: !!e.name, hasPhone: !!e.phone, hasSite: !!e.site, hasEmail: !!e.email, hasForm: !!e.form
+    };
+  }
+
   renderVals() {
-    const s = this.state, e = s.errors, v = Object.assign({}, s.values, this.vals || {});
-    const err = (f) => e[f] || '';
+    const s = this.state;
     return {
       cfg: this.cfg,
-      offerOn: this.CFG.offerActive,
+      demo: this.demoVals(),
+      fa: this.formVals('fa'),
+      fb: this.formVals('fb'),
       ev: {
-        demoTop: () => this.track('demo_click_header', false),
+        demoHeader: () => this.track('demo_click_header', false),
         demoHero: () => this.track('demo_click_hero', false),
-        demoAnim: () => this.track('demo_click_section', false),
         demoForm: () => this.track('demo_click_form', false),
         demoBar: () => this.track('demo_click_sticky', false),
-        demoGift: () => this.track('demo_click_gift', false),
         demoFooter: () => this.track('demo_click_footer', false),
         waFooter: () => this.track('whatsapp_click_footer', false),
         telFooter: () => this.track('phone_click_footer', false),
         mailFooter: () => this.track('mail_click_footer', false),
-        // שלב א׳: הקופסה נשארת והמכסה עף. שלב ב׳: התוכן יוצא ממנה
-        giftOpen: () => {
-          if (this.state.gift) return;
-          this.track('gift_open', false);
-          this.setState({ gift: true });
-        },
-        giftJump: () => {
-          this.track('gift_open_hero', false);
-          this.setState({ gift: true });
-          const el = document.getElementById('form');
-          if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 20, behavior: 'smooth' });
-        },
-        giftClose: () => this.setState({ gift: false }),
-        stop: (e) => e.stopPropagation(),
-        waBar: () => { this.track('whatsapp_click', false); }
+        toForm: () => this.track('scroll_to_form', false)
       },
-      gift: { show: s.gift ? 'open' : 'closed', boxDisplay: s.gift ? 'none' : 'flex', cardDisplay: s.gift ? 'flex' : 'none' },
-      anim: { state: s.anim, label: '', toggle: this.toggleAnim, replay: this.replay },
-      fit: {
-        is0: (s.fit ?? 0) === 0, is1: s.fit === 1, is2: s.fit === 2,
-        pick0: this.pickFit(0), pick1: this.pickFit(1), pick2: this.pickFit(2),
-        line: this.FIT[s.fit ?? 0].line, cta: this.FIT[s.fit ?? 0].cta
+      faq: {
+        q0: this.ask(0), q1: this.ask(1), q2: this.ask(2), q3: this.ask(3),
+        is0: s.open === 0, is1: s.open === 1, is2: s.open === 2, is3: s.open === 3,
+        s0: s.open === 0 ? '−' : '+', s1: s.open === 1 ? '−' : '+', s2: s.open === 2 ? '−' : '+', s3: s.open === 3 ? '−' : '+'
       },
-      faq: { q0: this.ask(0), q1: this.ask(1), q2: this.ask(2), q3: this.ask(3),
-             is0: s.open === 0, is1: s.open === 1, is2: s.open === 2, is3: s.open === 3 },
-      bar: { hidden: s.wa === 'open' ? 'hidden' : 'shown' },
+      bar: { state: s.wa === 'open' || s.kbd ? 'hidden' : 'shown' },
       wa: {
-        teased: s.waTeased, open: s.wa === 'open', openIt: this.waOpen, close: this.waClose,
+        open: s.wa === 'open', teased: s.waTeased && s.wa !== 'open',
+        openIt: this.waOpen, close: this.waClose, dismiss: this.waDismiss,
         toggle: s.wa === 'open' ? this.waClose : this.waOpen,
         fabLabel: s.wa === 'open' ? 'סגירת חלון הפנייה' : 'פתיחת חלון פנייה בוואטסאפ',
-        fabText: s.wa === 'open' ? 'סגירה' : '',
         iconChat: s.wa === 'open' ? 'none' : 'flex',
         iconClose: s.wa === 'open' ? 'flex' : 'none',
-        type: this.waType, send: this.waSend, draft: s.waDraft || '',
-        hide: s.waHidden && s.wa !== 'open' ? '1' : '0'
+        type: this.waType, send: this.waSend, draft: s.waDraft || ''
       },
       legal: {
         privacy: this.legalLink('מדיניות הפרטיות', this.CFG.privacyUrl),
@@ -468,17 +512,8 @@ class CampaignLogic extends React.Component {
           this.legalLink('תנאי שימוש', this.CFG.termsUrl),
           this.legalLink('מדיניות פרטיות', this.CFG.privacyUrl),
           this.legalLink('תנאי ההטבה', this.CFG.offerTermsUrl),
-          this.legalLink('הצהרת נגישות', this.CFG.accessibilityUrl),
-          this.legalLink('העדפות עוגיות', this.CFG.cookiesUrl)
+          this.legalLink('הצהרת נגישות', this.CFG.accessibilityUrl)
         ].map((el, i) => React.cloneElement(el, { key: i }))
-      },
-      form: {
-        name: v.name, phone: v.phone, site: v.site, email: v.email,
-        onName: this.set('name'), onPhone: this.set('phone'), onSite: this.set('site'), onEmail: this.set('email'),
-        submit: this.submit, sent: s.sent, editing: !s.sent,
-        cta: s.sending ? 'שולח…' : 'חזרו אליי להדגמה',
-        eName: err('name'), ePhone: err('phone'), eSite: err('site'), eEmail: err('email'), eForm: err('form'),
-        hasName: !!err('name'), hasPhone: !!err('phone'), hasSite: !!err('site'), hasEmail: !!err('email'), hasForm: !!err('form')
       }
     };
   }
@@ -489,9 +524,8 @@ class CampaignLogic extends React.Component {
     try {
       vals = { ...this.props, ...(this.renderVals() || {}) };
     } catch (e) {
-      // The design's renderVals() reads a dozen state fields. If one of them is
-      // missing the page must not disappear - a blank campaign page is a paid
-      // click landing on nothing.
+      // A blank page is a paid click landing on nothing. Show the failure
+      // rather than disappearing.
       console.error('renderVals():', e);
       return React.createElement('pre', { style: { padding: 24, color: '#8E3418' } },
         String((e && e.stack) || e));

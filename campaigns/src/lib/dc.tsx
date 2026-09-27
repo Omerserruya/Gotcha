@@ -4,9 +4,6 @@
  * project's `support.js`, so the rendered DOM matches the design canvas exactly
  * rather than approximately.
  *
- * `L` (the sc-for list coercion) is absent on purpose: this design has no
- * loops, and the compiler refuses to emit one, so a helper for it here would be
- * dead code pretending the feature is supported.
  */
 import React from 'react';
 
@@ -45,6 +42,16 @@ export function I(v: unknown): React.ReactNode {
   if (React.isValidElement(v) || Array.isArray(v)) return <>{v as React.ReactNode}</>;
   if (v === null || v === undefined || typeof v === 'boolean') return null;
   return <span className="sc-interp">{String(v)}</span>;
+}
+
+/**
+ * support.js: walkFor coerces a non-array list to an empty one.
+ *
+ * So a list that has not been computed yet renders nothing, rather than
+ * throwing inside a `.map()` on undefined.
+ */
+export function L(v: unknown): any[] {
+  return Array.isArray(v) ? v : [];
 }
 
 /** support.js: compileAttr's mixed-value branch joins with `?? ''`. */
