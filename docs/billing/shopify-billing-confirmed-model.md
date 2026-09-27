@@ -165,7 +165,7 @@ configuring a deployment into a guessing game played one restart at a time.
 | Condition | Required |
 |---|---|
 | Billing disabled | nothing |
-| `app_pricing`, any env **including mock** | `SHOPIFY_APP_HANDLE`, at least one sellable plan in `SHOPIFY_BILLING_PLAN_CATALOG` |
+| `app_pricing`, any env **including mock** | `SHOPIFY_APP_PRICING_HANDLE` (or the legacy `SHOPIFY_APP_HANDLE`), at least one sellable plan in `SHOPIFY_BILLING_PLAN_CATALOG` |
 | `app_pricing`, `test` or `live` | additionally **all three** of `SHOPIFY_PARTNER_API_TOKEN`, `SHOPIFY_PARTNER_ORGANIZATION_ID`, `SHOPIFY_PARTNER_APP_ID` |
 | `manual`, any env | none of the above |
 
@@ -196,7 +196,7 @@ Names, and whether each is required. **No values here.**
 | **`SHOPIFY_GRANDFATHER_DEV_STORES`** | Opt in for testing | `false` |
 | **`SHOPIFY_BILLING_PLAN_CATALOG`** | JSON plan catalog | unset → nothing sellable |
 | `SHOPIFY_BILLING_PLAN_HANDLES` | Minimal form: productKey → handle | unset |
-| `SHOPIFY_APP_HANDLE` | Builds the plan-selection URL | unset |
+| `SHOPIFY_APP_PRICING_HANDLE` | Builds the plan-selection URL. The APP handle, NOT the App Store listing slug — see `docs/setup/shopify-install-flow.md`. Falls back to `SHOPIFY_APP_HANDLE`. | unset |
 | `SHOPIFY_PARTNER_API_TOKEN` | **Secret.** App Pricing verification | unset |
 | `SHOPIFY_USAGE_BILLING_ENABLED` | Metered dispatch. **Not implemented** | `false` |
 
@@ -255,35 +255,51 @@ naming a store the session does not own. It is a guard, never a credential.
 
 ---
 
-## 7a. The test-shop allowlist
+## 7a. The test-shop list — REMOVED as a gate (review 132211)
 
-Testing runs against the **production Partner app**, on the production host,
-beside real merchants. `test` is not an isolated environment — it is the same
-deployment with a flag flipped, and Shopify's $0-on-development-stores rule is
-the only thing between a test charge and a real one.
+`SHOPIFY_BILLING_TEST_SHOPS` used to decide which stores could enter the App
+Pricing flow while `SHOPIFY_BILLING_ENV=test`. A store nobody had listed was
+connected and then silently excluded: no plan page, nothing granted, state
+`UNRESOLVED`.
 
-So while `SHOPIFY_BILLING_ENV=test`, only stores named in
-`SHOPIFY_BILLING_TEST_SHOPS` may enter the App Pricing flow. Everyone else
-behaves exactly as they do today: connected, no plan page, nothing granted on
-Shopify's account, connection `CONNECTED`, state `UNRESOLVED`.
+**Shopify App Store review 132211 rejected that shape**, and the reasoning
+generalises beyond this one variable. A reviewer works from an ordinary
+development store that nobody added to a server-side list, so an allowlist means
+the reviewer — and every real merchant during the same window — travels a
+different code path from the one under review. An app whose behaviour depends on
+whether the tenant was named in configuration cannot be assessed. The finding
+covers **any** reviewer-specific tenant, shop or workspace allowlist, so
+replacing it with a differently-named list would not answer it.
 
-- **Empty or missing admits nobody.** A forgotten variable must mean "the test
-  does not start", never "every merchant is enrolled".
-- **`live` never reads it.** A stale test list surviving into live would
-  silently exclude paying merchants — the same class of bug, pointing the other
-  way. `mock` reaches nothing and is ungated.
-- **Enforced in three places**: the post-install decision, plan selection, and
-  the verified return. The shop is read from the stored `CommerceConnection` or
-  a Shopify-signed request, **never** from a query parameter or request body.
-- **Rejects malicious suffixes.** `acme.myshopify.com.evil.com`, `evil.com`,
-  `myshopify.com` and `a.b.myshopify.com` are all refused, and a dotted host is
-  never auto-completed with the suffix.
-- **Boot logs the count, never the domains** — a shop domain identifies a
-  customer, and that line sits beside configuration adjacent to secrets.
+The variable still parses and is still reported at boot, purely as a diagnostic:
+it says which stores an operator *believes* are test stores. Nothing branches on
+it. `shopifyBillingAppliesToShop` is gone; `isListedShopifyTestShop` replaces it
+and is named for reporting rather than for a decision, so an `if` around it reads
+as obviously wrong.
 
-Accepts a bare handle or a full domain, comma/whitespace/newline separated.
-Unparseable entries are dropped and warned about at boot rather than taking the
-whole list down.
+### What still protects against an accidental charge
+
+None of this was ever the allowlist's job, and none of it changed:
+
+| Guard | Effect |
+|---|---|
+| `SHOPIFY_BILLING_ENABLED` | Master switch. Off by default. |
+| `SHOPIFY_BILLING_ENV=mock` | The default. Performs no network call and can charge nothing. |
+| `SHOPIFY_ALLOW_LIVE_BILLING` | `live` degrades to `mock` without this second, explicit acknowledgement. |
+| Shopify itself | Prices development stores at $0. |
+
+### What still guards the return path
+
+Removing the allowlist removed a gate, not the authorization rules around it.
+`/billing/shopify/complete` continues to:
+
+- read the shop from the stored `CommerceConnection`, **never** from a query
+  parameter or request body;
+- refuse a return whose `shop` does not match that connection
+  (`shopify_shop_mismatch`);
+- treat reaching the URL as **no evidence of payment** — Shopify appends
+  `plan_handle` and `shop` to a redirect anybody can replay — and re-verify the
+  subscription against the Partner API before any entitlement moves.
 
 ---
 
@@ -297,7 +313,7 @@ SHOPIFY_BILLING_MODE=manual          # or app_pricing once a Partner token exist
 SHOPIFY_BILLING_ENV=test             # NOT live; no SHOPIFY_ALLOW_LIVE_BILLING
 SHOPIFY_BILLING_POLICY_MODE=connector_addon
 SHOPIFY_ALLOW_SPLIT_BILLING=true
-SHOPIFY_APP_HANDLE=<the app handle>
+SHOPIFY_APP_PRICING_HANDLE=<the APP handle, e.g. gotcha-3>
 SHOPIFY_BILLING_PLAN_CATALOG='[{"key":"SHOPIFY_CONNECTOR","handle":"<plan handle>","entitlements":["shopify_catalog_sync","shopify_order_read"]}]'
 ```
 

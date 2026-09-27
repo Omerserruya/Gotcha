@@ -7,21 +7,6 @@
  * would disappear at the next export.
  */
 
-.chrome-nav {
-  transition: background .18s ease, color .18s ease;
-}
-.chrome-nav:hover {
-  background: #EFEAE1;
-  color: #16150F;
-}
-
-.chrome-foot {
-  transition: color .18s ease;
-}
-.chrome-foot:hover {
-  color: #F7F5F1;
-}
-
 .trust-card {
   transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
 }

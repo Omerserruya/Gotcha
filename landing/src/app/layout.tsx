@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import CookieNotice from '@/components/CookieNotice';
+import MetaPixel from '@/components/MetaPixel';
 import { ICON_VERSION } from '@/generated/icon-version';
 import './globals.css';
 import './site.css';
@@ -70,6 +71,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Sits above every page, including the compiled landing, because the
             first visit is what it is asking about. */}
         <CookieNotice />
+        {/* Renders nothing. Loads the pixel only once the card above says it
+            may, and reports each pushState navigation as its own page view. */}
+        <MetaPixel />
       </body>
     </html>
   );

@@ -66,6 +66,13 @@ function FinishShopifyInstall() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * The store this workspace holds today, when connecting would replace it.
+   *
+   * Null in the ordinary case. Non-null turns the button into an explicit
+   * two-option question, because a replacement is a decision and not a step.
+   */
+  const [replacing, setReplacing] = useState<string | null>(null);
 
   /**
    * Total lookups issued. Hard-capped at 2 - the first attempt and exactly one
@@ -99,9 +106,15 @@ function FinishShopifyInstall() {
   const MAX_ATTEMPTS = 2;
 
   useEffect(() => {
-    if (!handle) return;
-    // No token yet: the silent renew has not produced one. Keep waiting; this
-    // is the ordinary state for a merchant arriving straight from Shopify.
+    // NO `if (!handle) return;` any more.
+    //
+    // The handle used to be required, and it lived only in this page's query
+    // string. Anything that navigated away destroyed it - most importantly the
+    // signed-out bounce to /login, which every Shopify-originated install hit
+    // by definition. The store was authorized and permanently unreachable.
+    //
+    // The server now recovers the handle from an HttpOnly cookie set at the
+    // OAuth callback, so this page works with a bare URL.
     if (!token) return;
 
     if (settledRef.current) return;
@@ -114,7 +127,7 @@ function FinishShopifyInstall() {
     let cancelled = false;
     setPhase("loading");
 
-    getPendingShopifyInstall(token, handle)
+    getPendingShopifyInstall(token, handle || undefined)
       .then((r) => {
         if (cancelled) return;
         settledRef.current = true;
@@ -180,12 +193,13 @@ function FinishShopifyInstall() {
     if (typeof window !== "undefined") window.location.reload();
   }, []);
 
-  async function claim() {
-    if (!token || !handle || claiming) return;
+  async function claim(replace = false) {
+    // `handle` may legitimately be empty - the server reads the cookie.
+    if (!token || claiming) return;
     setClaiming(true);
     setError(null);
     try {
-      const r = await claimShopifyInstall(token, handle);
+      const r = await claimShopifyInstall(token, handle || undefined, replace);
       router.push(
         r.data.flow === "onboarding"
           ? "/setup?connected=shopify"
@@ -193,6 +207,21 @@ function FinishShopifyInstall() {
       );
     } catch (e: any) {
       const code = e?.code || e?.error;
+      if (code === "another_store_connected") {
+        // A workspace holds one Shopify store, so this connection would
+        // disconnect the one it already has. That used to happen silently -
+        // the row was overwritten and every AI answer quietly started reading a
+        // different catalogue while the screen said "Connected".
+        //
+        // The handle is NOT spent when the server answers this, so the
+        // merchant's answer goes straight back without another trip through
+        // Shopify.
+        // `body`, not `data`: apiFetch attaches the whole parsed response as
+        // `err.body`, and the server nests the detail under `data`.
+        setReplacing((e?.body as any)?.data?.currentShopDomain || "another store");
+        setClaiming(false);
+        return;
+      }
       if (code === "shop_connected_to_another_workspace") {
         // Never silently moved. The merchant is told exactly what to do, and
         // the store stays where it is until somebody with access decides.
@@ -207,16 +236,6 @@ function FinishShopifyInstall() {
       }
       setClaiming(false);
     }
-  }
-
-  if (!handle) {
-    return (
-      <Shell>
-        <p className="text-sm text-gray-600">
-          No installation to finish. Start from Business Systems, or install GOTCHA from Shopify.
-        </p>
-      </Shell>
-    );
   }
 
   if (phase === "loading" || phase === "awaiting_refresh") {
@@ -282,6 +301,43 @@ function FinishShopifyInstall() {
     );
   }
 
+  // The replacement question. Both outcomes are named on their buttons - the
+  // merchant should not have to infer which store survives.
+  if (replacing) {
+    return (
+      <Shell>
+        <p className="text-sm text-gray-600">
+          This workspace is connected to{" "}
+          <span className="font-medium text-gray-900">{replacing}</span>. A workspace can use one
+          Shopify store at a time, so connecting{" "}
+          <span className="font-medium text-gray-900">{shopDomain}</span> will disconnect it.
+        </p>
+        <p className="mt-2 text-sm text-gray-500">
+          {replacing} stays on Shopify and keeps its data. GOTCHA just stops reading from it.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => claim(true)}
+            disabled={claiming}
+            className="inline-flex items-center px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl text-sm font-medium transition disabled:opacity-50"
+          >
+            {claiming ? "Switching…" : `Disconnect ${replacing} and use ${shopDomain}`}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/settings/business-systems")}
+            disabled={claiming}
+            className="inline-flex items-center px-5 py-2.5 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium transition disabled:opacity-50"
+          >
+            Keep {replacing}
+          </button>
+        </div>
+        {error && <p className="mt-4 text-sm text-amber-700">{error}</p>}
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
       {shopDomain && (
@@ -292,7 +348,7 @@ function FinishShopifyInstall() {
           </p>
           <button
             type="button"
-            onClick={claim}
+            onClick={() => claim()}
             disabled={claiming}
             className="mt-4 inline-flex items-center px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl text-sm font-medium transition disabled:opacity-50"
           >

@@ -3,6 +3,8 @@
 import React from 'react';
 import { LandingChrome } from '@/components/Landing';
 import { useLocale } from '@/lib/use-locale';
+import { localeHref } from '@/lib/locale-url';
+import type { Locale } from '@/lib/site';
 import { C, F, MAXW, isHe } from '@/lib/site';
 
 type Card = {
@@ -59,13 +61,32 @@ const TINT: Record<string, [string, string]> = {
   server: [C.blueWash, C.blue],
 };
 
-export default function TrustHub({ cards }: { cards: Card[] }) {
-  const [locale, setLocale] = useLocale();
+export default function TrustHub({
+  cards,
+  pinned,
+}: {
+  cards: Card[];
+  /** Set when this page's language is part of its address. */
+  pinned?: Locale;
+}) {
+  const [locale, setLocale] = useLocale(pinned);
   const i = isHe(locale) ? 1 : 0;
   const p = (k: keyof typeof COPY) => (COPY[k] as readonly string[])[i];
 
   return (
-    <LandingChrome initialLang={locale} onLang={(l: string) => setLocale(l === 'he' ? 'he' : 'en')}>
+    <LandingChrome
+      initialLang={locale}
+      onLang={(l: string) => {
+        const next = l === 'he' ? 'he' : 'en';
+        // On a language-pinned page the two languages are two addresses, so
+        // switching is a navigation rather than a swap in place.
+        if (pinned) {
+          window.location.href = localeHref(window.location.pathname, next);
+          return;
+        }
+        setLocale(next);
+      }}
+    >
       <div data-no-translate style={{ padding: '98px 0 0' }}>
       <div style={{ maxWidth: MAXW, margin: '0 auto', padding: '8px 24px 0' }}>
         <div style={{ font: `500 11px ${F.mono}`, letterSpacing: '.18em', textTransform: 'uppercase', color: C.accent }}>
@@ -113,7 +134,7 @@ export default function TrustHub({ cards }: { cards: Card[] }) {
             return (
               <a
                 key={c.slug}
-                href={`/legal/${c.slug}`}
+                href={localeHref(`/legal/${c.slug}`, locale)}
                 className="trust-card"
                 style={{
                   display: 'block',

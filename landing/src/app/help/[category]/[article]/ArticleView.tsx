@@ -4,6 +4,8 @@ import React from 'react';
 import { LandingChrome } from '@/components/Landing';
 import { MarkdownText } from '@/components/Markdown';
 import { useLocale } from '@/lib/use-locale';
+import { localeHref } from '@/lib/locale-url';
+import type { Locale } from '@/lib/site';
 import { C, F, isHe } from '@/lib/site';
 import type { HelpArticle, HelpCategory } from '@/content/help';
 
@@ -19,20 +21,38 @@ const COPY = {
 export default function ArticleView({
   category,
   article,
+  pinned,
 }: {
   category: HelpCategory;
   article: HelpArticle;
+  /**
+   * Set when this article's language is part of its address. The switch then
+   * navigates to the sibling article instead of swapping the text in place.
+   */
+  pinned?: Locale;
 }) {
-  const [locale, setLocale] = useLocale();
+  const [locale, setLocale] = useLocale(pinned);
   const i = isHe(locale) ? 1 : 0;
   const siblings = category.articles.filter((a) => a.slug !== article.slug);
 
   return (
-    <LandingChrome initialLang={locale} onLang={(l: string) => setLocale(l === 'he' ? 'he' : 'en')}>
+    <LandingChrome
+      initialLang={locale}
+      onLang={(l: string) => {
+        const next = l === 'he' ? 'he' : 'en';
+        if (pinned) {
+          // Derived from the live path: the same page has a different
+          // shape on the apex and on its own subdomain.
+          window.location.href = localeHref(window.location.pathname, next);
+          return;
+        }
+        setLocale(next);
+      }}
+    >
       <div data-no-translate style={{ padding: '98px 0 0' }}>
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '8px 24px 0' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <a href="/help" style={{ font: `500 11px ${F.mono}`, letterSpacing: '.16em', textTransform: 'uppercase', color: C.accent }}>
+          <a href={localeHref("/help", locale)} style={{ font: `500 11px ${F.mono}`, letterSpacing: '.16em', textTransform: 'uppercase', color: C.accent }}>
             {isHe(locale) ? '→' : '←'} {category.title[i]}
           </a>
         </div>
@@ -56,7 +76,7 @@ export default function ArticleView({
               {siblings.map((a) => (
                 <a
                   key={a.slug}
-                  href={`/help/${category.slug}/${a.slug}`}
+                  href={localeHref(`/help/${category.slug}/${a.slug}`, locale)}
                   className="trust-card"
                   style={{ display: 'block', padding: '16px 20px', background: C.card, border: `1px solid ${C.line}`, borderRadius: 14 }}
                 >

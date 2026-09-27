@@ -2,9 +2,9 @@
 
 > This English text is a translation provided for convenience. The Hebrew version of this document is the authoritative one, and in case of any conflict or inconsistency between the versions, the Hebrew version prevails.
 
-Effective date: September 9, 2026
+Effective date: September 14, 2026
 
-This policy explains how GOTCHA by Omer Serruya, the operator of gotcha.co.il, uses cookies and similar technologies. The short version: GOTCHA sets one cookie of its own, which remembers your answer to the cookie question, our self-hosted sign-in service sets only strictly necessary cookies, we use no marketing or tracking technologies at all, and no analytics runs unless you choose to allow it.
+This policy explains how GOTCHA by Omer Serruya, the operator of gotcha.co.il, uses cookies and similar technologies. The short version: GOTCHA sets one cookie of its own, which remembers your answer to the cookie question; our self-hosted sign-in service sets only strictly necessary cookies; and neither analytics nor advertising measurement runs unless you switch it on. One advertising technology is available and is off until you allow it: the Meta pixel, described in section 3.
 
 ## 1. Cookies set by GOTCHA
 
@@ -16,7 +16,7 @@ One, and it exists only to record what you told us.
 
 It is set on gotcha.co.il and shared with our subdomains, so answering the question on one part of the site answers it for all of them. It holds nothing but your answer, the date you gave it and a version number. There is no identifier in it, and it is never sent to a third party.
 
-There are no advertising cookies, no analytics cookies, no social media pixels, and no third-party tracking scripts anywhere in the product.
+Nothing else is set by us. The one third-party technology on the site is the Meta pixel, which runs only if you turn it on and is described in the next section.
 
 ## 2. Cookies set by our sign-in service
 
@@ -31,13 +31,17 @@ These cookies are essential for authentication and security. They are not used f
 
 ## 3. The choice we ask you to make
 
-On your first visit to our website you are asked one question, with two categories.
+On your first visit to our website you are asked one question, with three categories.
 
 **Strictly necessary** covers the sign-in cookies described above. They cannot be switched off, and applicable cookie rules do not require prior consent for them, because without them signing in securely does not work.
 
-**Analytics** is optional and off unless you turn it on. No analytics provider is in use today; we ask first so that measuring which pages are useful can never begin without a decision from you. There are no advertising cookies, no social media pixels and no third-party tracking scripts, and no category above asks for consent to any.
+**Analytics** is optional and off unless you turn it on. No analytics provider is in use today; we ask first so that measuring which pages are useful can never begin without a decision from you.
 
-Your answer is stored on your own device in the `gotcha_consent` cookie described in section 1, not on our servers. Because that cookie is shared across gotcha.co.il and its subdomains, you are asked once and not again as you move between the website, the Help Center and the Trust Center. You can change your answer at any time by clearing your browser storage for this site, which makes the question appear again, and it expires by itself after six months so that a decision is never treated as permanent. If we ever introduce a category beyond these two, we will update this policy and ask again rather than treat an earlier answer as covering it.
+**Measuring our ads** is optional, off unless you turn it on, and asked separately from analytics because it is a different question. If you allow it, we load the Meta pixel (Meta Platforms Ireland Limited) on our marketing pages. It tells us which of our advertisements brought you here so that we can stop paying for the ones that do not work. Unlike the two categories above, this one does send your visit to another company, and Meta may use it to recognise you on other sites and in its own products. The pixel is not loaded at all until you turn it on: refusing means the script is never requested, not that it is loaded and told to stay quiet. Turning it off again stops any further events immediately; clearing cookies for this site, as described in section 5, removes what Meta has already set in your browser.
+
+Your answer is stored on your own device in the `gotcha_consent` cookie described in section 1, not on our servers. Because that cookie is shared across gotcha.co.il and its subdomains, you are asked once and not again as you move between the website, the Help Center and the Trust Center. You can change your answer at any time by clearing your browser storage for this site, which makes the question appear again, and it expires by itself after six months so that a decision is never treated as permanent.
+
+The record carries a version. When we added the advertising category, everyone who had already answered was asked again rather than having a yes to two questions read as a yes to three, and we will do the same for any category we add in future.
 
 ## 4. Similar technologies: browser storage
 
@@ -55,6 +59,8 @@ Beyond the one cookie above, the GOTCHA application keeps a small number of item
 | Voice call preferences and callback state | localStorage and sessionStorage | Remembers per-device voice settings and in-progress call state |
 | Assistant calibration preference | localStorage | Remembers a per-device assistant setting |
 | Cookie choice | localStorage | A copy of the `gotcha_consent` cookie, kept in case the browser refuses the cookie; the cookie is what is read first |
+
+If you allow the advertising category, the Meta pixel sets its own cookies on your device (`_fbp`, and `_fbc` when you arrive from one of our advertisements). They are Meta's, not ours, and they are covered by Meta's own policies; clearing site data as described below removes them.
 
 None of these items are sent to advertisers or analytics providers. The sign-in tokens are credentials for your own session; keep your device secure and sign out on shared computers.
 
@@ -78,4 +84,4 @@ Related documents: ./privacy-policy.md
 
 Contact: privacy@gotcha.co.il
 
-Effective date: September 9, 2026
+Effective date: September 14, 2026

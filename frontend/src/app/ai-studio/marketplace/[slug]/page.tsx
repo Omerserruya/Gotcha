@@ -428,6 +428,15 @@ function IntegrationDetailPageInner() {
                           reauthorize: Boolean(editingCreds) || isConnected,
                           params: credentials,
                         });
+                        if (!url) {
+                          // Pre-publication: no reachable Shopify page. Say so
+                          // rather than navigating to a listing that 404s.
+                          setTestResult({
+                            ok: true,
+                            msg: "Installing GOTCHA starts on Shopify. Open the GOTCHA app from Shopify and approve the permissions - you will be brought back here with your store ready to connect, and nothing to type.",
+                          });
+                          return;
+                        }
                         window.location.href = url;
                       } catch (err: any) {
                         setTestResult({ ok: false, msg: connectErrorMessage(slug, err) });

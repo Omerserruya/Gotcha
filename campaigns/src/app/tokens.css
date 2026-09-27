@@ -1,0 +1,85 @@
+/*
+ * The GOTCHA palette and type, and nothing else.
+ *
+ * NOT a copy of landing/src/app/globals.css. That file is GENERATED from the
+ * design tool and is 495 lines of selectors matching literal inline-style text;
+ * copying it here would produce a second copy that silently drifts from the
+ * design file it was generated from and that nobody would think to regenerate.
+ *
+ * These are the values a campaign page actually needs, written by hand and
+ * meant to be edited by hand. They are taken from the marketing site so a
+ * campaign page looks like GOTCHA on the day it is written, not so that the
+ * two stay locked together - a campaign is allowed to look different, and
+ * frequently should.
+ */
+:root {
+  --bg: #faf8f4;
+  --ink: #16150f;
+  --ink-soft: #57544a;
+  --accent: #c4552f;
+  --accent-soft: #efd9cd;
+  --line: #e4dfd5;
+
+  --font-sans: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+
+  /* Notch and home-indicator clearance. Most paid traffic is on a phone. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+img,
+svg,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+/*
+ * Respected everywhere, and worth more here than on the marketing site: an ad
+ * click is an involuntary arrival, and someone who has asked their OS for less
+ * motion did not opt into a page that moves.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

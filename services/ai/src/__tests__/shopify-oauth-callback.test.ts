@@ -40,6 +40,8 @@ const H = vi.hoisted(() => {
     connection: { current: null as any },
     linkResult: { current: { ok: true, connectionId: "c1", reconnected: false } as any },
     linkCalls: [] as any[],
+    /** The store a connect would REPLACE. null = nothing to replace. */
+    replacing: { current: null as string | null },
     pendingCalls: [] as any[],
     exchange: v.fn(async () => ({ accessToken: "shpat_verysecret", scope: "read_orders" })),
   };
@@ -91,6 +93,10 @@ vi.mock("../services/shopify-connection-link.service", () => ({
     return H.linkResult.current;
   }),
   exchangeShopifyCode: H.exchange,
+  // Returns the store this workspace would REPLACE, or null. Defaults to null
+  // (nothing to replace) so existing cases keep the plain connect path; the
+  // multiple-store cases override H.replacing.
+  pendingStoreReplacement: vi.fn(async () => H.replacing.current),
   findShopOwner: vi.fn(async () => null),
 }));
 
@@ -102,6 +108,14 @@ vi.mock("../services/shopify-install-intent.service", () => ({
     return "p".repeat(64);
   }),
   consumeInstallIntent: vi.fn(async () => null),
+  PENDING_INSTALL_COOKIE: "gotcha_shopify_pending",
+  // A real cookie write, so the tests below assert the header the browser
+  // actually receives. This cookie is what lets a Shopify-originated install
+  // be finished after a login round trip discards the URL.
+  setPendingInstallCookie: (res: any, handle: string) =>
+    res.cookie("gotcha_shopify_pending", handle, { httpOnly: true, sameSite: "lax", path: "/" }),
+  clearPendingInstallCookie: (res: any) =>
+    res.clearCookie("gotcha_shopify_pending", { path: "/" }),
 }));
 
 vi.mock("../services/integration-provisioning.service", () => ({
@@ -166,6 +180,7 @@ beforeEach(() => {
   H.stateResult.current = WITH_INTENT;
   H.connection.current = null;
   H.linkResult.current = { ok: true, connectionId: "c1", reconnected: false };
+  H.replacing.current = null;
   H.linkCalls.length = 0;
   H.pendingCalls.length = 0;
   H.exchange.mockResolvedValue({ accessToken: "shpat_verysecret", scope: "read_orders" });
@@ -261,6 +276,27 @@ describe("workspace linking", () => {
     // Nothing is written to any tenant yet.
     expect(H.linkCalls).toHaveLength(0);
     expect(H.pendingCalls[0]).toMatchObject({ shopDomain: SHOP });
+  });
+
+  it("hands the browser a cookie so the parked install can be found later", async () => {
+    // THE FIX FOR REVIEW 132211.
+    //
+    // The pending handle used to travel only in the redirect URL, and the
+    // signed-out bounce to /login threw that URL away. The store was
+    // authorized on Shopify and unreachable in GOTCHA, which is what the
+    // reviewer filmed. The cookie survives the whole OIDC round trip.
+    H.stateResult.current = WITHOUT_INTENT;
+
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+
+    expect(res.status).toBe(302);
+    const setCookie = String(res.headers["set-cookie"] ?? "");
+    expect(setCookie).toContain("gotcha_shopify_pending");
+    // HttpOnly, so no script, referrer header or log can read the key to a
+    // stored access token.
+    expect(setCookie).toMatch(/HttpOnly/i);
+    // And the token itself never appears in the response.
+    expect(JSON.stringify(res.headers)).not.toContain("shpat_");
   });
 
   it("never infers a workspace from a blank tenantId", async () => {
