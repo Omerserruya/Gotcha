@@ -115,6 +115,34 @@ export async function create(data: CreateMessageData) {
      * found while fixing the flow executor, and if it stayed at that one site
      * then every writer moved into this function afterwards would reintroduce the
      * bug - which is the opposite of what consolidating the writers is for.
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * ★★ AND YET THIS RULE LIVES AT FOUR-PLUS SITES BY DECISION, NOT BY
+     * OVERSIGHT. If you are here because you found it duplicated, this is the
+     * choice you are looking at rather than a gap to close.
+     *
+     * The plan was to make this the ONE message writer. A survey of all 31
+     * direct writes across 17 files found that only THREE of them - two in
+     * `routes/approvals.ts` and one in `routes/contacts.ts` - can even call this
+     * function. The other 28 live in `services/ai`, `incoming-worker`,
+     * `outgoing-worker` and `voice-copilot`, and no service in this repo imports
+     * another service's `src`. So "one writer" is not reachable from where this
+     * function sits; it would require relocating it into `packages/shared`.
+     *
+     * That was put to the product owner as two halves - fixing the sites that
+     * have the rule wrong today, against relocating the writer so the 19th
+     * writer cannot get it wrong tomorrow - and the decision was to FIX THE BUGS
+     * AND NOT RELOCATE. The relocation is cancelled, not deferred.
+     *
+     * The consequence, stated plainly so nobody has to rediscover it: the
+     * failed-send rule and the origin rule are maintained BY CONVENTION at every
+     * site that writes a message. The known sites carrying them correctly are
+     * `incoming-worker/services/flow-executor.service.ts`,
+     * `incoming-worker/services/ai-bot.service.ts` (three writes), the
+     * `status === "SENT"` branch of `outgoing-worker/workers/outgoing.worker.ts`,
+     * and this function. Reopening the relocation is a product decision, not a
+     * cleanup - so if you are tempted, that is the conversation to have first.
+     * ─────────────────────────────────────────────────────────────────────
      */
     if (msg.status !== "FAILED") {
       await tx.conversation.update({ where: { id: data.conversationId }, data: { lastMessageAt: msg.createdAt } });
