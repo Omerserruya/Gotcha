@@ -86,6 +86,19 @@ export const candidateSchema = z.object({
   conflict: z.boolean().default(false),
   confidence: z.number().default(0),
   /**
+   * ★★ THE SERVER'S OWN VERDICT ON WHETHER "APPROVE ALL" WOULD TAKE THIS.
+   *
+   * `!c.conflict && c.confidence >= BULK_APPROVE_MIN_CONFIDENCE`, computed by
+   * the route, which says why it is sent: *"Stated by the API rather than only
+   * by the UI, so the bulk endpoint and the button can never disagree about
+   * what 'safe' means."*
+   *
+   * `.optional()` and never defaulted. `false` would be a claim that the
+   * server excluded this candidate; `undefined` is "this service did not say",
+   * which is the only case where `bulkWouldTake` is entitled to derive it.
+   */
+  bulkApprovable: z.boolean().optional(),
+  /**
    * ★ The answer is real and cannot be stated as fact.
    *
    * *"'We usually do viewings Thursday and Friday' is true — but an agent
@@ -168,8 +181,41 @@ export const candidateSchema = z.object({
 
 export type Candidate = z.infer<typeof candidateSchema>;
 
+/**
+ * The candidates response, whole.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THIS NAMED ONLY `candidates` AND STRIPPED THE REST
+ * ════════════════════════════════════════════════════════════════════════════
+ * The route also sends `counts` and `bulkApproveMinConfidence`, and each
+ * candidate carries `bulkApprovable`. All three were discarded by `z.object`,
+ * and the third one matters most: the route's comment says it is
+ *
+ *   > "Stated by the API rather than only by the UI, so the bulk endpoint and
+ *   >  the button can never disagree about what 'safe' means."
+ *
+ * **The UI stripped it and recomputed it.** The field added specifically to
+ * stop the two from disagreeing was thrown away, and `bulkWouldTake` derived
+ * its own answer from a threshold it could not see either — so 13f would have
+ * had to hardcode a confidence floor to render a count of what the server
+ * would take.
+ */
 export const candidateListSchema = z.object({
   candidates: z.array(candidateSchema).default([]),
+  /**
+   * `{ PENDING: 12, APPROVED: 3, … }` — by status, from the route's own
+   * `groupBy`. `.default({})` because a service that stops sending it is
+   * reporting nothing rather than reporting zero of each.
+   */
+  counts: z.record(z.string(), z.number()).default({}),
+  /**
+   * The server's confidence floor for a bulk approve.
+   *
+   * `.optional()`, never defaulted: a number invented here is a claim about
+   * what the server would take, and the whole point of the field is that the
+   * client should not be guessing it.
+   */
+  bulkApproveMinConfidence: z.number().optional(),
 });
 
 /* ── The four groups ─────────────────────────────────────────────────────── */
@@ -212,7 +258,42 @@ export function approvableAsIs(candidate: Candidate): boolean {
  * promise worth rendering rather than a footnote, because a merchant who does
  * not know it will approve fifty things one at a time.
  */
-export function bulkWouldTake(candidates: readonly Candidate[], minConfidence: number): number {
+export function bulkWouldTake(
+  candidates: readonly Candidate[],
+  /**
+   * The server's floor, or `undefined` when it did not send one.
+   *
+   * ★★ AND `undefined` IS NOT ZERO. A floor of `0` passes EVERYTHING — every
+   * confidence is `>= 0` — so defaulting it would count every unconflicted
+   * suggestion as bulk-approvable and overstate what pressing the button does.
+   * That is the opposite of the cautious reading, and it was in a first draft
+   * of the caller with a comment claiming it meant the cautious one.
+   *
+   * Not told, and no per-candidate verdict either, means we cannot say: the
+   * answer is 0, as a refusal rather than as a count.
+   */
+  minConfidence: number | undefined,
+): number {
+  /*
+   * ★★ THE SERVER'S OWN ANSWER FIRST, BECAUSE IT ASKED TO BE ASKED.
+   *
+   * `bulkApprovable` is on every candidate and the route says why it is there:
+   * *"so the bulk endpoint and the button can never disagree about what 'safe'
+   * means."* Recomputing it from a threshold is the disagreement it exists to
+   * prevent — the client's rule would drift the moment the server's floor
+   * moved, and the number on the button is a promise about what pressing it
+   * will do.
+   *
+   * The fallback is for a service that predates the field. `undefined` there is
+   * "we were not told", so it is the one case where deriving is right — and it
+   * is derived from the floor the server SENT, not from a constant mirrored
+   * here.
+   */
+  const stated = candidates.filter((c) => c.bulkApprovable !== undefined);
+  if (stated.length === candidates.length) {
+    return candidates.filter((c) => c.bulkApprovable === true).length;
+  }
+  if (minConfidence === undefined) return 0;
   return candidates.filter((c) => approvableAsIs(c) && c.confidence >= minConfidence).length;
 }
 

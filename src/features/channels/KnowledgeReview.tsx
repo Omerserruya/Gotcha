@@ -45,8 +45,15 @@ export async function KnowledgeReview({
   bulkMinConfidence,
 }: {
   readonly candidates: readonly Candidate[];
-  /** `BULK_APPROVE_MIN_CONFIDENCE`, so the count matches what the server takes. */
-  readonly bulkMinConfidence: number;
+  /**
+   * The server's `BULK_APPROVE_MIN_CONFIDENCE`, so the count matches what it
+   * would take — `undefined` when the service did not send one.
+   *
+   * Not defaulted anywhere on the way here: a floor of `0` passes everything,
+   * so a default would overstate the count rather than understate it. See
+   * `bulkWouldTake`.
+   */
+  readonly bulkMinConfidence: number | undefined;
 }) {
   const t = await getTranslations('channels.whatsapp');
   const locale = await getLocale();

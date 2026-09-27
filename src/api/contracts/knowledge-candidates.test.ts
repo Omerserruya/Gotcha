@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   approvableAsIs,
   bulkWouldTake,
+  candidateListSchema,
   candidateSchema,
   groupOf,
   hasEvidence,
@@ -82,6 +83,110 @@ describe('★ "Approve all" cannot take a conflict, however it is pressed', () =
       candidate({ id: 'c2', confidence: 1, conflict: true }),
     ];
     expect(bulkWouldTake(list, 0.8)).toBe(0);
+  });
+
+  it('★★ uses the server’s own verdict, EVEN WHERE IT DISAGREES WITH OUR RULE', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE ASSERTION THAT PROVES WE STOPPED RECOMPUTING
+     * ════════════════════════════════════════════════════════════════════════
+     * `bulkApprovable` is on every candidate and the route states why it is
+     * there: *"so the bulk endpoint and the button can never disagree about
+     * what 'safe' means."* The contract stripped it and this function derived
+     * its own answer — which is exactly the disagreement it exists to prevent.
+     *
+     * So the case that matters is the one where the two answers differ. A
+     * candidate the server marks approvable at a confidence BELOW the floor we
+     * were handed must still be counted: the server is the authority on what
+     * pressing the button does, and the number beside it is a promise about
+     * that. If this test passed by agreeing with the derived rule it would
+     * prove nothing.
+     */
+    /*
+     * ★ AND THE NUMBERS ARE CHOSEN SO THE TWO RULES GIVE DIFFERENT COUNTS.
+     *
+     * A first version used one candidate the server accepts below the floor AND
+     * one it rejects above it — the sets differ, the COUNT is 1 either way, and
+     * the test passed against a version that ignored `bulkApprovable`
+     * entirely. A mutation found it. Asserting a total cannot distinguish two
+     * rules that happen to select the same number of different things.
+     */
+    const serverSaysMore = [
+      candidate({ confidence: 0.2, bulkApprovable: true }),
+      candidate({ id: 'c2', confidence: 0.99, bulkApprovable: true }),
+    ];
+    // The server takes both; our rule would take only the one above 0.8.
+    expect(bulkWouldTake(serverSaysMore, 0.8)).toBe(2);
+
+    const serverSaysFewer = [
+      candidate({ confidence: 0.99, bulkApprovable: false }),
+      candidate({ id: 'c2', confidence: 0.95, bulkApprovable: false }),
+    ];
+    // Our rule would take both; the server takes neither.
+    expect(bulkWouldTake(serverSaysFewer, 0.8)).toBe(0);
+  });
+
+  it('★★ derives only when the service did not say, and from the floor it sent', () => {
+    // `undefined` is "we were not told" — an older service. `false` would be a
+    // claim the server excluded it, which is why the field is optional and
+    // never defaulted.
+    const list = [candidate({ confidence: 0.9 }), candidate({ id: 'c2', confidence: 0.2 })];
+    expect(bulkWouldTake(list, 0.8)).toBe(1);
+  });
+
+  it('★★ an unstated floor counts nothing, and a floor of 0 would count everything', () => {
+    /*
+     * THE TRAP, CAUGHT IN A FIRST DRAFT OF THE CALLER. Passing
+     * `bulkMinConfidence ?? 0` looks cautious and is the opposite: every
+     * confidence is `>= 0`, so a defaulted floor counts every unconflicted
+     * suggestion and OVERSTATES what pressing "approve all" would take. The
+     * comment beside it claimed it meant the cautious reading.
+     *
+     * Undefined is a refusal: we were not told the floor, no candidate stated
+     * its own verdict, so there is no number to give.
+     */
+    const list = [candidate({ confidence: 0.9 }), candidate({ id: 'c2', confidence: 0.01 })];
+
+    expect(bulkWouldTake(list, undefined)).toBe(0);
+    // What the defaulted version would have said — both of them.
+    expect(bulkWouldTake(list, 0)).toBe(2);
+  });
+
+  it('★ a partial answer is not trusted', () => {
+    /*
+     * One candidate stating the flag and one not is a shape we have not seen,
+     * and mixing the two rules would produce a count that is neither. Deriving
+     * for all of them is at least one rule consistently applied.
+     */
+    const list = [
+      candidate({ confidence: 0.2, bulkApprovable: true }),
+      candidate({ id: 'c2', confidence: 0.9 }),
+    ];
+    expect(bulkWouldTake(list, 0.8)).toBe(1);
+  });
+});
+
+describe('★★ the fields the candidates response was throwing away', () => {
+  it('★★ keeps the server’s confidence floor, and does not invent one', () => {
+    const parsed = candidateListSchema.parse({
+      candidates: [],
+      counts: { PENDING: 12, APPROVED: 3 },
+      bulkApproveMinConfidence: 0.75,
+    });
+    expect(parsed.bulkApproveMinConfidence).toBe(0.75);
+    expect(parsed.counts).toEqual({ PENDING: 12, APPROVED: 3 });
+  });
+
+  it('★★ a floor the service does not send stays undefined, never a number', () => {
+    /*
+     * A default here would be a claim about what the server would take, and
+     * 13f renders a count of exactly that. The whole reason the route sends it
+     * is that the client should not be guessing.
+     */
+    const parsed = candidateListSchema.parse({ candidates: [] });
+    expect(parsed.bulkApproveMinConfidence).toBeUndefined();
+    // Counts, by contrast, default to {} — reporting nothing, not zero of each.
+    expect(parsed.counts).toEqual({});
   });
 });
 
