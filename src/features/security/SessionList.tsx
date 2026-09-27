@@ -84,7 +84,36 @@ export function SessionList({
   const hidden = ordered.length - visible.length;
 
   return (
-    <div className={styles.block} data-testid="session-list">
+    /*
+      ════════════════════════════════════════════════════════════════════════
+      ★★ THE TOTAL IS STATED, BECAUSE COUNTING THE ROWS NOW GIVES FIVE
+      ════════════════════════════════════════════════════════════════════════
+      Collapsing this list to five was the right fix for a buried control and it
+      broke a thing that used to work: a probe counting rendered rows got the
+      true number of sessions before, and gets `VISIBLE` after. Somebody checking
+      that a bulk revoke did what it said would read five, then five, and
+      conclude nothing happened.
+
+      `data-total` and `data-others` are the two numbers anybody asks this list
+      for, read from the props rather than from the DOM, so they are right
+      whether the list is collapsed or expanded. **The reader who needs them is
+      an instrument, and an instrument that has to count nodes is one that can
+      count the wrong nodes** — which is exactly what happened: a probe used
+      `[data-testid^="session-"]`, which also matches `session-detail-*` and,
+      because the plural starts with the singular, `sessions-show-all`.
+
+      I am not renaming the testids over that. 752 of them have 392 prefix
+      relationships, because the scheme is hierarchical on purpose —
+      `session-<id>` and `session-detail-<id>` describe a row and its detail. Any
+      hierarchy has prefixes; a prefix selector over one is the wrong query, not
+      the wrong name. Stating the numbers removes the reason to write that query.
+    */
+    <div
+      className={styles.block}
+      data-testid="session-list"
+      data-total={ordered.length}
+      data-others={others}
+    >
       <ul className={styles.rows}>
         {visible.map((session) => (
           <li

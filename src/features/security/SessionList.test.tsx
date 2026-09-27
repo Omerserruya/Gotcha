@@ -175,3 +175,49 @@ describe('★★ signing out everywhere asks first, and says what survives', () 
     expect(screen.queryByTestId('sessions-show-all')).toBeNull();
   });
 });
+
+describe('★★ the list states its totals, because counting its rows gives five', () => {
+  it('★★ carries the real total and the real other-count while collapsed', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * COLLAPSING THE LIST BROKE A THING THAT USED TO WORK
+     * ════════════════════════════════════════════════════════════════════════
+     * A probe counting rendered rows got the true number of sessions before the
+     * pagination and gets five after. Somebody checking that a bulk revoke did
+     * what it said would read five, then five, and conclude nothing happened —
+     * and a supervisor's script did report a wrong number off this screen for a
+     * neighbouring reason.
+     *
+     * Read from the props, so they are right collapsed or expanded. Asserted in
+     * the collapsed state specifically, because that is the one where the DOM
+     * disagrees with the truth.
+     */
+    show(many(37));
+    const list = screen.getByTestId('session-list');
+    expect(list).toHaveAttribute('data-total', '38');
+    expect(list).toHaveAttribute('data-others', '37');
+    // And the DOM really does disagree, which is why the attributes exist.
+    expect(screen.getAllByTestId(/^session-\w/).filter((el) => el.tagName === 'LI')).toHaveLength(
+      5,
+    );
+  });
+
+  it('★ the totals do not change when the list is expanded', async () => {
+    show(many(9));
+    await userEvent.click(screen.getByTestId('sessions-show-all'));
+    const list = screen.getByTestId('session-list');
+    expect(list).toHaveAttribute('data-total', '10');
+    expect(list).toHaveAttribute('data-others', '9');
+  });
+
+  it('★★ says zero others when this is the only device, rather than omitting it', async () => {
+    /*
+     * An absent attribute and a zero are different readings to an instrument, and
+     * "no other sessions" is the answer somebody is checking for after a revoke.
+     */
+    show(many(0));
+    const list = screen.getByTestId('session-list');
+    expect(list).toHaveAttribute('data-total', '1');
+    expect(list).toHaveAttribute('data-others', '0');
+  });
+});
