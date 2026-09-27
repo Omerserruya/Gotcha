@@ -1,6 +1,9 @@
 import { getTranslations } from 'next-intl/server';
 
+import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import { additions, removals, type Person } from '@/api/contracts/roles';
+
+import { RemovePermission } from './RemovePermission';
 
 import styles from './Roles.module.css';
 
@@ -34,11 +37,41 @@ import styles from './Roles.module.css';
  * **a button implies we did it, and when it fails the merchant blames us for
  * something we do not own.** Deactivating IS ours: `User.isActive`.
  */
-export async function PersonPanel({ person }: { readonly person: Person }) {
+export async function PersonPanel({
+  person,
+  permissions,
+}: {
+  readonly person: Person;
+  /**
+   * The catalogue, for `displayName`. Empty when the catalogue read failed —
+   * and then every row shows its key with the caption that says why, rather
+   * than a blank where a name should be.
+   */
+  readonly permissions: readonly PermissionDef[];
+}) {
   const t = await getTranslations('roles');
 
   const added = additions(person);
   const removed = removals(person);
+
+  /*
+   * ★★ THE CATALOGUE'S OWN NAME FOR A PERMISSION, NOT ITS KEY.
+   *
+   * `grant.feature` was rendered raw — `ai:knowledge:write` on the screen a
+   * manager uses to decide what somebody may do. `PermissionDef.displayName`
+   * has existed for as long as the catalogue has.
+   *
+   * ── AND A KEY THE CATALOGUE DOES NOT DESCRIBE IS ITSELF WORTH SEEING ──
+   * Unlike a channel enum, an override on a permission the catalogue has never
+   * heard of is not noise — it is somebody granting something the product
+   * cannot explain. So the key IS shown in that case, with a sentence saying
+   * it is not in the catalogue. Hiding it would hide the more interesting of
+   * the two states.
+   */
+  const named = new Map(
+    permissions.filter((p) => p.displayName.trim() !== '').map((p) => [p.key, p.displayName]),
+  );
+  const nameOf = (feature: string) => named.get(feature) ?? null;
 
   return (
     <div className={styles.person} data-testid="person-panel">
@@ -68,13 +101,42 @@ export async function PersonPanel({ person }: { readonly person: Person }) {
               <ul className={styles.grantList} data-testid="grants-added">
                 {added.map((grant) => (
                   <li key={grant.feature} className={styles.grant} data-kind="added">
-                    <span className={styles.grantFeature}>{grant.feature}</span>
+                    <span className={styles.grantFeature}>
+                      {nameOf(grant.feature) ?? grant.feature}
+                    </span>
                     <span className={styles.grantWhat}>{t('overrides.added')}</span>
+                    {nameOf(grant.feature) === null ? (
+                      <span
+                        className={styles.grantWhy}
+                        data-testid={`uncatalogued-${grant.feature}`}
+                      >
+                        {t('overrides.notInCatalogue')}
+                      </span>
+                    ) : null}
                     {grant.reason ? (
                       <span className={styles.grantWhy}>
                         {t('overrides.because', { reason: grant.reason })}
                       </span>
                     ) : null}
+                    {/*
+                      ★★ 12e's SECOND PATH, WHICH THE DESIGN DESCRIBES AND
+                      NOTHING MOUNTED. Taking a permission away from one
+                      person, beside the grant it takes away — the only place
+                      the reader can see what they are removing.
+
+                      ⚠ IT IS A WRITE against a real person on a tenant that
+                      sends live traffic. No test and no capture presses it.
+                      Only on an ADDED grant: removing an already-removed one
+                      is a control for a state the reader is looking at.
+                    */}
+                    <RemovePermission
+                      /* `person.id` is `User.id` — `personDetailSchema` maps it from the
+                         route's `user.id`. Verified, because it is the target of a write. */
+                      userId={person.id}
+                      personName={person.name ?? person.email}
+                      feature={grant.feature}
+                      featureName={nameOf(grant.feature) ?? grant.feature}
+                    />
                   </li>
                 ))}
               </ul>
@@ -88,7 +150,9 @@ export async function PersonPanel({ person }: { readonly person: Person }) {
               <ul className={styles.grantList} data-testid="grants-removed">
                 {removed.map((grant) => (
                   <li key={grant.feature} className={styles.grant} data-kind="removed">
-                    <span className={styles.grantFeature}>{grant.feature}</span>
+                    <span className={styles.grantFeature}>
+                      {nameOf(grant.feature) ?? grant.feature}
+                    </span>
                     <span className={styles.grantWhat}>{t('overrides.removed')}</span>
                     {grant.reason ? (
                       <span className={styles.grantWhy}>

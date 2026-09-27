@@ -36,8 +36,44 @@ const person = (over: Partial<Person> = {}): Person => ({
   ...over,
 });
 
-const renderPanel = async (over: Partial<Person> = {}) =>
-  render(await PersonPanel({ person: person(over) }));
+/*
+ * ⚠ THE REMOVE CONTROL IS MOCKED TO THROW.
+ *
+ * `RemovePermission` is now inside this panel, and it removes a permission from
+ * a real person on a tenant that sends live traffic. Rendering it is fine;
+ * pressing it is not, and the only way to be sure no test does is to make the
+ * attempt fail loudly.
+ */
+vi.mock('./RemovePermission', () => ({
+  RemovePermission: ({ featureName }: { featureName: string }) => (
+    <button
+      type="button"
+      data-testid={`remove-${featureName}`}
+      onClick={() => {
+        throw new Error('a test must never press RemovePermission');
+      }}
+    >
+      remove
+    </button>
+  ),
+}));
+
+/* The catalogue's own names, so a key is not what the reader sees. */
+const CATALOG = [
+  {
+    key: 'commerce:refunds:write',
+    domain: 'commerce',
+    feature: 'refunds',
+    subFeature: '',
+    action: 'write',
+    scoped: false,
+    displayName: 'Issue refunds',
+    description: '',
+  },
+];
+
+const renderPanel = async (over: Partial<Person> = {}, permissions = CATALOG) =>
+  render(await PersonPanel({ person: person(over), permissions }));
 
 describe('exceptions to a role', () => {
   it('says plainly when there are none', async () => {
@@ -134,5 +170,89 @@ describe('what this panel does not claim', () => {
     const elsewhere = screen.getByTestId('account-elsewhere');
     expect(elsewhere).toHaveTextContent(/identity provider, not in GOTCHA/i);
     expect(screen.queryByRole('button', { name: /reset password|revoke session/i })).toBeNull();
+  });
+});
+
+describe('★★ the catalogue’s name, not the permission key', () => {
+  const granted = {
+    feature: 'commerce:refunds:write',
+    granted: true,
+    reason: null,
+    updatedBy: null,
+    updatedAt: null,
+  };
+
+  it('★★ shows the display name where the catalogue has one', async () => {
+    /*
+     * `grant.feature` was rendered raw — `commerce:refunds:write` on the screen
+     * a manager uses to decide what somebody may do. `displayName` has existed
+     * for as long as the catalogue has.
+     */
+    await renderPanel({ grants: [granted] });
+
+    expect(screen.getByText('Issue refunds')).toBeInTheDocument();
+    expect(screen.queryByText('commerce:refunds:write')).toBeNull();
+  });
+
+  it('★★ shows the KEY for a permission the catalogue does not describe, and says so', async () => {
+    /*
+     * The opposite decision from the channel enum, deliberately. An override on
+     * a permission the catalogue has never heard of is not noise — it is
+     * somebody granting something the product cannot explain, and that is the
+     * more interesting of the two states. Hiding the key would hide it.
+     */
+    await renderPanel({ grants: [{ ...granted, feature: 'mystery:thing:write' }] });
+
+    expect(screen.getByText('mystery:thing:write')).toBeInTheDocument();
+    expect(screen.getByTestId('uncatalogued-mystery:thing:write')).toHaveTextContent(
+      /not in the catalogue/i,
+    );
+  });
+
+  it('★ and no such caption where the name was found', async () => {
+    await renderPanel({ grants: [granted] });
+    expect(screen.queryByTestId('uncatalogued-commerce:refunds:write')).toBeNull();
+  });
+
+  it('★★ a failed catalogue read leaves keys and the caption, not blanks', async () => {
+    // The catalogue degrades on its own: the person is the subject of this
+    // screen and the names are decoration. Every row still says what it is.
+    await renderPanel({ grants: [granted] }, []);
+
+    expect(screen.getByText('commerce:refunds:write')).toBeInTheDocument();
+    expect(screen.getByTestId('uncatalogued-commerce:refunds:write')).toBeInTheDocument();
+  });
+});
+
+describe('★★ the remove path, drawn and never pressed', () => {
+  const granted = {
+    feature: 'commerce:refunds:write',
+    granted: true,
+    reason: null,
+    updatedBy: null,
+    updatedAt: null,
+  };
+
+  it('★★ offers a remove on an ADDED grant', async () => {
+    // 12e's second path. The design describes it and only the ADD path was
+    // mounted, on a different screen.
+    await renderPanel({ grants: [granted] });
+    expect(screen.getByTestId('remove-Issue refunds')).toBeInTheDocument();
+  });
+
+  it('★★ offers NO remove on a grant that is already a removal', async () => {
+    /*
+     * `granted: false` is a permission taken away. A remove control there is a
+     * control for the state the reader is already looking at, and pressing it
+     * would ask the platform to remove a removal.
+     */
+    await renderPanel({ grants: [{ ...granted, granted: false }] });
+    expect(screen.queryByTestId(/^remove-/)).toBeNull();
+    expect(screen.getByTestId('grants-removed')).toBeInTheDocument();
+  });
+
+  it('★ and none at all when there are no overrides', async () => {
+    await renderPanel({ grants: [] });
+    expect(screen.queryByTestId(/^remove-/)).toBeNull();
   });
 });

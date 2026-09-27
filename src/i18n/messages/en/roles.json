@@ -27,7 +27,8 @@
     "added": "given on top of their role",
     "removed": "taken away from what their role allows",
     "because": "because {reason}",
-    "noExpiry": "An exception lasts until someone removes it. GOTCHA has no end date for one."
+    "noExpiry": "An exception lasts until someone removes it. GOTCHA has no end date for one.",
+    "notInCatalogue": "this permission is not in the catalogue, so we cannot say what it allows"
   },
   "elsewhere": "Passwords and signed-in sessions live in your identity provider, not in GOTCHA — we don't hold either. Deactivating someone here keeps their history and stops them signing in.",
   "catalog": {
@@ -79,5 +80,9 @@
     "wildcardBody": "It holds {patterns}. A pattern means “everything under this, including permissions added later” — so it is a standing instruction, not a list. Ticking the boxes it matches today would freeze it, and the role would stop keeping up the next time a permission is added.",
     "wildcardCannotSeed": "The checkbox list cannot express that, so this role cannot be used as a starting point. Choose one without patterns, or start from nothing.",
     "wildcardCount": "{count, plural, one {# pattern} other {# patterns}}"
+  },
+  "person": {
+    "title": "One person",
+    "description": "What this person can do, and every exception somebody made to their role."
   }
 }
