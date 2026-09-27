@@ -1059,6 +1059,72 @@ services:
       - /app/node_modules
       - /app/.next
 
+  # ── The redesigned app, installed BESIDE the existing product ───────────────
+  #
+  # Its own repository, its own dependencies, its own image. Reachable at /v2
+  # once the gateway route exists; until then it is only on the compose network.
+  # What is deliberately ABSENT matters as much as what is here:
+  #
+  #   * no `volumes:` - the legacy service above bind-mounts its source, which
+  #     means sharing a host `node_modules`. That is the one thing this
+  #     deployment was asked not to do, so this runs a built image and its
+  #     behaviour never depends on an editor having saved.
+  #   * no published port - the gateway reaches it as `frontend-v2:3000` over
+  #     the compose network. A host port would be a collision to negotiate on a
+  #     contended box, for no reader.
+  #   * no `depends_on` - so `docker compose up -d --no-deps frontend-v2` cannot
+  #     recreate a running platform service. Recreation hands a service a new IP
+  #     and this gateway resolves its upstreams once, at startup.
+  #   * no `${VAR:?...}` anywhere below - a required-variable error makes EVERY
+  #     `docker compose` command in this project fail, including `ps` and
+  #     `config`, for every other session on this checkout. A missing value is
+  #     left to fail in the app, which says exactly which variable it was.
+  frontend-v2:
+    restart: unless-stopped
+    build:
+      context: ../redesign
+      args:
+        # ★ A BUILD ARG, NOT AN `environment:` ENTRY.
+        #
+        # `basePath` is inlined into the client bundle by `next build`. Supplied
+        # only at runtime it does nothing and warns about nothing: the server
+        # routes under the prefix while the browser's own JavaScript fetches the
+        # root. The Dockerfile re-declares it in the runtime stage from this same
+        # arg so the two halves cannot drift apart.
+        NEXT_PUBLIC_BASE_PATH: /v2
+    environment:
+      APP_ENV: ${V2_APP_ENV:-local}
+      # Server-to-server only, and never sent to the browser: every browser call
+      # goes through this app's own BFF, because the platform API allows only
+      # its own origin through CORS.
+      API_BASE_URL: ${V2_API_BASE_URL:-https://dev.gotcha.co.il}
+      # The browser talks to Authentik directly, so this is the PUBLIC issuer,
+      # not internal service DNS. Defaulted from the platform's own value so
+      # there is one place to change it.
+      OIDC_ISSUER: ${NEXT_PUBLIC_OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${V2_OIDC_CLIENT_ID:-${NEXT_PUBLIC_OIDC_CLIENT_ID:-gotcha-app}}
+      OIDC_CLIENT_SECRET: ${V2_OIDC_CLIENT_SECRET:-}
+      # Reduced to its origin by `appUrl`, which then rebuilds the path from the
+      # base path - so whether this carries /v2 makes no difference to the
+      # redirect_uri. It is written as a bare origin because that is what the
+      # schema calls it.
+      APP_ORIGIN: ${V2_APP_ORIGIN:-https://dev.gotcha.co.il}
+      # ★ NOT SUFFICIENT ON ITS OWN, AND THE FAILURE IS SILENT.
+      #
+      # `proxy.ts` reads this at RUNTIME to put the socket origin in the CSP,
+      # which is why it belongs here. But `realtime-provider.tsx` reads it from
+      # `clientEnv`, which Next inlines at BUILD time, and returns null when it
+      # is undefined - so with only this half the CSP permits a connection the
+      # browser never attempts, and realtime is simply dead with no error.
+      # It needs the same ARG+ENV pair the base path has; the Dockerfile does
+      # not declare one yet.
+      NEXT_PUBLIC_REALTIME_URL: ${V2_REALTIME_URL:-https://dev.gotcha.co.il}
+      # 32+ bytes. Deliberately left empty: this is the one value that is
+      # identity material, it is nobody's to mint on another team's behalf, and
+      # an empty default fails at the first request naming this variable rather
+      # than booting a container with a guessable cookie key.
+      SESSION_SECRET: ${V2_SESSION_SECRET:-}
+
 volumes:
   redis_data:
   pgdata:
