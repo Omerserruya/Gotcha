@@ -592,9 +592,15 @@
     color: var(--intent-blocked-text);
   }
 
-  .buyButton:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  /*
+   * `.buyButton` is gone: the control is the `Button` primitive now, which
+   * carries its own states. What was here was ONLY a `:disabled` rule — no
+   * base style — so the button rendered as centred plain text on the screen
+   * that charges a card.
+   */
+
+  .buyPackPrice {
+    font-weight: var(--font-weight-semibold);
   }
 
   .buyOk {

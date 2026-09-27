@@ -37,7 +37,18 @@ const PACKS = packagesResponseSchema.parse({
       key: 'pack_1k',
       name: 'Starter',
       credits: 1000,
-      price: { amount: 100, currency: 'ILS' },
+      /*
+       * ★★ FLAT, BECAUSE THE WIRE IS FLAT — AND THIS FIXTURE IS WHY THE DEFECT
+       * SHIPPED. It claimed `price: { amount, currency }`, a nested object the
+       * route does not send (`price: String(p.price)` with `currency` as its
+       * sibling), so the component read it happily here and got nothing in
+       * production: no price on any pack, no currency symbol on any total.
+       *
+       * A fixture is a claim that the platform can produce this object. This
+       * one could not have come from anywhere.
+       */
+      price: '100.00',
+      currency: 'ILS',
       expiryPolicy: 'NEVER',
       taxed: { net: '100.00', tax: '18.00', gross: '118.00', percent: 18, label: 'VAT 18%' },
       maxPurchaseQuantity: 3,
@@ -97,7 +108,7 @@ describe('★ the price on the tile is not the price that is charged', () => {
      */
     const untaxed = packagesResponseSchema.parse({
       eligible: true,
-      packages: [{ key: 'k', name: 'Pack', credits: 100, price: { amount: 50, currency: 'ILS' } }],
+      packages: [{ key: 'k', name: 'Pack', credits: 100, price: '50.00', currency: 'ILS' }],
     });
     show({ packages: untaxed });
     expect(screen.getByTestId('buy-total-unknown')).toHaveTextContent(/can.t show a total/i);
@@ -116,7 +127,8 @@ describe('★ the price on the tile is not the price that is charged', () => {
           key: 'k',
           name: 'Pack',
           credits: 100,
-          price: { amount: 50, currency: 'ILS' },
+          price: '50.00',
+          currency: 'ILS',
           taxed: { net: '50.00', tax: '0.00', gross: '50.00', percent: 0, exempt: true },
         },
       ],
@@ -439,7 +451,18 @@ describe('★★ the tax label is in the reader’s language, not the tenant’s
           key: 'pack_1k',
           name: 'Starter',
           credits: 1000,
-          price: { amount: 100, currency: 'ILS' },
+          /*
+           * ★★ FLAT, BECAUSE THE WIRE IS FLAT — AND THIS FIXTURE IS WHY THE DEFECT
+           * SHIPPED. It claimed `price: { amount, currency }`, a nested object the
+           * route does not send (`price: String(p.price)` with `currency` as its
+           * sibling), so the component read it happily here and got nothing in
+           * production: no price on any pack, no currency symbol on any total.
+           *
+           * A fixture is a claim that the platform can produce this object. This
+           * one could not have come from anywhere.
+           */
+          price: '100.00',
+          currency: 'ILS',
           expiryPolicy: 'NEVER',
           taxed: { net: '100.00', tax: '18.00', gross: '118.00', percent: 18, label: 'מע"מ' },
           maxPurchaseQuantity: 3,
@@ -453,5 +476,78 @@ describe('★★ the tax label is in the reader’s language, not the tenant’s
     expect(label).toHaveTextContent(/18/);
     // The Hebrew block — nothing in it should reach an English screen here.
     expect(label.textContent ?? '').not.toMatch(/[֐-׿]/);
+  });
+});
+
+describe('★★ the four defects a browser walk found in one panel', () => {
+  it('★★ a pack shows its price, which no pack had', async () => {
+    /*
+     * The contract read `price: { amount, currency }` — a nested object the
+     * route does not send. `price` is a string and `currency` is its sibling,
+     * so the object schema failed, the default fired, and every tile was
+     * priceless while every total lost its symbol. One cause, two reports.
+     */
+    show();
+    expect(await screen.findByTestId('buy-pack-price-pack_1k')).toHaveTextContent(/100/);
+  });
+
+  it('★★ and the totals carry the currency again', async () => {
+    show();
+    /* ILS renders as ₪ or as "ILS" depending on the runtime's data; either is
+       a currency, and a bare number is not. */
+    const net = await screen.findByTestId('buy-net');
+    expect(net.textContent ?? '').toMatch(/[₪]|ILS/);
+  });
+
+  it('★★ the credit count is not printed twice', async () => {
+    /*
+     * The packs are named for their size on this tenant, so the tile read
+     * "1,000 credits · 1,000 credits · These credits do not expire". The name
+     * is the tenant's and the count is ours; where they say the same thing,
+     * ours goes.
+     */
+    show({
+      packages: packagesResponseSchema.parse({
+        eligible: true,
+        tax: { ratePct: 18, label: 'VAT 18%' },
+        packages: [
+          {
+            key: 'pack_1k',
+            name: '1,000 credits',
+            credits: 1000,
+            price: '100.00',
+            currency: 'ILS',
+            expiryPolicy: 'NEVER',
+            taxed: { net: '100.00', tax: '18.00', gross: '118.00', percent: 18 },
+            maxPurchaseQuantity: 3,
+          },
+        ],
+      }),
+    });
+
+    const tile = await screen.findByTestId('buy-pack-pack_1k');
+    const occurrences = (tile.textContent ?? '').match(/1,000 credits/g) ?? [];
+    expect(occurrences).toHaveLength(1);
+  });
+
+  it('★ a name that does NOT state the count keeps the count line', async () => {
+    // The check is about duplication, not about hiding the number.
+    show();
+    const tile = await screen.findByTestId('buy-pack-pack_1k');
+    expect(tile).toHaveTextContent(/1,000 credits/);
+    expect(tile).toHaveTextContent(/Starter/);
+  });
+
+  it('★★ the buy control is a button, not centred plain text', async () => {
+    /*
+     * It was a raw `<button className={styles.buyButton}>` and the stylesheet
+     * had ONLY a `.buyButton:disabled` rule — no base style. On the screen that
+     * charges a card, the thing you press did not look like one.
+     */
+    show();
+    const button = await screen.findByTestId('buy-button');
+    expect(button.tagName).toBe('BUTTON');
+    /* The primitive's class, which carries both states. */
+    expect(button.className).not.toBe('');
   });
 });

@@ -72,11 +72,6 @@ export function isStillPending(change: PendingChange | null | undefined): boolea
 
 /* ── Money ───────────────────────────────────────────────────────────────── */
 
-const displayPriceSchema = z.object({
-  amount: z.union([z.string(), z.number()]).nullable().default(null),
-  currency: z.string().nullable().default(null),
-});
-
 /**
  * Every catalogue price is NET.
  *
@@ -139,13 +134,54 @@ export function rateIsFallback(currency: CurrencyBlock): boolean {
 
 /* ── Credit packages ─────────────────────────────────────────────────────── */
 
+/**
+ * A pack's price, as the two fields the wire actually carries.
+ *
+ * One accessor so no component reassembles the pair, and so the "we were not
+ * told" case has one shape: a price without a currency is not a price, and
+ * `money()` already refuses to invent one.
+ */
+export function packagePrice(pkg: {
+  readonly price: string | number | null;
+  readonly currency: string | null;
+}): { readonly amount: number; readonly currency: string } | null {
+  if (pkg.price === null || pkg.currency === null) return null;
+  const amount = typeof pkg.price === 'number' ? pkg.price : Number.parseFloat(pkg.price);
+  return Number.isFinite(amount) ? { amount, currency: pkg.currency } : null;
+}
+
 export const creditPackageSchema = z.object({
   key: z.string(),
   name: z.string(),
   /** The platform's own Hebrew. One string, one owner — as with the disclaimer. */
   nameHe: z.string().nullable().default(null),
   credits: z.number().default(0),
-  price: displayPriceSchema.default({ amount: null, currency: null }),
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ FLAT SIBLINGS, NOT A NESTED OBJECT — AND THAT IS WHY NO PACK HAD A PRICE
+   * ════════════════════════════════════════════════════════════════════════
+   * This read `price: displayPriceSchema` — an object with `amount` and
+   * `currency`. The route sends
+   *
+   *     { key, name, nameHe, credits: p.units, price: String(p.price),
+   *       currency: p.currency, … }
+   *
+   * so `price` is a **string** and `currency` is its **sibling**. The object
+   * schema could not parse a string, the `.default({ amount: null, currency:
+   * null })` fired, and a browser walk found **no price on any pack and no
+   * currency symbol on the totals** — one cause, reported as two defects.
+   *
+   * `money()` was behaving correctly throughout: *"no currency means no claim
+   * about one"*. It was told there was none.
+   *
+   * ── AND I CHECKED THE WRONG ROUTE FIRST ──
+   * `/billing/credits/packages` sends the model raw, where the field is
+   * `units`. This app calls `/billing/pricing/packages`, which maps
+   * `credits: p.units` — so `credits` was right all along and "fixing" it
+   * would have broken a working line.
+   */
+  price: z.union([z.string(), z.number()]).nullable().default(null),
+  currency: z.string().nullable().default(null),
   discountLabel: z.string().nullable().default(null),
   /**
    * `NEVER` · `DAYS_AFTER_PURCHASE` · `PERIOD_END`.

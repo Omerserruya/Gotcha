@@ -10,6 +10,9 @@ import {
   type PackagesResponse,
 } from '@/api/contracts/pricing';
 
+import { packagePrice } from '@/api/contracts/pricing';
+import { Button } from '@/design-system/primitives/button/Button';
+
 import { buyCreditPack, type BuyOutcome } from './actions';
 import styles from './Billing.module.css';
 
@@ -150,6 +153,12 @@ export function BuyCredits({
   if (!packages || sellable.length === 0) return null;
 
   const total = pkg ? chargeable(pkg, quantity) : null;
+  /*
+   * ★ ONE LOOKUP. `price` and `currency` are flat siblings on the wire — see
+   * `packagePrice` — and a price without a currency is not a price, so the
+   * pair travels together or not at all.
+   */
+  const price = pkg ? packagePrice(pkg) : null;
   const blocked = !billable ? 'no_account' : !hasPaymentMethod ? 'no_card' : null;
 
   function buy() {
@@ -199,9 +208,29 @@ export function BuyCredits({
                 }}
               />
               <span className={styles.buyPackName}>{p.name}</span>
-              <span className={styles.buyPackCredits}>
-                {t('pricing.packages.credits', { credits: format.number(p.credits) })}
-              </span>
+              {/*
+                ★★ THE CREDIT COUNT ONLY WHEN THE NAME DOES NOT ALREADY SAY IT.
+                The packs are named for their size on this tenant, so the tile
+                read *"1,000 credits · 1,000 credits · These credits do not
+                expire"*. The name is the tenant's and the count is ours; where
+                they are the same fact, ours goes.
+              */}
+              {p.name.includes(format.number(p.credits)) ? null : (
+                <span className={styles.buyPackCredits}>
+                  {t('pricing.packages.credits', { credits: format.number(p.credits) })}
+                </span>
+              )}
+              {/*
+                ★★ THE PRICE, WHICH NO PACK HAD. The design prices them and the
+                contract was reading a nested object the wire does not send —
+                so every tile was priceless and every total was unsymbolled,
+                from one mismatch.
+              */}
+              {packagePrice(p) ? (
+                <span className={styles.buyPackPrice} data-testid={`buy-pack-price-${p.key}`}>
+                  {money(format, packagePrice(p)!.amount, packagePrice(p)!.currency)}
+                </span>
+              ) : null}
               {/*
                 ⚠ `pricing.packages.*`, NOT `packages.*`. Pricing.tsx reads
                 with the namespace `billing.pricing`; this component reads
@@ -268,7 +297,7 @@ export function BuyCredits({
         <dl className={styles.buyTotals} data-testid="buy-totals">
           <div>
             <dt>{t('buy.net')}</dt>
-            <dd data-testid="buy-net">{money(format, total.net, pkg.price.currency)}</dd>
+            <dd data-testid="buy-net">{money(format, total.net, price?.currency ?? null)}</dd>
           </div>
           <div>
             <dt data-testid="buy-tax-label">
@@ -303,11 +332,11 @@ export function BuyCredits({
                    */
                   t('buy.taxFallback', { pct: pkg.taxed.percent })}
             </dt>
-            <dd data-testid="buy-tax">{money(format, total.tax, pkg.price.currency)}</dd>
+            <dd data-testid="buy-tax">{money(format, total.tax, price?.currency ?? null)}</dd>
           </div>
           <div className={styles.buyTotalRow}>
             <dt>{t('buy.total')}</dt>
-            <dd data-testid="buy-total">{money(format, total.gross, pkg.price.currency)}</dd>
+            <dd data-testid="buy-total">{money(format, total.gross, price?.currency ?? null)}</dd>
           </div>
         </dl>
       ) : (
@@ -322,15 +351,27 @@ export function BuyCredits({
         </p>
       )}
 
-      <button
-        type="button"
-        className={styles.buyButton}
+      {/*
+        ════════════════════════════════════════════════════════════════════
+        ★★ THE `Button` PRIMITIVE. THIS RENDERED AS CENTRED PLAIN TEXT.
+        ════════════════════════════════════════════════════════════════════
+        It was a raw `<button className={styles.buyButton}>`, and
+        `Billing.module.css` has **only** a `.buyButton:disabled` rule — no
+        base rule at all. So the control had no background, no border and no
+        padding: on the screen that takes money, the thing you press did not
+        look like a thing you press.
+        A hand-rolled control whose only style is its disabled state is how
+        that happens. The primitive carries both states, and `variant="primary"`
+        is right here because buying is the panel's one action.
+      */}
+      <Button
+        variant="primary"
         data-testid="buy-button"
         disabled={isPending || blocked !== null || !total}
         onClick={buy}
       >
         {isPending ? t('buy.buying') : t('buy.action')}
-      </button>
+      </Button>
 
       {/*
         TWO REASONS, TWO REPAIRS. "Nobody to invoice" and "nothing to charge"
