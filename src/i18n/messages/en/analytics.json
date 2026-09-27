@@ -4,13 +4,13 @@
   "noGotchaSection": "There is no “what GOTCHA did” section yet. It needs a breakdown of why the AI handed a conversation to a person, and the platform records the handover without recording the cause — so any chart here would be invented rather than measured.",
   "team": {
     "heading": "Who is holding what",
-    "today": "These are today's numbers. They reset at midnight, and they are not the seven days shown above.",
+    "today": "These are today's numbers. They reset at midnight, and they are the only period this panel covers.",
     "person": "Person",
     "openNow": "Open now",
     "takenToday": "Taken today",
     "unnamed": "Unnamed",
     "none": "Nobody on the team is set up to take conversations yet.",
-    "humansOnly": "This is the human team. GOTCHA's AI employees don't appear here — their work is on the GOTCHA tab.",
+    "humansOnly": "This is the human team. GOTCHA's AI employees are not in this list, so it is smaller than the people and machines actually working.",
     "unavailable": "We couldn't read the team's workload just now.",
     "noSpeed": "There's no reply-speed column here. The only timing GOTCHA records measures from when a conversation was claimed to each reply in it, so it grows with how long a conversation runs — beside a name that would read as slowness."
   },

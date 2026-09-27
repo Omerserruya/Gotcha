@@ -34,16 +34,28 @@ const agent = (over: Record<string, unknown> = {}): AgentLoad =>
 const show = async (agents: readonly AgentLoad[] | null) => render(await TeamLoad({ agents }));
 
 describe('★★ every number says which period it covers', () => {
-  it('★★ labels the figures as today, not as the seven days above', async () => {
+  it('★★ labels the figures with the period they actually cover, and claims no longer one', async () => {
     /*
-     * `claimedToday` and the reply average are Redis day-keys. The tab's
-     * header says "Last 7 days, compared with the week before" — a figure
-     * under the wrong period label is wrong in a way no reader can see.
+     * `claimedToday` and the open count are day-scoped — Redis day-keys and a
+     * live queue depth. The design's header says *"Last 7 days, compared with
+     * the week before"*, and a figure under the wrong period label is wrong in
+     * a way no reader can see.
+     *
+     * ── AND THIS ASSERTION WAS AIMED AT A PHRASE ──
+     * It required the words *"not the seven days above"*, which stopped being
+     * true when the screen was assembled: there is no header above this panel,
+     * so a sentence denying one referred to something absent. The rule is that
+     * the period is STATED and no longer one is implied — checked positively,
+     * and negatively against any weekly claim rather than against the sentence
+     * that used to deny it. Third assertion this week pinned to wording when
+     * it meant a claim.
      */
     await show([agent()]);
     const period = screen.getByTestId('team-period');
     expect(period).toHaveTextContent(/today's numbers/i);
-    expect(period).toHaveTextContent(/not the seven days/i);
+    expect(period).toHaveTextContent(/reset at midnight/i);
+    // No period this panel does not cover.
+    expect(period).not.toHaveTextContent(/seven days|7 days|last week|this week|this month/i);
   });
 
   it('★ calls the open count "open now" rather than "handled"', async () => {
