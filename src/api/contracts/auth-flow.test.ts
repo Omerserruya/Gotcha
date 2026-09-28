@@ -9,6 +9,8 @@ import {
   staySignedInBody,
   deviceChallengeSchema,
   devicesByRecency,
+  validateBody,
+  factorEntry,
 } from './auth-flow';
 
 /**
@@ -336,5 +338,94 @@ describe('★★ devicesByRecency — the familiar one first', () => {
     const devices = [device('a', null), device('b', '2026-01-01T00:00:00Z')];
     devicesByRecency(devices);
     expect(devices.map((d) => d.device_class)).toEqual(['a', 'b']);
+  });
+});
+
+describe('★★ the validate submit — from the schema, and the trap inside it', () => {
+  const device = deviceChallengeSchema.parse({
+    device_class: 'totp',
+    device_uid: '1',
+    challenge: {},
+    last_used: '2026-08-07T06:58:58.258317Z',
+  });
+
+  it('★★ echoes the whole device back, because that is what the field takes', () => {
+    /*
+     * `selected_challenge` is a `DeviceChallengeRequest` with all four fields
+     * required — not an id. So the picker hands back exactly the object it was
+     * given, which is also why nothing here needs to understand `challenge`.
+     */
+    expect(validateBody(device, '123456')).toEqual({
+      component: 'ak-stage-authenticator-validate',
+      selected_challenge: {
+        device_class: 'totp',
+        device_uid: '1',
+        challenge: {},
+        last_used: '2026-08-07T06:58:58.258317Z',
+      },
+      code: '123456',
+    });
+  });
+
+  it('★★ sends the code as a STRING, which is the opposite of the enrolment stage', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * SIX DIGITS, SAME NAME, DIFFERENT TYPE, TWO STAGES OF ONE PRODUCT
+     * ════════════════════════════════════════════════════════════════════════
+     *     AuthenticatorValidationChallengeResponseRequest.code  →  string
+     *     AuthenticatorTOTPChallengeResponseRequest.code        →  integer
+     *
+     * A shared helper would be wrong in one of the two places, at runtime, on the
+     * screen where being wrong locks somebody out. Asserted as a type rather than
+     * a value so that "helpfully" coercing it goes red.
+     */
+    const body = validateBody(device, '000123');
+    expect(typeof body.code).toBe('string');
+    // And leading zeros survive, which an integer would eat.
+    expect(body.code).toBe('000123');
+  });
+
+  it('★ keeps a null last_used, because the field is required and nullable', () => {
+    const unused = deviceChallengeSchema.parse({
+      device_class: 'static',
+      device_uid: '1',
+      last_used: null,
+    });
+    const body = validateBody(unused, 'abcd-efgh');
+    expect((body.selected_challenge as Record<string, unknown>).last_used).toBeNull();
+  });
+});
+
+describe('★★ factorEntry — a code box is wrong for three of the five', () => {
+  it('★★ names the two that are digits somebody types', () => {
+    expect(factorEntry('totp')).toBe('code');
+    expect(factorEntry('static')).toBe('code');
+  });
+
+  it('★★ names the three that are not, which the schema proves by having three fields', () => {
+    /*
+     * `code`, `webauthn` and `duo` are **separate fields** on the submit. That is
+     * the contract saying these are different journeys — a browser credential
+     * prompt, a push, and an out-of-band message — rather than one value with
+     * three flavours.
+     */
+    expect(factorEntry('webauthn')).toBe('other');
+    expect(factorEntry('duo')).toBe('other');
+    expect(factorEntry('sms')).toBe('other');
+  });
+
+  it('★★ a class nobody has seen is UNKNOWN, not "other"', () => {
+    /*
+     * The third state, and the reason it exists: "we know this is not a code box"
+     * and "we have never met this" are different facts, and only the first
+     * licenses rendering something else. Collapsing them would have a future
+     * device class silently routed to whatever we do for `duo`.
+     */
+    expect(factorEntry('passkey')).toBe('unknown');
+    expect(factorEntry('')).toBe('unknown');
+  });
+
+  it('★ is not fooled by case or padding from the wire', () => {
+    expect(factorEntry(' TOTP ')).toBe('code');
   });
 });

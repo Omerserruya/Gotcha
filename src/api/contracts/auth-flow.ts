@@ -205,6 +205,70 @@ export const authenticatorValidateChallengeSchema = z.looseObject({
 export type AuthenticatorValidateChallenge = z.infer<typeof authenticatorValidateChallengeSchema>;
 
 /**
+ * What the validate stage accepts — from Authentik's own OpenAPI schema
+ * (`GET /api/v3/schema/`, `2024.10.5`), not from experiment.
+ *
+ *     AuthenticatorValidationChallengeResponseRequest
+ *       component           string
+ *       selected_challenge  DeviceChallengeRequest   ← the whole device, echoed
+ *       selected_stage      string
+ *       code                string                   ← totp and static
+ *       webauthn            object                   ← webauthn
+ *       duo                 integer                  ← duo
+ *
+ * ★★ `code`, `webauthn` AND `duo` ARE THREE SEPARATE FIELDS, which settles
+ *   something that was an inference from class names an hour ago: **these are
+ *   three different journeys, and the payload says so.** A picker that leads to
+ *   a code box is wrong for three of the five classes the flow permits, and that
+ *   is now a fact about the contract rather than a reading of Authentik's docs.
+ *
+ * ★ `selected_challenge` takes the **entire** device object back — all four of
+ *   `device_class`, `device_uid`, `challenge` and `last_used` are required. So
+ *   the picker does not invent an identifier; it hands back exactly what it was
+ *   given, which is also why nothing here needs to understand `challenge`.
+ *
+ * ⚠⚠ AND A TRAP TWO LINES APART IN THE SAME SCHEMA:
+ *
+ *     AuthenticatorValidationChallengeResponseRequest.code  →  string
+ *     AuthenticatorTOTPChallengeResponseRequest.code        →  integer
+ *
+ * **Six digits, same name, different type, in two stages of one product.** A
+ * shared `code` helper would be wrong in one of the two places, and the failure
+ * would land at runtime on the screen where being wrong locks somebody out of
+ * their account. This function is for **validation only** and is named so; when
+ * enrolment is built it needs its own, with a number.
+ */
+export function validateBody(device: DeviceChallenge, code: string): Record<string, unknown> {
+  return {
+    component: 'ak-stage-authenticator-validate',
+    selected_challenge: {
+      device_class: device.device_class,
+      device_uid: device.device_uid,
+      challenge: device.challenge,
+      last_used: device.last_used,
+    },
+    code,
+  };
+}
+
+/**
+ * Which device classes are a code somebody types.
+ *
+ * `totp` and `static` go through the `code` field. `webauthn` needs the browser
+ * credential API and its own `webauthn` object; `duo` is a push and answers with
+ * an integer; `sms` is out of band. **Three states, and the third is the point:**
+ * a class nobody has seen is `unknown`, not `other`, because "we know this is not
+ * a code box" and "we have never met this" are different facts and only one of
+ * them licenses a fallback.
+ */
+export function factorEntry(deviceClass: string): 'code' | 'other' | 'unknown' {
+  const normalised = deviceClass.trim().toLowerCase();
+  if (normalised === 'totp' || normalised === 'static') return 'code';
+  if (normalised === 'webauthn' || normalised === 'duo' || normalised === 'sms') return 'other';
+  return 'unknown';
+}
+
+/**
  * The devices, most recently used first, never-used last.
  *
  * `last_used` is populated per device and `null` on one nobody has touched,
