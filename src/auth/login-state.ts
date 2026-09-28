@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { serverEnv } from '@/config/env.server';
 import { appPath } from '@/lib/base-path';
+import { safeInternalPath } from '@/lib/safe-url';
 
 /**
  * The short-lived state carried across the redirect to Authentik and back.
@@ -93,15 +94,31 @@ export async function unsealLoginState(sealed: string | undefined): Promise<Logi
 /**
  * Constrains a post-login redirect to this application.
  *
- * Without this an attacker can turn the login endpoint into an open redirect
- * by handing a victim `/api/auth/login?returnTo=https://evil.example`. Only a
- * single-slash-prefixed relative path is accepted; `//host` and any absolute
- * URL are rejected.
+ * Without this an attacker can turn the login endpoint into an open redirect by
+ * handing a victim `/api/auth/login?returnTo=https://evil.example`: they sign in
+ * legitimately, on our real sign-in page, and land somewhere else.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THIS HELD ITS OWN COPY OF THE CHECK, AND ITS OWN COPY OF THE HOLE
+ * ════════════════════════════════════════════════════════════════════════════
+ * It used to be three string checks — must start with `/`, not `//`, not `/\`.
+ * `safeInternalPath` in `lib/safe-url.ts` was the same three lines, and a tab
+ * walks through both: **the URL parser strips tab, LF and CR from anywhere in a
+ * URL before it parses**, so `"/\t/evil.example"` satisfies every check and
+ * then becomes `//evil.example`. Measured, not reasoned.
+ *
+ * ★ **The base path was the only thing hiding it here.** `appUrl` builds
+ *   `${origin}${BASE_PATH}${path}`, so under `/v2` the smuggled authority
+ *   becomes `/v2\t/evil.example` -> `/v2/evil.example`, which is on-site. At
+ *   `BASE_PATH === ''` — local dev today, and **a root-mounted build of this
+ *   same source, which is exactly what serving sign-in from its own origin
+ *   needs** — nothing absorbs it. A deployment variable was standing in for a
+ *   security control.
+ *
+ * The predicate now lives in one place. This differs only in what it says when
+ * the answer is no: a rejected link renders nothing, a rejected return path
+ * sends somebody to the top of the app rather than nowhere.
  */
 export function safeReturnPath(candidate: string | null | undefined): string {
-  if (!candidate) return '/';
-  if (!candidate.startsWith('/')) return '/';
-  if (candidate.startsWith('//')) return '/';
-  if (candidate.startsWith('/\\')) return '/';
-  return candidate;
+  return safeInternalPath(candidate) ?? '/';
 }

@@ -47,16 +47,93 @@ describe('safeInternalPath', () => {
     expect(safeInternalPath('/inbox/conv_123')).toBe('/inbox/conv_123');
   });
 
-  it.each([
+  it('★ keeps the query and the fragment, which is where a deep link lives', () => {
+    expect(safeInternalPath('/inbox?filter=open#thread')).toBe('/inbox?filter=open#thread');
+  });
+
+  const hostile: readonly string[] = [
     '//evil.example',
     'https://evil.example',
     '/\\evil.example',
     'javascript:alert(1)',
     'inbox',
-  ])('rejects %s', (hostile) => {
+
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * ★★ THE FIVE ABOVE ARE THE SHAPES SOMEBODY THOUGHT OF. THESE WALKED
+     *    THROUGH ALL OF THEM.
+     * ════════════════════════════════════════════════════════════════════════
+     * The URL parser strips tab, LF and CR from ANYWHERE in a URL before it
+     * parses. The old guard read the first two characters, so a tab between the
+     * slashes satisfied every check and then vanished, leaving `//host`. Each
+     * was measured producing `https://evil.example/`, not reasoned about.
+     */
+    '/\t/evil.example',
+    '/\n/evil.example',
+    '/\r/evil.example',
+    '/\t\\evil.example',
+
+    /*
+     * ★★ AND THESE TWO DEFEATED THE FIX RATHER THAN THE ORIGINAL.
+     * They resolve to our own origin — the host is not in the URL when it is
+     * parsed. `.` and `..` collapse to nothing and the pathname comes back as
+     * `//evil.example`: an authority MANUFACTURED by normalisation, after the
+     * origin comparison has already said yes.
+     */
+    '/.//evil.example',
+    '/foo/..//evil.example',
+
+    /*
+     * ★★ AND THESE TWO ARE THE OLD FIXTURES WITH A PATH ON THEM.
+     * `//evil.example` and `https://evil.example` have an EMPTY path, so a
+     * guard that threw the host away and kept the path returns null for both
+     * and looks correct. Mutation testing proved it: the origin comparison
+     * could be deleted outright with every assertion still green. An attacker
+     * sends the page they want somebody on, so the real payload has a path.
+     */
+    'https://evil.example/inbox/123',
+    '//evil.example/inbox/123',
+  ];
+
+  it.each(hostile)('rejects %j', (candidate) => {
     // A notification's `link` is a free-text column somebody wrote. Treating
     // it as a trusted route is how a stored value becomes an open redirect.
-    expect(safeInternalPath(hostile)).toBeNull();
+    expect(safeInternalPath(candidate)).toBeNull();
+  });
+
+  it('⚠⚠ nothing that survives can navigate off this origin', () => {
+    /*
+     * The list above can only hold the spellings somebody wrote down. This asks
+     * the question the value exists to answer — where does the BROWSER end up —
+     * by resolving the approved output the way an `href` is resolved.
+     *
+     * ★ At the root, deliberately. Under `/v2` the prefix absorbs a smuggled
+     *   authority (`/v2//evil` is a path), so this property is weaker in the
+     *   only deployment anyone looks at, and a root-mounted build has nothing
+     *   to absorb it.
+     */
+    const ORIGIN = 'https://dev.gotcha.co.il';
+    for (const candidate of hostile) {
+      const approved = safeInternalPath(candidate);
+      if (approved === null) continue;
+      expect(new URL(approved, `${ORIGIN}/`).origin, candidate).toBe(ORIGIN);
+    }
+    // Both directions: a predicate that rejected everything satisfies the loop.
+    expect(safeInternalPath('/inbox/conv_123')).toBe('/inbox/conv_123');
+  });
+
+  it('★★ what it returns is already canonical, so a second parse cannot move it', () => {
+    /*
+     * The original defect was not only the missing spellings — it was checking
+     * one string and navigating to a different one. Re-approving the output
+     * must be a no-op, or whatever renders it can still reinterpret a value
+     * this function approved.
+     */
+    for (const candidate of [...hostile, '/inbox/conv_123', '/inbox?filter=open#thread']) {
+      const once = safeInternalPath(candidate);
+      if (once === null) continue;
+      expect(safeInternalPath(once), candidate).toBe(once);
+    }
   });
 
   it('rejects empty input', () => {
