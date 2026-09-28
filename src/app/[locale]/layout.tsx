@@ -8,6 +8,8 @@ import '@/design-system/styles/global.css';
 
 import { fontVariables } from '@/design-system/tokens/fonts';
 import { directionOf, LOCALE_CODES } from '@/i18n/locales';
+import { loadMessages } from '@/i18n/load-messages';
+import { SHELL_NAMESPACES } from '@/i18n/namespaces';
 import { routing } from '@/i18n/routing';
 
 export function generateStaticParams() {
@@ -83,7 +85,27 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} dir={directionOf(locale)} className={fontVariables}>
       <body>
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        {/*
+          ════════════════════════════════════════════════════════════════════
+          ★★ SCOPED, BECAUSE THIS PROVIDER SERIALISES WHAT IT IS GIVEN
+          ════════════════════════════════════════════════════════════════════
+          With no `messages` prop it hands the client EVERY namespace in the
+          request config. Measured on the deployed sign-in page: 143,757 bytes
+          and 1,097 message-shaped strings — "Approvals", "Studio",
+          "conversation" x121, "refund" x20 — the product's entire vocabulary,
+          on a page nobody has authenticated to reach.
+
+          What survives here is only what the route error boundary needs, since
+          `error.tsx` is a client component living above both route groups.
+          Each group then provides its own: `(auth)` the panel's namespace,
+          `(app)` the product's.
+
+          ★ A gateway allowlist cannot fix this. It governs which routes
+            answer; this was not another route, it was this route's payload.
+        */}
+        <NextIntlClientProvider messages={await loadMessages(locale, SHELL_NAMESPACES)}>
+          {children}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

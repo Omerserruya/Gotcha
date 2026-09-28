@@ -1,3 +1,4 @@
+import { NextIntlClientProvider } from 'next-intl';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
@@ -7,6 +8,8 @@ import { effectivePermissionsSchema } from '@/api/contracts/identity';
 import { activeSession } from '@/auth/session-store';
 import { logger } from '@/observability/logger';
 import type { PermissionsStatus } from '@/permissions/permissions-context';
+import { loadMessages } from '@/i18n/load-messages';
+import { isLocale, DEFAULT_LOCALE } from '@/i18n/locales';
 import { AppProviders } from '@/shell/AppProviders';
 import { AppShell } from '@/shell/AppShell';
 
@@ -38,16 +41,26 @@ export default async function AuthenticatedLayout({
 
   const { permissions, roleKey, status } = await loadPermissions();
 
+  /*
+   * ★★ THE FULL CATALOGUE, AND ONLY BEHIND THE SESSION CHECK ABOVE.
+   * The locale layout now provides only what the error boundary needs, so the
+   * product's vocabulary is attached here — inside the authenticated area —
+   * rather than to every page in the app including sign-in.
+   */
+  const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
+
   return (
-    <AppProviders
-      locale={locale}
-      tenantId={session.tid ?? null}
-      permissions={permissions}
-      roleKey={roleKey}
-      permissionsStatus={status}
-    >
-      <AppShell>{children}</AppShell>
-    </AppProviders>
+    <NextIntlClientProvider messages={await loadMessages(resolved)}>
+      <AppProviders
+        locale={locale}
+        tenantId={session.tid ?? null}
+        permissions={permissions}
+        roleKey={roleKey}
+        permissionsStatus={status}
+      >
+        <AppShell>{children}</AppShell>
+      </AppProviders>
+    </NextIntlClientProvider>
   );
 }
 

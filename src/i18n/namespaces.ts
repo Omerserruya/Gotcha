@@ -96,3 +96,49 @@ export const NAMESPACES = [
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];
+
+/**
+ * What the pre-authentication surface loads into the browser.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE SIGN-IN PAGE WAS SHIPPING THE ENTIRE PRODUCT'S VOCABULARY
+ * ════════════════════════════════════════════════════════════════════════════
+ * `NextIntlClientProvider` with no `messages` serialises **everything in the
+ * request config** into the client payload. Measured on the deployed page:
+ * 143,757 bytes of HTML, 1,097 message-shaped strings, and among them —
+ * on a page nobody has authenticated to reach —
+ *
+ *     "Approvals" x5   "Studio" x6   "Analytics" x2
+ *     "conversation" x121   "refund" x20   "Shopify" x4
+ *
+ * including *"…in your Approvals queue, because merging the wrong two
+ * customers cannot be undone."* Feature names, warnings and limits, readable
+ * by anyone who opens the page.
+ *
+ * ★ A GATEWAY ALLOWLIST CANNOT TOUCH THIS. It restricts which routes answer;
+ *   this is not another route, it is *this* route's payload. Serving sign-in
+ *   from an origin meant to exclude the product, while the page carries the
+ *   product's copy, gets the address right and the contents wrong.
+ *
+ * ── WHY THESE TWO AND NOT A COMFORTABLE MARGIN ──
+ * Every `useTranslations` / `getTranslations` call reachable from the auth
+ * surface asks for `auth` (the panel) or `errors` (the design system's state
+ * displays, and the route error boundary, which is a client component). That
+ * is measured by `namespaces.test.ts`, which reads the call sites rather than
+ * trusting this comment — because a list that drifts from its callers renders
+ * a blank string, and a blank string on a sign-in screen is indistinguishable
+ * from a page that simply says less.
+ */
+export const CREDENTIAL_SURFACE_NAMESPACES = [
+  'auth',
+  'errors',
+] as const satisfies readonly Namespace[];
+
+/**
+ * What the route error boundary needs, above both groups.
+ *
+ * `error.tsx` is a client component by Next's requirement and lives at the
+ * locale root, outside `(app)` and `(auth)` alike, so something must provide
+ * its namespace before either group's layout runs.
+ */
+export const SHELL_NAMESPACES = ['errors'] as const satisfies readonly Namespace[];

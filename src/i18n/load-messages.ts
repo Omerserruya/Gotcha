@@ -20,9 +20,21 @@ async function loadNamespace(locale: string, namespace: Namespace): Promise<Mess
   }
 }
 
-export async function loadMessages(locale: Locale): Promise<Messages> {
+/**
+ * A locale's messages, optionally narrowed to the namespaces a surface needs.
+ *
+ * ★★ THE ARGUMENT IS WHAT KEEPS THE PRODUCT'S COPY OFF THE SIGN-IN PAGE.
+ * `NextIntlClientProvider` serialises whatever it is given into the client
+ * payload, so "all of them" is not a neutral default on a page nobody has
+ * authenticated to reach — it published feature names, warnings and limits to
+ * anyone who opened it. See `CREDENTIAL_SURFACE_NAMESPACES`.
+ */
+export async function loadMessages(
+  locale: Locale,
+  namespaces: readonly Namespace[] = NAMESPACES,
+): Promise<Messages> {
   const loaded = await Promise.all(
-    NAMESPACES.map(
+    namespaces.map(
       async (namespace) => [namespace, await loadNamespace(locale, namespace)] as const,
     ),
   );
