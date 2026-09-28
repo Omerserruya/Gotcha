@@ -131,7 +131,22 @@ export function SignInPanel({
      * its origin. Following it would land somebody who has just signed in
      * successfully on a stranger's home page.
      */
-    if (step.kind === 'done' || step.kind === 'handOver') {
+    if (step.kind === 'done' || step.kind === 'handOver' || step.kind === 'chooseFactor') {
+      /*
+       * ⚠⚠ `chooseFactor` IS PARSED AND DELIBERATELY NOT RENDERED.
+       * The challenge is now known — two device classes, `totp` and `static`
+       * (recovery codes), arriving as peers with `last_used` per device. **What
+       * is not known is the submit body.** Posting `{}` answers "Empty response"
+       * without naming a field, so the trick that found `remember_me` does not
+       * work here, and it cannot be probed by trial because every malformed
+       * attempt is a counted failed authentication against the one enrolled
+       * account there is.
+       *
+       * A device picker that cannot submit is a control that does nothing — the
+       * same reason the copilot has no insert button and the integrations rail
+       * has no Connect. So this hands over, exactly as before, and the panel
+       * gains the renderer in the commit that gains the submit shape.
+       */
       window.location.assign(handOverHref);
     }
   }, [step, handOverHref]);
@@ -170,7 +185,7 @@ export function SignInPanel({
   }
 
   /* Nothing to show until the first stage lands. */
-  if (!step || step.kind === 'done' || step.kind === 'handOver') {
+  if (!step || step.kind === 'done' || step.kind === 'handOver' || step.kind === 'chooseFactor') {
     return <p className={styles.loading}>{t('signIn.starting')}</p>;
   }
 

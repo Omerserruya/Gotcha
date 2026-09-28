@@ -115,6 +115,93 @@ export const userLoginChallengeSchema = z.looseObject({
 });
 
 /**
+ * Authentik's device classes for a validate stage.
+ *
+ * ★ `static` IS RECOVERY CODES, AND IT ARRIVES AS A PEER. Not a link under the
+ *   code box — an entry in the same `device_challenges` list as the
+ *   authenticator app. So this stage is not "enter your code", it is **a choice
+ *   between devices**, and any panel that renders it has to express that.
+ *
+ * Open on purpose: Authentik also ships `webauthn`, `duo`, `sms` and `email`
+ * classes, and only two have been observed here. A class we do not recognise is
+ * carried through rather than dropped, because dropping it would silently remove
+ * somebody's only second factor from the list.
+ */
+export const OBSERVED_DEVICE_CLASSES = ['totp', 'static'] as const;
+
+export const deviceChallengeSchema = z.looseObject({
+  device_class: z.string().default(''),
+  device_uid: z.string().default(''),
+  /** Empty on both observed classes. The class carries the meaning. */
+  challenge: z.looseObject({}).default({}),
+  /** ISO timestamp, or null on a device nobody has used yet. */
+  last_used: z.string().nullable().default(null),
+});
+export type DeviceChallenge = z.infer<typeof deviceChallengeSchema>;
+
+/**
+ * Second factor — measured 2026-09-28 against an enrolled account.
+ *
+ * ⚠⚠ THE SUBMIT SHAPE IS NOT KNOWN AND IS NOT GUESSED. Posting `{}` answers
+ * `non_field_errors: [{ string: "Empty response" }]`, which — unlike
+ * `ak-stage-user-login`'s `remember_me` — **does not name the field.** The
+ * self-describing trick does not work on this stage.
+ *
+ * And it cannot be probed by trial: every malformed attempt is a failed
+ * authentication that Authentik counts, against the one enrolled account there
+ * is. Locking it to learn a field name would be a bad trade.
+ *
+ * So this parses the challenge and **nothing renders it yet.** The panel hands
+ * over, as it did before, and the reason is now specific rather than "a stage we
+ * have never heard of".
+ */
+export const authenticatorValidateChallengeSchema = z.looseObject({
+  component: z.literal('ak-stage-authenticator-validate'),
+  flow_info: flowInfoSchema,
+  /**
+   * ⚠ A USERNAME, NOT AN EMAIL — observed as `akadmin`. The design's panel puts
+   * "Welcome back" over an identity, and this field will not always be a pretty
+   * name. Whatever renders it must not assume an address.
+   */
+  pending_user: z.string().default(''),
+  device_challenges: z.array(deviceChallengeSchema).default([]),
+  /**
+   * Empty for an already-enrolled user. **This is where 00b's second half —
+   * enrolment — would appear**, for a user in a workspace that requires two-step
+   * and has no device. Still unobserved.
+   */
+  configuration_stages: z.array(z.looseObject({})).default([]),
+  response_errors: flowErrorsSchema,
+});
+export type AuthenticatorValidateChallenge = z.infer<typeof authenticatorValidateChallengeSchema>;
+
+/**
+ * The devices, most recently used first, never-used last.
+ *
+ * `last_used` is populated per device and `null` on one nobody has touched,
+ * which is the affordance for ordering. Putting the familiar one first is the
+ * design's *"never make somebody choose a method they cannot remember picking"*
+ * applied to a list whose order somebody did not choose.
+ *
+ * ★ Stable within a group: two devices last used at the same instant keep the
+ *   order the server sent, rather than swapping between renders.
+ */
+export function devicesByRecency(devices: readonly DeviceChallenge[]): readonly DeviceChallenge[] {
+  return [...devices]
+    .map((device, index) => ({ device, index }))
+    .sort((a, b) => {
+      const at = a.device.last_used ? Date.parse(a.device.last_used) : Number.NaN;
+      const bt = b.device.last_used ? Date.parse(b.device.last_used) : Number.NaN;
+      const aKnown = Number.isFinite(at);
+      const bKnown = Number.isFinite(bt);
+      if (aKnown && bKnown && at !== bt) return bt - at;
+      if (aKnown !== bKnown) return aKnown ? -1 : 1;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.device);
+}
+
+/**
  * The flow is done.
  *
  * ⚠⚠ `to` IS THE IDENTITY PROVIDER'S OWN PATH AND MUST NOT BE FOLLOWED.
@@ -143,6 +230,12 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
 export type FlowStep =
   | { readonly kind: 'identify'; readonly challenge: IdentificationChallenge }
   | { readonly kind: 'staySignedIn'; readonly challenge: UserLoginChallenge }
+  /**
+   * A second factor is required. **Parsed, and deliberately not rendered** — the
+   * submit shape is the one unknown, and a device picker that cannot submit is a
+   * control that does nothing. The panel hands over on this, specifically.
+   */
+  | { readonly kind: 'chooseFactor'; readonly challenge: AuthenticatorValidateChallenge }
   /**
    * Sign-in succeeded. **There is nothing here to navigate to** — `idpPath` is
    * Authentik's own destination and the panel's next move is always our
@@ -180,6 +273,9 @@ export function readChallenge(raw: unknown): FlowStep {
 
   const stay = userLoginChallengeSchema.safeParse(raw);
   if (stay.success) return { kind: 'staySignedIn', challenge: stay.data };
+
+  const factor = authenticatorValidateChallengeSchema.safeParse(raw);
+  if (factor.success) return { kind: 'chooseFactor', challenge: factor.data };
 
   const component =
     typeof raw === 'object' && raw !== null
