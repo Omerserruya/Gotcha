@@ -318,7 +318,37 @@ export default function proxy(request: NextRequest): NextResponse {
 export const config = {
   /*
    * Skip Next internals, the auth and BFF routes (which manage their own
-   * authentication), and anything with a file extension.
+   * authentication), and static assets.
+   *
+   * ═══════════════════════════════════════════════════════════════════════════
+   * ★★ IT USED TO SKIP ANY PATH WITH A DOT IN IT, AND THAT WAS A HOLE
+   * ═══════════════════════════════════════════════════════════════════════════
+   * `.*\..*` was meant to mean "a static file". It means "a dot anywhere", and
+   * two routes here take an id. Reproduced against the deployed auth image:
+   *
+   *     /en/home                   404   refused
+   *     /en/customers/plain        404   refused
+   *     /en/customers/a.b@c.com    307   ★ skipped the middleware entirely
+   *
+   * Everything in this file was skipped with it — the credential-surface
+   * refusal, the auth gate, and the narrowed CSP. On the sign-in origin that
+   * left the gateway allowlist as the ONLY guard on that shape, while every
+   * other product path had two.
+   *
+   * ★ `/en/settings/…/roles/u.1` looks like a second witness and is not: it has
+   *   no route, so Next refuses it for an unrelated reason. **One live example,
+   *   not two** — worth stating, because a hole with two witnesses and a hole
+   *   with one get triaged differently.
+   *
+   * ── WHY AN EXTENSION LIST RATHER THAN A NARROWER DOT RULE ──
+   * "Ends with a dot and letters" does not work: an id like `a.b@c.com` ends
+   * in `.com`. Only naming the extensions separates a static asset from a path
+   * segment that happens to contain a dot.
+   *
+   * ★ And `public/` holds nothing but `.gitkeep` — measured, not assumed — so
+   *   this exclusion currently protects no file that exists. It is kept narrow
+   *   rather than removed because the day somebody adds `favicon.ico` should
+   *   not be the day the auth gate starts redirecting it.
    *
    * ════════════════════════════════════════════════════════════════════════
    * ★★ THE BARE `'/'` LOOKS REDUNDANT AND IS NOT. DO NOT REMOVE IT.
@@ -356,5 +386,8 @@ export const config = {
    * anyone arriving another way. Here, next-intl negotiates — a Hebrew
    * browser lands on `/v2/he`.
    */
-  matcher: ['/', '/((?!api|_next|_vercel|.*\\..*).*)'],
+  matcher: [
+    '/',
+    '/((?!api|_next|_vercel|.*\\.(?:ico|png|jpe?g|gif|svg|webp|avif|css|js|mjs|map|txt|xml|webmanifest|woff2?|ttf|otf|eot|pdf)).*)',
+  ],
 };
