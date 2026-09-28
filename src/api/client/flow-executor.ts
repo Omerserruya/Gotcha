@@ -53,8 +53,57 @@ import { AUTHENTICATION_FLOW, readChallenge, type FlowStep } from '../contracts/
  * application's login route.
  */
 
-/** Where nginx proxies to `authentik_server/api/v3/`. Owned by the gateway. */
-const executorUrl = (flow: string) => appPath(`/auth-api/flows/executor/${flow}/`);
+/**
+ * The executor's base, which is not the same on both builds of this source.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * ★★ ON THE PRODUCT ORIGIN THIS IS A PROXY. ON AN AUTH ORIGIN IT IS NOT.
+ * ═════════════════════════════════════════════════════════════════════════════
+ * Under `/v2`, `/v2/auth-api/…` is a gateway location that proxies to
+ * `authentik_server/api/v3/`. That indirection exists only because the panel is
+ * served from the PRODUCT’s origin and Authentik is not.
+ *
+ * Served from the identity provider’s own origin, the panel and the API are
+ * already same-origin and the proxy is **not needed at all** — `/api/v3/…` is
+ * the real path. Keeping the proxy there would be a hop invented to preserve a
+ * URL shape.
+ *
+ * ★ So it is a variable, and it is `NEXT_PUBLIC_` because this runs in the
+ *   browser. Like `BASE_PATH` it is **inlined at build time**: setting it on a
+ *   running container does nothing, and the two builds differ by their build
+ *   arguments rather than by their source.
+ *
+ * ★★ AND THE BASE-PATH LESSON APPLIES TO IT, WHICH IS WHY THE DEFAULT IS THE
+ *   CURRENT BEHAVIOUR AND NOT A VALUE. Unset, this composes exactly the string
+ *   it has always composed. A build that forgets it is the product’s build,
+ *   not a broken one — the failure mode of the base path was that an absent
+ *   value silently produced a DIFFERENT working URL, and that is what an
+ *   explicit fallback to today’s behaviour avoids.
+ *
+ *   The remaining risk is the honest one: a build whose configuration does not
+ *   match the origin it is served from. Nothing in the page can show that, so
+ *   it is asserted in the test beside this file for both shapes rather than
+ *   left to a walk to discover.
+ */
+const EXECUTOR_BASE = process.env.NEXT_PUBLIC_FLOW_EXECUTOR_BASE ?? '';
+
+/**
+ * Where the flow executor answers.
+ *
+ * `appPath` when nothing overrides it, because `fetch` is not prefixed: Next
+ * prefixes `next/link` and `redirect()` with `basePath` and does not touch
+ * this. A bare `/auth-api/…` would leave `/v2` and hit the legacy app’s
+ * origin — the same defect that sent the sign-in button to the wrong
+ * application’s login route.
+ *
+ * An override is used verbatim, because a value naming another origin’s layout
+ * has nothing to do with where THIS app is mounted, and prefixing it would
+ * reproduce that defect in the other direction.
+ */
+const executorUrl = (flow: string) =>
+  EXECUTOR_BASE === ''
+    ? appPath(`/auth-api/flows/executor/${flow}/`)
+    : `${EXECUTOR_BASE}/flows/executor/${flow}/`;
 
 /**
  * Authentik's CSRF header for this deployment.

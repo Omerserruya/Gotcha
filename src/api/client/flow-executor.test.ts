@@ -166,6 +166,58 @@ describe('★★ how the request is made', () => {
     vi.resetModules();
   });
 
+  it('⚠⚠ on an auth origin it calls the executor natively, with no proxy', async () => {
+    /*
+     * ═════════════════════════════════════════════════════════════════════════
+     * THE SAME SOURCE, TWO BUILDS, TWO CORRECT AND DIFFERENT URLS
+     * ═════════════════════════════════════════════════════════════════════════
+     * `/v2/auth-api/` exists only because the panel is served from the
+     * PRODUCT’s origin and Authentik is not. On the identity provider’s own
+     * origin the page and the API are already same-origin, and the proxy is a
+     * hop invented to preserve a URL shape.
+     *
+     * ★ The override is used VERBATIM — not passed through `appPath`. It names
+     *   another origin’s layout, so prefixing it with where THIS app is mounted
+     *   would reproduce the exact defect the line above guards against, in the
+     *   other direction. That is the assertion here: `/v2` must NOT appear.
+     */
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/v2');
+    vi.stubEnv('NEXT_PUBLIC_FLOW_EXECUTOR_BASE', '/api/v3');
+    const { startFlow: startOnAuthOrigin } = await import('./flow-executor');
+
+    fetchMock.mockResolvedValue(jsonResponse(identification));
+    await startOnAuthOrigin();
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      '/api/v3/flows/executor/default-authentication-flow/',
+    );
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('★★ and an absent override is the product’s build, not a broken one', async () => {
+    /*
+     * The base-path failure was that an absent value silently produced a
+     * DIFFERENT working URL. An explicit fallback to today’s behaviour is what
+     * keeps a build that never heard of this variable correct rather than
+     * quietly wrong — so this asserts the default composes the proxy path, at
+     * a real base path where the two answers differ.
+     */
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/v2');
+    const { startFlow: startWithoutOverride } = await import('./flow-executor');
+
+    fetchMock.mockResolvedValue(jsonResponse(identification));
+    await startWithoutOverride();
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      '/v2/auth-api/flows/executor/default-authentication-flow/',
+    );
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
   it('★★ sends the flow cookie, or the second stage never arrives', async () => {
     /*
      * The flow is stateful and its state is a cookie. Without credentials the

@@ -71,6 +71,10 @@ COPY . .
 # supplies empty.
 ARG NEXT_PUBLIC_BASE_PATH
 ARG NEXT_PUBLIC_REALTIME_URL
+# Only the auth-origin build passes this. Unset means `/v2/auth-api`, the
+# gateway proxy the product origin needs; set means the executor is reachable
+# natively because the page and the identity provider share an origin.
+ARG NEXT_PUBLIC_FLOW_EXECUTOR_BASE
 ARG NEXT_PUBLIC_APP_ENV
 ARG NEXT_PUBLIC_RELEASE
 ARG NEXT_PUBLIC_SENTRY_DSN
