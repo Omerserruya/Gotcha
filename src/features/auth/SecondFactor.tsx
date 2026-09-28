@@ -30,9 +30,38 @@ import styles from './SecondFactor.module.css';
  *
  * None of those three is configured on this tenant, none has been observed on
  * the wire, and each is a different journey. Choosing one hands over to the
- * identity provider's page, which still works. **That is deliberate and
- * reversible, not an oversight** — the handover is narrowed from "any stage we
- * do not recognise" to "three named classes we have chosen not to build blind".
+ * identity provider's page. **That is deliberate and reversible, not an
+ * oversight** — the handover is narrowed from "any stage we do not recognise"
+ * to "three named classes we have chosen not to build blind".
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * ⚠⚠ THIS PARAGRAPH USED TO SAY THE HANDOVER "STILL WORKS". NOBODY HAS
+ *    EVER WALKED IT.
+ * ═════════════════════════════════════════════════════════════════════════════
+ * No `webauthn`, `duo` or `sms` device exists on this tenant, so the branch
+ * has never run against a real one. And the sentence was written **before**
+ * two things that change the journey underneath it:
+ *
+ *   1. sign-in moved to its own origin, so the handover now leaves the auth
+ *      host for the product host and comes back;
+ *   2. `/api/auth/login` gained a hand-over marker, so this navigation is the
+ *      one arrival that still starts OIDC directly rather than being sent
+ *      back here.
+ *
+ * ★ The open question, stated as a question: this panel has driven the flow
+ *   as far as the authenticator stage, and the handover restarts the journey
+ *   at `authorize`. **Whether Authentik resumes that in-progress flow at the
+ *   authenticator prompt, or begins a new one and asks for the password
+ *   again, is unobserved.** If it restarts, the person types their password
+ *   twice and the handover is a broken journey rather than a working one.
+ *
+ * ★★ AND IT IS NOW THE ONLY PATH IN THIS APP THAT DELIBERATELY SHOWS THE
+ *   IDENTITY PROVIDER'S OWN UI. Five entrances were closed so that nobody
+ *   meets it by accident; this one meets it on purpose. That is defensible —
+ *   the alternative is guessing at three credential journeys nobody here can
+ *   test — but it should be a standing decision rather than a leftover, and
+ *   it is the first thing to re-examine if a device of one of these classes
+ *   is ever enrolled.
  *
  * ── SIX BOXES FOR A CODE, ONE FIELD FOR A RECOVERY CODE ──
  * 00b specifies six auto-advancing boxes, and Authentik's own enrolment UI uses
