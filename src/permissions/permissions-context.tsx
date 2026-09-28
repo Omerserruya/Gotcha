@@ -89,6 +89,23 @@ export function usePermissions(): PermissionsContextValue {
  * It is wrong for an action inside a workflow they are halfway through, where
  * a disabled control saying "you need the Refunds permission" is the
  * difference between a user who asks their admin and one who files a bug.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ⚠⚠ `'hide'` IS UNREACHABLE TODAY AND WOULD NOT WORK IF YOU REACHED IT
+ * ════════════════════════════════════════════════════════════════════════════
+ * Found by `scripts/unused-guard-sweep.ts`: `isVisible` — the ONLY reader of
+ * `status === 'hidden'` in the codebase — has no callers. Nothing else tests
+ * for it either. No call site passes `'hide'`, so the branch has never run.
+ *
+ * ★ Which means the first person to pass it gets the quiet wrong answer: the
+ *   consumer will reach for `isEnabled`, which is false for `hidden`, and
+ *   render a **disabled control with no reason beside it** — the one state
+ *   this doc comment argues against — instead of no control at all.
+ *
+ * So passing `'hide'` is not enough on its own. The call site must also ask
+ * `isVisible(capability)` and render nothing when it is false. Written here
+ * rather than left to be rediscovered, because the failure renders as a
+ * plausible screen and nothing in the repository disagrees with it.
  */
 export function useCapability(
   permission: PermissionString,
