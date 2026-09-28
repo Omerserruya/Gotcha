@@ -1,0 +1,82 @@
+@layer features {
+  /*
+   * Screen 00a's form. The frame, the editorial panel and the footnote belong to
+   * the page; everything that changes between stages belongs here.
+   */
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-7);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .labelRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .label {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .input {
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-12);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+  }
+
+  .forgot,
+  .recoveryInline {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .remember {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * The stage's own sentence. Never our paraphrase: Authentik does not say
+   * whether the email or the password was wrong, and a more specific message
+   * would undo that on our side.
+   */
+  .problem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-urgent-text);
+    max-inline-size: var(--size-reading);
+  }
+
+  /* Before the first stage lands. Deliberately quiet — it is usually one hop. */
+  .loading {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+}

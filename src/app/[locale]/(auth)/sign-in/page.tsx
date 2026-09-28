@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { SignInPanel } from '@/features/auth/SignInPanel';
 import { Logo } from '@/design-system/brand/Logo';
-import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
 import { appPath } from '@/lib/base-path';
 
@@ -144,15 +144,6 @@ export default async function SignInPage({
 
       <main className={styles.surface}>
         <div className={styles.form}>
-          <div className={styles.intro}>
-            <Text role="title" as="h1">
-              {t('signIn.title')}
-            </Text>
-            <Text role="body" tone="muted">
-              {t('signIn.body')}
-            </Text>
-          </div>
-
           {knownError ? (
             // `role="alert"` so the reason is announced on arrival, not only
             // discovered by someone who happens to read down the page.
@@ -161,11 +152,22 @@ export default async function SignInPage({
             </p>
           ) : null}
 
-          <Button variant="primary" size="lg" fullWidth asChild>
-            {/* A plain anchor: this leaves the app for the identity provider,
-                so client-side routing must not intercept it. */}
-            <a href={loginHref}>{t('signIn.action')}</a>
-          </Button>
+          {/*
+            ════════════════════════════════════════════════════════════════════
+            ★★ THE PANEL DRIVES THE FLOW; `loginHref` IS BOTH ITS FALLBACK AND
+               ITS SUCCESS PATH
+            ════════════════════════════════════════════════════════════════════
+            This used to be a single button handing over to the identity
+            provider. That handover still exists and is still correct — it is
+            what `handOverHref` is — but it is now the path we take when the
+            panel cannot finish, rather than the only path.
+
+            It is also the path we take when it CAN. Completing the flow sets an
+            Authentik session on `.gotcha.co.il`; `/api/auth/login` then runs
+            OIDC, sees it, and returns silently. One destination, two meanings,
+            and guessing wrong between them is harmless.
+          */}
+          <SignInPanel handOverHref={loginHref} returnTo={returnTo} />
 
           <p className={styles.footnote}>{t('signIn.footnote')}</p>
         </div>

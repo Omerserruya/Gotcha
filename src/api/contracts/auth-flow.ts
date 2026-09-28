@@ -1,0 +1,231 @@
+import { z } from 'zod';
+
+/**
+ * Authentik's flow executor, as screen 00a drives it.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THIS CONTRACT IS LOOSE, AND EVERY OTHER ONE IN THIS DIRECTORY IS STRICT
+ * ════════════════════════════════════════════════════════════════════════════
+ * The rest of `contracts/` describes routes we can ask Backend to change, so a
+ * strict `z.object` is right: it names what we rely on and a surprise is a
+ * conversation. **This describes a third party's API on a version nobody
+ * promised us.** A strict object here strips an unknown field silently, and from
+ * inside this codebase that is indistinguishable from Authentik not sending it —
+ * which is the defect that hid `Message.status`, `taxed` and `upgradePath` this
+ * week, three times, on contracts we DID own.
+ *
+ * So: `looseObject` throughout, and the distinction is written here because a
+ * reader who has seen the other twenty files will assume this one is a mistake.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ AND THE IMPORTANT PART IS THE FALLBACK, NOT THE HAPPY PATH
+ * ════════════════════════════════════════════════════════════════════════════
+ * Measured on 2026-09-28, this tenant's authentication flow is exactly two
+ * stages: `ak-stage-identification` (which takes the email AND the password in
+ * one POST) and `ak-stage-user-login` (the "stay signed in" question). No
+ * authenticator stage of any kind — no TOTP, no SMS, no WhatsApp.
+ *
+ * **A flow is Authentik configuration, not a deploy of ours.** An administrator
+ * can add a stage this afternoon and our panel would meet a component it has
+ * never heard of, mid-sign-in, with somebody's password already accepted.
+ *
+ * So an unrecognised stage is not an error here: it means **this panel cannot
+ * finish the job, and the identity provider's own page still can.** `handOver`
+ * is the answer, and the full redirect flow stays in the product as the path we
+ * fall back to rather than the path we replaced. An optimisation that cannot
+ * degrade is not an optimisation, it is a second implementation.
+ */
+
+/**
+ * Field errors, keyed by field name.
+ *
+ * Authentik puts errors that belong to no field under `non_field_errors`, which
+ * is where a wrong password lands — the stage will not say *which* of email or
+ * password was wrong, deliberately, and neither should we.
+ */
+export const NON_FIELD = 'non_field_errors';
+
+const flowErrorsSchema = z
+  .record(
+    z.string(),
+    z.array(z.looseObject({ string: z.string().default(''), code: z.string().default('') })),
+  )
+  .default({});
+
+export type FlowErrors = z.infer<typeof flowErrorsSchema>;
+
+const flowInfoSchema = z
+  .looseObject({
+    title: z.string().default(''),
+    cancel_url: z.string().default(''),
+  })
+  .optional();
+
+/** Email + password in one stage. The design's single panel, by luck or by design. */
+export const identificationChallengeSchema = z.looseObject({
+  component: z.literal('ak-stage-identification'),
+  flow_info: flowInfoSchema,
+  /** `["email", "username"]` here. Which identifier the stage will accept. */
+  user_fields: z.array(z.string()).default([]),
+  /** `true` on this tenant: the password is part of THIS stage, not the next. */
+  password_fields: z.boolean().default(false),
+  /**
+   * Where "Forgot it?" goes. **Read from the challenge, never hardcoded** — it
+   * is a flow slug an administrator can change, and a stale path here sends
+   * somebody who has forgotten their password to a 404.
+   */
+  recovery_url: z.string().nullable().default(null),
+  primary_action: z.string().default(''),
+  response_errors: flowErrorsSchema,
+});
+
+/** "Stay signed in?" — a stage, which is why it can live in our own panel. */
+export const userLoginChallengeSchema = z.looseObject({
+  component: z.literal('ak-stage-user-login'),
+  flow_info: flowInfoSchema,
+  pending_user: z.string().default(''),
+  response_errors: flowErrorsSchema,
+});
+
+/**
+ * The flow is done.
+ *
+ * ⚠⚠ `to` IS THE IDENTITY PROVIDER'S OWN PATH AND MUST NOT BE FOLLOWED.
+ * Measured 2026-09-28: a completed sign-in returns `{ to: "/" }`, and that `/`
+ * is Authentik's root, not ours. Following it lands somebody who has just signed
+ * in successfully on a stranger's home page.
+ *
+ * It is parsed because it identifies the shape, and it is renamed on the way out
+ * so that using it is a deliberate act rather than an obvious one.
+ */
+export const redirectChallengeSchema = z.looseObject({
+  component: z.literal('xak-flow-redirect'),
+  to: z.string().min(1),
+});
+
+export type IdentificationChallenge = z.infer<typeof identificationChallengeSchema>;
+export type UserLoginChallenge = z.infer<typeof userLoginChallengeSchema>;
+export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
+
+/**
+ * What the panel should do next.
+ *
+ * `handOver` carries the reason so the fallback is explicable rather than a
+ * shrug — and so a log line says which component we did not know.
+ */
+export type FlowStep =
+  | { readonly kind: 'identify'; readonly challenge: IdentificationChallenge }
+  | { readonly kind: 'staySignedIn'; readonly challenge: UserLoginChallenge }
+  /**
+   * Sign-in succeeded. **There is nothing here to navigate to** — `idpPath` is
+   * Authentik's own destination and the panel's next move is always our
+   * `/api/auth/login`, which runs the OIDC exchange that gives us OUR session.
+   * Carried for logging only, and named so that following it reads as a mistake.
+   */
+  | { readonly kind: 'done'; readonly idpPath: string }
+  | { readonly kind: 'handOver'; readonly because: string };
+
+/**
+ * Read one challenge.
+ *
+ * ★ Never throws. A parse failure mid-sign-in must not be an exception on a
+ *   screen where somebody has just typed a password: it is a reason to hand over
+ *   to the identity provider's own page, which still works.
+ */
+export function readChallenge(raw: unknown): FlowStep {
+  const redirect = redirectChallengeSchema.safeParse(raw);
+  if (redirect.success) return { kind: 'done', idpPath: redirect.data.to };
+
+  const identify = identificationChallengeSchema.safeParse(raw);
+  if (identify.success) {
+    /*
+     * ★★ A STAGE THAT WANTS AN IDENTIFIER AND NOT A PASSWORD IS NOT OUR PANEL.
+     * `password_fields` is true on this tenant, which is what makes 00a a single
+     * submit. If a flow is reconfigured to ask for them separately, the design's
+     * one-action screen is no longer what the flow does, and rendering a
+     * password box that the stage will reject is worse than handing over.
+     */
+    if (!identify.data.password_fields) {
+      return { kind: 'handOver', because: 'identification-without-password' };
+    }
+    return { kind: 'identify', challenge: identify.data };
+  }
+
+  const stay = userLoginChallengeSchema.safeParse(raw);
+  if (stay.success) return { kind: 'staySignedIn', challenge: stay.data };
+
+  const component =
+    typeof raw === 'object' && raw !== null
+      ? (raw as { component?: unknown }).component
+      : undefined;
+  return {
+    kind: 'handOver',
+    because: typeof component === 'string' && component !== '' ? component : 'unreadable',
+  };
+}
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ A CHALLENGE DOES NOT DESCRIBE ITS OWN INPUTS
+ * ════════════════════════════════════════════════════════════════════════════
+ * `ak-stage-user-login` returns four keys — `flow_info`, `component`,
+ * `pending_user`, `pending_user_avatar` — and **requires a field none of them
+ * mention.** Posting `{}` answers:
+ *
+ *     response_errors: { remember_me: [{ string: "This field is required." }] }
+ *
+ * So a renderer written from the challenge shape alone sends `{}` and is told at
+ * runtime, by a user, that a field it has never heard of is missing.
+ *
+ * ★ The method generalises and is the only self-describing thing the executor
+ *   offers: **post an empty body to a new stage and read `response_errors` — the
+ *   errors are the field list.** Worth doing before writing any future renderer.
+ *
+ * ★★ AND IT MEANS THE CHECKBOX IS NOT DECORATIVE. The design's *"Keep me signed
+ *   in on this device"* maps to this field; the flow refuses to complete without
+ *   an answer. What it does NOT tell us is whether `false` shortens the session
+ *   or what the configured length is — so **the copy must not say "30 days"**
+ *   until somebody with admin access confirms it, on the same rule as the
+ *   lockout number that is also not being written.
+ */
+export const REMEMBER_ME = 'remember_me';
+
+/** The body that completes `ak-stage-user-login`. Measured, not inferred. */
+export function staySignedInBody(remember: boolean): Record<string, boolean> {
+  return { [REMEMBER_ME]: remember };
+}
+
+/**
+ * The flow this application is bound to.
+ *
+ * Taken from the authorize endpoint's own redirect chain rather than from a
+ * drive: `/application/o/authorize/` → `/flows/-/default/authentication/` →
+ * `/if/flow/default-authentication-flow/`.
+ *
+ * ★ The middle hop is an ALIAS and is deliberately not used. It resolves to
+ *   whatever the admin UI points it at, so building on it means our sign-in
+ *   panel silently starts driving a different flow than the one the application
+ *   authorises against.
+ */
+export const AUTHENTICATION_FLOW = 'default-authentication-flow';
+
+/**
+ * The sentence to show for a failed submit, or `null` when the stage reported
+ * nothing.
+ *
+ * ★ `non_field_errors` FIRST, AND THAT IS THE POINT. Authentik deliberately does
+ *   not say whether the email or the password was wrong — telling an attacker
+ *   which half they got right is how an address list becomes an account list. We
+ *   keep that property by preferring the non-field message and never attributing
+ *   a failure to a field ourselves.
+ */
+export function firstError(errors: FlowErrors | undefined): string | null {
+  if (!errors) return null;
+  const nonField = errors[NON_FIELD]?.find((e) => e.string.trim() !== '');
+  if (nonField) return nonField.string;
+  for (const list of Object.values(errors)) {
+    const found = list.find((e) => e.string.trim() !== '');
+    if (found) return found.string;
+  }
+  return null;
+}
