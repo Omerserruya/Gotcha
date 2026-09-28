@@ -157,6 +157,72 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
   });
 });
 
+describe('⚠⚠ the gate can send people to a sign-in screen on another origin', () => {
+  /*
+   * ═════════════════════════════════════════════════════════════════════════════
+   * THREE DESTINATIONS, AND TWO OF THEM MEAN OPPOSITE THINGS
+   * ═══════════════════════════════════════════════════════════════════════════
+   * `PLATFORM_LOGIN_URL` means "do not use our panel at all". `SIGN_IN_URL`
+   * means "our panel, on another host". Borrowing one variable for both would
+   * make a deployment that wanted the second silently get the first, and the
+   * symptom would be somebody landing on the legacy product’s login — which
+   * looks like a working sign-in.
+   */
+  const gate = async (env: Record<string, string>, path = '/en/home') => {
+    vi.resetModules();
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    const { default: freshProxy } = await import('./proxy');
+    const response = freshProxy(new NextRequest(`https://dev.gotcha.co.il${path}`));
+    const result = { status: response.status, location: response.headers.get('location') ?? '' };
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    return result;
+  };
+
+  const AUTH_SIGN_IN = 'https://auth-dev.gotcha.co.il/sign-in';
+
+  it('⚠⚠ sends them to the configured screen, on its own origin', async () => {
+    const { status, location } = await gate({ SIGN_IN_URL: AUTH_SIGN_IN });
+    expect(status).toBe(307);
+    expect(new URL(location).origin).toBe('https://auth-dev.gotcha.co.il');
+    expect(new URL(location).pathname).toBe('/sign-in');
+  });
+
+  it('⚠⚠ carries `returnTo` across the origin, or every deep link is lost', async () => {
+    /*
+     * The round trip the design requires now crosses TWO origin boundaries —
+     * here, and again when the panel hands over. Each hop has to keep it, and
+     * a test of only the same-host form passed while this one dropped it.
+     */
+    const { location } = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, '/en/inbox?c=abc');
+    expect(new URL(location).searchParams.get('returnTo')).toBe('/en/inbox?c=abc');
+  });
+
+  it('★★ `PLATFORM_LOGIN_URL` still wins over it', async () => {
+    /*
+     * Precedence, stated as a test because it is the kind of thing a later
+     * refactor reorders without noticing. Handing off to the platform’s own
+     * login is a deliberate deployment choice and neither our panel nor a
+     * relocated copy of it may preempt that.
+     */
+    const { location } = await gate({
+      SIGN_IN_URL: AUTH_SIGN_IN,
+      PLATFORM_LOGIN_URL: 'https://dev.gotcha.co.il/api/auth/login',
+    });
+    expect(new URL(location).host).toBe('dev.gotcha.co.il');
+    expect(new URL(location).pathname).toBe('/api/auth/login');
+  });
+
+  it('★★ and unset is today’s behaviour, unchanged', async () => {
+    // Both directions. A gate that always used a configured URL would be
+    // broken on every deployment that has none — which is all of them today.
+    const { status, location } = await gate({});
+    expect(status).toBe(307);
+    expect(new URL(location, 'https://dev.gotcha.co.il').pathname).toBe('/sign-in');
+    expect(location).not.toContain('auth-dev');
+  });
+});
+
 describe('⚠⚠ on the auth origin, this build serves sign-in and nothing else', () => {
   /*
    * ═════════════════════════════════════════════════════════════════════════════

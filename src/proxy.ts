@@ -136,12 +136,35 @@ export default function proxy(request: NextRequest): NextResponse {
        * When it is set, handing off to the platform's own login is a deliberate
        * deployment choice and our panel must not preempt it.
        *
+       * ── ★★ AND `SIGN_IN_URL` IS THE SAME SCREEN, SOMEWHERE ELSE ──
+       * Once sign-in is served from its own origin, our panel is still the
+       * destination — it is simply not on this host. That is a different fact
+       * from `PLATFORM_LOGIN_URL`, which means "do not use our panel at all",
+       * so it gets its own variable rather than borrowing one whose meaning is
+       * the opposite.
+       *
+       * ★ It is the symmetric twin of `PRODUCT_LOGIN_URL`: each build is told
+       *   where the OTHER one is, and neither is a boolean. The product points
+       *   at the sign-in origin; the sign-in origin points at the product.
+       *   Absent on both, they are the same deployment and nothing changes.
+       *
+       * ★ A whole URL, not an origin, for the reason `PRODUCT_LOGIN_URL` is:
+       *   composing one would need the other build's mount point, which this
+       *   build does not have and must not guess.
+       *
        * ── AND NO LOCALE IS CHOSEN HERE ──
        * `/sign-in` un-prefixed, so `intlMiddleware` negotiates it into
        * `/en/sign-in` or `/he/sign-in` on the next pass. Picking one here would
        * override the visitor's own `Accept-Language` with a guess.
+       *
+       * ★ That applies to the same-host form only. A configured URL is used
+       *   exactly as given — the negotiation then happens on the OTHER origin,
+       *   by its own middleware, from the browser's own `Accept-Language`. So
+       *   the configured value should name the un-prefixed path for the same
+       *   reason, and this file cannot enforce that.
        */
       const platformLogin = process.env.PLATFORM_LOGIN_URL;
+      const signInElsewhere = process.env.SIGN_IN_URL;
       /*
        * ★★ THE MOUNT POINT, FROM THE REQUEST ITSELF.
        *
@@ -157,7 +180,9 @@ export default function proxy(request: NextRequest): NextResponse {
       const mount = request.nextUrl.basePath;
       const loginUrl = platformLogin
         ? new URL(platformLogin)
-        : new URL(`${mount}/sign-in`, request.url);
+        : signInElsewhere
+          ? new URL(signInElsewhere)
+          : new URL(`${mount}/sign-in`, request.url);
       /*
        * `pathname` is already stripped of the prefix by Next, and it is stored
        * that way on purpose: the callback re-prefixes it with `appUrl` when it
