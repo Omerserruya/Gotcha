@@ -13,10 +13,17 @@ Next prefixes what it controls and nothing else:
 | `next/link`, the router | `fetch()` |
 | `redirect()` from `next/navigation` | `new URL()` |
 | `source` in `headers()` / `redirects()` / `rewrites()` | `NextResponse.redirect()` |
-| Sentry's `tunnelRoute` (it becomes a rewrite) | anything composed from a string |
+| Sentry's `tunnelRoute` (it becomes a rewrite) | a raw `<a href>` |
+| | `location.assign()` / `location.replace()` |
+| | anything composed from a string |
 
-**`fetch` and `new URL` are plain web APIs with no knowledge of a mount
-point.** Every defect below is one of those two.
+**These are plain web APIs with no knowledge of a mount point.**
+
+> **The right-hand column was two rows short when this was written**, and both
+> missing rows later produced a live defect — items 8 and 9 below. The list was
+> assembled from the sinks the audit had already found, which is the same
+> mistake the audit was written to describe. A sink absent from this table is
+> not a sink that is safe; it is one nobody had been bitten by yet.
 
 ## Fixed
 
@@ -81,11 +88,55 @@ sources are prefixed automatically. Reverted to the bare path.
 
 **Verified in the build**: `/v2/monitoring(/?)` in `routes-manifest.json`.
 
+### 8 · The sign-in button, which started the *other* product's login
+
+`href={loginHref}` where `loginHref` was a bare `/api/auth/login`. A raw `<a>`
+is resolved by the **browser** against the origin, and this one deliberately
+opts out of the router because it leaves the app for the identity provider —
+so it also opted out of the prefix. Measured on 2026-09-28: the journey ended
+at the legacy product's sign-in.
+
+The note written at the time said *"this was the LAST unprefixed
+browser-facing path in the app"*. It was not. See item 9.
+
+### 9 · A session expiring, which went to the same wrong place
+
+`startSignIn` in `auth/sign-out.ts` used `location.assign('/api/auth/login?…')`.
+Its only caller is `SessionExpiryWatcher`, so it fires on exactly the occasion
+nobody is watching a test suite.
+
+**And the sweep that should have caught it looked at the wrong granularity.**
+Item 8's note recorded that *"every other one — `sign-out.ts`,
+`browser-api.ts`, `login-state.ts`, `realtime-provider.tsx` — already calls
+`appPath`. They are all `fetch` calls."* Both halves were true and the
+conclusion was false: `sign-out.ts` calls `appPath` in `signOut`, four lines
+above the function that did not. **A file can satisfy a check and still hold a
+second call site that does not.**
+
+## The sweep, and what it cannot see
+
+`scripts/unprefixed-path-sweep.ts` now looks for this class mechanically. Two
+passes — a literal at a sink, and a `const` bound to a literal that reaches a
+sink in the same file — and it runs against all three real defects, the fixed
+forms and a `next/link` href on every invocation, exiting 2 rather than
+printing a clean result when its own probes disagree.
+
+**It still does not catch item 8**, measured rather than assumed: restoring
+that defect produced a clean run, because the real code is two hops and a file
+boundary — a literal into `loginBase`, into `loginHref`, into a component
+prop, and the `<a href>` in another file. Item 8 is covered by
+`sign-in/page.test.tsx` asserting the composed `href`, which is a test, not a
+sweep.
+
 ## Correct already, checked anyway
 
 - **The middleware matcher** `['/((?!api|_next|_vercel|.*\..*).*)']` matches
   against the path with the prefix already stripped, so the `api` exclusion
-  still excludes `/v2/api/…`.
+  still excludes `/v2/api/…`. **Correct for prefixes and not the whole story:**
+  the same two exclusions mean middleware does not run for `/api/…` at all, nor
+  for any path containing a dot, which later mattered for a guard that had
+  nothing to do with base paths. See `api/client/credential-surface.ts`. An
+  item cleared in one dimension is not cleared.
 - **`headers()`** — **verified in the build**: `source` came out as
   `/v2/:path*`.
 - **`next/image`** — the docs require the prefix in `src` by hand. There is no
@@ -283,10 +334,11 @@ up is not evidence of an app that works; probe a page that exercises a read.
 
 ## Not verified, and why
 
-- **The image has not been built.** Disk is at 90% with 7.8G free, and a build
-  of this image costs two to three of them on a machine where a build was
-  already killed by a full disk today. That is a shared resource and not mine to
-  spend without asking.
+- **The image has not been built.** *(Stale, kept as written: it was measured
+  at 90% / 7.8G free and was 99% / 944MB within the hour. A measurement has an
+  age, and a figure quoted from a document is a figure from whenever somebody
+  last looked.)* The image has since been built many times; this line is no
+  longer a blocker, only a record of one.
 - **A `.ts` config in a production-only install.** `next start` re-reads
   `next.config.ts`, and `typescript` is a devDependency. Next bundles
   `@next/swc-*`, which should parse it, but this is untested. If it fails it
