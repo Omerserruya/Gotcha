@@ -45,7 +45,17 @@ import styles from './SecondFactor.module.css';
  *   that keeps a lockout number off the failed-password message.
  */
 
-/** Measured from this deployment's own `otpauth://` URL: `digits=6`. */
+/**
+ * Measured from this deployment's own `otpauth://` URL: `digits=6`.
+ *
+ * ★★ AND NO USER-FACING STRING MAY NAME IT. The hint used to read "the moment
+ * the **sixth** digit lands" — a number owned by this constant, written out in
+ * prose in two catalogues, where changing the constant would leave both
+ * sentences confidently wrong and nothing would disagree. The count reaches the
+ * screen through `code.digit`'s `{of}` parameter and through the boxes
+ * themselves, which are visible; the hint says "the last digit" and cannot
+ * drift. Asserted in the test beside this file.
+ */
 const CODE_LENGTH = 6;
 
 export function SecondFactor({

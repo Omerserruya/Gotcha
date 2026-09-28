@@ -8,6 +8,7 @@ import {
   type AuthenticatorValidateChallenge,
 } from '@/api/contracts/auth-flow';
 import messages from '@/i18n/messages/en/auth.json';
+import hebrewMessages from '@/i18n/messages/he/auth.json';
 
 import { SecondFactor } from './SecondFactor';
 
@@ -62,6 +63,73 @@ const show = (over: Record<string, unknown> = {}, problem: string | null = null)
 beforeEach(() => {
   onSubmit.mockReset();
   onHandOver.mockReset();
+});
+
+describe('★★ the digit count is the constant’s to own, not the copy’s', () => {
+  it('⚠⚠ no visible sentence names how many digits there are', async () => {
+    /*
+     * ═════════════════════════════════════════════════════════════════════════
+     * THE HINT SAID “THE SIXTH DIGIT” IN TWO CATALOGUES
+     * ═════════════════════════════════════════════════════════════════════════
+     * `CODE_LENGTH` is measured from this deployment’s own `otpauth://` URL,
+     * and a number the code owns was also written out in prose — in English and
+     * in Hebrew. Change the constant and both sentences stay confidently wrong,
+     * the boxes and the sentence disagree, and nothing anywhere reddens.
+     *
+     * ★ It asserts the RENDERED text rather than the catalogue string, so it
+     *   also covers a future sentence that names the number somewhere else. The
+     *   count is allowed to reach the screen twice — as the boxes themselves,
+     *   which are visible and countable, and through `code.digit`’s `{of}`
+     *   parameter, which is derived. Both track the constant; prose does not.
+     */
+    show();
+    const boxes = screen.getAllByRole('textbox');
+
+    // Not a word list: the assertion is that no VISIBLE sentence carries the
+    // number, whatever word it is spelled with.
+    const visible = document.body.textContent ?? '';
+    expect(visible).not.toContain(String(boxes.length));
+    for (const word of ['six', 'sixth', 'eight', 'eighth']) {
+      expect(visible.toLowerCase(), word).not.toContain(word);
+    }
+
+    // Both directions: the count must still reach somebody who cannot see the
+    // boxes, or this is satisfied by a screen that says nothing at all.
+    expect(boxes[0]).toHaveAttribute('aria-label', `Digit 1 of ${boxes.length}`);
+    expect(boxes.at(-1)).toHaveAttribute('aria-label', `Digit ${boxes.length} of ${boxes.length}`);
+  });
+
+  it('\u26a0\u26a0 and the Hebrew catalogue does not name it either', () => {
+    /*
+     * \u2605 THE DEFECT WAS IN BOTH CATALOGUES, SO ONE LOCALE IS HALF A TEST.
+     * A guard that reads only English passes a Hebrew sentence that still says
+     * \u201cthe sixth digit\u201d \u2014 and the Hebrew reader is the one it would be wrong
+     * for.
+     *
+     * The numeral check is language-independent and carries no false-positive
+     * risk. The word check covers the one spelling that was actually there;
+     * it is not a claim to cover every way Hebrew can say six, because a word
+     * list that reddens on correct copy gets weakened until it matches
+     * nothing.
+     */
+    render(
+      <NextIntlClientProvider locale="he" messages={{ auth: hebrewMessages }}>
+        <SecondFactor
+          challenge={challenge()}
+          email="maya@avivco.il"
+          busy={false}
+          problem={null}
+          onSubmit={onSubmit}
+          onHandOver={onHandOver}
+        />
+      </NextIntlClientProvider>,
+    );
+    const visible = document.body.textContent ?? '';
+    expect(visible).not.toContain('6');
+    expect(visible).not.toContain('\u05e9\u05d9\u05e9\u05d9\u05ea');
+    // Both directions: the Hebrew panel must actually have rendered.
+    expect(visible).toContain(hebrewMessages.secondFactor.title);
+  });
 });
 
 describe('the code, and the shape a real server accepted', () => {
