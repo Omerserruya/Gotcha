@@ -72,6 +72,51 @@ export default async function SignInPage({
           `aria-hidden`: it is ambient copy, and a screen reader announcing a
           new sentence every five seconds while somebody is trying to sign in
           would be actively hostile. The panel says nothing needed to proceed.
+
+          ════════════════════════════════════════════════════════════════════
+          ★★ THESE NUMBERS ARE INVENTED, DELIBERATELY, BY A RULING ON
+             2026-09-28 — AND THE DESIGN SAYS THE OPPOSITE
+          ════════════════════════════════════════════════════════════════════
+          Screen 00a specifies: *"Real workspace data, not marketing copy"*, and
+          lists "the three rotating side-panel figures, fetched once per load,
+          unauthenticated and workspace-agnostic" as a backend requirement.
+
+          **There is no such endpoint and Omer ruled there will not be one for
+          now** — "let it be static, invent them, make it sensible but not too
+          small". That is recorded here rather than left to be rediscovered,
+          because building the design as written means publishing **live
+          platform-wide business volume on a public page**: a new unauthenticated
+          route returning how many people are mid-conversation and how many
+          messages were answered since midnight, scrapeable every five seconds by
+          anyone, in which a quiet week is legible to a competitor.
+
+          ⚠ SO A FUTURE READER COMPARING THIS FILE TO THE DESIGN WILL FIND A
+            DISCREPANCY, AND IT IS NOT A BUG. Changing it back is a commercial
+            decision, not a fix.
+
+          ── AND THE THIRD SLIDE IS NOT LIKE THE OTHER TWO ──
+          It used to read *"Your team, this week — You answered in four minutes
+          instead of forty. The queue never grew past fourteen."* Slides one and
+          two invent a number about the PLATFORM, which Omer's ruling covers.
+          That one invented a number **about the reader**, on a page where nobody
+          has identified themselves, and it was false for every single person who
+          ever saw it. A made-up personal statistic is a different object from a
+          made-up platform one, and no ruling about the latter licenses it.
+
+          It now says something true about the product instead, keeping the
+          rhythm and claiming nothing about whoever is looking.
+
+          ── AND THERE IS DELIBERATELY NO TEST GUARDING THIS ──
+          The obvious one — "no editorial string addresses the reader" — fails a
+          string that is correct: slide two's *"Every one of them left a trace
+          **you** can open, read and undo"* is second person and is a statement
+          about the PRODUCT's capability, not about the reader's week. The
+          property that matters is semantic and a word-list cannot see it.
+
+          A guard that reddens on correct copy gets weakened by the next person
+          until it matches nothing, which is how the `merge` caption guard and
+          the `text-transform` sweep each nearly went. The record above is the
+          guard; it is prose because the thing being protected is a judgement.
         */}
         <div className={styles.editorialStage} aria-hidden="true">
           {(['scale', 'actions', 'team'] as const).map((slide) => (
