@@ -48,12 +48,28 @@ import styles from './SecondFactor.module.css';
  *      one arrival that still starts OIDC directly rather than being sent
  *      back here.
  *
- * ★ The open question, stated as a question: this panel has driven the flow
- *   as far as the authenticator stage, and the handover restarts the journey
- *   at `authorize`. **Whether Authentik resumes that in-progress flow at the
- *   authenticator prompt, or begins a new one and asks for the password
- *   again, is unobserved.** If it restarts, the person types their password
- *   twice and the handover is a broken journey rather than a working one.
+ * ★★ THE QUESTION HAS BEEN WALKED, AND THE ANSWER IS THE FAVOURABLE ONE.
+ *   Driven through this panel to the second-factor stage and handed over from
+ *   exactly that state, `authorize` **resumes the in-progress flow** — it does
+ *   not start a new one:
+ *
+ *       after handover   /if/flow/default-authentication-flow/
+ *                        asksPasswordAgain: false
+ *       the screen       "Two-step verification … enter the code from your
+ *                        authenticator app", "Welcome back, akadmin"
+ *
+ *   So the handover lands in a continuing journey with the identity already
+ *   established, not a restart. Nobody types a password twice.
+ *
+ * ⚠ THE SCOPE, BECAUSE OVER-BROADNESS IS WHAT WAS WRONG HERE BEFORE. That was
+ *   measured with **`totp`** — still no `webauthn`, `duo` or `sms` device
+ *   exists on this tenant. What is established is the MECHANIC the three
+ *   journeys depend on: `authorize`, re-entered mid-flow, resumes. Strong
+ *   evidence for them; not a walk of them.
+ *
+ * ★ And it cost one correct password and zero wrong ones. A wrong code is a
+ *   counted authentication failure against the only enrolled account on this
+ *   deployment, and answering this needed the flow resumed, not completed.
  *
  * ★★ AND IT IS NOW THE ONLY PATH IN THIS APP THAT DELIBERATELY SHOWS THE
  *   IDENTITY PROVIDER'S OWN UI. Five entrances were closed so that nobody
