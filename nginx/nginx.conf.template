@@ -68,6 +68,12 @@ http {
         server frontend-v2:3000;
     }
 
+    # The sign-in screen's own build, root-mounted. See `frontend-auth` in
+    # docker-compose.yml for why it is a second image rather than a proxy.
+    upstream frontend_auth {
+        server frontend-auth:3000;
+    }
+
     # API documentation UI. DEV ONLY - gateway/nginx.prod.conf.template has no
     # equivalent upstream or location, so /api/docs simply does not exist in
     # production. That is a structural absence, not a runtime flag that could be
@@ -1878,6 +1884,74 @@ http {
     server {
         listen 80;
         server_name auth-dev.gotcha.co.il;
+
+        # ════════════════════════════════════════════════════════════════════
+        # ★★ THE SIGN-IN SCREEN — AND THIS BLOCK IS A SECURITY CONTROL
+        # ════════════════════════════════════════════════════════════════════
+        # `frontend_auth` is the WHOLE application, root-mounted. It serves
+        # /inbox, /en/home, /en/settings/billing and every other product route
+        # exactly as the product does. **Nothing in the image keeps them off
+        # this origin. This allowlist is the only thing that does.**
+        #
+        # So this is not routing, and it is not reviewed as routing: adding a
+        # prefix here exposes a product surface on the origin that exists to
+        # contain only a password field. The whole point of the separate origin
+        # is that an XSS anywhere in the product cannot reach this page; a
+        # product route served here puts the product back.
+        #
+        # ★ ONLY THESE PREFIXES. Everything else falls through to `location /`
+        #   below, which is Authentik - so an unlisted product route gets the
+        #   IdP's 404, not ours, and never a redirect back to the product.
+        #
+        # ⚠ A REDIRECT WOULD ALSO SATISFY "not 200". The test asserts the
+        #   status AND that nothing 3xx's across to dev.gotcha.co.il, because a
+        #   guard that merely fails to serve is one config line from leaking.
+        # ★★ AND THE LOCALE-PREFIXED FORM, WHICH THE FIRST ALLOWLIST MISSED.
+        #
+        # `/sign-in` answers 307 to `/en/sign-in` - next-intl negotiating, not
+        # us. That target does NOT start with `/sign-in`, so it fell through to
+        # Authentik and the whole screen 404'd behind a redirect that looked
+        # fine. **The allowlist was correct about the path it was given and
+        # wrong about the one the app actually serves.**
+        #
+        # ⚠ A REGEX HERE, AND THE BOUNDARY IS THE POINT. `(/|$)` is what stops
+        #   this matching `/en/sign-inbox`, and naming the locales explicitly is
+        #   what stops it becoming `/en/` - which would put the entire product
+        #   on this origin and silently undo the isolation this vhost exists
+        #   for. Anything looser than this is the leak.
+        #
+        # Regex locations are evaluated before the `location /` prefix below,
+        # so this wins over the Authentik catch-all without `^~`.
+        location ~ ^/(en|he)/sign-in(/|$) {
+            proxy_pass http://frontend_auth;
+            proxy_http_version 1.1;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Internal-Key    "";
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /sign-in {
+            proxy_pass http://frontend_auth;
+            proxy_http_version 1.1;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Internal-Key    "";
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # The bundle. Content-hashed names, and the sign-in page references only
+        # its own chunks - measured: no route manifest lists the product's
+        # pages, so this exposes assets rather than a map of the application.
+        location ^~ /_next/ {
+            proxy_pass http://frontend_auth;
+            proxy_http_version 1.1;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Internal-Key    "";
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
 
         client_max_body_size 50m;
 
