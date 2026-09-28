@@ -62,6 +62,39 @@ export default function proxy(request: NextRequest): NextResponse {
     return response;
   };
 
+  /*
+   * ═══════════════════════════════════════════════════════════════════════════
+   * ★★ ON THE AUTH ORIGIN, THIS BUILD SERVES SIGN-IN AND NOTHING ELSE
+   * ═══════════════════════════════════════════════════════════════════════════
+   * A root-mounted build of this source compiles EVERY route, so an auth host
+   * that serves it has the whole product available behind a gateway allowlist.
+   * That allowlist is a real security control and it was wrong on its first
+   * version — it permitted `/sign-in`, the app answered 307 to `/en/sign-in`,
+   * and the screen 404’d behind a redirect that looked fine. One rule, one
+   * place, one mistake away.
+   *
+   * ★★ AND IT IS DERIVED, NOT DECLARED. There is no `IS_AUTH_ORIGIN` flag,
+   *   because a boolean whose wrong value is a TOTAL OUTAGE is a new way to
+   *   take the product down, sitting in a compose file beside a dozen that do
+   *   nothing of the sort. `PRODUCT_LOGIN_URL` already means exactly "I am the
+   *   sign-in origin": it tells this build where the product is, which is only
+   *   ever true of a build that is not the product.
+   *
+   *   So the dangerous combination is unconstructible rather than documented.
+   *   To 404 the product you would have to tell the product where the product
+   *   is. And the two facts cannot drift: a build that hands over to the
+   *   product IS a build that should serve nothing but sign-in, and with a
+   *   separate flag those would be two assertions free to disagree.
+   *
+   * ★ A BARE 404, NOT THE PRODUCT’S NOT-FOUND PAGE. Rendering that here would
+   *   ship the product’s chrome and its vocabulary to the origin whose entire
+   *   purpose is to carry neither — the same mistake as the translation
+   *   catalogue, one layer out. An empty refusal is the correct body.
+   */
+  if (process.env.PRODUCT_LOGIN_URL && !PUBLIC_PATH_PATTERN.test(pathname)) {
+    return withSecurityHeaders(new NextResponse(null, { status: 404 }));
+  }
+
   if (!PUBLIC_PATH_PATTERN.test(pathname)) {
     /*
      * Either session counts. This is a redirect, not a security control — it

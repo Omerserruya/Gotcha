@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -152,6 +154,136 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
     const { status, location } = redirectFor('/en/home', 'gotcha_session=');
     expect(status).toBe(307);
     expect(location).toContain('/sign-in');
+  });
+});
+
+describe('⚠⚠ on the auth origin, this build serves sign-in and nothing else', () => {
+  /*
+   * ═════════════════════════════════════════════════════════════════════════════
+   * A SECOND REFUSAL, BECAUSE THE FIRST ONE IS ONE NGINX RULE
+   * ═══════════════════════════════════════════════════════════════════════════
+   * A root-mounted build compiles every route, so the gateway allowlist is a
+   * security control — and its first version permitted `/sign-in` while the
+   * app answered 307 to `/en/sign-in`, so the screen 404’d behind a redirect
+   * that looked fine. These assert the app refuses too.
+   *
+   * ★ Derived from `PRODUCT_LOGIN_URL`, not a flag. That variable already
+   *   means "I am the sign-in origin", so there is no second value to get
+   *   wrong and no way to 404 the product except by telling the product where
+   *   the product is.
+   */
+  const stubbed = async (env: Record<string, string>, path: string, cookie?: string) => {
+    vi.resetModules();
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    const { default: freshProxy } = await import('./proxy');
+    const response = freshProxy(
+      new NextRequest(`https://auth-dev.gotcha.co.il${path}`, {
+        headers: cookie ? { cookie } : undefined,
+      }),
+    );
+    const result = { status: response.status, location: response.headers.get('location') };
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    return result;
+  };
+
+  const AUTH_BUILD = { PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login' };
+
+  it('⚠⚠ refuses every product route, including ones nobody listed', async () => {
+    /*
+     * The last two matter most. An allowlist that covers the routes we thought
+     * of and leaks the one we did not passes every test built from the list —
+     * and the list is the thing most likely to be incomplete.
+     */
+    for (const path of [
+      '/en/home',
+      '/en/inbox',
+      '/he/inbox',
+      '/en/approvals',
+      '/en/settings/billing',
+      '/studio',
+      '/',
+    ]) {
+      const { status } = await stubbed(AUTH_BUILD, path);
+      expect(status, path).toBe(404);
+    }
+  });
+
+  it('⚠⚠ refuses rather than redirecting, so nothing leaks across origins', async () => {
+    /*
+     * A 307 to the product would also "not serve" the route, and would mean
+     * the isolation is one `Location` header from gone — and it would tell an
+     * unauthenticated visitor that the route exists and where.
+     */
+    const { location } = await stubbed(AUTH_BUILD, '/en/inbox');
+    expect(location).toBeNull();
+  });
+
+  it('★★ and still serves the sign-in screen, at every spelling of it', async () => {
+    // Both directions. A build that refused everything satisfies all of the
+    // above and is a blank auth origin.
+    for (const path of ['/sign-in', '/en/sign-in', '/he/sign-in', '/en/sign-in/']) {
+      const { status } = await stubbed(AUTH_BUILD, path);
+      expect(status, path).not.toBe(404);
+    }
+  });
+
+  it('⚠⚠ refuses a path that merely starts with the same letters', async () => {
+    // `/en/sign-inbox` is not the sign-in page. This is the boundary the
+    // pattern’s `(?:\/|$)` exists for, and the one a prefix allowlist misses.
+    const { status } = await stubbed(AUTH_BUILD, '/en/sign-inbox');
+    expect(status).toBe(404);
+  });
+
+  it('★★ and the PRODUCT build is untouched, or this is a total outage', async () => {
+    /*
+     * The failure mode that made a boolean flag the wrong shape: a value on the
+     * wrong image 404s the whole product. Deriving it makes that unconstructible
+     * — but unconstructible is a claim, and this is the assertion.
+     */
+    expect((await stubbed({}, '/en/home', 'gotcha_session=abc')).status).not.toBe(404);
+    expect((await stubbed({}, '/en/inbox', 'gotcha_session=abc')).status).not.toBe(404);
+    // Signed out, the product still redirects to sign-in rather than refusing.
+    const signedOut = await stubbed({}, '/en/home');
+    expect(signedOut.status).toBe(307);
+    expect(signedOut.location).toContain('/sign-in');
+  });
+});
+
+describe('⚠⚠ the variable that triggers the refusal can never be baked into an image', () => {
+  /*
+   * ═════════════════════════════════════════════════════════════════════════════
+   * THE ONE FAILURE MODE THIS DESIGN TRADES AWAY, ASSERTED RATHER THAN CLAIMED
+   * ═══════════════════════════════════════════════════════════════════════════
+   * `PRODUCT_LOGIN_URL` on the product’s own deployment 404s every route in the
+   * product. Deriving the refusal from it rather than from a flag makes that
+   * combination nonsense — you would be telling the product where the product
+   * is — but nonsense is not the same as impossible.
+   *
+   * ★ An `ENV` line in the Dockerfile would put it in EVERY container from that
+   *   image, which is the one way it could arrive without anybody choosing it
+   *   per-deployment. That is the half of the claim this repository can see.
+   *
+   * ⚠ THE OTHER HALF IS NOT HERE AND IS NOT COVERED. Whether the running
+   *   `/v2` service has this variable is a fact about a compose file in another
+   *   repository, and no test in this one can reach it. Said plainly rather
+   *   than left as an implied guarantee.
+   */
+  it('⚠⚠ the Dockerfile neither defaults nor exports it', () => {
+    const dockerfile = readFileSync('Dockerfile', 'utf8');
+    expect(dockerfile).not.toMatch(/^\s*ENV\s+PRODUCT_LOGIN_URL/m);
+    expect(dockerfile).not.toMatch(/^\s*ARG\s+PRODUCT_LOGIN_URL\s*=/m);
+  });
+
+  it('★ and the example file ships it commented out', () => {
+    /*
+     * `.env.example` is copied by people starting from it. An uncommented line
+     * there is how a local run — or a deployment assembled from it — acquires
+     * the variable without anybody deciding to.
+     */
+    const example = readFileSync('.env.example', 'utf8');
+    expect(example).toContain('PRODUCT_LOGIN_URL');
+    expect(example).not.toMatch(/^\s*PRODUCT_LOGIN_URL\s*=/m);
   });
 });
 
