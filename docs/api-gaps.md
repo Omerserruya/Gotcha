@@ -1,8 +1,10 @@
 # API Gap Report
 
 Confirmed against the backend source. Home re-checked 2026-09-08; the rest
-2026-09-06. Supersedes the earlier inferred version — several entries there
-were wrong, and are corrected here.
+2026-09-06. Screen 00c added 2026-09-28, read from the design rather than from
+the backend — it is the one section here describing capabilities that do not
+exist yet rather than ones checked against source. Supersedes the earlier
+inferred version — several entries there were wrong, and are corrected here.
 
 Ordered by what they block.
 
@@ -70,6 +72,64 @@ written four times sits below the person who wrote once. Raising it to ~45
 inverts that. This is a product call, not a defect, and has not been changed.
 
 ---
+
+## Blocking: screen 00c has no backend at all, and no ruling either
+
+Self-service sign-up. Read out of
+`design/Redesigning GOTCHA from scratch 5/GOTCHA Directions.dc.html` on
+2026-09-28 so the next person does not have to parse HTML for it.
+
+**What the screen is.** *"Create a workspace — everything an account needs, and
+not one field more."* Six fields, all required: name, business name, work
+email, password, mobile, website. Business type, team size and message volume
+are never asked — GOTCHA works them out from the website in the next step. The
+mobile is verified by code **in the same panel**, straight after submit,
+because recovery and two-step both run on it. Password strength is a live
+score against length and known breaches, not a submit-time rejection. Region,
+language, currency and timezone are detected and overridable.
+
+Two behaviours that are easy to miss and are the point of the screen:
+
+- ★ **The workspace is created able to read but not to send.** Nothing reaches
+  a customer until a person turns it on.
+- Submitting goes **straight into guided setup**, never an empty dashboard.
+- Invited users never see this screen; an invitation carries workspace, role
+  and team and lands on a single name-and-password step.
+
+**What it needs from the backend — none of which exists:**
+
+| 00c needs | Status |
+|---|---|
+| create workspace + owner user in **one** call (name, business, email, password, mobile, website) | Missing |
+| password policy + breach check, returned as a **live score** | Missing |
+| email verification link **and** mobile verification code, both issued on create | Missing |
+| region / language / currency / timezone detected server-side, overridable | Missing |
+| consent record: terms + DPA version, authority claim, timestamp, IP | Missing |
+| duplicate detection: existing workspace on this email domain, with a request-to-join path | Missing |
+| invitation acceptance carrying workspace, role and team | Missing |
+| name / subdomain availability check | Missing |
+| workspace created in a **cannot-send** state with an explicit activation step | Missing |
+
+No site-ownership proof is required at this stage — reading a public page needs
+none.
+
+**What the app does today.** `auth.signIn.footnote` reads *"New here? Ask your
+workspace admin for an invitation."* There is no create-workspace route, link
+or copy beyond that line. The screen is absent rather than half-built, and
+that footnote is itself a product statement nobody has ruled on.
+
+⚠ **AND THERE IS NO RECORDED RULING ON ANY OF THIS.** A "00c redirects to a
+waitlist" decision was relayed between sessions and **cannot be sourced** — not
+in `src/`, not here, not in any commit message, not in the design. It is
+written down now as *unsourced*, because a ruling that was made and never
+recorded is indistinguishable from one that never happened, and the next
+person to ask will otherwise inherit it as settled.
+
+★ **Why this is worth a decision rather than a backlog entry:** building 00c
+means a **public, unauthenticated write endpoint that creates tenants**, and
+since 2026-09-28 sign-in is served from its own origin. Every other write in
+this app sits behind a session. That is a materially different surface from
+anything now on that host.
 
 ## Blocking: realtime cannot be authenticated from a browser
 
