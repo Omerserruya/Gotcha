@@ -68,14 +68,17 @@ describe('⚠⚠ the hand-over target', () => {
   it('★ is a path on this host when nothing says otherwise', async () => {
     // Unset is the whole product today, and this asserts nothing changed.
     serverEnv.mockReturnValue({});
-    expect(await show()).toHaveAttribute('href', '/api/auth/login');
+    expect(await show()).toHaveAttribute('href', '/api/auth/login?handover=1');
   });
 
   it('⚠⚠ is the configured product URL when sign-in lives elsewhere', async () => {
     serverEnv.mockReturnValue({
       PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login',
     });
-    expect(await show()).toHaveAttribute('href', 'https://dev.gotcha.co.il/v2/api/auth/login');
+    expect(await show()).toHaveAttribute(
+      'href',
+      'https://dev.gotcha.co.il/v2/api/auth/login?handover=1',
+    );
   });
 
   it('⚠⚠ carries `returnTo` either way, or the deep link is lost at the hop', async () => {
@@ -88,13 +91,13 @@ describe('⚠⚠ the hand-over target', () => {
     serverEnv.mockReturnValue({});
     expect(await show({ returnTo: '/en/inbox?c=abc' })).toHaveAttribute(
       'href',
-      '/api/auth/login?returnTo=%2Fen%2Finbox%3Fc%3Dabc',
+      '/api/auth/login?handover=1&returnTo=%2Fen%2Finbox%3Fc%3Dabc',
     );
 
     serverEnv.mockReturnValue({ PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login' });
     expect(await show({ returnTo: '/en/inbox?c=abc' })).toHaveAttribute(
       'href',
-      'https://dev.gotcha.co.il/v2/api/auth/login?returnTo=%2Fen%2Finbox%3Fc%3Dabc',
+      'https://dev.gotcha.co.il/v2/api/auth/login?handover=1&returnTo=%2Fen%2Finbox%3Fc%3Dabc',
     );
   });
 
@@ -108,6 +111,30 @@ describe('⚠⚠ the hand-over target', () => {
     expect(await show({ returnTo: '/en/home' })).toHaveTextContent('/en/home');
     expect(await show()).toHaveTextContent('no-return');
   });
+});
+
+it('⚠⚠ always carries the hand-over marker, or this panel loops on itself', async () => {
+  /*
+   * ═══════════════════════════════════════════════════════════════════════════
+   * `/api/auth/login` now sends anyone WITHOUT the marker to the sign-in
+   * surface — reaching the OIDC start cold renders the identity provider's
+   * own login page, which is the screen the separation exists to prevent.
+   * This panel is the one legitimate direct caller.
+   *
+   * Without it: panel → `/api/auth/login` → panel → … **on the front door**,
+   * with no error anywhere and nothing to read but a spinning tab.
+   *
+   * Asserted for every shape this URL takes, because the loop does not care
+   * which branch built it.
+   */
+  for (const env of [{}, { PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login' }]) {
+    for (const search of [{}, { returnTo: '/en/inbox?c=abc' }]) {
+      serverEnv.mockReturnValue(env);
+      const href = (await show(search)).getAttribute('href') ?? '';
+      const query = new URL(href, 'https://dev.gotcha.co.il').searchParams;
+      expect(query.get('handover'), href).toBe('1');
+    }
+  }
 });
 
 describe('★ the error a person is sent back with', () => {

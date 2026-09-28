@@ -5,6 +5,7 @@ import { Logo } from '@/design-system/brand/Logo';
 import { Text } from '@/design-system/primitives/text/Text';
 import { appPath } from '@/lib/base-path';
 import { serverEnv } from '@/config/env.server';
+import { HANDOVER_PARAM } from '@/app/api/auth/login/route';
 
 import styles from './SignIn.module.css';
 
@@ -78,8 +79,22 @@ export default async function SignInPage({
    *   The variable is how the origin move becomes configuration instead of a
    *   code change, and it ships before the move so the move is one edit.
    */
+  /*
+   * ★★ THE HAND-OVER CARRIES THE MARKER, OR THIS PANEL LOOPS ON ITSELF.
+   * `/api/auth/login` now sends anyone WITHOUT it to the sign-in surface,
+   * because reaching the OIDC start cold renders the provider's own login page
+   * — the screen the separation exists to prevent. This panel is the one
+   * legitimate direct caller: by the time it navigates there it has already
+   * created the provider session, so `authorize` returns silently.
+   *
+   * Without the marker: panel → `/api/auth/login` → panel → … on the front
+   * door. The constant is imported rather than spelled again for exactly that
+   * reason.
+   */
   const loginBase = serverEnv().PRODUCT_LOGIN_URL ?? appPath('/api/auth/login');
-  const loginHref = `${loginBase}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
+  const handOver = new URLSearchParams({ [HANDOVER_PARAM]: '1' });
+  if (returnTo) handOver.set('returnTo', returnTo);
+  const loginHref = `${loginBase}?${handOver.toString()}`;
   const knownError = KNOWN_ERRORS.find((candidate) => candidate === error);
 
   return (
