@@ -19,9 +19,15 @@ import styles from './SignInPanel.module.css';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THIS IS AN OPTIMISATION OVER A PATH THAT STILL EXISTS
  * ════════════════════════════════════════════════════════════════════════════
- * Handing over to the identity provider's own page still works and is still
- * wired. This panel drives the same flow in place, so a returning agent starts a
- * shift in one action instead of loading a 3 MB page on somebody else's origin.
+ * Handing over to the identity provider's own page is still wired. This panel
+ * drives the same flow in place, so a returning agent starts a shift in one
+ * action instead of loading a 3 MB page on somebody else's origin.
+ *
+ * ⚠ It used to read "still works and is still wired". **Wired is checked;
+ *   works was not.** See `SecondFactor.tsx` for what is and is not observed
+ *   about where that navigation lands — written once there rather than
+ *   restated here, because this claim existed in three files and all three
+ *   aged at the same time.
  *
  * **Everything it cannot handle, it hands back.** An unknown stage, an
  * unreadable body, an identification stage that does not want a password — all
@@ -29,7 +35,14 @@ import styles from './SignInPanel.module.css';
  * this screen did before this panel existed.
  *
  * ★★ AND THE SUCCESS PATH IS THE SAME NAVIGATION, WHICH IS WHY THIS IS SAFE.
- * Completing the flow sets an Authentik session on `.gotcha.co.il`; going to
+ * Completing the flow leaves the provider holding a session **on the
+ * provider's own origin**, which is where `authorize` is served from — that,
+ * and not any particular cookie domain, is what makes the next hop silent.
+ * (This line used to name `.gotcha.co.il`. Since sign-in moved to its own
+ * host the shared domain is no longer what the handover depends on, and
+ * depending in prose on a cookie attribute nobody here has read is how the
+ * session cookie's missing `domain` came to be load-bearing unnoticed.) Going
+ * to
  * `/api/auth/login` then runs OIDC, sees that session, and returns silently with
  * a code. Handing over goes to the same URL with no session, so the identity
  * provider renders its page and the person finishes there. **One destination,

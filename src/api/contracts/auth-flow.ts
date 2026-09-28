@@ -355,8 +355,14 @@ export type FlowStep =
  * Read one challenge.
  *
  * ★ Never throws. A parse failure mid-sign-in must not be an exception on a
- *   screen where somebody has just typed a password: it is a reason to hand over
- *   to the identity provider's own page, which still works.
+ *   screen where somebody has just typed a password: it is a reason to hand
+ *   over to the identity provider's own page.
+ *
+ * ⚠ That handover used to be described here as one that "still works". It is
+ *   the LEAST walked path in the flow — by definition, since it fires when the
+ *   body is one we could not read. The single account of what it does, and of
+ *   what about it is unobserved, is in `features/auth/SecondFactor.tsx`; three
+ *   copies of that sentence went stale together and are not restated here.
  */
 export function readChallenge(raw: unknown): FlowStep {
   const redirect = redirectChallengeSchema.safeParse(raw);
