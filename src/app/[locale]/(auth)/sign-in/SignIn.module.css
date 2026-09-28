@@ -14,8 +14,31 @@
     overflow: hidden;
   }
 
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ★★ 508px IS THE DESIGN'S NUMBER, NOT A CHOICE
+   * ═════════════════════════════════════════════════════════════════════════
+   * `Directions.dc.html`, screen 00a, the mock's own markup:
+   *
+   *     frame     width:1440px height:900px padding:12px radius:26px  #121212
+   *     editorial width:508px  flex:none    padding:32px 34px
+   *
+   * It was 460px — 48px narrow, which is what "the left column is too narrow"
+   * was. Omer read it off the screen; this is the same finding with the
+   * design's number attached.
+   *
+   * ★ `--size-frame-inset` is already 12px and `--space-32` is 32px, so the
+   *   frame and the block padding were right. Only the width was not.
+   *
+   * ⚠ THE INLINE PADDING IS 32px HERE AND 34px IN THE DESIGN, AND I HAVE LEFT
+   *   IT. `34px` appears nowhere else in the product; carrying it would mean a
+   *   one-screen token or a raw literal beside a scale that exists to stop
+   *   exactly that. 2px of inline padding against 48px of width is a different
+   *   order of thing — but it IS a deviation from "stick to the design", so it
+   *   is written here rather than absorbed silently. Reported alongside.
+   */
   .editorial {
-    inline-size: 460px;
+    inline-size: 508px;
     flex: none;
     display: flex;
     flex-direction: column;
