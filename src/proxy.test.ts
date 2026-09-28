@@ -168,11 +168,20 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
    * symptom would be somebody landing on the legacy product’s login — which
    * looks like a working sign-in.
    */
-  const gate = async (env: Record<string, string>, path = '/en/home') => {
+  const gate = async (
+    env: Record<string, string>,
+    path = '/en/home',
+    /** How the request ARRIVED, which is not always how the visitor sees it. */
+    arrival: { host?: string; forwardedHost?: string } = {},
+  ) => {
     vi.resetModules();
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
     const { default: freshProxy } = await import('./proxy');
-    const response = freshProxy(new NextRequest(`https://dev.gotcha.co.il${path}`));
+    const response = freshProxy(
+      new NextRequest(`https://${arrival.host ?? 'dev.gotcha.co.il'}${path}`, {
+        headers: arrival.forwardedHost ? { 'x-forwarded-host': arrival.forwardedHost } : undefined,
+      }),
+    );
     const result = { status: response.status, location: response.headers.get('location') ?? '' };
     vi.unstubAllEnvs();
     vi.resetModules();
@@ -282,6 +291,43 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
       '/en/sign-in',
     );
     expect(status).not.toBe(307);
+  });
+
+  it('⚠⚠ the loop guard also reads `x-forwarded-host`, which is the real deployment', async () => {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════════
+     * `nextUrl.host` IS THE CONNECTION'S HOST, NOT THE VISITOR'S
+     * ═══════════════════════════════════════════════════════════════════════════
+     * Measured against the built image: a probe reaching the container
+     * directly saw `nextUrl.host` = `127.0.0.1:3999` and Next **ignored
+     * `x-forwarded-host` entirely**. Behind the gateway it is usually the
+     * public host because nginx passes `Host` through, and "usually" is not
+     * something to rest a loop guard on.
+     *
+     * This is the case a container probe cannot construct — it cannot stand
+     * where the code stands — and it is trivial here, which is the division of
+     * labour rather than a gap.
+     */
+    const { status } = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, '/en/sign-in', {
+      host: 'frontend-v2:3000',
+      forwardedHost: 'auth-dev.gotcha.co.il',
+    });
+    expect(status).not.toBe(307);
+  });
+
+  it('★★ and a forwarded host that is NOT the target still relocates', async () => {
+    /*
+     * Both directions, and this is the one that matters in production: the
+     * visitor arrives on the product host, the target is the auth host, and
+     * the redirect must happen. A guard that fired on any forwarded header at
+     * all would satisfy the test above and break every real request.
+     */
+    const { status, location } = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, '/en/sign-in', {
+      host: 'frontend-v2:3000',
+      forwardedHost: 'dev.gotcha.co.il',
+    });
+    expect(status).toBe(307);
+    expect(new URL(location).host).toBe('auth-dev.gotcha.co.il');
   });
 
   it('★★ and unset is today’s behaviour, unchanged', async () => {

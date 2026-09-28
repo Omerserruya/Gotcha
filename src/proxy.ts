@@ -124,10 +124,31 @@ export default function proxy(request: NextRequest): NextResponse {
    *   point of the variable is another origin, so a value that is not one is a
    *   misconfiguration, and the safe reading of it is today's behaviour rather
    *   than a redirect chain nobody can escape.
+   *
+   * ★★ AND IT ASKS TWO SOURCES FOR "THIS HOST", BECAUSE ONE OF THEM IS THE
+   *   CONNECTION'S AND NOT THE VISITOR'S. Measured against the built image:
+   *   `nextUrl.host` is the host the request ARRIVED on and **ignores
+   *   `x-forwarded-host` entirely** — a probe reaching the container directly
+   *   saw `127.0.0.1:3999` and a redirect emitted to `127.0.0.1:3996`.
+   *
+   *   Behind the gateway that is usually the public host, because nginx passes
+   *   `Host` through. "Usually" is not a property to rest a loop guard on, so
+   *   the forwarded header is consulted as well and either match is enough.
+   *
+   * ★ Worth being exact about which way this fails. If `nextUrl.host` is the
+   *   INTERNAL host and the forwarded header is absent, the comparison cannot
+   *   match and the guard does not fire — but the only configuration that
+   *   reaches it is one where `SIGN_IN_URL` names this same product, which is
+   *   already broken. **A wrong host weakens the loop guard; it never breaks
+   *   the correct configuration**, where the target is a different origin and
+   *   the redirect must happen.
    */
   if (signInElsewhere && !process.env.PRODUCT_LOGIN_URL && PUBLIC_PATH_PATTERN.test(pathname)) {
     const moved = new URL(signInElsewhere);
-    if (moved.host !== request.nextUrl.host) {
+    const hostsHere = new Set(
+      [request.nextUrl.host, request.headers.get('x-forwarded-host')].filter(Boolean),
+    );
+    if (!hostsHere.has(moved.host)) {
       for (const [key, value] of request.nextUrl.searchParams) {
         moved.searchParams.set(key, value);
       }
