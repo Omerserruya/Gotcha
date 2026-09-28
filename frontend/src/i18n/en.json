@@ -1632,7 +1632,7 @@
         "viewPricing": "View pricing in Shopify",
         "manageInShopify": "Manage in Shopify",
         "choosePlan": "Choose plan in Shopify",
-        "pricingNote": "Shopify shows the price and takes the payment.",
+        "pricingNote": "Shopify displays the Connector price and bills the subscription through the merchant's Shopify account.",
         "accessOn": "Shopify features are on.",
         "accessOff": "Shopify features are off.",
         "coreUnaffected": "GOTCHA Core and your other channels are unaffected.",

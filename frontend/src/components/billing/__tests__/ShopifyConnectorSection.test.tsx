@@ -227,6 +227,15 @@ describe("price", () => {
     expect(container.textContent).not.toMatch(/\$\s?\d|\d+\s?(USD|ILS|₪)/);
     expect(container.textContent).toContain(EN.shopifyConnector.pricingNote);
   });
+
+  it("names Shopify as both the price display and the biller", () => {
+    // The reviewer-facing claim: we are not quoting a price and not taking the
+    // money. Both halves have to be said, in both locales.
+    expect(EN.shopifyConnector.pricingNote).toMatch(/Shopify displays/i);
+    expect(EN.shopifyConnector.pricingNote).toMatch(/bills the subscription through the merchant's Shopify account/i);
+    expect(HE.shopifyConnector.pricingNote).toMatch(/[\u0590-\u05FF]/);
+    expect(HE.shopifyConnector.pricingNote).toContain("Shopify");
+  });
 });
 
 describe("loading and failure", () => {
