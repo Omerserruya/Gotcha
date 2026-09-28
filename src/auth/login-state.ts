@@ -107,13 +107,27 @@ export async function unsealLoginState(sealed: string | undefined): Promise<Logi
  * URL before it parses**, so `"/\t/evil.example"` satisfies every check and
  * then becomes `//evil.example`. Measured, not reasoned.
  *
- * ★ **The base path was the only thing hiding it here.** `appUrl` builds
- *   `${origin}${BASE_PATH}${path}`, so under `/v2` the smuggled authority
- *   becomes `/v2\t/evil.example` -> `/v2/evil.example`, which is on-site. At
- *   `BASE_PATH === ''` — local dev today, and **a root-mounted build of this
- *   same source, which is exactly what serving sign-in from its own origin
- *   needs** — nothing absorbs it. A deployment variable was standing in for a
- *   security control.
+ * ★ **THIS SINK WAS NEVER THE REACHABLE ONE, AND MY FIRST ACCOUNT OF WHY WAS
+ *   WRONG.** I wrote that the `/v2` prefix was hiding it and that a
+ *   root-mounted build would expose it. Measured at both mount points, the
+ *   callback is safe at both:
+ *
+ *       BASE_PATH="/v2"  ->  https://app/v2//evil.example   on-site
+ *       BASE_PATH=""     ->  https://app//evil.example      on-site
+ *
+ *   `appUrl` CONCATENATES — `${origin}${BASE_PATH}${path}` — so the authority
+ *   is already fixed before the candidate is appended and there is no
+ *   authority position left to smuggle into. The prefix was not the
+ *   protection; the composition was.
+ *
+ *   The live sink was the other one: `safeInternalPath` feeding an `href`,
+ *   which the **browser** resolves against the document, with no prefix in
+ *   front of it at all. Same hole, same day, and the half I could not reach
+ *   from here was the half that mattered.
+ *
+ * ★ So this function is fixed because the predicate was wrong, not because
+ *   this caller was exploitable. Both are worth saying; only one of them was
+ *   urgent.
  *
  * The predicate now lives in one place. This differs only in what it says when
  * the answer is no: a rejected link renders nothing, a rejected return path

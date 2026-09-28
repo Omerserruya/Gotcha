@@ -10,6 +10,7 @@ import {
 import {
   failedInvoices,
   receiptAbsence,
+  receiptHref,
   totalAmount,
   type Invoice,
 } from '@/api/contracts/invoices';
@@ -273,6 +274,7 @@ export async function Invoices({ invoices }: { readonly invoices: readonly Invoi
       <ul className={styles.invoiceList}>
         {invoices.map((invoice) => {
           const absence = receiptAbsence(invoice);
+          const receipt = receiptHref(invoice);
           const when = invoice.issuedAt ?? invoice.createdAt;
           return (
             <li key={invoice.id} className={styles.invoice} data-testid={`invoice-${invoice.id}`}>
@@ -289,14 +291,40 @@ export async function Invoices({ invoices }: { readonly invoices: readonly Invoi
               {/*
                 Why there is no receipt, rather than a blank that reads as a
                 lost document. `providerPdfUrl` is written with PAID.
+
+                ★★ AND THE LINK IS THE VALIDATED ONE, NOT THE RAW FIELD. This
+                read `href={invoice.providerPdfUrl ?? '#'}` — a string the
+                payment provider wrote, straight into an `href`, with the guard
+                for exactly that sitting unused two directories away. The `??
+                '#'` was dead, because the branch already required a URL; it is
+                gone rather than left as a fallback that renders a link which
+                does nothing.
+
+                ⚠ AND NO TEST CAN SEE THIS HALF OF THE FIX. Restoring the raw
+                `href` here as a mutation leaves every assertion green, because
+                `receiptAbsence` now consults the same guard and this branch
+                never runs for a value it would refuse. The security property
+                lives in the contract; what is here is the type narrowing plus
+                defence in depth, and it is recorded as untested rather than
+                counted as verified. Two guards, one test — the outer one means
+                the inner is never exercised.
               */}
-              {absence === null ? (
-                <a className={styles.invoiceReceipt} href={invoice.providerPdfUrl ?? '#'}>
+              {/*
+                ★ BOTH, NOT EITHER. `absence` carries the PAID rule; `receipt`
+                carries the safety one. Testing only the second would show a
+                receipt link on a FAILED invoice that happened to carry a URL —
+                contractually possible, and a charge that did not go through is
+                the last row to hand somebody a receipt for.
+              */}
+              {absence === null && receipt !== null ? (
+                <a className={styles.invoiceReceipt} href={receipt}>
                   {t('invoices.receipt')}
                 </a>
               ) : (
                 <span className={styles.invoiceNoReceipt} data-testid={`no-receipt-${invoice.id}`}>
-                  {t(`invoices.noReceipt.${absence}` as 'invoices.noReceipt.not_paid')}
+                  {t(
+                    `invoices.noReceipt.${absence ?? 'unusable'}` as 'invoices.noReceipt.not_paid',
+                  )}
                 </span>
               )}
             </li>

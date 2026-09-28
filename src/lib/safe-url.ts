@@ -19,13 +19,44 @@ const SAFE_MEDIA_SCHEMES = new Set(['https:', 'blob:']);
  *
  * Callers render nothing rather than an inert link, so a rejected URL is
  * visible as a missing affordance rather than a broken one.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ IT USED TO RESOLVE A RELATIVE VALUE ONTO THE SENTINEL AND RETURN IT
+ * ════════════════════════════════════════════════════════════════════════════
+ * The base was `https://invalid.example` — correct in intent, so a relative
+ * value could not silently become a link on OUR origin. But the resolved URL
+ * was then returned:
+ *
+ *     safeLinkUrl("/if/flow/recovery/")  ->  "https://invalid.example/if/flow/recovery/"
+ *     safeLinkUrl("example.com/a")       ->  "https://invalid.example/example.com/a"
+ *
+ * `.invalid` cannot resolve, so both are dead links — and **an inert link that
+ * looks real is exactly what the contract above promises callers they will
+ * never be handed.** It also made the function unusable for the one caller
+ * that most needs it: the identity provider sends `recovery_url` as a path.
+ *
+ * A relative value is now handled as what it is — an in-app path — and gets
+ * the same treatment as anything else going into an `href`.
  */
 export function safeLinkUrl(candidate: string | null | undefined): string | null {
   if (!candidate) return null;
+  /*
+   * A leading `/` means an in-app path, and `safeInternalPath` is the stricter
+   * predicate for exactly that. Routing it there rather than duplicating the
+   * check is what keeps the tab/LF/CR handling in one place — the same
+   * duplication that produced the hole it now guards against.
+   */
+  if (candidate.startsWith('/')) return safeInternalPath(candidate);
   try {
-    const url = new URL(candidate, 'https://invalid.example');
+    const url = new URL(candidate);
     return SAFE_SCHEMES.has(url.protocol) ? url.toString() : null;
   } catch {
+    /*
+     * Not absolute and not a path — `example.com/a`, `../up`, free text. There
+     * is no reading of it that is both safe and useful: guessing `https://` in
+     * front turns somebody's typo into a navigation to a host we did not
+     * check.
+     */
     return null;
   }
 }
@@ -77,6 +108,15 @@ const RESOLUTION_BASE = 'https://internal-path.invalid';
  *
  * Measured, not reasoned: `\t`, `\n` and `\r` each produce a fully off-site
  * navigation; `\0` does not, being percent-encoded rather than stripped.
+ *
+ * ★★ **AND THIS IS THE SINK THAT WAS LIVE.** An `href` is resolved by the
+ *   BROWSER against the document, so nothing stands in front of it: on the
+ *   served page, `<a href="/<TAB>/evil.example">` navigates to
+ *   `https://evil.example/`. The auth caller of the same predicate was safe
+ *   all along — it concatenates onto a fixed authority — which is the opposite
+ *   of what I first wrote. The reachable half was the one rendered into
+ *   markup, and it needs no crafted link: `link` on a notification is a
+ *   free-text column, so **a stored row is the whole attack**.
  *
  * ── SO IT NO LONGER INSPECTS THE STRING; IT RESOLVES IT ──
  * The candidate is parsed against an origin we can never be served from and

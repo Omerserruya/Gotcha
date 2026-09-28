@@ -7,6 +7,7 @@ import { firstError, staySignedInBody, type FlowStep } from '@/api/contracts/aut
 import { startFlow, submitStage } from '@/api/client/flow-executor';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
+import { safeLinkUrl } from '@/lib/safe-url';
 
 import { SecondFactor } from './SecondFactor';
 
@@ -257,7 +258,30 @@ export function SignInPanel({
     );
   }
 
-  const recovery = step.challenge.recovery_url;
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ A THIRD PARTY'S STRING, ON THE ONE PAGE WITH A PASSWORD FIELD
+   * ════════════════════════════════════════════════════════════════════════
+   * `recovery_url` is `z.string().nullable()` in a LOOSE contract — the shape
+   * is Authentik's, not ours, and by design we do not bound it. This rendered
+   * it straight into an `href`.
+   *
+   * A `javascript:` value there executes in the origin that holds the password
+   * field, which is the exact surface the narrowed CSP on this route exists to
+   * protect. The CSP would not stop it either: it is a navigation, not a
+   * script source.
+   *
+   * ★ Not a claim that Authentik would send one. It is that the contract
+   *   permits any string and the sink is the most sensitive one in the app,
+   *   and those two facts together are the whole argument — the same reason
+   *   the loose contract was right and also why it cannot be the last word.
+   *
+   * ★ `safeLinkUrl` and not `safeInternalPath`, because this value is a path
+   *   today (`/if/flow/…` on the provider) and becomes an absolute URL the
+   *   moment sign-in moves to its own origin. It accepts both and refuses
+   *   everything else.
+   */
+  const recovery = safeLinkUrl(step.challenge.recovery_url);
 
   return (
     <form

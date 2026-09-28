@@ -47,7 +47,8 @@
     },
     "noReceipt": {
       "not_paid": "No receipt — a receipt is issued when a charge is paid, and this one wasn't.",
-      "missing": "Paid, but the receipt hasn't arrived from the payment provider."
+      "missing": "Paid, but the receipt hasn't arrived from the payment provider.",
+      "unusable": "Paid, and a receipt arrived — but not in a form we could open. Ask support to re-send it."
     }
   },
   "autoPurchase": {

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { safeLinkUrl } from '@/lib/safe-url';
+
 /**
  * Invoices — screen 17.
  *
@@ -59,9 +61,29 @@ export const invoiceListSchema = z
   .object({ invoices: z.array(invoiceSchema).default([]) })
   .transform(({ invoices }) => invoices);
 
-/** A receipt exists only once the invoice is paid. */
+/**
+ * The receipt link, validated, or null.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ `providerPdfUrl` IS `z.string()`, AND IT WENT STRAIGHT INTO AN `href`
+ * ════════════════════════════════════════════════════════════════════════════
+ * The contract says "a URL"; the type says "a string the payment provider
+ * sent". Nothing between the two ever checked which, and the screen rendered
+ * it as `href={invoice.providerPdfUrl ?? '#'}` — the precise sink
+ * `safeLinkUrl` was written for and, until now, **the module had no callers at
+ * all.** A guard nobody calls is worse than no guard, because its existence is
+ * the reassurance.
+ *
+ * `javascript:` in a billing row is the whole attack: no crafted link, no
+ * navigation, just a value on a record.
+ */
+export function receiptHref(invoice: Invoice): string | null {
+  return safeLinkUrl(invoice.providerPdfUrl);
+}
+
+/** A receipt exists only once the invoice is paid, and only if we can open it. */
 export function hasReceipt(invoice: Invoice): boolean {
-  return invoice.status === 'PAID' && Boolean(invoice.providerPdfUrl);
+  return invoice.status === 'PAID' && receiptHref(invoice) !== null;
 }
 
 /**
@@ -70,10 +92,21 @@ export function hasReceipt(invoice: Invoice): boolean {
  * `null` when there is one. Otherwise the reason, so the screen can say it
  * rather than leaving a blank cell that reads as a lost document.
  */
-export function receiptAbsence(invoice: Invoice): 'not_paid' | 'missing' | null {
+export function receiptAbsence(invoice: Invoice): 'not_paid' | 'missing' | 'unusable' | null {
   if (hasReceipt(invoice)) return null;
   // A failed or draft invoice was never paid, so no receipt was ever issued.
-  return invoice.status === 'PAID' ? 'missing' : 'not_paid';
+  if (invoice.status !== 'PAID') return 'not_paid';
+  /*
+   * ★★ THREE REASONS, NOT TWO — AND THE THIRD IS THE ONE SOMEBODY MUST SEE.
+   * "Paid, but the receipt hasn't arrived from the payment provider" is a
+   * sentence about the provider being slow. If a receipt DID arrive and we
+   * refused it, that sentence is false, it blames the wrong party, and it
+   * reads as something that will fix itself — so nobody ever looks.
+   *
+   * A refused URL means the provider sent something we could not safely open,
+   * which is a thing to investigate rather than to wait out.
+   */
+  return invoice.providerPdfUrl ? 'unusable' : 'missing';
 }
 
 /** Charges that did not go through. The thing a merchant most needs to see. */

@@ -6,6 +6,7 @@ import {
   invoiceListSchema,
   invoiceSchema,
   receiptAbsence,
+  receiptHref,
   totalAmount,
   type Invoice,
 } from './invoices';
@@ -54,6 +55,48 @@ describe('a failed invoice has no receipt, and that is consistency', () => {
 
   it('says nothing when the receipt is there', () => {
     expect(receiptAbsence(invoice({ status: 'PAID', providerPdfUrl: 'https://x' }))).toBeNull();
+  });
+
+  /*
+   * ══════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ THE THIRD REASON: A RECEIPT ARRIVED AND WE WOULD NOT OPEN IT
+   * ══════════════════════════════════════════════════════════════════════════
+   * `providerPdfUrl` is `z.string()` — "a string the payment provider sent",
+   * not "a URL". It went into `href` unchecked, with the guard written for
+   * exactly that sitting unused in `lib/safe-url.ts`.
+   */
+  it('⚠⚠ refuses a receipt URL that is not a URL we will navigate to', () => {
+    for (const hostile of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'vbscript:msgbox(1)',
+    ]) {
+      expect(receiptHref(invoice({ status: 'PAID', providerPdfUrl: hostile })), hostile).toBeNull();
+      expect(hasReceipt(invoice({ status: 'PAID', providerPdfUrl: hostile })), hostile).toBe(false);
+    }
+  });
+
+  it('★★ and says so as its own reason, not as "the provider was slow"', () => {
+    /*
+     * `missing` reads as something that will fix itself, blames the provider,
+     * and is FALSE here — a receipt did arrive. Three states, never two: the
+     * one that needs somebody to look must not render as the one that does
+     * not.
+     */
+    expect(receiptAbsence(invoice({ status: 'PAID', providerPdfUrl: 'javascript:alert(1)' }))).toBe(
+      'unusable',
+    );
+    // Both directions, or `unusable` could quietly become the answer for every
+    // unpaid invoice too.
+    expect(receiptAbsence(invoice({ status: 'PAID', providerPdfUrl: null }))).toBe('missing');
+    expect(receiptAbsence(invoice({ status: 'FAILED', providerPdfUrl: null }))).toBe('not_paid');
+  });
+
+  it('★ passes a real receipt through unchanged', () => {
+    // A guard that rejected everything satisfies every assertion above.
+    expect(
+      receiptHref(invoice({ status: 'PAID', providerPdfUrl: 'https://pay.example/r.pdf' })),
+    ).toBe('https://pay.example/r.pdf');
   });
 });
 

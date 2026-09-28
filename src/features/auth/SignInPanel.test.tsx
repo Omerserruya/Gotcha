@@ -310,6 +310,46 @@ describe('★★ one way in', () => {
     );
   });
 
+  it('⚠⚠ refuses a recovery link that would execute instead of navigate', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * A THIRD PARTY'S STRING, ON THE ONE PAGE WITH A PASSWORD FIELD
+     * ════════════════════════════════════════════════════════════════════════
+     * `recovery_url` is `z.string().nullable()` in a LOOSE contract — the shape
+     * is Authentik's and by design we do not bound it. It rendered straight
+     * into an `href`, where `javascript:` executes in the origin holding the
+     * password. The narrowed CSP on this route does not stop it: a navigation
+     * is not a script source.
+     *
+     * Not a claim that Authentik would send one — the contract permits any
+     * string and this is the most sensitive sink in the app.
+     */
+    for (const hostile of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>']) {
+      startFlow.mockResolvedValue(identify({ recovery_url: hostile }));
+      const view = show();
+      await screen.findByTestId('sign-in-form');
+      expect(screen.queryByTestId('forgot'), hostile).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it('★★ and still accepts an absolute one, which is what the origin move makes it', async () => {
+    /*
+     * Today the provider sends a path. Once sign-in is served from its own
+     * origin this becomes an absolute URL, and a guard that only accepted
+     * paths would silently remove the link for the one person on this screen
+     * who cannot get in by trying harder.
+     */
+    startFlow.mockResolvedValue(
+      identify({ recovery_url: 'https://auth.gotcha.co.il/if/flow/recovery/' }),
+    );
+    show();
+    expect(await screen.findByTestId('forgot')).toHaveAttribute(
+      'href',
+      'https://auth.gotcha.co.il/if/flow/recovery/',
+    );
+  });
+
   it('★ offers no recovery link when the flow has no recovery configured', async () => {
     // A link to nothing is worse than no link on the one screen where the person
     // reading it already cannot get in.

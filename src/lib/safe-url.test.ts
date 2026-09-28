@@ -18,6 +18,35 @@ describe('safeLinkUrl', () => {
     expect(safeLinkUrl(hostile)).toBeNull();
   });
 
+  it('★★ an in-app path stays a path instead of becoming a dead sentinel URL', () => {
+    /*
+     * It used to resolve onto `https://invalid.example` and RETURN that, so
+     * `recovery_url` — which the identity provider sends as a path — came back
+     * as a link to a domain that cannot resolve. An inert link that looks real
+     * is the one thing this module promises callers they will never be handed.
+     */
+    expect(safeLinkUrl('/if/flow/default-recovery-flow/')).toBe('/if/flow/default-recovery-flow/');
+  });
+
+  it('⚠⚠ and a path gets the same whitespace treatment as everything else', () => {
+    // It routes to `safeInternalPath`, so the tab/LF/CR handling is not
+    // duplicated here — duplicating it is what produced the hole in the first
+    // place.
+    expect(safeLinkUrl('/\t/evil.example')).toBeNull();
+    expect(safeLinkUrl('/.//evil.example')).toBeNull();
+  });
+
+  it('★ rejects something that is neither absolute nor a path', () => {
+    /*
+     * `example.com/a` has no scheme. Putting `https://` in front of it would
+     * turn somebody's typo into a navigation to a host nothing checked, and
+     * returning it resolved against the sentinel produced a dead link. Neither
+     * reading is both safe and useful, so it is refused.
+     */
+    expect(safeLinkUrl('example.com/a')).toBeNull();
+    expect(safeLinkUrl('../up')).toBeNull();
+  });
+
   it('rejects empty and malformed input', () => {
     expect(safeLinkUrl('')).toBeNull();
     expect(safeLinkUrl(null)).toBeNull();
