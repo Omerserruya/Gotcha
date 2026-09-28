@@ -39,6 +39,91 @@ const directive = (csp: string, name: string): string[] => {
   return found ? found.slice(1) : [];
 };
 
+describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * THE DESTINATION IS THE ASSERTION. "IT REDIRECTS" PASSED WITH THE WRONG ONE.
+   * ════════════════════════════════════════════════════════════════════════════
+   * The gate used to send visitors to `/api/auth/login`, which starts the OIDC
+   * flow immediately and lands on the identity provider's own page. **So nobody
+   * ever saw the sign-in screen this application has.** It was reachable only by
+   * typing its URL — and every walk did exactly that, photographed the panel, and
+   * reported it working.
+   *
+   * A test for "an unauthenticated request redirects" would have passed
+   * throughout. These assert where to.
+   */
+  const redirectFor = (path: string, cookie?: string) => {
+    const request = new NextRequest(`https://dev.gotcha.co.il${path}`, {
+      headers: cookie ? { cookie } : undefined,
+    });
+    const response = proxy(request);
+    return { status: response.status, location: response.headers.get('location') ?? '' };
+  };
+
+  it('⚠⚠ sends them to /sign-in, not to the OIDC start', () => {
+    const { status, location } = redirectFor('/en/home');
+    expect(status).toBe(307);
+    expect(location).toContain('/sign-in');
+    expect(location).not.toContain('/api/auth/login');
+  });
+
+  it('⚠⚠ carries `returnTo`, or "back to where you were" is broken', () => {
+    /*
+     * The design requires that signing in returns somebody to the exact
+     * conversation they were reading. That round trip now has an extra hop — the
+     * panel — and `returnTo` has to survive it, because the panel appends it to
+     * the `/api/auth/login` it eventually calls.
+     */
+    const { location } = redirectFor('/en/inbox?c=abc');
+    const target = new URL(location, 'https://dev.gotcha.co.il');
+    expect(target.searchParams.get('returnTo')).toBe('/en/inbox?c=abc');
+  });
+
+  it('★ chooses no locale, leaving negotiation to next-intl', () => {
+    /*
+     * `/sign-in` un-prefixed. Picking `/en/sign-in` here would override the
+     * visitor's own `Accept-Language` with a guess, on the first page they see.
+     */
+    const { location } = redirectFor('/en/home');
+    const target = new URL(location, 'https://dev.gotcha.co.il');
+    expect(target.pathname).toBe('/sign-in');
+  });
+
+  it('★★ does not redirect the sign-in screen itself', () => {
+    // The obvious way to turn this fix into an infinite loop.
+    const { status } = redirectFor('/en/sign-in');
+    expect(status).not.toBe(307);
+  });
+
+  it('★★ leaves a visitor who already has a session alone', () => {
+    /*
+     * Both directions. A gate that redirected everybody would "pass" every test
+     * above and lock out every signed-in user.
+     *
+     * ★ This app's cookie is `gotcha_session`, and the gate matches on
+     *   `endsWith('_session')`. The first version of this test used
+     *   `gotcha_session_dev` — the LEGACY product's name, which ends in `_dev`
+     *   and does not match. My fixture was wrong, not the gate; noted because it
+     *   is the same prefix-versus-suffix trap that has cost two wrong readings
+     *   today.
+     */
+    const { status } = redirectFor('/en/home', 'gotcha_session=abc123');
+    expect(status).not.toBe(307);
+  });
+
+  it('★★ an empty session cookie is not a session', () => {
+    /*
+     * A cleared cookie is sent as an empty value rather than withdrawn. Treating
+     * its presence as a session would leave somebody staring at a shell that
+     * 401s on every read, with no route to sign in again.
+     */
+    const { status, location } = redirectFor('/en/home', 'gotcha_session=');
+    expect(status).toBe(307);
+    expect(location).toContain('/sign-in');
+  });
+});
+
 describe('★★ the narrower policy reaches the page that has a password on it', () => {
   it('★★ sign-in gets no `https:` image wildcard', () => {
     expect(directive(cspFor('/en/sign-in'), 'img-src')).toEqual(["'self'", 'data:']);

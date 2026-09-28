@@ -78,8 +78,36 @@ export default function proxy(request: NextRequest): NextResponse {
       );
 
     if (!hasSessionCookie) {
-      // Hand off to the platform's own login when configured; otherwise this
-      // app's, which drives the OIDC flow itself.
+      /*
+       * ════════════════════════════════════════════════════════════════════
+       * ★★★ OUR OWN SIGN-IN SCREEN, NOT THE OIDC START
+       * ════════════════════════════════════════════════════════════════════
+       * This used to redirect to `/api/auth/login`, which begins the OIDC flow
+       * immediately and lands on the identity provider's own page. So **no
+       * visitor ever reached the sign-in screen this application has** — it was
+       * reachable only by typing its URL, and `PUBLIC_PATH_PATTERN` letting
+       * `/sign-in` through made it look wired when nothing pointed at it.
+       *
+       * Omer opened `/v2` and landed on a purple Authentik page. Every walk had
+       * navigated straight to `/v2/en/sign-in`, photographed the panel, and
+       * reported it working — **entering through a door no user uses.** The
+       * screen was never wrong; the route to it did not exist, and no amount of
+       * looking at the screen could show that.
+       *
+       * ★ The extra hop costs nothing: the panel's own Continue button, and its
+       *   fallback when the executor cannot be reached, both go to
+       *   `/api/auth/login` — which is exactly where this line used to send
+       *   people. Nothing is bypassed; something is put in front of it.
+       *
+       * ── `PLATFORM_LOGIN_URL` STILL WINS ──
+       * When it is set, handing off to the platform's own login is a deliberate
+       * deployment choice and our panel must not preempt it.
+       *
+       * ── AND NO LOCALE IS CHOSEN HERE ──
+       * `/sign-in` un-prefixed, so `intlMiddleware` negotiates it into
+       * `/en/sign-in` or `/he/sign-in` on the next pass. Picking one here would
+       * override the visitor's own `Accept-Language` with a guess.
+       */
       const platformLogin = process.env.PLATFORM_LOGIN_URL;
       /*
        * ★★ THE MOUNT POINT, FROM THE REQUEST ITSELF.
@@ -96,7 +124,7 @@ export default function proxy(request: NextRequest): NextResponse {
       const mount = request.nextUrl.basePath;
       const loginUrl = platformLogin
         ? new URL(platformLogin)
-        : new URL(`${mount}/api/auth/login`, request.url);
+        : new URL(`${mount}/sign-in`, request.url);
       /*
        * `pathname` is already stripped of the prefix by Next, and it is stored
        * that way on purpose: the callback re-prefixes it with `appUrl` when it
