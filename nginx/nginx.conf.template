@@ -1977,6 +1977,39 @@ http {
             add_header Cache-Control "no-cache, must-revalidate" always;
         }
 
+        # ★★ THE ROOT OF THIS ORIGIN IS OUR SIGN-IN SCREEN, NOT THE IdP's.
+        #
+        # `location /` below hands everything unmatched to Authentik, which is
+        # correct for `/if/flow/`, `/application/o/authorize/` and `/api/v3/` —
+        # the OIDC hops need it. But it also meant that typing the bare host
+        # `auth-dev.gotcha.co.il` returned **Authentik's own purple login page**,
+        # on the origin whose entire purpose is to serve the screen we designed.
+        #
+        # ★ Measured in a clean browser, one door at a time:
+        #     /v2, /v2/en/inbox, /en/sign-in  ->  our panel
+        #     /  and  /v2/api/auth/login      ->  Authentik's /if/flow/ UI
+        #
+        # ⚠ `= /` AND NOT A PREFIX. An exact-match location beats the `/` prefix
+        #   for the root alone and touches nothing else — a prefix here would
+        #   swallow `/if/flow/` and `/application/o/authorize/` and break every
+        #   sign-in, since those are the hops the flow itself redirects through.
+        #
+        # ★ 302 rather than 301: this is a routing decision we may revisit, and
+        #   a permanent redirect would be cached in browsers that saw it once,
+        #   outliving the config that produced it.
+        #
+        # ⚠⚠ ABSOLUTE, AND BUILT FROM `$public_proto` — NOT `return 302 /sign-in`.
+        #   A relative target makes nginx synthesise the absolute URL from
+        #   `$scheme`, and **TLS terminates upstream of this container, so
+        #   `$scheme` is "http" here** — the map at the top of this file exists
+        #   to say so. The first version of this block sent
+        #   `302 -> http://auth-dev.gotcha.co.il/sign-in`: a plaintext hop, on
+        #   the one origin that exists to carry passwords. It looked correct in
+        #   a browser, because the port-80 vhost bounces it back to https.
+        location = / {
+            return 302 $public_proto://$host/sign-in;
+        }
+
         location / {
             limit_req zone=authentik burst=40 nodelay;
 
