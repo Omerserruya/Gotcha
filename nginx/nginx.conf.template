@@ -1966,6 +1966,39 @@ http {
         # URL), and the CDN once pinned a stale copy for hours - users saw the
         # stock Authentik look until the edge cache expired. Force revalidation
         # so a theme change is live on the next page load.
+        # ★★ THE TAB ICON. Omer asked why the auth tab has none.
+        #
+        # The app serves them — `app/icon.svg` and `app/apple-icon.png` answer
+        # 200 when asked directly — and the page declares both in <head>. They
+        # 404 at the edge because THIS allowlist does not name them, so they
+        # fall through to `location /` and Authentik answers instead.
+        #
+        # ★ Same shape as when this list allowed `/sign-in` against an app that
+        #   replies `307 /en/sign-in`: **an allowlist is correct about what it
+        #   lists and silent about what it does not.** That silence is the point
+        #   of the list on a credential origin, and it is also its failure mode.
+        #
+        # ⚠ A BROWSER PROBE CANNOT FIND THIS. A page-load capture reported 33
+        #   requests and 0 failures, because the favicon is fetched by the
+        #   browser's chrome, not by the document — headless skips it entirely.
+        #   Only a direct request, or a person looking at the tab, can see it.
+        #
+        # Exact matches: Next appends a cache-busting query (`?icon.<hash>.svg`)
+        # which `location =` ignores, and neither name can shadow anything else.
+        location = /icon.svg {
+            proxy_pass http://frontend_auth;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+        }
+
+        location = /apple-icon.png {
+            proxy_pass http://frontend_auth;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+        }
+
         location = /static/dist/custom.css {
             proxy_pass http://authentik_server;
             proxy_http_version 1.1;
