@@ -1,9 +1,14 @@
 import { prisma } from "./prisma";
 import {
   FEATURE_METADATA,
+  FEATURES,
   isFeature,
   type Feature,
 } from "./features";
+import {
+  isShopifyAuthorized,
+  type ShopifyCapability,
+} from "./billing/shopify-authorization";
 import {
   ALL_PERMISSION_KEYS,
   BUILTIN_ROLES,
@@ -183,11 +188,55 @@ async function loadUserRoleFeatures(userId: string): Promise<Set<string>> {
   return set;
 }
 
-/** Does this tenant have feature F enabled at the org level? */
+/**
+ * Shopify features, and the Shopify-funded capability each one needs.
+ *
+ * These five are the entire Shopify surface in the legacy `Feature` vocabulary.
+ * They are listed here rather than detected by name so that adding a Shopify
+ * feature is a deliberate act with a stated funding source, and so that a
+ * non-Shopify feature can never be caught by an over-eager prefix match.
+ *
+ * `null` means "any Shopify funding will do" - the feature is the connection
+ * itself rather than one capability on top of it.
+ */
+const SHOPIFY_FEATURE_FUNDING: Partial<Record<Feature, ShopifyCapability | null>> = {
+  [FEATURES.SHOPIFY_CORE_INTEGRATION]: null,
+  [FEATURES.SHOPIFY_INTEGRATION]: null,
+  [FEATURES.SHOPIFY_LIVE_CHAT]: "shopify_storefront_widget",
+  [FEATURES.SHOPIFY_PRODUCT_MESSAGING]: "shopify_catalog_sync",
+  [FEATURES.SHOPIFY_ORDER_ACTIONS]: "shopify_order_actions",
+};
+
+/** True for a feature that only a Shopify-funded subscription may unlock. */
+export function isShopifyFeature(feature: Feature): boolean {
+  return feature in SHOPIFY_FEATURE_FUNDING;
+}
+
+/**
+ * Does this tenant have feature F enabled at the org level?
+ *
+ * SHOPIFY IS DECIDED BEFORE ANYTHING ELSE, AND IT IS A VETO.
+ *
+ * Shopify App Store requirement 1.2.1 requires that capabilities tied to the
+ * Shopify integration be paid for through Shopify. The rest of this function
+ * answers a different question - what did the workspace's admin switch on -
+ * and that answer must not be able to unlock Shopify. Nor may the metadata
+ * default at the bottom: `defaultEnabled` is TRUE for the Shopify pair, which
+ * is precisely how the storefront widget and the product picker came to be
+ * available to every workspace, including ones that never paid Shopify.
+ *
+ * The veto direction matters. A workspace that has paid Shopify still has to
+ * have the feature switched on; paying does not force a capability on anybody.
+ * So Shopify can only ever REMOVE access here, never add it.
+ */
 export async function isFeatureEnabledForTenant(
   tenantId: string,
   feature: Feature,
 ): Promise<boolean> {
+  if (isShopifyFeature(feature)) {
+    const capability = SHOPIFY_FEATURE_FUNDING[feature] ?? undefined;
+    if (!(await isShopifyAuthorized(tenantId, capability))) return false;
+  }
   const map = await loadTenantFeatures(tenantId);
   if (map.has(feature)) return map.get(feature)!;
   // Unknown to DB and no legacy column → use metadata default.
@@ -198,8 +247,16 @@ export async function isFeatureEnabledForTenant(
 export async function hasFeature(user: PermissionUser, feature: Feature): Promise<boolean> {
   if (!isFeature(feature)) return false;
 
-  // 1. SYSTEM_ADMIN - total bypass.
-  if (user.role === "SYSTEM_ADMIN") return true;
+  // 1. SYSTEM_ADMIN - total bypass, EXCEPT for Shopify.
+  //
+  // Staff seniority is not a Shopify payment. A GOTCHA system admin acting
+  // inside a workspace that has no Connector must not be the one path that
+  // reaches Shopify anyway, because that path would be indistinguishable from
+  // the merchant having access and would make the invariant untestable.
+  if (user.role === "SYSTEM_ADMIN") {
+    if (!isShopifyFeature(feature)) return true;
+    return isFeatureEnabledForTenant(user.tenantId, feature);
+  }
 
   // 2. Tenant must have it enabled.
   const tenantEnabled = await isFeatureEnabledForTenant(user.tenantId, feature);

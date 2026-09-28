@@ -864,6 +864,19 @@ export { requireEntitlement, requireCapacity, handleEntitlementError } from "./m
 // middleware and cannot reach those, which is a large part of why commercial
 // enforcement stopped at the HTTP edge.
 export { isEntitled, entitledIn, resolveEntitlements, assertEntitled } from "./lib/billing/entitlement-resolver";
+// The Shopify authorization boundary. Separate from the entitlement resolver
+// on purpose: the resolver answers "what does this workspace have", which
+// merges plan defaults and catalog fallbacks, and neither of those may ever
+// unlock Shopify. This answers "did Shopify get paid".
+export {
+  getShopifyAuthorization,
+  isShopifyAuthorized,
+  assertShopifyAuthorized,
+  ShopifyConnectorRequiredError,
+  SHOPIFY_FUNDED_ENTITLEMENTS,
+  SHOPIFY_FUNDING_SOURCES,
+} from "./lib/billing/shopify-authorization";
+export type { ShopifyAuthorization, ShopifyCapability, ShopifyDenialReason } from "./lib/billing/shopify-authorization";
 export { requirePlatformPermission } from "./middleware/platform-permission";
 
 // Shared CRM client - used by AI tools, outbound, broadcast, and any

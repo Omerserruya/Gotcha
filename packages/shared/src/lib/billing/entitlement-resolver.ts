@@ -224,10 +224,49 @@ export async function isEntitled(tenantId: string, featureKey: string): Promise<
   return entitledIn(set, featureKey);
 }
 
+/**
+ * Sources that may satisfy a Shopify-funded entitlement.
+ *
+ * Shopify App Store requirement 1.2.1: capabilities tied to the Shopify
+ * integration must be paid for through Shopify. These two sources are the only
+ * ones written after money (or a confirmed pre-publication carve-out) reached
+ * Shopify. PLAN_DEFAULT, VOLUME_OPTION, ADDON, PROMO, TRIAL, BETA and OVERRIDE
+ * are all GOTCHA-side, so none of them may unlock Shopify - not even on a
+ * CUSTOM plan, because a negotiated GOTCHA plan is still not a Shopify charge.
+ */
+const SHOPIFY_FUNDING_SOURCES = new Set(["SHOPIFY_SUBSCRIPTION", "SHOPIFY_GRANDFATHERED"]);
+
+/**
+ * True for a key that only a Shopify subscription may unlock.
+ *
+ * Prefix-based rather than a hardcoded list so a Shopify capability added later
+ * is fail-CLOSED by default: it has to be granted by Shopify to work, and an
+ * author who forgets to register it gets a denial, not free access.
+ */
+function isShopifyFundedKey(featureKey: string): boolean {
+  return featureKey.startsWith("shopify_") || featureKey.startsWith("commerce.shopify_");
+}
+
 /** Same check against an already-resolved set (avoids a second round trip). */
 export function entitledIn(set: EntitlementSet, featureKey: string): boolean {
   if (isUnsellable(featureKey)) return false;
   const entry = set.entries.get(featureKey);
+
+  // Shopify keys are decided ONLY by who funded the row.
+  //
+  // `resolveEntitlements` deliberately flattens plan defaults, volume options
+  // and tenant rows into one pool, which is right for every GOTCHA capability
+  // and wrong for this one: a Core PlanVersion that listed `shopify_order_read`
+  // would otherwise read as authorized, and so would the catalog `defaultValue`
+  // fallback below - which is exactly how the storefront widget ended up on for
+  // every workspace that had never paid Shopify a cent.
+  if (isShopifyFundedKey(featureKey)) {
+    if (!entry) return false;
+    if (entry.source === "COMPLIANCE_DENY") return false;
+    if (!SHOPIFY_FUNDING_SOURCES.has(String(entry.source))) return false;
+    return asBool(entry.value);
+  }
+
   if (entry) {
     // A compliance deny is a deny, no matter what the stored value says.
     if (entry.source === "COMPLIANCE_DENY") return false;

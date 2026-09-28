@@ -24,6 +24,7 @@ import {
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { withProtectedAtoms } from "@chatcenter/shared";
+import { isShopifyAuthorized } from "@chatcenter/shared";
 import { capabilitiesFor, MAX_CAROUSEL_ITEMS } from "@chatcenter/shared";
 import {
   readGrammaticalAddress,
@@ -2058,9 +2059,21 @@ async function generateAIBotReplyInner(
       where: { tenantId: opts.tenantId, status: "CONNECTED" },
       include: { integration: true },
     });
+    // A Shopify connection that nobody is paying Shopify for is not a
+    // connection the model may see.
+    //
+    // Dropping it from `connectedSlugs` removes its tools from the SURFACE, not
+    // merely from dispatch. Offering a tool that will refuse is a mistake this
+    // codebase has already paid for once: the model picks the tool it was
+    // shown, spends a turn on it, and reports a failure to the customer. The
+    // dispatch path is gated too (loadConnection), but the model should never
+    // be told the option exists.
+    const shopifyConnected = tiRows.some((ti) => ti.integration?.slug === "shopify");
+    const shopifyFunded = shopifyConnected ? await isShopifyAuthorized(opts.tenantId) : false;
     for (const ti of tiRows) {
       const s = ti.integration?.slug;
       if (!s) continue;
+      if (s === "shopify" && !shopifyFunded) continue;
       connectedSlugs.add(s);
       configBySlug.set(s, ti.config || {});
     }

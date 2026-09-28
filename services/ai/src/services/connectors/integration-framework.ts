@@ -9,7 +9,7 @@
  * each adapter stays small (one file, ~150-300 LOC of provider logic).
  */
 
-import { prisma, encryptCredentials, decryptCredentials } from "@chatcenter/shared";
+import { prisma, encryptCredentials, decryptCredentials, isShopifyAuthorized } from "@chatcenter/shared";
 
 export interface ToolDefinition {
   /** Tool function name surfaced to the LLM (e.g. "stripe.refund_payment"). */
@@ -163,17 +163,66 @@ export interface ProviderAdapter {
 
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
 
+/** The provider slug that requires a Shopify-funded subscription. */
+const SHOPIFY_SLUG = "shopify";
+
+/**
+ * Why a caller wants a connection.
+ *
+ * `data` (the default, and the fail-closed one) means the caller is about to
+ * read, write, synchronize or render something through the provider. For
+ * Shopify that requires an active Connector subscription.
+ *
+ * `install` means the caller is running the installation, OAuth or billing
+ * handshake itself. Shopify App Review requires that a merchant be able to
+ * complete the signed install and OAuth BEFORE subscribing - the plan is chosen
+ * afterwards, on Shopify's hosted pricing page - so blocking these would make
+ * the app impossible to install and impossible to review. They are allowed to
+ * load the row, and they still cannot read merchant data with it, because every
+ * data path asks for `data`.
+ *
+ * Defaulting to `data` is deliberate: a new call site that forgets to say what
+ * it is doing gets the restrictive answer, not the permissive one.
+ */
+export type ConnectionPurpose = "data" | "install";
+
 /**
  * Load the connected TenantIntegration row for a tenant + slug.
  * Returns null if not connected. Decrypts credentials.
+ *
+ * SHOPIFY IS GATED HERE, and this is the reason this function is the gate.
+ * Selecting a provider and decrypting its credentials is the narrowest point
+ * through which every Shopify read, write, sync and render must pass - the
+ * adapter, the catalog service, the Inbox commerce context, the live-chat
+ * services and the returns resolver all begin here. One check at this point is
+ * worth more than a dozen scattered ones, and unlike them it cannot be
+ * forgotten by the next feature.
+ *
+ * Denial returns `null`, which is a state every caller already handles, rather
+ * than a throw that would turn a billing lapse into a 500.
  */
-export async function loadConnection(opts: { tenantId: string; slug: string }): Promise<{
+export async function loadConnection(opts: {
+  tenantId: string;
+  slug: string;
+  purpose?: ConnectionPurpose;
+}): Promise<{
   tenantIntegrationId: string;
   credentials: Record<string, any>;
   config: Record<string, any>;
   status: string;
   expiresAt: Date | null;
 } | null> {
+  if (opts.slug === SHOPIFY_SLUG && (opts.purpose ?? "data") === "data") {
+    if (!(await isShopifyAuthorized(opts.tenantId))) {
+      // Deliberately not an error: a workspace whose Connector lapsed is in a
+      // normal, recoverable commercial state, not a fault. The tenant id is
+      // safe to log; no token, shop domain or subscription id is.
+      console.info(
+        `[integration-framework] shopify access denied for tenant ${opts.tenantId}: no active Shopify Connector subscription or grandfather grant`,
+      );
+      return null;
+    }
+  }
   // Load CONNECTED *or* ERROR integrations. An OAuth integration whose access
   // token merely expired latches to ERROR, but it is recoverable via its refresh
   // token - excluding ERROR here is what created the deadlock (ERROR → never
