@@ -151,6 +151,18 @@ export function sessionCookieOptions(): {
     // `lax` keeps the cookie on the top-level redirect back from Authentik
     // while still withholding it from cross-site form posts.
     sameSite: 'lax',
+    /*
+     * ★★ THERE IS NO `domain`, AND ITS ABSENCE IS LOAD-BEARING.
+     * Without one the cookie is HOST-ONLY: set on the product's host, never
+     * sent to the sign-in origin. That is what keeps a signed-in visitor from
+     * rendering a product page there through the one gap in the middleware's
+     * matcher — it skips any path containing a dot, so
+     * `/en/customers/a.b@c.com` reaches the app with no refusal in front of
+     * it, and only the absent session turns it away.
+     *
+     * Adding a `domain` to share this across subdomains is a reasonable thing
+     * to want. Doing it opens that path. See `refuseOnCredentialSurface`.
+     */
     path: '/',
     maxAge: env.SESSION_MAX_AGE_SECONDS,
   };
