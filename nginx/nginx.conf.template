@@ -1773,6 +1773,71 @@ http {
         # Accept-Language: he answers 307 -> /v2/he/sign-in. A rewrite here would
         # have pinned one language for a bilingual product, which is why there is
         # no rewrite here.
+        # ════════════════════════════════════════════════════════════════════
+        # ★★ THE FLOW EXECUTOR, FIRST-PARTY — SO THE PASSWORD NEVER ENTERS NODE
+        # ════════════════════════════════════════════════════════════════════
+        # /v2 serves its own sign-in panel and drives Authentik's flow executor
+        # directly. The password therefore travels:
+        #
+        #     browser -> THIS PROXY -> authentik_server
+        #
+        # and **not** through the Next.js application. That is the whole
+        # security argument for building our own login, and it only holds while
+        # this stays an nginx location: a Next route handler or a server action
+        # here would put our own process in the credential path.
+        #
+        # It adds no new exposure, because this same gateway already fronts
+        # `auth-dev.gotcha.co.il` further down this file — every password typed
+        # on the IdP's own page already crosses this proxy today.
+        #
+        # ★ SAME-ORIGIN RATHER THAN CORS, DELIBERATELY. A preflight from
+        #   https://dev.gotcha.co.il to the executor returns 200 with NO
+        #   `Access-Control-Allow-Origin` at all, so a cross-origin fetch is
+        #   blocked. The fix for that would be loosening CORS on the identity
+        #   provider to accept credentialed cross-site calls - exactly the wrong
+        #   direction. Proxied under our own origin, no CORS is involved.
+        #
+        # ★ `Host` IS THE IdP'S OWN NAME, NOT $host. Authentik is a Django app
+        #   and checks Origin/Referer against its trusted origins; handing it a
+        #   host it does not expect is how this fails. The session cookie is
+        #   unaffected either way because `AUTHENTIK_COOKIE_DOMAIN=gotcha.co.il`
+        #   is now set, so one cookie is valid on both names - which is the
+        #   change that made this whole approach possible.
+        #
+        # ★ NOTHING REWRITES COOKIES. `Set-Cookie` and `Cookie` pass untouched
+        #   in both directions. A proxy that drops `Set-Cookie` breaks the CSRF
+        #   token and the failure looks EXACTLY like a wrong password, which
+        #   sends whoever debugs it to the wrong layer entirely.
+        #
+        # Longest-prefix wins among `^~` locations, so this takes precedence
+        # over `^~ /v2` below regardless of the order they appear in.
+        location ^~ /v2/auth-api/ {
+            proxy_pass http://authentik_server/api/v3/;
+            # ★★ THE EXECUTOR REDIRECTS TO ITS OWN ROOT, AND THAT IS NOT OURS.
+            #
+            # Posting a stage answers `302 Location: /api/v3/flows/executor/...`
+            # - an ABSOLUTE path, which the browser resolves against OUR origin
+            # and which therefore lands on the Next app instead of this proxy.
+            # Measured: the follow-up returned Next's 404 HTML page, which the
+            # panel would have read as a broken stage rather than a routing
+            # mistake.
+            #
+            # Same defect class as our own sign-in button earlier today: an
+            # absolute path written by something that assumes it is mounted at
+            # the root. There it was ours to fix in the href; here it is the
+            # IdP's assumption and the rewrite belongs at the proxy.
+            proxy_redirect /api/v3/ /v2/auth-api/;
+            proxy_http_version 1.1;
+            proxy_set_header Host auth-dev.gotcha.co.il;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            # Same budget as the IdP's own location further down this file.
+            limit_req zone=authentik burst=40 nodelay;
+        }
+
         location ^~ /v2 {
             proxy_pass http://frontend_v2;
             proxy_http_version 1.1;
