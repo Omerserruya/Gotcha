@@ -201,9 +201,15 @@ describe('★★ how the request is made', () => {
 
   it('★ an absent CSRF cookie sends an empty token rather than the string "undefined"', async () => {
     /*
-     * A missing cookie means the proxy dropped `Set-Cookie`, which fails in a way
-     * that looks exactly like a wrong password. Sending `"undefined"` would make
-     * the server-side log of that failure meaningless too.
+     * ★ NOT because sign-in depends on it — it does not. DRF enforces CSRF only
+     * for authenticated sessions, and every login stage runs before there is one,
+     * so a missing cookie does not break this path. It is enforced on
+     * **enrolment**, which runs after sign-in.
+     *
+     * The assertion stands for a narrower reason: sending the string
+     * `"undefined"` would put a fake token in a header and make any server-side
+     * log of a real CSRF failure meaningless. An empty string is the honest
+     * value for "there was no cookie".
      */
     Object.defineProperty(document, 'cookie', { value: 'other=1', writable: true });
     fetchMock.mockResolvedValue(jsonResponse(identification));

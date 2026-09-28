@@ -36,7 +36,36 @@ import { z } from 'zod';
  * has observed an enrolled one.** An `ak-stage-authenticator-validate` may well
  * appear, and this file must not read as though it cannot.
  *
- * ★★ AND ON 2026-09-28 THE ODDS MOVED A LONG WAY. While the gateway's redirect
+ * ★★★ AND ON 2026-09-28 IT WAS SETTLED FROM THE FLOW'S OWN CONFIGURATION, read
+ *   with an admin token rather than inferred from a challenge:
+ *
+ *       order  10   ak-stage-identification-form           email + password
+ *       order  30   ak-stage-authenticator-validate-form   ← the second factor
+ *       order 100   ak-stage-user-login-form               remember_me
+ *
+ *       default-authentication-mfa-validation
+ *         not_configured_action: skip
+ *         device_classes:  ['static', 'totp', 'webauthn', 'duo', 'sms']
+ *         configuration_stages: [default-authenticator-totp-setup]
+ *
+ *   **`not_configured_action: skip` is the mechanism, in one word.** A user with
+ *   no device is skipped past the stage, which is why two people driving the
+ *   flow with an unenrolled account saw two stages and concluded there were two.
+ *
+ *   ★ THE ORDER MATTERS FOR THE PANEL: the second factor comes **before**
+ *     "keep me signed in", not after. So the checkbox is the last thing in the
+ *     flow, and a renderer that assumed MFA was the final step would put it in
+ *     the wrong place.
+ *
+ *   ★★ AND `device_classes` ALLOWS FIVE, OF WHICH ONLY TWO ARE CODE ENTRY.
+ *     `totp` and `static` are digits somebody types. **`webauthn` is a browser
+ *     credential prompt, `duo` is a push notification, and `sms` is an
+ *     out-of-band journey of its own** — so `chooseFactor` does not lead to "a
+ *     code box" in general, and a renderer built around one would be wrong for
+ *     three of the five the flow permits. What each of those three needs on the
+ *     wire is unobserved; what is certain is that it is not six digits.
+ *
+ * ★★ AND EARLIER THE SAME DAY THE ODDS HAD ALREADY MOVED. While the gateway's redirect
  *   was still wrong, one POST landed in an odd flow position and Authentik
  *   answered with `component: "ak-stage-authenticator-validate"` and
  *   `non_field_errors: [{ string: "Empty response" }]`. **It does not invent

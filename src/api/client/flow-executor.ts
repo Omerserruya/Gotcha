@@ -59,10 +59,23 @@ const executorUrl = (flow: string) => appPath(`/auth-api/flows/executor/${flow}/
 /**
  * Authentik's CSRF header for this deployment.
  *
- * Not `X-CSRFToken`: measured, this build wants `X-authentik-CSRF`, taken from
- * the `authentik_csrf` cookie. A proxy that drops `Set-Cookie` breaks this in a
- * way that **looks exactly like a wrong password**, which is the worst possible
- * symptom because it sends everybody debugging the wrong layer.
+ * Not `X-CSRFToken`: this build wants `X-authentik-CSRF`, taken from the
+ * `authentik_csrf` cookie.
+ *
+ * ⚠ AND THE WARNING THAT USED TO BE HERE WAS WRONG. It said a proxy dropping
+ * `Set-Cookie` would break this "in a way that looks exactly like a wrong
+ * password". **It would not**, on this path: DRF's `SessionAuthentication`
+ * enforces CSRF only for requests carrying an **authenticated session**, and
+ * every stage of the login flow — identification, authenticator-validate,
+ * user-login — runs *before* anybody is signed in. Measured 2026-09-28: our
+ * POSTs succeed whether or not the cookie is there, and always have.
+ *
+ * So the header is sent because it is correct and free, not because this path
+ * depends on it. **Enrolment is where it is enforced** — that stage runs after
+ * sign-in, and a POST to it without the pair fails with `CSRF cookie not set`,
+ * surfaced as an opaque `ak-stage-flow-error`. Anybody building 00b's second
+ * half needs the cookie and the header; anybody debugging a failed sign-in
+ * should look elsewhere.
  */
 const CSRF_HEADER = 'X-authentik-CSRF';
 const CSRF_COOKIE = 'authentik_csrf';
