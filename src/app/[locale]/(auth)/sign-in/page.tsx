@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { Logo } from '@/design-system/brand/Logo';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
+import { appPath } from '@/lib/base-path';
 
 import styles from './SignIn.module.css';
 
@@ -31,7 +32,31 @@ export default async function SignInPage({
   const { error, returnTo } = await searchParams;
   const t = await getTranslations('auth');
 
-  const loginHref = `/api/auth/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * ★★ `appPath`, BECAUSE A PLAIN ANCHOR IS NOT PREFIXED AND THIS ONE LEFT THE APP
+   * ════════════════════════════════════════════════════════════════════════════
+   * Next prefixes `next/link` and `redirect()` with `basePath`. It does NOT
+   * touch a raw `<a href>` — the browser resolves that against the origin, so
+   * `/api/auth/login` under `/v2` became `https://dev.gotcha.co.il/api/auth/login`.
+   *
+   * Beside the legacy product that is not a 404. It is the OTHER application's
+   * login route, and the button on this screen started the wrong app's OIDC
+   * flow: measured on 2026-09-28, the journey ended at
+   * `http://localhost:3000/en/sign-in?error=expired`.
+   *
+   * ★ The anchor is still a plain `<a>` on purpose — this leaves the app for
+   *   the identity provider, so client-side routing must not intercept it.
+   *   That reasoning was right; what it missed is that opting out of the
+   *   router also opts out of the prefix.
+   *
+   * ★ And this was the LAST unprefixed browser-facing path in the app. Every
+   *   other one — `sign-out.ts`, `browser-api.ts`, `login-state.ts`,
+   *   `realtime-provider.tsx` — already calls `appPath`. They are all `fetch`
+   *   calls. This was the only `href`, so a sweep shaped like "a fetch with a
+   *   root path" finds all of them and misses exactly this one.
+   */
+  const loginHref = `${appPath('/api/auth/login')}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
   const knownError = KNOWN_ERRORS.find((candidate) => candidate === error);
 
   return (
