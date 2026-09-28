@@ -96,9 +96,47 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
     const matches = new RegExp(`^/((${pattern!.replaceAll('\\\\', '\\')}).*)$`);
 
     expect(matches.test('/en/home')).toBe(true);
-    // ⚠⚠ The defect, now covered.
-    expect(matches.test('/en/customers/a.b@c.com')).toBe(true);
-    expect(matches.test('/en/customers/v1.2')).toBe(true);
+
+    /*
+     * ⚠⚠ THE SECOND HALF OF THIS DEFECT, AND THE FIRST FIX DID NOT CLOSE IT.
+     * A lookahead need not reach the end of the string, so an UNANCHORED
+     * `.*\.(?:…|js|…)` means "a dot followed by something that BEGINS WITH a
+     * listed extension" — the trailing `.*` eats the rest. The extension list
+     * shrank the hole rather than closing it.
+     *
+     * ★★ `a.jsmith@company.com` is what "J. Smith" looks like. These are not
+     *   contrived probes; they are the likeliest strings in that column, and
+     *   every probe I wrote for the first fix (`a.b`, `v1.2`, `u.1`) happened
+     *   to have a dot followed by something that starts no extension. **The
+     *   probe set was built from the shapes I had already seen.**
+     */
+    for (const id of [
+      'a.b@c.com',
+      'j.smith@c.com',
+      'a.jsmith@c.com', // .js  + mith
+      'a.mapleton@c.com', // .map + leton
+      'x.pdfoo@c.com', // .pdf + oo
+      'a.txtra@c.com', // .txt + ra
+      'n.svgator@c.com', // .svg + ator
+      'q.icourt@c.com', // .ico + urt
+      'w.ttfield@c.com', // .ttf + ield
+      // ★ Controls, not witnesses: these pass under BOTH forms, because what
+      //   follows the dot begins no listed extension. They are the shapes my
+      //   original probe set was made of, which is why it proved nothing.
+      'e.otter@c.com',
+      'v1.2',
+    ]) {
+      expect(matches.test(`/en/customers/${id}`), id).toBe(true);
+    }
+
+    /*
+     * ★ And the symptom the bug was hiding: `/anything.json` was SKIPPED, not
+     *   because `json` is listed — it is not — but because `.js` matched and
+     *   `on` was eaten. It looked like correct behaviour from an extension
+     *   that does not exist in the list.
+     */
+    expect(matches.test('/anything.json')).toBe(true);
+    expect(matches.test('/anything.wasm')).toBe(true);
 
     // ★ And both directions: the exclusion still has to exclude. An extension
     //   list that matched nothing would satisfy every assertion above and put

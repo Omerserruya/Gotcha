@@ -345,6 +345,34 @@ export const config = {
    * in `.com`. Only naming the extensions separates a static asset from a path
    * segment that happens to contain a dot.
    *
+   * ═══════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ AND THE `$` IS THE WHOLE RULE. WITHOUT IT THE LIST SHRANK THE HOLE
+   *    RATHER THAN CLOSING IT.
+   * ═══════════════════════════════════════════════════════════════════════════
+   * A lookahead does not have to reach the end of the string. Unanchored,
+   * `.*\.(?:…|js|…)` means "a dot followed by something that **begins with** a
+   * listed extension", so the trailing `.*` eats the rest:
+   *
+   *     a.b@c.com        ran      ✓   the case the list was written for
+   *     a.jsmith@c.com   SKIPPED  ⚠   `.js` + `mith`
+   *     a.mapleton@c.com SKIPPED  ⚠   `.map` + `leton`
+   *     a.txtra@c.com    SKIPPED  ⚠   `.txt` + `ra`
+   *     q.icourt@c.com   SKIPPED  ⚠   `.ico` + `urt`
+   *
+   * ★★ `a.jsmith@company.com` is what "J. Smith" looks like. Not a contrived
+   *   probe — one of the likeliest strings in that column.
+   *
+   * ★ My own probes missed it because every one of them had a dot followed by
+   *   something that starts no extension: `a.b`, `v1.2`, `u.1`. **The probe set
+   *   was built from the shapes I had already seen**, which is the failure this
+   *   file documents three times over, and it caught the fix for it.
+   *
+   * ★ The anchored form is also what Next's own guide shows —
+   *   `'/((?!api|_next/static|_next/image|.*\.png$).*)'` — so the unanchored
+   *   version was not a variant of the documented pattern, it was a mistake
+   *   against it. Matcher paths carry no query string, so `$` is the end of
+   *   the path.
+   *
    * ★ And `public/` holds nothing but `.gitkeep` — measured, not assumed — so
    *   this exclusion currently protects no file that exists. It is kept narrow
    *   rather than removed because the day somebody adds `favicon.ico` should
@@ -388,6 +416,6 @@ export const config = {
    */
   matcher: [
     '/',
-    '/((?!api|_next|_vercel|.*\\.(?:ico|png|jpe?g|gif|svg|webp|avif|css|js|mjs|map|txt|xml|webmanifest|woff2?|ttf|otf|eot|pdf)).*)',
+    '/((?!api|_next|_vercel|.*\\.(?:ico|png|jpe?g|gif|svg|webp|avif|css|js|mjs|map|txt|xml|webmanifest|woff2?|ttf|otf|eot|pdf)$).*)',
   ],
 };
