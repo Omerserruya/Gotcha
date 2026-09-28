@@ -28,20 +28,52 @@
  *   npx tsx scripts/unprefixed-path-sweep.ts
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ⚠⚠ WHAT IT CANNOT SEE, STATED FIRST BECAUSE IT MATTERS MOST
+ * TWO PASSES, BECAUSE ONE OF THE THREE DEFECTS HAD NO LITERAL AT ITS SINK
  * ════════════════════════════════════════════════════════════════════════════
- * It matches a LITERAL path at a sink. **A path that travels through a
- * variable is invisible to it** — which means the first of the three defects
- * above, the one that started this whole line of work, would NOT have been
- * caught:
+ * The first pass matches a LITERAL path at a sink. On its own that misses the
+ * sign-in anchor — the defect that started this line of work — because the
+ * path was built into a name on one line and used on the next:
  *
  *     const loginHref = `/api/auth/login?…`;   // no sink on this line
  *     <a href={loginHref}>                     // no literal on this line
  *
- * Closing that needs dataflow, which is a different tool. A green run here
- * means "no literal unprefixed path at a known sink", not "every browser-facing
- * path is prefixed", and reporting the first as the second is exactly the
- * habit this file exists to break.
+ * So the second pass follows a `const` bound to a literal absolute path and
+ * asks whether that NAME reaches a sink in the same file.
+ *
+ * ⚠⚠ AND IT STILL DOES NOT CATCH THE ANCHOR. MEASURED, NOT ASSUMED.
+ * Restoring the real defect in `sign-in/page.tsx` — `const loginBase =
+ * '/api/auth/login'` — produced a CLEAN run. The real code is two hops and a
+ * file boundary, not one:
+ *
+ *     const loginBase = '/api/auth/login';          // the literal
+ *     const loginHref = `${loginBase}${query}`;     // a second name
+ *     <SignInPanel handOverHref={loginHref} />      // a prop, not a sink
+ *     … and the <a href> lives in another file entirely
+ *
+ * ★ My first probe for this pass was called "the sign-in anchor" and was a
+ *   two-line simplification I wrote from memory of the defect rather than from
+ *   the code. **It passed while the defect walked through** — the same
+ *   fixture-that-cannot-discriminate this project keeps producing, this time
+ *   inside the instrument built to stop it. The probe is now named for what it
+ *   actually tests.
+ *
+ * ★ The binding pattern requires a real character after the slash, so
+ *   `` const path = `/${segments.join('/')}` `` in the BFF is not a match. It
+ *   is a path with no literal in it, composed for the PLATFORM's origin, and
+ *   it must not be prefixed. Without that refinement it was the only finding
+ *   on a clean tree — one false positive out of one result, which is the rate
+ *   at which people stop reading a sweep.
+ *
+ * ⚠⚠ SO WHAT IS STILL INVISIBLE, STATED PLAINLY. The second pass follows ONE
+ *   assignment to ONE name inside ONE file. A second hop, a prop, a return
+ *   value, or a module boundary defeats it — and the anchor defect had three
+ *   of those four. It is covered today only by `page.test.tsx` asserting the
+ *   composed `href`, which is a test, not a sweep.
+ *
+ *   A green run means "no unprefixed literal at a sink, and none bound to a
+ *   local name that reaches one". It does not mean every browser-facing path
+ *   is prefixed, and reporting the first as the second is the habit this file
+ *   exists to break.
  *
  * ── AND ONE VARIANT WAS TRIED AND THROWN AWAY ──
  * Organising by VALUE instead — every literal naming `/api/…` — returns 174
@@ -95,6 +127,61 @@ const PROBES: readonly (readonly [string, string, boolean])[] = [
   ['a next/link href', '<Link href="/home" className={styles.brand}>', false],
 ];
 
+/** Second-pass probes: a whole file, because the defect spans two lines. */
+const BOUND_PROBES: readonly (readonly [string, string, boolean])[] = [
+  [
+    // NOT "the sign-in anchor": that defect has two hops and a file boundary,
+    // and a clean run against it is recorded in the header above.
+    'a literal bound to a name used directly at a sink',
+    'const loginHref = `/api/auth/login?x`;\nreturn <a href={loginHref}>x</a>;',
+    true,
+  ],
+  [
+    "the BFF's composed upstream path",
+    "const path = `/${segments.map(encodeURIComponent).join('/')}`;\nconst url = new URL(path, base);",
+    false,
+  ],
+  [
+    'the FIXED anchor',
+    "const loginHref = `${appPath('/api/auth/login')}?x`;\nreturn <a href={loginHref}>x</a>;",
+    false,
+  ],
+];
+
+/**
+ * A `const` holding a literal absolute path.
+ *
+ * The trailing `[A-Za-z]` is the refinement that keeps the BFF's
+ * `` `/${segments…}` `` out: a path with no literal segment is not a path this
+ * app owns, it is one composed for somebody else's origin.
+ */
+const BINDING = /\bconst\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*[`'"](\/[A-Za-z][\w.-]*)/;
+
+const sinksFor = (name: string): readonly RegExp[] => [
+  new RegExp(`\\bfetch\\(\\s*${name}\\b`),
+  new RegExp(`\\bnew URL\\(\\s*${name}\\b`),
+  new RegExp(`\\blocation\\.(?:assign|replace)\\(\\s*${name}\\b`),
+  new RegExp(`\\blocation\\.href\\s*=\\s*${name}\\b`),
+  new RegExp(`<a\\b[^>]*\\bhref=\\{\\s*${name}\\s*\\}`),
+];
+
+/** Lines binding a literal path to a name that later reaches a sink. */
+function boundPathsReachingASink(source: string): readonly { line: string; index: number }[] {
+  const lines = source.split('\n');
+  const found: { line: string; index: number }[] = [];
+  lines.forEach((line, index) => {
+    if (COMMENT.test(line) || WRAPPED.test(line)) return;
+    const match = BINDING.exec(line);
+    if (!match) return;
+    const name = match[1]!;
+    const reaches = sinksFor(name).some((pattern) =>
+      lines.some((other) => !COMMENT.test(other) && pattern.test(other)),
+    );
+    if (reaches) found.push({ line, index });
+  });
+  return found;
+}
+
 const flags = (line: string): string | null => {
   if (COMMENT.test(line)) return null;
   if (WRAPPED.test(line)) return null;
@@ -102,7 +189,12 @@ const flags = (line: string): string | null => {
   return null;
 };
 
-const brokenProbes = PROBES.filter(([, line, shouldFlag]) => (flags(line) !== null) !== shouldFlag);
+const brokenProbes = [
+  ...PROBES.filter(([, line, shouldFlag]) => (flags(line) !== null) !== shouldFlag),
+  ...BOUND_PROBES.filter(
+    ([, source, shouldFlag]) => boundPathsReachingASink(source).length > 0 !== shouldFlag,
+  ),
+];
 if (brokenProbes.length > 0) {
   out('REFUSING TO REPORT — the sweep does not agree with its own probes:\n', true);
   for (const [name, , shouldFlag] of brokenProbes) {
@@ -130,11 +222,15 @@ for (const path of walk(ROOT)) {
       if (kind)
         findings.push(`  [${kind}] ${relative('.', path)}:${index + 1}\n      ${line.trim()}`);
     });
+
+  for (const { line, index } of boundPathsReachingASink(readFileSync(path, 'utf8'))) {
+    findings.push(`  [bound then used] ${relative('.', path)}:${index + 1}\n      ${line.trim()}`);
+  }
 }
 
 if (findings.length === 0) {
   out(`OK — no literal unprefixed path at a known sink in ${ROOT}.`);
-  out('(Probes agree. This does NOT cover a path built into a variable first.)');
+  out('(Both passes agree with their probes. Neither follows a path across files.)');
   process.exit(0);
 }
 
