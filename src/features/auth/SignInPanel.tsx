@@ -102,13 +102,23 @@ import styles from './SignInPanel.module.css';
  *     unobserved, and it is the difference between a seam and losing somebody's
  *     typing. The same enrolment answers it.
  */
+/** Which of the design's screens this panel is currently showing. */
+export type SignInScreenName = 'signIn' | 'secondFactor';
+
 export function SignInPanel({
   handOverHref,
   returnTo,
+  onScreen,
 }: {
   /** `/api/auth/login`, already prefixed and carrying `returnTo`. */
   readonly handOverHref: string;
   readonly returnTo?: string;
+  /**
+   * Told which screen is on, so a composition root can put the matching
+   * editorial panel and footnote beside it. Optional: the panel is complete
+   * without one, and its own tests render it that way.
+   */
+  readonly onScreen?: (screen: SignInScreenName) => void;
 }) {
   const t = useTranslations('auth');
   const [step, setStep] = useState<FlowStep | null>(null);
@@ -161,6 +171,24 @@ export function SignInPanel({
       live = false;
     };
   }, [handOverHref]);
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ WHICH SCREEN IS SHOWING, TOLD UPWARDS
+   * ════════════════════════════════════════════════════════════════════════
+   * The editorial panel and the footnote are server-rendered siblings of this
+   * component, so neither could know which stage was on screen — which is why
+   * 00b wore 00a's figures and 00a's "New here? Ask your workspace admin…",
+   * a sentence that is actively wrong to somebody already halfway signed in.
+   *
+   * ★ A callback rather than a slot prop per screen: the stage is this
+   *   component's to know, and the composition root's to react to. Copy stays
+   *   server-rendered on the other side of it.
+   */
+  useEffect(() => {
+    if (!step) return;
+    onScreen?.(step.kind === 'chooseFactor' ? 'secondFactor' : 'signIn');
+  }, [step, onScreen]);
 
   useEffect(() => {
     if (!step) return;

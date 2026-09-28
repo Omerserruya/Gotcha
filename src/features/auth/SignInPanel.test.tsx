@@ -451,3 +451,71 @@ describe('★★ one way in', () => {
     expect(await screen.findByText(/straight back to where you were/i)).toBeInTheDocument();
   });
 });
+
+describe('⚠⚠ telling the layout which screen is on', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE LINK NOTHING WAS TESTING, FOUND BY A SURVIVING MUTATION
+   * ════════════════════════════════════════════════════════════════════════
+   * `SignInScreen` swaps the editorial, the status line and the footnote on
+   * this signal — and its own tests use a STUB panel, while these tests never
+   * passed `onScreen`. So replacing the whole mapping with a constant
+   * `'signIn'` broke nothing anywhere: 71 tests green with the feature
+   * destroyed.
+   *
+   * ★ Two halves, each thoroughly tested, and the join between them tested by
+   *   neither. Guards assert hops; this is the hop.
+   */
+  it('⚠⚠ reports the second factor when the flow reaches it', async () => {
+    const onScreen = vi.fn();
+    startFlow.mockResolvedValue({
+      kind: 'chooseFactor',
+      challenge: {
+        component: 'ak-stage-authenticator-validate',
+        pending_user: 'akadmin',
+        device_challenges: [
+          { device_class: 'totp', device_uid: '1', challenge: {}, last_used: null },
+        ],
+        configuration_stages: [],
+        response_errors: {},
+      } as never,
+    });
+
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel handOverHref={HANDOVER} onScreen={onScreen} />
+      </NextIntlClientProvider>,
+    );
+
+    await screen.findByTestId('second-factor');
+    expect(onScreen).toHaveBeenCalledWith('secondFactor');
+  });
+
+  it('★★ and reports sign-in on the identification stage', async () => {
+    /*
+     * Both directions. A mapping that answered `secondFactor` for everything
+     * would satisfy the assertion above and put 00b's editorial behind the
+     * password field.
+     */
+    const onScreen = vi.fn();
+    startFlow.mockResolvedValue(identify());
+
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel handOverHref={HANDOVER} onScreen={onScreen} />
+      </NextIntlClientProvider>,
+    );
+
+    await screen.findByTestId('sign-in-form');
+    expect(onScreen).toHaveBeenCalledWith('signIn');
+    expect(onScreen).not.toHaveBeenCalledWith('secondFactor');
+  });
+
+  it('★ and works without one, because the panel is complete on its own', async () => {
+    // `onScreen` is optional: the panel's own tests render it without one and
+    // must keep doing so.
+    startFlow.mockResolvedValue(identify());
+    show();
+    expect(await screen.findByTestId('sign-in-form')).toBeInTheDocument();
+  });
+});

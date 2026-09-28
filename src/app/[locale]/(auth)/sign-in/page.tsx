@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
-import { SignInPanel } from '@/features/auth/SignInPanel';
+import { SignInScreen } from './SignInScreen';
 import { Logo } from '@/design-system/brand/Logo';
 import { Text } from '@/design-system/primitives/text/Text';
 import { appPath } from '@/lib/base-path';
@@ -26,6 +26,41 @@ const KNOWN_ERRORS = ['expired', 'denied', 'exchange_failed'] as const;
  * action are the parts that belong to us, and those are what is built.
  * Recorded in docs/api-gaps.md.
  */
+/**
+ * One screen's rotating figures.
+ *
+ * ★ The SHELL is the same on both — 508px column, 250px stage, the 15s cycle,
+ *   the reduced-motion hold. Only the three statements differ, so this takes a
+ *   key prefix rather than being written twice.
+ */
+function Figures({
+  slides,
+  t,
+}: {
+  readonly slides: readonly string[];
+  readonly t: (key: string) => string;
+}) {
+  return (
+    <div className={styles.editorialStage} aria-hidden="true">
+      {slides.map((slide) => (
+        <div key={slide} className={styles.editorialSlide}>
+          <Text role="eyebrow" as="p">
+            {t(`${slide}.eyebrow`)}
+          </Text>
+          {/* The serif, italic. `inherit` because this sits on the dark frame,
+              not the light panel. */}
+          <Text role="serif" tone="inherit" as="p">
+            {t(`${slide}.headline`)}
+          </Text>
+          <Text role="bodySm" tone="inherit" as="p" className={styles.editorialSupport}>
+            {t(`${slide}.support`)}
+          </Text>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default async function SignInPage({
   searchParams,
 }: {
@@ -33,6 +68,12 @@ export default async function SignInPage({
 }) {
   const { error, returnTo } = await searchParams;
   const t = await getTranslations('auth');
+  /*
+   * Scoped to the editorial block so `Figures` can take a key prefix and be
+   * written once for both screens — `scale.eyebrow` and
+   * `secondFactor.why.eyebrow` are the same shape from here.
+   */
+  const editorial = await getTranslations('auth.editorial');
 
   /*
    * ════════════════════════════════════════════════════════════════════════════
@@ -98,139 +139,72 @@ export default async function SignInPage({
   const knownError = KNOWN_ERRORS.find((candidate) => candidate === error);
 
   return (
-    <div className={styles.frame}>
-      <aside className={styles.editorial}>
+    <SignInScreen
+      handOverHref={loginHref}
+      returnTo={returnTo}
+      brand={
         <div className={styles.brand}>
           <Logo variant="framed" size={38} />
           GOTCHA
         </div>
+      }
+      /*
+        ════════════════════════════════════════════════════════════════════
+        ★★ ONE SHELL, TWO SETS OF FIGURES — 00b HAS ITS OWN
+        ════════════════════════════════════════════════════════════════════
+        The second-factor screen was wearing sign-in's three statements. The
+        mock gives it three of its own, and they are an ARGUMENT for why the
+        code exists rather than figures about the platform.
 
-        {/*
-          Three statements rotating on a 15s cycle, 5s apart.
-          `aria-hidden`: it is ambient copy, and a screen reader announcing a
-          new sentence every five seconds while somebody is trying to sign in
-          would be actively hostile. The panel says nothing needed to proceed.
+        Both are rendered here, on the server, and `SignInScreen` picks. No
+        copy crosses into the client bundle and the 508/italic/390 shell is
+        written once.
+      */
+      figures={{
+        signIn: <Figures slides={['scale', 'actions', 'team']} t={editorial} />,
+        secondFactor: (
+          <Figures
+            slides={['secondFactor.why', 'secondFactor.behind', 'secondFactor.cost']}
+            t={editorial}
+          />
+        ),
+      }}
+      ticks={
+        /*
+          "…with the position marked by three ticks" — 00a, verbatim.
+          Decorative and `aria-hidden` like the stage: they mark the position
+          of copy a screen reader is deliberately not being read.
 
-          ════════════════════════════════════════════════════════════════════
-          ★★ THESE NUMBERS ARE INVENTED, DELIBERATELY, BY A RULING ON
-             2026-09-28 — AND THE DESIGN SAYS THE OPPOSITE
-          ════════════════════════════════════════════════════════════════════
-          Screen 00a specifies: *"Real workspace data, not marketing copy"*, and
-          lists "the three rotating side-panel figures, fetched once per load,
-          unauthenticated and workspace-agnostic" as a backend requirement.
-
-          **There is no such endpoint and Omer ruled there will not be one for
-          now** — "let it be static, invent them, make it sensible but not too
-          small". That is recorded here rather than left to be rediscovered,
-          because building the design as written means publishing **live
-          platform-wide business volume on a public page**: a new unauthenticated
-          route returning how many people are mid-conversation and how many
-          messages were answered since midnight, scrapeable every five seconds by
-          anyone, in which a quiet week is legible to a competitor.
-
-          ⚠ SO A FUTURE READER COMPARING THIS FILE TO THE DESIGN WILL FIND A
-            DISCREPANCY, AND IT IS NOT A BUG. Changing it back is a commercial
-            decision, not a fix.
-
-          ── AND THE THIRD SLIDE IS NOT LIKE THE OTHER TWO ──
-          It used to read *"Your team, this week — You answered in four minutes
-          instead of forty. The queue never grew past fourteen."* Slides one and
-          two invent a number about the PLATFORM, which Omer's ruling covers.
-          That one invented a number **about the reader**, on a page where nobody
-          has identified themselves, and it was false for every single person who
-          ever saw it. A made-up personal statistic is a different object from a
-          made-up platform one, and no ruling about the latter licenses it.
-
-          It now says something true about the product instead, keeping the
-          rhythm and claiming nothing about whoever is looking.
-
-          ── AND THERE IS DELIBERATELY NO TEST GUARDING THIS ──
-          The obvious one — "no editorial string addresses the reader" — fails a
-          string that is correct: slide two's *"Every one of them left a trace
-          **you** can open, read and undo"* is second person and is a statement
-          about the PRODUCT's capability, not about the reader's week. The
-          property that matters is semantic and a word-list cannot see it.
-
-          A guard that reddens on correct copy gets weakened by the next person
-          until it matches nothing, which is how the `merge` caption guard and
-          the `text-transform` sweep each nearly went. The record above is the
-          guard; it is prose because the thing being protected is a judgement.
-        */}
-        <div className={styles.editorialStage} aria-hidden="true">
-          {(['scale', 'actions', 'team'] as const).map((slide) => (
-            <div key={slide} className={styles.editorialSlide}>
-              <Text role="eyebrow" as="p">
-                {t(`editorial.${slide}.eyebrow`)}
-              </Text>
-              {/* The serif, italic. `inherit` because this sits on the dark
-                  frame, not the light panel. */}
-              <Text role="serif" tone="inherit" as="p">
-                {t(`editorial.${slide}.headline`)}
-              </Text>
-              <Text role="bodySm" tone="inherit" as="p" className={styles.editorialSupport}>
-                {t(`editorial.${slide}.support`)}
-              </Text>
-            </div>
-          ))}
+          Driven by the same 15s CSS cycle as the slides rather than by state,
+          so the two cannot disagree — and they belong inside the status row,
+          which is one flex row in the mock.
+        */
+        <div className={styles.editorialTicks} aria-hidden="true" data-testid="editorial-ticks">
+          <span className={styles.editorialTick} />
+          <span className={styles.editorialTick} />
+          <span className={styles.editorialTick} />
         </div>
-
-        {/*
-          "…with the position marked by three ticks" — 00a, verbatim. Decorative
-          and `aria-hidden` like the stage above it: they mark the position of
-          copy a screen reader is deliberately not being read, so announcing
-          them would be announcing the furniture of something invisible.
-
-          Driven by the same 15s cycle as the slides rather than by state — see
-          the stylesheet for why they cannot be allowed to disagree.
-
-          ⚠ AND THEY BELONG IN THIS ROW, NOT ABOVE IT. My first version made
-            them a separate block; the mock has one footer row — ticks, a
-            1×12px rule, the status dot, the status text. Corrected after
-            reading the mock rather than the prose, which is the third thing on
-            this screen that error cost.
-        */}
-        <div className={styles.systemStatus}>
-          <div className={styles.editorialTicks} aria-hidden="true" data-testid="editorial-ticks">
-            <span className={styles.editorialTick} />
-            <span className={styles.editorialTick} />
-            <span className={styles.editorialTick} />
-          </div>
-          <span className={styles.editorialRule} aria-hidden="true" />
-          <span className={styles.statusDot} aria-hidden="true" />
-          {t('editorial.status')}
-        </div>
-      </aside>
-
-      <main className={styles.surface}>
-        <div className={styles.form}>
-          {knownError ? (
-            // `role="alert"` so the reason is announced on arrival, not only
-            // discovered by someone who happens to read down the page.
-            <p className={styles.notice} role="alert">
-              {t(`error.${knownError}`)}
-            </p>
-          ) : null}
-
-          {/*
-            ════════════════════════════════════════════════════════════════════
-            ★★ THE PANEL DRIVES THE FLOW; `loginHref` IS BOTH ITS FALLBACK AND
-               ITS SUCCESS PATH
-            ════════════════════════════════════════════════════════════════════
-            This used to be a single button handing over to the identity
-            provider. That handover still exists and is still correct — it is
-            what `handOverHref` is — but it is now the path we take when the
-            panel cannot finish, rather than the only path.
-
-            It is also the path we take when it CAN. Completing the flow sets an
-            Authentik session on `.gotcha.co.il`; `/api/auth/login` then runs
-            OIDC, sees it, and returns silently. One destination, two meanings,
-            and guessing wrong between them is harmless.
-          */}
-          <SignInPanel handOverHref={loginHref} returnTo={returnTo} />
-
-          <p className={styles.footnote}>{t('signIn.footnote')}</p>
-        </div>
-      </main>
-    </div>
+      }
+      status={{
+        signIn: t('editorial.status'),
+        secondFactor: t('editorial.secondFactor.status'),
+      }}
+      notice={
+        knownError ? (
+          // `role="alert"` so the reason is announced on arrival, not only
+          // discovered by someone who happens to read down the page.
+          <p className={styles.notice} role="alert">
+            {t(`error.${knownError}`)}
+          </p>
+        ) : null
+      }
+      /*
+        ⚠ SIGN-IN ONLY. "New here? Ask your workspace admin for an invitation"
+        was showing on the second factor as well, where it is not merely the
+        wrong line but an actively wrong statement: the person reading it has
+        already answered that question and is halfway in.
+      */
+      footnote={<p className={styles.footnote}>{t('signIn.footnote')}</p>}
+    />
   );
 }
