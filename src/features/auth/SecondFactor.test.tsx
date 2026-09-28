@@ -231,6 +231,45 @@ describe('one device means no chooser, and the way out is still there', () => {
     expect(screen.getByTestId('recovery-code')).toBeInTheDocument();
     expect(onHandOver).not.toHaveBeenCalled();
   });
+
+  it('stops asking about the phone once they have answered that question', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * A STATE A BROWSER WALK MADE REACHABLE, NOT A HYPOTHETICAL
+     * ════════════════════════════════════════════════════════════════════════
+     * The admin account has exactly `totp` and `static`, so this is one click
+     * from where the walk landed: press "No access to your phone?", choose the
+     * recovery code, and the link underneath asked **the same question again** —
+     * of somebody who has already answered it and is now typing a recovery code.
+     *
+     * The label follows the active device. It stays "No access to your phone?"
+     * while the phone is the thing in use, and becomes a neutral way back
+     * afterwards.
+     */
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('no-access'));
+    await user.click(screen.getByTestId('use-static'));
+
+    const wayOut = screen.getByTestId('no-access');
+    expect(wayOut).toHaveTextContent(/use a different method/i);
+    expect(wayOut).not.toHaveTextContent(/no access to your phone/i);
+  });
+
+  it('offers the way back, so choosing the recovery code is not a dead end', async () => {
+    /*
+     * Somebody who clicks through to recovery codes and then finds their phone
+     * must be able to return. Without this the only route back is reloading the
+     * page, which restarts the flow and costs them the password they just typed.
+     */
+    const user = userEvent.setup();
+    show();
+    await user.click(screen.getByTestId('no-access'));
+    await user.click(screen.getByTestId('use-static'));
+    await user.click(screen.getByTestId('no-access'));
+    await user.click(screen.getByTestId('use-totp'));
+    expect(screen.getByTestId('code-0')).toBeInTheDocument();
+  });
 });
 
 describe('the three classes we have not built hand over rather than guess', () => {

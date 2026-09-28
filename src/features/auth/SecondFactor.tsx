@@ -266,7 +266,15 @@ export function SecondFactor({
             data-testid="no-access"
             onClick={() => setShowAll(true)}
           >
-            {t('noAccess')}
+            {/*
+              ★ THE LABEL FOLLOWS THE DEVICE, AND THE SECOND CASE IS REACHABLE
+              TODAY. "No access to your phone?" is the right sentence to somebody
+              holding an authenticator app. Once they have answered it and
+              switched to a recovery code, asking again is asking a question they
+              have already answered — and the admin account has exactly those two
+              devices, so it is one click away rather than hypothetical.
+            */}
+            {active.device_class.trim().toLowerCase() === 'totp' ? t('noAccess') : t('otherMethod')}
           </button>
         )
       ) : null}
