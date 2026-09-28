@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import ShopifyConnectorSection from "@/components/billing/ShopifyConnectorSection";
 import { usePermissions } from "@/context/PermissionsContext";
 import { track } from "@/lib/analytics";
 import { useBillingIdentity } from "@/components/billing/ReceiptDetailsForm";
@@ -199,6 +200,29 @@ export default function BillingSettingsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{t("settings.billing.title")}</h1>
         <p className="mt-1 text-sm text-gray-500">{t("settings.billing.subtitle")}</p>
+      </div>
+
+      {/* WHAT GOTCHA CORE IS, said before any plan is shown.
+          The Shopify reviewer saw a list of plans with no way to tell whether
+          Shopify functionality was being sold outside Shopify Billing. Naming
+          the product, naming who bills it, and stating plainly that it does NOT
+          include Shopify is what makes the rest of the page readable - and it
+          is true whether or not this workspace has ever heard of Shopify. */}
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4" data-testid="core-identity">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-gray-900">{t("settings.billing.core.heading")}</h2>
+          <span
+            className="rounded-full border border-gray-300 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-700"
+            data-testid="core-billed-by"
+          >
+            {t("settings.billing.core.billedBy")}
+          </span>
+        </div>
+        <p className="mt-2 text-sm text-gray-700">{t("settings.billing.core.lede")}</p>
+        <p className="mt-1 text-sm text-gray-600">{t("settings.billing.core.includes")}</p>
+        <p className="mt-2 text-sm font-medium text-gray-900" data-testid="core-not-shopify">
+          {t("settings.billing.core.notShopify")}
+        </p>
       </div>
 
       {msg && (
@@ -403,6 +427,12 @@ export default function BillingSettingsPage() {
           </div>
         )}
       </Section>
+
+      {/* ── Shopify Connector ──
+          Placed directly after the Core plan so both subscriptions are visible
+          together: they coexist, and a reviewer must not have to scroll to
+          discover the second one. */}
+      <ShopifyConnectorSection />
 
       {/* ── Payment ── */}
       <Section

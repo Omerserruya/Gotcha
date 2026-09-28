@@ -1608,6 +1608,81 @@
         },
         "dataSafe": "Your data, conversations and settings are all still here. Choosing a plan switches them back on.",
         "cta": "Choose a plan"
+      },
+      "core": {
+        "heading": "GOTCHA Core",
+        "billedBy": "Billed by GOTCHA",
+        "lede": "Your standalone customer service and AI platform. It works on its own, with or without an online store.",
+        "includes": "Includes AI and human agents, the Inbox, automations, approvals, analytics, your communication channels, manually managed knowledge, and supported non-Shopify integrations such as WooCommerce.",
+        "notShopify": "GOTCHA Core does not include connection to Shopify or access to Shopify data."
+      },
+      "shopifyConnector": {
+        "heading": "Shopify Connector",
+        "billedBy": "Billed and managed by Shopify",
+        "lede": "Required to connect a Shopify store and use Shopify products, inventory, customers, orders, storefront functionality, synchronization and actions in GOTCHA.",
+        "separateNote": "This is an additional subscription, not an alternative to GOTCHA Core. You can have both at the same time.",
+        "capabilitiesTitle": "What the Connector unlocks",
+        "capabilities": {
+          "store": "Connecting your Shopify store",
+          "catalog": "Shopify products, inventory and catalogue sync",
+          "orders": "Shopify customers and orders in the Inbox and for AI agents",
+          "actions": "Shopify order actions, refunds and writebacks",
+          "storefront": "The storefront chat widget and app embed"
+        },
+        "viewPricing": "View pricing in Shopify",
+        "manageInShopify": "Manage in Shopify",
+        "choosePlan": "Choose plan in Shopify",
+        "pricingNote": "Shopify shows the price and takes the payment.",
+        "accessOn": "Shopify features are on.",
+        "accessOff": "Shopify features are off.",
+        "coreUnaffected": "GOTCHA Core and your other channels are unaffected.",
+        "loading": "Checking your Shopify subscription…",
+        "loadFailed": "We could not read your Shopify subscription state just now.",
+        "state": {
+          "notConnected": {
+            "title": "No Shopify store connected",
+            "body": "Connect a Shopify store to use Shopify data in GOTCHA. You will choose a Connector plan on Shopify as part of connecting."
+          },
+          "billingRequired": {
+            "title": "Shopify Connector required",
+            "titleDeclined": "No Connector plan approved",
+            "body": "{shop} is authorized, but the Shopify Connector is not active yet. Choose a plan on Shopify to switch on Shopify features.",
+            "bodyDeclined": "{shop} stays authorized, but Shopify features stay off until a Connector plan is approved on Shopify."
+          },
+          "approvalPending": {
+            "title": "Waiting for approval on Shopify",
+            "body": "Shopify still shows this subscription as awaiting approval. Finish approving it in your Shopify admin."
+          },
+          "active": {
+            "title": "Connector active",
+            "body": "Your Shopify Connector subscription is active and Shopify features are on.",
+            "bodyEnding": "Your Connector is active but set to end at the close of the current period."
+          },
+          "trialing": {
+            "title": "Connector trial running",
+            "body": "Your trial is running and Shopify features are on."
+          },
+          "pastDue": {
+            "title": "Payment overdue",
+            "body": "Shopify reports a failed charge. Settle it in your Shopify admin to restore Shopify features."
+          },
+          "frozen": {
+            "title": "Store frozen on Shopify",
+            "body": "Shopify has frozen this store, so the subscription is paused. Shopify features resume when Shopify unfreezes it."
+          },
+          "cancelled": {
+            "title": "Connector cancelled",
+            "body": "Shopify features are off and your data is untouched. GOTCHA Core keeps working as before."
+          },
+          "unknownPlan": {
+            "title": "Finishing your Connector setup",
+            "body": "Shopify has confirmed your subscription and we are completing the setup on our side. There is nothing for you to do and you will not be charged again. If this persists, contact support and mention plan {handle}."
+          },
+          "unavailable": {
+            "title": "Connector status unavailable",
+            "body": "Nothing has changed on your account. Contact support and we will look into it."
+          }
+        }
       }
     }
   },
