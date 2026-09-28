@@ -27,6 +27,32 @@
     /* ── Typefaces ────────────────────────────────────────────────────── */
     --font-sans: var(--font-archivo), system-ui, sans-serif;
     --font-serif: var(--font-instrument-serif), georgia, serif;
+    /*
+     * ════════════════════════════════════════════════════════════════════
+     * ⚠⚠ THIS LINE WAS MISSING, AND THE DISPLAY SERIF WAS UPRIGHT EVERYWHERE
+     * ════════════════════════════════════════════════════════════════════
+     * `--font-serif-style` existed ONLY inside `:root:lang(he)` below, where
+     * `normal` is a deliberate and correct decision — Hebrew has no italic
+     * tradition and a browser asked for one shears the letterforms.
+     *
+     * **A token declared only in its exception has no rule to except.** In
+     * Latin `font-style: var(--font-serif-style)` resolved to nothing, the
+     * declaration was dropped, and `font-style` stayed at its initial value.
+     * Silently: an invalid custom property does not warn, it just is not
+     * there.
+     *
+     * The design draws the sign-in panel's display line as
+     * `font-family:'Instrument Serif',serif; font-style:italic` — the largest
+     * text on that screen, in the wrong style since the day it shipped, and
+     * `Text.module.css` says "used italic" four lines from the rule that was
+     * not applying it.
+     *
+     * ★ The italic FACE is loaded — `Instrument_Serif({ style: ['normal',
+     *   'italic'] })` — so this asks for a real cut, not a synthesised
+     *   oblique. Worth stating because `font-style: italic` against a
+     *   normal-only family is a different and worse thing.
+     */
+    --font-serif-style: italic;
     --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
 
     /* ── Type scale ───────────────────────────────────────────────────────

@@ -259,9 +259,22 @@
     }
   }
 
+  /*
+   * ★★ 390px, AND THIS IS PROBABLY WHAT "TOO NARROW" MEANT.
+   *
+   * The mock: `font-size:13.5px; line-height:1.65; color:#A29D95;
+   * max-width:390px`. Ours was 340px — fifty pixels, 13% narrower, on the
+   * paragraph inside the panel.
+   *
+   * Omer said "the width of the left side with the changing sentences is too
+   * narrow". That was read as the panel and the panel was widened 460→508,
+   * which was also right — but **the element he was pointing at is this one**,
+   * and it was still short afterwards. Two different widths, one sentence,
+   * and the first fix would have looked like it missed.
+   */
   .editorialSupport {
     color: var(--frame-text-secondary);
-    max-inline-size: 340px;
+    max-inline-size: 390px;
   }
 
   .systemStatus {

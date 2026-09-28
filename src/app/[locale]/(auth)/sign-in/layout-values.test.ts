@@ -79,3 +79,41 @@ describe('⚠⚠ 00a values quoted from the design', () => {
     expect(declaration('editorialSlide', 'animation')).toContain('15s');
   });
 });
+
+describe('⚠⚠ the two that change what the reviewer sees', () => {
+  it('⚠⚠ the supporting paragraph is the design’s 390px, not 340', () => {
+    /*
+     * `max-width:390px` in the mock. Ours was 340 — 13% narrower, on the
+     * element "the left side with the changing sentences is too narrow" was
+     * actually pointing at. The panel width was the other half of that
+     * sentence and was fixed first.
+     */
+    expect(declaration('editorialSupport', 'max-inline-size')).toBe('390px');
+  });
+
+  it('⚠⚠ the display serif has a Latin default, or it falls back to upright', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * A TOKEN DECLARED ONLY IN ITS EXCEPTION HAS NO RULE TO EXCEPT
+     * ════════════════════════════════════════════════════════════════════════
+     * `--font-serif-style` existed only inside `:root:lang(he)`, where
+     * `normal` is correct and deliberate. In Latin the custom property was
+     * undefined, so `font-style: var(--font-serif-style)` was an invalid
+     * declaration — dropped in silence — and the largest text on the sign-in
+     * screen has been upright since it shipped.
+     *
+     * Asserted in both directions: the base must be italic AND the Hebrew
+     * override must survive, because "fixing" this by hard-coding italic in
+     * the component would shear Hebrew letterforms and read as a rendering
+     * fault.
+     */
+    const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+    const base = /:root\s*\{([\s\S]*?)\n  \}/.exec(tokens)?.[1] ?? '';
+    expect(base, 'no base :root block found').toContain('--font-serif-style');
+    expect(/--font-serif-style:\s*italic/.test(base)).toBe(true);
+
+    const hebrew = /:root:lang\(he\)\s*\{([\s\S]*?)\n  \}/.exec(tokens)?.[1] ?? '';
+    expect(hebrew, 'no :lang(he) block found').toContain('--font-serif-style');
+    expect(/--font-serif-style:\s*normal/.test(hebrew)).toBe(true);
+  });
+});
