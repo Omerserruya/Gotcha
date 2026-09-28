@@ -51,5 +51,11 @@ claimed as verified in the submission.
    sweep proves it for the real code path.
 7. **Dashboard ↔ repository agreement** (all of `06-dashboard-checklist.md`).
 8. **Screencast timings** — the shot numbers are placeholders until recorded.
-9. **Real-page visual QA** of the Billing screen. The screenshots use the real
-   production CSS but render the section in isolation, not the running app.
+9. **Real-page visual QA of the Billing screen — MANDATORY BEFORE RECORDING.**
+   The screenshots use the real production CSS but render the section in
+   isolation, not the running app. An attempt to run the app locally was
+   abandoned deliberately: it would have depended on another team's checkout,
+   containers, ports and `node_modules`, which breaks the isolation this work
+   is required to keep. It needs either a dedicated environment or an agreed
+   slot on the dev stack. Until then, layout, navigation, responsiveness,
+   console cleanliness and live CTA behaviour are UNVERIFIED.

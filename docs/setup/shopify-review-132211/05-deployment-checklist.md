@@ -1,32 +1,44 @@
 # Deployment checklist
 
-> **Read the blocker first.** The new enforcement is fail-closed, and as of the
-> measurement below **nobody in production holds a Shopify entitlement**.
-> Deploying without the preparation in §2 switches Shopify off for every
-> connected store.
+> **There is no customer to lock out.** An earlier draft of this file called
+> the single connected store a blocker. A read-only classification via the
+> server-side state path showed it is our own development store with a
+> cancelled subscription, so switching it off after deployment is the CORRECT
+> behaviour, not an incident. The preparation below is now verification, not
+> remediation.
 
-## 0. Production as measured (read-only, 2026-09-28)
+## 0. Production as classified (read-only, 2026-09-28)
+
+Both Shopify connections belong to **one tenant**, `cmssrazgl…1r4z`, whose
+GOTCHA Core plan is `poc`.
 
 | Fact | Value |
 |------|-------|
-| Shopify commerce connections | 2 (1 `CONNECTED`) |
-| Connected Shopify integrations | 1 |
-| **Tenants holding any Shopify-funded entitlement** | **0** |
-| Tenants total | 8 |
-| `SHOPIFY_BILLING_ENABLED` | `true` |
-| `SHOPIFY_BILLING_MODE` | `app_pricing` |
-| `SHOPIFY_BILLING_ENV` | `test` (not live) |
-| `SHOPIFY_ALLOW_GRANDFATHERED` | `false` |
-| `SHOPIFY_APP_PUBLICATION_CUTOFF` | **empty** |
-| `SHOPIFY_ALLOW_SPLIT_BILLING` | `true` |
+| Connected store | `shining-face-drgeqqoi.myshopify.com` — Shopify's auto-generated development-store name shape |
+| Second connection | `activewaer.myshopify.com` — **uninstalled** 2026-09-15 |
+| Shopify state (server-side path) | `CANCELLED`, reason `provider_status_cancelled` |
+| Cancelled at | 2026-09-17 |
+| Reported plan handle | `gotcha-connector` — **known**, matches the configured catalog |
+| `grantsAccess` | `false` |
+| Entitlements | `[]` |
+| `lastVerifiedAt` | 2026-09-28 (reconciliation is running and current) |
+| Grandfather grants | 0 |
+| Tenants with any Shopify entitlement | **0** |
 
-Two consequences, both blocking:
+**Why there are no `SHOPIFY_SUBSCRIPTION` rows.** The subscription was
+cancelled on 2026-09-17 and `revokeShopifyEntitlements` deletes exactly those
+rows on a confirmed cancellation. The system behaved correctly. The plan handle
+is known, so this is not `UNKNOWN_PLAN`; reconciliation ran today and Shopify's
+own answer is still "cancelled", so there is nothing to reconcile either.
 
-1. **One live store loses Shopify access the moment this deploys.** It has a
-   connection but no entitlement, and the guard reads entitlements only.
-2. **Grandfathering cannot currently rescue it.** `SHOPIFY_ALLOW_GRANDFATHERED`
-   is `false` *and* the cutoff is empty, and a missing cutoff grandfathers
-   nobody by design.
+**Therefore no grandfather grant is appropriate.** Of the five conditions a
+grant requires, this store fails the first two outright: it is not a real
+customer store, and there was no external paid GOTCHA relationship before
+publication — the tenant is on a `poc` plan. Tenant creation date is not
+evidence of a paid relationship and is not used as such here.
+
+**Do not create a grant. Do not set a cutoff. Do not change the grandfather
+flags.** None of it is needed.
 
 ## 1. What ships
 
@@ -48,39 +60,37 @@ rebuild all of them for consistency. Behaviour actually changes in:
   the shared code beneath it moved.
 - **`gateway`** — carries the rebuilt `frontend/out` (the Billing UI).
 
-## 2. Before enforcement goes live — do these first
+## 2. Before deploying `ai` — verify, do not remediate
 
-Do **not** deploy `ai` until every legitimate existing Shopify tenant is either
-verified through Shopify Billing or holds a valid grandfather grant.
+The enforcement is fail-closed, so this step exists to confirm that nothing
+legitimate is caught by it. As classified above, nothing is.
 
-- [ ] **Identify the affected tenants.** One connected store today; re-run the
-      count immediately before deploying, because it can change.
-- [ ] **Decide per tenant:** are they a genuine pre-publication customer, or
-      should they subscribe through Shopify?
-- [ ] **For anyone staying on a grant:** set `SHOPIFY_APP_PUBLICATION_CUTOFF`
-      to the real publication date and `SHOPIFY_ALLOW_GRANDFATHERED=true`, then
-      create the grant and **verify the row exists** before deploying `ai`.
-      A grant is a recorded `SHOPIFY_GRANDFATHERED` entitlement, never a flag.
-- [ ] **For anyone subscribing:** have them approve the Connector, then confirm
-      `SHOPIFY_SUBSCRIPTION` rows exist for them.
-- [ ] **Re-run the entitlement count and require it to be non-zero** and to
-      cover every connected store. This is the gate; if it fails, stop.
-
-> Creating grants and changing these variables is a production change and is
-> explicitly **out of scope for this work**. It is listed here because
-> enforcement must not be deployed before someone does it deliberately.
+- [ ] **Re-run the classification immediately before deploying.** It can change:
+      a real merchant could connect and subscribe between now and then. The
+      check is "every CONNECTED Shopify store either holds a
+      `SHOPIFY_SUBSCRIPTION` row or is a store we are content to switch off".
+- [ ] **If a real customer store has appeared**, stop and decide deliberately:
+      have them subscribe through Shopify (preferred — the plan handle is known
+      and the catalog is correct), or, only if all five grandfather conditions
+      are genuinely met, create an auditable grant. That is a production
+      decision and is out of scope for this work.
+- [ ] **Expect the development store to lose Shopify access.** That is the
+      change working. Do not treat it as a regression or roll back for it.
 
 ## 3. Deployment order
 
 1. **Build and stage images** for `ai`, `conversation`, `billing`, `gateway`
    at the release SHA. Build for **arm64** — the box is aarch64 and the publish
    script defaults to amd64.
-2. **Deploy `billing` and `conversation` first.** Neither enforces anything new
-   on its own, so this is a safe warm-up that proves the shared package builds
-   and boots.
+2. **Deploy `billing` and `conversation` first.** VERIFIED, not assumed:
+   `conversation` gates only on `FEATURES.AUTO_BUY`, which is not a Shopify
+   feature, and `billing` has no Shopify `isEntitled` call site. Neither
+   activates any part of the Shopify veto, so this is a safe warm-up that
+   proves the shared package builds and boots.
 3. **Deploy `gateway`** (the Billing UI). Safe to deploy early: showing the two
    subscriptions is honest regardless of enforcement state, and it does not
-   grant or remove anything.
+   grant or remove anything. With the store cancelled, the Billing page will
+   correctly read "Connector cancelled" before `ai` is touched.
 4. **Deploy `ai` LAST.** This is the moment enforcement becomes real. Do it only
    after §2 passes.
 5. **No restarts beyond the recreated containers.** cloudflared reaches the
@@ -92,7 +102,10 @@ Use the gateway-only recipe already documented in the deploy notes:
 ## 4. Smoke tests after deploying `ai`
 
 - [ ] A tenant **with** a verified Connector: Shopify products load, Inbox order
-      context renders, a Shopify tool appears to an agent.
+      context renders, a Shopify tool appears to an agent. **Note: no such
+      tenant exists in production today**, so this can only be exercised by
+      subscribing a store — see the unprovable list in
+      `07-policy-evidence-matrix.md`.
 - [ ] A tenant **without**: Shopify features are off, and **WhatsApp, Instagram,
       email, the Inbox, approvals and WooCommerce all still work.** This is the
       one that proves Core was not collaterally damaged.

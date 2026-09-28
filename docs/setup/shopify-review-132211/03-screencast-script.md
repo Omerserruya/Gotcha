@@ -5,6 +5,16 @@ billing boundary, not evaluating the product, so every second spent on an
 unrelated GOTCHA feature is a second they have to sit through. Resist showing
 the Inbox in depth, the AI builder, analytics, or anything not on this list.
 
+> **BLOCKER — do this before you record.** Real-page QA of the Billing screen
+> has NOT been done. The screenshots in this pack render the real component
+> with the real production CSS, but in isolation, not inside the running
+> Next.js app. Before recording, open `/settings/billing` in the real
+> application and confirm: full page layout, Core and Connector both reachable
+> without confusing navigation, responsive mobile rendering, English and
+> Hebrew RTL, the six Connector states, no console errors, and that every CTA
+> uses only the server-supplied destination. An isolated component render
+> cannot prove any of those.
+
 **Recording setup:** Chrome Incognito, 1440×900, browser zoom 100%, no
 extensions, no bookmarks bar, no notifications. Narrate briefly or add captions;
 either is fine, but the URL bar must stay visible throughout so the reviewer can

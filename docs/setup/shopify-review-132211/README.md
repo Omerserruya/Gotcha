@@ -17,13 +17,15 @@ an active Connector and a cancelled one produced identical access.
 | [05-deployment-checklist.md](./05-deployment-checklist.md) | **Read first — enforcement is fail-closed** |
 | [06-dashboard-checklist.md](./06-dashboard-checklist.md) | Manual Dashboard checks (read-only) |
 | [07-policy-evidence-matrix.md](./07-policy-evidence-matrix.md) | Requirement → code → test → shot |
+| [08-deployment-dry-run.md](./08-deployment-dry-run.md) | Expected before/after per store, read-only |
 
-## The one blocker
+## No customer is at risk
 
-Production currently has **one connected Shopify store and zero tenants holding
-a Shopify entitlement**, and grandfathering is switched off with an empty
-publication cutoff. Deploying `services/ai` before fixing that switches Shopify
-off for that store. See `05-deployment-checklist.md` §2.
+The single connected store is **our own development store with a cancelled
+subscription**, on a `poc` tenant. Switching its Shopify access off after
+deployment is the correct behaviour, not an incident. **No grandfather grant is
+needed or appropriate.** See `05-deployment-checklist.md` §0 and
+`08-deployment-dry-run.md`.
 
 ## Code
 
