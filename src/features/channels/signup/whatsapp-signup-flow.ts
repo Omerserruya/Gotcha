@@ -1,7 +1,8 @@
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * ★ A VERBATIM COPY OF
+ * ★ A COPY OF
  *   ChatCenter/frontend/src/lib/whatsapp-signup-flow.ts
+ *   — verbatim when it was made, and **no longer**. See the end of this note.
  *
  * Copied, not reimplemented, and the reason is one line inside it:
  *
@@ -23,6 +24,36 @@
  * nobody knows is duplicated is the hazard.
  *
  * If you change this file, change the other one.
+ *
+ * ⚠⚠ THAT INSTRUCTION WAS NOT FOLLOWED, BY ME, ONE COMMIT LATER.
+ * Measured 2026-09-28, both files as they stand:
+ *
+ *     this copy at `79c81d9` (when made)  vs ChatCenter today    0 differ
+ *     this copy today                     vs ChatCenter today   48 differ
+ *                                       (code lines, quote style normalised)
+ *
+ * **It was verbatim. We drifted; they did not.** `750625b` replaced eight
+ * `any`s with `unknown` plus the `field()`/`text()` accessors below, to satisfy
+ * `@typescript-eslint/no-explicit-any` — a **repo-wide lint gate** with no way
+ * to know that this one file answers to another repository. I wrote that
+ * commit and did not think of it as "changing this file". I thought of it as
+ * fixing eleven lint errors.
+ *
+ * ★ THAT IS A STRONGER ARGUMENT THAN "TWO COPIES MIGHT DRIFT". A
+ *   cross-repository sync instruction living in a comment is invisible to
+ *   every gate this project runs. It did not fail through carelessness — the
+ *   mechanism that changed the file was not reading comments.
+ *
+ * ⚠ AND THE DRIFT CARRIED A BUG FIX THAT HAS NOT PROPAGATED. `750625b` also
+ *   filtered `waba_ids` to non-empty strings. ChatCenter's copy still reads
+ *   `payload.data?.waba_ids || …` unfiltered, so a list with a null in it
+ *   still becomes a waba id of `null` further down **over there**. Not fixed
+ *   here: that repository is read-only to this session. Reported instead.
+ *
+ * ★ The security-critical line is still identical in both, modulo quotes —
+ *   `host === 'facebook.com' || host.endsWith('.facebook.com')` — which is the
+ *   part the copy exists for, and it survived because the lint rule happened
+ *   not to touch it. **Luck, not design.**
  * ════════════════════════════════════════════════════════════════════════════
  */
 /**
