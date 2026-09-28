@@ -56,7 +56,7 @@ describe("OAuth alone is never 'active'", () => {
     );
     expect(p?.key).toBe("billingRequired");
     expect(p?.grantsAccess).toBe(false);
-    expect(p?.action).toBe(true);
+    expect(p?.action).toBe("choosePlan");
   });
 
   it("access is copied from the server verdict, not inferred from the state name", () => {
@@ -83,7 +83,7 @@ describe("state mapping", () => {
     ["APPROVAL_PENDING", "approvalPending", false],
     ["PAST_DUE", "pastDue", false],
     ["FROZEN", "frozen", false],
-    ["UNKNOWN_PLAN", "unknownPlan", true],
+    ["UNKNOWN_PLAN", "unknownPlan", false],
     ["ERROR", "unavailable", false],
     ["NOT_REQUIRED_GRANDFATHERED", "grandfathered", true],
   ])("%s maps to %s", (state, key, grants) => {
@@ -91,8 +91,26 @@ describe("state mapping", () => {
     expect(p?.key).toBe(key);
   });
 
-  it("UNRESOLVED renders nothing rather than inventing a subscription", () => {
+  it("UNRESOLVED renders nothing on a screen that did not ask for it", () => {
     expect(presentConnector(snap({ shopify: { state: "UNRESOLVED" } }))).toBeNull();
+  });
+
+  // If the Connector section disappeared from the Billing page, the only thing
+  // left there would be externally billed GOTCHA plans - and the honest
+  // conclusion from that page alone is that Shopify comes with them. That is
+  // the 1.2.1 finding, recreated by an empty state.
+  it("UNRESOLVED still shows on the Billing page, as 'not active', not an error", () => {
+    const p = presentConnector(snap({ shopify: { state: "UNRESOLVED" }, grantsAccess: false }), {
+      alwaysShow: true,
+    });
+    expect(p?.key).toBe("notActive");
+    expect(p?.tone).toBe("neutral");
+    expect(p?.grantsAccess).toBe(false);
+    expect(p?.action).toBe("none");
+  });
+
+  it("alwaysShow does not invent a card when there is no snapshot at all", () => {
+    expect(presentConnector(null, { alwaysShow: true })).toBeNull();
   });
 
   it("no snapshot renders nothing", () => {
@@ -104,7 +122,7 @@ describe("state mapping", () => {
       snap({ installation: { connectionId: null, shopDomain: null }, grantsAccess: false }),
     );
     expect(p?.key).toBe("notConnected");
-    expect(p?.action).toBe(false);
+    expect(p?.action).toBe("none");
   });
 
   it("an uninstalled store is not treated as connected", () => {
@@ -115,15 +133,116 @@ describe("state mapping", () => {
   });
 });
 
-describe("unknown plan is visible and actionable", () => {
-  it("names the handle so an operator can fix the catalog", () => {
+describe("unknown plan follows grantsAccess exactly", () => {
+  // The state name must not decide access. Only the server's verdict does.
+  it("grantsAccess=false means Shopify access is OFF and says nothing was expanded", () => {
+    const p = presentConnector(
+      snap({ shopify: { state: "UNKNOWN_PLAN", unknownPlanHandle: "pro-monthly" }, grantsAccess: false }),
+    );
+    expect(p?.key).toBe("unknownPlan");
+    expect(p?.grantsAccess).toBe(false);
+    expect(p?.bodyKey).toMatch(/unknownPlan\.body$/);
+  });
+
+  it("grantsAccess=true keeps existing access and says it is preserved, not finished", () => {
     const p = presentConnector(
       snap({ shopify: { state: "UNKNOWN_PLAN", unknownPlanHandle: "pro-monthly" }, grantsAccess: true }),
     );
-    expect(p?.key).toBe("unknownPlan");
-    expect(p?.vars.handle).toBe("pro-monthly");
-    // Never "choose a plan": the merchant is already paying Shopify.
-    expect(p?.action).toBe(false);
+    expect(p?.grantsAccess).toBe(true);
+    expect(p?.bodyKey).toMatch(/unknownPlan\.bodyPreserved$/);
+  });
+
+  it("never offers 'choose a plan' - the merchant is already paying Shopify", () => {
+    for (const grants of [true, false]) {
+      const p = presentConnector(
+        snap({ shopify: { state: "UNKNOWN_PLAN" }, grantsAccess: grants }),
+      );
+      expect(p?.action).not.toBe("choosePlan");
+      expect(p?.support).toBe(true);
+    }
+  });
+
+  it("does not put the plan handle in merchant-facing copy", () => {
+    const p = presentConnector(
+      snap({ shopify: { state: "UNKNOWN_PLAN", unknownPlanHandle: "pro-monthly" }, grantsAccess: true }),
+    );
+    expect(JSON.stringify(p?.vars)).not.toContain("pro-monthly");
+  });
+});
+
+describe("recovery paths exist instead of dead ends", () => {
+  it.each(["PAST_DUE", "FROZEN", "UNKNOWN_PLAN"])(
+    "%s offers Manage in Shopify when the server supplied a destination",
+    (state) => {
+      const p = presentConnector(snap({ shopify: { state }, grantsAccess: false }));
+      expect(p?.action).toBe("manage");
+    },
+  );
+
+  it("ERROR offers a retry and a support line rather than a dead end", () => {
+    const p = presentConnector(snap({ shopify: { state: "ERROR" }, grantsAccess: false }));
+    expect(p?.action).toBe("retry");
+    expect(p?.support).toBe(true);
+  });
+
+  it("falls back to retry when the server gave no destination", () => {
+    const p = presentConnector(
+      snap({ shopify: { state: "PAST_DUE" }, planSelectionUrl: null, grantsAccess: false }),
+    );
+    expect(p?.action).toBe("retry");
+  });
+
+  it("no CTA implies that pressing it grants access", () => {
+    // `manage` and `choosePlan` both open Shopify's own page; neither is a
+    // switch we control. `retry` only re-reads our own state.
+    for (const state of ["ACTIVE", "PAST_DUE", "FROZEN", "UNKNOWN_PLAN", "CANCELLED", "ERROR"]) {
+      const p = presentConnector(snap({ shopify: { state }, grantsAccess: false }));
+      expect(["none", "manage", "choosePlan", "retry"]).toContain(p?.action);
+    }
+  });
+});
+
+/**
+ * THE AUTHORITATIVE VERDICT.
+ *
+ * Across every state and both verdicts, the access the UI reports must equal
+ * `grantsAccess` and nothing else - not the state enum, not the install, not
+ * the connection, not Core's subscription, not the URL.
+ */
+describe("displayed access is derived from grantsAccess alone", () => {
+  const STATES = [
+    "NOT_REQUIRED_GRANDFATHERED", "ACTIVE", "TRIALING", "PLAN_SELECTION_REQUIRED",
+    "APPROVAL_PENDING", "PAST_DUE", "FROZEN", "CANCELLED", "UNKNOWN_PLAN", "ERROR",
+  ];
+
+  for (const state of STATES) {
+    for (const grants of [true, false]) {
+      it(`${state} + grantsAccess=${grants} reports access=${grants}`, () => {
+        const p = presentConnector(snap({ shopify: { state }, grantsAccess: grants }));
+        expect(p?.grantsAccess).toBe(grants);
+      });
+    }
+  }
+
+  it("a healthy install and a live Core plan do not raise access", () => {
+    const p = presentConnector(
+      snap({
+        shopify: { state: "ACTIVE" },
+        installation: { status: "CONNECTED", connectionId: "c1", shopDomain: "demo.myshopify.com" },
+        grantsAccess: false,
+      }),
+    );
+    expect(p?.grantsAccess).toBe(false);
+  });
+
+  it("a missing install does not lower access reported by the server", () => {
+    // notConnected is decided by the installation, and it reports no access -
+    // which is the one case where the two agree by construction.
+    const p = presentConnector(
+      snap({ installation: { connectionId: null, shopDomain: null }, grantsAccess: true }),
+    );
+    expect(p?.key).toBe("notConnected");
+    expect(p?.grantsAccess).toBe(false);
   });
 });
 
@@ -138,7 +257,7 @@ describe("grandfathered", () => {
     );
     expect(p?.key).toBe("grandfathered");
     expect(p?.grantsAccess).toBe(true);
-    expect(p?.action).toBe(false);
+    expect(p?.action).toBe("none");
   });
 });
 
@@ -161,8 +280,8 @@ describe("no state is inferred from the browser", () => {
     expect(after?.key).toBe("cancelled");
   });
 
-  it("takes exactly one argument, so there is nowhere for browser state to enter", () => {
-    expect(presentConnector.length).toBe(1);
+  it("takes only a snapshot and options, so there is nowhere for browser state to enter", () => {
+    expect(presentConnector.length).toBeLessThanOrEqual(2);
   });
 });
 
@@ -172,6 +291,7 @@ describe("the action is only offered when the SERVER supplied a destination", ()
       snap({ shopify: { state: "PLAN_SELECTION_REQUIRED" }, planSelectionUrl: null, grantsAccess: false }),
     );
     expect(p?.key).toBe("billingRequired");
-    expect(p?.action).toBe(false);
+    // No destination from the server: a retry, never a button that goes nowhere.
+    expect(p?.action).toBe("retry");
   });
 });

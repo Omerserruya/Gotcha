@@ -87,7 +87,11 @@ export default function ShopifyBillingBanner() {
     }
   }
 
-  const manage = p.key === "active" || p.key === "trialing" || p.key === "grandfathered";
+  const LABEL: Record<string, string> = {
+    choosePlan: t("settings.billing.shopifyConnector.choosePlan"),
+    manage: t("settings.billing.shopifyConnector.manageInShopify"),
+    retry: t("settings.billing.shopifyConnector.retry"),
+  };
 
   return (
     <div className={`rounded-xl border px-4 py-3 ${TONE_CLASS[p.tone]}`} data-testid={`connector-state-${p.key}`}>
@@ -102,19 +106,16 @@ export default function ShopifyBillingBanner() {
           {error && <p className="mt-2 text-sm font-medium text-red-700">{error}</p>}
         </div>
 
-        {p.action && (
+        {p.action !== "none" && p.action !== "retry" && (
           <button
             type="button"
             onClick={choosePlan}
             disabled={busy}
             data-testid="connector-cta"
+            data-action={p.action}
             className="shrink-0 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
           >
-            {busy
-              ? t("settings.billing.shopifyConnector.loading")
-              : manage
-                ? t("settings.billing.shopifyConnector.manageInShopify")
-                : t("settings.billing.shopifyConnector.choosePlan")}
+            {busy ? t("settings.billing.shopifyConnector.loading") : LABEL[p.action]}
           </button>
         )}
       </div>

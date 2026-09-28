@@ -26,6 +26,7 @@ import type { ShopifyBillingSnapshot } from "@/lib/api";
 
 /** Stable identifiers - safe to assert on in tests and to key translations. */
 export type ConnectorStateKey =
+  | "notActive"
   | "notConnected"
   | "billingRequired"
   | "approvalPending"
@@ -40,14 +41,26 @@ export type ConnectorStateKey =
 
 export type ConnectorTone = "ok" | "warn" | "info" | "neutral";
 
+/**
+ * What the button does, if there is one.
+ *
+ * `manage` and `choosePlan` both open the SERVER-supplied Shopify page; they
+ * differ only in what the label promises. Neither may imply that pressing it
+ * grants access - Shopify decides that, and we find out by verifying
+ * afterwards. `retry` re-reads our own state and exists so that a state we
+ * genuinely cannot resolve is not a dead end.
+ */
+export type ConnectorAction = "none" | "choosePlan" | "manage" | "retry";
+
 export interface ConnectorPresentation {
   key: ConnectorStateKey;
   tone: ConnectorTone;
   /** i18n keys, so one mapping serves English and Hebrew alike. */
   titleKey: string;
   bodyKey: string;
-  /** Offer the button that sends the merchant to Shopify's hosted page. */
-  action: boolean;
+  action: ConnectorAction;
+  /** Show the "contact support" line beneath the state. */
+  support?: boolean;
   /**
    * Whether Shopify data and actions are actually switched on. Copied from the
    * server verdict, never inferred from installation or plan.
@@ -59,15 +72,37 @@ export interface ConnectorPresentation {
 
 const K = "settings.billing.shopifyConnector.state";
 
+export interface PresentOptions {
+  /**
+   * Keep the section on screen even when Shopify billing is UNRESOLVED for this
+   * deployment.
+   *
+   * The Billing page passes this and the integration banner does not, and the
+   * difference is not cosmetic. On the Billing page the reviewer is looking at
+   * externally billed GOTCHA plans; if the Connector vanishes, the only thing
+   * left to read is "here are GOTCHA's plans", and the honest conclusion from
+   * that page alone is that Shopify functionality comes with them. That is the
+   * 1.2.1 finding, recreated by an empty state.
+   *
+   * On the integration screen the connection card already speaks and a strip
+   * about a subscription that cannot exist yet is noise, so it stays hidden.
+   *
+   * It is an OPTION rather than a second mapping so both screens keep reading
+   * one interpretation of one snapshot.
+   */
+  alwaysShow?: boolean;
+}
+
 /**
  * Turn the server snapshot into what to show.
  *
- * `null` means render nothing at all: Shopify billing is switched off for this
- * deployment and there is no honest statement to make about a subscription that
- * cannot exist. An empty card saying nothing is worse than no card.
+ * `null` means render nothing at all. Without `alwaysShow`, an UNRESOLVED
+ * deployment is one of those cases: Shopify billing is switched off and there
+ * is no honest statement to make about a subscription that cannot exist.
  */
 export function presentConnector(
   snapshot: ShopifyBillingSnapshot | null,
+  options: PresentOptions = {},
 ): ConnectorPresentation | null {
   if (!snapshot) return null;
 
@@ -86,19 +121,41 @@ export function presentConnector(
       tone: "neutral",
       titleKey: `${K}.notConnected.title`,
       bodyKey: `${K}.notConnected.body`,
-      action: false,
+      action: "none",
       grantsAccess: false,
       vars,
     };
   }
 
+  // Every destination is the SERVER's. The frontend has no code path that can
+  // build a Shopify URL, because one built here could address a store this
+  // workspace does not own. With no destination we offer a retry instead of a
+  // button that goes nowhere.
+  const hasUrl = !!snapshot.planSelectionUrl;
+  const manage: ConnectorAction = hasUrl ? "manage" : "retry";
+  const choose: ConnectorAction = hasUrl ? "choosePlan" : "retry";
+
   const state = snapshot.shopify?.state;
 
   switch (state) {
-    // Shopify billing is off for this deployment. Say nothing rather than
-    // inventing a subscription state.
+    // Shopify billing is off or unconfigured for this deployment.
+    //
+    // On the integration screen there is nothing to say. On the Billing page
+    // there is something important to say - that the Connector is a separate
+    // subscription Shopify bills - and saying it does not require a
+    // subscription to exist. It is NOT an error: a workspace that never
+    // installed the app has done nothing wrong.
     case "UNRESOLVED":
-      return null;
+      if (!options.alwaysShow) return null;
+      return {
+        key: "notActive",
+        tone: "neutral",
+        titleKey: `${K}.notActive.title`,
+        bodyKey: `${K}.notActive.body`,
+        action: "none",
+        grantsAccess: false,
+        vars,
+      };
 
     case "NOT_REQUIRED_GRANDFATHERED":
       return {
@@ -106,7 +163,8 @@ export function presentConnector(
         tone: "ok",
         titleKey: `${K}.grandfathered.title`,
         bodyKey: `${K}.grandfathered.body`,
-        action: false,
+        // No Shopify subscription to manage: this access is not billed there.
+        action: "none",
         grantsAccess,
         vars,
       };
@@ -119,7 +177,7 @@ export function presentConnector(
         bodyKey: snapshot.shopify.cancelAtPeriodEnd
           ? `${K}.active.bodyEnding`
           : `${K}.active.body`,
-        action: false,
+        action: hasUrl ? "manage" : "none",
         grantsAccess,
         vars,
       };
@@ -130,7 +188,7 @@ export function presentConnector(
         tone: "ok",
         titleKey: `${K}.trialing.title`,
         bodyKey: `${K}.trialing.body`,
-        action: false,
+        action: hasUrl ? "manage" : "none",
         grantsAccess,
         vars,
       };
@@ -148,7 +206,7 @@ export function presentConnector(
         bodyKey: snapshot.shopify.declined
           ? `${K}.billingRequired.bodyDeclined`
           : `${K}.billingRequired.body`,
-        action: !!snapshot.planSelectionUrl,
+        action: choose,
         grantsAccess,
         vars,
       };
@@ -159,7 +217,7 @@ export function presentConnector(
         tone: "warn",
         titleKey: `${K}.approvalPending.title`,
         bodyKey: `${K}.approvalPending.body`,
-        action: !!snapshot.planSelectionUrl,
+        action: manage,
         grantsAccess,
         vars,
       };
@@ -170,7 +228,9 @@ export function presentConnector(
         tone: "warn",
         titleKey: `${K}.pastDue.title`,
         bodyKey: `${K}.pastDue.body`,
-        action: false,
+        // Settling the charge happens in Shopify, so send them there rather
+        // than leaving a status they can do nothing about.
+        action: manage,
         grantsAccess,
         vars,
       };
@@ -181,7 +241,7 @@ export function presentConnector(
         tone: "warn",
         titleKey: `${K}.frozen.title`,
         bodyKey: `${K}.frozen.body`,
-        action: false,
+        action: manage,
         grantsAccess,
         vars,
       };
@@ -192,24 +252,33 @@ export function presentConnector(
         tone: "warn",
         titleKey: `${K}.cancelled.title`,
         bodyKey: `${K}.cancelled.body`,
-        action: !!snapshot.planSelectionUrl,
+        action: choose,
         grantsAccess,
         vars,
       };
 
     // OUR configuration is incomplete, not theirs. The merchant IS paying
-    // Shopify, so "choose a plan" would ask them to pay twice. The plan handle
-    // is configuration, not a credential, and naming it is what makes this
-    // actionable for an operator.
+    // Shopify, so "choose a plan" would ask them to pay twice.
+    //
+    // The two bodies are NOT cosmetic. `grantsAccess` is the server's verdict
+    // and the copy follows it exactly: when it is false nothing was switched on
+    // and "finishing your setup" would be a false reassurance; when it is true,
+    // access the merchant already had is being held open while we fix the
+    // catalog - a different promise, and still not a claim that setup worked.
+    //
+    // The unknown plan handle is NOT shown. It is configuration rather than a
+    // credential, so it is safe, but it means nothing to a merchant and support
+    // can read it from the snapshot.
     case "UNKNOWN_PLAN":
       return {
         key: "unknownPlan",
-        tone: "info",
+        tone: "warn",
         titleKey: `${K}.unknownPlan.title`,
-        bodyKey: `${K}.unknownPlan.body`,
-        action: false,
+        bodyKey: grantsAccess ? `${K}.unknownPlan.bodyPreserved` : `${K}.unknownPlan.body`,
+        action: hasUrl ? "manage" : "none",
+        support: true,
         grantsAccess,
-        vars: { ...vars, handle: snapshot.shopify.unknownPlanHandle ?? "" },
+        vars,
       };
 
     case "ERROR":
@@ -219,7 +288,10 @@ export function presentConnector(
         tone: "info",
         titleKey: `${K}.unavailable.title`,
         bodyKey: `${K}.unavailable.body`,
-        action: false,
+        // We could not resolve our own state: offer a retry and a support path
+        // rather than a status the merchant can only stare at.
+        action: "retry",
+        support: true,
         grantsAccess,
         vars,
       };

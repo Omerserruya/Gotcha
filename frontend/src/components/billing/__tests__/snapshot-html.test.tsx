@@ -80,8 +80,8 @@ async function shoot(name: string, loc: Locale, over: any) {
   await new Promise((r) => setTimeout(r, 30));
   const dir = loc === "he" ? "rtl" : "ltr";
   const html = `<!doctype html><html lang="${loc}" dir="${dir}"><head><meta charset="utf-8">
-<script src="https://cdn.tailwindcss.com"></script>
-<style>body{background:#f8fafc;font-family:ui-sans-serif,system-ui,'Segoe UI',Arial}</style></head>
+<link rel="stylesheet" href="./app.css">
+<style>body{background:#f8fafc}</style></head>
 <body><div class="mx-auto max-w-3xl p-6">
 <h1 class="text-2xl font-bold text-gray-900">${T[loc].t("settings.billing.title")}</h1>
 <p class="mt-1 mb-6 text-sm text-gray-500">${T[loc].t("settings.billing.subtitle")}</p>
@@ -95,7 +95,7 @@ ${coreCard(loc)}
 // Opt-in: only runs when a destination is given, so an ordinary test run does
 // not write files anywhere.
 describe.skipIf(!process.env.SHOT_DIR)("render states for screenshots", () => {
-  it("writes all six", async () => {
+  it("writes every state", async () => {
     await shoot("1-core-active-connector-active", "en", { shopify: { state: "ACTIVE" }, grantsAccess: true });
     await shoot("2-core-active-connector-required", "en", { shopify: { state: "PLAN_SELECTION_REQUIRED" }, grantsAccess: false });
     await shoot("3-core-active-connector-cancelled", "en", { shopify: { state: "CANCELLED" }, grantsAccess: false });
@@ -106,5 +106,10 @@ describe.skipIf(!process.env.SHOT_DIR)("render states for screenshots", () => {
       grantsAccess: true,
     });
     await shoot("6-hebrew-rtl-connector-required", "he", { shopify: { state: "PLAN_SELECTION_REQUIRED" }, grantsAccess: false });
+    // Added after review feedback: the Connector must never vanish from
+    // Billing, and UNKNOWN_PLAN must follow grantsAccess rather than its name.
+    await shoot("7-unresolved-still-visible", "en", { shopify: { state: "UNRESOLVED" }, grantsAccess: false });
+    await shoot("8-unknown-plan-access-off", "en", { shopify: { state: "UNKNOWN_PLAN", unknownPlanHandle: "connector-monthly-v2" }, grantsAccess: false });
+    await shoot("9-unknown-plan-access-preserved", "en", { shopify: { state: "UNKNOWN_PLAN", unknownPlanHandle: "connector-monthly-v2" }, grantsAccess: true });
   });
 });

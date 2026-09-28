@@ -68,13 +68,13 @@ export default function ShopifyConnectorSection() {
     };
   }, [token]);
 
-  const p = presentConnector(snapshot);
+  // alwaysShow: the Billing page keeps this section even when Shopify billing
+  // is UNRESOLVED. If it vanished, the only thing left on the page would be
+  // externally billed GOTCHA plans, and the honest conclusion from that page
+  // alone is that Shopify comes with them - which is the 1.2.1 finding.
+  const p = presentConnector(snapshot, { alwaysShow: true });
 
-  // Shopify billing is switched off for this deployment: there is no
-  // subscription to describe and inventing a card would be a claim.
-  if (!loading && !failed && !p) return null;
-
-  async function choosePlan() {
+  async function goToShopify() {
     if (!token) return;
     setBusy(true);
     setError(null);
@@ -83,15 +83,33 @@ export default function ShopifyConnectorSection() {
       // A full navigation, not a new tab: the merchant returns to
       // /integrations/shopify/billing/complete in this same browser context.
       window.location.href = data.url;
-    } catch (e: any) {
+    } catch {
       setError(t("settings.billing.shopifyConnector.loadFailed"));
       setBusy(false);
     }
   }
 
-  const actionLabel = p?.key === "active" || p?.key === "trialing" || p?.key === "grandfathered"
-    ? t("settings.billing.shopifyConnector.manageInShopify")
-    : t("settings.billing.shopifyConnector.choosePlan");
+  /** Re-read OUR state. Used when Shopify's answer could not be resolved. */
+  async function recheck() {
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    setFailed(false);
+    try {
+      const r = await getShopifyBillingState(token);
+      setSnapshot(r.data);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const ACTION_LABEL: Record<string, string> = {
+    choosePlan: t("settings.billing.shopifyConnector.choosePlan"),
+    manage: t("settings.billing.shopifyConnector.manageInShopify"),
+    retry: t("settings.billing.shopifyConnector.retry"),
+  };
 
   return (
     <section className="border-t border-gray-100 pt-6 mt-6" data-testid="shopify-connector-section">
@@ -140,18 +158,25 @@ export default function ShopifyConnectorSection() {
                     : `${t("settings.billing.shopifyConnector.accessOff")} ${t("settings.billing.shopifyConnector.coreUnaffected")}`}
                 </p>
 
+                {p.support && (
+                  <p className="mt-2 text-xs opacity-80" data-testid="connector-support">
+                    {t("settings.billing.shopifyConnector.supportLine")}
+                  </p>
+                )}
+
                 {error && <p className="mt-2 text-sm font-medium text-red-700">{error}</p>}
               </div>
 
-              {p.action && (
+              {p.action !== "none" && (
                 <button
                   type="button"
-                  onClick={choosePlan}
+                  onClick={p.action === "retry" ? recheck : goToShopify}
                   disabled={busy}
                   data-testid="connector-cta"
+                  data-action={p.action}
                   className="shrink-0 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
                 >
-                  {busy ? t("settings.billing.shopifyConnector.loading") : actionLabel}
+                  {busy ? t("settings.billing.shopifyConnector.loading") : ACTION_LABEL[p.action]}
                 </button>
               )}
             </div>

@@ -117,13 +117,23 @@ describe("the action goes to Shopify, never to GOTCHA checkout", () => {
     expect(target).not.toMatch(/\/settings\/billing|gotcha\.co\.il|checkout/i);
   });
 
-  it("shows no button when the server gave no destination", async () => {
+  it("offers a retry, not a Shopify link, when the server gave no destination", async () => {
     getState.mockResolvedValue({
       data: snap({ shopify: { state: "PLAN_SELECTION_REQUIRED" }, planSelectionUrl: null, grantsAccess: false }),
     });
     render(<ShopifyConnectorSection />);
     await screen.findByTestId("connector-state-billingRequired");
-    expect(screen.queryByTestId("connector-cta")).toBeNull();
+    const cta = screen.getByTestId("connector-cta");
+    // A retry re-reads OUR state. It must never try to open Shopify, because
+    // there is no server-supplied destination and the frontend may not invent
+    // one.
+    expect(cta.getAttribute("data-action")).toBe("retry");
+    expect(cta).toHaveTextContent(EN.shopifyConnector.retry);
+
+    getState.mockClear();
+    fireEvent.click(cta);
+    await waitFor(() => expect(getState).toHaveBeenCalled());
+    expect(startPlan).not.toHaveBeenCalled();
   });
 });
 
@@ -153,14 +163,50 @@ describe("state is shown accurately", () => {
     expect(screen.getByTestId("connector-access")).toHaveTextContent(EN.shopifyConnector.accessOn);
   });
 
-  it("unknown plan is visible and names the handle for support", async () => {
+  it("unknown plan with access OFF says nothing was expanded, and hides the handle", async () => {
     getState.mockResolvedValue({
-      data: snap({ shopify: { state: "UNKNOWN_PLAN", unknownPlanHandle: "pro-monthly" }, grantsAccess: true }),
+      data: snap({ shopify: { state: "UNKNOWN_PLAN", unknownPlanHandle: "pro-monthly" }, grantsAccess: false }),
+    });
+    const { container } = render(<ShopifyConnectorSection />);
+    expect(await screen.findByTestId("connector-state-unknownPlan")).toBeTruthy();
+    expect(screen.getByTestId("connector-access")).toHaveTextContent(EN.shopifyConnector.accessOff);
+    expect(screen.getByText(EN.shopifyConnector.state.unknownPlan.body)).toBeTruthy();
+    expect(container.textContent).not.toContain("pro-monthly");
+    expect(screen.getByTestId("connector-support")).toBeTruthy();
+  });
+
+  it("unknown plan with access ON says existing access is preserved, not finished", async () => {
+    getState.mockResolvedValue({
+      data: snap({ shopify: { state: "UNKNOWN_PLAN" }, grantsAccess: true }),
     });
     render(<ShopifyConnectorSection />);
     expect(await screen.findByTestId("connector-state-unknownPlan")).toBeTruthy();
-    expect(screen.getByText(/pro-monthly/)).toBeTruthy();
+    expect(screen.getByTestId("connector-access")).toHaveTextContent(EN.shopifyConnector.accessOn);
+    expect(screen.getByText(EN.shopifyConnector.state.unknownPlan.bodyPreserved)).toBeTruthy();
+    // Never the old "finishing your setup" reassurance.
+    expect(EN.shopifyConnector.state.unknownPlan.bodyPreserved).not.toMatch(/finishing/i);
+  });
+
+  it("UNRESOLVED still renders the Connector identity on the Billing page", async () => {
+    getState.mockResolvedValue({
+      data: snap({ shopify: { state: "UNRESOLVED" }, grantsAccess: false }),
+    });
+    render(<ShopifyConnectorSection />);
+    expect(await screen.findByTestId("connector-state-notActive")).toBeTruthy();
+    expect(screen.getByTestId("connector-billed-by")).toHaveTextContent(EN.shopifyConnector.billedBy);
+    expect(screen.getByText(EN.shopifyConnector.separateNote)).toBeTruthy();
     expect(screen.queryByTestId("connector-cta")).toBeNull();
+  });
+
+  it.each([
+    ["PAST_DUE", "manage"],
+    ["FROZEN", "manage"],
+    ["ERROR", "retry"],
+  ])("%s offers a %s action rather than a dead end", async (state, action) => {
+    getState.mockResolvedValue({ data: snap({ shopify: { state }, grantsAccess: false }) });
+    render(<ShopifyConnectorSection />);
+    const cta = await screen.findByTestId("connector-cta");
+    expect(cta.getAttribute("data-action")).toBe(action);
   });
 
   it("grandfathered is shown without claiming Shopify bills them", async () => {

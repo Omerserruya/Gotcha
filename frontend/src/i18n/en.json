@@ -1675,14 +1675,21 @@
             "body": "Shopify features are off and your data is untouched. GOTCHA Core keeps working as before."
           },
           "unknownPlan": {
-            "title": "Finishing your Connector setup",
-            "body": "Shopify has confirmed your subscription and we are completing the setup on our side. There is nothing for you to do and you will not be charged again. If this persists, contact support and mention plan {handle}."
+            "title": "Connector plan not recognised",
+            "body": "We could not match your active Shopify subscription to a configured Connector plan. Shopify access has not been expanded. Contact GOTCHA support.",
+            "bodyPreserved": "We could not match your active Shopify subscription to a configured Connector plan. The Shopify access you already had is preserved for now while we correct this. Contact GOTCHA support."
           },
           "unavailable": {
             "title": "Connector status unavailable",
             "body": "Nothing has changed on your account. Contact support and we will look into it."
+          },
+          "notActive": {
+            "title": "Shopify Connector not active",
+            "body": "Connect and subscribe through Shopify to use Shopify data and functionality in GOTCHA."
           }
-        }
+        },
+        "retry": "Check again",
+        "supportLine": "If this does not clear, contact GOTCHA support."
       }
     }
   },

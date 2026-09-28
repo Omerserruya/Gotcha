@@ -179,11 +179,33 @@ describe("the page survives Shopify being unavailable", () => {
     expect(screen.getByText(/AI Workforce|ai_workforce/)).toBeTruthy();
   });
 
-  it("renders Core and no Connector card when Shopify billing is off for the deployment", async () => {
+  /**
+   * The Connector section must NEVER vanish from Billing.
+   *
+   * If it did, a reviewer would see only externally billed GOTCHA plans, and
+   * the honest conclusion from that page alone is that Shopify functionality
+   * is included in them. That is exactly the 1.2.1 finding, recreated by an
+   * empty state.
+   */
+  it("keeps the Connector section visible when Shopify billing is UNRESOLVED", async () => {
     shopifyState.mockResolvedValue({ data: snap({ shopify: { state: "UNRESOLVED" }, grantsAccess: false }) });
     render(<BillingSettingsPage />);
+
+    // Core is intact...
     expect(await screen.findByTestId("core-identity")).toBeTruthy();
-    await waitFor(() => expect(screen.queryByTestId("shopify-connector-section")).toBeNull());
+    await waitFor(() => expect(screen.getByText(EN.current)).toBeTruthy());
+    expect(screen.getByText(/AI Workforce|ai_workforce/)).toBeTruthy();
+
+    // ...and the Connector is still explained as separate and Shopify-billed.
+    expect(await screen.findByTestId("shopify-connector-section")).toBeTruthy();
+    expect(screen.getByTestId("connector-state-notActive")).toBeTruthy();
+    expect(screen.getByTestId("connector-billed-by")).toHaveTextContent(EN.shopifyConnector.billedBy);
+
+    // ...and the page still says Core excludes Shopify.
+    expect(screen.getByTestId("core-not-shopify")).toHaveTextContent(EN.core.notShopify);
+
+    // Not an error: nothing was installed, nothing went wrong.
+    expect(screen.queryByText(EN.shopifyConnector.loadFailed)).toBeNull();
   });
 });
 
