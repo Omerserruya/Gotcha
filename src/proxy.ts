@@ -32,6 +32,18 @@ export default function proxy(request: NextRequest): NextResponse {
     nonce,
     realtimeUrl: process.env.NEXT_PUBLIC_REALTIME_URL,
     isDevelopment: process.env.NODE_ENV !== 'production',
+    /*
+     * ★★ THE SIGN-IN ROUTE NOW HOLDS A PASSWORD FIELD IN OUR OWN BUNDLE.
+     * Until screen 00a, the credential was typed on the identity provider's
+     * origin and an injected script here could not reach it. It narrows
+     * `img-src`, `media-src`, `connect-src` and `frame-src` — the ways a value
+     * leaves a page — on exactly the route that has one to lose.
+     *
+     * The same pattern already decides which routes are public, and it is reused
+     * rather than copied: two lists of "which pages are the sign-in" would be
+     * one list too many, and the one that drifts would be this one.
+     */
+    credentialSurface: PUBLIC_PATH_PATTERN.test(pathname),
   });
 
   /*
