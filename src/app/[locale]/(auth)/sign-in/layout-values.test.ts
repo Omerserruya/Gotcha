@@ -52,6 +52,21 @@ describe('⚠⚠ 00a values quoted from the design', () => {
     expect(declaration('editorialStage', 'block-size')).toBe('250px');
   });
 
+  it('⚠⚠ the ticks are spaced at the design’s 5px, not at a token that was nearby', () => {
+    /*
+     * `gap:5px` in the mock. The scale has 4 and 6 and no 5, and my first
+     * version used `--space-8` — three pixels wider, invented, and nothing
+     * could have disagreed with it. A literal with the design's number beats a
+     * token chosen for proximity.
+     */
+    expect(declaration('editorialTicks', 'gap')).toBe('5px');
+  });
+
+  it('★ and the rule between marker and status is the design’s 1×12', () => {
+    expect(declaration('editorialRule', 'inline-size')).toBe('1px');
+    expect(declaration('editorialRule', 'block-size')).toBe('12px');
+  });
+
   it('★★ the ticks are the design’s 16×3, on the same 15s cycle as the figures', () => {
     /*
      * `width:16px;height:3px;border-radius:2px;opacity:.26` and

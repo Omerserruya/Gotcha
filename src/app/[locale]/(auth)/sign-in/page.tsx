@@ -182,14 +182,20 @@ export default async function SignInPage({
 
           Driven by the same 15s cycle as the slides rather than by state — see
           the stylesheet for why they cannot be allowed to disagree.
-        */}
-        <div className={styles.editorialTicks} aria-hidden="true" data-testid="editorial-ticks">
-          <span className={styles.editorialTick} />
-          <span className={styles.editorialTick} />
-          <span className={styles.editorialTick} />
-        </div>
 
+          ⚠ AND THEY BELONG IN THIS ROW, NOT ABOVE IT. My first version made
+            them a separate block; the mock has one footer row — ticks, a
+            1×12px rule, the status dot, the status text. Corrected after
+            reading the mock rather than the prose, which is the third thing on
+            this screen that error cost.
+        */}
         <div className={styles.systemStatus}>
+          <div className={styles.editorialTicks} aria-hidden="true" data-testid="editorial-ticks">
+            <span className={styles.editorialTick} />
+            <span className={styles.editorialTick} />
+            <span className={styles.editorialTick} />
+          </div>
+          <span className={styles.editorialRule} aria-hidden="true" />
           <span className={styles.statusDot} aria-hidden="true" />
           {t('editorial.status')}
         </div>

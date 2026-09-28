@@ -151,10 +151,42 @@
    *   rather than the literal, so it stays the panel's ink if the panel's ink
    *   changes.
    */
+  /*
+   * ⚠ THE TICKS SIT IN THE STATUS ROW, NOT ABOVE IT — CORRECTED.
+   * I first built this as its own block with an invented 8px gap. The mock is
+   * one footer row holding four things:
+   *
+   *     margin-top:auto; padding-top:36px; display:flex;
+   *     align-items:center; gap:14px
+   *       [ three ticks, gap:5px ]
+   *       span 1×12px #2E2E2E      ← a vertical rule
+   *       span 6×6 round #A8C57A   ← the status dot
+   *       "All systems operational"
+   *
+   * `.systemStatus` below already carries that row. The ticks are its first
+   * child now, and the gap is the design's 5px rather than a token I reached
+   * for because it was nearby.
+   */
   .editorialTicks {
     display: flex;
-    gap: var(--space-8);
-    margin-block-start: var(--space-20);
+    /* 5px, from the mock. The scale has 4 and 6 and no 5. */
+    gap: 5px;
+    flex: none;
+  }
+
+  /*
+   * The rule between the position marker and the status line: `1×12px`.
+   *
+   * ⚠ The design's value is `#2E2E2E`; this is `--frame-line` (`#333`). Five
+   *   values apart and role-correct — a rule on the dark frame — where a raw
+   *   `#2e2e2e` would be the one hard-coded colour on a screen whose every
+   *   other colour is a token. Named rather than absorbed.
+   */
+  .editorialRule {
+    inline-size: 1px;
+    block-size: 12px;
+    background-color: var(--frame-line);
+    flex: none;
   }
 
   .editorialTick {

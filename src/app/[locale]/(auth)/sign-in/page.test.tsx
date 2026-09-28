@@ -173,6 +173,27 @@ describe('★★ the rotating panel and its three ticks', () => {
     expect(ticks.children).toHaveLength(slides.length);
   });
 
+  it('⚠⚠ the ticks sit inside the status row, not in a block above it', async () => {
+    /*
+     * The mock is ONE footer row: ticks, a 1×12px rule, the status dot, the
+     * status text — `margin-top:auto; padding-top:36px; gap:14px`. My first
+     * version made the ticks a separate block with a margin, which renders
+     * close enough to look right and is a different structure.
+     *
+     * ★ Asserted as containment rather than by class name, because what the
+     *   design specifies is that they share a row — not what the row is called.
+     */
+    serverEnv.mockReturnValue({});
+    const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
+    const ticks = within(container).getByTestId('editorial-ticks');
+    const row = ticks.parentElement;
+    expect(row, 'the ticks have no parent row').not.toBeNull();
+    expect(row?.textContent ?? '').toMatch(/systems operational/i);
+    // The rule and the dot are its siblings, in that order after the ticks.
+    expect(row?.children.length).toBeGreaterThanOrEqual(3);
+    expect(row?.children[0]).toBe(ticks);
+  });
+
   it('★ the ticks are hidden from assistive technology, like the stage they mark', async () => {
     /*
      * The stage is `aria-hidden` on purpose: ambient copy changing every five
