@@ -82,7 +82,13 @@ export function SignInScreen({
       </aside>
 
       <main className={styles.surface}>
-        <div className={styles.form}>
+        {/*
+          ★★ THE COLUMN IS NOT THE SAME WIDTH ON BOTH SCREENS.
+          00a's mock gives the form `width:400px`; 00b's gives it `430px`.
+          Thirty pixels, and it is the column the six code slots divide — so
+          it is not only the column that changes width.
+        */}
+        <div className={styles.form} data-screen={screen}>
           {screen === 'signIn' ? notice : null}
 
           <SignInPanel handOverHref={handOverHref} returnTo={returnTo} onScreen={setScreen} />

@@ -307,12 +307,32 @@
     overflow-y: auto;
   }
 
+  /*
+   * 00a: `width:400px`. 00b: `width:430px` — see the rule below.
+   */
   .form {
     inline-size: 400px;
     max-inline-size: 100%;
     display: flex;
     flex-direction: column;
     gap: var(--space-20);
+  }
+
+  /*
+   * ★★ AND THE SLOTS FOLLOW WITHOUT BEING TOLD, WHICH IS THE POINT OF
+   *    HAVING USED THE DESIGN'S RULE RATHER THAN ITS NUMBER.
+   *
+   * The six code boxes are `flex: 1`, so they divide whatever this column is:
+   *
+   *     400px  →  (400 − 5×8) / 6  =  60px each
+   *     430px  →  (430 − 5×8) / 6  =  65px each
+   *
+   * Had they been hard-coded to the 60px the mock happens to show, this line
+   * would have widened the column and left them stranded in the middle of it
+   * — the same "stops short of the button" defect, reversed.
+   */
+  .form[data-screen='secondFactor'] {
+    inline-size: 430px;
   }
 
   .intro {

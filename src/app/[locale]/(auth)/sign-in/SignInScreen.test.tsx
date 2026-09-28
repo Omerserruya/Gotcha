@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -104,5 +106,44 @@ describe('⚠⚠ the editorial panel follows the screen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'advance' }));
     expect(screen.getByText('GOTCHA')).toBeInTheDocument();
     expect(screen.getByTestId('ticks')).toBeInTheDocument();
+  });
+});
+
+describe('⚠⚠ the form column is not the same width on both screens', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 400px ON 00a, 430px ON 00b — AND THE SLOTS DIVIDE IT
+   * ════════════════════════════════════════════════════════════════════════
+   * Thirty pixels, read out of each screen's own mock. It is not only the
+   * column that changes: the six code boxes are `flex: 1`, so they divide
+   * whatever this is —
+   *
+   *     400px → 60px each        430px → 65px each
+   *
+   * ★ Which is also the correction to something I wrote: "the mock's slots
+   *   are square" was arithmetic on OUR 400px column, not a fact about the
+   *   design. At 430 they are 65×60. Using the design's RULE rather than its
+   *   number is what made that mistake cost nothing.
+   */
+  it('⚠⚠ marks which screen the column belongs to', async () => {
+    const { container } = show();
+    const column = container.querySelector('[data-screen]');
+    expect(column).toHaveAttribute('data-screen', 'signIn');
+
+    await userEvent.click(screen.getByRole('button', { name: 'advance' }));
+    expect(container.querySelector('[data-screen]')).toHaveAttribute('data-screen', 'secondFactor');
+  });
+
+  it('★★ and the stylesheet gives each screen its own width', () => {
+    /*
+     * The attribute is only half of it — a marker nothing styles would pass
+     * the assertion above and change no pixel. Asserted against the rule that
+     * consumes it, and against the arithmetic the slots depend on.
+     */
+    const css = readFileSync('src/app/[locale]/(auth)/sign-in/SignIn.module.css', 'utf8');
+    expect(/\.form\s*\{[^}]*inline-size:\s*400px/.test(css)).toBe(true);
+    expect(/\.form\[data-screen='secondFactor'\]\s*\{[^}]*inline-size:\s*430px/.test(css)).toBe(
+      true,
+    );
   });
 });

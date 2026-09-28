@@ -92,9 +92,16 @@
    *   what lets them actually shrink — without it a flex item refuses to go
    *   below its content width and the row overflows on a narrow viewport.
    *
-   * ★ And 60px wide against `height:60px` is a square, at 26px/600 — more than
-   *   twice the digit we were drawing. The size IS the affordance on a screen
-   *   whose only job is six characters.
+   * ★ At 26px/600 the digit is more than twice what we were drawing. The size
+   *   IS the affordance on a screen whose only job is six characters.
+   *
+   * ⚠ AND A CORRECTION TO WHAT THIS COMMENT USED TO SAY. It read "60px wide
+   *   against `height:60px` is a square". That was arithmetic on OUR column,
+   *   not a fact about the mock: 00b's form column there is **430px**, not
+   *   400px, so its slots are `(430 − 5×8) / 6 = 65px` wide by 60px tall.
+   *   **Not square.** I derived a property from our own layout and attributed
+   *   it to the design — which is the reason this file uses `flex: 1` and not
+   *   a width, and the reason the mistake cost nothing.
    */
   .box {
     flex: 1;
