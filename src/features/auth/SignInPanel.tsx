@@ -1,7 +1,8 @@
 'use client';
 
+import { Check, Eye, EyeOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { firstError, staySignedInBody, type FlowStep } from '@/api/contracts/auth-flow';
 import { startFlow, submitStage } from '@/api/client/flow-executor';
@@ -113,6 +114,30 @@ export function SignInPanel({
   const [step, setStep] = useState<FlowStep | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  /*
+   * ★ Hidden by default and reset on every submit. Never persisted — see the
+   *   button below for why.
+   */
+  const [revealed, setRevealed] = useState(false);
+
+  /*
+   * ★★ THE BROWSER'S RULE, NOT ONE OF MINE.
+   * `type="email"` already carries a well-formedness rule and the browser will
+   * apply it on submit. A regex here would be a SECOND opinion, and the case
+   * that matters is the one where the two disagree: a tick saying "this is
+   * fine" over a field the form is about to reject.
+   *
+   * `new Option()` is only a scratch element to borrow validation from without
+   * reaching into the DOM during render.
+   */
+  const emailLooksValid = useMemo(() => {
+    if (email === '') return false;
+    const probe = document.createElement('input');
+    probe.type = 'email';
+    probe.value = email;
+    return probe.checkValidity();
+  }, [email]);
   const [remember, setRemember] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -342,17 +367,41 @@ export function SignInPanel({
 
       <label className={styles.field}>
         <span className={styles.label}>{t('signIn.email')}</span>
-        <input
-          type="email"
-          name="email"
-          autoComplete="username"
-          autoFocus
-          required
-          className={styles.input}
-          data-testid="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
+        <span className={styles.fieldControl}>
+          <input
+            type="email"
+            name="email"
+            autoComplete="username"
+            autoFocus
+            required
+            className={styles.input}
+            data-testid="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          {/*
+            ★★ THE MOCK'S GREEN CHECK, AND THE BROWSER DECIDES WHEN.
+            `<i data-lucide="check" width=15 height=15 stroke-width=2.4>` in
+            `#4F7A2E`. Whether an address is well-formed is asked of the input
+            itself — `type="email"` already carries the platform's rule, and a
+            regex of mine would be a second, worse opinion that disagrees with
+            the browser's own validation on submit.
+
+            ★ Presence only, never absence: nothing turns red while somebody is
+              still typing. The design shows the affirmative state and nothing
+              else, and a field that scolds mid-word is the reason people give
+              up on forms.
+          */}
+          {email !== '' && emailLooksValid ? (
+            <span
+              className={`${styles.fieldIcon} ${styles.fieldValid}`}
+              data-testid="email-valid"
+              aria-hidden="true"
+            >
+              <Check size={15} strokeWidth={2.4} />
+            </span>
+          ) : null}
+        </span>
       </label>
 
       <label className={styles.field}>
@@ -371,16 +420,50 @@ export function SignInPanel({
             </a>
           ) : null}
         </span>
-        <input
-          type="password"
-          name="password"
-          autoComplete="current-password"
-          required
-          className={styles.input}
-          data-testid="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
+        <span className={styles.fieldControl}>
+          <input
+            type={revealed ? 'text' : 'password'}
+            name="password"
+            autoComplete="current-password"
+            required
+            className={styles.input}
+            data-testid="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          {/*
+            ═════════════════════════════════════════════════════════════════
+            ★★ THE MOCK'S EYE — `<i data-lucide="eye" width=15 height=15
+               stroke-width=2>` in `#A8A39A`
+            ═════════════════════════════════════════════════════════════════
+            It was read as an addition and refused twice — by me and by the
+            supervisor — because the prose does not mention it. It is in the
+            mock. Omer reported an omission; we heard a request.
+
+            ★ A BUTTON, NOT AN ICON. The mock draws a glyph; a glyph nobody can
+              operate without a mouse is a different control. `type="button"`
+              so it never submits the form under it.
+
+            ★ IT REVERTS ON SUBMIT AND NOT ON BLUR. I proposed both. Blur is
+              wrong here: clicking the eye blurs the input, so a
+              revert-on-blur hides the password on the very click meant to show
+              it. Submit-only is the part that survives contact with the DOM.
+
+            ★ Nothing is remembered. A reveal that persists turns one
+              deliberate choice at a moment somebody controls into a standing
+              state they have forgotten about.
+          */}
+          <button
+            type="button"
+            className={styles.reveal}
+            data-testid="reveal-password"
+            aria-pressed={revealed}
+            aria-label={revealed ? t('signIn.hidePassword') : t('signIn.showPassword')}
+            onClick={() => setRevealed((shown) => !shown)}
+          >
+            {revealed ? <EyeOff size={15} strokeWidth={2} /> : <Eye size={15} strokeWidth={2} />}
+          </button>
+        </span>
       </label>
 
       <Button type="submit" variant="primary" size="lg" fullWidth disabled={busy}>

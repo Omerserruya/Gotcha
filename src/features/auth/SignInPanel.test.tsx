@@ -287,17 +287,99 @@ describe('★★ "keep me signed in" is a real answer to a required field', () =
   });
 });
 
+describe('⚠⚠ the two controls the mock draws and the prose does not mention', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * BOTH WERE REFUSED AS "ADDITIONS" BEFORE ANYONE READ THE MOCK
+   * ════════════════════════════════════════════════════════════════════════════
+   * `Directions.dc.html`, screen 00a, in the field markup:
+   *
+   *     email     <span color:#4F7A2E><i data-lucide="check"  width=15 stroke-width=2.4>
+   *     password  <span color:#A8A39A><i data-lucide="eye"    width=15 stroke-width=2>
+   *
+   * Omer reported them missing; two of us told him they were requests. The
+   * prose says what the screen is for, the mock says what it is.
+   */
+  it('★★ shows the green check once the address is well-formed', async () => {
+    show();
+    const email = await screen.findByTestId('email');
+    expect(screen.queryByTestId('email-valid')).toBeNull();
+
+    await userEvent.type(email, 'maya@avivco.il');
+    expect(screen.getByTestId('email-valid')).toBeInTheDocument();
+  });
+
+  it('⚠⚠ and shows nothing at all while it is still being typed', async () => {
+    /*
+     * Presence only, never absence. The design draws the affirmative state and
+     * nothing else — a field that turns red mid-word is the reason people
+     * abandon forms, and `not-an-email` is what every address looks like
+     * before it is finished.
+     */
+    show();
+    const email = await screen.findByTestId('email');
+    await userEvent.type(email, 'not-an-email');
+    expect(screen.queryByTestId('email-valid')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('★★ the reveal turns the password into text and back', async () => {
+    show();
+    const password = await screen.findByTestId('password');
+    expect(password).toHaveAttribute('type', 'password');
+
+    await userEvent.click(screen.getByTestId('reveal-password'));
+    expect(password).toHaveAttribute('type', 'text');
+
+    await userEvent.click(screen.getByTestId('reveal-password'));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
+  it('⚠⚠ the reveal is a button, so it can never submit the form under it', async () => {
+    /*
+     * A `<button>` with no `type` inside a form submits it. On this form that
+     * would post the credentials on a click meant to look at them.
+     */
+    show();
+    expect(await screen.findByTestId('reveal-password')).toHaveAttribute('type', 'button');
+  });
+
+  it('★ and it says which state it is in, for somebody who cannot see the icon', async () => {
+    show();
+    const reveal = await screen.findByTestId('reveal-password');
+    expect(reveal).toHaveAttribute('aria-pressed', 'false');
+    expect(reveal).toHaveAccessibleName(/show password/i);
+
+    await userEvent.click(reveal);
+    expect(reveal).toHaveAttribute('aria-pressed', 'true');
+    expect(reveal).toHaveAccessibleName(/hide password/i);
+  });
+});
+
 describe('★★ one way in', () => {
   it('★★ offers no second method and no social sign-in', async () => {
     /*
      * The design: "One way in: work email and password. No social sign-in and no
      * second button to weigh up — nobody has to remember which method they picked
-     * a year ago." Asserted as a count, because the failure mode is an extra
-     * button arriving later rather than this one changing.
+     * a year ago."
+     *
+     * ⚠⚠ THIS COUNTED BUTTONS AND HAD TO BE RE-AIMED. `getAllByRole('button')`
+     *    was 1, and it broke the day the design's own password reveal arrived —
+     *    **a correct screen failing a green test.** The rule is "no second
+     *    sign-in METHOD"; the count was a proxy that held only while the form
+     *    had exactly one control.
+     *
+     * ★ So: exactly one SUBMIT, and nothing offering another way in. A reveal,
+     *   or anything else that does not submit, is not a method and must not
+     *   redden this.
      */
     show();
     await screen.findByTestId('sign-in-form');
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+
+    const submits = screen
+      .getAllByRole('button')
+      .filter((control) => control.getAttribute('type') !== 'button');
+    expect(submits).toHaveLength(1);
     expect(screen.queryByText(/google|microsoft|sso|single sign/i)).toBeNull();
   });
 
