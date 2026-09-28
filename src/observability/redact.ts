@@ -30,7 +30,33 @@ export function redact(value: unknown, depth = 0): unknown {
   }
   if (typeof value === 'number' || typeof value === 'boolean') return value;
   if (value instanceof Error) {
-    return { name: value.name, message: value.message };
+    /*
+     * ═════════════════════════════════════════════════════════════════════════
+     * ⚠⚠ THE ONE PATH WITH NO LENGTH CAP WAS THE ONE MOST LIKELY TO CARRY A
+     *    RESPONSE BODY
+     * ═════════════════════════════════════════════════════════════════════════
+     * `message` was returned raw while every other string in the tree is capped
+     * at `MAX_STRING_LENGTH`. Measured: a 2,000-character field came back 513
+     * characters, the same text as an `Error` came back 2,000.
+     *
+     * An upstream failure is exactly where a whole response body ends up, and
+     * `cause` is logged at 900+ call sites. It goes through the same handling
+     * now — one rule for strings, not two.
+     *
+     * ★ THE CONTENT IS STILL NOT REDACTED, AND THAT IS A DECISION THIS FILE
+     *   CONTRADICTS. `message` is in `SENSITIVE_KEY_PATTERN`, so `{ message }`
+     *   as a field becomes `[redacted]` while an `Error`'s message survives —
+     *   two rules for one word, both tested. The argument for keeping it is
+     *   that an error reading `[redacted]` is useless; the argument against is
+     *   this module's own stated principle, that it is cheaper to lose a field
+     *   than to leak one, and `error.tsx` records that in this product an
+     *   error message **can quote customer data**.
+     *
+     *   Not resolved here, because blinding 900 call sites is a product
+     *   decision rather than a tidy-up. Named so that it is a choice somebody
+     *   can make rather than an inconsistency nobody noticed.
+     */
+    return { name: value.name, message: redact(value.message, depth) };
   }
   if (Array.isArray(value)) {
     const items = value.slice(0, MAX_ARRAY_ITEMS).map((item) => redact(item, depth + 1));
