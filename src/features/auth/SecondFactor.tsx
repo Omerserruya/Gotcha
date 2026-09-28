@@ -223,10 +223,34 @@ export function SecondFactor({
         <Text role="title" as="h1">
           {t('title')}
         </Text>
-        <Text role="body" tone="muted">
-          {/* Their own address, from stage one. Never the server's username. */}
-          {t('forAccount', { email })}
-        </Text>
+        {/*
+          ════════════════════════════════════════════════════════════════════
+          ⚠⚠ RENDERED "Signing in as " WITH NOTHING AFTER IT
+          ════════════════════════════════════════════════════════════════════
+          Their own address, from stage one — never the server's `pending_user`,
+          which is `akadmin` here and reads as an internal account to somebody
+          halfway through signing in.
+
+          **But the stage outlives the address.** `startFlow()` on mount resumes
+          whatever stage the flow cookie holds, so a reload — or a link opened
+          fresh — lands straight on this screen with the panel's `email` state
+          empty, because nobody typed it in this page load. The stage lives on
+          the server; the typed value lived only in React.
+
+          ★ A label with an empty value is the reassuring-looking failure: it
+            reads as a broken screen rather than as a missing fact, and it was
+            the first thing the reviewer saw. Three states, never two — we have
+            it, or we say nothing. Omitting loses a reassurance; a dangling
+            "Signing in as" loses trust in the screen.
+
+          ⚠ It is NOT filled from `pending_user` as a fallback. That was ruled
+            on, and a wrong name here is worse than no name.
+        */}
+        {email !== '' ? (
+          <Text role="body" tone="muted">
+            {t('forAccount', { email })}
+          </Text>
+        ) : null}
       </div>
 
       {problem ? (

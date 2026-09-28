@@ -83,6 +83,12 @@
     --font-size-initials: 9.5px;
     /* The uppercase mono channel tag beside a customer's name. */
     --font-size-tag: 9.5px;
+    /*
+     * One digit of a six-box code field. 00b's mock: `font-size:26px;
+     * font-weight:600` in a 60px square — more than twice body size, because
+     * on a screen whose only job is six characters the size IS the affordance.
+     */
+    --font-size-code-box: 26px;
 
     --line-height-hero: 1.1;
     --line-height-display: 1.12;
@@ -115,6 +121,8 @@
     /* The raised "do this next" step on day one. */
     --radius-step: 12px;
     --radius-control: 11px;
+    /* A code box. 00b's mock: `border-radius:12px` on a 60px square. */
+    --radius-code-box: 12px;
     --radius-item: 9px;
     --radius-chip: 8px;
     --radius-badge: 6px;
@@ -174,8 +182,12 @@
      * percentage is of a page that is already allowed to be 1600px.
      */
     --size-inbox-queue: clamp(260px, 21%, 360px);
-    /* One digit of a six-box code field. Wide enough for a tabular numeral. */
-    --size-code-box: 44px;
+    /*
+     * ⚠ `--size-code-box: 44px` was here and is gone. The mock gives the code
+     *   boxes `flex:1` — they divide the column rather than having a width —
+     *   so a fixed one was the invention that made six boxes stop short of the
+     *   button beneath them. Removed rather than left for somebody to reuse.
+     */
     --size-frame-inset: 12px;
     --size-control: 44px;
     --size-control-sm: 34px;

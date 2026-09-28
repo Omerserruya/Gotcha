@@ -37,18 +37,59 @@
     gap: var(--space-8);
   }
 
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ `flex: 1` IS "THE LENGTH OF THE BUTTON" — 00b's MOCK, VERBATIM
+   * ════════════════════════════════════════════════════════════════════════
+   *     flex:1; height:60px; border-radius:12px;
+   *     font-size:26px; font-weight:600
+   *     row: display:flex; gap:8px; margin-top:24px
+   *
+   * Ours were a fixed `--size-code-box` (44px) at body size. Six of those plus
+   * five 8px gaps is 304px sitting inside a 400px column, so the row stopped
+   * short of a 400px button under it — which is exactly what "make it all the
+   * length of the button" describes.
+   *
+   * ★ `flex: 1` is not a way of reaching 60px, it is the design's own rule:
+   *   the boxes divide whatever the column is. At 400px they come out 60px
+   *   each and the row ends level with the button **by construction** rather
+   *   than because two numbers were typed to agree. `min-inline-size: 0` is
+   *   what lets them actually shrink — without it a flex item refuses to go
+   *   below its content width and the row overflows on a narrow viewport.
+   *
+   * ★ And 60px wide against `height:60px` is a square, at 26px/600 — more than
+   *   twice the digit we were drawing. The size IS the affordance on a screen
+   *   whose only job is six characters.
+   */
   .box {
-    inline-size: var(--size-code-box);
+    flex: 1;
     min-inline-size: 0;
-    padding-block: var(--space-12);
+    block-size: 60px;
     font: inherit;
-    font-size: var(--font-size-body);
+    font-size: var(--font-size-code-box);
+    font-weight: var(--font-weight-semibold);
     font-variant-numeric: tabular-nums;
     text-align: center;
     color: var(--text-primary);
     background-color: var(--panel-field);
     border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-control);
+    border-radius: var(--radius-code-box);
+  }
+
+  /*
+   * The mock draws the focused box with `border:1.5px solid #121212` and a
+   * `2px × 24px` caret element inside it.
+   *
+   * ★ THE BORDER IS COPIED; THE CARET IS DELIBERATELY NOT. The mock's boxes
+   *   are `div`s, so it has to draw its own cursor. Ours are real `<input>`s
+   *   and the browser already puts one there at roughly that size — adding
+   *   the span would render two carets in the same box, one of which does not
+   *   move when you type.
+   */
+  .box:focus-visible {
+    border-width: var(--border-width-thick);
+    border-color: var(--border-focus);
+    outline: none;
   }
 
   /*

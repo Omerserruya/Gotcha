@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
@@ -403,5 +405,117 @@ describe('who it says you are', () => {
     show({}, 'Invalid code.');
     expect(screen.getByTestId('second-factor-problem')).toHaveTextContent('Invalid code.');
     expect(screen.getByTestId('code-0')).toBeInTheDocument();
+  });
+});
+
+describe('⚠⚠ what the reviewer saw first: a label with nothing after it', () => {
+  it('⚠⚠ says nothing rather than "Signing in as " when the address is unknown', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE STAGE OUTLIVES THE ADDRESS
+     * ════════════════════════════════════════════════════════════════════════
+     * `startFlow()` resumes whatever stage the flow cookie holds, so a reload
+     * lands on this screen with the panel's `email` state empty — nobody typed
+     * it in that page load. The stage is server-side; the typed value was only
+     * in React.
+     *
+     * A label with an empty value reads as a broken screen rather than as a
+     * missing fact. Three states, never two.
+     */
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SecondFactor
+          challenge={challenge()}
+          email=""
+          busy={false}
+          problem={null}
+          onSubmit={onSubmit}
+          onHandOver={onHandOver}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByText(/signing in as/i)).toBeNull();
+    // And the screen is still usable: the code boxes are the point of it.
+    expect(screen.getByTestId('code-0')).toBeInTheDocument();
+  });
+
+  it('★★ and still names them when it does know, which is the whole ruling', () => {
+    // Both directions. Omitting always would satisfy the assertion above and
+    // throw away the reassurance the line exists to give.
+    show();
+    expect(screen.getByText(/maya@avivco\.il/)).toBeInTheDocument();
+  });
+
+  it('⚠ never falls back to the server’s username', () => {
+    /*
+     * The challenge carries `pending_user: 'akadmin'`. Filling the gap with it
+     * would put an internal account name in front of somebody halfway through
+     * signing in — ruled out, and a wrong name is worse than no name.
+     */
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SecondFactor
+          challenge={challenge()}
+          email=""
+          busy={false}
+          problem={null}
+          onSubmit={onSubmit}
+          onHandOver={onHandOver}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByText(/akadmin/i)).toBeNull();
+  });
+});
+
+describe('⚠⚠ "make it all the length of the button" — 00b’s mock', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * `flex:1` IS THE RULE. 60px IS WHAT IT COMES TO AT 400px.
+   * ════════════════════════════════════════════════════════════════════════
+   *     mock  flex:1; height:60px; border-radius:12px;
+   *           font-size:26px; font-weight:600; row gap:8px
+   *     was   44px fixed, body size — six of those plus five gaps is 304px
+   *           inside a 400px column, so the row stopped short of the button
+   *
+   * Asserted from the stylesheet, because a literal there has nothing behind
+   * it — the same reason 00a's quoted values are pinned.
+   */
+  const css = readFileSync('src/features/auth/SecondFactor.module.css', 'utf8');
+  const declaration = (selector: string, property: string): string | undefined => {
+    const block = new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1];
+    return new RegExp(`(?:^|;|\\n)\\s*${property}\\s*:\\s*([^;]+)`).exec(block ?? '')?.[1]?.trim();
+  };
+
+  it('⚠⚠ the boxes divide the row rather than having a width of their own', () => {
+    expect(declaration('box', 'flex')).toBe('1');
+    // Without this a flex item will not shrink below its content and the row
+    // overflows instead of fitting.
+    expect(declaration('box', 'min-inline-size')).toBe('0');
+    expect(declaration('box', 'inline-size')).toBeUndefined();
+  });
+
+  it('★★ and they are the design’s square, at the design’s digit size', () => {
+    expect(declaration('box', 'block-size')).toBe('60px');
+    expect(declaration('box', 'font-size')).toBe('var(--font-size-code-box)');
+    expect(declaration('box', 'font-weight')).toBe('var(--font-weight-semibold)');
+    expect(declaration('box', 'border-radius')).toBe('var(--radius-code-box)');
+  });
+
+  it('★ the tokens carry the mock’s own numbers', () => {
+    // 26px and 12px, added to the scale rather than written into this screen —
+    // 00b is not the last screen that will have a code box.
+    const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+    expect(tokens).toMatch(/--font-size-code-box:\s*26px/);
+    expect(tokens).toMatch(/--radius-code-box:\s*12px/);
+    /*
+     * And the fixed width that caused this is gone, not left to be reused.
+     *
+     * ⚠ Anchored to a DECLARATION. The first version matched the name
+     *   anywhere and failed on the comment that explains the removal — a
+     *   true match against the wrong object, which is the shape that has cost
+     *   most today.
+     */
+    expect(tokens).not.toMatch(/^\s*--size-code-box:/m);
   });
 });
