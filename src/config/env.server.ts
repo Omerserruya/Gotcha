@@ -48,6 +48,33 @@ const serverEnvSchema = z.object({
    */
   PLATFORM_LOGIN_URL: z.url().optional(),
 
+  /**
+   * Where the sign-in panel hands over once the flow is complete, when that is
+   * not this same deployment.
+   *
+   * ═════════════════════════════════════════════════════════════════════════════
+   * ★★ UNSET IS THE WHOLE PRODUCT TODAY, AND THE ONLY REASON THIS EXISTS IS
+   *    THAT A SEPARATE AUTH ORIGIN BREAKS THE RELATIVE PATH
+   * ═════════════════════════════════════════════════════════════════════════════
+   * The panel finishes the flow and then navigates to `/api/auth/login` so the
+   * OIDC exchange can run against the session it just created. Unset, that is
+   * built with `appPath` and is a path on this same host — correct, and what
+   * ships today.
+   *
+   * ★ Served from an auth origin it is NOT correct, and it fails in the
+   *   confusing direction: the credentials are accepted, the identity provider
+   *   session is created, and the browser then asks the AUTH host for a route
+   *   only the product host has. Under a gateway allowlist that is a 404 at
+   *   the end of a successful sign-in — a failure that looks like the panel
+   *   is broken when the panel has just done its job.
+   *
+   * ★ And `appUrl(…, APP_ORIGIN)` cannot substitute. It rebuilds the path from
+   *   this build’s own `BASE_PATH`, which on a root-mounted auth build is
+   *   empty, so it would produce the product’s origin with the product’s mount
+   *   point missing. The whole URL has to be given, not composed.
+   */
+  PRODUCT_LOGIN_URL: z.url().optional(),
+
   // --- Authentik OIDC (Authorization Code + PKCE, driven by the BFF) ---
   OIDC_ISSUER: z.url(),
   OIDC_CLIENT_ID: z.string().min(1),

@@ -4,6 +4,7 @@ import { SignInPanel } from '@/features/auth/SignInPanel';
 import { Logo } from '@/design-system/brand/Logo';
 import { Text } from '@/design-system/primitives/text/Text';
 import { appPath } from '@/lib/base-path';
+import { serverEnv } from '@/config/env.server';
 
 import styles from './SignIn.module.css';
 
@@ -56,7 +57,29 @@ export default async function SignInPage({
    *   calls. This was the only `href`, so a sweep shaped like "a fetch with a
    *   root path" finds all of them and misses exactly this one.
    */
-  const loginHref = `${appPath('/api/auth/login')}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
+  /*
+   * ═════════════════════════════════════════════════════════════════════════════
+   * ★★ A RELATIVE PATH ASSUMES THE PANEL AND THE PRODUCT SHARE A HOST
+   * ═════════════════════════════════════════════════════════════════════════════
+   * They do today, and `appPath` is right for that. They will not when sign-in
+   * moves to its own origin, and the failure is the confusing kind: the
+   * password is accepted, the identity provider session is created, and the
+   * browser then asks the AUTH host for a route only the PRODUCT host serves.
+   * Behind a gateway allowlist that is a **404 at the end of a successful
+   * sign-in** — which reads as the panel being broken when the panel has just
+   * finished its job.
+   *
+   * ★ `PRODUCT_LOGIN_URL` is the whole URL rather than an origin, because
+   *   `appUrl` would rebuild the path from THIS build’s `BASE_PATH` — empty on
+   *   a root-mounted auth build — and produce the product’s origin with the
+   *   product’s mount point missing.
+   *
+   * ★ Unset, nothing changes: this is exactly the string it has always been.
+   *   The variable is how the origin move becomes configuration instead of a
+   *   code change, and it ships before the move so the move is one edit.
+   */
+  const loginBase = serverEnv().PRODUCT_LOGIN_URL ?? appPath('/api/auth/login');
+  const loginHref = `${loginBase}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
   const knownError = KNOWN_ERRORS.find((candidate) => candidate === error);
 
   return (
