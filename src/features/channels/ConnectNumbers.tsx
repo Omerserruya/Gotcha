@@ -19,6 +19,22 @@ import styles from './Channels.module.css';
 /**
  * Choosing a number to connect — screens 13c and 13d.
  *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * ⚠ IMPORTED BY NOTHING, DELIBERATELY. THE REASON IS ON THE PAGE, NOT HERE.
+ * ═════════════════════════════════════════════════════════════════════════════
+ * `scripts/orphan-component-sweep.ts` lists this file, and its advice is to
+ * mount it or to say in its own file why it is waiting. The full account is in
+ * `settings/channels/whatsapp/page.tsx`; the short version is that this takes
+ * an `inspection` — the SECOND step of Meta’s Embedded Signup — and the first
+ * step has no component here. Mounting it would mean either building that
+ * launcher, which ends in a `connect` call nothing in this repo may fire, or
+ * feeding it a fabricated inspection on the screen that attaches a real
+ * business’s phone number.
+ *
+ * ★ The pointer is what makes the sweep usable: it prints THIS path, so a
+ *   person triaging it reads THIS file, and an explanation they cannot find is
+ *   the same to them as an explanation nobody wrote.
+ *
  * ════════════════════════════════════════════════════════════════════════════
  * ONE LIST, BECAUSE THE PLATFORM HAS NO DOORS
  * ════════════════════════════════════════════════════════════════════════════

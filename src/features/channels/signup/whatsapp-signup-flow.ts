@@ -32,6 +32,23 @@
  * popup that never opens, a `postMessage` that arrives in pieces - are unit
  * testable without a browser, a Meta account, or React. Every function here is
  * total: same input, same output, no side effects.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * ⚠ NOTHING IN THIS APP CALLS ANY OF IT YET, AND THAT IS THE STATE TO KNOW
+ * ═════════════════════════════════════════════════════════════════════════════
+ * The launcher component does not exist, so there is **no `message` listener
+ * anywhere in this codebase** — checked, not assumed. `isMetaOrigin` is
+ * therefore dormant rather than bypassed: there is no unguarded handler.
+ * `scripts/unused-guard-sweep.ts` reports it with no callers, and this is the
+ * answer.
+ *
+ * ★★ SO THE ONE THING THAT MATTERS WHEN SOMEBODY BUILDS THE LAUNCHER: the
+ *   origin check has to be WIRED to the listener, not merely present. A guard
+ *   that exists and is never called is worse than none, because the file's
+ *   existence is the reassurance — `safeLinkUrl` sat here with passing tests
+ *   and zero callers while two screens rendered somebody else's string into an
+ *   `href`. Every `message` handler starts by refusing an origin this module
+ *   does not recognise.
  */
 
 /** Asset ids the Embedded Signup popup reports back. */
