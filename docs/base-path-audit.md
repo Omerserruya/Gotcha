@@ -130,13 +130,16 @@ sweep.
 
 ## Correct already, checked anyway
 
-- **The middleware matcher** `['/((?!api|_next|_vercel|.*\..*).*)']` matches
-  against the path with the prefix already stripped, so the `api` exclusion
-  still excludes `/v2/api/…`. **Correct for prefixes and not the whole story:**
-  the same two exclusions mean middleware does not run for `/api/…` at all, nor
-  for any path containing a dot, which later mattered for a guard that had
-  nothing to do with base paths. See `api/client/credential-surface.ts`. An
-  item cleared in one dimension is not cleared.
+- **The middleware matcher** matches against the path with the prefix already
+  stripped, so the `api` exclusion still excludes `/v2/api/…`. **Correct for
+  prefixes and not the whole story:** its exclusions also decide what the
+  middleware's *other* jobs cover, which later mattered for guards that have
+  nothing to do with base paths. `/api/…` is excluded by design and covered
+  separately in `api/client/credential-surface.ts`; the `.*\..*` rule, which
+  skipped **any** path containing a dot, was a real hole and is fixed in
+  `4f719de` — an id like `a.b@c.com` bypassed the auth gate, the
+  credential-surface refusal and the CSP together. **An item cleared in one
+  dimension is not cleared.**
 - **`headers()`** — **verified in the build**: `source` came out as
   `/v2/:path*`.
 - **`next/image`** — the docs require the prefix in `src` by hand. There is no
@@ -234,7 +237,12 @@ build.
 `/v2` returned a bare 404 — the exact URL somebody types — while `/v2/en`
 worked. The cause is the middleware matcher:
 
-    matcher: ['/((?!api|_next|_vercel|.*\..*).*)']
+    matcher: ['/((?!api|_next|_vercel|…).*)']
+
+*(The exclusion list is longer now — see `4f719de`. It is elided here because
+this section is about the bare `'/'` entry, and a quoted constant in prose is a
+copy that goes stale silently: three of them had to be found by grep after that
+change.)*
 
 At the root that matches `/` with an empty tail. **Next prefixes each matcher
 with the base path**, so it becomes `/v2/((?!…).*)` — and `/v2` has no slash

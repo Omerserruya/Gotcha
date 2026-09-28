@@ -11,8 +11,13 @@ import { NextResponse, type NextRequest } from 'next/server';
  * The credential-surface refusal in the middleware 404s every product route on
  * the auth origin — and **middleware never runs for a route handler**:
  *
- *     matcher: ['/', '/((?!api|_next|_vercel|.*\\..*).*)']
+ *     matcher: ['/', '/((?!api|_next|_vercel|.*\\.(?:ico|png|…)).*)']
  *                        ^^^
+ *
+ * (Quoted in part, and quoting it at all is a small risk: the `.*\\..*` this
+ * once read was corrected in `4f719de` and three copies of it — here and twice
+ * in `docs/base-path-audit.md` — all had to be found by grep. The `/api`
+ * exclusion is the load-bearing part for this file, and it has not changed.)
  *
  * So `/api/bff/…`, which forwards the caller's platform session upstream, was
  * covered on that origin by the gateway allowlist **and by nothing else** —
