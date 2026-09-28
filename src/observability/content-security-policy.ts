@@ -1,6 +1,41 @@
 /**
  * Content Security Policy.
  *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ⚠⚠ THIS IS NOT THE ONLY POLICY ON THE RESPONSE, AND THE OTHER ONE IS WIDER
+ * ════════════════════════════════════════════════════════════════════════════
+ * Measured on 2026-09-28 at `/v2/en/sign-in`: the response carries **two**
+ * `content-security-policy` headers. Ours, and one from the gateway containing
+ * `'unsafe-inline'`, `'unsafe-eval'`, `img-src … https:` and
+ * `script-src … https://connect.facebook.net`.
+ *
+ * **Our narrowing still holds.** A browser enforces every policy present
+ * independently, so a resource must satisfy all of them and the effective result
+ * is the intersection. A wildcard over there cannot widen a restriction here.
+ *
+ * ★ BUT THE GATEWAY DEFINES IT NINE TIMES, NOT ONCE. `nginx/security-headers.conf`
+ *   and eight `add_header` lines across `nginx.conf.template` and
+ *   `gateway/nginx.prod.conf.template`, with different values per server and
+ *   location block — the one on `dev.gotcha.co.il` is not the one in
+ *   `security-headers.conf`. Which applies depends on which block matches, and
+ *   **nginx's `add_header` inheritance is all-or-nothing**: a block that defines
+ *   any `add_header` drops every inherited one. So the second policy can change,
+ *   or disappear, without anybody editing this file.
+ *
+ * ── WHAT FOLLOWS, AND IT IS WHY THIS NOTE EXISTS ──
+ * 1. Somebody debugging a blocked resource will search this file for a directive
+ *    that lives in nginx. The reasoning below reads as complete and is one of
+ *    two sources.
+ * 2. **The coupling is one-way.** A future narrowing in nginx can break a route
+ *    without touching this file; a future widening there cannot help it.
+ * 3. Therefore this policy is written to be **self-sufficient** — every
+ *    directive we rely on is named here rather than left to fall back to the
+ *    other policy or to `default-src`. If the gateway's header vanished
+ *    tomorrow, the page would be exactly as protected. There is a test for that.
+ *
+ * Collapsing the two is a change to the existing product's headers and is not
+ * ours to make unilaterally.
+ *
  * CSP is the control that turns a successful script injection into a blocked
  * console message. It matters most in a product like this one, where the page
  * renders customer-authored text all day.

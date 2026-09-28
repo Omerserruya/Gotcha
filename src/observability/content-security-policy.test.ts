@@ -142,3 +142,68 @@ describe('★★ a page where somebody types a password gets a narrower policy',
     );
   });
 });
+
+describe('★★ the policy stands on its own, because it is not the only one', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * A RESPONSE AT `/v2/en/sign-in` CARRIES TWO CSP HEADERS
+   * ════════════════════════════════════════════════════════════════════════════
+   * Ours, and a wider one from the gateway. The browser enforces both and the
+   * effective policy is the intersection, so our narrowing holds — but the
+   * gateway defines its policy in **nine** places with different values per
+   * block, and nginx's `add_header` inheritance is all-or-nothing: a block that
+   * defines any header drops every inherited one.
+   *
+   * So the other policy can change, or vanish, without anybody touching our
+   * code. This asserts the property that makes that survivable: **we name every
+   * directive we rely on**, rather than letting one fall through to the other
+   * policy or to `default-src`.
+   */
+  const required = [
+    'default-src',
+    'script-src',
+    'style-src',
+    'img-src',
+    'font-src',
+    'connect-src',
+    'media-src',
+    'object-src',
+    'base-uri',
+    'form-action',
+    'frame-ancestors',
+    'frame-src',
+  ];
+
+  it('★★ names every directive it relies on, on both surfaces', () => {
+    for (const credentialSurface of [true, false]) {
+      const csp = buildContentSecurityPolicy({
+        nonce: 'n',
+        realtimeUrl: 'https://realtime.gotcha.co.il',
+        isDevelopment: false,
+        credentialSurface,
+      });
+      const named = csp.split('; ').map((part) => part.split(' ')[0]);
+      for (const directive of required) {
+        expect(named, `${directive} missing (credentialSurface=${credentialSurface})`).toContain(
+          directive,
+        );
+      }
+    }
+  });
+
+  it('★★ does not lean on `default-src` for the ones that matter most', () => {
+    /*
+     * `default-src` is a fallback, and a fallback is what a reader stops reading
+     * at. `img-src` and `connect-src` are the two exfiltration channels on the
+     * credential surface; both are stated explicitly so that narrowing one is a
+     * visible edit rather than a consequence of editing something else.
+     */
+    const csp = buildContentSecurityPolicy({
+      nonce: 'n',
+      isDevelopment: false,
+      credentialSurface: true,
+    });
+    expect(csp).toContain("img-src 'self' data:");
+    expect(csp).toContain("connect-src 'self'");
+  });
+});
