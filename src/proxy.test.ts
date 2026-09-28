@@ -213,6 +213,77 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
     expect(new URL(location).pathname).toBe('/api/auth/login');
   });
 
+  it('⚠⚠ and this origin STOPS SERVING the sign-in screen once it has moved', async () => {
+    /*
+     * ═══════════════════════════════════════════════════════════════════════════
+     * POINTING THE GATE ELSEWHERE RELOCATES THE PANEL. IT DOES NOT REMOVE THIS
+     * ONE.
+     * ═══════════════════════════════════════════════════════════════════════════
+     * `/en/sign-in` would go on rendering a password field — working perfectly,
+     * reachable by bookmark, by an old link, or by the callback’s own
+     * `?error=expired` redirect — on the origin whose CSP is measured to allow
+     * `unsafe-inline`, `unsafe-eval` and a third-party script host.
+     *
+     * Moving the panel to a clean origin and leaving a working copy on the
+     * dirty one collects none of the benefit and keeps every cost. It is the
+     * orphaned route inverted: not a screen nothing points at, but a screen
+     * that still answers after everything stopped pointing at it.
+     */
+    for (const path of ['/sign-in', '/en/sign-in', '/he/sign-in']) {
+      const { status, location } = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, path);
+      expect(status, path).toBe(307);
+      expect(new URL(location).host, path).toBe('auth-dev.gotcha.co.il');
+    }
+  });
+
+  it('⚠⚠ carrying the whole query, not the parameters somebody listed', async () => {
+    /*
+     * `error` arrives here too — the OIDC callback redirects to THIS path with
+     * `?error=expired`. A named list of the parameters we thought of is the
+     * shape that drops the next one silently, and the symptom would be a
+     * person sent back to a sign-in screen that has forgotten why.
+     */
+    const { location } = await gate(
+      { SIGN_IN_URL: AUTH_SIGN_IN },
+      '/en/sign-in?error=expired&returnTo=%2Fen%2Finbox',
+    );
+    const target = new URL(location);
+    expect(target.searchParams.get('error')).toBe('expired');
+    expect(target.searchParams.get('returnTo')).toBe('/en/inbox');
+  });
+
+  it('⚠⚠ a same-origin target is ignored rather than looping on the front door', async () => {
+    /*
+     * `SIGN_IN_URL` naming this host would send `/sign-in` to itself, or to a
+     * form `intlMiddleware` bounces straight back — an inescapable redirect
+     * chain on the first page anybody sees. The variable exists for another
+     * origin, so a value that is not one is a misconfiguration, and the safe
+     * reading is today’s behaviour.
+     */
+    const { status } = await gate(
+      { SIGN_IN_URL: 'https://dev.gotcha.co.il/v2/sign-in' },
+      '/en/sign-in',
+    );
+    expect(status).not.toBe(307);
+  });
+
+  it('★★ and the AUTH build never relocates its own screen', async () => {
+    /*
+     * The other loop. If both variables were ever present on the auth build it
+     * would redirect sign-in away from the only host that serves it. Excluded
+     * by construction — `PRODUCT_LOGIN_URL` means "I am the sign-in origin" —
+     * and asserted, because "by construction" is a claim.
+     */
+    const { status } = await gate(
+      {
+        SIGN_IN_URL: AUTH_SIGN_IN,
+        PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login',
+      },
+      '/en/sign-in',
+    );
+    expect(status).not.toBe(307);
+  });
+
   it('★★ and unset is today’s behaviour, unchanged', async () => {
     // Both directions. A gate that always used a configured URL would be
     // broken on every deployment that has none — which is all of them today.

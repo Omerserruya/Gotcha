@@ -91,8 +91,50 @@ export default function proxy(request: NextRequest): NextResponse {
    *   purpose is to carry neither — the same mistake as the translation
    *   catalogue, one layer out. An empty refusal is the correct body.
    */
+  const signInElsewhere = process.env.SIGN_IN_URL;
+
   if (process.env.PRODUCT_LOGIN_URL && !PUBLIC_PATH_PATTERN.test(pathname)) {
     return withSecurityHeaders(new NextResponse(null, { status: 404 }));
+  }
+
+  /*
+   * ═══════════════════════════════════════════════════════════════════════════
+   * ★★ AND THE MIRROR: ONCE SIGN-IN HAS MOVED, THIS ORIGIN STOPS SERVING IT
+   * ═══════════════════════════════════════════════════════════════════════════
+   * Pointing the gate at another origin RELOCATES the panel; it does not remove
+   * this one. `/v2/en/sign-in` would go on rendering a password field, working
+   * perfectly, reachable by bookmark, by an old link, or by the callback's own
+   * error redirect — **on the origin the move exists to get the password off.**
+   *
+   * ★ That origin is measured to allow `'unsafe-inline' 'unsafe-eval'` and a
+   *   third-party script host. Moving the panel to a clean origin while leaving
+   *   a working copy on the dirty one collects none of the benefit and keeps
+   *   every cost: it is the same defect as an orphaned route, inverted — not a
+   *   screen nothing points at, but a screen that still answers after
+   *   everything stopped pointing at it.
+   *
+   * ★ The query is carried whole rather than named field by field. `returnTo`
+   *   and `error` both arrive here — the callback sends `?error=expired` to
+   *   THIS path — and a list of the parameters we thought of is the shape that
+   *   drops the next one silently.
+   *
+   * ⚠ A SAME-ORIGIN TARGET IS IGNORED, BECAUSE IT IS AN INFINITE LOOP ON THE
+   *   FRONT DOOR. `SIGN_IN_URL` naming this host would send `/sign-in` to
+   *   itself, or to a form `intlMiddleware` bounces straight back. The whole
+   *   point of the variable is another origin, so a value that is not one is a
+   *   misconfiguration, and the safe reading of it is today's behaviour rather
+   *   than a redirect chain nobody can escape.
+   */
+  if (signInElsewhere && !process.env.PRODUCT_LOGIN_URL && PUBLIC_PATH_PATTERN.test(pathname)) {
+    const moved = new URL(signInElsewhere);
+    if (moved.host !== request.nextUrl.host) {
+      for (const [key, value] of request.nextUrl.searchParams) {
+        moved.searchParams.set(key, value);
+      }
+      const relocated = withSecurityHeaders(NextResponse.redirect(moved));
+      relocated.headers.set('cache-control', 'no-store');
+      return relocated;
+    }
   }
 
   if (!PUBLIC_PATH_PATTERN.test(pathname)) {
@@ -164,7 +206,6 @@ export default function proxy(request: NextRequest): NextResponse {
        *   reason, and this file cannot enforce that.
        */
       const platformLogin = process.env.PLATFORM_LOGIN_URL;
-      const signInElsewhere = process.env.SIGN_IN_URL;
       /*
        * ★★ THE MOUNT POINT, FROM THE REQUEST ITSELF.
        *
