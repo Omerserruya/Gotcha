@@ -174,6 +174,21 @@ export default async function SignInPage({
           ))}
         </div>
 
+        {/*
+          "…with the position marked by three ticks" — 00a, verbatim. Decorative
+          and `aria-hidden` like the stage above it: they mark the position of
+          copy a screen reader is deliberately not being read, so announcing
+          them would be announcing the furniture of something invisible.
+
+          Driven by the same 15s cycle as the slides rather than by state — see
+          the stylesheet for why they cannot be allowed to disagree.
+        */}
+        <div className={styles.editorialTicks} aria-hidden="true" data-testid="editorial-ticks">
+          <span className={styles.editorialTick} />
+          <span className={styles.editorialTick} />
+          <span className={styles.editorialTick} />
+        </div>
+
         <div className={styles.systemStatus}>
           <span className={styles.statusDot} aria-hidden="true" />
           {t('editorial.status')}

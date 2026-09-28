@@ -137,6 +137,55 @@ it('⚠⚠ always carries the hand-over marker, or this panel loops on itself', 
   }
 });
 
+describe('★★ the rotating panel and its three ticks', () => {
+  /*
+   * ═══════════════════════════════════════════════════════════════════════════
+   * 00a: "The dark panel rotates through three live figures — one every five
+   * seconds … with the position marked by three ticks."
+   * ═══════════════════════════════════════════════════════════════════════════
+   * ⚠ WHAT THIS CAN AND CANNOT SEE, SAID FIRST. The rotation is a CSS opacity
+   *   animation and all three statements are in the DOM at every instant, so
+   *   **no text assertion can observe the rotation** — a probe sampling text at
+   *   t+0 and t+20 reads the same string both times and concludes there is one
+   *   figure. That is what happened on the live panel, and the rotation was
+   *   working. These tests assert the STRUCTURE the animation needs; whether
+   *   pixels move is a screenshot's question.
+   */
+  it('⚠⚠ renders three ticks, one per figure', async () => {
+    serverEnv.mockReturnValue({});
+    const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
+    const ticks = within(container).getByTestId('editorial-ticks');
+    expect(ticks.children).toHaveLength(3);
+  });
+
+  it('★★ one tick per statement, or the position marker lies about the count', async () => {
+    /*
+     * The number is not three because three is a nice number — it is one per
+     * figure. Counting the slides rather than hard-coding 3 means adding a
+     * fourth statement reddens this instead of leaving a marker that silently
+     * undercounts.
+     */
+    serverEnv.mockReturnValue({});
+    const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
+    const slides = container.querySelectorAll('[class*="editorialSlide"]');
+    const ticks = within(container).getByTestId('editorial-ticks');
+    expect(slides.length).toBeGreaterThan(0);
+    expect(ticks.children).toHaveLength(slides.length);
+  });
+
+  it('★ the ticks are hidden from assistive technology, like the stage they mark', async () => {
+    /*
+     * The stage is `aria-hidden` on purpose: ambient copy changing every five
+     * seconds while somebody is trying to sign in would be hostile. Ticks that
+     * announced themselves would be announcing the furniture of something
+     * deliberately not read.
+     */
+    serverEnv.mockReturnValue({});
+    const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
+    expect(within(container).getByTestId('editorial-ticks')).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
 describe('★ the error a person is sent back with', () => {
   it('★ shows a known one and ignores anything else', async () => {
     /*

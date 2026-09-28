@@ -107,6 +107,71 @@
   }
 
   /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ★★ "WITH THE POSITION MARKED BY THREE TICKS" — 00a, VERBATIM
+   * ═════════════════════════════════════════════════════════════════════════
+   * The rotation shipped; the ticks did not. Sizes, colour and timing are the
+   * design's own values, read out of `Directions.dc.html` rather than chosen:
+   *
+   *     width:16px height:3px border-radius:2px background:#F7F5F1
+   *     opacity:.26  animation: gotchaDot 15s ease-in-out infinite
+   *     delays 0s / 5s / 10s
+   *     @keyframes gotchaDot { 0%,4%{opacity:1} 32%{opacity:1} 36%,100%{opacity:.26} }
+   *
+   * ★ CSS and not state, because the slides are CSS too. A tick driven from
+   *   React would need a timer that agrees with an animation it cannot see,
+   *   and the two would drift apart on any frame drop or tab suspension. One
+   *   cycle, one clock, three delays — the ticks cannot disagree with the
+   *   slides because they are on the same one.
+   *
+   * ★ `#f7f5f1` is `--frame-text`, which is the same value. The token is used
+   *   rather than the literal, so it stays the panel's ink if the panel's ink
+   *   changes.
+   */
+  .editorialTicks {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-start: var(--space-20);
+  }
+
+  .editorialTick {
+    inline-size: 16px;
+    block-size: 3px;
+    border-radius: 2px;
+    background-color: var(--frame-text);
+    opacity: 0.26;
+    animation: editorial-tick 15s ease-in-out infinite;
+  }
+
+  .editorialTick:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .editorialTick:nth-child(2) {
+    animation-delay: 5s;
+  }
+
+  .editorialTick:nth-child(3) {
+    animation-delay: 10s;
+  }
+
+  @keyframes editorial-tick {
+    0%,
+    4% {
+      opacity: 1;
+    }
+
+    32% {
+      opacity: 1;
+    }
+
+    36%,
+    100% {
+      opacity: 0.26;
+    }
+  }
+
+  /*
    * Reduced motion: no travel, no fade, no cycle. Someone who asked their
    * system to stop animating gets the first statement and nothing moving —
    * cycling text they cannot stop is worse than a single line.
@@ -122,6 +187,20 @@
 
     .editorialSlide:not(:nth-child(1)) {
       display: none;
+    }
+
+    /*
+     * ★ THE TICKS STAY, AND THE FIRST ONE STAYS LIT. The panel holds on
+     *   statement one, so one of three marked is the true picture. Hiding them
+     *   would be tidier and would say something false — that there is nothing
+     *   else to see.
+     */
+    .editorialTick {
+      animation: none;
+    }
+
+    .editorialTick:nth-child(1) {
+      opacity: 1;
     }
   }
 
