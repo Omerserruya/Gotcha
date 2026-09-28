@@ -54,11 +54,36 @@ import styles from './SignInPanel.module.css';
  *   would be a promise made on an unread policy to the one person on this screen
  *   who cannot get in by trying harder.
  *
- * ⚠ THE LIMITATION THAT FOLLOWS, STATED: if an enrolled colleague meets
- *   `ak-stage-authenticator-validate` here, this panel hands them to the identity
- *   provider's own page and they finish there. They sign in; they do not get the
- *   new screen. That is a real gap and it is the right behaviour until somebody
- *   can show us the stage.
+ * ⚠⚠ AND THE HANDOVER FOR MFA IS A DEVIATION FROM THE DESIGN, NOT A PROPERTY OF
+ *   THE PLATFORM. This wording matters, because the first version of this note
+ *   read as though Authentik required its own page for two-step. **It does not.**
+ *   `ak-stage-authenticator-validate` comes back from the same executor endpoint,
+ *   in the same envelope, with the same `response_errors` convention as the two
+ *   stages rendered below. **We hand over because we have no renderer, and for no
+ *   other reason.**
+ *
+ *   The design is explicit that this is wrong: *"Two-step sign-in, where the
+ *   workspace requires it, happens in this same panel — never on a new page with
+ *   a different layout"*, and *"where two-step is required and not yet set up,
+ *   this same panel becomes enrolment"*.
+ *
+ *   ★ THE ONLY BLOCKER IS THAT NOBODY HAS AN ENROLLED ACCOUNT, so nobody has
+ *     seen the challenge shape. Not the API, not the architecture, not the
+ *     proxy — one missing observation. Enrolling TOTP on the dev test account
+ *     removes it, and TOTP needs no SMS gateway and no WhatsApp.
+ *
+ *   ⚠ Building the renderer from Authentik's documentation instead would be
+ *     inventing a challenge shape for the one screen where being wrong locks
+ *     somebody out of their own account — and `ak-stage-user-login` already
+ *     proved the payload does not describe its own inputs: `remember_me` is
+ *     REQUIRED and is named by none of the four keys the challenge returns. A
+ *     renderer written from docs would be a guess wearing a schema.
+ *
+ *   ⚠ AND THE HANDOVER MAY BE WORSE THAN INCOMPLETE. It happens **after** the
+ *     password was accepted. Whether the identity provider's page resumes the
+ *     in-progress flow from its cookie or asks for the password again is
+ *     unobserved, and it is the difference between a seam and losing somebody's
+ *     typing. The same enrolment answers it.
  */
 export function SignInPanel({
   handOverHref,
