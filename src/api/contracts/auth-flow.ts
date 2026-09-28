@@ -36,6 +36,17 @@ import { z } from 'zod';
  * has observed an enrolled one.** An `ak-stage-authenticator-validate` may well
  * appear, and this file must not read as though it cannot.
  *
+ * ★★ AND ON 2026-09-28 THE ODDS MOVED A LONG WAY. While the gateway's redirect
+ *   was still wrong, one POST landed in an odd flow position and Authentik
+ *   answered with `component: "ak-stage-authenticator-validate"` and
+ *   `non_field_errors: [{ string: "Empty response" }]`. **It does not invent
+ *   component names for stages that are not bound to the flow.**
+ *
+ *   Evidence, not proof — it came from an anomalous run nobody could reproduce
+ *   cleanly, and the bindings still answer 403. But it is strong enough that the
+ *   handover below should be read as **the ordinary path for a colleague with
+ *   two-step set up**, not as a guard against a hypothetical.
+ *
  * ★ That is not a hypothetical worry about the future — it is the ordinary
  *   present for any colleague who has set up two-step. It is the strongest
  *   reason the handover below exists.
