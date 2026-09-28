@@ -1241,6 +1241,28 @@ services:
         # the BROWSER - a blank app served by a healthy-looking container.
         NEXT_PUBLIC_APP_ENV: ${V2_APP_ENV:-local}
     environment:
+      # ════════════════════════════════════════════════════════════════════════
+      # ★★ WHERE THE SIGN-IN SCREEN LIVES. UNSET = TODAY'S BEHAVIOUR.
+      # ════════════════════════════════════════════════════════════════════════
+      # Set this and an unauthenticated visitor is sent to our panel on its own
+      # origin instead of to `/v2/sign-in` here. Unset it and one restart puts
+      # the product back exactly as it was - a better rollback than a revert,
+      # which is why this is a value rather than a code change.
+      #
+      # ★ NOT `PLATFORM_LOGIN_URL`, and the distinction is load-bearing. That
+      #   one means "do not use our panel at all"; this means "our panel, on
+      #   another host" - opposite facts. Borrowing one for both would land
+      #   somebody on the legacy product's login, which LOOKS like a working
+      #   sign-in. `PLATFORM_LOGIN_URL` still wins above this.
+      #
+      # ★ UNPREFIXED AND UNLOCALISED ON PURPOSE. The auth origin answers
+      #   `307 -> /en/sign-in` from the browser's own `Accept-Language`.
+      #   Naming a locale here would override somebody's preference on the
+      #   first page they ever see, and nothing in the app would object -
+      #   that is a property of THIS VALUE, not of the code that reads it.
+      #
+      # Commented until the walk confirms `returnTo` survives two origin hops.
+      SIGN_IN_URL: ${V2_SIGN_IN_URL:-https://auth-dev.gotcha.co.il/sign-in}
       APP_ENV: ${V2_APP_ENV:-local}
       # Server-to-server only, and never sent to the browser: every browser call
       # goes through this app's own BFF, because the platform API allows only
