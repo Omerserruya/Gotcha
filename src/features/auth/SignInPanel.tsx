@@ -39,11 +39,26 @@ import styles from './SignInPanel.module.css';
  *
  * ── WHAT THE DESIGN ASKS FOR THAT IS NOT HERE, AND WHY ──
  * 00a specifies a code by WhatsApp offered after a failed password, a
- * three-attempt fallback, and two-step in this panel. **Measured on 2026-09-28:
- * this tenant's flow has no authenticator stage of any kind** — no TOTP, no SMS,
- * no WhatsApp, and email-only recovery. Those three behaviours describe screen
- * 00b, which has no backend. Building copy for them would be promising a path
- * that does not exist to somebody who cannot get in.
+ * three-attempt fallback, and two-step in this panel. **None of the three is
+ * built, and the reason is that nobody can currently show they are possible.**
+ *
+ * Driven on 2026-09-28 for a user with no enrolled device, the flow is two
+ * stages and reports `device_challenges: []`. That is consistent with the flow
+ * having no authenticator stage AND with it having one this user skips — the
+ * endpoints that would settle it answer 403 without admin credentials. Recovery
+ * has only been observed as far as its first stage, because driving it further
+ * sends somebody a real password-reset email.
+ *
+ * ★ So this is not "the capability does not exist". It is **"nobody has seen it,
+ *   in either direction"**, and copy that offers a code path or counts attempts
+ *   would be a promise made on an unread policy to the one person on this screen
+ *   who cannot get in by trying harder.
+ *
+ * ⚠ THE LIMITATION THAT FOLLOWS, STATED: if an enrolled colleague meets
+ *   `ak-stage-authenticator-validate` here, this panel hands them to the identity
+ *   provider's own page and they finish there. They sign in; they do not get the
+ *   new screen. That is a real gap and it is the right behaviour until somebody
+ *   can show us the stage.
  */
 export function SignInPanel({
   handOverHref,

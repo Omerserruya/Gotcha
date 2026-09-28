@@ -20,14 +20,30 @@ import { z } from 'zod';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ AND THE IMPORTANT PART IS THE FALLBACK, NOT THE HAPPY PATH
  * ════════════════════════════════════════════════════════════════════════════
- * Measured on 2026-09-28, this tenant's authentication flow is exactly two
- * stages: `ak-stage-identification` (which takes the email AND the password in
- * one POST) and `ak-stage-user-login` (the "stay signed in" question). No
- * authenticator stage of any kind — no TOTP, no SMS, no WhatsApp.
+ * Driven on 2026-09-28: for a user with **no enrolled MFA device**, this flow is
+ * two stages — `ak-stage-identification` (which takes the email AND the password
+ * in one POST) and `ak-stage-user-login` (the "stay signed in" question).
  *
- * **A flow is Authentik configuration, not a deploy of ours.** An administrator
- * can add a stage this afternoon and our panel would meet a component it has
- * never heard of, mid-sign-in, with somebody's password already accepted.
+ * ⚠ WHAT THAT MEASUREMENT DOES NOT SAY, AND WAS FIRST REPORTED AS SAYING.
+ * Both stages returned `device_challenges: []`, which was read as "this flow has
+ * no authenticator stage". **It is equally consistent with "the flow has one and
+ * this user has never enrolled a device"** — Authentik skips that stage
+ * per-user. Settling it needs the flow's stage bindings, and
+ * `/api/v3/flows/instances/…`, `/flows/bindings/` and `/stages/all/` all answer
+ * **403** without admin credentials.
+ *
+ * So the honest statement is: **two stages for an unenrolled user, and nobody
+ * has observed an enrolled one.** An `ak-stage-authenticator-validate` may well
+ * appear, and this file must not read as though it cannot.
+ *
+ * ★ That is not a hypothetical worry about the future — it is the ordinary
+ *   present for any colleague who has set up two-step. It is the strongest
+ *   reason the handover below exists.
+ *
+ * **And a flow is Authentik configuration, not a deploy of ours** either way. An
+ * administrator can add a stage this afternoon and our panel would meet a
+ * component it has never heard of, mid-sign-in, with somebody's password already
+ * accepted.
  *
  * So an unrecognised stage is not an error here: it means **this panel cannot
  * finish the job, and the identity provider's own page still can.** `handOver`

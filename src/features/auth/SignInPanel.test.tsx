@@ -121,8 +121,18 @@ describe('★★ everything it cannot finish, it hands back', () => {
   });
 
   it('★★ hands over on a stage it has never heard of', async () => {
-    // The realistic case: an admin enables two-step. Somebody's password has
-    // already been accepted, and improvising here strands them mid-sign-in.
+    /*
+     * ★ NOT A HYPOTHETICAL. `ak-stage-authenticator-validate` is what a colleague
+     * who has already enrolled a device would meet here — the flow reports
+     * `device_challenges: []` only for users with none, and nobody has been able
+     * to read the stage bindings to say whether the stage exists. So this is the
+     * ordinary path for an MFA user, not a guard against a future admin change.
+     *
+     * ⚠ AND ONE THING NOBODY HAS OBSERVED: the handover happens AFTER their
+     * password was accepted. Whether the identity provider's page resumes the
+     * in-progress flow — its state is a cookie — or asks for the password again
+     * is unverified, and it is the difference between a seam and a retype.
+     * Testable the moment somebody has an enrolled account.
     submitStage.mockResolvedValue({
       ok: true,
       step: { kind: 'handOver', because: 'ak-stage-authenticator-validate' },
@@ -183,9 +193,13 @@ describe('★★ what a refusal is allowed to say', () => {
   it('★★ offers recovery after a failure, and never an attempt count or a code path', async () => {
     /*
      * 00a specifies "after three attempts it offers the code path instead of
-     * locking the account". **There is no code path on this tenant** — no TOTP,
-     * no SMS, no WhatsApp, email-only recovery — and no readable lockout policy.
-     * Both would be copy that nothing enforces.
+     * locking the account". **Nobody has been able to show that either exists.**
+     * The flow reports `device_challenges: []` for an unenrolled user, which does
+     * not distinguish "no authenticator stage" from "this user has not enrolled";
+     * the endpoints that would settle it answer 403; and the lockout policy is
+     * equally unreadable. Both sentences would be promises made on an unread
+     * policy, to the one person on this screen who cannot get in by trying
+     * harder.
      */
     submitStage.mockResolvedValue({
       ok: true,
