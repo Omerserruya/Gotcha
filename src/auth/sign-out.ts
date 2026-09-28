@@ -34,6 +34,28 @@ export async function signOut(): Promise<void> {
  *
  * Also a full-page navigation, and for the same reason: `/api/auth/login`
  * answers with a redirect to Authentik.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * ⚠⚠ THIS WAS UNPREFIXED, AND IT IS THE THIRD TIME IN THIS APP
+ * ═════════════════════════════════════════════════════════════════════════════
+ * `window.location.assign` is a plain web API: an absolute path resolves
+ * against the ORIGIN, not against where this app is mounted. Under `/v2` it
+ * sent the browser to `https://host/api/auth/login` — which, beside the legacy
+ * product, is not a 404. It is **the other application's login route.**
+ *
+ * So a session expiring mid-work handed the person to a different product's
+ * sign-in, carrying our `returnTo` on the query, and nothing on the way looked
+ * wrong.
+ *
+ * ★ THE SWEEP THAT SHOULD HAVE CAUGHT IT LOOKED AT THE WRONG GRANULARITY.
+ *   When the sign-in anchor was fixed, the note recorded that "every other one
+ *   — `sign-out.ts`, `browser-api.ts`, `login-state.ts`,
+ *   `realtime-provider.tsx` — already calls `appPath`". **It does, in
+ *   `signOut` directly above.** A file can satisfy a check and still hold a
+ *   second call site that does not, and a sweep organised by FILE cannot see
+ *   it. Nor could one shaped like "a fetch with a root path": this is neither
+ *   a fetch nor an `href`, which is the third distinct spelling of the same
+ *   defect.
  */
 export function startSignIn(returnTo: string): void {
   /*
@@ -42,5 +64,5 @@ export function startSignIn(returnTo: string): void {
    * Authentik. `router.push()` would try to render it as a route and fail.
    */
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-  window.location.assign(`/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
+  window.location.assign(`${appPath('/api/auth/login')}?returnTo=${encodeURIComponent(returnTo)}`);
 }
