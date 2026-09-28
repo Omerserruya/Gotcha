@@ -87,6 +87,28 @@ services:
       AUTHENTIK_REDIS__DB: 1
       AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
       AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      # ════════════════════════════════════════════════════════════════════════
+      # ★★ SCOPED TO THE APEX, AND DEV WAS THE ONLY ENVIRONMENT WITHOUT IT
+      # ════════════════════════════════════════════════════════════════════════
+      # Unset, Authentik issues `authentik_session` with NO `Domain` attribute,
+      # which makes it HOST-ONLY - measured on 2026-09-28:
+      #
+      #   set-cookie: authentik_session=...; HttpOnly; Path=/; SameSite=None; Secure
+      #
+      # A session established under `dev.gotcha.co.il` is then never sent to
+      # `auth-dev.gotcha.co.il`, so anything that authenticates on one host and
+      # authorises on the other succeeds and is immediately asked to sign in
+      # again. That is the blocker for serving our own sign-in UI against the
+      # flow-executor API from the product's own origin.
+      #
+      # `docker-compose.prod.yml:179` has carried this since it was written.
+      # **Dev was the odd one out**, so this is not a new decision - it is dev
+      # catching up with the environment the work ships to, which is also why
+      # the risk is known rather than estimated.
+      #
+      # Changing it restarts the IdP and invalidates live sessions. Authorised
+      # by Omer, 2026-09-28, for dev only.
+      AUTHENTIK_COOKIE_DOMAIN: ${AUTHENTIK_COOKIE_DOMAIN:-gotcha.co.il}
       AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
       AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
       AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@gotcha.co.il}
