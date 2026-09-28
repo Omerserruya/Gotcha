@@ -9,6 +9,41 @@
     gap: var(--space-16);
   }
 
+  /*
+   * The account, above the heading, with the way out beside it — 00b's mock:
+   * `font-size:12.5px; color:#8C887F; display:flex; align-items:center;
+   * gap:8px`, and the heading `margin:14px 0 0` below it.
+   *
+   * ★ `--font-size-meta` IS 12.5px and `--text-subtle` IS #8c887f. Both are
+   *   the mock's own values, so the tokens carry them.
+   */
+  .back {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    margin-block-end: var(--space-14);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  /*
+   * The meaning, for anybody who cannot see that an arrow points backwards.
+   * Visually hidden rather than absent: the mock shows an address and an
+   * arrow, and "maya@avivco.il" alone does not say what pressing it does.
+   */
+  .backLabel {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .intro {
     display: flex;
     flex-direction: column;

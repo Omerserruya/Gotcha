@@ -519,3 +519,89 @@ describe('⚠⚠ "make it all the length of the button" — 00b’s mock', () =>
     expect(tokens).not.toMatch(/^\s*--size-code-box:/m);
   });
 });
+
+describe('⚠⚠ the account at the top, with a way back', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * "עדיין אין את שם המשתמש למעלה עם אופציה לחזור"
+   * ════════════════════════════════════════════════════════════════════════
+   * The address was BELOW the heading as "Signing in as …" and there was no
+   * way back at all. The mock puts it above with an `arrow-left`.
+   *
+   * ★ "Back" cannot be a link to the previous page: the stage lives in a
+   *   server-side flow, so returning to `/sign-in` resumes THIS stage. The
+   *   provider hands us the way out on the challenge —
+   *   `flow_info.cancel_url` — which our contract has parsed since it was
+   *   written and nothing had ever read.
+   */
+  const withCancel = (over: Record<string, unknown> = {}) =>
+    challenge({ flow_info: { title: 'Sign in', cancel_url: '/flows/-/cancel/' }, ...over });
+
+  const render00b = (email: string, ch = withCancel()) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SecondFactor
+          challenge={ch}
+          email={email}
+          busy={false}
+          problem={null}
+          onSubmit={onSubmit}
+          onHandOver={onHandOver}
+        />
+      </NextIntlClientProvider>,
+    );
+
+  it('⚠⚠ shows the address above the heading, linked to the provider’s way out', () => {
+    render00b('maya@avivco.il');
+    const back = screen.getByTestId('second-factor-back');
+    expect(back).toHaveAttribute('href', '/flows/-/cancel/');
+    expect(back).toHaveTextContent('maya@avivco.il');
+  });
+
+  it('⚠⚠ it comes BEFORE the heading, which is the whole complaint', () => {
+    /*
+     * Order, not presence. The address was already on the screen — underneath.
+     * `compareDocumentPosition` is the assertion that would have failed on the
+     * version he was looking at.
+     */
+    render00b('maya@avivco.il');
+    const back = screen.getByTestId('second-factor-back');
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('⚠⚠ renders nothing when the provider offers no way out', () => {
+    /*
+     * `cancel_url` defaults to '' and its value has never been observed live.
+     * A back arrow that silently does nothing, on a screen somebody is stuck
+     * on, is worse than no arrow. Three states, never two.
+     */
+    render00b('maya@avivco.il', challenge());
+    expect(screen.queryByTestId('second-factor-back')).toBeNull();
+  });
+
+  it('★ still offers the way out when the address is unknown', () => {
+    // A resumed flow has no typed email. The affordance is about leaving, not
+    // about identity, so it survives — with words instead of an address.
+    render00b('');
+    const back = screen.getByTestId('second-factor-back');
+    expect(back).toBeInTheDocument();
+    expect(back).not.toHaveTextContent('@');
+  });
+
+  it('★★ and it says what it does, for anyone who cannot see an arrow', () => {
+    // "maya@avivco.il" beside a glyph does not say what pressing it will do.
+    render00b('maya@avivco.il');
+    expect(screen.getByTestId('second-factor-back')).toHaveTextContent(/use a different account/i);
+  });
+
+  it('⚠ never links to a cancel path the provider did not send', () => {
+    /*
+     * It is a path on the identity provider's origin. Composing one ourselves
+     * is the absolute-path defect this repository has had three times, and
+     * `safeLinkUrl` is what refuses a value that is not a path or a URL.
+     */
+    render00b('maya@avivco.il', withCancel({ flow_info: { cancel_url: 'javascript:alert(1)' } }));
+    expect(screen.queryByTestId('second-factor-back')).toBeNull();
+  });
+});

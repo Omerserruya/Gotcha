@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowLeft } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useMemo, useRef, useState } from 'react';
 
@@ -12,6 +13,7 @@ import {
 } from '@/api/contracts/auth-flow';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
+import { safeLinkUrl } from '@/lib/safe-url';
 
 import styles from './SecondFactor.module.css';
 
@@ -148,6 +150,13 @@ export function SecondFactor({
     return <p className={styles.note}>{t('continuing')}</p>;
   }
 
+  /*
+   * The provider's own way out of this flow. Never composed by us: it is a
+   * path on the identity provider's origin, and guessing one would be the
+   * absolute-path defect this repository has already had three times.
+   */
+  const back = safeLinkUrl(challenge.flow_info?.cancel_url);
+
   const active = chosen ?? usable[0]!;
   const isRecovery = active.device_class.trim().toLowerCase() === 'static';
   const ready = isRecovery ? code.trim() !== '' : code.length === CODE_LENGTH;
@@ -219,6 +228,44 @@ export function SecondFactor({
         if (ready) send(isRecovery ? code.trim() : code);
       }}
     >
+      {/*
+        ═══════════════════════════════════════════════════════════════════
+        ★★ "עדיין אין את שם המשתמש למעלה עם אופציה לחזור"
+        ═══════════════════════════════════════════════════════════════════
+        The account was BELOW the heading as "Signing in as …" and there was no
+        way back at all. The mock puts it above, with an arrow:
+
+            <div font-size:12.5px; color:#8C887F; display:flex; gap:8px>
+              <i data-lucide="arrow-left" width=14 height=14 stroke-width=2>
+              maya@avivco.il
+            <h2 margin:14px 0 0>
+
+        ★ `--text-subtle` IS `#8c887f`, so the token carries the mock's value.
+
+        ── AND "BACK" IS A REAL ACTION, NOT A LINK TO THE PREVIOUS PAGE ──
+        The stage lives in a server-side flow, so navigating back to
+        `/sign-in` RESUMES this same stage — the browser's own back button does
+        nothing useful here. Authentik supplies the way out on the challenge
+        itself: `flow_info.cancel_url`, which our contract has parsed since the
+        day it was written and **nothing has ever read**.
+
+        ⚠ It is `.default('')`, and its value has never been observed. So the
+          control renders only when the provider actually offers one — three
+          states, never two. A back arrow that silently does nothing on a
+          screen somebody is stuck on is worse than no arrow.
+
+        ★ The address is shown beside it when we have it and omitted when we do
+          not (a resumed flow has no typed email), which is why the accessible
+          name carries the meaning rather than the text.
+      */}
+      {back ? (
+        <a className={styles.back} href={back} data-testid="second-factor-back">
+          <ArrowLeft size={14} strokeWidth={2} aria-hidden="true" />
+          {email !== '' ? email : t('backStartAgain')}
+          <span className={styles.backLabel}>{t('back')}</span>
+        </a>
+      ) : null}
+
       <div className={styles.intro}>
         <Text role="title" as="h1">
           {t('title')}
