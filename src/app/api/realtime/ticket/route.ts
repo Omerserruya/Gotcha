@@ -5,6 +5,7 @@ import { realtimeTicketSchema } from '@/api/contracts/presence';
 import { realtimeEndpoints } from '@/api/endpoints/registry';
 import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
+import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
 
 /**
  * Mints a socket handshake ticket for the browser.
@@ -19,6 +20,15 @@ import { logger } from '@/observability/logger';
  * socket fails in a way that looks like a network fault.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  /*
+   * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
+   * see this file — its matcher excludes `/api` — so this route was covered
+   * there by the gateway allowlist and by nothing else, while every page route
+   * had two independent refusals.
+   */
+  const notHere = refuseOnCredentialSurface(request);
+  if (notHere) return notHere;
+
   const originError = assertSameOrigin(request);
   if (originError) return originError;
 

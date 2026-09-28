@@ -6,6 +6,7 @@ import { activeSession } from '@/auth/session-store';
 import { sessionCookieOptions } from '@/auth/session';
 import { serverEnv } from '@/config/env.server';
 import { logger } from '@/observability/logger';
+import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
 
 /**
  * The browser's only route to the platform API.
@@ -60,6 +61,15 @@ function upstreamPath(segments: string[]): string | null {
 }
 
 async function proxy(request: NextRequest, segments: string[]): Promise<NextResponse> {
+  /*
+   * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
+   * see this file — its matcher excludes `/api` — so this route was covered
+   * there by the gateway allowlist and by nothing else, while every page route
+   * had two independent refusals.
+   */
+  const notHere = refuseOnCredentialSurface(request);
+  if (notHere) return notHere;
+
   const originError = assertSameOrigin(request);
   if (originError) return originError;
 

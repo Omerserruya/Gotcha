@@ -7,6 +7,7 @@ import { serverEnv } from '@/config/env.server';
 import { assertSameOrigin } from '@/api/client/csrf';
 import { logger } from '@/observability/logger';
 import { appUrl } from '@/lib/base-path';
+import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
 
 /**
  * Ends the session.
@@ -20,6 +21,15 @@ import { appUrl } from '@/lib/base-path';
  * want the local sign-out to have happened.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  /*
+   * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
+   * see this file — its matcher excludes `/api` — so this route was covered
+   * there by the gateway allowlist and by nothing else, while every page route
+   * had two independent refusals.
+   */
+  const notHere = refuseOnCredentialSurface(request);
+  if (notHere) return notHere;
+
   const originError = assertSameOrigin(request);
   if (originError) return originError;
 

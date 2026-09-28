@@ -6,6 +6,7 @@ import { sealSession, sessionCookieOptions, type Session } from '@/auth/session'
 import { serverEnv } from '@/config/env.server';
 import { logger } from '@/observability/logger';
 import { appUrl } from '@/lib/base-path';
+import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
 
 /**
  * Completes sign-in.
@@ -36,6 +37,15 @@ function uncached(response: NextResponse): NextResponse {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  /*
+   * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
+   * see this file — its matcher excludes `/api` — so this route was covered
+   * there by the gateway allowlist and by nothing else, while every page route
+   * had two independent refusals.
+   */
+  const notHere = refuseOnCredentialSurface(request);
+  if (notHere) return notHere;
+
   const env = serverEnv();
   // See `redirectUri`: an absolute path would discard the mount point.
   const signInUrl = new URL(appUrl('/sign-in', env.APP_ORIGIN));
