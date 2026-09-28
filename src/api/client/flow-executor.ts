@@ -24,9 +24,18 @@ import { AUTHENTICATION_FLOW, readChallenge, type FlowStep } from '../contracts/
  * ★ To be precise about what is and is not claimed: **our server never receives
  *   the password, never logs it, and it never enters Node.** Our JavaScript does
  *   render the field, so an XSS in our bundle could read it — true of any
- *   first-party login form, and why this route wants a strict CSP. Saying "our
+ *   first-party login form, and why this route gets a narrowed CSP. Saying "our
  *   application is not in the credential path" would be a stronger claim than
  *   the architecture supports.
+ *
+ * ★★ AND THE SECOND CLAUSE DEPENDS ON SOMETHING NOT WRITTEN HERE: that no code
+ *   in this app replaces `window.fetch`. The legacy product does exactly that —
+ *   `installTenantFetchInterceptor` wraps it to attach a tenant header — and it
+ *   is a reasonable thing for somebody to add here too. A wrapper would sit in
+ *   this call's path, reading the URL and possibly the body, while **this file
+ *   would look completely unchanged**. A `console.log` of its arguments in
+ *   development would make "never logs it" false without anybody editing the
+ *   module that says it. Verified absent, and guarded in the test beside it.
  *
  * ── WHY IT LIVES IN `api/client` AND NOT BESIDE THE PANEL ──
  * `no-restricted-globals` forbids `fetch` in UI code, and the rule is right:

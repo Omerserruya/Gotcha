@@ -225,3 +225,60 @@ describe('★★ how the request is made', () => {
     expect(headers['X-authentik-CSRF']).toBe('CSRF');
   });
 });
+
+describe('⚠⚠ nothing in this app intercepts fetch, because that would be in the credential path', () => {
+  it('⚠⚠ installs no global fetch interceptor anywhere in `src`', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE LEGACY APP HAS ONE, AND IT IS A PLAUSIBLE THING TO ADD HERE
+     * ════════════════════════════════════════════════════════════════════════
+     * `ChatCenter/frontend/src/lib/active-tenant.ts` installs
+     * `installTenantFetchInterceptor`, which replaces `window.fetch` to attach an
+     * `X-Tenant-Id` header. Entirely reasonable in that app, and it surfaced here
+     * only because a probe's stack trace showed it while measuring something
+     * else.
+     *
+     * **This app has no such thing, and that is a security property rather than
+     * a style preference.** `flow-executor.ts` calls `fetch` with the password in
+     * its body. A global interceptor would sit in that path — reading the URL,
+     * possibly the body, possibly logging — and `flow-executor.ts` would look
+     * completely unchanged. The claim in that file is "our server never receives
+     * it, never logs it, and it never enters Node", and a wrapper that
+     * `console.log`s its arguments in development would make the second clause
+     * false without touching the module that states it.
+     *
+     * ⚠ ITS BLIND SPOT, STATED: this reads source text. It catches an assignment
+     * to `window.fetch` or `globalThis.fetch`; it cannot see one installed by a
+     * dependency, or by a `Proxy`, or through a computed property. It is a
+     * tripwire on the obvious spelling, which is the one somebody adding a tenant
+     * header would reach for.
+     */
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+
+    const walk = async (dir: string): Promise<string[]> => {
+      const entries = await readdir(dir, { withFileTypes: true });
+      const out: string[] = [];
+      for (const entry of entries) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...(await walk(full)));
+        else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) out.push(full);
+      }
+      return out;
+    };
+
+    const files = await walk(join(process.cwd(), 'src'));
+    /* A path that resolves to nothing makes this pass for ever. */
+    expect(files.length).toBeGreaterThan(100);
+
+    const offenders: string[] = [];
+    for (const file of files) {
+      const source = await readFile(file, 'utf8');
+      /* An ASSIGNMENT, not a call. `globalThis.fetch(…)` is ordinary usage. */
+      if (/\b(?:window|globalThis|self)\s*\.\s*fetch\s*=/.test(source)) {
+        offenders.push(file.replace(process.cwd(), '.'));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
