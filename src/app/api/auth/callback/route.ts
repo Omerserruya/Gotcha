@@ -14,6 +14,27 @@ import { appUrl } from '@/lib/base-path';
  * a mismatch throws rather than producing a session, which is what closes the
  * CSRF and code-injection holes on this endpoint.
  */
+/**
+ * Every answer this endpoint gives is about one single-use code.
+ *
+ * ★★ NONE OF THEM MAY BE STORED. The success path carries a `Set-Cookie`
+ * holding a sealed session; the failure paths carry a reason for one specific
+ * attempt. A replayed copy of either is a stale answer to a question the
+ * browser thinks it just asked — somebody who has signed out being sent onward
+ * by a redirect recorded while they were signed in, or a stale
+ * `?error=expired` shown after a sign-in that actually worked.
+ *
+ * ★ Not a claim that a shared cache would hold these. They are `Set-Cookie`
+ *   responses on a 307, which a shared cache must not store anyway, and 307 is
+ *   not on RFC 9111’s heuristic list. It is the browser’s own back/forward and
+ *   in-memory caches this speaks to, which obey `no-store` and do not consult
+ *   that rule.
+ */
+function uncached(response: NextResponse): NextResponse {
+  response.headers.set('cache-control', 'no-store');
+  return response;
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const env = serverEnv();
   // See `redirectUri`: an absolute path would discard the mount point.
@@ -23,7 +44,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!loginState) {
     // Expired, replayed, or never started here.
     signInUrl.searchParams.set('error', 'expired');
-    return NextResponse.redirect(signInUrl.toString());
+    return uncached(NextResponse.redirect(signInUrl.toString()));
   }
 
   if (request.nextUrl.searchParams.has('error')) {
@@ -31,7 +52,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       error: request.nextUrl.searchParams.get('error'),
     });
     signInUrl.searchParams.set('error', 'denied');
-    return NextResponse.redirect(signInUrl.toString());
+    return uncached(NextResponse.redirect(signInUrl.toString()));
   }
 
   let tokens;
@@ -53,13 +74,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (cause) {
     logger.error('auth.callback.exchange_failed', { cause });
     signInUrl.searchParams.set('error', 'exchange_failed');
-    return NextResponse.redirect(signInUrl.toString());
+    return uncached(NextResponse.redirect(signInUrl.toString()));
   }
 
   const claims = tokens.claims();
   if (!claims?.sub) {
     signInUrl.searchParams.set('error', 'exchange_failed');
-    return NextResponse.redirect(signInUrl.toString());
+    return uncached(NextResponse.redirect(signInUrl.toString()));
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -82,7 +103,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // endless sign-in loop. One legible failure is better.
     logger.error('auth.callback.session_too_large', { cause });
     signInUrl.searchParams.set('error', 'session_too_large');
-    return NextResponse.redirect(signInUrl.toString());
+    return uncached(NextResponse.redirect(signInUrl.toString()));
   }
 
   /*
@@ -103,5 +124,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Same constant as the setter: a delete whose path does not match is a
   // no-op, and a stale sealed state can be picked up by the next attempt.
   response.cookies.delete({ name: LOGIN_STATE_COOKIE, path: LOGIN_STATE_COOKIE_PATH });
-  return response;
+  return uncached(response);
 }

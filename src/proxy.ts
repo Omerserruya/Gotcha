@@ -136,7 +136,33 @@ export default function proxy(request: NextRequest): NextResponse {
        * not — checked, because the difference is the whole behaviour.)
        */
       loginUrl.searchParams.set('returnTo', `${pathname}${request.nextUrl.search}`);
-      return withSecurityHeaders(NextResponse.redirect(loginUrl));
+
+      /*
+       * ════════════════════════════════════════════════════════════════════
+       * ★★ `no-store`, BECAUSE THIS REDIRECT'S DESTINATION DEPENDS ON STATE
+       * ════════════════════════════════════════════════════════════════════
+       * Where `/v2` sends somebody is a function of whether they have a
+       * session. A stored redirect is a redirect that has stopped asking: a
+       * user who signs out can be sent onward by an entry recorded while they
+       * were signed in, and a change to this destination — which happened
+       * today, in `7801fe7` — can go on being replayed from a browser after
+       * the server has moved on.
+       *
+       * ★ AND THE PRECISE CLAIM, BECAUSE THE LOOSE ONE IS WRONG. A bare 307
+       *   is NOT heuristically cacheable: RFC 9111 §4.2.2 lists 200, 203,
+       *   204, 206, 300, 301, 308, 404, 405, 410, 414 and 501, and 307 is
+       *   absent. So this header is not what fixes a stale redirect somebody
+       *   is looking at right now — a browser that replays one is doing it
+       *   from its back/forward cache or its in-memory cache for the tab, and
+       *   `no-store` is the thing that tells it not to.
+       *
+       *   Worth stating apart: 404 IS on that list, and `/v2` served a bare
+       *   404 before the matcher fix. A browser that saw that one may still
+       *   be holding it.
+       */
+      const redirect = withSecurityHeaders(NextResponse.redirect(loginUrl));
+      redirect.headers.set('cache-control', 'no-store');
+      return redirect;
     }
   }
 

@@ -47,6 +47,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   logger.debug('auth.login.start', { returnTo });
 
   const response = NextResponse.redirect(authorizationUrl.toString());
+  /*
+   * This response carries the sealed PKCE verifier and the CSRF `state` in a
+   * cookie, and its `Location` embeds a one-time `state` and code challenge.
+   * A replayed copy hands somebody a stale challenge against a fresh cookie,
+   * which fails at the callback as "expired" with nothing to explain it.
+   */
+  response.headers.set('cache-control', 'no-store');
   response.cookies.set(
     LOGIN_STATE_COOKIE,
     await sealLoginState({ v: codeVerifier, s: state, r: returnTo }),

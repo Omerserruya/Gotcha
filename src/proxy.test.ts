@@ -112,6 +112,37 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
     expect(status).not.toBe(307);
   });
 
+  it('⚠⚠ the redirect is never stored, because its destination is state', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * A CACHED REDIRECT IS A REDIRECT THAT HAS STOPPED ASKING
+     * ════════════════════════════════════════════════════════════════════════
+     * Where `/v2` sends somebody depends on whether they have a session. A
+     * stored copy sends a signed-out user onward by an entry recorded while
+     * they were signed in — and when this destination changed today, browsers
+     * went on replaying the old one for an hour after the server had moved.
+     *
+     * ★ The precise claim, because the loose one is wrong: a bare 307 is NOT
+     *   heuristically cacheable — RFC 9111 §4.2.2 lists 200, 203, 204, 206,
+     *   300, 301, 308, 404, 405, 410, 414, 501, and 307 is absent. This header
+     *   speaks to the browser's own back/forward and in-memory caches, which
+     *   obey `no-store` and do not consult that list.
+     */
+    const request = new NextRequest('https://dev.gotcha.co.il/en/home');
+    expect(proxy(request).headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('★ and an ordinary page is NOT marked no-store', () => {
+    /*
+     * Both directions. Stamping every response would make the whole product
+     * uncacheable to fix one redirect, and nothing on the screen would say so.
+     */
+    const signedIn = new NextRequest('https://dev.gotcha.co.il/en/home', {
+      headers: { cookie: 'gotcha_session=abc123' },
+    });
+    expect(proxy(signedIn).headers.get('cache-control')).not.toBe('no-store');
+  });
+
   it('★★ an empty session cookie is not a session', () => {
     /*
      * A cleared cookie is sent as an empty value rather than withdrawn. Treating
