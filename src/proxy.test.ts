@@ -14,12 +14,15 @@ import { describe, expect, it, vi } from 'vitest';
  * security question rather than a tidiness one.
  */
 
-vi.mock('next-intl/middleware', () => ({
-  default: () => () => {
-    const { NextResponse } = require('next/server') as typeof import('next/server');
-    return NextResponse.next();
-  },
-}));
+/*
+ * An async factory with a dynamic import: a `vi.mock` factory is hoisted above
+ * the imports, so it cannot close over the `NextResponse` at the top of this
+ * file, and `require()` is forbidden here.
+ */
+vi.mock('next-intl/middleware', async () => {
+  const { NextResponse: Response } = await import('next/server');
+  return { default: () => () => Response.next() };
+});
 
 const { default: proxy } = await import('./proxy');
 

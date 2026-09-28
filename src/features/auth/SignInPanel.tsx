@@ -8,6 +8,8 @@ import { startFlow, submitStage } from '@/api/client/flow-executor';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
 
+import { SecondFactor } from './SecondFactor';
+
 import styles from './SignInPanel.module.css';
 
 /**
@@ -131,22 +133,7 @@ export function SignInPanel({
      * its origin. Following it would land somebody who has just signed in
      * successfully on a stranger's home page.
      */
-    if (step.kind === 'done' || step.kind === 'handOver' || step.kind === 'chooseFactor') {
-      /*
-       * ⚠⚠ `chooseFactor` IS PARSED AND DELIBERATELY NOT RENDERED.
-       * The challenge is now known — two device classes, `totp` and `static`
-       * (recovery codes), arriving as peers with `last_used` per device. **What
-       * is not known is the submit body.** Posting `{}` answers "Empty response"
-       * without naming a field, so the trick that found `remember_me` does not
-       * work here, and it cannot be probed by trial because every malformed
-       * attempt is a counted failed authentication against the one enrolled
-       * account there is.
-       *
-       * A device picker that cannot submit is a control that does nothing — the
-       * same reason the copilot has no insert button and the integrations rail
-       * has no Connect. So this hands over, exactly as before, and the panel
-       * gains the renderer in the commit that gains the submit shape.
-       */
+    if (step.kind === 'done' || step.kind === 'handOver') {
       window.location.assign(handOverHref);
     }
   }, [step, handOverHref]);
@@ -185,8 +172,33 @@ export function SignInPanel({
   }
 
   /* Nothing to show until the first stage lands. */
-  if (!step || step.kind === 'done' || step.kind === 'handOver' || step.kind === 'chooseFactor') {
+  if (!step || step.kind === 'done' || step.kind === 'handOver') {
     return <p className={styles.loading}>{t('signIn.starting')}</p>;
+  }
+
+  if (step.kind === 'chooseFactor') {
+    /*
+      ★★ THE SECOND FACTOR, IN THIS PANEL — which is what the design asks for and
+      what the handover was a deviation from. It renders `totp` and `static`;
+      `webauthn`, `duo` and `sms` call `onHandOver`, because each is a different
+      journey nobody has observed and the schema agrees by giving them separate
+      fields.
+
+      `email` rather than `pending_user`: the server sends a username — observed
+      as `akadmin` — and a screen that names an internal account halfway through
+      sign-in is where somebody wonders whether they are in the right place.
+      What they typed a moment ago is in this component's state already.
+    */
+    return (
+      <SecondFactor
+        challenge={step.challenge}
+        email={email}
+        busy={busy}
+        problem={problem}
+        onSubmit={(body) => void send(body)}
+        onHandOver={() => window.location.assign(handOverHref)}
+      />
+    );
   }
 
   if (step.kind === 'staySignedIn') {

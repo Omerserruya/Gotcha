@@ -1,0 +1,112 @@
+@layer features {
+  /*
+   * Screen 00b's first half, in screen 00a's panel. The frame and the editorial
+   * side are the page's; only what changes between stages lives here.
+   */
+  .factor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-7);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .label {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .hint {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* Six boxes that behave as one field. */
+  .boxes {
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  .box {
+    inline-size: var(--size-code-box);
+    min-inline-size: 0;
+    padding-block: var(--space-12);
+    font: inherit;
+    font-size: var(--font-size-body);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+  }
+
+  /*
+   * A recovery code is not six digits — nothing has been observed about its
+   * length or alphabet — so it gets an ordinary field rather than boxes that
+   * would silently truncate one.
+   */
+  .input {
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-12);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+  }
+
+  .problem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-snug);
+    color: var(--intent-urgent-text);
+    max-inline-size: var(--size-reading);
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * Quiet on purpose. One device means no chooser, and the way out is phrased as
+   * the situation somebody is in rather than as a menu label — so it costs
+   * nothing to the person whose phone is in their hand.
+   */
+  .noAccess,
+  .other {
+    padding: 0;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    background: none;
+    border: 0;
+    text-align: start;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .others {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+}

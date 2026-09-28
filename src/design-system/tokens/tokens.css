@@ -148,6 +148,8 @@
      * percentage is of a page that is already allowed to be 1600px.
      */
     --size-inbox-queue: clamp(260px, 21%, 360px);
+    /* One digit of a six-box code field. Wide enough for a tabular numeral. */
+    --size-code-box: 44px;
     --size-frame-inset: 12px;
     --size-control: 44px;
     --size-control-sm: 34px;

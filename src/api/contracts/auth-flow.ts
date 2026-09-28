@@ -206,7 +206,20 @@ export type AuthenticatorValidateChallenge = z.infer<typeof authenticatorValidat
 
 /**
  * What the validate stage accepts — from Authentik's own OpenAPI schema
- * (`GET /api/v3/schema/`, `2024.10.5`), not from experiment.
+ * (`GET /api/v3/schema/`, `2024.10.5`), **and confirmed against the live stage
+ * on 2026-09-28**: a real TOTP code was submitted with this exact body and the
+ * flow advanced to `ak-stage-user-login` with no `response_errors`.
+ *
+ * ★ So three things are measured rather than read: `code` as a **string** is
+ *   correct here, `selected_challenge` takes the device object back **verbatim**
+ *   (the confirmation echoed the challenge unmodified), and validate really does
+ *   precede `user-login` — the bindings and the behaviour agree.
+ *
+ * ⚠ `static` IS NOT CONFIRMED. It shares the `code` field per the schema and no
+ *   recovery code has been fired, because they are single-use and burning one to
+ *   check a field name is a bad trade. Spec plus a confirmed sibling is strong
+ *   evidence; it is not the same as having seen it, and the difference belongs
+ *   here rather than in somebody's memory.
  *
  *     AuthenticatorValidationChallengeResponseRequest
  *       component           string
