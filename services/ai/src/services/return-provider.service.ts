@@ -1,3 +1,4 @@
+import { SHOPIFY_OPERATION } from "@chatcenter/shared";
 /**
  * Which system creates a return for this tenant - decided once, in one place.
  *
@@ -173,7 +174,7 @@ export async function getReturnProvider(tenantId: string): Promise<ReturnProvide
   let returngoConn: Awaited<ReturnType<typeof loadConnection>> = null;
   try {
     [shopifyConn, returngoConn] = await Promise.all([
-      loadConnection({ tenantId, slug: "shopify" }),
+      loadConnection({ tenantId, slug: "shopify", capability: SHOPIFY_OPERATION.ORDER_ACTION }),
       loadConnection({ tenantId, slug: "returngo" }),
     ]);
   } catch (err: any) {

@@ -1,3 +1,4 @@
+import { SHOPIFY_OPERATION } from "@chatcenter/shared";
 /**
  * GOTCHA Shopify Chat App - installation lifecycle.
  *
@@ -684,7 +685,7 @@ export async function enableChatForTenant(input: {
 > {
   // The Core connection is the only source of the shop domain. Accepting one
   // from the caller would let a tenant claim a storefront it never connected.
-  const conn = await loadConnection({ tenantId: input.tenantId, slug: "shopify" }).catch(() => null);
+  const conn = await loadConnection({ tenantId: input.tenantId, slug: "shopify", capability: SHOPIFY_OPERATION.STOREFRONT }).catch(() => null);
   const shopDomain = normalizeShopifyShopDomain((conn?.config as any)?.shopDomain ?? "");
   if (!conn || !shopDomain) return { ok: false, reason: "shopify_not_connected" };
 

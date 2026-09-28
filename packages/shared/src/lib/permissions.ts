@@ -199,9 +199,19 @@ async function loadUserRoleFeatures(userId: string): Promise<Set<string>> {
  * `null` means "any Shopify funding will do" - the feature is the connection
  * itself rather than one capability on top of it.
  */
-const SHOPIFY_FEATURE_FUNDING: Partial<Record<Feature, ShopifyCapability | null>> = {
-  [FEATURES.SHOPIFY_CORE_INTEGRATION]: null,
-  [FEATURES.SHOPIFY_INTEGRATION]: null,
+const SHOPIFY_FEATURE_FUNDING: Partial<Record<Feature, ShopifyCapability>> = {
+  // Every entry names ONE capability. There is deliberately no "any Shopify
+  // row will do" option: the Connector grants a SET, a plan may grant a subset,
+  // and a merchant funded for the storefront widget must not thereby gain the
+  // Admin API connection. Fine-grained enforcement happens at `loadConnection`,
+  // which names the capability per operation; this table is the coarse gate.
+  //
+  // CORE_INTEGRATION and INTEGRATION both describe "the Shopify connection is
+  // usable at all". They require catalogue sync as the baseline data
+  // capability rather than order actions, which would be too strict for a
+  // catalogue-only merchant, or "anything", which would be no boundary.
+  [FEATURES.SHOPIFY_CORE_INTEGRATION]: "shopify_catalog_sync",
+  [FEATURES.SHOPIFY_INTEGRATION]: "shopify_catalog_sync",
   [FEATURES.SHOPIFY_LIVE_CHAT]: "shopify_storefront_widget",
   [FEATURES.SHOPIFY_PRODUCT_MESSAGING]: "shopify_catalog_sync",
   [FEATURES.SHOPIFY_ORDER_ACTIONS]: "shopify_order_actions",
@@ -234,7 +244,10 @@ export async function isFeatureEnabledForTenant(
   feature: Feature,
 ): Promise<boolean> {
   if (isShopifyFeature(feature)) {
-    const capability = SHOPIFY_FEATURE_FUNDING[feature] ?? undefined;
+    const capability = SHOPIFY_FEATURE_FUNDING[feature];
+    // A Shopify feature with no mapping is denied rather than broadly allowed:
+    // an unmapped entry means nobody decided who funds it.
+    if (!capability) return false;
     if (!(await isShopifyAuthorized(tenantId, capability))) return false;
   }
   const map = await loadTenantFeatures(tenantId);
