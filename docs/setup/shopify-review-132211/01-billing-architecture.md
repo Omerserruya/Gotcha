@@ -1,4 +1,4 @@
-# Billing architecture — paste at the top of Test Instructions
+# Billing architecture (paste at the top of Test Instructions)
 
 > Copy the block below verbatim into the **Test Instructions** field. It is
 > written for a reviewer reading it cold, states the model as implemented, and
@@ -57,7 +57,7 @@ source, installation date or plan.
 
 - Do **not** add a request for an exemption. None is being sought; this
   describes what the app does.
-- Do **not** soften "does not provide Shopify connectivity" — it is the single
+- Do **not** soften "does not provide Shopify connectivity". It is the single
   sentence that answers the 1.2.1 finding.
 - Keep the two paragraphs about what cannot grant access. They are the part a
   reviewer can verify by trying it.

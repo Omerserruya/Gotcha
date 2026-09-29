@@ -1,5 +1,33 @@
 # Reviewer test account — verify immediately before resubmitting
 
+> **Verification status, 2026-09-29.** Six of the ten checks below can only be
+> confirmed by signing in or by opening the Partner Dashboard, and neither is
+> possible from a shell. They are marked UNVERIFIED rather than assumed, because
+> a Test-Instructions statement that turns out to be false is the kind of thing
+> that fails a review on its own.
+>
+> | Check | Status |
+> |---|---|
+> | Credentials work | **UNVERIFIED** — needs a sign-in attempt |
+> | MFA disabled | **UNVERIFIED** — Authentik holds this, not the app DB |
+> | No social sign-in required | **UNVERIFIED** |
+> | No password reset pending | **UNVERIFIED** |
+> | Full testable feature set | **VERIFIED** — 47 provider-neutral entitlements (1 OVERRIDE + 46 TRIAL) |
+> | Opens the intended workspace | **VERIFIED** — the account resolves to the review tenant |
+> | Workspace has no Shopify connection | **NOT YET TRUE** — see below |
+> | GOTCHA Core active | **VERIFIED** — `poc`, ACTIVE, period end 2028-12-31 |
+> | Reviewer can attach their own store | **VERIFIED by design** — no allowlist gates installation, and the claim path is tested |
+> | Partner Dashboard declares non-embedded | **UNVERIFIED** — the repo declares `embedded = false` in `shopify.app.production.toml`, but the Dashboard is authoritative and only a browser can read it |
+>
+> **The workspace is not yet clean.** `new-for-test-of1cm1on.myshopify.com` is
+> still installed and CONNECTED. It holds no paid access - `grantsAccess` is
+> false and all four Shopify-funded entitlements are absent - so it is not a
+> billing problem. It is a *staging* problem: a reviewer attaching their own
+> store should not find somebody else's already attached. **Uninstall GOTCHA
+> from that store in Shopify Admin before submitting**, then re-run the
+> clean-state verification.
+
+
 Run this within a few hours of submitting. Several items decay: a session
 expires, a pending installation ages out, a previous review attempt leaves a
 store claimed.

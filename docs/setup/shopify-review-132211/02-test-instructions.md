@@ -1,4 +1,4 @@
-# Test Instructions — final version for submission 132211
+# Test Instructions (final version for submission 132211)
 
 This replaces every earlier draft. Paste
 [01-billing-architecture.md](./01-billing-architecture.md) at the top, then this.
@@ -14,8 +14,12 @@ GOTCHA's own domain in the usual way.
 
 Please use a **fresh Incognito window** so no existing session interferes.
 
-**Review account:** `<REVIEW_EMAIL>` — password supplied separately in the
+**Review account:** `<REVIEW_EMAIL>`. The password is supplied separately in the
 Partner Dashboard test-credentials field.
+
+The supplied review account opens a dedicated review workspace. At the start of
+review the workspace has no active Shopify store connection, so you can install
+and connect your own review store and see the whole flow from the beginning.
 
 ---
 
@@ -29,13 +33,24 @@ Partner Dashboard test-credentials field.
 4. **Sign in** with the review account above. The pending installation survives
    the sign-in redirect.
 5. **Claim the store.** GOTCHA shows the authorized store waiting to be
-   attached. Attach it to the clean review workspace.
+   attached. Attach it to the review workspace.
+
+   **Stop here and look, before any payment.** This is the state the previous
+   review asked about. The Shopify integration screen shows the store as
+   **Authorized** with **Connector required** beside it: the OAuth grant is
+   real and is not revoked, and no Shopify feature is switched on. The system
+   toggle is off, writeback reads unavailable, and the Shopify tool count reads
+   **0 of 68 available**. Meanwhile GOTCHA Core keeps working: WhatsApp,
+   Instagram, email, web chat, the Inbox, manual knowledge and every
+   non-Shopify integration are all live. Authorization and paid access are
+   different facts, and the product says so on every screen that mentions
+   Shopify.
 6. **Continue to Shopify's hosted plan-selection page.** GOTCHA sends you to
    Shopify; the plan and its price are shown by Shopify.
 7. **Approve the Shopify Connector subscription** on Shopify.
 8. **You are returned to GOTCHA.**
 9. **GOTCHA verifies the subscription directly with Shopify.** The return URL is
-   not treated as proof of payment — GOTCHA performs its own authoritative read
+   not treated as proof of payment. GOTCHA performs its own authoritative read
    against Shopify before granting anything.
 10. **Confirm Shopify becomes active.** The Shopify integration screen and the
     Billing screen both change to an active state only after that verification
@@ -70,9 +85,9 @@ capability stays off until a plan is approved.
 
 ## Billing screen, what it shows
 
-- **GOTCHA Core** — *Billed by GOTCHA*. The standalone platform. States plainly
+- **GOTCHA Core**, *Billed by GOTCHA*. The standalone platform. States plainly
   that it does not include connection to Shopify or access to Shopify data.
-- **Shopify Connector** — *Billed and managed by Shopify*, with the Shopify
+- **Shopify Connector**, *Billed and managed by Shopify*, with the Shopify
   capabilities it unlocks listed, and the current subscription state. All
   purchase and management actions go to Shopify's hosted page; there is no
   GOTCHA checkout for the Connector, and GOTCHA does not display the Connector
