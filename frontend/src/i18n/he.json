@@ -1608,6 +1608,88 @@
         },
         "dataSafe": "הנתונים, השיחות וההגדרות שלכם נשמרו במלואם. בחירת תוכנית מפעילה אותם מחדש.",
         "cta": "בחירת תוכנית"
+      },
+      "core": {
+        "heading": "GOTCHA Core",
+        "billedBy": "חיוב על ידי GOTCHA",
+        "lede": "פלטפורמת שירות הלקוחות וה-AI העצמאית שלכם. היא עובדת בפני עצמה, עם חנות מקוונת או בלעדיה.",
+        "includes": "כוללת עובדי AI ונציגים אנושיים, תיבת השיחות, אוטומציות, אישורים, אנליטיקה, ערוצי התקשורת שלכם, ידע שמנוהל ידנית, ואינטגרציות נתמכות שאינן Shopify כגון WooCommerce.",
+        "notShopify": "GOTCHA Core אינה כוללת חיבור ל-Shopify או גישה לנתוני Shopify."
+      },
+      "shopifyConnector": {
+        "heading": "מחבר Shopify",
+        "billedBy": "מחויב ומנוהל על ידי Shopify",
+        "lede": "נדרש כדי לחבר חנות Shopify ולהשתמש ב-GOTCHA במוצרים, מלאי, לקוחות, הזמנות, פונקציונליות חנות, סנכרון ופעולות של Shopify.",
+        "separateNote": "זהו מינוי נוסף, לא חלופה ל-GOTCHA Core. אפשר להחזיק בשניהם במקביל.",
+        "capabilitiesTitle": "מה המחבר פותח",
+        "capabilities": {
+          "store": "חיבור חנות ה-Shopify שלכם",
+          "catalog": "מוצרים, מלאי וסנכרון קטלוג של Shopify",
+          "orders": "לקוחות והזמנות Shopify בתיבת השיחות ועבור עובדי ה-AI",
+          "actions": "פעולות על הזמנות, זיכויים וכתיבה חזרה ל-Shopify",
+          "storefront": "ווידג'ט הצ'אט בחנות והטמעת האפליקציה"
+        },
+        "viewPricing": "צפייה במחיר ב-Shopify",
+        "manageInShopify": "ניהול ב-Shopify",
+        "choosePlan": "בחירת תוכנית ב-Shopify",
+        "pricingNote": "Shopify מציגה את מחיר המחבר ומחייבת את המינוי דרך חשבון ה-Shopify של העסק.",
+        "accessOn": "יכולות Shopify פעילות.",
+        "accessOff": "יכולות Shopify כבויות.",
+        "coreUnaffected": "GOTCHA Core ושאר הערוצים שלכם אינם מושפעים.",
+        "loading": "בודקים את מינוי ה-Shopify שלכם…",
+        "loadFailed": "לא הצלחנו לקרוא כרגע את מצב מינוי ה-Shopify שלכם.",
+        "state": {
+          "notConnected": {
+            "title": "לא מחוברת חנות Shopify",
+            "body": "חברו חנות Shopify כדי להשתמש בנתוני Shopify ב-GOTCHA. בחירת תוכנית המחבר נעשית ב-Shopify כחלק מהחיבור."
+          },
+          "billingRequired": {
+            "title": "נדרש מחבר Shopify",
+            "titleDeclined": "לא אושרה תוכנית מחבר",
+            "body": "{shop} מורשית, אבל מחבר ה-Shopify עדיין לא פעיל. בחרו תוכנית ב-Shopify כדי להפעיל את יכולות ה-Shopify.",
+            "bodyDeclined": "{shop} נשארת מורשית, אבל יכולות ה-Shopify כבויות עד שתאושר תוכנית מחבר ב-Shopify."
+          },
+          "approvalPending": {
+            "title": "ממתינים לאישור ב-Shopify",
+            "body": "Shopify עדיין מציגה את המינוי כממתין לאישור. השלימו את האישור בממשק הניהול של Shopify."
+          },
+          "active": {
+            "title": "המחבר פעיל",
+            "body": "מינוי מחבר ה-Shopify שלכם פעיל ויכולות ה-Shopify מופעלות.",
+            "bodyEnding": "המחבר פעיל אך מוגדר להסתיים בתום התקופה הנוכחית."
+          },
+          "trialing": {
+            "title": "תקופת ניסיון של המחבר",
+            "body": "תקופת הניסיון פעילה ויכולות ה-Shopify מופעלות."
+          },
+          "pastDue": {
+            "title": "תשלום באיחור",
+            "body": "Shopify מדווחת על חיוב שנכשל. הסדירו אותו בממשק הניהול של Shopify כדי לשחזר את יכולות ה-Shopify."
+          },
+          "frozen": {
+            "title": "החנות מוקפאת ב-Shopify",
+            "body": "Shopify הקפיאה את החנות ולכן המינוי מושהה. יכולות ה-Shopify יחזרו כאשר Shopify תשחרר את ההקפאה."
+          },
+          "cancelled": {
+            "title": "המחבר בוטל",
+            "body": "יכולות ה-Shopify כבויות והנתונים שלכם לא נגעו. GOTCHA Core ממשיכה לעבוד כרגיל."
+          },
+          "unknownPlan": {
+            "title": "תוכנית המחבר אינה מזוהה",
+            "body": "לא הצלחנו להתאים את מינוי ה-Shopify הפעיל שלכם לתוכנית מחבר מוגדרת. הגישה ל-Shopify לא הורחבה. פנו לתמיכה של GOTCHA.",
+            "bodyPreserved": "לא הצלחנו להתאים את מינוי ה-Shopify הפעיל שלכם לתוכנית מחבר מוגדרת. הגישה ל-Shopify שכבר היתה לכם נשמרת בינתיים עד שנתקן זאת. פנו לתמיכה של GOTCHA."
+          },
+          "unavailable": {
+            "title": "מצב המחבר אינו זמין",
+            "body": "דבר לא השתנה בחשבון שלכם. פנו לתמיכה ונבדוק את העניין."
+          },
+          "notActive": {
+            "title": "מחבר Shopify אינו פעיל",
+            "body": "התחברו והירשמו דרך Shopify כדי להשתמש בנתונים וביכולות של Shopify בתוך GOTCHA."
+          }
+        },
+        "retry": "בדיקה מחדש",
+        "supportLine": "אם זה לא מסתדר, פנו לתמיכה של GOTCHA."
       }
     }
   },
@@ -2960,6 +3042,15 @@
       "saveFailed": "שמירת המיפוי נכשלה.",
       "needName": "יש למפות את עמודת השם לפני שמירה.",
       "needIdentifier": "יש למפות לפחות עמודת טלפון או אימייל."
+    },
+    "shopifyAccess": {
+      "active": "פעיל",
+      "authorized": "מאושר",
+      "connectorRequired": "נדרש מחבר Shopify",
+      "toolsLocked": "כלי Shopify אינם זמינים עד שמחבר Shopify יהיה פעיל",
+      "toolsLockedCount": "0 מתוך {total} זמינים",
+      "writebackUnavailable": "לא זמין עד שמחבר Shopify יהיה פעיל",
+      "featureLocked": "דורש מחבר Shopify"
     }
   },
   "usage": {

@@ -14,6 +14,7 @@
  */
 
 import { prisma } from "@chatcenter/shared";
+import { SHOPIFY_OPERATION } from "@chatcenter/shared";
 import type {
   CommerceContext,
   CommerceContextResponse,
@@ -570,7 +571,7 @@ async function buildCommerceContextFresh(opts: {
   const recentLimit = Math.min(Math.max(opts.recentLimit ?? 5, 1), 25);
 
   // 1. Connection state.
-  const conn = await loadConnection({ tenantId: opts.tenantId, slug: "shopify" });
+  const conn = await loadConnection({ tenantId: opts.tenantId, slug: "shopify", capability: SHOPIFY_OPERATION.ORDER_CONTEXT });
   if (!conn) return { state: "not_connected" };
   if (conn.status === "ERROR") return { state: "connection_unhealthy" };
 
@@ -712,7 +713,7 @@ export async function orderToCard(
   locale?: string,
 ): Promise<OrderCard> {
   const l: Locale = String(locale || "en").toLowerCase().startsWith("he") ? "he" : "en";
-  const conn = await loadConnection({ tenantId, slug: "shopify" });
+  const conn = await loadConnection({ tenantId, slug: "shopify", capability: SHOPIFY_OPERATION.ORDER_CONTEXT });
   const shopDomain = String(conn?.config?.shopDomain || "").trim() || "unknown.myshopify.com";
   const imageByProduct = await fetchProductImages(tenantId, undefined, [order]);
   const card = mapOrderCard(order, shopDomain, canWrite, l, imageByProduct);

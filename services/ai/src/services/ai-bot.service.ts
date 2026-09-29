@@ -24,6 +24,7 @@ import {
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { withProtectedAtoms } from "@chatcenter/shared";
+import { getShopifyAuthorization, shopifyCapabilityForTool } from "@chatcenter/shared";
 import { capabilitiesFor, MAX_CAROUSEL_ITEMS } from "@chatcenter/shared";
 import {
   readGrammaticalAddress,
@@ -2058,9 +2059,27 @@ async function generateAIBotReplyInner(
       where: { tenantId: opts.tenantId, status: "CONNECTED" },
       include: { integration: true },
     });
+    // A Shopify connection that nobody is paying Shopify for is not a
+    // connection the model may see.
+    //
+    // Dropping it from `connectedSlugs` removes its tools from the SURFACE, not
+    // merely from dispatch. Offering a tool that will refuse is a mistake this
+    // codebase has already paid for once: the model picks the tool it was
+    // shown, spends a turn on it, and reports a failure to the customer. The
+    // dispatch path is gated too (loadConnection), but the model should never
+    // be told the option exists.
+    const shopifyConnected = tiRows.some((ti) => ti.integration?.slug === "shopify");
+    // The SET of Shopify capabilities Shopify has actually funded, not a
+    // boolean. A merchant funded only for catalogue sync must be offered the
+    // catalogue tools and none of the order or refund tools, so the surface is
+    // filtered per tool below rather than per provider here.
+    const shopifyCaps = new Set<string>(
+      shopifyConnected ? (await getShopifyAuthorization(opts.tenantId)).capabilities : [],
+    );
     for (const ti of tiRows) {
       const s = ti.integration?.slug;
       if (!s) continue;
+      if (s === "shopify" && shopifyCaps.size === 0) continue;
       connectedSlugs.add(s);
       configBySlug.set(s, ti.config || {});
     }
@@ -2172,6 +2191,21 @@ async function generateAIBotReplyInner(
         if (toolCannotExecute(def)) {
           console.log(`[ai-bot][tool-surface] hiding ${def.name}: provider declares it unsupported`);
           continue;
+        }
+        // Entitlement gate, per TOOL. Which Shopify entitlement a tool needs is
+        // policy (shopify-capability-map), and a merchant funded for one group
+        // must not be offered another: catalogue sync does not buy order
+        // history, and neither buys refunds. An unclassified Shopify tool maps
+        // to null and is hidden, so a tool added later cannot ride in on an
+        // unrelated entitlement.
+        if (catalogSlug === "shopify") {
+          const need = shopifyCapabilityForTool(def.name);
+          if (!need || !shopifyCaps.has(need)) {
+            console.log(
+              `[ai-bot][tool-surface] hiding ${def.name}: ${need ?? "unclassified"} not funded by Shopify`,
+            );
+            continue;
+          }
         }
         tools.push({
           type: "function",

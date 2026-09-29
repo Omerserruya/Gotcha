@@ -10,6 +10,10 @@
  * and only a stored-destination OTP grant opens scoped access.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  shopifyCapabilityForTool as actualShopifyCapabilityForTool,
+  SHOPIFY_OPERATION as actualSHOPIFY_OPERATION,
+} from "@chatcenter/shared/src/lib/billing/shopify-capability-map";
 import { orderNode } from "./helpers/shopify-graphql-fixtures";
 
 const prismaMock = vi.hoisted(() => ({
@@ -27,6 +31,32 @@ vi.mock("@chatcenter/shared", () => ({
   readDurableSetting: async () => null,
   writeDurableSetting: async () => undefined,
   settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,
+  // Shopify paid-access gating now lives in this barrel too. An EXHAUSTIVE
+  // mock that omits an export does not return undefined - vitest throws on
+  // access - so a missing entry here fails correct code. The real map is
+  // imported rather than faked: these suites are about tool authorization and
+  // customer scoping, and a hand-written capability table would drift from the
+  // one the product actually enforces.
+  shopifyCapabilityForTool: (tool: string) =>
+    actualShopifyCapabilityForTool(tool),
+  SHOPIFY_OPERATION: actualSHOPIFY_OPERATION,
+  // These suites are about TOOL authorization and CUSTOMER scoping, not about
+  // billing. A paid Connector is the precondition they assume, so this returns
+  // true: making it false would mean every assertion here passed because
+  // Shopify was switched off, which would prove nothing about the guard under
+  // test. The billing gate has its own suites.
+  isShopifyAuthorized: async () => true,
+  getShopifyAuthorization: async () => ({
+    authorized: true,
+    source: "SHOPIFY_SUBSCRIPTION",
+    capabilities: [
+      "shopify_catalog_sync",
+      "shopify_order_read",
+      "shopify_order_actions",
+      "shopify_storefront_widget",
+    ],
+    reason: null,
+  }),
   // Version pins now live in shared modules, so exhaustive mocks of this
   // barrel must supply them. Returning the real defaults keeps any URL the
   // code builds meaningful instead of "undefined/...".

@@ -240,10 +240,23 @@ export const FEATURE_METADATA: Record<Feature, FeatureMetadata> = {
   // existed, which surfaced as "connect your Shopify store" on a workspace
   // whose store was connected. Default-on, still explicitly disableable
   // per tenant from the system console (a row with enabled = false wins).
-  [FEATURES.SHOPIFY_CORE_INTEGRATION]: { ...m(FEATURES.SHOPIFY_CORE_INTEGRATION, "commerce", "Shopify Core Integration", "Admin API connection to a Shopify store: products, inventory, store binding and agent order context.", "all"), defaultEnabled: true },
-  [FEATURES.SHOPIFY_ORDER_ACTIONS]: { ...m(FEATURES.SHOPIFY_ORDER_ACTIONS, "commerce", "Shopify Order Actions", "Order lookup and cancellation, customer writes, refunds, returns and discounts through the Core integration.", "none"), defaultEnabled: true },
-  [FEATURES.SHOPIFY_LIVE_CHAT]: { ...m(FEATURES.SHOPIFY_LIVE_CHAT, "messaging", "Shopify Live Chat", "Branded live chat installed on a Shopify storefront through a Theme App Extension.", "all"), defaultEnabled: true },
-  [FEATURES.SHOPIFY_PRODUCT_MESSAGING]: { ...m(FEATURES.SHOPIFY_PRODUCT_MESSAGING, "commerce", "Shopify Product Messaging", "Send Shopify product cards, carousels and Add to Cart actions inside a conversation.", "all"), defaultEnabled: true },
+  // SHOPIFY DEFAULTS ARE FALSE, AND THAT IS A BILLING REQUIREMENT.
+  //
+  // These four were `defaultEnabled: true`, so `isFeatureEnabledForTenant`
+  // handed them to every workspace that had no explicit row - including every
+  // workspace that had never paid Shopify anything. Shopify App Store
+  // requirement 1.2.1 requires capabilities tied to the Shopify integration to
+  // be paid for through Shopify, so a default of `true` was a capability given
+  // away by a constant in a TypeScript file.
+  //
+  // The real enforcement is the Shopify veto in `isFeatureEnabledForTenant`,
+  // which no default can outrank. These are set to `false` as well so the
+  // declared default and the enforced behaviour agree: a reader of this table
+  // should not be told a Shopify capability is on by default when it cannot be.
+  [FEATURES.SHOPIFY_CORE_INTEGRATION]: { ...m(FEATURES.SHOPIFY_CORE_INTEGRATION, "commerce", "Shopify Core Integration", "Admin API connection to a Shopify store: products, inventory, store binding and agent order context.", "all"), defaultEnabled: false },
+  [FEATURES.SHOPIFY_ORDER_ACTIONS]: { ...m(FEATURES.SHOPIFY_ORDER_ACTIONS, "commerce", "Shopify Order Actions", "Order lookup and cancellation, customer writes, refunds, returns and discounts through the Core integration.", "none"), defaultEnabled: false },
+  [FEATURES.SHOPIFY_LIVE_CHAT]: { ...m(FEATURES.SHOPIFY_LIVE_CHAT, "messaging", "Shopify Live Chat", "Branded live chat installed on a Shopify storefront through a Theme App Extension.", "all"), defaultEnabled: false },
+  [FEATURES.SHOPIFY_PRODUCT_MESSAGING]: { ...m(FEATURES.SHOPIFY_PRODUCT_MESSAGING, "commerce", "Shopify Product Messaging", "Send Shopify product cards, carousels and Add to Cart actions inside a conversation.", "all"), defaultEnabled: false },
 
   // ── Messaging - conversation operations ─────────────────────
   [FEATURES.CONVERSATION_MANAGEMENT]: m(FEATURES.CONVERSATION_MANAGEMENT, "messaging", "Conversation Management", "View and manage customer conversations.", "all"),

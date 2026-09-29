@@ -159,16 +159,23 @@ const COMMUNICATION: FeatureDef[] = [
   // catalog key, so nothing ever materialised a row for them and
   // `isFeatureEnabledForTenant` fell through to `FEATURE_METADATA.defaultEnabled`.
   //
-  // The consequence was not that they were blocked - `defaultEnabled` is TRUE
+  // The consequence was not that they were blocked - `defaultEnabled` was TRUE
   // for the Shopify pair, so everyone had them. The consequence was that they
   // could not be SOLD: no PlanVersion could grant or withhold them, because
   // there was no key to grant. Availability was decided by a hardcoded default
   // in a TypeScript file rather than by what the customer bought.
   //
-  // `defaultValue` below deliberately mirrors today's `defaultEnabled` so this
-  // change is behaviour-preserving: adding the key must not take a capability
-  // away from a tenant who has it right now. Restricting them to specific plans
-  // is a commercial decision, made in plan seeds, not here.
+  // `defaultValue` below USED to mirror `defaultEnabled`, so that adding the key
+  // took nothing away from a tenant who already had it. That reasoning held
+  // while the only question was packaging. It stopped holding when Shopify App
+  // Review paused the submission under requirement 1.2.1 (reference 132211):
+  // for the Shopify pair the default WAS the defect, because it handed Shopify
+  // storefront functionality and the Shopify product picker to every workspace,
+  // including ones that had never paid Shopify anything.
+  //
+  // Both are now `false`, and the binding decision is no longer a default at
+  // all: `isFeatureEnabledForTenant` vetoes every Shopify feature unless a
+  // Shopify-funded entitlement exists, which no default can outrank.
   //
   // NOTE: this does NOT replace the requireFeature gate. That gate also carries
   // the per-user/per-role dimension (240 tenant_role_features rows), which
@@ -182,7 +189,11 @@ const COMMUNICATION: FeatureDef[] = [
     descriptionHe: "ווידג'ט צ'אט בחנות השופיפיי שלך.",
     category: "COMMUNICATION",
     entitlementType: "BOOLEAN",
-    defaultValue: bool(true), // mirrors FEATURES.SHOPIFY_LIVE_CHAT defaultEnabled
+    // FALSE because this is Shopify storefront functionality (a Theme App
+    // Extension on the merchant's Shopify storefront) and requirement 1.2.1
+    // requires it to be funded by the Shopify Connector. Provider-neutral web
+    // chat is the separate WEBCHAT channel and is unaffected by this key.
+    defaultValue: bool(false),
     enforcementLocations: ["services/ai:shopify-live-chat.routes (via requireFeature)"],
     materializesTo: "shopify_live_chat",
     customerVisible: true,
@@ -197,7 +208,11 @@ const COMMUNICATION: FeatureDef[] = [
     descriptionHe: "שליחת כרטיסי מוצר וקרוסלות לתוך השיחה.",
     category: "COMMUNICATION",
     entitlementType: "BOOLEAN",
-    defaultValue: bool(true), // mirrors FEATURES.SHOPIFY_PRODUCT_MESSAGING defaultEnabled
+    // FALSE because the cards it sends are resolved from the Shopify catalog.
+    // Product messaging sourced from the manual Knowledge Base or from a
+    // non-Shopify commerce provider does not pass through this key and stays
+    // part of Core.
+    defaultValue: bool(false),
     enforcementLocations: ["services/ai:shopify-live-chat.routes (via requireFeature)"],
     materializesTo: "shopify_product_messaging",
     customerVisible: true,

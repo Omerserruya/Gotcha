@@ -402,3 +402,172 @@ describe("scenario 14/15: repeated and out-of-order syncs settle correctly", () 
     expect(await prisma.tenantEntitlement.count({ where: { tenantId: tenant.id, source: "SHOPIFY_SUBSCRIPTION" } })).toBe(0);
   });
 });
+
+/**
+ * Scenario 22: reconciliation must not resurrect a store the merchant removed.
+ *
+ * FOUND IN PRODUCTION. A store uninstalled on the 28th came back as
+ * BILLING_PENDING nine minutes later, and again on every pass after that: the
+ * connection write was unconditional, its cancelled subscription still pointed
+ * at it, and "not entitled" was recorded as "awaiting billing". A removed store
+ * is not awaiting payment. It also put a live-looking lifecycle status behind
+ * an integration screen that had just been fixed not to overclaim.
+ *
+ * The four cases below are the four things Shopify can still say about a
+ * subscription attached to a connection whose app is already gone.
+ */
+describe("scenario 22: an uninstalled connection is never reopened by reconciliation", () => {
+  /** Install, subscribe, then uninstall - the state every case starts from. */
+  async function uninstalledStore(shopSuffix: string) {
+    const { tenant, entityId } = await newTenant();
+    const shop = `${RUN}-${shopSuffix}`;
+    const conn = await linkCommerceConnection({
+      tenantId: tenant.id, platform: "SHOPIFY", externalShopId: shop,
+    });
+    use(sourceReporting(shopifySays("ACTIVE")));
+    await syncProviderSubscription({
+      tenantId: tenant.id, billableEntityId: entityId, productKey: "shopify_connector",
+      billingSource: "SHOPIFY", externalShopId: shop, commerceConnectionId: conn.id,
+    });
+    await handleCommerceUninstall({ platform: "SHOPIFY", externalShopId: shop });
+
+    const afterUninstall = await prisma.commerceConnection.findUnique({ where: { id: conn.id } });
+    expect(afterUninstall!.status).toBe("DISCONNECTED");
+    expect(afterUninstall!.uninstalledAt).toBeTruthy();
+    return { tenant, entityId, shop, conn };
+  }
+
+  /** Run reconciliation as production does, with Shopify reporting `says`. */
+  async function reconcileWith(
+    ctx: Awaited<ReturnType<typeof uninstalledStore>>,
+    says: ObservedSubscription | null,
+  ) {
+    use(sourceReporting(says));
+    await syncProviderSubscription({
+      tenantId: ctx.tenant.id, billableEntityId: ctx.entityId, productKey: "shopify_connector",
+      billingSource: "SHOPIFY", externalShopId: ctx.shop, commerceConnectionId: ctx.conn.id,
+    });
+    return prisma.commerceConnection.findUnique({ where: { id: ctx.conn.id } });
+  }
+
+  it("a CANCELLED subscription does not flip it to BILLING_PENDING", async () => {
+    // The exact production defect.
+    const ctx = await uninstalledStore("un-cancelled");
+    const after = await reconcileWith(ctx, shopifySays("CANCELLED"));
+    expect(after!.status).toBe("DISCONNECTED");
+    expect(after!.uninstalledAt).toBeTruthy();
+  });
+
+  it("an ACTIVE subscription does not flip it to CONNECTED, and grants nothing", async () => {
+    // The dangerous one: Shopify has not finished cancelling, and the old code
+    // would have handed a removed store paid access back.
+    const ctx = await uninstalledStore("un-active");
+    const after = await reconcileWith(ctx, shopifySays("ACTIVE"));
+    expect(after!.status).toBe("DISCONNECTED");
+
+    const ents = await prisma.tenantEntitlement.findMany({
+      where: { tenantId: ctx.tenant.id, source: "SHOPIFY_SUBSCRIPTION" },
+    });
+    expect(ents).toHaveLength(0);
+  });
+
+  it("a pending plan selection does not reopen it", async () => {
+    const ctx = await uninstalledStore("un-pending");
+    const after = await reconcileWith(ctx, shopifySays("PENDING"));
+    expect(after!.status).toBe("DISCONNECTED");
+  });
+
+  it("an unknown plan handle does not reopen it", async () => {
+    const ctx = await uninstalledStore("un-unknown");
+    const after = await reconcileWith(
+      ctx,
+      shopifySays("ACTIVE", { planHandle: "a-handle-the-catalog-has-never-heard-of" }),
+    );
+    expect(after!.status).toBe("DISCONNECTED");
+
+    const ents = await prisma.tenantEntitlement.findMany({
+      where: { tenantId: ctx.tenant.id, source: "SHOPIFY_SUBSCRIPTION" },
+    });
+    expect(ents).toHaveLength(0);
+  });
+
+  it("repeated passes keep it DISCONNECTED - the defect recurred every cycle", async () => {
+    const ctx = await uninstalledStore("un-twice");
+    await reconcileWith(ctx, shopifySays("CANCELLED"));
+    const after = await reconcileWith(ctx, shopifySays("CANCELLED"));
+    expect(after!.status).toBe("DISCONNECTED");
+  });
+
+  it("still records that it verified, and keeps subscription history for audit", async () => {
+    // Preserving the status must not cost us the audit trail: we DID look.
+    const ctx = await uninstalledStore("un-audit");
+    const before = await prisma.commerceConnection.findUnique({ where: { id: ctx.conn.id } });
+    const after = await reconcileWith(ctx, shopifySays("CANCELLED"));
+
+    expect(after!.lastVerifiedAt!.getTime()).toBeGreaterThanOrEqual(
+      before!.lastVerifiedAt?.getTime() ?? 0,
+    );
+    const sub = await prisma.providerSubscription.findFirst({ where: { tenantId: ctx.tenant.id } });
+    expect(sub).toBeTruthy();
+    expect(sub!.status).toBe("CANCELLED");
+  });
+
+  it("a still-installed store is unaffected - this must not freeze live connections", async () => {
+    // The guard keys on uninstalledAt, so an installed store still transitions
+    // normally. Without this, the fix would break every working reconciliation.
+    const { tenant, entityId } = await newTenant();
+    const shop = `${RUN}-still-live`;
+    const conn = await linkCommerceConnection({
+      tenantId: tenant.id, platform: "SHOPIFY", externalShopId: shop,
+    });
+    use(sourceReporting(shopifySays("ACTIVE")));
+    await syncProviderSubscription({
+      tenantId: tenant.id, billableEntityId: entityId, productKey: "shopify_connector",
+      billingSource: "SHOPIFY", externalShopId: shop, commerceConnectionId: conn.id,
+    });
+
+    const after = await prisma.commerceConnection.findUnique({ where: { id: conn.id } });
+    expect(after!.status).toBe("CONNECTED");
+    expect(after!.uninstalledAt).toBeNull();
+
+    const ents = await prisma.tenantEntitlement.findMany({
+      where: { tenantId: tenant.id, source: "SHOPIFY_SUBSCRIPTION" },
+    });
+    expect(ents.length).toBe(SHOPIFY_FUNDED_ENTITLEMENTS.length);
+  });
+});
+
+describe("scenario 22b: reconciliation repairs rows the old defect corrupted", () => {
+  it("returns an uninstalled store left at BILLING_PENDING to DISCONNECTED", async () => {
+    // Production has exactly this row: uninstalled on the 28th, then dragged to
+    // BILLING_PENDING by passes that ran before the guard existed. Preserving
+    // the status would preserve the damage, so the guard writes the terminal
+    // state and the next pass heals it without anyone editing data by hand.
+    const { tenant, entityId } = await newTenant();
+    const shop = `${RUN}-heal`;
+    const conn = await linkCommerceConnection({
+      tenantId: tenant.id, platform: "SHOPIFY", externalShopId: shop,
+    });
+    use(sourceReporting(shopifySays("ACTIVE")));
+    await syncProviderSubscription({
+      tenantId: tenant.id, billableEntityId: entityId, productKey: "shopify_connector",
+      billingSource: "SHOPIFY", externalShopId: shop, commerceConnectionId: conn.id,
+    });
+    await handleCommerceUninstall({ platform: "SHOPIFY", externalShopId: shop });
+
+    // Recreate the corruption the old code produced.
+    await prisma.commerceConnection.update({
+      where: { id: conn.id }, data: { status: "BILLING_PENDING" },
+    });
+
+    use(sourceReporting(shopifySays("CANCELLED")));
+    await syncProviderSubscription({
+      tenantId: tenant.id, billableEntityId: entityId, productKey: "shopify_connector",
+      billingSource: "SHOPIFY", externalShopId: shop, commerceConnectionId: conn.id,
+    });
+
+    const healed = await prisma.commerceConnection.findUnique({ where: { id: conn.id } });
+    expect(healed!.status).toBe("DISCONNECTED");
+    expect(healed!.uninstalledAt).toBeTruthy();
+  });
+});

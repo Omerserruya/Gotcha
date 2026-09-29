@@ -9,7 +9,8 @@
  * each adapter stays small (one file, ~150-300 LOC of provider logic).
  */
 
-import { prisma, encryptCredentials, decryptCredentials } from "@chatcenter/shared";
+import { prisma, encryptCredentials, decryptCredentials, isShopifyAuthorized, shopifyCapabilityForTool } from "@chatcenter/shared";
+import type { ShopifyCapability } from "@chatcenter/shared";
 
 export interface ToolDefinition {
   /** Tool function name surfaced to the LLM (e.g. "stripe.refund_payment"). */
@@ -163,17 +164,85 @@ export interface ProviderAdapter {
 
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
 
+/** The provider slug that requires a Shopify-funded subscription. */
+const SHOPIFY_SLUG = "shopify";
+
+/**
+ * Why a caller wants a connection.
+ *
+ * `data` (the default, and the fail-closed one) means the caller is about to
+ * read, write, synchronize or render something through the provider. For
+ * Shopify that requires an active Connector subscription.
+ *
+ * `install` means the caller is running the installation, OAuth or billing
+ * handshake itself. Shopify App Review requires that a merchant be able to
+ * complete the signed install and OAuth BEFORE subscribing - the plan is chosen
+ * afterwards, on Shopify's hosted pricing page - so blocking these would make
+ * the app impossible to install and impossible to review. They are allowed to
+ * load the row, and they still cannot read merchant data with it, because every
+ * data path asks for `data`.
+ *
+ * Defaulting to `data` is deliberate: a new call site that forgets to say what
+ * it is doing gets the restrictive answer, not the permissive one.
+ */
+export type ConnectionPurpose = "data" | "install";
+
 /**
  * Load the connected TenantIntegration row for a tenant + slug.
  * Returns null if not connected. Decrypts credentials.
+ *
+ * SHOPIFY IS GATED HERE, and this is the reason this function is the gate.
+ * Selecting a provider and decrypting its credentials is the narrowest point
+ * through which every Shopify read, write, sync and render must pass - the
+ * adapter, the catalog service, the Inbox commerce context, the live-chat
+ * services and the returns resolver all begin here. One check at this point is
+ * worth more than a dozen scattered ones, and unlike them it cannot be
+ * forgotten by the next feature.
+ *
+ * Denial returns `null`, which is a state every caller already handles, rather
+ * than a throw that would turn a billing lapse into a 500.
  */
-export async function loadConnection(opts: { tenantId: string; slug: string }): Promise<{
+export async function loadConnection(opts: {
+  tenantId: string;
+  slug: string;
+  purpose?: ConnectionPurpose;
+  /**
+   * WHICH Shopify entitlement this access needs.
+   *
+   * Required for Shopify data access. "Has any Shopify-funded row" is not
+   * authorization: the Connector grants a SET, a plan may grant a subset, and a
+   * merchant funded only for catalogue sync must not thereby read order history
+   * or issue refunds. Omitting it on a Shopify data path DENIES rather than
+   * falling back to the broad check, so a call site that has not decided which
+   * capability it needs cannot accidentally get all of them.
+   */
+  capability?: ShopifyCapability;
+}): Promise<{
   tenantIntegrationId: string;
   credentials: Record<string, any>;
   config: Record<string, any>;
   status: string;
   expiresAt: Date | null;
 } | null> {
+  if (opts.slug === SHOPIFY_SLUG && (opts.purpose ?? "data") === "data") {
+    if (!opts.capability) {
+      console.warn(
+        `[integration-framework] shopify access denied for tenant ${opts.tenantId}: ` +
+          `no capability declared. A Shopify data path must name the entitlement it needs.`,
+      );
+      return null;
+    }
+    if (!(await isShopifyAuthorized(opts.tenantId, opts.capability))) {
+      // Deliberately not an error: a workspace whose Connector lapsed is in a
+      // normal, recoverable commercial state, not a fault. The tenant id is
+      // safe to log; no token, shop domain or subscription id is.
+      console.info(
+        `[integration-framework] shopify access denied for tenant ${opts.tenantId}: ` +
+          `${opts.capability} is not funded by an active Shopify Connector subscription or grandfather grant`,
+      );
+      return null;
+    }
+  }
   // Load CONNECTED *or* ERROR integrations. An OAuth integration whose access
   // token merely expired latches to ERROR, but it is recoverable via its refresh
   // token - excluding ERROR here is what created the deadlock (ERROR → never
@@ -469,7 +538,14 @@ export async function refreshCapabilityState(opts: {
   slug: string;
 }): Promise<{ ok: boolean; missingScopes: string[] }> {
   const adapter = getAdapter(opts.slug);
-  const conn = await loadConnection({ tenantId: opts.tenantId, slug: opts.slug });
+  // purpose: "install" - this probes the CONNECTION (which scopes were
+  // granted) and returns no merchant business data. It runs right after OAuth,
+  // before any plan has been chosen, and the connect screen depends on it.
+  const conn = await loadConnection({
+    tenantId: opts.tenantId,
+    slug: opts.slug,
+    purpose: "install",
+  });
   if (!adapter?.validate || !conn) return { ok: false, missingScopes: [] };
   let verdict: Awaited<ReturnType<NonNullable<ProviderAdapter["validate"]>>>;
   try {
@@ -872,7 +948,20 @@ export async function executeAdapterTool(opts: {
     return { ok: false, reason };
   }
 
-  const conn = await loadConnection({ tenantId: opts.tenantId, slug });
+  // Which Shopify entitlement this specific tool needs. An unmapped Shopify
+  // tool yields null, which denies - a new Shopify tool must be classified
+  // before it can run, rather than inheriting whatever the merchant happens to
+  // have bought.
+  const shopifyCapability =
+    slug === SHOPIFY_SLUG ? shopifyCapabilityForTool(opts.toolFunctionName) : undefined;
+  if (slug === SHOPIFY_SLUG && !shopifyCapability) {
+    return { ok: false, reason: "shopify_tool_not_classified" };
+  }
+  const conn = await loadConnection({
+    tenantId: opts.tenantId,
+    slug,
+    capability: shopifyCapability ?? undefined,
+  });
   if (!conn) {
     const reason = `not_connected:${slug}`;
     await auditAdapterCall({

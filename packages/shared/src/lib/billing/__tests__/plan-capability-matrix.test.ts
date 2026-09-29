@@ -37,6 +37,50 @@ const foundation = setForPlan("foundation");
 const workforce = setForPlan("ai_workforce");
 const voice = setForPlan("ai_voice");
 
+/**
+ * No plan GOTCHA sells may include a Shopify capability.
+ *
+ * Shopify App Store requirement 1.2.1: capabilities tied to the Shopify
+ * integration must be billed through Shopify. GOTCHA Core is billed by GOTCHA,
+ * so a Core plan that granted a Shopify key would be off-platform billing for
+ * Shopify functionality - the exact finding that paused submission 132211.
+ *
+ * This asserts it at the seed level, where a future plan edit would reintroduce
+ * it, and separately at the resolver level, which refuses it even if a seed
+ * somehow did.
+ */
+describe("no GOTCHA-billed plan sells Shopify", () => {
+  const SHOPIFY_KEYS = ["commerce.shopify_live_chat", "commerce.shopify_product_messaging"];
+
+  it.each(PLANS.map((p) => p.key))("plan %s lists no Shopify capability", (planKey) => {
+    const plan = PLANS.find((p) => p.key === planKey)!;
+    for (const key of SHOPIFY_KEYS) {
+      expect(plan.features, `${planKey} must not sell ${key}`).not.toContain(key);
+    }
+  });
+
+  it.each(["foundation", "ai_workforce", "ai_voice"])(
+    "a tenant on %s resolves to NO Shopify capability",
+    (planKey) => {
+      const set = setForPlan(planKey);
+      for (const key of SHOPIFY_KEYS) {
+        expect(entitledIn(set, key), `${planKey} must not grant ${key}`).toBe(false);
+      }
+    },
+  );
+
+  it("even a plan that wrongly listed a Shopify key would not grant it", () => {
+    // Defence in depth: the resolver requires a Shopify funding source, so a
+    // PLAN_DEFAULT row for a Shopify key is inert.
+    const entries = new Map([[
+      "commerce.shopify_live_chat",
+      { key: "commerce.shopify_live_chat", valueType: "BOOLEAN", value: { bool: true }, source: "PLAN_DEFAULT" },
+    ]]);
+    const rogue = { tenantId: "t_rogue", planKey: "rogue", planVersion: 1, entries, unsubscribed: false } as any;
+    expect(entitledIn(rogue, "commerce.shopify_live_chat")).toBe(false);
+  });
+});
+
 describe("Foundation sells conversations, not an AI workforce", () => {
   it("does NOT include AI employees", () => {
     expect(entitledIn(foundation, "ai.employee")).toBe(false);

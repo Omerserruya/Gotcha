@@ -509,7 +509,15 @@ router.get(
     // Shopify connection has nothing to reauthorize, and is told to install
     // rather than being offered a box to type a domain into - the whole point
     // of this change.
-    const conn = await loadConnection({ tenantId: req.tenantId!, slug: "shopify" }).catch(() => null);
+      // purpose: "install" - this is the OAuth handshake itself, not a data
+      // read. A merchant whose Connector lapsed must still be able to
+      // re-authorize scopes; what they must not be able to do is read merchant
+      // data afterwards, and every data path asks for the default purpose.
+      const conn = await loadConnection({
+        tenantId: req.tenantId!,
+        slug: "shopify",
+        purpose: "install",
+      }).catch(() => null);
     const shop = normalizeShopifyShopDomain((conn?.config as any)?.shopDomain);
     if (!shop) {
       res.status(409).json({
