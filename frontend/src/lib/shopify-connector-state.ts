@@ -306,3 +306,103 @@ export const CONNECTOR_CAPABILITY_KEYS = [
   "settings.billing.shopifyConnector.capabilities.actions",
   "settings.billing.shopifyConnector.capabilities.storefront",
 ] as const;
+
+/**
+ * What the SHOPIFY INTEGRATION screens may claim.
+ *
+ * WHY THIS EXISTS BESIDE `presentConnector`
+ * -----------------------------------------
+ * `presentConnector` answers "what should the Connector banner say". It was
+ * correct, and the banner was correct, and the page around it still announced
+ * Shopify as active: the integration screens each computed their own
+ * `isConnected` from `TenantIntegration.status`, which records only that OAuth
+ * finished. So one page showed "Connector required" beside a green "Active"
+ * store, an enabled system toggle, writeback on, and 68 of 68 Shopify tools
+ * live. That is precisely the contradiction App Store requirement 1.2.1 is
+ * about: the merchant was told the paid feature was off and shown it running.
+ *
+ * INSTALLATION AND PAID ACCESS ARE DIFFERENT FACTS.
+ * OAuth says the merchant let us in. The Connector subscription says Shopify is
+ * being paid for. A store can be fully, healthily installed and completely
+ * unpaid, and in that state every Shopify-specific feature indicator must read
+ * off, while the installation itself stays untouched - we do not drop an OAuth
+ * grant because a subscription lapsed.
+ *
+ * `grantsAccess` is copied from the server verdict and never recomputed here,
+ * for the same reason it is never recomputed in `presentConnector`.
+ */
+export interface ShopifyFeatureAccess {
+  /**
+   * This gate has something to say. False for every non-Shopify integration,
+   * and false when the deployment has no snapshot at all - in both cases the
+   * screens keep their existing behaviour untouched.
+   */
+  applies: boolean;
+  /** OAuth completed and the installation has not been removed. */
+  authorized: boolean;
+  /**
+   * The paid Connector is verified. THE ONLY INPUT any Shopify feature claim
+   * may derive from.
+   */
+  grantsAccess: boolean;
+  /**
+   * What to call the installation. Never "Active" without payment: an
+   * authorized store that has not paid is exactly "Authorized".
+   */
+  installationLabelKey: string;
+  /** Put "Connector required" beside the store name. */
+  showConnectorRequired: boolean;
+  /**
+   * Whether Shopify-specific features may be presented as on: the system
+   * toggle, writeback, the tool list, the capability chips. One flag so a new
+   * indicator cannot be added that forgets to ask.
+   */
+  featuresEnabled: boolean;
+}
+
+const FK = "marketplace.shopifyAccess";
+
+/**
+ * Decide what a Shopify integration surface may claim.
+ *
+ * `slug` is taken rather than assumed so a caller cannot accidentally apply the
+ * Shopify gate to Airtable; `applies` is false for everything else and the
+ * caller's existing logic stands.
+ */
+export function presentShopifyFeatureAccess(
+  slug: string,
+  snapshot: ShopifyBillingSnapshot | null,
+  opts: { integrationConnected: boolean },
+): ShopifyFeatureAccess {
+  const neutral: ShopifyFeatureAccess = {
+    applies: false,
+    authorized: opts.integrationConnected,
+    grantsAccess: true,
+    installationLabelKey: `${FK}.active`,
+    showConnectorRequired: false,
+    // Non-Shopify integrations are not gated by a Shopify subscription.
+    featuresEnabled: true,
+  };
+  if (slug !== "shopify") return neutral;
+
+  // No snapshot means Shopify billing is not resolved for this deployment. We
+  // deliberately do NOT switch every indicator off on missing data: that would
+  // break self-hosted and pre-billing installs which never had a Connector to
+  // begin with. The banner already stays silent in that case for the same
+  // reason, and this keeps the two consistent.
+  if (!snapshot) return neutral;
+
+  const grantsAccess = snapshot.grantsAccess === true;
+  const authorized =
+    opts.integrationConnected && !snapshot.installation?.uninstalledAt;
+
+  return {
+    applies: true,
+    authorized,
+    grantsAccess,
+    // The whole point: authorized-but-unpaid reads "Authorized", never "Active".
+    installationLabelKey: grantsAccess ? `${FK}.active` : `${FK}.authorized`,
+    showConnectorRequired: authorized && !grantsAccess,
+    featuresEnabled: grantsAccess,
+  };
+}

@@ -3041,6 +3041,15 @@
       "saveFailed": "Could not save the mapping.",
       "needName": "Map the name column before saving.",
       "needIdentifier": "Map at least a phone or an email column."
+    },
+    "shopifyAccess": {
+      "active": "Active",
+      "authorized": "Authorized",
+      "connectorRequired": "Connector required",
+      "toolsLocked": "Shopify tools unavailable until the Connector is active",
+      "toolsLockedCount": "0 of {total} available",
+      "writebackUnavailable": "Unavailable until the Connector is active",
+      "featureLocked": "Requires the Shopify Connector"
     }
   },
   "usage": {

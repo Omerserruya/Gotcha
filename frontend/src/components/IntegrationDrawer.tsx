@@ -13,6 +13,7 @@ import {
   toggleAgentTool,
 } from "@/lib/api";
 import clsx from "clsx";
+import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
 
 // ─── Constants ─────────────────────────────────────────────
 const RISK_BADGE: Record<string, string> = {
@@ -512,6 +513,9 @@ function DetailView({
 }) {
   const ti = integration?.tenantConnection;
   const isConnected = ti?.status === "CONNECTED";
+  // OAuth done is not the Connector paid for. Shopify feature claims below read
+  // this; every other integration gets `applies: false` and is unaffected.
+  const shopifyAccess = useShopifyFeatureAccess(integration?.slug ?? "", isConnected);
 
   // Same rule the per-tool rows use: agent mode reads the per-agent permission,
   // marketplace mode reads tenant state.
@@ -537,12 +541,33 @@ function DetailView({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h4 className="font-semibold text-gray-900">{integration.name}</h4>
-            <span className={clsx(
-              "px-2 py-0.5 rounded-full text-[10px] font-semibold",
-              isConnected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-            )}>
-              {isConnected ? "Connected" : "Not connected"}
+            <span
+              data-testid="integration-status-chip"
+              className={clsx(
+                "px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                isConnected && shopifyAccess.featuresEnabled
+                  ? "bg-green-100 text-green-700"
+                  : isConnected
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-gray-100 text-gray-500",
+              )}
+            >
+              {!isConnected
+                ? "Not connected"
+                : shopifyAccess.applies
+                  ? t(shopifyAccess.installationLabelKey)
+                  : "Connected"}
             </span>
+            {/* The store IS authorized. It is simply not paid for, and saying so
+                beside the name is what stops the page contradicting billing. */}
+            {shopifyAccess.showConnectorRequired && (
+              <span
+                data-testid="shopify-connector-required"
+                className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800"
+              >
+                {t("marketplace.shopifyAccess.connectorRequired")}
+              </span>
+            )}
           </div>
           {integration.category && (
             <span className="text-xs text-gray-400">{integration.category}</span>
@@ -616,7 +641,20 @@ function DetailView({
       )}
 
       {/* Tools section (when connected) */}
-      {isConnected && tools.length > 0 && (
+      {isConnected && tools.length > 0 && shopifyAccess.applies && !shopifyAccess.featuresEnabled && (
+        <div className="space-y-2" data-testid="shopify-tools-locked">
+          <h4 className="text-sm font-semibold text-gray-700">{t("marketplace.availableTools")}</h4>
+          <p className="text-xs text-gray-500">{t("marketplace.shopifyAccess.toolsLocked")}</p>
+          <span
+            data-testid="shopify-tools-count"
+            className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border bg-gray-50 text-gray-400 border-gray-200"
+          >
+            {t("marketplace.shopifyAccess.toolsLockedCount").replace("{total}", String(tools.length))}
+          </span>
+        </div>
+      )}
+
+      {isConnected && tools.length > 0 && shopifyAccess.featuresEnabled && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-semibold text-gray-700">{t("marketplace.availableTools")}</h4>

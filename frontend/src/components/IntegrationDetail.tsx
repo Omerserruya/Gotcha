@@ -20,6 +20,7 @@ import {
   listMongoCollections,
   listRdsTables,
 } from "@/lib/api";
+import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
 import CustomApiToolsSection from "@/components/CustomApiToolsSection";
 import CustomDbToolsSection from "@/components/CustomDbToolsSection";
 import { AirtableMappingCard } from "@/components/integrations/AirtableMappingCard";
@@ -193,6 +194,14 @@ export function IntegrationDetail({
 
   const ti = integration?.tenantConnection;
   const isConnected = ti?.status === "CONNECTED";
+  /**
+   * OAuth finishing is not the same fact as the Connector being paid for.
+   * Every Shopify-specific indicator below reads this instead of `isConnected`,
+   * so this page cannot announce Shopify as running while the Connector banner
+   * beside it says the subscription is required. Non-Shopify integrations get
+   * `applies: false` and are untouched.
+   */
+  const shopifyAccess = useShopifyFeatureAccess(slug, isConnected);
   const status = ti?.status || "DISCONNECTED";
 
   // Build credential fields from authSchema. Per-provider fallbacks below
@@ -975,8 +984,21 @@ export function IntegrationDetail({
           {slug === "shopify" && isConnected && useAsCrm && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
               <div className="flex items-center gap-3">
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 shrink-0">
-                  {t("marketplace.systemOfRecordActive")}
+                {/* Writeback to Shopify is a Shopify-funded capability. Without
+                    the Connector it is off, and a green "active" chip here was
+                    one of the claims that contradicted the billing state. */}
+                <span
+                  data-testid="shopify-writeback-chip"
+                  className={clsx(
+                    "px-2 py-0.5 rounded-full text-xs font-medium border shrink-0",
+                    shopifyAccess.featuresEnabled
+                      ? "bg-green-50 text-green-700 border-green-200"
+                      : "bg-gray-100 text-gray-500 border-gray-200",
+                  )}
+                >
+                  {shopifyAccess.featuresEnabled
+                    ? t("marketplace.systemOfRecordActive")
+                    : t("marketplace.shopifyAccess.writebackUnavailable")}
                 </span>
                 <Link href="/settings/business-systems" className="text-sm font-medium text-violet-600 hover:text-violet-700 ms-auto shrink-0">
                   {t("marketplace.manageInSettings")}
@@ -985,8 +1007,27 @@ export function IntegrationDetail({
             </div>
           )}
 
+          {/* Tools are a Shopify-funded capability. Claiming "68 of 68 active"
+              while the Connector is unpaid is the contradiction requirement
+              1.2.1 is about, so an authorized-but-unpaid store is told the
+              count is zero and why, rather than being shown a live list. */}
+          {isConnected && tools.length > 0 && shopifyAccess.applies && !shopifyAccess.featuresEnabled && (
+            <div
+              data-testid="shopify-tools-locked"
+              className="bg-white rounded-2xl shadow-card border border-gray-100 p-5"
+            >
+              <h2 className="font-semibold text-gray-900 mb-2">{t("marketplace.availableTools")}</h2>
+              <p className="text-sm text-gray-500">
+                {t("marketplace.shopifyAccess.toolsLocked")}
+              </p>
+              <p className="mt-1 text-sm font-medium text-gray-400" data-testid="shopify-tools-count">
+                {t("marketplace.shopifyAccess.toolsLockedCount").replace("{total}", String(tools.length))}
+              </p>
+            </div>
+          )}
+
           {/* Tools section */}
-          {isConnected && tools.length > 0 && (
+          {isConnected && tools.length > 0 && shopifyAccess.featuresEnabled && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
               <h2 className="font-semibold text-gray-900 mb-4">{t("marketplace.availableTools")}</h2>
               <div className="space-y-3">

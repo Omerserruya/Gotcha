@@ -3042,6 +3042,15 @@
       "saveFailed": "שמירת המיפוי נכשלה.",
       "needName": "יש למפות את עמודת השם לפני שמירה.",
       "needIdentifier": "יש למפות לפחות עמודת טלפון או אימייל."
+    },
+    "shopifyAccess": {
+      "active": "פעיל",
+      "authorized": "מאושר",
+      "connectorRequired": "נדרש מחבר Shopify",
+      "toolsLocked": "כלי Shopify אינם זמינים עד שמחבר Shopify יהיה פעיל",
+      "toolsLockedCount": "0 מתוך {total} זמינים",
+      "writebackUnavailable": "לא זמין עד שמחבר Shopify יהיה פעיל",
+      "featureLocked": "דורש מחבר Shopify"
     }
   },
   "usage": {
