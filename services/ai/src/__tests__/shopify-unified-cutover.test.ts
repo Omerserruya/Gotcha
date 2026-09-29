@@ -127,7 +127,13 @@ describe("enabling Chat starts no OAuth", () => {
     // Accepting a shop from the body would let a tenant claim a storefront
     // it never connected.
     const svc = read("services/ai/src/services/shopify-chat-install.service.ts");
-    expect(svc).toMatch(/loadConnection\(\{\s*tenantId: input\.tenantId,\s*slug: "shopify"\s*\}\)/);
+      // The call now also carries the Shopify capability, because loading a
+      // connection is where paid access is checked. Requiring it here means a
+      // future edit that drops the gate fails this guard too, instead of
+      // quietly restoring unpaid access to the storefront.
+      expect(svc).toMatch(
+        /loadConnection\(\{\s*tenantId: input\.tenantId,\s*slug: "shopify",\s*capability: SHOPIFY_OPERATION\.\w+\s*\}\)/,
+      );
   });
 });
 
@@ -161,7 +167,9 @@ describe("commerce still runs on the Core connection", () => {
     // Add-to-Cart validation continue to use the Core token. The slug comes
     // from a constant, so assert the call AND what the constant resolves to.
     const src = read("services/ai/src/services/shopify-catalog.service.ts");
-    expect(src).toMatch(/loadConnection\(\{\s*tenantId,\s*slug: SHOPIFY_SLUG\s*\}\)/);
+      expect(src).toMatch(
+        /loadConnection\(\{\s*tenantId,\s*slug: SHOPIFY_SLUG,\s*capability: SHOPIFY_OPERATION\.\w+\s*\}\)/,
+      );
     expect(src).toMatch(/SHOPIFY_SLUG\s*=\s*"shopify"|SHOPIFY_SLUG\b.*from/);
   });
 
