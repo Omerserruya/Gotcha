@@ -335,6 +335,12 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
  */
 export type FlowStep =
   | { readonly kind: 'identify'; readonly challenge: IdentificationChallenge }
+  /**
+   * An identification stage that wants an identifier and no password — the
+   * recovery flow's first screen. Reported rather than refused: whether it can
+   * be rendered is the caller's question, not the contract's.
+   */
+  | { readonly kind: 'identifyOnly'; readonly challenge: IdentificationChallenge }
   | { readonly kind: 'staySignedIn'; readonly challenge: UserLoginChallenge }
   /**
    * A second factor is required. **Parsed, and deliberately not rendered** — the
@@ -371,14 +377,28 @@ export function readChallenge(raw: unknown): FlowStep {
   const identify = identificationChallengeSchema.safeParse(raw);
   if (identify.success) {
     /*
-     * ★★ A STAGE THAT WANTS AN IDENTIFIER AND NOT A PASSWORD IS NOT OUR PANEL.
-     * `password_fields` is true on this tenant, which is what makes 00a a single
-     * submit. If a flow is reconfigured to ask for them separately, the design's
-     * one-action screen is no longer what the flow does, and rendering a
-     * password box that the stage will reject is worse than handing over.
+     * ★★ AN IDENTIFIER WITHOUT A PASSWORD IS NOT 00a — WHICH IS NOT THE SAME
+     *    AS "NOT OURS", AND THIS USED TO SAY IT WAS.
+     *
+     * `password_fields` is true on the authentication flow, which is what makes
+     * 00a a single submit. This branch returned `handOver` on the reasoning
+     * that a flow asking for them separately is no longer the design's
+     * one-action screen — correct for sign-in, and **wrong as a universal
+     * rule**.
+     *
+     * ⚠ The RECOVERY flow's first stage is this exact shape: the same
+     *   `ak-stage-identification` component with `password_fields: false`,
+     *   because asking for an email and no password is what recovery IS. So
+     *   this line, not Authentik, is why "Forgot it?" landed on the provider's
+     *   own UI — a guard of ours, enforcing a policy about one screen on every
+     *   screen.
+     *
+     * ★ It now REPORTS the stage and lets the caller decide. `SignInPanel`
+     *   hands over on `identifyOnly` exactly as before, so 00a's behaviour is
+     *   unchanged; the recovery screen renders it.
      */
     if (!identify.data.password_fields) {
-      return { kind: 'handOver', because: 'identification-without-password' };
+      return { kind: 'identifyOnly', challenge: identify.data };
     }
     return { kind: 'identify', challenge: identify.data };
   }

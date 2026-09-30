@@ -519,3 +519,33 @@ describe('⚠⚠ telling the layout which screen is on', () => {
     expect(await screen.findByTestId('sign-in-form')).toBeInTheDocument();
   });
 });
+
+describe('⚠ the panel still hands over on a password-less identification stage', () => {
+  it('⚠⚠ because this panel is 00a, not the recovery screen', async () => {
+    /*
+     * The contract now REPORTS that stage instead of refusing it, so that the
+     * recovery screen can render it. This panel must not: it is a single
+     * submit carrying an email AND a password, and drawing a password box the
+     * stage will reject fails after the typing rather than before.
+     *
+     * ★ This assertion is what lets the contract change be safe. Without it,
+     *   "report instead of refuse" would silently start rendering 00a against
+     *   a flow that cannot accept it.
+     */
+    startFlow.mockResolvedValue({
+      kind: 'identifyOnly',
+      challenge: {
+        component: 'ak-stage-identification',
+        user_fields: ['email', 'username'],
+        password_fields: false,
+        primary_action: 'Continue',
+        sources: [],
+        response_errors: {},
+      } as never,
+    });
+
+    show();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(HANDOVER));
+    expect(screen.queryByTestId('sign-in-form')).toBeNull();
+  });
+});

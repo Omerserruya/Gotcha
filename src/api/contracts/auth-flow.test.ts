@@ -119,15 +119,37 @@ describe('★★ anything else is a handover, not an improvisation', () => {
     expect(step).toEqual({ kind: 'handOver', because: 'ak-stage-consent' });
   });
 
-  it('★★ hands over when identification does NOT want a password', () => {
+  it('⚠⚠ REPORTS an identification stage that wants no password, rather than refusing it', () => {
     /*
-     * `password_fields: true` is what makes 00a a single submit. If the flow is
-     * reconfigured to ask separately, our one-action screen is no longer what the
-     * flow does — and rendering a password box the stage will reject is worse
-     * than handing over, because it fails after the typing rather than before.
+     * ═══════════════════════════════════════════════════════════════════════
+     * THIS USED TO ASSERT `handOver`, AND THAT IS WHY "FORGOT IT?" LEFT OUR UI
+     * ═══════════════════════════════════════════════════════════════════════
+     * The reasoning was sound for 00a: `password_fields: true` is what makes it
+     * a single submit, and drawing a password box the stage will reject fails
+     * after the typing rather than before.
+     *
+     * ⚠ But the RECOVERY flow's first stage is this exact shape — the same
+     *   `ak-stage-identification` with `password_fields: false`, because asking
+     *   for an address and no password is what recovery IS. A rule about one
+     *   screen was being enforced on every screen, so the contract refused a
+     *   stage it could read perfectly well.
+     *
+     * ★ The contract now reports; the caller decides. `SignInPanel` still hands
+     *   over on this, asserted in its own tests, so 00a is unchanged.
      */
     const step = readChallenge(identification({ password_fields: false }));
-    expect(step).toEqual({ kind: 'handOver', because: 'identification-without-password' });
+    expect(step.kind).toBe('identifyOnly');
+    // And the challenge survives, or the recovery screen has nothing to render.
+    expect(step.kind === 'identifyOnly' && step.challenge.user_fields).toEqual([
+      'email',
+      'username',
+    ]);
+  });
+
+  it('★★ and still distinguishes it from the stage that DOES want a password', () => {
+    // Both directions. Reporting `identifyOnly` for everything would satisfy
+    // the assertion above and break 00a completely.
+    expect(readChallenge(identification({ password_fields: true })).kind).toBe('identify');
   });
 
   it('★★ never throws on a body it cannot read at all', () => {

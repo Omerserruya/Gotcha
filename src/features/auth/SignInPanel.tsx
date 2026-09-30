@@ -200,7 +200,7 @@ export function SignInPanel({
      * its origin. Following it would land somebody who has just signed in
      * successfully on a stranger's home page.
      */
-    if (step.kind === 'done' || step.kind === 'handOver') {
+    if (step.kind === 'done' || step.kind === 'handOver' || step.kind === 'identifyOnly') {
       window.location.assign(handOverHref);
     }
   }, [step, handOverHref]);
@@ -239,7 +239,13 @@ export function SignInPanel({
   }
 
   /* Nothing to show until the first stage lands. */
-  if (!step || step.kind === 'done' || step.kind === 'handOver') {
+  /*
+   * ⚠ `identifyOnly` HANDS OVER HERE, DELIBERATELY. It is the recovery flow's
+   *   first stage, and this panel is 00a: a single submit carrying an email AND
+   *   a password. Rendering it would draw a password box the stage will reject.
+   *   The recovery screen renders that stage instead.
+   */
+  if (!step || step.kind === 'done' || step.kind === 'handOver' || step.kind === 'identifyOnly') {
     return <p className={styles.loading}>{t('signIn.starting')}</p>;
   }
 
