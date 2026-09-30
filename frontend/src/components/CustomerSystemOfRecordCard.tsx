@@ -23,6 +23,7 @@ import { useI18n } from "@/context/I18nContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { getMarketplaceIntegrations, setIntegrationCrmSource, getSourceOfTruthStatus, type SourceOfTruthStatus } from "@/lib/api";
 import { logoForIntegration } from "@/lib/integration-logos";
+import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
 
 // Integrations that can be elected the customer system of record while not
 // being CRM-category. Kept in sync with the server, which today only accepts
@@ -44,6 +45,18 @@ export default function CustomerSystemOfRecordCard() {
   // Backend-resolved election + truthful capability set - what the AI-side
   // resolver ACTUALLY uses, never inferred from local toggle state.
   const [sot, setSot] = useState<SourceOfTruthStatus | null>(null);
+
+  /**
+   * The source-of-truth resolver answers "which system is elected and what can
+   * it do", and it does not ask whether Shopify has been paid for. Electing
+   * Shopify and paying for the Connector are different facts, so a workspace
+   * whose Connector is unpaid was shown "active customer system: Shopify" with
+   * a row of green capability chips while the banner above said Shopify was
+   * switched off. Same contradiction as the integration screen, different card.
+   */
+  const shopifyAccess = useShopifyFeatureAccess("shopify", true);
+  const sotIsShopify = (sot?.vendor ?? "").toLowerCase() === "shopify";
+  const sotLocked = sotIsShopify && shopifyAccess.applies && !shopifyAccess.featuresEnabled;
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -107,14 +120,24 @@ export default function CustomerSystemOfRecordCard() {
           from the backend resolver's answer so a toggle that didn't take (or
           an ERROR connection) can never show phantom capabilities. */}
       {sot?.configured && (
-        <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+        <div className={clsx("mt-4 rounded-xl border p-3", sotLocked ? "border-amber-200 bg-amber-50/40" : "border-violet-100 bg-violet-50/40")}>
           <p className="text-sm text-gray-800">
             <span className="font-medium">{t("settings.integrations.systemOfRecord.currentTitle")}:</span>{" "}
             <span className="font-semibold capitalize">{sot.vendor}</span>
+            {sotLocked && (
+              <span
+                data-testid="sot-connector-required"
+                className="ms-2 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 align-middle"
+              >
+                {t("marketplace.shopifyAccess.connectorRequired")}
+              </span>
+            )}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {CAP_ORDER.map((cap) => {
-              const ok = sot.capabilities.includes(cap);
+              // A capability the elected system supports but cannot currently
+              // run is not "active". Locked wins over supported.
+              const ok = sot.capabilities.includes(cap) && !sotLocked;
               return (
                 <span
                   key={cap}

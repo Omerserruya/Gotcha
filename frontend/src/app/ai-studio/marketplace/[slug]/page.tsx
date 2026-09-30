@@ -21,6 +21,7 @@ import clsx from "clsx";
 import MeetingTypesSection from "@/components/MeetingTypesSection";
 import CustomApiToolsSection from "@/components/CustomApiToolsSection";
 import { beginConnect, connectHelpText, connectButtonLabel, connectErrorMessage } from "@/lib/shopify-connect";
+import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -131,6 +132,10 @@ function IntegrationDetailPageInner() {
 
   const ti = integration?.tenantConnection;
   const isConnected = ti?.status === "CONNECTED";
+  // Same gate as the Settings integration screen. This page is a second copy of
+  // that surface inside AI Studio, and fixing only one of them would leave the
+  // other claiming 68 live Shopify tools on an unpaid Connector.
+  const shopifyAccess = useShopifyFeatureAccess(slug, isConnected);
   const status = ti?.status || "DISCONNECTED";
 
   // Build credential fields from authSchema. Per-provider fallbacks below
@@ -539,8 +544,23 @@ function IntegrationDetailPageInner() {
               authorize). */}
           {slug === "custom_api" && <CustomApiToolsSection />}
 
+          {/* Tools are Shopify-funded. An authorized but unpaid store is told the
+              count is zero and why, rather than shown a live list. */}
+          {isConnected && tools.length > 0 && shopifyAccess.applies && !shopifyAccess.featuresEnabled && (
+            <div
+              data-testid="shopify-tools-locked"
+              className="bg-white rounded-2xl shadow-card border border-gray-100 p-5"
+            >
+              <h2 className="font-semibold text-gray-900 mb-2">{t("marketplace.availableTools")}</h2>
+              <p className="text-sm text-gray-500">{t("marketplace.shopifyAccess.toolsLocked")}</p>
+              <p className="mt-1 text-sm font-medium text-gray-400">
+                {t("marketplace.shopifyAccess.toolsLockedCount").replace("{total}", String(tools.length))}
+              </p>
+            </div>
+          )}
+
           {/* Tools section */}
-          {isConnected && tools.length > 0 && (
+          {isConnected && tools.length > 0 && shopifyAccess.featuresEnabled && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
               <h2 className="font-semibold text-gray-900 mb-4">{t("marketplace.availableTools")}</h2>
               <div className="space-y-3">
