@@ -1,4 +1,4 @@
-import { prisma, shopifyApiVersion } from "@chatcenter/shared";
+import { prisma, shopifyApiVersion, decryptCredentials } from "@chatcenter/shared";
 import { shopifyGraphQLRequest } from "./shopify-graphql";
 
 /**
@@ -68,11 +68,45 @@ export async function requestShopifySelfUninstall(tenantId: string): Promise<Sel
   if (!row) return { ok: false, reason: "not_connected" };
 
   const config = (row.config ?? {}) as Record<string, any>;
-  const credentials = (row.credentials ?? {}) as Record<string, any>;
+
+  // CREDENTIALS ARE STORED ENCRYPTED, AS A STRING.
+  //
+  // Reading `row.credentials.accessToken` off the raw column silently yields
+  // undefined - the column is ciphertext, not an object - so the first version
+  // of this returned `no_token` for a perfectly healthy connection and the
+  // merchant got a 502 with nothing in the logs. Decrypt exactly as
+  // `loadConnection` does.
+  //
+  // It deliberately does NOT go through `loadConnection` itself: that applies
+  // the Shopify paid-access gate, and a merchant whose Connector is unpaid or
+  // cancelled must still be able to disconnect. Uninstalling is not a
+  // Shopify-funded capability.
+  let credentials: Record<string, any> = {};
+  try {
+    credentials = typeof row.credentials === "string"
+      ? decryptCredentials(row.credentials)
+      : ((row.credentials ?? {}) as Record<string, any>);
+  } catch (err) {
+    console.error(
+      `[shopify-uninstall] tenant=${tenantId} could not decrypt credentials: ${(err as Error)?.message}`,
+    );
+    return { ok: false, reason: "no_token" };
+  }
+
   const shopDomain: string = config.shopDomain || credentials.shopDomain || "";
   const token: string = credentials.accessToken || credentials.token || "";
-  if (!shopDomain) return { ok: false, reason: "no_shop_domain" };
-  if (!token) return { ok: false, reason: "no_token" };
+  if (!shopDomain) {
+    console.error(`[shopify-uninstall] tenant=${tenantId} refused: no shop domain on the connection`);
+    return { ok: false, reason: "no_shop_domain" };
+  }
+  if (!token) {
+    // Named keys only, never a value.
+    console.error(
+      `[shopify-uninstall] tenant=${tenantId} shop=${shopDomain} refused: no access token ` +
+        `(credential keys present: ${Object.keys(credentials).join(", ") || "none"})`,
+    );
+    return { ok: false, reason: "no_token" };
+  }
 
   try {
     await shopifyGraphQLRequest(
