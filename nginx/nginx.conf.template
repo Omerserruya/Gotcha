@@ -1922,7 +1922,19 @@ http {
         #
         # Regex locations are evaluated before the `location /` prefix below,
         # so this wins over the Authentik catch-all without `^~`.
-        location ~ ^/(en|he)/sign-in(/|$) {
+        #
+        # ★★ A LIST, NOT A NAME. This alternation is the THIRD refusal of the
+        #   recovery screen, one per layer, and each was invisible behind the
+        #   next: the flow contract refused the stage, the app's own
+        #   PUBLIC_PATH_PATTERN refused the route, and this refused the path.
+        #   Fixing either of the first two changed nothing a visitor could see.
+        #
+        # ⚠ So when a screen is added to the sign-in surface it must be added
+        #   HERE TOO. The app enumerates its (auth) route directory and fails
+        #   its own test if a screen exists that its list does not permit;
+        #   nginx cannot read that directory, so this line is the copy that
+        #   drifts. Measured before this change: app=200, edge=404.
+        location ~ ^/(en|he)/(sign-in|recover)(/|$) {
             proxy_pass http://frontend_auth;
             proxy_http_version 1.1;
             proxy_set_header Host              $host;
@@ -1932,7 +1944,19 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # The un-prefixed forms, which the app answers with a 307 into the
+        # negotiated locale. Both surfaces need one.
         location ^~ /sign-in {
+            proxy_pass http://frontend_auth;
+            proxy_http_version 1.1;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Internal-Key    "";
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /recover {
             proxy_pass http://frontend_auth;
             proxy_http_version 1.1;
             proxy_set_header Host              $host;
