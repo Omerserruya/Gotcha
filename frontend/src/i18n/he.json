@@ -3050,7 +3050,18 @@
       "toolsLocked": "כלי Shopify אינם זמינים עד שמחבר Shopify יהיה פעיל",
       "toolsLockedCount": "0 מתוך {total} זמינים",
       "writebackUnavailable": "לא זמין עד שמחבר Shopify יהיה פעיל",
-      "featureLocked": "דורש מחבר Shopify"
+      "featureLocked": "דורש מחבר Shopify",
+      "disconnected": "מנותק"
+    },
+    "shopifyDisconnect": {
+      "title": "לנתק את Shopify?",
+      "body": "GOTCHA תבקש מ-Shopify להסיר את האפליקציה מהחנות {shop}. סנכרון המוצרים, הלקוחות וההזמנות ייפסק, ויכולות Shopify ייכבו: תשובות מהקטלוג, איתור הזמנות, פעולות על הזמנות והעוזר בחנות.\n\nGOTCHA Core לא מושפעת. וואטסאפ, אינסטגרם, אימייל, צ'אט באתר, תיבת הדואר, הידע הידני וכל אינטגרציה שאינה Shopify ימשיכו לעבוד בדיוק כמו עכשיו.\n\nהיסטוריית החיוב נשמרת. אפשר להתקין מחדש בכל עת.",
+      "confirm": "נתק את Shopify",
+      "cancel": "להשאיר מחובר",
+      "waiting": "ממתינים ש-Shopify תשלים את ההסרה",
+      "waitingHint": "Shopify מאשרת את ההסרה בעצמה. המסך יתעדכן ברגע שזה יקרה. נתוני Shopify שלך זמינים עד אז.",
+      "failed": "Shopify לא הצליחה להשלים את ההסרה. שום דבר לא השתנה והחנות עדיין מחוברת.",
+      "retry": "לנסות שוב"
     }
   },
   "usage": {

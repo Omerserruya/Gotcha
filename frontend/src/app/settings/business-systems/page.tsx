@@ -7,7 +7,7 @@
 // providers live in AI Studio - both surfaces reuse the SAME underlying
 // connection rows (one OAuth per provider, ever).
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import IntegrationsExplorer from "@/components/IntegrationsExplorer";
 import { RequirePermission } from "@/components/RequirePermission";
@@ -17,6 +17,7 @@ import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
 import { getSourceOfTruthStatus, getMarketplaceIntegrations } from "@/lib/api";
 import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
+import { useIntegrationsChanged } from "@/lib/integration-events";
 
 interface SotStatus {
   configured: boolean;
@@ -52,11 +53,17 @@ function SourceOfTruthStatusPanel() {
     catalogTools?: Array<{ tenantTool?: { isEnabled?: boolean } | null }>;
   }>>([]);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!token) return;
     getSourceOfTruthStatus(token).then((r) => setStatus(r.data)).catch(() => {});
     getMarketplaceIntegrations(token).then((r) => setRows(r.data || [])).catch(() => {});
   }, [token]);
+
+  useEffect(load, [load]);
+
+  // A disconnect on another screen changes both answers. Without this the strip
+  // kept reporting the pre-disconnect vendor and its writeback state.
+  useIntegrationsChanged(load);
 
   // The SAME connection row powers AI tools - match it by the elected vendor
   // (catalog slug for Zoho is zoho_crm; the resolver reports "zoho").

@@ -22,6 +22,7 @@ import MeetingTypesSection from "@/components/MeetingTypesSection";
 import CustomApiToolsSection from "@/components/CustomApiToolsSection";
 import { beginConnect, connectHelpText, connectButtonLabel, connectErrorMessage } from "@/lib/shopify-connect";
 import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
+import { notifyIntegrationsChanged } from "@/lib/integration-events";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -216,6 +217,8 @@ function IntegrationDetailPageInner() {
     setDisconnecting(true);
     try {
       await disconnectIntegration(token, slug);
+      // Other screens show this connection; tell them it changed.
+      notifyIntegrationsChanged();
       await load();
     } catch {
       // ignore

@@ -155,6 +155,24 @@ async function alreadyProcessed(app: "chat" | "core", webhookId: string | null):
 
 // ═══ CHAT APP ════════════════════════════════════════════════
 
+
+/**
+ * Strip the fields that assert a LIVE connection, keeping the historical ones.
+ *
+ * A disconnected integration still usefully records which store it was. It
+ * must not go on claiming it is the elected system of record with a healthy
+ * capability set, which is what left the Business systems screen contradicting
+ * the integration card.
+ */
+function stripLiveClaims(config: unknown): Record<string, any> {
+  const next = { ...((config ?? {}) as Record<string, any>) };
+  delete next.uninstallRequestedAt;
+  delete next.useAsCrm;
+  delete next.capabilityState;
+  delete next.catalogFacets;
+  return next;
+}
+
 const chat = Router();
 
 /**
@@ -351,6 +369,20 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
           // The token is revoked on Shopify's side the moment the app is
           // removed. Keeping the ciphertext would only be a liability.
           credentials: {},
+          // Two things at once, both about not leaving stale claims behind:
+          //
+          // `uninstallRequestedAt` is dropped because this webhook is the
+          // answer to that request, and it is cleared HERE rather than in the
+          // route that made it because only the webhook knows the uninstall
+          // actually happened.
+          //
+          // `useAsCrm` and `capabilityState` are dropped because they are
+          // claims about a live connection. Left in place they told the
+          // Business systems screen that Shopify was still the active source
+          // of truth with writeback on, beside a card already reading
+          // Disconnected. `shopDomain` is KEPT: which store this was is
+          // history worth having, and the screens label it disconnected.
+          config: stripLiveClaims(match.config),
           lastError: "The GOTCHA Shopify app was uninstalled from this store.",
         },
       }),

@@ -24,6 +24,7 @@ import { usePermissions } from "@/context/PermissionsContext";
 import { getMarketplaceIntegrations, setIntegrationCrmSource, getSourceOfTruthStatus, type SourceOfTruthStatus } from "@/lib/api";
 import { logoForIntegration } from "@/lib/integration-logos";
 import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
+import { useIntegrationsChanged } from "@/lib/integration-events";
 
 // Integrations that can be elected the customer system of record while not
 // being CRM-category. Kept in sync with the server, which today only accepts
@@ -81,6 +82,10 @@ export default function CustomerSystemOfRecordCard() {
       setLoading(false);
     }
   }, [token]);
+
+  // A disconnect on another screen changes this answer. Without this the card
+  // kept showing the pre-disconnect vendor until a full page reload.
+  useIntegrationsChanged(load);
 
   useEffect(() => { load(); }, [load]);
 

@@ -358,6 +358,16 @@ export interface ShopifyFeatureAccess {
    * indicator cannot be added that forgets to ask.
    */
   featuresEnabled: boolean;
+  /**
+   * We asked Shopify to uninstall and are waiting for its verified webhook.
+   *
+   * The store is STILL CONNECTED in this state and its data still works, so
+   * this is not a kind of disconnection - it is a request in flight. Screens
+   * use it to say "waiting", to stop a second disconnect being started, and
+   * above all to avoid showing "Disconnected" for something Shopify has not
+   * confirmed.
+   */
+  awaitingUninstall: boolean;
 }
 
 const FK = "marketplace.shopifyAccess";
@@ -372,8 +382,25 @@ const FK = "marketplace.shopifyAccess";
 export function presentShopifyFeatureAccess(
   slug: string,
   snapshot: ShopifyBillingSnapshot | null,
-  opts: { integrationConnected: boolean },
+  opts: { integrationConnected: boolean; awaitingUninstall?: boolean },
 ): ShopifyFeatureAccess {
+  // `grantsAccess` answers "is it paid", which is not the same question as "is
+  // it connected". A merchant who disconnects Shopify inside GOTCHA has removed
+  // the credentials; whether a subscription is still live somewhere does not
+  // make the features work, and showing them as on would be the same false
+  // claim from the other direction. So a disconnected integration closes the
+  // gate no matter what billing says.
+  if (slug === "shopify" && !opts.integrationConnected) {
+    return {
+      applies: true,
+      authorized: false,
+      grantsAccess: false,
+      installationLabelKey: `${FK}.disconnected`,
+      showConnectorRequired: false,
+      featuresEnabled: false,
+      awaitingUninstall: false,
+    };
+  }
   const neutral: ShopifyFeatureAccess = {
     applies: false,
     authorized: opts.integrationConnected,
@@ -382,6 +409,7 @@ export function presentShopifyFeatureAccess(
     showConnectorRequired: false,
     // Non-Shopify integrations are not gated by a Shopify subscription.
     featuresEnabled: true,
+    awaitingUninstall: false,
   };
   if (slug !== "shopify") return neutral;
 
@@ -404,5 +432,9 @@ export function presentShopifyFeatureAccess(
     installationLabelKey: grantsAccess ? `${FK}.active` : `${FK}.authorized`,
     showConnectorRequired: authorized && !grantsAccess,
     featuresEnabled: grantsAccess,
+    // Set by the caller, which is the only side that can see the connection
+    // row's config. Defaulted false so a caller that does not know cannot
+    // accidentally claim a transition is in flight.
+    awaitingUninstall: opts.awaitingUninstall === true,
   };
 }
