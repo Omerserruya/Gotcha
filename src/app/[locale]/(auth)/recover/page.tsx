@@ -63,7 +63,7 @@ export default async function RecoverPage({
         */}
         <div className={signIn.editorialStage} aria-hidden="true">
           <div className={signIn.editorialSlide}>
-            <Text role="eyebrow" as="p">
+            <Text role="eyebrow" as="p" className={signIn.editorialEyebrow}>
               {t('editorial.eyebrow')}
             </Text>
             <Text role="serif" tone="inherit" as="p">

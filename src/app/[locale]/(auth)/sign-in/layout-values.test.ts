@@ -21,7 +21,21 @@ import { describe, expect, it } from 'vitest';
  *   would redden on every legitimate edit and be deleted within a week.
  */
 
-const css = readFileSync('src/app/[locale]/(auth)/sign-in/SignIn.module.css', 'utf8');
+/*
+ * ⚠⚠ COMMENTS ARE STRIPPED FIRST, AND THAT IS NOT TIDINESS.
+ *   These comments QUOTE THE MOCK — `font-size:13.5px; line-height:1.65` —
+ *   so a declaration regex run over the raw file finds the quotation before
+ *   the rule. It read 1.65 out of a comment and reported the file correct
+ *   while the rule said something else.
+ *
+ * ★ Second time today a pattern matched its own explanatory prose: the sweep
+ *   for `--size-code-box` found the comment recording its removal. A true
+ *   match against the wrong object, in the instrument rather than the code.
+ */
+const css = readFileSync('src/app/[locale]/(auth)/sign-in/SignIn.module.css', 'utf8').replace(
+  /\/\*[\s\S]*?\*\//g,
+  '',
+);
 
 const declaration = (selector: string, property: string): string | undefined => {
   const block = new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1];
@@ -115,5 +129,77 @@ describe('⚠⚠ the two that change what the reviewer sees', () => {
     const hebrew = /:root:lang\(he\)\s*\{([\s\S]*?)\n  \}/.exec(tokens)?.[1] ?? '';
     expect(hebrew, 'no :lang(he) block found').toContain('--font-serif-style');
     expect(/--font-serif-style:\s*normal/.test(hebrew)).toBe(true);
+  });
+});
+
+describe('⚠⚠ the cluster: six values, all rounded the same direction', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * INDIVIDUALLY INVISIBLE, AND ALL SMALLER OR LIGHTER THAN DRAWN
+   * ════════════════════════════════════════════════════════════════════════
+   *     34px → 32   the editorial column's inline padding
+   *     36px → 32   its footer row's top padding
+   *     13.5 → 13   the supporting paragraph
+   *     1.65 → 1.6  its line-height
+   *   #6E6A63 → #8c887f  the eyebrow, on a DARK frame
+   *   #2E2E2E → #333     the hairline
+   *
+   * ★ Not six small calls. A systematic drift in one direction, and the fix
+   *   is on the scale rather than in this screen — 00b's editorial column is
+   *   the same shell, and so is recovery's.
+   *
+   * ⚠ THREE OF THE SIX WERE ALREADY TOKENS NOTHING READ HERE:
+   *   `--line-height-loose` was 1.65, `--frame-text-eyebrow` was #6e6a63, and
+   *   `--frame-text-secondary` was #a29d95 and correct. The value existed and
+   *   the call site did not use it — the third time today.
+   */
+  it('★★ the two spacing steps are the design’s own numbers', () => {
+    expect(declaration('editorial', 'padding-inline')).toBe('var(--space-34)');
+    expect(declaration('systemStatus', 'padding-block-start')).toBe('var(--space-36)');
+
+    const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+    expect(tokens).toMatch(/--space-34:\s*34px/);
+    expect(tokens).toMatch(/--space-36:\s*36px/);
+  });
+
+  it('⚠⚠ the supporting paragraph reads at the size and rhythm drawn', () => {
+    expect(declaration('editorialSupport', 'font-size')).toBe('var(--font-size-editorial)');
+    expect(declaration('editorialSupport', 'line-height')).toBe('var(--line-height-loose)');
+
+    const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+    expect(tokens).toMatch(/--font-size-editorial:\s*13\.5px/);
+    expect(tokens).toMatch(/--line-height-loose:\s*1\.65/);
+  });
+
+  it('⚠⚠ and `--font-size-body-sm` did NOT move, which is the point', () => {
+    /*
+     * Half a pixel is not a rounding error to fix in place. `body-sm` is read
+     * by screens with nothing to do with this panel; changing it to suit one
+     * role would move all of them to match a mock they are not drawn from.
+     */
+    const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+    expect(tokens).toMatch(/--font-size-body-sm:\s*13px/);
+  });
+
+  it('★★ the eyebrow uses the dark frame’s colour, by class not by position', () => {
+    /*
+     * `:first-child` would be a proxy for "the eyebrow" that holds only while
+     * the eyebrow is first. This file has had enough of those today.
+     */
+    expect(declaration('editorialEyebrow', 'color')).toBe('var(--frame-text-eyebrow)');
+    const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+    expect(tokens).toMatch(/--frame-text-eyebrow:\s*#6e6a63/i);
+  });
+
+  it('⚠ the hairline is the design’s #2e2e2e, on the token both readers share', () => {
+    /*
+     * `#333` appears nowhere in `Directions.dc.html`; `#2E2E2E` appears twice,
+     * as the frame hairline on both 00a and 00b. Changed on the token because
+     * the other reader — the shell's frame border — is the same hairline in
+     * the same design language.
+     */
+    const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+    expect(tokens).toMatch(/--frame-line:\s*#2e2e2e/i);
+    expect(tokens).not.toMatch(/--frame-line:\s*#333\b/);
   });
 });

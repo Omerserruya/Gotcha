@@ -48,7 +48,7 @@ function Figures({
     <div className={styles.editorialStage} aria-hidden="true">
       {slides.map((slide) => (
         <div key={slide} className={styles.editorialSlide}>
-          <Text role="eyebrow" as="p">
+          <Text role="eyebrow" as="p" className={styles.editorialEyebrow}>
             {t(`${slide}.eyebrow`)}
           </Text>
           {/* The serif, italic. `inherit` because this sits on the dark frame,

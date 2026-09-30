@@ -71,6 +71,20 @@
     --font-size-control: 14px;
     --font-size-item: 13.5px;
     --font-size-body-sm: 13px;
+    /*
+     * The editorial panel's supporting paragraph: `font-size:13.5px;
+     * line-height:1.65` on 00a, 00b and recovery alike.
+     *
+     * ⚠ A SEPARATE TOKEN RATHER THAN MOVING `--font-size-body-sm`. Half a
+     *   pixel is not a rounding error to fix in place — `body-sm` is read by
+     *   screens that have nothing to do with this panel, and changing it to
+     *   suit one role would move all of them to match a mock they are not
+     *   drawn from.
+     *
+     * ★ `--line-height-loose` is already 1.65 and already correct. It simply
+     *   was not being used here.
+     */
+    --font-size-editorial: 13.5px;
     --font-size-meta: 12.5px;
     --font-size-label: 12px;
     --font-size-caption: 11.5px;
@@ -158,6 +172,18 @@
     --space-28: 28px;
     --space-30: 30px;
     --space-32: 32px;
+    /*
+     * ⚠⚠ 34 AND 36 ARE THE DESIGN'S, NOT ROUNDINGS OF 32.
+     * 00a gives the editorial column `padding:32px 34px` and its footer row
+     * `padding-top:36px`. Both had been taken to the nearest existing step,
+     * and the result was a panel two pixels narrow on each side and a footer
+     * four pixels high — individually invisible, and all in one direction.
+     *
+     * ★ On the scale rather than in the screen: 00b's editorial column is the
+     *   same shell, and so is recovery's.
+     */
+    --space-34: 34px;
+    --space-36: 36px;
     --space-40: 40px;
     --space-56: 56px;
 
@@ -269,7 +295,16 @@
     /* The selected sub-navigation row: a shade quieter than a chip. */
     --frame-subtle: #1e1e1e;
     --frame-selected: #262626;
-    --frame-line: #333;
+    /*
+     * ⚠ #2e2e2e, NOT #333. The design draws every frame hairline at #2E2E2E
+     *   — twice in `Directions.dc.html`, and `#333` appears nowhere in it.
+     *   Ours was a rounding to a web-safe-looking triple.
+     *
+     * ★ Changed on the TOKEN rather than in the screen, because the other
+     *   reader of it — the shell's frame border — is the same hairline in the
+     *   same design language. Two call sites, both of which should move.
+     */
+    --frame-line: #2e2e2e;
     /*
      * The rule inside a raised dark card. Quieter than --frame-line, which
      * separates regions of the chrome; this one separates sections within one

@@ -42,8 +42,12 @@
     flex: none;
     display: flex;
     flex-direction: column;
+    /*
+     * 00a: `padding:32px 34px 32px 34px`. The inline pair is 34, not 32 —
+     * taken to the nearest existing step before `--space-34` existed.
+     */
     padding-block: var(--space-32);
-    padding-inline: var(--space-32);
+    padding-inline: var(--space-34);
     color: var(--frame-text);
   }
 
@@ -273,13 +277,45 @@
    * and the first fix would have looked like it missed.
    */
   .editorialSupport {
+    /*
+     * ════════════════════════════════════════════════════════════════════
+     * 00a AND 00b: `font-size:13.5px; line-height:1.65; color:#A29D95`
+     * ════════════════════════════════════════════════════════════════════
+     * The `bodySm` role gives 13px and 1.6, so BOTH were a step off — and
+     * the colour was already right, which is what made the other two easy
+     * to miss.
+     *
+     * ★ `--line-height-loose` was ALREADY 1.65 and already correct.
+     *   Nothing was using it here.
+     */
+    font-size: var(--font-size-editorial);
+    line-height: var(--line-height-loose);
     color: var(--frame-text-secondary);
     max-inline-size: 390px;
   }
 
+  /*
+   * ⚠⚠ THE EYEBROW ON THIS PANEL IS NOT THE EYEBROW ON A LIGHT CARD.
+   * 00a draws it `color:#6E6A63`; the `eyebrow` role resolves
+   * `--text-subtle` (#8c887f), correct on a light surface and several steps
+   * too light on the dark frame.
+   *
+   * ★ `--frame-text-eyebrow` IS #6e6a63 and already exists — the shell and
+   *   the home screen both read it. This panel was the one dark-framed place
+   *   that did not.
+   *
+   * ⚠ A class, not `:first-child`. A positional selector is a proxy for
+   *   "the eyebrow" that holds only while the eyebrow is first, and this
+   *   file has had enough of those today.
+   */
+  .editorialEyebrow {
+    color: var(--frame-text-eyebrow);
+  }
+
   .systemStatus {
     margin-block-start: auto;
-    padding-block-start: var(--space-32);
+    /* 00a's footer row: `margin-top:auto; padding-top:36px; gap:14px`. */
+    padding-block-start: var(--space-36);
     display: flex;
     align-items: center;
     gap: var(--space-14);
