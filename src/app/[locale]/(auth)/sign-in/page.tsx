@@ -1,6 +1,10 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import { SignInScreen } from './SignInScreen';
+import { FinishSignIn } from './FinishSignIn';
+import { isAuthorizeEndpoint } from '@/api/contracts/auth-flow';
+import { oidcConfiguration } from '@/auth/oidc';
+import { appUrl } from '@/lib/base-path';
 import { Logo } from '@/design-system/brand/Logo';
 import { Text } from '@/design-system/primitives/text/Text';
 import { appPath } from '@/lib/base-path';
@@ -64,9 +68,9 @@ function Figures({
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; returnTo?: string }>;
+  searchParams: Promise<{ error?: string; returnTo?: string; authorize?: string }>;
 }) {
-  const { error, returnTo } = await searchParams;
+  const { error, returnTo, authorize } = await searchParams;
   const locale = await getLocale();
   const t = await getTranslations('auth');
   /*
@@ -138,6 +142,40 @@ export default async function SignInPage({
   if (returnTo) handOver.set('returnTo', returnTo);
   const loginHref = `${loginBase}?${handOver.toString()}`;
   const knownError = KNOWN_ERRORS.find((candidate) => candidate === error);
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ THE AUTHORIZE URL IS CHECKED HERE, WHERE THE REAL ENDPOINT IS KNOWN
+   * ═════════════════════════════════════════════════════════════════════════════
+   * It arrives in our own query string, so it is in the address bar and
+   * anybody can retype it. Handing an unchecked URL to a component that
+   * fetches it with credentials and navigates to the answer would make this
+   * page a fetch-and-redirect anyone can aim.
+   *
+   * ★ Checked on the SERVER, against the endpoint OIDC discovery reports —
+   *   not against a constant, and not in the browser. The client never sees a
+   *   URL that has not already been compared to the real one.
+   *
+   * ⚠ A parameter that fails the check is DROPPED, not an error: the panel
+   *   renders as usual and the person signs in normally. A forged one
+   *   achieves nothing and says nothing.
+   */
+  let finishing: string | null = null;
+  if (typeof authorize === 'string' && authorize !== '') {
+    const endpoint = (await oidcConfiguration()).serverMetadata().authorization_endpoint;
+    if (endpoint && isAuthorizeEndpoint(authorize, endpoint)) finishing = authorize;
+  }
+
+  if (finishing) {
+    return (
+      <div className={styles.frame}>
+        <FinishSignIn
+          authorizeUrl={finishing}
+          callbackUrl={appUrl('/api/auth/callback', serverEnv().APP_ORIGIN)}
+        />
+      </div>
+    );
+  }
 
   return (
     <SignInScreen

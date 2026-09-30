@@ -13,6 +13,7 @@ import {
   factorEntry,
   recoveryFlowSlug,
   followableCompletion,
+  isAuthorizeEndpoint,
 } from './auth-flow';
 
 /**
@@ -580,6 +581,52 @@ describe('⚠⚠ a completed flow’s `to` — one field, two meanings', () => {
      */
     for (const to of ['callback?code=abc&state=xyz', './callback?code=abc&state=xyz']) {
       expect(followableCompletion(to, CALLBACK), to).toBeNull();
+    }
+  });
+});
+
+describe('⚠⚠ the authorize URL we were handed, before we fetch it', () => {
+  const AUTHORIZE = 'https://auth-dev.gotcha.co.il/application/o/authorize/';
+
+  it('★★ accepts the real endpoint, with whatever query it carries', () => {
+    /*
+     * The query is NOT checked and must not be: it holds `state`, the PKCE
+     * challenge and the nonce, all minted by our own route for this request.
+     */
+    expect(isAuthorizeEndpoint(`${AUTHORIZE}?client_id=x&state=s&nonce=n`, AUTHORIZE)).toBe(true);
+    expect(isAuthorizeEndpoint(AUTHORIZE, AUTHORIZE)).toBe(true);
+  });
+
+  it('⚠⚠ refuses another origin, which is the attack', () => {
+    /*
+     * A page that fetches whatever it is handed with `credentials: 'include'`
+     * and navigates to whatever comes back is a confused deputy wearing a
+     * sign-in screen.
+     */
+    for (const bad of [
+      'https://evil.example/application/o/authorize/',
+      'https://auth-dev.gotcha.co.il.evil.example/application/o/authorize/',
+      'http://auth-dev.gotcha.co.il/application/o/authorize/',
+      'https://dev.gotcha.co.il/application/o/authorize/',
+    ]) {
+      expect(isAuthorizeEndpoint(bad, AUTHORIZE), bad).toBe(false);
+    }
+  });
+
+  it('⚠⚠ refuses another path on the provider, prefix included', () => {
+    for (const bad of [
+      'https://auth-dev.gotcha.co.il/application/o/authorize-evil/',
+      'https://auth-dev.gotcha.co.il/application/o/token/',
+      'https://auth-dev.gotcha.co.il/if/flow/anything/',
+      'https://auth-dev.gotcha.co.il/',
+    ]) {
+      expect(isAuthorizeEndpoint(bad, AUTHORIZE), bad).toBe(false);
+    }
+  });
+
+  it('⚠ refuses anything that is not an absolute URL', () => {
+    for (const bad of ['', '/application/o/authorize/', '//evil.example/x', 'javascript:1']) {
+      expect(isAuthorizeEndpoint(bad, AUTHORIZE), bad).toBe(false);
     }
   });
 });

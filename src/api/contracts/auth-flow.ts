@@ -353,6 +353,44 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
  *   origin we happened to resolve it with, and the one meaningful relative
  *   value observed — `/` — is precisely the one that must not be followed.
  */
+/**
+ * Whether a URL we were handed is the provider's authorize endpoint.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ⚠⚠ WITHOUT THIS, THE SIGN-IN PAGE IS A FETCH-AND-REDIRECT ANYONE CAN AIM
+ * ═══════════════════════════════════════════════════════════════════════════
+ * The authorize URL reaches the panel through our own query string, so it
+ * lands in the address bar and anybody can retype it. A page that fetches
+ * whatever it is handed with `credentials: 'include'`, and then navigates to
+ * whatever comes back, is a confused deputy wearing a sign-in screen.
+ *
+ * ★ So: ORIGIN AND PATHNAME, both exact. Not a prefix — that admits
+ *   `/application/o/authorize-evil/`. Not the origin alone — that admits
+ *   every other endpoint the provider has. The authorize endpoint is one
+ *   known URL and equality is available, so equality is what is used.
+ *
+ * ★ This is the third guard of one shape, with `followableCompletion` and
+ *   `recoveryFlowSlug`: **never compose a request from a string we were
+ *   handed without checking it is the endpoint we meant.** Four defects of
+ *   that class in this repository already.
+ *
+ * ⚠ The query string is NOT checked and must not be. It carries `state`, the
+ *   PKCE challenge and the nonce, all minted by our own route this request —
+ *   and the response's worth is decided later by `followableCompletion`,
+ *   which requires the completion to be our registered callback.
+ */
+export function isAuthorizeEndpoint(candidate: string, expectedEndpoint: string): boolean {
+  let target: URL;
+  let expected: URL;
+  try {
+    target = new URL(candidate);
+    expected = new URL(expectedEndpoint);
+  } catch {
+    return false;
+  }
+  return target.origin === expected.origin && target.pathname === expected.pathname;
+}
+
 export function followableCompletion(to: string, expectedCallback: string): string | null {
   let target: URL;
   let expected: URL;

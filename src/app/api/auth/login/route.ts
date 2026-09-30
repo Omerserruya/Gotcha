@@ -31,6 +31,15 @@ import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
 export const HANDOVER_PARAM = 'handover';
 
 /**
+ * Asks this route to send the browser back to the panel with an authorize URL
+ * instead of to the provider. Opt-in, so every other arrival is unchanged.
+ */
+export const FINISH_PARAM = 'finish';
+
+/** Carries the authorize URL to the panel. Verified there before it is used. */
+export const AUTHORIZE_PARAM = 'authorize';
+
+/**
  * Begins sign-in: Authorization Code + PKCE against Authentik.
  *
  * The code verifier and the CSRF `state` travel in a short-lived encrypted
@@ -123,7 +132,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   logger.debug('auth.login.start', { returnTo });
 
-  const response = NextResponse.redirect(authorizationUrl.toString());
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * ★★ THE HOP BACK, SO THE PROVIDER'S PAGE IS NEVER RENDERED
+   * ════════════════════════════════════════════════════════════════════════════
+   * Sending the browser to `authorize` makes it RENDER `/if/flow/` for the
+   * last hop. The panel can finish that hop with two fetches instead — but
+   * only if it holds the authorize URL, and it cannot mint one: this route
+   * 404s on the sign-in origin, and the PKCE verifier has to be sealed into a
+   * `SameSite=lax` cookie that only a top-level navigation here can set.
+   *
+   * ★ So the cookie is still set by THIS navigation, exactly as before, and
+   *   the browser is sent back to the panel carrying the authorize URL. The
+   *   URL is public; the verifier stays in the cookie.
+   *
+   * ⚠ ONLY WHEN THE PANEL ASKED. Without `?finish=1` this redirects to
+   *   `authorize` as it always has — so the front door, an expiring session
+   *   and any other arrival are untouched, and a panel that cannot finish the
+   *   hop has somewhere to fall back TO.
+   *
+   * ⚠ AND THE FALLBACK MUST NOT COME BACK HERE. The panel's failure path
+   *   navigates to the authorize URL itself, not to this route, or the two
+   *   redirect at each other forever.
+   */
+  const finishAtThePanel =
+    request.nextUrl.searchParams.get(FINISH_PARAM) === '1' && signInElsewhere !== undefined;
+
+  let destination = authorizationUrl.toString();
+  if (finishAtThePanel) {
+    const panel = new URL(signInElsewhere);
+    panel.searchParams.set(AUTHORIZE_PARAM, authorizationUrl.toString());
+    panel.searchParams.set('returnTo', returnTo);
+    destination = panel.toString();
+  }
+
+  const response = NextResponse.redirect(destination);
   /*
    * This response carries the sealed PKCE verifier and the CSRF `state` in a
    * cookie, and its `Location` embeds a one-time `state` and code challenge.

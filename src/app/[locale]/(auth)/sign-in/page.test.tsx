@@ -1,6 +1,6 @@
 import { render, within } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import messages from '@/i18n/messages/en/auth.json';
 
@@ -27,6 +27,26 @@ import messages from '@/i18n/messages/en/auth.json';
 const { serverEnv } = vi.hoisted(() => ({ serverEnv: vi.fn() }));
 
 vi.mock('@/config/env.server', () => ({ serverEnv }));
+
+/*
+ * Discovery, stubbed to the endpoint this deployment really reports. The page
+ * compares the `?authorize=` parameter against it — so the value here IS the
+ * thing under test, and hardcoding the check instead would assert nothing.
+ */
+vi.mock('@/auth/oidc', () => ({
+  oidcConfiguration: async () => ({
+    serverMetadata: () => ({
+      authorization_endpoint: 'https://auth-dev.gotcha.co.il/application/o/authorize/',
+    }),
+  }),
+}));
+
+/* The hop is tested on its own; here it only has to be identifiable. */
+vi.mock('./FinishSignIn', () => ({
+  FinishSignIn: ({ authorizeUrl }: { authorizeUrl: string }) => (
+    <div data-testid="finishing" data-authorize={authorizeUrl} />
+  ),
+}));
 
 vi.mock('next-intl/server', () => ({
   /*
@@ -239,5 +259,60 @@ describe('★ the error a person is sent back with', () => {
       await SignInPage({ searchParams: Promise.resolve({ error: 'you have been hacked' }) }),
     );
     expect(within(unknown.container).queryAllByRole('alert')).toHaveLength(0);
+  });
+});
+
+describe('⚠⚠ the authorize URL handed back by our own login route', () => {
+  const REAL = 'https://auth-dev.gotcha.co.il/application/o/authorize/?state=s&nonce=n';
+
+  beforeEach(() => {
+    // The finishing hop needs the product origin to build the callback it will
+    // be compared against.
+    serverEnv.mockReturnValue({ APP_ORIGIN: 'https://dev.gotcha.co.il/v2' });
+  });
+
+  it('★★ finishes the hop when the parameter is the provider’s endpoint', async () => {
+    const { container } = render(
+      await SignInPage({ searchParams: Promise.resolve({ authorize: REAL }) }),
+    );
+    const hop = container.querySelector('[data-testid="finishing"]');
+    expect(hop).not.toBeNull();
+    expect(hop?.getAttribute('data-authorize')).toBe(REAL);
+    // And the panel is NOT also rendered: sign-in is already finished here.
+    expect(container.querySelector('[data-testid="hand-over"]')).toBeNull();
+  });
+
+  it('⚠⚠ DROPS a forged parameter and renders the ordinary panel', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THIS IS THE ONE THAT MATTERS
+     * ════════════════════════════════════════════════════════════════════════
+     * The parameter is in the address bar and anybody can retype it. A page
+     * that fetched whatever it was handed with credentials, and navigated to
+     * the answer, would be a confused deputy wearing a sign-in screen.
+     *
+     * ★ Dropped, not an error: the person signs in normally and a forged URL
+     *   achieves nothing and says nothing.
+     */
+    for (const forged of [
+      'https://evil.example/application/o/authorize/?state=s',
+      'https://auth-dev.gotcha.co.il.evil.example/application/o/authorize/',
+      'https://auth-dev.gotcha.co.il/application/o/authorize-evil/',
+      'https://auth-dev.gotcha.co.il/if/flow/anything/',
+      '/application/o/authorize/',
+      'javascript:alert(1)',
+    ]) {
+      const { container } = render(
+        await SignInPage({ searchParams: Promise.resolve({ authorize: forged }) }),
+      );
+      expect(container.querySelector('[data-testid="finishing"]'), forged).toBeNull();
+      expect(container.querySelector('[data-testid="hand-over"]'), forged).not.toBeNull();
+    }
+  });
+
+  it('★ and with no parameter at all, nothing changes', async () => {
+    const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
+    expect(container.querySelector('[data-testid="finishing"]')).toBeNull();
+    expect(container.querySelector('[data-testid="hand-over"]')).not.toBeNull();
   });
 });
