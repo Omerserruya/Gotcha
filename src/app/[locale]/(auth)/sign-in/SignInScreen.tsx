@@ -36,6 +36,7 @@ import styles from './SignIn.module.css';
  */
 export function SignInScreen({
   handOverHref,
+  recoverPath,
   returnTo,
   notice,
   brand,
@@ -45,6 +46,7 @@ export function SignInScreen({
   ticks,
 }: {
   readonly handOverHref: string;
+  readonly recoverPath: string;
   readonly returnTo?: string;
   /** The `?error=` explanation, when there is one. Sign-in only. */
   readonly notice?: ReactNode;
@@ -91,7 +93,12 @@ export function SignInScreen({
         <div className={styles.form} data-screen={screen}>
           {screen === 'signIn' ? notice : null}
 
-          <SignInPanel handOverHref={handOverHref} returnTo={returnTo} onScreen={setScreen} />
+          <SignInPanel
+            handOverHref={handOverHref}
+            recoverPath={recoverPath}
+            returnTo={returnTo}
+            onScreen={setScreen}
+          />
 
           {screen === 'signIn' ? footnote : null}
         </div>

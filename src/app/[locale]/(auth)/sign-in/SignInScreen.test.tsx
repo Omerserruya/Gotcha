@@ -41,6 +41,7 @@ const show = () =>
   render(
     <SignInScreen
       handOverHref="/api/auth/login"
+      recoverPath="/v2/en/recover"
       brand={<div>GOTCHA</div>}
       ticks={<div data-testid="ticks" />}
       figures={{

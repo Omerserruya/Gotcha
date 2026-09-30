@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 import { SignInScreen } from './SignInScreen';
 import { Logo } from '@/design-system/brand/Logo';
@@ -67,6 +67,7 @@ export default async function SignInPage({
   searchParams: Promise<{ error?: string; returnTo?: string }>;
 }) {
   const { error, returnTo } = await searchParams;
+  const locale = await getLocale();
   const t = await getTranslations('auth');
   /*
    * Scoped to the editorial block so `Figures` can take a key prefix and be
@@ -141,6 +142,7 @@ export default async function SignInPage({
   return (
     <SignInScreen
       handOverHref={loginHref}
+      recoverPath={appPath(`/${locale}/recover`)}
       returnTo={returnTo}
       brand={
         <div className={styles.brand}>

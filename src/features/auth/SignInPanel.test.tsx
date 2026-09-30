@@ -52,11 +52,12 @@ const staySignedIn = (errors: Record<string, unknown> = {}): FlowStep => ({
 
 const assign = vi.hoisted(() => vi.fn());
 const HANDOVER = '/v2/api/auth/login?returnTo=%2Finbox';
+const RECOVER = '/v2/en/recover';
 
 const show = (returnTo?: string) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
-      <SignInPanel handOverHref={HANDOVER} returnTo={returnTo} />
+      <SignInPanel handOverHref={HANDOVER} recoverPath={RECOVER} returnTo={returnTo} />
     </NextIntlClientProvider>,
   );
 
@@ -214,9 +215,11 @@ describe('★★ what a refusal is allowed to say', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const problem = await screen.findByTestId('sign-in-problem');
+    // Our screen now, carrying the provider's slug. It used to be a link
+    // straight to `/if/flow/…` — the provider's own UI, and the report.
     expect(screen.getByTestId('recover-after-fail')).toHaveAttribute(
       'href',
-      '/if/flow/gotcha-recovery-self/',
+      `${RECOVER}?flow=gotcha-recovery-self`,
     );
     expect(problem.textContent).not.toMatch(/\battempt|\btries|\block|whatsapp|sms|code/i);
   });
@@ -383,12 +386,35 @@ describe('★★ one way in', () => {
     expect(screen.queryByText(/google|microsoft|sso|single sign/i)).toBeNull();
   });
 
-  it('★★ takes the recovery link from the challenge rather than hardcoding it', async () => {
+  it('★★ takes the recovery FLOW from the challenge rather than hardcoding it', async () => {
+    /*
+     * The intent of this test is unchanged and still the important one: the
+     * slug is an administrator's to rename, and a stale one is a 404 for
+     * somebody already locked out. What changed is the destination — our
+     * screen instead of the provider's, carrying the name it advertises.
+     */
     startFlow.mockResolvedValue(identify({ recovery_url: '/if/flow/renamed-recovery/' }));
     show();
     expect(await screen.findByTestId('forgot')).toHaveAttribute(
       'href',
-      '/if/flow/renamed-recovery/',
+      `${RECOVER}?flow=renamed-recovery`,
+    );
+  });
+
+  it('⚠⚠ falls back to the provider when the URL is not a flow path', async () => {
+    /*
+     * An absolute URL, or any shape `recoveryFlowSlug` cannot read, leaves us
+     * without a slug to drive. Linking at the provider then looks old — but
+     * leaving somebody locked out with NO way to reset a password is worse
+     * than a screen that works and looks dated.
+     */
+    startFlow.mockResolvedValue(
+      identify({ recovery_url: 'https://auth-dev.gotcha.co.il/custom/reset' }),
+    );
+    show();
+    expect(await screen.findByTestId('forgot')).toHaveAttribute(
+      'href',
+      'https://auth-dev.gotcha.co.il/custom/reset',
     );
   });
 
@@ -483,7 +509,7 @@ describe('⚠⚠ telling the layout which screen is on', () => {
 
     render(
       <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
-        <SignInPanel handOverHref={HANDOVER} onScreen={onScreen} />
+        <SignInPanel handOverHref={HANDOVER} recoverPath={RECOVER} onScreen={onScreen} />
       </NextIntlClientProvider>,
     );
 
@@ -502,7 +528,7 @@ describe('⚠⚠ telling the layout which screen is on', () => {
 
     render(
       <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
-        <SignInPanel handOverHref={HANDOVER} onScreen={onScreen} />
+        <SignInPanel handOverHref={HANDOVER} recoverPath={RECOVER} onScreen={onScreen} />
       </NextIntlClientProvider>,
     );
 

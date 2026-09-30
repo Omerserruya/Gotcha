@@ -29,8 +29,25 @@ const { serverEnv } = vi.hoisted(() => ({ serverEnv: vi.fn() }));
 vi.mock('@/config/env.server', () => ({ serverEnv }));
 
 vi.mock('next-intl/server', () => ({
-  getTranslations: async () =>
-    createTranslator({ locale: 'en', messages: { auth: messages }, namespace: 'auth' }),
+  /*
+   * ⚠ The page now asks for a SCOPED namespace (`auth.editorial`) as well as
+   *   `auth`, so this mock has to honour the argument rather than always
+   *   returning the same translator. Typed through `createTranslator`'s own
+   *   parameter, because `string` is wider than the key union it accepts.
+   */
+  getTranslations: async (namespace?: string) =>
+    createTranslator({
+      locale: 'en',
+      messages: { auth: messages },
+      /*
+       * The key union is generated from the catalogue, so it is narrower than
+       * the `string` the page hands in. The cast sits here, at the mock's
+       * boundary, rather than loosening anything the real code is checked
+       * against.
+       */
+      namespace: (namespace ?? 'auth') as 'auth',
+    }),
+  getLocale: async () => 'en',
 }));
 
 /*

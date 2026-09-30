@@ -4,7 +4,12 @@ import { Check, Eye, EyeOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 
-import { firstError, staySignedInBody, type FlowStep } from '@/api/contracts/auth-flow';
+import {
+  firstError,
+  recoveryFlowSlug,
+  staySignedInBody,
+  type FlowStep,
+} from '@/api/contracts/auth-flow';
 import { startFlow, submitStage } from '@/api/client/flow-executor';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
@@ -107,11 +112,19 @@ export type SignInScreenName = 'signIn' | 'secondFactor';
 
 export function SignInPanel({
   handOverHref,
+  recoverPath,
   returnTo,
   onScreen,
 }: {
   /** `/api/auth/login`, already prefixed and carrying `returnTo`. */
   readonly handOverHref: string;
+  /**
+   * Our own recovery screen, already prefixed and localised. Passed in rather
+   * than composed here: this component does not know the locale or the base
+   * path, and guessing either is the absolute-path defect this repo has had
+   * three times.
+   */
+  readonly recoverPath: string;
   readonly returnTo?: string;
   /**
    * Told which screen is on, so a composition root can put the matching
@@ -353,7 +366,27 @@ export function SignInPanel({
    *   moment sign-in moves to its own origin. It accepts both and refuses
    *   everything else.
    */
-  const recovery = safeLinkUrl(step.challenge.recovery_url);
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ★★ "FORGOT IT?" NOW GOES TO OUR SCREEN, CARRYING THE PROVIDER'S OWN SLUG
+   * ═════════════════════════════════════════════════════════════════════════
+   * It used to be `href={recovery_url}` — a real link to `/if/flow/…`, which
+   * is Authentik's own UI. That is the "old UI" in the report.
+   *
+   * ★ The slug still comes from the challenge and is never a constant of ours:
+   *   the contract's note is that an administrator can change it and a stale
+   *   one is a 404 for somebody already locked out. So we read the name the
+   *   provider advertises and hand it to our own route.
+   *
+   * ⚠ If the URL is not the `/if/flow/<slug>/` shape, `recoveryFlowSlug`
+   *   returns null and this falls back to linking at the provider directly.
+   *   Leaving somebody with no way to reset a password at all would be worse
+   *   than sending them to a screen that works but looks old.
+   */
+  const recoverySlug = recoveryFlowSlug(step.challenge.recovery_url);
+  const recovery = recoverySlug
+    ? `${recoverPath}?flow=${encodeURIComponent(recoverySlug)}`
+    : safeLinkUrl(step.challenge.recovery_url);
 
   return (
     <form

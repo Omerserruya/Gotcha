@@ -465,6 +465,36 @@ export function staySignedInBody(remember: boolean): Record<string, boolean> {
 export const AUTHENTICATION_FLOW = 'default-authentication-flow';
 
 /**
+ * The recovery flow's slug, read out of the identification challenge's own
+ * `recovery_url`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ★★ NOT A CONSTANT, AND THE REASON IS ALREADY WRITTEN IN THIS FILE
+ * ═══════════════════════════════════════════════════════════════════════════
+ * `recovery_url` carries the note "it is a flow slug an administrator can
+ * change, and a stale path here sends somebody who has forgotten their
+ * password to a 404". Hardcoding `gotcha-recovery-self` would contradict the
+ * sentence sitting forty lines above it.
+ *
+ * ★ So the provider names its own recovery flow and we read the name. The
+ *   observed value is `/if/flow/gotcha-recovery-self/`; this returns the slug
+ *   between `/if/flow/` and the trailing slash, or `null` for anything that is
+ *   not that shape.
+ *
+ * ⚠ THE RESULT IS USED TO DRIVE A FLOW, so the slug is checked rather than
+ *   trusted: lowercase, digits and hyphens, bounded. That refuses path
+ *   traversal and anything with a scheme or host in it. It does NOT pretend to
+ *   be an authorisation check — the executor is the provider's own and a
+ *   person can reach any flow of theirs by typing its URL. What this prevents
+ *   is OUR code composing a request out of an arbitrary string.
+ */
+export function recoveryFlowSlug(recoveryUrl: string | null | undefined): string | null {
+  if (typeof recoveryUrl !== 'string') return null;
+  const match = /^\/if\/flow\/([a-z0-9][a-z0-9-]{0,63})\/?$/.exec(recoveryUrl);
+  return match ? match[1]! : null;
+}
+
+/**
  * The sentence to show for a failed submit, or `null` when the stage reported
  * nothing.
  *

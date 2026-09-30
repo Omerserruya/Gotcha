@@ -11,6 +11,7 @@ import {
   devicesByRecency,
   validateBody,
   factorEntry,
+  recoveryFlowSlug,
 } from './auth-flow';
 
 /**
@@ -449,5 +450,48 @@ describe('★★ factorEntry — a code box is wrong for three of the five', () 
 
   it('★ is not fooled by case or padding from the wire', () => {
     expect(factorEntry(' TOTP ')).toBe('code');
+  });
+});
+
+describe('⚠⚠ the recovery flow names itself', () => {
+  /*
+   * Hardcoding `gotcha-recovery-self` would contradict the note already in this
+   * contract: it is a slug an administrator can change, and a stale one sends
+   * somebody who has forgotten their password to a 404.
+   */
+  it('★★ reads the slug the provider advertises', () => {
+    expect(recoveryFlowSlug('/if/flow/gotcha-recovery-self/')).toBe('gotcha-recovery-self');
+    expect(recoveryFlowSlug('/if/flow/gotcha-recovery-self')).toBe('gotcha-recovery-self');
+  });
+
+  it('⚠⚠ refuses anything that is not that exact shape', () => {
+    /*
+     * The result is used to COMPOSE A REQUEST, so it is checked rather than
+     * trusted. Not an authorisation check — the executor is the provider's own
+     * and a person can reach any flow by typing its URL. What this prevents is
+     * our code building a request out of an arbitrary string.
+     */
+    for (const bad of [
+      null,
+      undefined,
+      '',
+      '/if/flow/',
+      '/if/flow/../../admin/',
+      '/if/flow/a/b/',
+      'https://evil.example/if/flow/x/',
+      '//evil.example/if/flow/x/',
+      '/if/flow/UPPER/',
+      '/if/flow/has space/',
+      '/flows/-/cancel/',
+      `/if/flow/${'a'.repeat(65)}/`,
+    ]) {
+      expect(recoveryFlowSlug(bad as string | null), String(bad)).toBeNull();
+    }
+  });
+
+  it('★ and a hyphenated slug at the length limit still passes', () => {
+    // Both directions: a validator that refused everything would satisfy the
+    // test above and leave recovery unreachable.
+    expect(recoveryFlowSlug(`/if/flow/${'a'.repeat(64)}/`)).toBe('a'.repeat(64));
   });
 });

@@ -143,9 +143,12 @@ function csrfToken(): string {
  */
 export type SubmitOutcome = { readonly ok: true; readonly step: FlowStep } | { readonly ok: false };
 
-async function call(init?: RequestInit): Promise<FlowStep | null> {
+async function call(
+  init?: RequestInit,
+  flow: string = AUTHENTICATION_FLOW,
+): Promise<FlowStep | null> {
   try {
-    const response = await fetch(executorUrl(AUTHENTICATION_FLOW), {
+    const response = await fetch(executorUrl(flow), {
       /*
        * The flow is stateful and its state is a cookie. Without this the
        * executor issues a fresh flow on every request and the second stage never
@@ -170,13 +173,28 @@ async function call(init?: RequestInit): Promise<FlowStep | null> {
   }
 }
 
-/** The first challenge, or `null` when the executor could not be reached. */
-export async function startFlow(): Promise<FlowStep | null> {
-  return call();
+/**
+ * The first challenge, or `null` when the executor could not be reached.
+ *
+ * ★ `flow` defaults to the one this application authorises against, so every
+ *   existing caller is unchanged. Recovery passes its own — a DIFFERENT flow,
+ *   with its own cookie and its own stages, driven through the same executor.
+ */
+export async function startFlow(flow?: string): Promise<FlowStep | null> {
+  return call(undefined, flow);
 }
 
-/** Answer the current stage. */
-export async function submitStage(body: Record<string, unknown>): Promise<SubmitOutcome> {
-  const step = await call({ method: 'POST', body: JSON.stringify(body) });
+/**
+ * Answer the current stage.
+ *
+ * ⚠ The flow must match the one `startFlow` opened. Submitting to the wrong
+ *   slug does not error — it starts a fresh flow of that kind and answers ITS
+ *   first stage, so the symptom is a stage that repeats rather than a failure.
+ */
+export async function submitStage(
+  body: Record<string, unknown>,
+  flow?: string,
+): Promise<SubmitOutcome> {
+  const step = await call({ method: 'POST', body: JSON.stringify(body) }, flow);
   return step ? { ok: true, step } : { ok: false };
 }
