@@ -3051,6 +3051,16 @@
       "writebackUnavailable": "Unavailable until the Connector is active",
       "featureLocked": "Requires the Shopify Connector",
       "disconnected": "Disconnected"
+    },
+    "shopifyDisconnect": {
+      "title": "Disconnect Shopify?",
+      "body": "GOTCHA will ask Shopify to uninstall the app from {shop}. Product, customer and order synchronization will stop, and Shopify-specific features will switch off: catalogue answers, order lookups, order actions and the storefront assistant.\n\nGOTCHA Core is not affected. WhatsApp, Instagram, email, web chat, the Inbox, your manual knowledge and every non-Shopify integration keep working exactly as they do now.\n\nYour billing history is kept. You can reinstall at any time.",
+      "confirm": "Disconnect Shopify",
+      "cancel": "Keep it connected",
+      "waiting": "Waiting for Shopify to complete the uninstall",
+      "waitingHint": "Shopify confirms the uninstall itself. This screen updates as soon as it does. Your Shopify data stays available until then.",
+      "failed": "Shopify could not complete the uninstall. Nothing was changed and the store is still connected.",
+      "retry": "Try again"
     }
   },
   "usage": {

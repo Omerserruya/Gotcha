@@ -28,6 +28,7 @@ import {
 export function useShopifyFeatureAccess(
   slug: string,
   integrationConnected: boolean,
+  awaitingUninstall = false,
 ): ShopifyFeatureAccess {
   const { token } = useAuth();
   const [snapshot, setSnapshot] = useState<ShopifyBillingSnapshot | null>(null);
@@ -50,5 +51,5 @@ export function useShopifyFeatureAccess(
     };
   }, [slug, token]);
 
-  return presentShopifyFeatureAccess(slug, snapshot, { integrationConnected });
+  return presentShopifyFeatureAccess(slug, snapshot, { integrationConnected, awaitingUninstall });
 }

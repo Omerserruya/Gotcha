@@ -88,6 +88,18 @@ export async function requestShopifySelfUninstall(tenantId: string): Promise<Sel
     console.error(
       `[shopify-uninstall] tenant=${tenantId} shop=${shopDomain} refused: ${(err as Error)?.message}`,
     );
+    // Clear any marker a previous attempt left. A failed retry must not leave
+    // the merchant stuck on "waiting for Shopify" with nothing coming: the
+    // connection is live, the button has to work again, and the screens have
+    // to stop promising a transition that is not happening.
+    if (config[UNINSTALL_REQUESTED_AT]) {
+      const cleared = { ...config };
+      delete cleared[UNINSTALL_REQUESTED_AT];
+      await (prisma as any).tenantIntegration.update({
+        where: { id: row.id },
+        data: { config: cleared },
+      });
+    }
     return { ok: false, reason: "shopify_refused" };
   }
 
