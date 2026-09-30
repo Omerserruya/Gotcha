@@ -42,11 +42,9 @@ tier or paid status.
 Core, the communication channels and non-Shopify integrations keep working, and
 the merchant's data is untouched.
 
-**Pre-publication customers.** A small number of merchants who subscribed before
-publication may hold an explicit, auditable grandfather grant, consistent with
-the policy guidance Shopify Support previously confirmed. A grant is a recorded
-entitlement with a date and a reason; it is never inferred from acquisition
-source, installation date or plan.
+**No billing exemption is being requested.** Every Shopify-specific capability
+is paid for through Shopify App Pricing. This section describes the app as
+implemented and asks for nothing.
 
 *Context only: App Review submission 132211, and Shopify Support ticket
 69897769.*
@@ -57,6 +55,13 @@ source, installation date or plan.
 
 - Do **not** add a request for an exemption. None is being sought; this
   describes what the app does.
+- The paragraph about pre-publication grandfather grants was REMOVED on
+  2026-09-30. Production has grandfathering switched off
+  (`SHOPIFY_ALLOW_GRANDFATHERED=false`), an empty publication cutoff, zero
+  grants and zero grandfathered entitlements, so it described a mechanism that
+  does not operate. Describing a way merchants might hold Shopify access
+  without paying Shopify is the 1.2.1 finding restated, and it is not true of
+  this app. Do not put it back unless a grant actually exists.
 - Do **not** soften "does not provide Shopify connectivity". It is the single
   sentence that answers the 1.2.1 finding.
 - Keep the two paragraphs about what cannot grant access. They are the part a

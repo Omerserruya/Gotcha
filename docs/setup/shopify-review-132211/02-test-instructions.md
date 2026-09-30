@@ -12,14 +12,18 @@ application rather than inside the Shopify Admin iframe, so there is no App
 Bridge session token and no iframe storage to worry about. Signing in happens on
 GOTCHA's own domain in the usual way.
 
-Please use a **fresh Incognito window** so no existing session interferes.
+We suggest a fresh Incognito window so no existing session interferes.
 
 **Review account:** `<REVIEW_EMAIL>`. The password is supplied separately in the
 Partner Dashboard test-credentials field.
 
-The supplied review account opens a dedicated review workspace. At the start of
-review the workspace has no active Shopify store connection, so you can install
-and connect your own review store and see the whole flow from the beginning.
+The supplied review account opens the dedicated Shopify Review workspace. The
+workspace starts without an active Shopify store connection, allowing the
+reviewer to install and connect their own review store.
+
+The workspace is reusable and supports one active Shopify store at a time. It is
+not recreated for each review, so if you need to start over, disconnect the
+store from inside GOTCHA and install again.
 
 ---
 
