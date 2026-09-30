@@ -21,6 +21,20 @@ const loginStateSchema = z.object({
   s: z.string().min(1),
   /** Same-origin path to return to. Validated before use. */
   r: z.string().default('/'),
+  /*
+   * OpenID Connect `nonce`, matched against the ID Token's claim at exchange.
+   *
+   * ★ PKCE binds the CODE to this client; the nonce binds the ID TOKEN to
+   *   this sign-in. They are different objects and a stolen token replayed
+   *   into a fresh exchange is what the second one refuses.
+   *
+   * ⚠ OPTIONAL, AND DELIBERATELY SO. A cookie sealed by a build that did not
+   *   send a nonce must still complete — those sign-ins are in flight across
+   *   a deploy, and failing them would log people out for the length of a
+   *   restart. `openid-client` is symmetric here: no nonce sent means no
+   *   nonce claimed means none expected.
+   */
+  n: z.string().min(1).optional(),
 });
 
 export type LoginState = z.infer<typeof loginStateSchema>;

@@ -67,5 +67,6 @@ export {
   refreshTokenGrant,
   randomPKCECodeVerifier,
   randomState,
+  randomNonce,
   calculatePKCECodeChallenge,
 } from 'openid-client';

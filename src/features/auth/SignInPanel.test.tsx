@@ -513,8 +513,15 @@ describe('⚠⚠ telling the layout which screen is on', () => {
       </NextIntlClientProvider>,
     );
 
-    await screen.findByTestId('second-factor');
-    expect(onScreen).toHaveBeenCalledWith('secondFactor');
+    /*
+     * ⚠ WAITS ON THE CALLBACK, NOT ON THE DOM. The first version awaited
+     *   `findByTestId('second-factor')` and then asserted — which passed most
+     *   runs and failed about one in four. The element appears at the render
+     *   commit; `onScreen` is called from an effect, which is flushed after
+     *   it. Waiting on the markup is waiting on a PROXY for the thing being
+     *   asserted, and the two are not the same instant.
+     */
+    await waitFor(() => expect(onScreen).toHaveBeenCalledWith('secondFactor'));
   });
 
   it('★★ and reports sign-in on the identification stage', async () => {
@@ -532,8 +539,8 @@ describe('⚠⚠ telling the layout which screen is on', () => {
       </NextIntlClientProvider>,
     );
 
-    await screen.findByTestId('sign-in-form');
-    expect(onScreen).toHaveBeenCalledWith('signIn');
+    // Same reason as above: the effect, not the markup.
+    await waitFor(() => expect(onScreen).toHaveBeenCalledWith('signIn'));
     expect(onScreen).not.toHaveBeenCalledWith('secondFactor');
   });
 

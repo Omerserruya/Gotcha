@@ -9,6 +9,7 @@ import {
 } from '@/auth/login-state';
 import {
   buildAuthorizationUrl,
+  randomNonce,
   calculatePKCECodeChallenge,
   oidcConfiguration,
   randomPKCECodeVerifier,
@@ -96,6 +97,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const codeVerifier = randomPKCECodeVerifier();
   const codeChallenge = await calculatePKCECodeChallenge(codeVerifier);
   const state = randomState();
+  /*
+   * ═══════════════════════════════════════════════════════════════════════
+   * ★★ PKCE BINDS THE CODE. THE NONCE BINDS THE ID TOKEN. BOTH, NOT EITHER.
+   * ═══════════════════════════════════════════════════════════════════════
+   * This request carried `state` and a PKCE challenge and no nonce. PKCE
+   * proves the code is being redeemed by whoever asked for it; it says
+   * nothing about the ID TOKEN that comes back. The nonce is what ties that
+   * token to this particular sign-in, and `openid-client` will check it for
+   * us when we say what to expect.
+   */
+  const nonce = randomNonce();
 
   const authorizationUrl = buildAuthorizationUrl(await oidcConfiguration(), {
     redirect_uri: redirectUri(),
@@ -103,6 +115,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
     state,
+    nonce,
     ...(request.nextUrl.searchParams.get('login_hint')
       ? { login_hint: request.nextUrl.searchParams.get('login_hint') as string }
       : {}),
@@ -120,7 +133,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   response.headers.set('cache-control', 'no-store');
   response.cookies.set(
     LOGIN_STATE_COOKIE,
-    await sealLoginState({ v: codeVerifier, s: state, r: returnTo }),
+    await sealLoginState({ v: codeVerifier, s: state, r: returnTo, n: nonce }),
     {
       httpOnly: true,
       secure: !env.APP_ORIGIN.startsWith('http://'),

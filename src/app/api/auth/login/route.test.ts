@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+
+import { LOGIN_STATE_COOKIE } from '@/auth/login-state';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -34,12 +36,28 @@ vi.mock('@/config/env.server', () => ({ serverEnv }));
  * route chooses, and a test that could only reach one of them would be half a
  * test.
  */
+/*
+ * A spy rather than an arrow, so the authorize PARAMETERS can be asserted.
+ * What goes into this call is the security-relevant part — `state`, the PKCE
+ * challenge, and now the nonce — and a stub that discards them can only prove
+ * that a redirect happened.
+ */
+const buildAuthorizationUrl = vi.hoisted(() =>
+  /* The parameters are declared so `mock.calls[n][1]` is typed at all — an
+     untyped spy infers a zero-length tuple and the assertion cannot compile. */
+  vi.fn(
+    (_config: unknown, _parameters: Record<string, unknown>) =>
+      new URL('https://auth-dev.gotcha.co.il/application/o/authorize/'),
+  ),
+);
+
 vi.mock('@/auth/oidc', () => ({
   oidcConfiguration: async () => ({}),
-  buildAuthorizationUrl: () => new URL('https://auth-dev.gotcha.co.il/application/o/authorize/'),
+  buildAuthorizationUrl,
   calculatePKCECodeChallenge: async () => 'challenge',
   randomPKCECodeVerifier: () => 'verifier',
   randomState: () => 'state',
+  randomNonce: () => 'nonce',
   redirectUri: () => 'https://dev.gotcha.co.il/v2/api/auth/callback',
 }));
 
@@ -55,9 +73,16 @@ vi.mock('@/auth/oidc', () => ({
  *   `safeReturnPath` has to be the REAL one — one of the assertions below is
  *   that a hostile `returnTo` is still refused on this path.
  */
+/*
+ * A spy, so what goes INTO the seal can be asserted. The real one encrypts,
+ * and this file stubs it to a literal — so a round-trip proves nothing here,
+ * and the question is whether the nonce reaches the cookie at all.
+ */
+const sealLoginState = vi.hoisted(() => vi.fn(async () => 'sealed'));
+
 vi.mock('@/auth/login-state', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
-  return { ...actual, sealLoginState: async () => 'sealed' };
+  return { ...actual, sealLoginState };
 });
 
 const { GET, HANDOVER_PARAM } = await import('./route');
@@ -125,5 +150,40 @@ describe('⚠⚠ arriving at the OIDC start without going through the panel', ()
     // Its destination depends on deployment configuration and on a session.
     vi.stubEnv('SIGN_IN_URL', AUTH);
     expect((await get()).headers.get('cache-control')).toBe('no-store');
+  });
+});
+
+describe('⚠⚠ the nonce, which binds the ID token to this sign-in', () => {
+  /*
+   * ═══════════════════════════════════════════════════════════════════════
+   * PKCE BINDS THE CODE. THE NONCE BINDS THE TOKEN. THEY ARE DIFFERENT JOBS.
+   * ═══════════════════════════════════════════════════════════════════════
+   * This request carried `state` and a PKCE challenge and no nonce. PKCE
+   * proves the code is redeemed by whoever asked for it, and says nothing
+   * about the ID Token that comes back.
+   */
+  it('★★ is sent on the authorize request, alongside what was already right', async () => {
+    await get(`?${HANDOVER_PARAM}=1`);
+
+    const params = buildAuthorizationUrl.mock.calls.at(-1)![1];
+    expect(params.nonce).toBe('nonce');
+    expect(params.state).toBe('state');
+    expect(params.code_challenge).toBe('challenge');
+    expect(params.code_challenge_method).toBe('S256');
+  });
+
+  it('⚠⚠ and is sealed into the cookie, or the callback cannot check it', async () => {
+    /*
+     * Sending a nonce nobody remembers is WORSE than not sending one: the ID
+     * Token would carry a claim the exchange then refuses, and every sign-in
+     * would fail closed. The two halves have to ship together.
+     */
+    const response = await get(`?${HANDOVER_PARAM}=1`);
+    expect(response.cookies.get(LOGIN_STATE_COOKIE)?.value).toBeDefined();
+
+    // The same value that went to the provider, kept for the exchange.
+    expect(sealLoginState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ n: 'nonce', s: 'state', v: 'verifier' }),
+    );
   });
 });

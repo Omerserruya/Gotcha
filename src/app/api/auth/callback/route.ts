@@ -80,6 +80,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     tokens = await authorizationCodeGrant(await oidcConfiguration(), currentUrl, {
       pkceCodeVerifier: loginState.v,
       expectedState: loginState.s,
+      /*
+       * ⚠ PASSED ONLY WHEN THE SEALED STATE HAS ONE, AND THAT IS NOT LAZINESS.
+       *   `openid-client` is symmetric: `expectedNonce: undefined` means "the
+       *   ID Token must NOT carry a nonce". So a cookie from a build that did
+       *   not send one still completes, and a cookie that did send one is
+       *   checked. Passing an empty string, or always passing, would break one
+       *   of those two.
+       *
+       * ⚠ The rollback direction is the asymmetric one: an authorize from
+       *   THIS build landing on an older callback would be refused, because
+       *   the token carries a nonce that callback does not expect. It fails
+       *   closed — back to sign-in with `exchange_failed` — rather than
+       *   issuing a session, which is the correct direction to fail in.
+       */
+      ...(loginState.n ? { expectedNonce: loginState.n } : {}),
     });
   } catch (cause) {
     logger.error('auth.callback.exchange_failed', { cause });
