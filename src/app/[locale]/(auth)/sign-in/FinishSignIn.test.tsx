@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const completeAuthorization = vi.hoisted(() => vi.fn());
@@ -63,10 +63,23 @@ describe('⚠⚠ the last hop, without the provider drawing it', () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith(AUTHORIZE));
   });
 
-  it('★ renders nothing — it is a hop, not a screen', () => {
+  it('★ draws nothing — it is a hop, not a screen', () => {
+    /*
+     * ⚠ THIS ASSERTED AN EMPTY CONTAINER AND HAD TO BE RE-AIMED. The rule is
+     *   that nothing is DRAWN: it renders over a screen the person is already
+     *   looking at, and a spinner that appears and vanishes reads as a fault
+     *   rather than as progress.
+     *
+     *   "No DOM at all" was a proxy for that, and it held only while the
+     *   component had nothing to say. It now carries its outcome in
+     *   attributes — because a log did not arrive anywhere — and the proxy
+     *   failed on a correct component. Assert the rule.
+     */
     completeAuthorization.mockResolvedValue({ reason: 'stage', component: 'ak-stage-consent' });
-    const { container } = show();
-    expect(container).toBeEmptyDOMElement();
+    show();
+    const marker = screen.getByTestId('finish-sign-in');
+    expect(marker).not.toBeVisible();
+    expect(marker.textContent).toBe('');
   });
 
   it('⚠ uses replace, so the back button cannot land on a spent authorize URL', async () => {
@@ -105,5 +118,68 @@ describe('⚠⚠ the fallback says why, because it is invisible otherwise', () =
     await waitFor(() => expect(replace).toHaveBeenCalled());
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe('⚠⚠ it says what happened in the DOM, not only in a log', () => {
+  /*
+   * ═════════════════════════════════════════════════════════════════════
+   * THE LOG DID NOT ARRIVE, ANYWHERE
+   * ═════════════════════════════════════════════════════════════════════
+   * Not the browser console, not either container. So "it ran and gave up"
+   * and "it never ran" were indistinguishable — the same collapse the
+   * four-reason outcome had just fixed one level down.
+   *
+   * ★ A log must survive a level filter, a sink, a bundle boundary and a
+   *   navigation. An attribute survives none of those.
+   */
+  it('★★ records the reason and the component it was given', async () => {
+    completeAuthorization.mockResolvedValue({ reason: 'stage', component: 'ak-stage-consent' });
+
+    show();
+    const marker = await screen.findByTestId('finish-sign-in');
+    await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'gave-up'));
+    expect(marker).toHaveAttribute('data-reason', 'stage');
+    expect(marker).toHaveAttribute('data-component', 'ak-stage-consent');
+  });
+
+  it('★★ is FINDABLE before anything resolves, which `null` was not', async () => {
+    /*
+     * The distinction that mattered. A component rendering `null` leaves
+     * nothing to look at, so a harness cannot tell it mounted — only that the
+     * page was a different size.
+     */
+    let release!: (outcome: unknown) => void;
+    completeAuthorization.mockReturnValue(new Promise((resolve) => (release = resolve)));
+
+    show();
+    const marker = await screen.findByTestId('finish-sign-in');
+    expect(marker).toHaveAttribute('data-phase', 'working');
+    expect(marker).toHaveAttribute('data-reason', '');
+
+    release({ reason: 'threw' });
+    await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'gave-up'));
+  });
+
+  it('★ marks a success as done, not as gave-up', async () => {
+    completeAuthorization.mockResolvedValue({ to: `${CALLBACK}?code=abc&state=s` });
+    show();
+    const marker = await screen.findByTestId('finish-sign-in');
+    await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'done'));
+  });
+
+  it('⚠⚠ and `hold` stops before navigating, so the outcome can be read', async () => {
+    completeAuthorization.mockResolvedValue({ reason: 'no-flow' });
+
+    render(<FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />);
+    const marker = await screen.findByTestId('finish-sign-in');
+    await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'gave-up'));
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('⚠ while without it, it still navigates — hold is opt-in', async () => {
+    completeAuthorization.mockResolvedValue({ reason: 'no-flow' });
+    show();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(AUTHORIZE));
   });
 });

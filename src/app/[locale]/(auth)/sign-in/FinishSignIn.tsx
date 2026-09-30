@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
-import { completeAuthorization } from '@/api/client/flow-executor';
+import { completeAuthorization, type AuthorizationOutcome } from '@/api/client/flow-executor';
 import { followableCompletion } from '@/api/contracts/auth-flow';
 import { logger } from '@/observability/logger';
 
@@ -28,36 +28,62 @@ import { logger } from '@/observability/logger';
  *   fetches what it is handed with credentials and navigates to the answer is
  *   a confused deputy. `isAuthorizeEndpoint` is the check, and it runs where
  *   the expected endpoint is known.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ⚠⚠ AND IT WRITES ITS PROGRESS INTO THE DOM, BECAUSE A LOG DID NOT ARRIVE
+ * ════════════════════════════════════════════════════════════════════════════
+ * The first walk with this active produced **no line of ours anywhere** — not
+ * in the browser console, not in either container. So "it ran and gave up" and
+ * "it never ran" were indistinguishable, which is the same collapse the
+ * four-reason outcome had just fixed one level down.
+ *
+ * ★ A log has to survive a level filter, a sink, a bundle boundary and a
+ *   navigation. **An attribute on an element has to survive none of those**,
+ *   and the harness that measured this page's byte count can already read it.
+ *
+ * ★ `data-phase` is written before the navigation, so a harness watching the
+ *   DOM sees the outcome even though the page is about to leave.
  */
 export function FinishSignIn({
   authorizeUrl,
   callbackUrl,
+  hold = false,
 }: {
   readonly authorizeUrl: string;
   readonly callbackUrl: string;
+  /**
+   * Stop before navigating, so the outcome can be read rather than inferred
+   * from where the browser ended up.
+   *
+   * ⚠ Opt-in through a query parameter the person typed themselves. It cannot
+   *   be reached by accident, it exposes nothing, and its only effect is that
+   *   sign-in does not continue — which is recoverable by reloading without
+   *   it. It exists because the alternative is guessing.
+   */
+  readonly hold?: boolean;
 }) {
+  const [phase, setPhase] = useState<'working' | 'done' | 'gave-up'>('working');
+  const [outcome, setOutcome] = useState<AuthorizationOutcome | null>(null);
+
   useEffect(() => {
     let live = true;
 
-    void completeAuthorization(authorizeUrl).then((outcome) => {
+    void completeAuthorization(authorizeUrl).then((answer) => {
       if (!live) return;
+      setOutcome(answer);
 
-      /*
-       * ⚠⚠ SAY WHY, BECAUSE THE FALLBACK IS INVISIBLE BY DESIGN.
-       *   Landing on the provider's page is what happens when this works and
-       *   when it gives up — the first live walk fell back correctly and
-       *   nothing distinguished "the executor answered a consent stage" from
-       *   "the fetch never found a flow". One line makes the four outcomes
-       *   tellable apart in a walk, and it names no URL or token.
-       */
-      if (outcome.reason) {
+      if (answer.reason) {
         logger.warn('auth.finish.gave_up', {
-          reason: outcome.reason,
-          component: outcome.component,
+          reason: answer.reason,
+          component: answer.component,
         });
       }
 
-      const target = outcome.to ? followableCompletion(outcome.to, callbackUrl) : null;
+      const target = answer.to ? followableCompletion(answer.to, callbackUrl) : null;
+      setPhase(target ? 'done' : 'gave-up');
+
+      if (hold) return;
+
       /*
        * `replace`, not `assign`: this page is a hop, not a destination. Left
        * in history, the browser's back button from the inbox would land on a
@@ -69,13 +95,21 @@ export function FinishSignIn({
     return () => {
       live = false;
     };
-  }, [authorizeUrl, callbackUrl]);
+  }, [authorizeUrl, callbackUrl, hold]);
 
   /*
-   * Deliberately nothing. This renders for the length of two fetches on a
-   * screen the person is already looking at — the sign-in panel's own frame
-   * is still around it — and a spinner that appears and vanishes reads as a
-   * fault rather than as progress.
+   * An empty element rather than `null`. It renders for the length of two
+   * fetches on a screen the person is already looking at, so it must not draw
+   * anything — a spinner that appears and vanishes reads as a fault rather
+   * than as progress — but it must be FINDABLE, which `null` is not.
    */
-  return null;
+  return (
+    <div
+      hidden
+      data-testid="finish-sign-in"
+      data-phase={phase}
+      data-reason={outcome?.reason ?? ''}
+      data-component={outcome?.component ?? ''}
+    />
+  );
 }

@@ -243,7 +243,7 @@ export async function submitStage(
  *          browser may be sent. See `followableCompletion`.
  */
 export type AuthorizationOutcome =
-  | { readonly to: string; readonly reason?: undefined }
+  | { readonly to: string; readonly reason?: undefined; readonly component?: undefined }
   | {
       readonly to?: undefined;
       /** Which step gave up. Named so a walk can distinguish them. */

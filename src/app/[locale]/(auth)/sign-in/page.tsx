@@ -68,9 +68,14 @@ function Figures({
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; returnTo?: string; authorize?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    returnTo?: string;
+    authorize?: string;
+    finishHold?: string;
+  }>;
 }) {
-  const { error, returnTo, authorize } = await searchParams;
+  const { error, returnTo, authorize, finishHold } = await searchParams;
   const locale = await getLocale();
   const t = await getTranslations('auth');
   /*
@@ -185,9 +190,16 @@ export default async function SignInPage({
   if (finishing) {
     return (
       <div className={styles.frame}>
+        {/*
+          ⚠ `?finishHold=1` stops before the navigation so the outcome can be
+            READ rather than inferred from where the browser ended up. The
+            first walk produced no line of ours anywhere, and "ran and gave
+            up" was indistinguishable from "never ran".
+        */}
         <FinishSignIn
           authorizeUrl={finishing}
           callbackUrl={appUrl('/api/auth/callback', serverEnv().APP_ORIGIN)}
+          hold={finishHold === '1'}
         />
       </div>
     );
