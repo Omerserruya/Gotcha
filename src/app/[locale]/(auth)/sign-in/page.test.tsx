@@ -33,18 +33,28 @@ vi.mock('@/config/env.server', () => ({ serverEnv }));
  * compares the `?authorize=` parameter against it — so the value here IS the
  * thing under test, and hardcoding the check instead would assert nothing.
  */
-vi.mock('@/auth/oidc', () => ({
-  oidcConfiguration: async () => ({
-    serverMetadata: () => ({
-      authorization_endpoint: 'https://auth-dev.gotcha.co.il/application/o/authorize/',
+vi.mock('@/auth/oidc', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    /*
+     * ★ `productCallbackUrl` is the REAL one. It is the thing that decides
+     *   which callback the hop compares against, and a stub here would assert
+     *   that the page calls something rather than that it gets the right
+     *   answer — which is exactly how the wrong callback got shipped.
+     */
+    ...actual,
+    oidcConfiguration: async () => ({
+      serverMetadata: () => ({
+        authorization_endpoint: 'https://auth-dev.gotcha.co.il/application/o/authorize/',
+      }),
     }),
-  }),
-}));
+  };
+});
 
 /* The hop is tested on its own; here it only has to be identifiable. */
 vi.mock('./FinishSignIn', () => ({
-  FinishSignIn: ({ authorizeUrl }: { authorizeUrl: string }) => (
-    <div data-testid="finishing" data-authorize={authorizeUrl} />
+  FinishSignIn: ({ authorizeUrl, callbackUrl }: { authorizeUrl: string; callbackUrl: string }) => (
+    <div data-testid="finishing" data-authorize={authorizeUrl} data-callback={callbackUrl} />
   ),
 }));
 
@@ -355,5 +365,62 @@ describe('★★ the hand-over now asks the route to finish at the panel', () =>
 
     expect(params.get('returnTo')).toBe('/inbox?conversation=abc123');
     expect(params.get('finish')).toBe('1');
+  });
+});
+
+describe('⚠⚠ which callback the hop is told to expect', () => {
+  it('⚠⚠ is the PRODUCT’s, not this origin’s', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE BUG THAT MADE THE HOP GIVE UP, AND IT WAS IN THE EXPECTATION
+     * ════════════════════════════════════════════════════════════════════════
+     * This page passed `appUrl('/api/auth/callback', APP_ORIGIN)`. On the
+     * sign-in deployment `APP_ORIGIN` is the SIGN-IN host, so the provider's
+     * completion — which points at the product — was compared against a URL
+     * on the wrong origin and correctly refused.
+     *
+     * ★ The guard did exactly its job. The expectation it was handed was
+     *   wrong, and the same expression is right on the other container, which
+     *   is why nothing looked suspicious.
+     */
+    serverEnv.mockReturnValue({
+      PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login',
+      APP_ORIGIN: 'https://auth-dev.gotcha.co.il',
+    });
+
+    const { container } = render(
+      await SignInPage({
+        searchParams: Promise.resolve({
+          authorize: 'https://auth-dev.gotcha.co.il/application/o/authorize/?state=s',
+        }),
+      }),
+    );
+    expect(container.querySelector('[data-testid="finishing"]')).toHaveAttribute(
+      'data-callback',
+      'https://dev.gotcha.co.il/v2/api/auth/callback',
+    );
+  });
+
+  it('★ and falls back to this origin when there is no product elsewhere', async () => {
+    // Single-origin deployment: APP_ORIGIN is the product, and is correct.
+    serverEnv.mockReturnValue({ APP_ORIGIN: 'https://dev.gotcha.co.il/v2' });
+
+    const { container } = render(
+      await SignInPage({
+        searchParams: Promise.resolve({
+          authorize: 'https://auth-dev.gotcha.co.il/application/o/authorize/?state=s',
+        }),
+      }),
+    );
+    /*
+     * ⚠ Asserted as origin + path rather than a literal: `appUrl` re-applies
+     *   the configured base path, which is `/v2` in production and empty in
+     *   this environment. A literal here would be asserting the test setup.
+     */
+    const callback = new URL(
+      container.querySelector('[data-testid="finishing"]')?.getAttribute('data-callback') ?? '',
+    );
+    expect(callback.origin).toBe('https://dev.gotcha.co.il');
+    expect(callback.pathname.endsWith('/api/auth/callback')).toBe(true);
   });
 });

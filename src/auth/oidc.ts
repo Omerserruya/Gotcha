@@ -56,6 +56,48 @@ export function oidcConfiguration(): Promise<oidc.Configuration> {
  * `appUrl` rebuilds the path from `BASE_PATH`, so the result no longer depends
  * on whether whoever set `APP_ORIGIN` happened to include the prefix.
  */
+/**
+ * The callback the PROVIDER was told to send people to, as seen from a
+ * deployment that is not the product.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ⚠⚠ `redirectUri()` IS WRONG ON THE SIGN-IN ORIGIN, AND SILENTLY
+ * ═══════════════════════════════════════════════════════════════════════════
+ * It reads `APP_ORIGIN`, which on the product deployment is the product and
+ * on the sign-in deployment is **the sign-in host**. The same expression
+ * therefore names two different URLs depending on which container evaluates
+ * it — and the one that matters is the product's, because that is what the
+ * provider redirects to and what it was registered with.
+ *
+ * ★ Measured 2026-09-30: the finishing hop compared the provider's completion
+ *   against `redirectUri()` evaluated on the SIGN-IN origin, so a correct
+ *   `to` pointing at `https://dev…/v2/api/auth/callback` was refused for not
+ *   matching `https://auth-dev…/api/auth/callback`. The guard did exactly its
+ *   job; the expectation it was given was wrong.
+ *
+ * ★ `PRODUCT_LOGIN_URL` is configured on the sign-in deployment for precisely
+ *   this reason — it is how that container knows where the product is. The
+ *   callback is its sibling, so it is derived rather than composed from an
+ *   origin this container cannot know.
+ *
+ * @returns the product's callback, or `null` when the URL is not the expected
+ *          `…/api/auth/login` shape — never a guess.
+ */
+export function productCallbackUrl(productLoginUrl: string | undefined): string | null {
+  if (!productLoginUrl) return null;
+  let url: URL;
+  try {
+    url = new URL(productLoginUrl);
+  } catch {
+    return null;
+  }
+  if (!url.pathname.endsWith('/login')) return null;
+  url.pathname = `${url.pathname.slice(0, -'/login'.length)}/callback`;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
 export function redirectUri(): string {
   return appUrl('/api/auth/callback', serverEnv().APP_ORIGIN);
 }

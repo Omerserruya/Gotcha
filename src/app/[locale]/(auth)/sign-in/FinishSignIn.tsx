@@ -64,6 +64,12 @@ export function FinishSignIn({
 }) {
   const [phase, setPhase] = useState<'working' | 'done' | 'gave-up'>('working');
   const [outcome, setOutcome] = useState<AuthorizationOutcome | null>(null);
+  /*
+   * Separate from `outcome.reason`, because the fifth give-up is decided HERE
+   * rather than inside `completeAuthorization` — it is about our callback, a
+   * fact that function is deliberately not given.
+   */
+  const [giveUp, setGiveUp] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let live = true;
@@ -72,15 +78,27 @@ export function FinishSignIn({
       if (!live) return;
       setOutcome(answer);
 
-      if (answer.reason) {
-        logger.warn('auth.finish.gave_up', {
-          reason: answer.reason,
-          component: answer.component,
-        });
-      }
-
+      /*
+       * ══════════════════════════════════════════════════════════════════
+       * ⚠⚠ THE FIFTH GIVE-UP, WHICH THE FIRST WALK REPORTED AS `reason: ""`
+       * ══════════════════════════════════════════════════════════════════
+       * `completeAuthorization` SUCCEEDING and `followableCompletion` refusing
+       * its answer is a fifth outcome, and it had no name: `answer.reason` is
+       * undefined on the success branch, so the attribute rendered empty while
+       * the phase said `gave-up`.
+       *
+       * ★ That is the same collapse as the four nulls, one level up, in code
+       *   written to fix it. A give-up must always say which give-up.
+       */
       const target = answer.to ? followableCompletion(answer.to, callbackUrl) : null;
+      const gaveUp = answer.reason ?? (answer.to && !target ? 'not-our-callback' : undefined);
+
       setPhase(target ? 'done' : 'gave-up');
+      setGiveUp(gaveUp);
+
+      if (gaveUp) {
+        logger.warn('auth.finish.gave_up', { reason: gaveUp, component: answer.component });
+      }
 
       if (hold) return;
 
@@ -108,7 +126,7 @@ export function FinishSignIn({
       hidden
       data-testid="finish-sign-in"
       data-phase={phase}
-      data-reason={outcome?.reason ?? ''}
+      data-reason={giveUp ?? ''}
       data-component={outcome?.component ?? ''}
     />
   );

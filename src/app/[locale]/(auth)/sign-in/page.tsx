@@ -3,7 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { SignInScreen } from './SignInScreen';
 import { FinishSignIn } from './FinishSignIn';
 import { isAuthorizeEndpoint } from '@/api/contracts/auth-flow';
-import { oidcConfiguration } from '@/auth/oidc';
+import { oidcConfiguration, productCallbackUrl } from '@/auth/oidc';
 import { appUrl } from '@/lib/base-path';
 import { Logo } from '@/design-system/brand/Logo';
 import { Text } from '@/design-system/primitives/text/Text';
@@ -198,7 +198,19 @@ export default async function SignInPage({
         */}
         <FinishSignIn
           authorizeUrl={finishing}
-          callbackUrl={appUrl('/api/auth/callback', serverEnv().APP_ORIGIN)}
+          /*
+            ⚠⚠ THE PRODUCT'S CALLBACK, NOT THIS ORIGIN'S.
+            `appUrl('/api/auth/callback', APP_ORIGIN)` was here and it is wrong
+            on exactly this page: `APP_ORIGIN` is the SIGN-IN host here, so the
+            provider's completion — which points at the product — was compared
+            against a URL on the wrong origin and correctly refused.
+            `PRODUCT_LOGIN_URL` is configured here precisely because this
+            container has to know where the product is.
+          */
+          callbackUrl={
+            productCallbackUrl(serverEnv().PRODUCT_LOGIN_URL) ??
+            appUrl('/api/auth/callback', serverEnv().APP_ORIGIN)
+          }
           hold={finishHold === '1'}
         />
       </div>

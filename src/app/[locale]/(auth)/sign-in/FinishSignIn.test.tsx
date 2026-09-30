@@ -183,3 +183,59 @@ describe('⚠⚠ it says what happened in the DOM, not only in a log', () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith(AUTHORIZE));
   });
 });
+
+describe('⚠⚠ the give-up that had no name', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * MEASURED: phase "gave-up", reason ""
+   * ════════════════════════════════════════════════════════════════════════
+   * `completeAuthorization` SUCCEEDING and `followableCompletion` refusing its
+   * answer is a fifth outcome. `answer.reason` is undefined on the success
+   * branch, so the attribute rendered empty while the phase said gave-up —
+   * the same collapse as the four nulls, one level up, in the code written to
+   * fix it.
+   */
+  it('★★ names it when the completion is not our callback', async () => {
+    completeAuthorization.mockResolvedValue({
+      to: 'https://auth-dev.gotcha.co.il/api/auth/callback?code=abc&state=s',
+    });
+
+    show();
+    const marker = await screen.findByTestId('finish-sign-in');
+    await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'gave-up'));
+    expect(marker).toHaveAttribute('data-reason', 'not-our-callback');
+  });
+
+  it('⚠⚠ so a gave-up is NEVER nameless, whichever branch produced it', async () => {
+    /*
+     * ★ The general property, asserted as a property rather than case by case.
+     *   A sixth branch added later must not be able to report `""` — which is
+     *   exactly how the fifth arrived.
+     */
+    for (const answer of [
+      { reason: 'no-flow' },
+      { reason: 'executor-refused' },
+      { reason: 'stage', component: 'ak-stage-consent' },
+      { reason: 'threw' },
+      { to: 'https://evil.example/v2/api/auth/callback?code=a&state=b' },
+      { to: '/' },
+    ]) {
+      completeAuthorization.mockResolvedValue(answer);
+      const { unmount } = render(
+        <FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />,
+      );
+      const marker = await screen.findByTestId('finish-sign-in');
+      await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'gave-up'));
+      expect(marker.getAttribute('data-reason'), JSON.stringify(answer)).not.toBe('');
+      unmount();
+    }
+  });
+
+  it('★ and a success still reports no reason at all', async () => {
+    completeAuthorization.mockResolvedValue({ to: `${CALLBACK}?code=abc&state=s` });
+    show();
+    const marker = await screen.findByTestId('finish-sign-in');
+    await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'done'));
+    expect(marker).toHaveAttribute('data-reason', '');
+  });
+});
