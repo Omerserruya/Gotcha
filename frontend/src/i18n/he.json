@@ -3050,7 +3050,8 @@
       "toolsLocked": "כלי Shopify אינם זמינים עד שמחבר Shopify יהיה פעיל",
       "toolsLockedCount": "0 מתוך {total} זמינים",
       "writebackUnavailable": "לא זמין עד שמחבר Shopify יהיה פעיל",
-      "featureLocked": "דורש מחבר Shopify"
+      "featureLocked": "דורש מחבר Shopify",
+      "disconnected": "מנותק"
     }
   },
   "usage": {

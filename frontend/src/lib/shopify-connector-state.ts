@@ -374,6 +374,22 @@ export function presentShopifyFeatureAccess(
   snapshot: ShopifyBillingSnapshot | null,
   opts: { integrationConnected: boolean },
 ): ShopifyFeatureAccess {
+  // `grantsAccess` answers "is it paid", which is not the same question as "is
+  // it connected". A merchant who disconnects Shopify inside GOTCHA has removed
+  // the credentials; whether a subscription is still live somewhere does not
+  // make the features work, and showing them as on would be the same false
+  // claim from the other direction. So a disconnected integration closes the
+  // gate no matter what billing says.
+  if (slug === "shopify" && !opts.integrationConnected) {
+    return {
+      applies: true,
+      authorized: false,
+      grantsAccess: false,
+      installationLabelKey: `${FK}.disconnected`,
+      showConnectorRequired: false,
+      featuresEnabled: false,
+    };
+  }
   const neutral: ShopifyFeatureAccess = {
     applies: false,
     authorized: opts.integrationConnected,

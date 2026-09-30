@@ -3049,7 +3049,8 @@
       "toolsLocked": "Shopify tools unavailable until the Connector is active",
       "toolsLockedCount": "0 of {total} available",
       "writebackUnavailable": "Unavailable until the Connector is active",
-      "featureLocked": "Requires the Shopify Connector"
+      "featureLocked": "Requires the Shopify Connector",
+      "disconnected": "Disconnected"
     }
   },
   "usage": {

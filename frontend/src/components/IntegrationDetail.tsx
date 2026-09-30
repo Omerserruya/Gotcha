@@ -27,6 +27,7 @@ import { AirtableMappingCard } from "@/components/integrations/AirtableMappingCa
 import clsx from "clsx";
 import { beginConnect, connectHelpText, connectButtonLabel, connectErrorMessage } from "@/lib/shopify-connect";
 import { getPendingShopifyInstall, getShopifyInstallAvailability } from "@/lib/api";
+import { notifyIntegrationsChanged } from "@/lib/integration-events";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -383,6 +384,8 @@ export function IntegrationDetail({
     setDisconnecting(true);
     try {
       await disconnectIntegration(token, slug);
+      // Other screens show this connection; tell them it changed.
+      notifyIntegrationsChanged();
       await load();
     } catch {
       // ignore

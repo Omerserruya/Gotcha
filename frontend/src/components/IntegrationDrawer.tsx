@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import clsx from "clsx";
 import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
+import { notifyIntegrationsChanged } from "@/lib/integration-events";
 
 // ─── Constants ─────────────────────────────────────────────
 const RISK_BADGE: Record<string, string> = {
