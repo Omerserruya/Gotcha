@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 
 import { completeAuthorization } from '@/api/client/flow-executor';
 import { followableCompletion } from '@/api/contracts/auth-flow';
+import { logger } from '@/observability/logger';
 
 /**
  * The last hop of sign-in, done with two fetches instead of a rendered page.
@@ -38,9 +39,25 @@ export function FinishSignIn({
   useEffect(() => {
     let live = true;
 
-    void completeAuthorization(authorizeUrl).then((to) => {
+    void completeAuthorization(authorizeUrl).then((outcome) => {
       if (!live) return;
-      const target = to ? followableCompletion(to, callbackUrl) : null;
+
+      /*
+       * ⚠⚠ SAY WHY, BECAUSE THE FALLBACK IS INVISIBLE BY DESIGN.
+       *   Landing on the provider's page is what happens when this works and
+       *   when it gives up — the first live walk fell back correctly and
+       *   nothing distinguished "the executor answered a consent stage" from
+       *   "the fetch never found a flow". One line makes the four outcomes
+       *   tellable apart in a walk, and it names no URL or token.
+       */
+      if (outcome.reason) {
+        logger.warn('auth.finish.gave_up', {
+          reason: outcome.reason,
+          component: outcome.component,
+        });
+      }
+
+      const target = outcome.to ? followableCompletion(outcome.to, callbackUrl) : null;
       /*
        * `replace`, not `assign`: this page is a hop, not a destination. Left
        * in history, the browser's back button from the inbox would land on a

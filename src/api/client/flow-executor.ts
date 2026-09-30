@@ -231,10 +231,28 @@ export async function submitStage(
  *   rather than a redirect — which is not an error here, it is `null`, and
  *   the caller hands over exactly as it does for anything else it cannot use.
  *
- * @returns the completion's `to`, unvalidated — the caller decides whether it
- *          is somewhere a browser may be sent. See `followableCompletion`.
+ * ⚠⚠ IT REPORTS WHY IT FAILED, AND THE FIRST VERSION DID NOT. Four different
+ *    outcomes returned `null`: no slug, a non-OK executor, a stage instead of
+ *    a redirect, and a thrown fetch. On the first live walk the hop fell back
+ *    correctly and **there was no way to tell which of the four had happened**
+ *    — empty, absent and literal collapsed into one nothing, on the one path
+ *    a walk cannot otherwise see into.
+ *
+ * @returns `{ to }` on success, or `{ reason }` naming which step gave up.
+ *          `to` is UNVALIDATED — the caller decides whether it is somewhere a
+ *          browser may be sent. See `followableCompletion`.
  */
-export async function completeAuthorization(authorizeUrl: string): Promise<string | null> {
+export type AuthorizationOutcome =
+  | { readonly to: string; readonly reason?: undefined }
+  | {
+      readonly to?: undefined;
+      /** Which step gave up. Named so a walk can distinguish them. */
+      readonly reason: 'no-flow' | 'executor-refused' | 'stage' | 'threw';
+      /** The component the executor answered with, when it answered one. */
+      readonly component?: string;
+    };
+
+export async function completeAuthorization(authorizeUrl: string): Promise<AuthorizationOutcome> {
   try {
     /*
      * `credentials: 'include'`, not `same-origin`: the authorize endpoint is
@@ -251,22 +269,32 @@ export async function completeAuthorization(authorizeUrl: string): Promise<strin
      */
     const landed = new URL(planned.url);
     const slug = /\/if\/flow\/([a-z0-9][a-z0-9-]{0,63})\/?$/.exec(landed.pathname)?.[1];
-    if (!slug) return null;
+    if (!slug) return { reason: 'no-flow' };
 
     const answer = await fetch(
       `${executorUrl(slug)}?query=${encodeURIComponent(landed.search.replace(/^\?/, ''))}`,
       { credentials: 'include', headers: { Accept: 'application/json' } },
     );
-    if (!answer.ok) return null;
+    if (!answer.ok) return { reason: 'executor-refused' };
 
     const step = readChallenge(await answer.json());
-    return step.kind === 'done' ? step.idpPath : null;
+    if (step.kind === 'done') return { to: step.idpPath };
+
+    /*
+     * ⚠ A STAGE, NOT A REDIRECT. The most likely one here is consent: this
+     *   deployment's flow is `…-explicit-consent`, and an account without a
+     *   standing grant is asked. That is not a defect in this function — it
+     *   is a screen we do not render — but it is the difference between
+     *   "the mechanism is broken" and "the mechanism worked and the flow
+     *   wants something", and the first walk could not tell them apart.
+     */
+    return { reason: 'stage', component: step.kind === 'handOver' ? step.because : step.kind };
   } catch {
     /*
      * Never throws. This runs on a screen where somebody has just finished
      * signing in; an exception here would surface as a crash at the last
      * moment instead of a hand-over that completes.
      */
-    return null;
+    return { reason: 'threw' };
   }
 }

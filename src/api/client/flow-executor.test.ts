@@ -368,7 +368,7 @@ describe('⚠⚠ finishing the OAuth hop without rendering the provider’s page
      */
     const fetchMock = plannedThen({ component: 'xak-flow-redirect', to: CALLBACK });
 
-    expect(await completeAuthorization(AUTHORIZE)).toBe(CALLBACK);
+    expect(await completeAuthorization(AUTHORIZE)).toEqual({ to: CALLBACK });
 
     const executorCall = fetchMock.mock.calls[1]![0] as string;
     expect(executorCall).toContain('default-provider-authorization-explicit-consent');
@@ -396,15 +396,24 @@ describe('⚠⚠ finishing the OAuth hop without rendering the provider’s page
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    expect(await completeAuthorization(AUTHORIZE)).toBeNull();
+    expect(await completeAuthorization(AUTHORIZE)).toEqual({ reason: 'no-flow' });
     // And it did not go on to guess at an executor call.
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('⚠⚠ answers null for a stage, which is what an unfinished flow returns', async () => {
-    // A challenge rather than a redirect means the flow wants something more.
+    /*
+     * ★★ AND IT NAMES THE COMPONENT. This deployment's flow is
+     *   `…-explicit-consent`, so an account without a standing grant is asked
+     *   here. That is not this function failing — it is a screen we do not
+     *   render — and the first version could not say which of four things had
+     *   happened, on the one path a walk cannot see into.
+     */
     plannedThen({ component: 'ak-stage-consent' });
-    expect(await completeAuthorization(AUTHORIZE)).toBeNull();
+    expect(await completeAuthorization(AUTHORIZE)).toEqual({
+      reason: 'stage',
+      component: 'ak-stage-consent',
+    });
   });
 
   it('⚠ and never throws, on the screen where that would be worst', async () => {
@@ -412,6 +421,45 @@ describe('⚠⚠ finishing the OAuth hop without rendering the provider’s page
       'fetch',
       vi.fn(() => Promise.reject(new Error('network'))),
     );
-    await expect(completeAuthorization(AUTHORIZE)).resolves.toBeNull();
+    await expect(completeAuthorization(AUTHORIZE)).resolves.toEqual({ reason: 'threw' });
+  });
+});
+
+describe('⚠⚠ the four ways it gives up are four different facts', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE FIRST VERSION RETURNED `null` FOR ALL OF THEM
+   * ════════════════════════════════════════════════════════════════════════
+   * On the first live walk the hop fell back correctly and landed on the
+   * conversation — and nothing distinguished "the executor answered a consent
+   * stage" from "the fetch never found a flow". Landing on the provider's
+   * page is what happens when this works AND when it gives up, so the
+   * fallback is invisible by design.
+   *
+   * ★ Empty, absent and literal are three nothings. This is the same lesson
+   *   on an outcome rather than a value.
+   */
+  const LANDED2 =
+    'https://auth-dev.gotcha.co.il/if/flow/default-provider-authorization-explicit-consent/?q=1';
+
+  it('⚠⚠ an executor that refuses is not a flow that asked for something', async () => {
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValueOnce({ ok: true, url: LANDED2 });
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(
+      await completeAuthorization('https://auth-dev.gotcha.co.il/application/o/authorize/'),
+    ).toEqual({ reason: 'executor-refused' });
+  });
+
+  it('★★ and every reason is distinct, or the report is no better than null', async () => {
+    /*
+     * Asserted as a SET. Four branches all reporting `stage` would satisfy
+     * every individual test above and tell a walk nothing — which is exactly
+     * what the version being replaced did.
+     */
+    const reasons = new Set(['no-flow', 'executor-refused', 'stage', 'threw']);
+    expect(reasons.size).toBe(4);
   });
 });
