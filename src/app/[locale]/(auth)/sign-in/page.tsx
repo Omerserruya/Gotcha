@@ -9,7 +9,7 @@ import { Logo } from '@/design-system/brand/Logo';
 import { Text } from '@/design-system/primitives/text/Text';
 import { appPath } from '@/lib/base-path';
 import { serverEnv } from '@/config/env.server';
-import { HANDOVER_PARAM } from '@/app/api/auth/login/route';
+import { FINISH_PARAM, HANDOVER_PARAM } from '@/app/api/auth/login/route';
 
 import styles from './SignIn.module.css';
 
@@ -138,7 +138,23 @@ export default async function SignInPage({
    * reason.
    */
   const loginBase = serverEnv().PRODUCT_LOGIN_URL ?? appPath('/api/auth/login');
-  const handOver = new URLSearchParams({ [HANDOVER_PARAM]: '1' });
+  /*
+   * ══════════════════════════════════════════════════════════════════════════
+   * ★★ `finish=1` IS THE PARAMETER THAT TURNS THE PROVIDER'S PAGE OFF
+   * ══════════════════════════════════════════════════════════════════════════
+   * Everything else for this was shipped inert and walked: eight documents,
+   * one Authentik page, identical to before. This line is the whole change in
+   * behaviour, which is why it is its own commit — it can be reverted without
+   * touching the machinery, and the machinery can be read without it.
+   *
+   * ★ It is sent ONLY on the panel's hand-over. The front door, an expiring
+   *   session and every other arrival at `/api/auth/login` are untouched: the
+   *   route only inverts its redirect when asked.
+   *
+   * ⚠ And the cost is real and was approved rather than assumed: ONE EXTRA
+   *   302 on every sign-in, in exchange for the provider never drawing a page.
+   */
+  const handOver = new URLSearchParams({ [HANDOVER_PARAM]: '1', [FINISH_PARAM]: '1' });
   if (returnTo) handOver.set('returnTo', returnTo);
   const loginHref = `${loginBase}?${handOver.toString()}`;
   const knownError = KNOWN_ERRORS.find((candidate) => candidate === error);

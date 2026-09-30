@@ -105,7 +105,7 @@ describe('⚠⚠ the hand-over target', () => {
   it('★ is a path on this host when nothing says otherwise', async () => {
     // Unset is the whole product today, and this asserts nothing changed.
     serverEnv.mockReturnValue({});
-    expect(await show()).toHaveAttribute('href', '/api/auth/login?handover=1');
+    expect(await show()).toHaveAttribute('href', '/api/auth/login?handover=1&finish=1');
   });
 
   it('⚠⚠ is the configured product URL when sign-in lives elsewhere', async () => {
@@ -114,7 +114,7 @@ describe('⚠⚠ the hand-over target', () => {
     });
     expect(await show()).toHaveAttribute(
       'href',
-      'https://dev.gotcha.co.il/v2/api/auth/login?handover=1',
+      'https://dev.gotcha.co.il/v2/api/auth/login?handover=1&finish=1',
     );
   });
 
@@ -128,13 +128,13 @@ describe('⚠⚠ the hand-over target', () => {
     serverEnv.mockReturnValue({});
     expect(await show({ returnTo: '/en/inbox?c=abc' })).toHaveAttribute(
       'href',
-      '/api/auth/login?handover=1&returnTo=%2Fen%2Finbox%3Fc%3Dabc',
+      '/api/auth/login?handover=1&finish=1&returnTo=%2Fen%2Finbox%3Fc%3Dabc',
     );
 
     serverEnv.mockReturnValue({ PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login' });
     expect(await show({ returnTo: '/en/inbox?c=abc' })).toHaveAttribute(
       'href',
-      'https://dev.gotcha.co.il/v2/api/auth/login?handover=1&returnTo=%2Fen%2Finbox%3Fc%3Dabc',
+      'https://dev.gotcha.co.il/v2/api/auth/login?handover=1&finish=1&returnTo=%2Fen%2Finbox%3Fc%3Dabc',
     );
   });
 
@@ -314,5 +314,46 @@ describe('⚠⚠ the authorize URL handed back by our own login route', () => {
     const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
     expect(container.querySelector('[data-testid="finishing"]')).toBeNull();
     expect(container.querySelector('[data-testid="hand-over"]')).not.toBeNull();
+  });
+});
+
+describe('★★ the hand-over now asks the route to finish at the panel', () => {
+  it('⚠⚠ carries finish=1 alongside the hand-over marker', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THIS PARAMETER IS THE ENTIRE BEHAVIOUR CHANGE
+     * ════════════════════════════════════════════════════════════════════════
+     * Everything else shipped inert and was walked: eight documents, one
+     * Authentik page, identical to before. Without this the machinery is
+     * unreachable; with it, the provider stops drawing a page.
+     */
+    serverEnv.mockReturnValue({
+      PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login',
+      APP_ORIGIN: 'https://dev.gotcha.co.il/v2',
+    });
+    const href = (await show())?.getAttribute('href') ?? '';
+    const params = new URL(href).searchParams;
+
+    expect(params.get('finish')).toBe('1');
+    // And it did not replace the marker it sits beside.
+    expect(params.get('handover')).toBe('1');
+  });
+
+  it('⚠⚠ and still carries returnTo, or the deep link dies at the new hop', async () => {
+    /*
+     * The extra redirect is one more place a deep link can be dropped. It was
+     * already asserted across the old hop; this is the same assertion against
+     * the new one.
+     */
+    serverEnv.mockReturnValue({
+      PRODUCT_LOGIN_URL: 'https://dev.gotcha.co.il/v2/api/auth/login',
+      APP_ORIGIN: 'https://dev.gotcha.co.il/v2',
+    });
+    const href =
+      (await show({ returnTo: '/inbox?conversation=abc123' }))?.getAttribute('href') ?? '';
+    const params = new URL(href).searchParams;
+
+    expect(params.get('returnTo')).toBe('/inbox?conversation=abc123');
+    expect(params.get('finish')).toBe('1');
   });
 });
