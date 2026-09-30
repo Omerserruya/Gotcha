@@ -41,6 +41,10 @@ import {
   disableChatForUninstalledShop,
 } from "../services/shopify-chat-install.service";
 import { notifyShopifyUninstalled } from "../services/shopify-billing-bridge.service";
+import {
+  removeTenantToolAssignments,
+  stripLiveConnectionClaims,
+} from "../services/connectors/integration-teardown";
 
 const router = Router();
 
@@ -156,22 +160,6 @@ async function alreadyProcessed(app: "chat" | "core", webhookId: string | null):
 // ═══ CHAT APP ════════════════════════════════════════════════
 
 
-/**
- * Strip the fields that assert a LIVE connection, keeping the historical ones.
- *
- * A disconnected integration still usefully records which store it was. It
- * must not go on claiming it is the elected system of record with a healthy
- * capability set, which is what left the Business systems screen contradicting
- * the integration card.
- */
-function stripLiveClaims(config: unknown): Record<string, any> {
-  const next = { ...((config ?? {}) as Record<string, any>) };
-  delete next.uninstallRequestedAt;
-  delete next.useAsCrm;
-  delete next.capabilityState;
-  delete next.catalogFacets;
-  return next;
-}
 
 const chat = Router();
 
@@ -382,11 +370,24 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
           // of truth with writeback on, beside a card already reading
           // Disconnected. `shopDomain` is KEPT: which store this was is
           // history worth having, and the screens label it disconnected.
-          config: stripLiveClaims(match.config),
+          config: stripLiveConnectionClaims(match.config),
           lastError: "The GOTCHA Shopify app was uninstalled from this store.",
         },
       }),
     );
+    // Tool assignments for a store that no longer exists. Shared with the
+    // in-product Disconnect route so the two paths cannot drift again, and
+    // idempotent so a duplicate webhook is safe.
+    const toolsRemoved = await withCrossTenantAccess(async () =>
+      removeTenantToolAssignments({ tenantId: match.tenantId, tenantIntegrationId: match.id }),
+    );
+    if (toolsRemoved.removed > 0) {
+      console.log(
+        `[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) ` +
+          `for tenant=${match.tenantId} after uninstall`,
+      );
+    }
+
     // The extension left with the app, so the storefront chat goes too.
     // Best-effort and ordered second: a chat-side failure must not leave the
     // commerce connection wrongly marked CONNECTED with a revoked token.
