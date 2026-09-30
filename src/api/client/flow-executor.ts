@@ -198,3 +198,75 @@ export async function submitStage(
   const step = await call({ method: 'POST', body: JSON.stringify(body) }, flow);
   return step ? { ok: true, step } : { ok: false };
 }
+
+/**
+ * Finish the OAuth hop without ever rendering the provider's page.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE SLUG IS THE WHOLE DIFFERENCE, AND IT IS WHY THIS EXISTS
+ * ════════════════════════════════════════════════════════════════════════════
+ * Started BY SLUG, as `startFlow()` does, a flow has no continuation and
+ * completes to the provider's root — `to: "/"`. Started through
+ * `/application/o/authorize/`, the plan carries the OAuth continuation and
+ * completes to **our callback with the code**.
+ *
+ * So `to` is not one field with two meanings. It is one field reporting where
+ * the flow it was given actually ends, and both answers are right about their
+ * own flow.
+ *
+ * ── THE THREE CALLS, AS MEASURED 2026-09-30 ──
+ *   1. the authorize URL is minted by our own login route — PKCE and state
+ *      are its secrets and this function never constructs one
+ *   2. `fetch(authorizeUrl)` answers a 302 the fetch FOLLOWS. The HTML of
+ *      `/if/flow/` comes back in the body and is simply never rendered —
+ *      no navigation, nothing displayed. `response.url` is how the slug and
+ *      the query are learned.
+ *   3. the executor for that slug, with the `/if/flow/` URL's query
+ *
+ * ⚠⚠ THE QUERY IS THE ONE FROM STEP 2, NOT FROM THE AUTHORIZE URL. They
+ *    differ, and this is the detail that would have been wrong by inference.
+ *
+ * ⚠ PRECONDITION: a completed sign-in, so a provider session exists. Without
+ *   one this lands on the authentication flow instead and answers a stage
+ *   rather than a redirect — which is not an error here, it is `null`, and
+ *   the caller hands over exactly as it does for anything else it cannot use.
+ *
+ * @returns the completion's `to`, unvalidated — the caller decides whether it
+ *          is somewhere a browser may be sent. See `followableCompletion`.
+ */
+export async function completeAuthorization(authorizeUrl: string): Promise<string | null> {
+  try {
+    /*
+     * `credentials: 'include'`, not `same-origin`: the authorize endpoint is
+     * on the provider's origin and the whole point is to carry the session
+     * cookie there. It is the same request the browser would make by
+     * navigating — we simply keep the answer instead of rendering it.
+     */
+    const planned = await fetch(authorizeUrl, { credentials: 'include' });
+
+    /*
+     * ⚠ `response.url` AFTER THE REDIRECTS, NOT THE URL WE ASKED FOR. That is
+     *   where the slug lives. If the fetch did not move, there is no plan to
+     *   drive and this is not the situation we are in.
+     */
+    const landed = new URL(planned.url);
+    const slug = /\/if\/flow\/([a-z0-9][a-z0-9-]{0,63})\/?$/.exec(landed.pathname)?.[1];
+    if (!slug) return null;
+
+    const answer = await fetch(
+      `${executorUrl(slug)}?query=${encodeURIComponent(landed.search.replace(/^\?/, ''))}`,
+      { credentials: 'include', headers: { Accept: 'application/json' } },
+    );
+    if (!answer.ok) return null;
+
+    const step = readChallenge(await answer.json());
+    return step.kind === 'done' ? step.idpPath : null;
+  } catch {
+    /*
+     * Never throws. This runs on a screen where somebody has just finished
+     * signing in; an exception here would surface as a crash at the last
+     * moment instead of a hand-over that completes.
+     */
+    return null;
+  }
+}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { startFlow, submitStage } from './flow-executor';
+import { startFlow, submitStage, completeAuthorization } from './flow-executor';
 
 /**
  * The module that carries the password.
@@ -338,5 +338,80 @@ describe('⚠⚠ nothing in this app intercepts fetch, because that would be in 
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('⚠⚠ finishing the OAuth hop without rendering the provider’s page', () => {
+  const AUTHORIZE = 'https://auth-dev.gotcha.co.il/application/o/authorize/?client_id=x&state=s';
+  const LANDED =
+    'https://auth-dev.gotcha.co.il/if/flow/default-provider-authorization-explicit-consent/?client_id=x&state=s&nonce=n';
+  const CALLBACK = 'https://dev.gotcha.co.il/v2/api/auth/callback?code=abc&state=s';
+
+  const plannedThen = (executorBody: unknown, ok = true) => {
+    const fetchMock = vi.fn();
+    // Step 2: the 302 is followed, and `url` is where it landed.
+    fetchMock.mockResolvedValueOnce({ ok: true, url: LANDED });
+    // Step 3: the executor for that slug.
+    fetchMock.mockResolvedValueOnce({ ok, json: async () => executorBody });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  };
+
+  it('★★ drives the executor for the slug it LANDED on, with that URL’s query', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * THE QUERY IS THE ONE FROM `/if/flow/`, NOT FROM THE AUTHORIZE URL
+     * ════════════════════════════════════════════════════════════════════════
+     * They differ — `nonce` is present on the landed URL and not on the one we
+     * asked for. This is the detail inference would have got wrong, so it is
+     * asserted on the exact string.
+     */
+    const fetchMock = plannedThen({ component: 'xak-flow-redirect', to: CALLBACK });
+
+    expect(await completeAuthorization(AUTHORIZE)).toBe(CALLBACK);
+
+    const executorCall = fetchMock.mock.calls[1]![0] as string;
+    expect(executorCall).toContain('default-provider-authorization-explicit-consent');
+    expect(executorCall).toContain(`query=${encodeURIComponent('client_id=x&state=s&nonce=n')}`);
+    expect(executorCall).not.toContain(encodeURIComponent('client_id=x&state=s&nonce=n&'));
+  });
+
+  it('⚠⚠ carries credentials to the provider, or there is no session to authorize', async () => {
+    const fetchMock = plannedThen({ component: 'xak-flow-redirect', to: CALLBACK });
+    await completeAuthorization(AUTHORIZE);
+
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ credentials: 'include' });
+    expect(fetchMock.mock.calls[1]![1]).toMatchObject({ credentials: 'include' });
+  });
+
+  it('⚠⚠ answers null when the fetch did not land on a flow at all', async () => {
+    /*
+     * The precondition is a completed sign-in. Without a provider session this
+     * lands somewhere else entirely — and that is not an error, it is "not the
+     * situation we are in". The caller hands over.
+     */
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      url: 'https://auth-dev.gotcha.co.il/flows/-/default/authentication/',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await completeAuthorization(AUTHORIZE)).toBeNull();
+    // And it did not go on to guess at an executor call.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('⚠⚠ answers null for a stage, which is what an unfinished flow returns', async () => {
+    // A challenge rather than a redirect means the flow wants something more.
+    plannedThen({ component: 'ak-stage-consent' });
+    expect(await completeAuthorization(AUTHORIZE)).toBeNull();
+  });
+
+  it('⚠ and never throws, on the screen where that would be worst', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('network'))),
+    );
+    await expect(completeAuthorization(AUTHORIZE)).resolves.toBeNull();
   });
 });
