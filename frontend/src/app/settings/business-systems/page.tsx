@@ -16,6 +16,7 @@ import ShopifyBillingBanner from "@/components/billing/ShopifyBillingBanner";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
 import { getSourceOfTruthStatus, getMarketplaceIntegrations } from "@/lib/api";
+import { useShopifyFeatureAccess } from "@/lib/useShopifyFeatureAccess";
 
 interface SotStatus {
   configured: boolean;
@@ -34,6 +35,17 @@ function SourceOfTruthStatusPanel() {
   const { token } = useAuth();
   const { t } = useI18n();
   const [status, setStatus] = useState<SotStatus | null>(null);
+
+  /**
+   * This strip reports the elected system's live capability, and the elected
+   * system can be Shopify. Electing it is not the same as paying for the
+   * Connector, so an unpaid workspace was shown "writeback: enabled" beside a
+   * banner saying Shopify was off. The gate below is the same one the
+   * integration screens read, so the two cannot disagree.
+   */
+  const shopifyAccess = useShopifyFeatureAccess("shopify", true);
+  const vendorIsShopify = (status?.vendor ?? "").toLowerCase() === "shopify";
+  const shopifyLocked = vendorIsShopify && shopifyAccess.applies && !shopifyAccess.featuresEnabled;
   const [rows, setRows] = useState<Array<{
     slug: string;
     tenantConnection?: { status?: string } | null;
@@ -70,15 +82,24 @@ function SourceOfTruthStatusPanel() {
         </div>
         <div>
           <span className="text-gray-500">{t("settings.businessSystems.writeback")}: </span>
-          <span className={status.writesEnabled ? "font-medium text-emerald-700" : "font-medium text-gray-500"}>
-            {status.writesEnabled ? t("settings.businessSystems.enabled") : t("settings.businessSystems.readOnly")}
+          <span
+            data-testid="sot-writeback"
+            className={status.writesEnabled && !shopifyLocked ? "font-medium text-emerald-700" : "font-medium text-gray-500"}
+          >
+            {shopifyLocked
+              ? t("marketplace.shopifyAccess.writebackUnavailable")
+              : status.writesEnabled
+                ? t("settings.businessSystems.enabled")
+                : t("settings.businessSystems.readOnly")}
           </span>
         </div>
         {toolInfo && (
           <div>
             <span className="text-gray-500">{t("settings.businessSystems.aiTools")}: </span>
             <span className="font-medium text-gray-900">
-              {t("settings.businessSystems.toolsEnabled").replace("{enabled}", String(toolInfo.enabled)).replace("{total}", String(toolInfo.total))}
+              {t("settings.businessSystems.toolsEnabled")
+                .replace("{enabled}", String(shopifyLocked ? 0 : toolInfo.enabled))
+                .replace("{total}", String(toolInfo.total))}
             </span>
             <Link
               href={`/ai-studio/marketplace/${toolInfo.slug}`}
