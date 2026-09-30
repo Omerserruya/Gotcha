@@ -7,6 +7,7 @@ import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../s
 import { maskPhone, maskEmail } from "../lib/mask";
 import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
 import { requestShopifySelfUninstall } from "../services/connectors/shopify-self-uninstall.service";
+import { removeTenantToolAssignments, stripLiveConnectionClaims } from "../services/connectors/integration-teardown";
 
 const router = Router();
 
@@ -613,10 +614,12 @@ router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Res
       return;
     }
 
-    // Explicitly delete tenant tools (cascade on TenantIntegration deletion handles this,
-    // but we delete them explicitly to be safe when only updating status)
-    await prisma.tenantTool.deleteMany({
-      where: { tenantId: req.tenantId!, tenantIntegrationId: tenantIntegration.id },
+    // Shared with the verified app/uninstalled webhook so the two teardown
+    // paths cannot drift. They already had: the webhook was not doing this,
+    // so a store uninstalled from Shopify Admin kept its tool assignments.
+    await removeTenantToolAssignments({
+      tenantId: req.tenantId!,
+      tenantIntegrationId: tenantIntegration.id,
     });
 
     // Clearing credentials is not enough. `config` carries claims about a
@@ -626,11 +629,7 @@ router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Res
     // shown as the active source of truth with writeback enabled, beside a
     // card that already read Disconnected. What the store WAS stays
     // (`shopDomain`); what it can currently DO does not.
-    const cfg = { ...((tenantIntegration.config ?? {}) as Record<string, any>) };
-    delete cfg.useAsCrm;
-    delete cfg.capabilityState;
-    delete cfg.catalogFacets;
-    delete cfg.uninstallRequestedAt;
+    const cfg = stripLiveConnectionClaims(tenantIntegration.config);
 
     const updated = await prisma.tenantIntegration.update({
       where: { id: tenantIntegration.id },
