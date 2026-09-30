@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "api:probe": "node --experimental-strip-types scripts/probe-contracts.ts",
-    "verify": "npm run typecheck && npm run lint && npm run lint:css && npm run format:check && npm run test"
+    "verify": "npm run typecheck && npm run lint && npm run lint:css && npm run lint:tokens && npm run format:check && npm run test",
+    "lint:tokens": "node scripts/check-tokens.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

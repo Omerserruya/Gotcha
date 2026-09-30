@@ -8,6 +8,8 @@ import {
   NONCE_HEADER,
 } from '@/observability/content-security-policy';
 
+import { PUBLIC_PATH_PATTERN } from './auth-surface';
+
 const intlMiddleware = createIntlMiddleware(routing);
 
 /**
@@ -22,7 +24,6 @@ const intlMiddleware = createIntlMiddleware(routing);
  * Getting this backwards is a classic mistake: an edge check that "protects" a
  * route while the route itself trusts it.
  */
-const PUBLIC_PATH_PATTERN = /^\/(?:[a-z]{2}\/)?(?:sign-in)(?:\/|$)/;
 
 export default function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;

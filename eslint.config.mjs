@@ -248,6 +248,19 @@ const eslintConfig = defineConfig([
   },
 
   {
+    /*
+     * Build-time checks that run in a terminal. `no-console` exists to keep
+     * stray logging out of the shipped bundle; a CLI whose entire output is
+     * its report is the case the rule is not about, and routing it through a
+     * logger would make a failing gate harder to read, not safer.
+     */
+    files: ['scripts/**/*.{mjs,js,ts}'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
+  {
     files: ['**/*.test.{ts,tsx}', 'e2e/**/*.ts'],
     rules: {
       /* A test that renders a bare `<a>` is asserting on the element, not
