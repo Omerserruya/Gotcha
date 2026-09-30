@@ -60,3 +60,47 @@ describe('⚠⚠ an error message is a string like any other', () => {
     expect(redact(new TypeError('boom'))).toEqual({ name: 'TypeError', message: 'boom' });
   });
 });
+
+describe('★★ the ruling: cap the message, keep the beginning', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * DECIDED 2026-09-30, AFTER BEING NAMED AS OPEN
+   * ════════════════════════════════════════════════════════════════════════
+   * Neither blind nor raw. An error reading `[redacted]` is useless; a whole
+   * response body must not reach a log sink. A cap satisfies both, and the
+   * beginning is where the cause is.
+   */
+  it('⚠⚠ keeps the START of a long message, not the end and not nothing', () => {
+    /*
+     * ★ THIS IS THE DIRECTION THAT MATTERS. A cap returning '' would pass
+     *   every "nothing leaked" assertion and make every log line useless —
+     *   a guard that holds by refusing to do its job.
+     */
+    const message = `DIAGNOSTIC-PREFIX ${'x'.repeat(4000)}`;
+    const capped = redact(new Error(message)) as { message: string };
+
+    expect(capped.message.startsWith('DIAGNOSTIC-PREFIX ')).toBe(true);
+    expect(capped.message.length).toBeGreaterThan(100);
+  });
+
+  it('⚠⚠ and still caps it, so a response body cannot ride out whole', () => {
+    const body = 'y'.repeat(20_000);
+    const capped = redact(new Error(body)) as { message: string };
+
+    expect(capped.message.length).toBeLessThan(600);
+    expect(capped.message).not.toContain('y'.repeat(1000));
+  });
+
+  it('★ a short message is untouched — the cap is a ceiling, not a transform', () => {
+    expect(redact(new Error('connect ECONNREFUSED 10.0.0.4:5432'))).toEqual({
+      name: 'Error',
+      message: 'connect ECONNREFUSED 10.0.0.4:5432',
+    });
+  });
+
+  it('⚠ while `message` as a FIELD is still blinded — the asymmetry is deliberate', () => {
+    // Two rules for one word. A future reader finding this inconsistent should
+    // read the note in `redact.ts` before making them agree.
+    expect(redact({ message: 'a customer said something' })).toEqual({ message: REDACTED });
+  });
+});

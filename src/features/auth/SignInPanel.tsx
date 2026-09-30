@@ -2,7 +2,7 @@
 
 import { Check, Eye, EyeOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   firstError,
@@ -174,6 +174,8 @@ export function SignInPanel({
     return probe.checkValidity();
   }, [email]);
   const [remember, setRemember] = useState(true);
+  /* Whether the held answer has already been posted. See the effect below. */
+  const answeredStayRef = useRef(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -210,6 +212,28 @@ export function SignInPanel({
    *   component's to know, and the composition root's to react to. Copy stays
    *   server-rendered on the other side of it.
    */
+  /*
+   * ═══════════════════════════════════════════════════════════════════════
+   * ★★ THE DESIGN HAS ONE SCREEN HERE; THE PROVIDER HAS TWO STAGES
+   * ═══════════════════════════════════════════════════════════════════════
+   * The checkbox is on 00a, so by the time `ak-stage-user-login` arrives the
+   * person has already answered it. Showing them a second screen to ask again
+   * is the flow's shape leaking into the design's.
+   *
+   * ⚠ ONCE. If the stage comes back — an error, a changed configuration —
+   *   the screen renders and they answer it themselves. An effect that
+   *   resubmits on every arrival is a loop on the last step of sign-in, and it
+   *   would look like a hang rather than like a failure.
+   */
+  useEffect(() => {
+    if (step?.kind !== 'staySignedIn' || answeredStayRef.current) return;
+    answeredStayRef.current = true;
+    void send(staySignedInBody(remember));
+    // `send` and `remember` are read at the moment the stage arrives, and
+    // re-running on their identity would defeat the once-only guard.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   useEffect(() => {
     if (!step) return;
     onScreen?.(step.kind === 'chooseFactor' ? 'secondFactor' : 'signIn');
@@ -574,6 +598,39 @@ export function SignInPanel({
       <Button type="submit" variant="primary" size="lg" fullWidth disabled={busy}>
         {busy ? t('signIn.working') : t('signIn.action')}
       </Button>
+
+      {/*
+        ═══════════════════════════════════════════════════════════════════
+        ★★ BELOW THE BUTTON, AS THE MOCK DRAWS IT — AND IT IS NOT DECORATIVE
+        ═══════════════════════════════════════════════════════════════════
+        00a, verbatim: `margin-top:12px; display:flex; align-items:center;
+        gap:9px; font-size:12px; color:#8C887F`, with a 15×15 box at
+        `border-radius:4px` — drawn CHECKED.
+
+        ★ The answer it collects is `remember_me` on `ak-stage-user-login`, a
+          field that stage REQUIRES: post an empty body and it replies "This
+          field is required." So this ticks a box that is actually sent.
+
+        ⚠ THE DESIGN'S LABEL SAYS "for 30 days" AND OURS DOES NOT. Whether
+          `false` shortens the session, and what the configured length is, are
+          Authentik settings nobody has read. A number here would be a promise
+          about session length that nothing in our codebase enforces — the
+          same rule that keeps a lockout count off the failed-password message.
+          Ruled on 2026-09-30: show the control, drop the number.
+
+        ⚠ AND IT IS CHECKED BY DEFAULT BECAUSE THE MOCK DRAWS IT CHECKED. That
+          is a real decision on a shared machine, not a styling detail, so it
+          is named here rather than left in a `useState(true)`.
+      */}
+      <label className={styles.remember}>
+        <input
+          type="checkbox"
+          checked={remember}
+          data-testid="remember-me"
+          onChange={(event) => setRemember(event.target.checked)}
+        />
+        {t('signIn.remember')}
+      </label>
     </form>
   );
 }

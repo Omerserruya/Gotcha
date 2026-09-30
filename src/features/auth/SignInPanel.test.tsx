@@ -642,3 +642,70 @@ describe('⚠⚠ where a completed flow sends the browser', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith(HANDOVER));
   });
 });
+
+describe('⚠⚠ "Keep me signed in" — on 00a, and it carries', () => {
+  it('★★ is on the sign-in form itself, where the mock draws it', async () => {
+    show();
+    await screen.findByTestId('sign-in-form');
+    const box = screen.getByTestId('remember-me');
+    expect(box).toBeInTheDocument();
+    // Drawn checked in the mock, so checked here — a real decision on a
+    // shared machine, not a styling detail.
+    expect(box).toBeChecked();
+  });
+
+  it('⚠⚠ never promises a duration, because nothing enforces one', async () => {
+    /*
+     * The design's label reads "…on this device for 30 days". Whether `false`
+     * shortens the session, and what the configured length is, are Authentik
+     * settings nobody has read. Ruled 2026-09-30: show the control, drop the
+     * number — the same rule that keeps a lockout count off the failed
+     * password message.
+     */
+    show();
+    await screen.findByTestId('sign-in-form');
+    const label = screen.getByTestId('remember-me').closest('label');
+    expect(label?.textContent ?? '').not.toMatch(/\d/);
+    expect(label?.textContent ?? '').not.toMatch(/day|week|month|30/i);
+  });
+
+  it('★★ and the answer completes the later stage without a second screen', async () => {
+    /*
+     * The design has one screen here; the provider has two stages. By the time
+     * `ak-stage-user-login` arrives the person has already answered, and
+     * asking again is the flow's shape leaking into the design's.
+     */
+    startFlow.mockResolvedValue(identify());
+    show();
+    await screen.findByTestId('sign-in-form');
+
+    await userEvent.click(screen.getByTestId('remember-me'));
+    expect(screen.getByTestId('remember-me')).not.toBeChecked();
+
+    submitStage.mockResolvedValue({ ok: true, step: staySignedIn() });
+    await userEvent.type(screen.getByTestId('email'), 'maya@avivco.il');
+    await userEvent.type(screen.getByTestId('password'), 'hunter2');
+    await userEvent.click(screen.getByRole('button', { name: /sign in|continue/i }));
+
+    // The held answer is posted, unticked, without the stage being drawn.
+    await waitFor(() =>
+      expect(submitStage).toHaveBeenLastCalledWith(expect.objectContaining({ remember_me: false })),
+    );
+  });
+
+  it('⚠⚠ and posts it ONCE, or the last step of sign-in loops', async () => {
+    /*
+     * An effect that resubmits on every arrival of the stage would spin on the
+     * final step — and it would look like a hang rather than like a failure,
+     * which is the worst way for this to break.
+     */
+    startFlow.mockResolvedValue(staySignedIn());
+    submitStage.mockResolvedValue({ ok: true, step: staySignedIn() });
+
+    show();
+    await waitFor(() => expect(submitStage).toHaveBeenCalledTimes(1));
+    // The stage came back; it must now be rendered rather than resubmitted.
+    expect(await screen.findByTestId('stay-signed-in')).toBeInTheDocument();
+    expect(submitStage).toHaveBeenCalledTimes(1);
+  });
+});

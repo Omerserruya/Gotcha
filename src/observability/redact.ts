@@ -43,18 +43,25 @@ export function redact(value: unknown, depth = 0): unknown {
      * `cause` is logged at 900+ call sites. It goes through the same handling
      * now — one rule for strings, not two.
      *
-     * ★ THE CONTENT IS STILL NOT REDACTED, AND THAT IS A DECISION THIS FILE
-     *   CONTRADICTS. `message` is in `SENSITIVE_KEY_PATTERN`, so `{ message }`
-     *   as a field becomes `[redacted]` while an `Error`'s message survives —
-     *   two rules for one word, both tested. The argument for keeping it is
-     *   that an error reading `[redacted]` is useless; the argument against is
-     *   this module's own stated principle, that it is cheaper to lose a field
-     *   than to leak one, and `error.tsx` records that in this product an
-     *   error message **can quote customer data**.
+     * ★★ THE CONTENT IS NOT REDACTED, AND THAT IS NOW A RULING RATHER THAN AN
+     *    OPEN QUESTION. Decided 2026-09-30: **cap it, keep the beginning.**
      *
-     *   Not resolved here, because blinding 900 call sites is a product
-     *   decision rather than a tidy-up. Named so that it is a choice somebody
-     *   can make rather than an inconsistency nobody noticed.
+     *   `message` is in `SENSITIVE_KEY_PATTERN`, so `{ message }` as a FIELD
+     *   becomes `[redacted]` while an `Error`'s message survives — two rules
+     *   for one word, both tested. That asymmetry stands on purpose. The
+     *   argument for keeping it was that an error reading `[redacted]` is
+     *   useless; the argument against was this module's own principle, that it
+     *   is cheaper to lose a field than to leak one, and `error.tsx` records
+     *   that in this product an error message **can quote customer data**.
+     *
+     * ★ The cap is what satisfies both: a whole response body cannot reach a
+     *   log sink, and the first 512 characters — which is where the cause is
+     *   — survive for whoever has to read it.
+     *
+     * ⚠ BOTH DIRECTIONS ARE ASSERTED, and the second is the one that matters.
+     *   A cap that deleted everything would pass "nothing leaked" perfectly
+     *   and make every log line useless. That is the shape of a guard that
+     *   holds by refusing to do its job.
      */
     return { name: value.name, message: redact(value.message, depth) };
   }
