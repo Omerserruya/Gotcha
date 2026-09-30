@@ -582,3 +582,63 @@ describe('⚠ the panel still hands over on a password-less identification stage
     expect(screen.queryByTestId('sign-in-form')).toBeNull();
   });
 });
+
+describe('⚠⚠ where a completed flow sends the browser', () => {
+  const CALLBACK = 'https://dev.gotcha.co.il/v2/api/auth/callback';
+
+  const withCallback = () =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel handOverHref={HANDOVER} recoverPath={RECOVER} callbackUrl={CALLBACK} />
+      </NextIntlClientProvider>,
+    );
+
+  it('⚠⚠ REFUSES the provider’s root, which is what a completed sign-in returns today', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * `to: "/"` IS AUTHENTIK'S ROOT, NOT OURS
+     * ════════════════════════════════════════════════════════════════════════
+     * Measured on the authentication flow. Following it lands somebody who has
+     * just signed in successfully on a stranger's home page — and it is
+     * same-origin, relative and harmless-looking, which is why a generic URL
+     * check would wave it through.
+     */
+    startFlow.mockResolvedValue({ kind: 'done', idpPath: '/' });
+    withCallback();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(HANDOVER));
+  });
+
+  it('★★ follows a completion that IS our callback, with a code', async () => {
+    const to = `${CALLBACK}?code=abc&state=xyz`;
+    startFlow.mockResolvedValue({ kind: 'done', idpPath: to });
+    withCallback();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(to));
+  });
+
+  it('⚠⚠ refuses a callback-shaped URL on somebody else’s origin', async () => {
+    startFlow.mockResolvedValue({
+      kind: 'done',
+      idpPath: 'https://evil.example/v2/api/auth/callback?code=abc&state=xyz',
+    });
+    withCallback();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(HANDOVER));
+  });
+
+  it('⚠⚠ and with no callback configured, behaves exactly as before', async () => {
+    /*
+     * The fallback is the point, not a safety net. Every path that is not a
+     * verified completion lands on `/api/auth/login` — which is what keeps the
+     * eight stage types we do not render working: an unrecognised component
+     * hands over to a page that COMPLETES, rather than hanging on a blank one.
+     */
+    startFlow.mockResolvedValue({ kind: 'done', idpPath: `${CALLBACK}?code=abc&state=xyz` });
+    show();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(HANDOVER));
+  });
+
+  it('⚠ an unknown component still hands over, callback configured or not', async () => {
+    startFlow.mockResolvedValue({ kind: 'handOver', because: 'ak-stage-consent' });
+    withCallback();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(HANDOVER));
+  });
+});

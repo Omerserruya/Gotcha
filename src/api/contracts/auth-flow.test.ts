@@ -12,6 +12,7 @@ import {
   validateBody,
   factorEntry,
   recoveryFlowSlug,
+  followableCompletion,
 } from './auth-flow';
 
 /**
@@ -493,5 +494,92 @@ describe('⚠⚠ the recovery flow names itself', () => {
     // Both directions: a validator that refused everything would satisfy the
     // test above and leave recovery unreachable.
     expect(recoveryFlowSlug(`/if/flow/${'a'.repeat(64)}/`)).toBe('a'.repeat(64));
+  });
+});
+
+describe('⚠⚠ a completed flow’s `to` — one field, two meanings', () => {
+  const CALLBACK = 'https://dev.gotcha.co.il/v2/api/auth/callback';
+
+  it('★★ follows the authorization flow’s completion, which is our callback', () => {
+    /*
+     * Measured 2026-09-30 on the authorization flow: `xak-flow-redirect` with
+     * `to` pointing at our own callback, carrying the code.
+     */
+    const to = `${CALLBACK}?code=abc&state=xyz`;
+    expect(followableCompletion(to, CALLBACK)).toBe(to);
+  });
+
+  it('⚠⚠ and REFUSES the authentication flow’s, which is the provider’s root', () => {
+    /*
+     * Measured 2026-09-28: a completed sign-in returns `{ to: "/" }`, and that
+     * `/` is Authentik's root. Following it lands somebody who has just signed
+     * in successfully on a stranger's home page.
+     *
+     * ★ This is the whole reason the function exists. A generic "is this URL
+     *   safe" check would pass `/` — it is same-origin and relative and
+     *   harmless-looking, and it is the exact value that must not be followed.
+     */
+    expect(followableCompletion('/', CALLBACK)).toBeNull();
+  });
+
+  it('⚠⚠ refuses another path on our own host', () => {
+    // Same-origin is not the test. The callback is ONE known URL.
+    for (const to of [
+      'https://dev.gotcha.co.il/v2/api/auth/login?code=a&state=b',
+      'https://dev.gotcha.co.il/v2/inbox?code=a&state=b',
+      // A prefix match would accept this one.
+      'https://dev.gotcha.co.il/v2/api/auth/callback-evil?code=a&state=b',
+    ]) {
+      expect(followableCompletion(to, CALLBACK), to).toBeNull();
+    }
+  });
+
+  it('⚠⚠ refuses another origin, however much it looks like ours', () => {
+    for (const to of [
+      'https://evil.example/v2/api/auth/callback?code=a&state=b',
+      'https://dev.gotcha.co.il.evil.example/v2/api/auth/callback?code=a&state=b',
+      'http://dev.gotcha.co.il/v2/api/auth/callback?code=a&state=b',
+      'https://auth-dev.gotcha.co.il/v2/api/auth/callback?code=a&state=b',
+    ]) {
+      expect(followableCompletion(to, CALLBACK), to).toBeNull();
+    }
+  });
+
+  it('⚠ refuses a completion with no code or no state', () => {
+    /*
+     * A redirect to our callback without a code is not a sign-in: the route
+     * refuses it and sends the person to `/sign-in?error=`, which reads as a
+     * failed password rather than a broken hop.
+     */
+    expect(followableCompletion(`${CALLBACK}?state=xyz`, CALLBACK)).toBeNull();
+    expect(followableCompletion(`${CALLBACK}?code=abc`, CALLBACK)).toBeNull();
+    expect(followableCompletion(CALLBACK, CALLBACK)).toBeNull();
+  });
+
+  it('⚠ refuses anything that is not a URL at all', () => {
+    for (const to of ['', 'not a url', 'javascript:alert(1)', '//evil.example/x']) {
+      expect(followableCompletion(to, CALLBACK), to).toBeNull();
+    }
+  });
+
+  it('⚠⚠ refuses a RELATIVE completion even when it would resolve onto the callback', () => {
+    /*
+     * ═════════════════════════════════════════════════════════════════════
+     * FOUND BY A SURVIVING MUTATION, AND THE FIRST TESTS DID NOT COVER IT
+     * ═════════════════════════════════════════════════════════════════════
+     * Replacing `new URL(to)` with `new URL(to, expectedCallback)` broke
+     * nothing: the one relative value under test was `/`, which resolves to
+     * the ROOT and is refused by the pathname check anyway. The refusal of
+     * relatives looked redundant and was not.
+     *
+     * ★ `'callback?code=…'` resolved against `/v2/api/auth/callback` lands
+     *   exactly on the callback and would be followed. A relative `to` from
+     *   the provider belongs to the PROVIDER's origin, so resolving it against
+     *   ours is the absolute-path defect inverted — and this repository has
+     *   had that one three times.
+     */
+    for (const to of ['callback?code=abc&state=xyz', './callback?code=abc&state=xyz']) {
+      expect(followableCompletion(to, CALLBACK), to).toBeNull();
+    }
   });
 });

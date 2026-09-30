@@ -328,6 +328,57 @@ export type UserLoginChallenge = z.infer<typeof userLoginChallengeSchema>;
 export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
 
 /**
+ * Whether a completed flow's `to` is somewhere we are willing to send a
+ * browser, and the exact URL if so.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * ★★ `to` MEANS DIFFERENT THINGS DEPENDING ON WHICH FLOW PRODUCED IT
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *   AUTHENTICATION flow, measured 2026-09-28   to: "/"
+ *       — Authentik's own root. Following it lands somebody who has just
+ *         signed in successfully on a stranger's home page.
+ *   AUTHORIZATION flow, measured 2026-09-30    to: "https://…/api/auth/callback?code=…&state=…"
+ *       — our own callback, carrying the code we are waiting for.
+ *
+ * **One field, two meanings, and only the second is followable.** So this does
+ * not ask "is `to` safe" in the abstract — it asks whether `to` IS the
+ * callback we registered, and answers null for everything else.
+ *
+ * ★ That is the reason it takes `expectedCallback` rather than an origin or a
+ *   prefix. A same-origin check would accept any path on our host; a prefix
+ *   check would accept `/api/auth/callback-evil`. The endpoint is a single
+ *   known URL and equality is available, so equality is what is used.
+ *
+ * ⚠ A relative `to` is refused outright. It would resolve against whichever
+ *   origin we happened to resolve it with, and the one meaningful relative
+ *   value observed — `/` — is precisely the one that must not be followed.
+ */
+export function followableCompletion(to: string, expectedCallback: string): string | null {
+  let target: URL;
+  let expected: URL;
+  try {
+    // No base: a relative `to` throws here, which is the intent.
+    target = new URL(to);
+    expected = new URL(expectedCallback);
+  } catch {
+    return null;
+  }
+
+  if (target.origin !== expected.origin) return null;
+  if (target.pathname !== expected.pathname) return null;
+
+  /*
+   * ⚠ AND IT MUST CARRY A CODE. A completion pointing at our callback with no
+   *   code is not a sign-in — it is a redirect loop back into a route that
+   *   will refuse it and send the person to `/sign-in?error=`, which looks
+   *   like a failed password rather than a broken hop.
+   */
+  if (!target.searchParams.get('code') || !target.searchParams.get('state')) return null;
+
+  return target.toString();
+}
+
+/**
  * What the panel should do next.
  *
  * `handOver` carries the reason so the fallback is explicable rather than a

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   firstError,
+  followableCompletion,
   recoveryFlowSlug,
   staySignedInBody,
   type FlowStep,
@@ -113,6 +114,7 @@ export type SignInScreenName = 'signIn' | 'secondFactor';
 export function SignInPanel({
   handOverHref,
   recoverPath,
+  callbackUrl,
   returnTo,
   onScreen,
 }: {
@@ -125,6 +127,16 @@ export function SignInPanel({
    * three times.
    */
   readonly recoverPath: string;
+  /**
+   * Our OIDC callback, absolute — the ONE destination a completed flow is
+   * allowed to send the browser to directly.
+   *
+   * ★ Passed in rather than composed here. It must equal the `redirect_uri`
+   *   registered with the provider, and this component knows neither the
+   *   origin nor the mount point. Omitted, every completion falls back to
+   *   `/api/auth/login`, which is today's behaviour exactly.
+   */
+  readonly callbackUrl?: string;
   readonly returnTo?: string;
   /**
    * Told which screen is on, so a composition root can put the matching
@@ -205,18 +217,44 @@ export function SignInPanel({
 
   useEffect(() => {
     if (!step) return;
+
     /*
-     * Both of these leave for `/api/auth/login`. On `done` it completes OIDC
-     * silently; on `handOver` the identity provider renders its own page.
+     * ════════════════════════════════════════════════════════════════════
+     * ★★ A COMPLETION IS FOLLOWED ONLY WHEN IT IS OUR OWN CALLBACK
+     * ════════════════════════════════════════════════════════════════════
+     * `xak-flow-redirect` means the flow finished, and its `to` means two
+     * different things depending on which flow produced it:
      *
-     * ⚠ `done` carries `idpPath`, which is Authentik's own destination — `/` on
-     * its origin. Following it would land somebody who has just signed in
-     * successfully on a stranger's home page.
+     *     authentication flow   "/"                      — Authentik's root
+     *     authorization flow    ".../api/auth/callback?code=…&state=…"
+     *
+     * `followableCompletion` answers null for everything that is not the
+     * callback we registered — including `/`, which is same-origin, relative
+     * and harmless-looking, and is exactly the value that must not be
+     * followed.
+     *
+     * ⚠ AND THE FALLBACK IS THE POINT, NOT A SAFETY NET. Today the
+     *   authentication flow returns `/`, so this refuses and we go to
+     *   `/api/auth/login` exactly as before. This branch is INERT until the
+     *   flow is driven from the authorize endpoint — which is the other half
+     *   of the change and is not in this commit.
+     *
+     * ★ Every unknown or unfollowable outcome lands on the same line. That is
+     *   what keeps the eight stage types we do not render working at all: an
+     *   unrecognised component hands over to a page that completes, rather
+     *   than hanging on a blank screen. A visible dated screen beats an
+     *   invisible dead one.
      */
-    if (step.kind === 'done' || step.kind === 'handOver' || step.kind === 'identifyOnly') {
+    if (step.kind === 'done') {
+      const target = callbackUrl ? followableCompletion(step.idpPath, callbackUrl) : null;
+      window.location.assign(target ?? handOverHref);
+      return;
+    }
+
+    if (step.kind === 'handOver' || step.kind === 'identifyOnly') {
       window.location.assign(handOverHref);
     }
-  }, [step, handOverHref]);
+  }, [step, handOverHref, callbackUrl]);
 
   async function send(body: Record<string, unknown>) {
     if (busy) return;
