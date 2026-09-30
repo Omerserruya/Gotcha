@@ -25,7 +25,18 @@ const update = vi.fn();
 vi.mock("@chatcenter/shared", () => ({
   prisma: { tenantIntegration: { findFirst: (...a: unknown[]) => findFirst(...a), update: (...a: unknown[]) => update(...a) } },
   shopifyApiVersion: () => "2026-07",
+  // Credentials are stored ENCRYPTED, as a string. The first version of this
+  // service read `row.credentials.accessToken` off the raw column, which is
+  // ciphertext, silently got undefined, and returned no_token for a healthy
+  // connection. The fixtures below use the real storage shape so that cannot
+  // pass again.
+  decryptCredentials: (blob: string) => JSON.parse(Buffer.from(blob, "base64").toString("utf8")),
 }));
+
+/** Encrypt-shaped: a string, exactly as the column stores it. */
+function sealed(obj: Record<string, unknown>): string {
+  return Buffer.from(JSON.stringify(obj), "utf8").toString("base64");
+}
 
 import {
   requestShopifySelfUninstall,
@@ -36,7 +47,7 @@ import {
 const CONNECTED_ROW = {
   id: "ti1",
   config: { shopDomain: "new-for-test.myshopify.com", useAsCrm: true },
-  credentials: { accessToken: "offline-token" },
+  credentials: sealed({ accessToken: "offline-token" }),
 };
 
 beforeEach(() => {
@@ -101,7 +112,7 @@ describe("3. nothing to uninstall", () => {
   });
 
   it("a connection without a usable token cannot be uninstalled remotely", async () => {
-    findFirst.mockResolvedValue({ ...CONNECTED_ROW, credentials: {} });
+    findFirst.mockResolvedValue({ ...CONNECTED_ROW, credentials: sealed({}) });
     const r = await requestShopifySelfUninstall("t1");
     expect(r).toEqual({ ok: false, reason: "no_token" });
     expect(graphQL).not.toHaveBeenCalled();
@@ -133,5 +144,32 @@ describe("5. the request is scoped to Shopify", () => {
     expect(where.tenantId).toBe("t1");
     // An already-disconnected row has no token to call with.
     expect(where.status).toEqual({ in: ["CONNECTED", "ERROR"] });
+  });
+});
+
+
+describe("6. credentials are encrypted at rest (the production 502)", () => {
+  it("decrypts the column instead of reading fields off ciphertext", async () => {
+    // This is the bug a merchant hit: a healthy CONNECTED store with a valid
+    // token, refused as `no_token`, because `credentials` is a string and
+    // `credentials.accessToken` on a string is undefined.
+    findFirst.mockResolvedValue(CONNECTED_ROW);
+    const r = await requestShopifySelfUninstall("t1");
+    expect(r).toEqual({ ok: true, state: "awaiting_webhook", shopDomain: "new-for-test.myshopify.com" });
+    expect(graphQL.mock.calls[0][0].token).toBe("offline-token");
+  });
+
+  it("still accepts an already-decrypted object, for connections stored that way", async () => {
+    findFirst.mockResolvedValue({ ...CONNECTED_ROW, credentials: { accessToken: "plain" } });
+    const r = await requestShopifySelfUninstall("t1");
+    expect(r.ok).toBe(true);
+    expect(graphQL.mock.calls[0][0].token).toBe("plain");
+  });
+
+  it("undecryptable credentials refuse rather than throwing at the merchant", async () => {
+    findFirst.mockResolvedValue({ ...CONNECTED_ROW, credentials: "not-valid-ciphertext" });
+    const r = await requestShopifySelfUninstall("t1");
+    expect(r).toEqual({ ok: false, reason: "no_token" });
+    expect(graphQL).not.toHaveBeenCalled();
   });
 });

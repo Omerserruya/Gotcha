@@ -575,7 +575,13 @@ router.post("/shopify/uninstall", canManageSystems, async (req: Request, res: Re
   try {
     const result = await requestShopifySelfUninstall(req.tenantId!);
     if (!result.ok) {
-      const code = result.reason === "not_connected" ? 404 : 502;
+      // 502 only for a genuine failure talking to Shopify. The others are
+      // preconditions on our side that the merchant can act on, and returning
+      // "bad gateway" for them sent a confusing signal and buried the cause.
+      const code =
+        result.reason === "not_connected" ? 404
+          : result.reason === "shopify_refused" ? 502
+            : 409;
       res.status(code).json({ error: result.reason });
       return;
     }
