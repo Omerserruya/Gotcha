@@ -136,6 +136,30 @@ http {
     # Authentik gets its own zone so app traffic can never throttle a login.
     limit_req_zone $binary_remote_addr zone=authentik:10m rate=20r/s;
 
+    # ★★ EVERY VHOST, NOT ONE — THIS BIT US TWICE IN ONE DAY.
+    #
+    # nginx's default `proxy_buffer_size` is one page (4k), and that is the
+    # buffer an upstream's RESPONSE HEADER BLOCK must fit in. Two upstreams
+    # here exceed it:
+    #
+    #   the product callback   4,369 bytes of headers, 2,783 of them Set-Cookie
+    #                          (gotcha_session alone is 2,711)
+    #   authentik 2025.6+      larger headers than 2024.x; the admin interface
+    #                          502s through the gateway while answering 200
+    #                          directly on :9000
+    #
+    # ⚠ The failure is `upstream sent too big header` and a 502 — the service
+    #   is fine and only the proxy fails, which is why it reads as an outage
+    #   with no error in the application's own logs.
+    #
+    # ★ It was first raised on the /v2 location alone. That fixed the callback
+    #   and left authentik on the default, so an upgrade took the admin
+    #   interface down hours later. Set at http level it covers every vhost,
+    #   including ones nobody has added yet.
+    proxy_buffer_size 16k;
+    proxy_buffers     8 16k;
+    proxy_busy_buffers_size 32k;
+
     server {
         listen 80;
         server_name _;
@@ -1843,26 +1867,6 @@ http {
             # Same budget as the IdP's own location further down this file.
             limit_req zone=authentik burst=40 nodelay;
         }
-
-        # ★★ THE RESPONSE HEADER BLOCK IS ALREADY OVER THE DEFAULT.
-        #
-        # Measured on a real sign-in callback: 4,369 bytes of response headers,
-        # of which 2,783 are Set-Cookie (`gotcha_session` alone is 2,711).
-        # nginx's default `proxy_buffer_size` is one page — 4k — and that is the
-        # buffer the upstream's HEADER block must fit in. We are 273 bytes past
-        # it today, before anything is added.
-        #
-        # ⚠ The failure mode is not a dropped cookie, it is `upstream sent too
-        #   big header` and a 502 — and it would arrive the moment a second
-        #   cookie is set on this response, which is exactly what the sign-out
-        #   fix needs (an id_token hint is ~1,575 bytes sealed).
-        #
-        # ★ So this is raised BEFORE that lands, not after it breaks. 16k gives
-        #   room for the session cookie, a hint cookie and the security headers
-        #   together, with the same multiple left spare that 4k gave originally.
-        proxy_buffer_size 16k;
-        proxy_buffers     8 16k;
-        proxy_busy_buffers_size 32k;
 
         location ^~ /v2 {
             proxy_pass http://frontend_v2;
