@@ -41,9 +41,6 @@ async function readHint(request: NextRequest): Promise<string | null> {
   }
 }
 
-/** Carries the end-session URL to the page that can run it. */
-export const SIGN_OUT_PARAM = 'signOut';
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
   /*
    * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
@@ -95,35 +92,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         post_logout_redirect_uri: appUrl('/sign-in', env.APP_ORIGIN),
       }).toString();
       reachedProvider = true;
-
-      /*
-       * ════════════════════════════════════════════════════════════════
-       * ★★ VIA OUR OWN PAGE, BECAUSE THE FETCH MUST BE SAME-ORIGIN
-       * ════════════════════════════════════════════════════════════════
-       * The invalidation flow can be run by fetch instead of rendered — but
-       * only from the provider's own origin, where `response.url` after the
-       * redirect chain is readable. `signOut()` runs on the PRODUCT, so a
-       * fetch from there is opaque and the evidence is unavailable.
-       *
-       * ★ So the browser goes to the sign-in page, which lives on that origin,
-       *   carrying the end-session URL. It runs the flow and lands the person
-       *   on a signed-out screen of ours.
-       *
-       * ⚠ WITHOUT `SIGN_IN_URL` THIS IS UNCHANGED. A single-origin deployment
-       *   has no other origin to borrow, and navigating to `end-session`
-       *   directly is what it has always done.
-       */
-      const signInElsewhere = process.env.SIGN_IN_URL;
-      if (signInElsewhere) {
-        try {
-          const panel = new URL(signInElsewhere);
-          panel.searchParams.set(SIGN_OUT_PARAM, redirectTo);
-          redirectTo = panel.toString();
-        } catch (cause) {
-          /* A misconfigured SIGN_IN_URL must not cost the sign-out. */
-          logger.warn('auth.logout.sign_in_url_unusable', { cause });
-        }
-      }
     } catch (cause) {
       /*
        * ⚠ NO LONGER SILENT. This swallowed its reason, and a sign-out that

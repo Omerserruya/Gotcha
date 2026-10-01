@@ -216,59 +216,8 @@ describe('⚠⚠ the property that broke: a session must reach the provider', ()
   });
 });
 
-describe('⚠⚠ the sign-out goes via the origin that can run the flow', () => {
-  /*
-   * ════════════════════════════════════════════════════════════════════════
-   * THE FETCH MUST BE SAME-ORIGIN, SO THE BROWSER GOES THERE FIRST
-   * ════════════════════════════════════════════════════════════════════════
-   * The invalidation flow can be RUN rather than rendered — but only from the
-   * provider's own origin, where `response.url` after the redirect chain is
-   * readable. `signOut()` runs on the product, so a fetch from there is
-   * opaque and the evidence is unavailable.
-   */
-  it('★★ wraps the end-session URL in the sign-in page when one is configured', async () => {
-    vi.stubEnv('SIGN_IN_URL', 'https://auth-dev.gotcha.co.il/sign-in');
-    unsealIdToken.mockResolvedValue('the.id.token');
-
-    const response = await post(true);
-    const { redirectTo } = (await response.json()) as { redirectTo: string };
-    const url = new URL(redirectTo);
-
-    expect(url.origin).toBe('https://auth-dev.gotcha.co.il');
-    expect(url.pathname).toBe('/sign-in');
-
-    // And the end-session URL survives intact inside it, hint and all.
-    const carried = new URL(url.searchParams.get('signOut') ?? '');
-    expect(carried.pathname).toContain('end-session');
-    vi.unstubAllEnvs();
-  });
-
-  it('⚠⚠ and is UNCHANGED without one — a single origin has nothing to borrow', async () => {
-    vi.unstubAllEnvs();
-    unsealIdToken.mockResolvedValue('the.id.token');
-
-    const response = await post(true);
-    const { redirectTo } = (await response.json()) as { redirectTo: string };
-
-    expect(new URL(redirectTo).origin).toBe('https://auth-dev.gotcha.co.il');
-    expect(redirectTo).toContain('end-session');
-    expect(new URL(redirectTo).searchParams.has('signOut')).toBe(false);
-  });
-
-  it('⚠⚠ a misconfigured SIGN_IN_URL costs the wrapping, never the sign-out', async () => {
-    /*
-     * ★ The failure that must not happen here. If this threw, the catch above
-     *   it would fall back to a LOCAL redirect — which is `82e0a2c` again: a
-     *   clean screen and a living session.
-     */
-    vi.stubEnv('SIGN_IN_URL', 'not a url');
-    unsealIdToken.mockResolvedValue('the.id.token');
-
-    const response = await post(true);
-    const { redirectTo } = (await response.json()) as { redirectTo: string };
-
-    expect(new URL(redirectTo).origin).toBe('https://auth-dev.gotcha.co.il');
-    expect(redirectTo).toContain('end-session');
-    vi.unstubAllEnvs();
-  });
-});
+/*
+ * ⚠ A suite asserting the sign-out was wrapped through `SIGN_IN_URL` was here.
+ *   Removed with the wrapping: running the invalidation flow by fetch does not
+ *   invalidate anything, so there is nothing for the other origin to do.
+ */

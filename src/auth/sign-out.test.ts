@@ -1,92 +1,226 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { signOut } from './sign-out';
 
 /**
- * The two ways this app sends a browser out of itself.
+ * Signing out, which has been got wrong three times today.
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ⚠⚠ NEITHER HAD A TEST, AND ONE OF THEM WENT TO THE WRONG APPLICATION
+ * ⚠⚠ THE ONLY OUTCOME WORSE THAN THE PROVIDER'S PAGE IS A CLEAN PAGE AND A
+ *    LIVING SESSION
  * ════════════════════════════════════════════════════════════════════════════
- * `startSignIn` used a bare `/api/auth/login`. `window.location.assign` is a
- * plain web API — an absolute path resolves against the ORIGIN, not the mount
- * point — so under `/v2` a session expiring mid-work sent the person to the
- * LEGACY product's login, with our `returnTo` on the query.
+ * Three designs have produced exactly that: a server-side end-session call, a
+ * fetch of the flow, and a hidden iframe. Each looked right and each left
+ * `authentik_session` alive — proven by asking for a fresh code and getting
+ * one.
  *
- * ★ It is the third spelling of one defect: an `href` (the sign-in button), a
- *   `new URL` against an origin carrying a path (the OIDC `redirect_uri`), and
- *   now a `location.assign`. A sweep for any one shape finds that one.
+ * ★ The popup works because it is a TOP-LEVEL browsing context. An iframe is a
+ *   nested one. The requirement was never visibility.
  */
-
+const END_SESSION = 'https://auth-dev.gotcha.co.il/application/o/gotcha/end-session/?x=1';
 const assign = vi.fn();
 
-beforeEach(() => {
-  assign.mockReset();
-  vi.stubGlobal('location', { assign, pathname: '/en/home', search: '' });
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
-  vi.resetModules();
-});
-
-const underBasePath = async (basePath: string) => {
-  vi.resetModules();
-  vi.stubEnv('NEXT_PUBLIC_BASE_PATH', basePath);
-  return import('./sign-out');
+/*
+ * ⚠ A FAITHFUL POPUP, AND THE FIDELITY IS THE POINT. A real window's
+ *   `location.href` THROWS once it has navigated cross-origin — that throw is
+ *   the only signal available, so a stub whose `href` stays readable models a
+ *   window that never left our origin and makes the wait run to its deadline.
+ */
+const popup = (opts: { navigatesAway?: boolean } = {}) => {
+  const { navigatesAway = true } = opts;
+  let replaced = false;
+  return {
+    closed: false,
+    close: vi.fn(),
+    location: {
+      replace: vi.fn(() => {
+        replaced = true;
+      }),
+      get href(): string {
+        if (replaced && navigatesAway) throw new Error('cross-origin');
+        return replaced ? 'https://dev.gotcha.co.il/v2/en/home' : 'about:blank';
+      },
+    },
+  };
 };
 
-describe('⚠⚠ starting sign-in after a session expires', () => {
-  it('⚠⚠ stays inside this application when it is mounted under a prefix', async () => {
-    const { startSignIn } = await underBasePath('/v2');
-    startSignIn('/en/inbox?c=abc');
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ json: async () => ({ redirectTo: END_SESSION }) })),
+  );
+  Object.defineProperty(window, 'location', { value: { assign }, writable: true });
+});
 
-    const target = assign.mock.calls[0]![0] as string;
-    expect(target.startsWith('/v2/api/auth/login')).toBe(true);
-    // The whole point: unprefixed, this is another product's route.
-    expect(target.startsWith('/api/auth/login')).toBe(false);
-  });
-
-  it('★★ carries `returnTo`, encoded, or the expiry loses their place', async () => {
+describe('⚠⚠ a blocked popup must not land on our own page', () => {
+  it('⚠⚠ navigates top-level when `window.open` returns null', async () => {
     /*
-     * Somebody whose session expires mid-conversation should come back to that
-     * conversation. The value is a path WITH a query of its own, so it has to
-     * be encoded — unencoded, its `?` starts a second parameter and the rest is
-     * silently dropped.
+     * ★ THE FOURTH CHANCE TO SHIP A SIGN-OUT THAT DOES NOT SIGN OUT. A blocked
+     *   popup with a fall-through to `/` would be exactly that. It goes to the
+     *   provider instead: its page, and a session that genuinely dies.
      */
-    const { startSignIn } = await underBasePath('/v2');
-    startSignIn('/en/inbox?c=abc');
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => null),
+    );
 
-    const target = new URL(assign.mock.calls[0]![0] as string, 'https://dev.gotcha.co.il');
-    expect(target.searchParams.get('returnTo')).toBe('/en/inbox?c=abc');
+    await signOut();
+    expect(assign).toHaveBeenCalledWith(END_SESSION);
+    expect(assign).not.toHaveBeenCalledWith('https://gotcha.co.il/');
   });
 
-  it('★ and is a plain path at the root, where the prefix is empty', async () => {
-    // Both directions. Asserting the ABSENCE of a prefix proves nothing at a
-    // base path that is empty by default — so the case above uses `/v2`, and
-    // this one records what the root actually produces.
-    const { startSignIn } = await underBasePath('');
-    startSignIn('/en/home');
-    expect(assign.mock.calls[0]![0]).toBe('/api/auth/login?returnTo=%2Fen%2Fhome');
+  it('⚠⚠ and when the person closes it before the flow runs', async () => {
+    const win = popup();
+    win.closed = true;
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => win),
+    );
+
+    await signOut();
+    expect(assign).toHaveBeenCalledWith(END_SESSION);
+  });
+
+  it('⚠⚠ and when it never leaves our origin', async () => {
+    /*
+     * A readable `href` that is not `about:blank` means the window went
+     * somewhere we own — so it never reached the provider and nothing was
+     * invalidated.
+     */
+    const win = popup({ navigatesAway: false });
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => win),
+    );
+
+    await signOut();
+    expect(assign).toHaveBeenCalledWith(END_SESSION);
   });
 });
 
-describe('★ signing out', () => {
-  it('★★ posts to this application, not to the origin root', async () => {
+describe('★★ the popup is opened inside the gesture, before the fetch', () => {
+  it('⚠⚠ opens on about:blank BEFORE awaiting anything', async () => {
     /*
-     * `fetch` is not prefixed either. This one was already correct — and being
-     * correct in the same file is exactly what let the defect above hide: a
-     * sweep that checked whether `sign-out.ts` calls `appPath` found that it
-     * does.
+     * ════════════════════════════════════════════════════════════════════════
+     * `window.open` AFTER AN `await` HAS LOST THE USER GESTURE
+     * ════════════════════════════════════════════════════════════════════════
+     * Browsers block it. The failure would look INTERMITTENT — some people,
+     * some settings — rather than like a bug, which is the worst way for this
+     * to break.
      */
-    const fetchMock = vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ redirectTo: 'https://idp.example/end-session' }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    const order: string[] = [];
+    const win = popup();
 
-    const { signOut } = await underBasePath('/v2');
+    vi.stubGlobal(
+      'open',
+      vi.fn((url: string) => {
+        order.push(`open:${url}`);
+        return win;
+      }),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        order.push('fetch');
+        return { json: async () => ({ redirectTo: END_SESSION }) };
+      }),
+    );
+
+    await signOut();
+    expect(order[0]).toBe('open:about:blank');
+    expect(order[1]).toBe('fetch');
+  });
+
+  it('★ and the URL still comes from the server, not from the client', async () => {
+    const win = popup();
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => win),
+    );
+
+    await signOut();
+    expect(win.location.replace).toHaveBeenCalledWith(END_SESSION);
+  });
+});
+
+describe('★★ the success path: our own page, and nothing of the provider seen', () => {
+  it('★★ closes the popup and lands the person on our root', async () => {
+    const win = popup();
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => win),
+    );
+
     await signOut();
 
-    expect(fetchMock.mock.calls[0]![0]).toBe('/v2/api/auth/logout');
-    expect(assign).toHaveBeenCalledWith('https://idp.example/end-session');
+    expect(win.close).toHaveBeenCalled();
+    expect(assign).toHaveBeenCalledWith('https://gotcha.co.il/');
+    // And the main tab never went to the provider.
+    expect(assign).not.toHaveBeenCalledWith(END_SESSION);
+  });
+
+  it('⚠⚠ the popup is the ONLY thing that ever sees the end-session URL', async () => {
+    /*
+     * ★ The id token travels in that URL. Keeping it out of the main tab's
+     *   address bar is a second benefit of the popup that nobody designed for.
+     */
+    const win = popup();
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => win),
+    );
+
+    await signOut();
+    expect(win.location.replace).toHaveBeenCalledWith(END_SESSION);
+    for (const call of assign.mock.calls) {
+      expect(String(call[0])).not.toContain('end-session');
+    }
+  });
+});
+
+describe('⚠ the landing is the marketing site, and that is a ruling', () => {
+  it('★★ lands on the apex, not the product root and not www', async () => {
+    /*
+     * Omer: "not `/` — I mean jump to `gotcha.co.il/`, not
+     * `app.gotcha.co.il/`", and separately: "signing out to production is
+     * fine with me."
+     *
+     * ★ So there is no environment variable on purpose. This asserts the
+     *   ruling rather than a default, because the next reader will see a
+     *   hard-coded production URL and recognise it as the absolute-path
+     *   defect this repo has had four times — and it is not that.
+     *
+     * ★ `www.gotcha.co.il` does not resolve. Measured.
+     */
+    const win = popup();
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => win),
+    );
+
+    await signOut();
+    const landed = assign.mock.calls.at(-1)?.[0] as string;
+
+    expect(landed).toBe('https://gotcha.co.il/');
+    expect(landed).not.toContain('app.gotcha.co.il');
+    expect(landed).not.toContain('www.');
+  });
+
+  it('⚠⚠ but a FALLBACK never lands there — it goes to the provider', async () => {
+    /*
+     * The marketing site is not on the provider's allow-list, and does not
+     * need to be: the popup does the invalidation and the provider is never
+     * asked to send anyone there. On the fallback the provider IS asked, and
+     * it shows its own page — today's behaviour, with a session that dies.
+     */
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => null),
+    );
+
+    await signOut();
+    expect(assign).toHaveBeenCalledWith(END_SESSION);
+    expect(assign).not.toHaveBeenCalledWith('https://gotcha.co.il/');
   });
 });

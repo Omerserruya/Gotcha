@@ -299,49 +299,43 @@ export async function completeAuthorization(authorizeUrl: string): Promise<Autho
   }
 }
 
-/**
- * Run the invalidation flow without a browser ever rendering it.
- *
+/*
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ THERE IS NO REDIRECT TO FOLLOW, AND THAT IS NOT A PROBLEM
+ * ⚠⚠ SIGNING OUT CANNOT BE DONE THROUGH THIS MODULE. MEASURED, THREE WAYS.
  * ════════════════════════════════════════════════════════════════════════════
- * Measured 2026-10-01: driving `default-invalidation-flow` through the
- * executor answers **`ak-stage-session-end`** — a terminal render, not a stage
- * awaiting input. An empty POST to it returns `ak-stage-flow-error`, with no
- * `response_errors`, because there are no fields. **The flow has already
- * ended by the time the executor replies.**
+ * A `runInvalidationFlow` lived here and is gone. It fetched `end-session`,
+ * confirmed the chain landed on `/if/flow/…`, and let the caller land the
+ * person on our own screen. It worked: the provider's page disappeared, the
+ * id token left the address bar, three documents, zero Authentik renders.
  *
- * ★ We spent a message planning to drive it to an `xak-flow-redirect` that
- *   never comes. We do not need one. The session dies when the flow RUNS; all
- *   the provider's page adds is buttons. So this fetches end-session, lets the
- *   flow run, and leaves the landing to the caller.
+ * ⚠⚠ AND THE SESSION SURVIVED. A fresh handover afterwards issued a code with
+ *    no credentials entered. Measured 2026-10-01, on the same walk:
  *
- * ⚠ IT MUST BE CALLED FROM THE PROVIDER'S OWN ORIGIN. Cross-origin, the
- *   redirect chain is opaque and `response.url` — the only evidence the flow
- *   ran — is unreadable. That is why sign-out now goes through the sign-in
- *   page rather than straight at `end-session` from the product.
+ *      fetch end-session          nested / no context   session SURVIVES
+ *      hidden iframe, 3s          NESTED context        session SURVIVES
+ *      hidden iframe, 20s         NESTED context        session SURVIVES
+ *      popup window               TOP-LEVEL context     session DIES
+ *      top-level navigation       top-level context     session DIES
  *
- * @returns true when the chain landed on an invalidation flow, which is the
- *          only observable proof the flow executed. False means the caller
- *          should navigate to `end-session` itself — today's behaviour, which
- *          ends the session and shows the provider's page.
+ * ★★ THE REQUIREMENT IS A TOP-LEVEL BROWSING CONTEXT, NOT A VISIBLE PAGE.
+ *    An iframe is a NESTED context and fails; a popup is a top-level context
+ *    of its own and succeeds. That distinction is the whole thing, and it is
+ *    why "it must be rendered" looked true for three attempts — every
+ *    mechanism tried happened to be nested or contextless.
+ *
+ * ★ So sign-out does NOT go through this module. It opens a popup from the
+ *   click handler — see `src/auth/sign-out.ts`, where the gesture is.
+ *
+ * ★ Framing is not the obstacle: Authentik sends
+ *   `frame-ancestors 'self' https://*.gotcha.co.il` and our CSP permits it.
+ *   The invalidation simply does not occur outside a top-level navigation.
+ *
+ * ⚠ THREE DESIGNS — a server-side call, this fetch, and an iframe — each
+ *   looked like an obvious shortcut and each produced a clean-looking
+ *   sign-out that did not sign out. The fourth works because it changes the
+ *   CONTEXT rather than the request.
+ *
+ * ★ It will look like an obvious shortcut again. It is written here, in the
+ *   module where it would be written, rather than in a commit message nobody
+ *   greps.
  */
-export async function runInvalidationFlow(endSessionUrl: string): Promise<boolean> {
-  try {
-    const ended = await fetch(endSessionUrl, { credentials: 'include' });
-
-    /*
-     * ⚠ `response.url` AFTER THE REDIRECTS. Landing on `/if/flow/` is what
-     *   says the flow was reached and executed. A 200 on its own does not:
-     *   an error page is also a 200.
-     */
-    return /\/if\/flow\/[a-z0-9-]+\/?$/.test(new URL(ended.url).pathname);
-  } catch {
-    /*
-     * Never throws. A sign-out that raises here would leave the person on the
-     * product with a dead session and no way forward; the caller's fallback
-     * is a navigation that works.
-     */
-    return false;
-  }
-}

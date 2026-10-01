@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  startFlow,
-  submitStage,
-  completeAuthorization,
-  runInvalidationFlow,
-} from './flow-executor';
+import { startFlow, submitStage, completeAuthorization } from './flow-executor';
 
 /**
  * The module that carries the password.
@@ -469,59 +464,14 @@ describe('⚠⚠ the four ways it gives up are four different facts', () => {
   });
 });
 
-describe('⚠⚠ running the invalidation flow, which answers no redirect at all', () => {
-  /*
-   * ════════════════════════════════════════════════════════════════════════
-   * MEASURED: `ak-stage-session-end`, AND AN EMPTY POST GIVES `ak-stage-flow-error`
-   * ════════════════════════════════════════════════════════════════════════
-   * A terminal render, not a stage awaiting input — no `response_errors`,
-   * because there are no fields. The flow has already ended when the executor
-   * replies.
-   *
-   * ★ We planned to drive it to an `xak-flow-redirect` that never comes. The
-   *   session dies when the flow RUNS; the page only adds buttons. So the
-   *   evidence we need is not a redirect, it is that the chain reached the
-   *   flow at all.
-   */
-  it('★★ confirms the flow ran when the chain lands on it', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        url: 'https://auth-dev.gotcha.co.il/if/flow/default-invalidation-flow/',
-      })),
-    );
-    expect(await runInvalidationFlow('https://auth-dev.gotcha.co.il/x/end-session/')).toBe(true);
-  });
-
-  it('⚠⚠ does NOT confirm it on a 200 that never reached a flow', async () => {
-    /*
-     * ★ A 200 is not evidence: an error page is also a 200. Only the landing
-     *   path says the flow executed, and a false answer costs the provider's
-     *   page rather than a sign-out that did not happen.
-     */
-    for (const url of [
-      'https://auth-dev.gotcha.co.il/application/o/gotcha/end-session/',
-      'https://auth-dev.gotcha.co.il/',
-      'https://auth-dev.gotcha.co.il/if/flow/',
-    ]) {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(async () => ({ ok: true, url })),
-      );
-      expect(await runInvalidationFlow('https://auth-dev.gotcha.co.il/x/end-session/'), url).toBe(
-        false,
-      );
-    }
-  });
-
-  it('⚠ never throws, because the caller has a working fallback and no way to retry', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() => Promise.reject(new Error('network'))),
-    );
-    await expect(runInvalidationFlow('https://auth-dev.gotcha.co.il/x/end-session/')).resolves.toBe(
-      false,
-    );
-  });
-});
+/*
+ * ⚠⚠ A `runInvalidationFlow` SUITE WAS HERE AND IS GONE WITH ITS SUBJECT.
+ *   It asserted that a fetch of `end-session` reaching `/if/flow/…` proved the
+ *   flow had executed. Every assertion passed and **the premise was false**:
+ *   measured on a live walk, the fetch runs the request and the session
+ *   SURVIVES. Only a top-level navigation invalidates.
+ *
+ * ★ The tests were right about the code and the code was wrong about the
+ *   provider. No amount of mocking `response.url` could have found that — it
+ *   took signing out and then asking for a code.
+ */
