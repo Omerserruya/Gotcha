@@ -50,7 +50,8 @@
     "tag": {
       "you": "You",
       "flow": "Flow"
-    }
+    },
+    "heading": "Waiting in queue"
   },
   "identity": {
     "unnamed": "Someone",

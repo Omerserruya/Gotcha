@@ -83,13 +83,17 @@
    *
    * Ordering is worth only as much as `lastMessageAt` is — see below.
    */
+  /*
+   * ★ The CARD is `.queueColumn` now — the panel the design draws. This is
+   *   the list inside it, so it carries no surface or radius of its own:
+   *   two rounded boxes with the same radius, one inside the other, is a
+   *   seam rather than a card.
+   */
   .queue {
     display: flex;
     flex-direction: column;
-    background-color: var(--panel-base);
-    border-radius: 18px;
-    overflow: hidden;
     min-block-size: 0;
+    flex: 1;
   }
 
   .queueList {
@@ -117,6 +121,31 @@
    * The bar that closes the card. 02: `#F5F2EC`, `border-top 1px #EDE9E1`,
    * and the radius only on the bottom corners so it meets the card's edge.
    */
+  /* 02: `padding:14px 18px`, bottom hairline, heading plus a count chip. */
+  .queueHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    padding: var(--space-14) 18px;
+    border-block-end: 1px solid var(--panel-well);
+  }
+
+  .queueHeading {
+    font-size: 15px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /*
+   * The count, in the mono face the design uses for every number that is a
+   * quantity rather than a word.
+   */
+  .queueCount {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
   .queueFooter {
     margin: 0;
     margin-block-start: auto;
@@ -166,7 +195,9 @@
     gap: var(--space-12);
     /* 02: `padding:13px 16px`. */
     padding: 13px var(--space-16);
-    border-block-end: 1px solid var(--border-subtle);
+    /* 02 separates rows with a top hairline, so the selected row can drop
+       its own and meet the panel cleanly. */
+    border-block-start: 1px solid var(--border-subtle);
     color: inherit;
     text-decoration: none;
     /*
@@ -187,9 +218,25 @@
    *   a queue that cannot show you where you are is a list you re-read after
    *   every reply.
    */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ "SEE HOW THEY'RE MARKED" — WHITE ROW, BLACK EDGE
+   * ════════════════════════════════════════════════════════════════════════
+   * 02's selected row: `background:#FFFFFF` against the panel's `#FAF8F4`,
+   * and the 3px left slot filled `#121212`. **Two signals, not one** — and
+   * the slot is on every row at `transparent`, so nothing shifts by three
+   * pixels when selection moves.
+   *
+   * ★ That is the reasoning I wrote for `aria-current` by hand. The design
+   *   had it as geometry all along.
+   *
+   * ⚠ And it loses its top border: a white row with a hairline above it
+   *   reads as the bottom of the row before it.
+   */
   .queueRow[data-open] {
-    background-color: var(--panel-sunken);
+    background-color: var(--panel-field);
     border-inline-start-color: var(--action-base);
+    border-block-start-color: transparent;
   }
 
   /*
@@ -508,8 +555,15 @@
   .screen {
     display: grid;
     grid-template-columns: var(--size-inbox-queue) minmax(0, 1fr) var(--size-reading-half);
-    gap: var(--space-16);
-    align-items: start;
+    /* 02: the three panels sit 10px apart, not 16. */
+    gap: 10px;
+    align-items: stretch;
+    /*
+     * The page the panels sit on. 02: `#F1EFE9`, which is `--panel-sunken`.
+     * Without it the panels are `#FAF8F4` on `#FAF8F4` and the separation
+     * that makes them "separate parts" is invisible.
+     */
+    background-color: var(--panel-sunken);
   }
 
   /*
@@ -523,13 +577,34 @@
     }
   }
 
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ "EVERY THING IN ITS OWN CONTAINER WITH A BORDER RADIUS"
+   * ════════════════════════════════════════════════════════════════════════
+   * 02 draws three panels on a `#F1EFE9` page: each `#FAF8F4`, each
+   * `border-radius:18px`, each `overflow:hidden`, 10px apart. We drew all
+   * three on one flat surface — which is why no amount of work inside a
+   * column made it look like a column.
+   *
+   * ⚠ `overflow: hidden` IS NOT DECORATION. It is what makes the rows' square
+   *   corners disappear into the rounded panel. Without it the first and last
+   *   row poke out and the result reads as a border drawn around a list
+   *   rather than a card containing one.
+   *
+   * ★ Every colour here was ALREADY A TOKEN. `--panel-base` IS #faf8f4 and
+   *   `--panel-sunken` IS #f1efe9 — a grep for the design's uppercase hex
+   *   found nothing because ours are lowercase, which nearly produced six
+   *   duplicate tokens for colours we already had.
+   */
   .queueColumn,
   .conversationColumn,
   .contextColumn {
     display: flex;
     flex-direction: column;
-    gap: var(--space-12);
     min-inline-size: 0;
+    background-color: var(--panel-base);
+    border-radius: 18px;
+    overflow: hidden;
   }
 }
 

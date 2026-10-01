@@ -422,6 +422,27 @@ export async function ConversationList({
   return (
     <div className={styles.queue} data-testid="conversation-list">
       {/*
+        ════════════════════════════════════════════════════════════════════
+        ★★ THE PANEL'S OWN HEADER. 02: `padding:14px 18px`, a bottom hairline,
+           "Waiting in queue" and a count.
+        ════════════════════════════════════════════════════════════════════
+        ⚠ THE COUNT IS WHAT THIS PAGE HOLDS, NOT THE QUEUE'S TOTAL. The design
+          shows 14 beside the heading; we do not know the total when
+          `hasMore` is true — the route pages by keyset and reports no grand
+          count. Printing a page size as a queue size would be the cap
+          defect the footer sentence exists to prevent, moved into a number.
+
+        ★ So the header counts what is here, and the footer says what that
+          number means. Two slots, one honest fact each.
+      */}
+      <header className={styles.queueHeader}>
+        <span className={styles.queueHeading}>{t('queue.heading')}</span>
+        <span className={styles.queueCount} data-testid="queue-count">
+          {rows?.length ?? 0}
+        </span>
+      </header>
+
+      {/*
         ★★ THE CAP IS STATED, NOT IMPLIED. A list that stops at N and says
         nothing teaches an agent that N is all there is.
       */}

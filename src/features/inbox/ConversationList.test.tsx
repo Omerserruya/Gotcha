@@ -772,3 +772,64 @@ describe('⚠⚠ 24-hour time, because the zone and the format are two defaults'
     expect(time).toBe('19:48');
   });
 });
+
+describe('⚠⚠ "every thing in its own container" — the panel, and how a row is marked', () => {
+  it('★★ the open row is marked, and the mark is on the ROW not the list', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * 02: WHITE ROW, BLACK LEFT EDGE, NO TOP HAIRLINE
+     * ════════════════════════════════════════════════════════════════════════
+     * Two signals, not one — and the 3px slot is on EVERY row at transparent,
+     * so nothing shifts by three pixels when selection moves. That is the
+     * reasoning I wrote by hand for `aria-current`; the design had it as
+     * geometry.
+     */
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' }), row({ id: 'c2' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        openId: 'c2',
+      }),
+    );
+    expect(screen.getByTestId('conversation-c2')).toHaveAttribute('data-open');
+    expect(screen.getByTestId('conversation-c1')).not.toHaveAttribute('data-open');
+  });
+
+  it('★★ the panel has a header, counting what this page holds', async () => {
+    /*
+     * ⚠ THE COUNT IS THIS PAGE, NOT THE QUEUE. The design shows 14 beside the
+     *   heading; we do not know the total when `hasMore` is true — the route
+     *   pages by keyset and reports no grand count. Printing a page size as a
+     *   queue size would be the cap defect the footer sentence exists to
+     *   prevent, moved into a number.
+     */
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' }), row({ id: 'c2' }), row({ id: 'c3' })],
+        cap: 10,
+        now: NOW,
+        hasMore: true,
+      }),
+    );
+    expect(screen.getByTestId('queue-count')).toHaveTextContent('3');
+    expect(screen.getByText(/waiting in queue/i)).toBeInTheDocument();
+  });
+
+  it('⚠ and says zero rather than nothing when the page is empty', async () => {
+    /*
+     * ⚠ A MUTATION SURVIVED HERE AND THE REASON IS WORTH RECORDING RATHER
+     *   THAN PAPERING OVER: replacing `rows?.length ?? 0` with `rows?.length`
+     *   breaks nothing, because `[].length` is 0 and the only other case —
+     *   `rows === null` — RETURNS EARLY with the unavailable panel.
+     *
+     * ★ So the `?? 0` is reachable only through the type, not through the
+     *   program. It stays because `rows` is nullable in the signature, and
+     *   this test covers the empty page, which is a real state. Adding an
+     *   assertion that only satisfies the mutant would be inventing coverage.
+     */
+    render(await ConversationList({ rows: [], cap: 10, now: NOW, hasMore: false }));
+    expect(screen.getByTestId('queue-count')).toHaveTextContent('0');
+  });
+});
