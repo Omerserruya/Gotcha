@@ -1,4 +1,5 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
 
 import {
   channelName,
@@ -10,11 +11,16 @@ import {
 
 import styles from './Inbox.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
-import { Globe, Mail, MessageCircle } from 'lucide-react';
+import { Globe, Mail, MessageCircle, MessagesSquare, type LucideProps } from 'lucide-react';
 
 import { Link } from '@/i18n/navigation';
 
-import type { InboxView } from './inbox-views';
+import {
+  inboxQuery,
+  QUEUE_CHANNEL_FILTERS,
+  type InboxView,
+  type QueueChannelFilter,
+} from './inbox-views';
 
 /**
  * Screen 02's queue.
@@ -46,6 +52,41 @@ import type { InboxView } from './inbox-views';
  * know get their own group rather than the floor of the list.
  */
 /**
+ * lucide's own `instagram` glyph, copied from 02's rendered DOM.
+ *
+ * ⚠⚠ THE FILTER ROW MADE THE STAND-IN UNTENABLE. A globe for Instagram was a
+ *    tolerable gap on a row badge; in 02's header the five channels sit side
+ *    by side, and the stand-in put TWO identical globes next to each other,
+ *    one meaning Instagram and one meaning web chat.
+ *
+ * ★ Not a camera or a lookalike: these are the exact three shapes 02 renders
+ *   (`data-lucide="instagram"`, from lucide's CDN build, which still ships
+ *   it). `lucide-react@1.38` dropped brand marks from the package, not from
+ *   the design.
+ */
+function InstagramGlyph({ size = 24, strokeWidth = 2 }: Pick<LucideProps, 'size' | 'strokeWidth'>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      data-glyph="instagram"
+    >
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
+/**
  * The channel's mark: which lucide glyph, and which tint.
  *
  * ════════════════════════════════════════════════════════════════════════════
@@ -66,25 +107,15 @@ import type { InboxView } from './inbox-views';
 const CHANNEL_MARKS = {
   WHATSAPP: { Icon: MessageCircle, tone: 'whatsapp' },
   EMAIL: { Icon: Mail, tone: 'email' },
-  /*
-   * ⚠⚠ INSTAGRAM KEEPS ITS COLOUR AND LOSES ITS GLYPH. `lucide-react@1.38.0`
-   *    exports 6,140 icons and NONE of them is a brand mark — they were
-   *    removed from the core package. Measured, not assumed.
-   *
-   * ★ A camera or a similar stand-in would be a DIFFERENT MARK presented as
-   *   Instagram's, which is worse than the generic one: a person scanning the
-   *   column would learn a symbol that means nothing elsewhere. The tint is
-   *   the design's own, so the row is still distinguishable at a glance, and
-   *   the channel's NAME is in the tag row either way.
-   *
-   * ⚠ This wants the real glyph. It is an asset request — the brand icons
-   *   live in `lucide-static` or a brand pack — not a code one.
-   */
-  INSTAGRAM: { Icon: Globe, tone: 'instagram' },
+  INSTAGRAM: { Icon: InstagramGlyph, tone: 'instagram' },
+  /* 02's filter row: `messages-square` on `#E3E8F2`/`#3E5C99`. It fell to the
+     globe before, which is web chat's mark. */
+  MESSENGER: { Icon: MessagesSquare, tone: 'messenger' },
+  WEBCHAT: { Icon: Globe, tone: 'web' },
 } as const;
 
 function channelMark(channel: string | null): {
-  readonly Icon: typeof Globe;
+  readonly Icon: (props: Pick<LucideProps, 'size' | 'strokeWidth'>) => ReactNode;
   readonly tone: string;
 } {
   if (channel === null) return { Icon: Globe, tone: 'web' };
@@ -122,6 +153,7 @@ export async function ConversationList({
   openId,
   meId = null,
   view = 'queue',
+  channel = null,
 }: {
   /** `null` when the read failed. Never an empty queue. */
   readonly rows: readonly ConversationRow[] | null;
@@ -149,6 +181,8 @@ export async function ConversationList({
    *   the list under it is the same defect as a list that ignores the view.
    */
   readonly view?: InboxView;
+  /** The channel filter in force; `null` is "All". */
+  readonly channel?: QueueChannelFilter | null;
   /** How many the page holds. Stated on screen, not implied. */
   readonly cap: number;
   readonly now: Date;
@@ -232,7 +266,7 @@ export async function ConversationList({
             `?conversation=` and it was the harness's, not ours.
         */}
         <Link
-          href={{ pathname: '/inbox', query: { c: conversation.id } }}
+          href={{ pathname: '/inbox', query: inboxQuery({ view, channel, c: conversation.id }) }}
           className={styles.queueRow}
           data-testid={testid}
           aria-current={conversation.id === openId ? 'true' : undefined}
@@ -452,10 +486,60 @@ export async function ConversationList({
           number means. Two slots, one honest fact each.
       */}
       <header className={styles.queueHeader}>
-        <span className={styles.queueHeading}>{nav(`inbox.${view}`)}</span>
-        <span className={styles.queueCount} data-testid="queue-count">
-          {rows?.length ?? 0}
-        </span>
+        {/* 02: the title left, the count pushed hard right. */}
+        <div className={styles.queueTitleRow}>
+          <span className={styles.queueHeading}>{nav(`inbox.${view}`)}</span>
+          <span className={styles.queueCount} data-testid="queue-count">
+            {rows?.length ?? 0}
+          </span>
+        </div>
+
+        {/*
+          ════════════════════════════════════════════════════════════════════
+          ★★ 02's FILTER ROW — AND EVERY CHIP IN IT FILTERS
+          ════════════════════════════════════════════════════════════════════
+          "All" as a dark pill, then one tinted square per channel. Links, not
+          buttons, for the same reason the rows are: the filter is a URL, so
+          it survives a reload, a shared link and the back button.
+
+          ⚠ "FILTERS" IS NOT HERE. 02 ends the row with it, and its prose says
+            what it opens: "intent, team, agent, owner type, wait time,
+            customer attributes". None of that panel exists, and a word that
+            promises it would be the screen describing a feature it does not
+            have. Its slot stays empty until the panel is built.
+        */}
+        <nav
+          className={styles.queueFilters}
+          aria-label={t('queue.filter.label')}
+          data-testid="queue-filters"
+        >
+          <Link
+            href={{ pathname: '/inbox', query: inboxQuery({ view, channel: null }) }}
+            className={styles.filterAll}
+            aria-current={channel === null ? 'true' : undefined}
+            data-testid="filter-all"
+          >
+            {t('queue.filter.all')}
+          </Link>
+          {QUEUE_CHANNEL_FILTERS.map((filter) => {
+            const mark = channelMark(filter);
+            return (
+              <Link
+                key={filter}
+                href={{ pathname: '/inbox', query: inboxQuery({ view, channel: filter }) }}
+                className={styles.filterChannel}
+                data-tone={mark.tone}
+                aria-current={channel === filter ? 'true' : undefined}
+                /* The glyph is the only thing on the chip; the name is its label. */
+                aria-label={channelName(filter, channelNames) ?? filter}
+                title={channelName(filter, channelNames) ?? filter}
+                data-testid={`filter-${filter}`}
+              >
+                <mark.Icon size={14} strokeWidth={2} />
+              </Link>
+            );
+          })}
+        </nav>
       </header>
 
       {/*
@@ -475,7 +559,7 @@ export async function ConversationList({
 
         {dated.length === 0 && undated.length === 0 ? (
           <p className={styles.note} data-testid="queue-empty">
-            {t('queue.empty')}
+            {channel === null ? t('queue.empty') : t('queue.filter.emptyFiltered')}
           </p>
         ) : (
           <ol className={styles.queueList}>{dated.map((c) => row(c, `conversation-${c.id}`))}</ol>

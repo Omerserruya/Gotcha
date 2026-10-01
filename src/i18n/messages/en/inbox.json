@@ -51,7 +51,12 @@
       "you": "You",
       "flow": "Flow"
     },
-    "heading": "Waiting in queue"
+    "heading": "Waiting in queue",
+    "filter": {
+      "label": "Filter by channel",
+      "all": "All",
+      "emptyFiltered": "Nothing here on this channel."
+    }
   },
   "identity": {
     "unnamed": "Someone",

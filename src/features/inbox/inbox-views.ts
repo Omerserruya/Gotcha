@@ -67,3 +67,59 @@ export function viewQuery(view: InboxView, meId: string | null): Record<string, 
       return { automatedOnly: 'true', handledBy: 'flow' };
   }
 }
+
+/**
+ * The queue header's channel filters, in 02's order.
+ *
+ * ★ 02's own rule: "Channel filters are icons; advanced filters (intent,
+ *   team, agent, owner type, wait time, customer attributes) stay behind
+ *   'Filters' and are off by default." So these five are real filters, sent
+ *   as the route's `channel` — not decoration over an unfiltered list.
+ *
+ * ⚠ The route matches ONE exact value. "Email" is `EMAIL` and does not
+ *   include `GMAIL` or `OUTLOOK`; "Web chat" is `WEBCHAT` and does not include
+ *   `SHOPIFY_LIVE_CHAT`. Grouping them needs the route to accept a list.
+ */
+export const QUEUE_CHANNEL_FILTERS = [
+  'WHATSAPP',
+  'INSTAGRAM',
+  'MESSENGER',
+  'EMAIL',
+  'WEBCHAT',
+] as const;
+export type QueueChannelFilter = (typeof QUEUE_CHANNEL_FILTERS)[number];
+
+/**
+ * `?channel=`, or null for "All".
+ *
+ * ⚠ Only the five the header draws. A filter with no chip lit would leave the
+ *   reader looking at a narrowed list with "All" unselected and nothing
+ *   saying what narrowed it.
+ */
+export function parseChannelFilter(raw: string | undefined): QueueChannelFilter | null {
+  return (QUEUE_CHANNEL_FILTERS as readonly string[]).includes(raw ?? '')
+    ? (raw as QueueChannelFilter)
+    : null;
+}
+
+/**
+ * The query for a link inside the inbox, keeping where the reader is.
+ *
+ * ⚠⚠ A ROW'S LINK WAS `{ c }` AND NOTHING ELSE. Opening a conversation from
+ *    "Resolved" dropped `view`, so the list behind it snapped back to the
+ *    queue — the view the reader had just chosen, undone by the click that
+ *    used it. Every inbox link goes through here so none can forget one.
+ *
+ * ★ `cursor` is never carried: a new filter or a new view starts at page one.
+ */
+export function inboxQuery(state: {
+  readonly view: InboxView;
+  readonly channel: QueueChannelFilter | null;
+  readonly c?: string | null;
+}): Record<string, string> {
+  return {
+    ...(state.view === 'queue' ? {} : { view: state.view }),
+    ...(state.channel === null ? {} : { channel: state.channel }),
+    ...(state.c ? { c: state.c } : {}),
+  };
+}

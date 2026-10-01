@@ -117,4 +117,18 @@ describe('⚠⚠ the view reaches the route', () => {
 
     expect(queueCall()?.query).toMatchObject({ assignedAgentId: 'u7' });
   });
+
+  it('★★ a channel filter reaches the route as its own `channel`', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'resolved', 'INSTAGRAM');
+    await settleMicrotasks();
+    expect(queueCall()?.query).toMatchObject({ status: 'CLOSED', channel: 'INSTAGRAM' });
+  });
+
+  it('⚠ and "All" sends no channel at all, not an empty one', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'queue', null);
+    await settleMicrotasks();
+    expect(queueCall()?.query).not.toHaveProperty('channel');
+  });
 });

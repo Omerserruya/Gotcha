@@ -133,14 +133,76 @@
    * The bar that closes the card. 02: `#F5F2EC`, `border-top 1px #EDE9E1`,
    * and the radius only on the bottom corners so it meets the card's edge.
    */
-  /* 02: `padding:14px 18px`, bottom hairline, heading plus a count chip. */
+  /*
+   * 02's queue header, measured: `[352x87]`, a COLUMN at `gap:12px` and
+   * `padding:18px 18px 12px` — the title row, then the filter row — over a
+   * `#EDE9E1` hairline. It was one row at `14px 18px` over `#F0EDE7`, which
+   * is the panel's well colour and not its divider.
+   */
   .queueHeader {
     flex: none;
     display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding: 18px 18px var(--space-12);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  /* 02: `justify-content:space-between` — the count sits hard right. */
+  .queueTitleRow {
+    display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--space-8);
-    padding: var(--space-14) 18px;
-    border-block-end: 1px solid var(--panel-well);
+  }
+
+  .queueFilters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+  }
+
+  /*
+   * 02's "All": `padding:6px 11px`, radius 8px, 11.5px, dark when it is the
+   * filter in force.
+   */
+  .filterAll {
+    padding: var(--space-6) 11px;
+    border-radius: 8px;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    background-color: var(--panel-well);
+    text-decoration: none;
+  }
+
+  .filterAll[aria-current] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /* 02: 28×28 tinted squares at radius 8px, a 14px glyph centred. */
+  .filterChannel {
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /*
+   * ⚠ OURS, NOT 02's. The design draws only the "All" state, so it never
+   *   says how a chosen channel looks. A ring in the chip's own mark colour:
+   *   the chip keeps its identity and "All" visibly lets go of the dark fill.
+   */
+  .filterChannel[aria-current] {
+    box-shadow: inset 0 0 0 1.5px currentcolor;
+  }
+
+  .filterAll:focus-visible,
+  .filterChannel:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
   }
 
   .queueHeading {
@@ -155,7 +217,8 @@
    */
   .queueCount {
     font-family: var(--font-mono);
-    font-size: var(--font-size-caption);
+    /* 02: 11px, not the 11.5px caption. */
+    font-size: 11px;
     color: var(--text-subtle);
   }
 
@@ -182,18 +245,13 @@
     padding: 3px var(--space-8);
     border-radius: 6px;
     white-space: nowrap;
-  }
-
-  /* "You" — the one that says this row is the reader's problem. */
-  .tagMine {
-    background-color: var(--signal-done-surface);
-    color: var(--signal-done-text);
-  }
-
-  /* "Flow" — neutral, because a flow handling it is not a status. */
-  .tagNeutral {
+    /*
+     * ⚠ "You" IS NEUTRAL IN 02, NOT GREEN. Measured: `#F0EDE7` on `#55524C`,
+     *   the same as "Flow". The green there is "High intent" — a
+     *   classification, which is what the row's colour is spent on.
+     */
     background-color: var(--panel-well);
-    color: var(--text-secondary);
+    color: var(--intent-neutral-text);
   }
 
   .queueItem {
@@ -303,22 +361,37 @@
     border: 2px solid var(--panel-base);
   }
 
-  .channelBadge[data-tone='whatsapp'] {
+  .channelBadge[data-tone='whatsapp'],
+  .filterChannel[data-tone='whatsapp'] {
     background-color: var(--channel-whatsapp-surface);
     color: var(--channel-whatsapp-mark);
   }
 
-  .channelBadge[data-tone='instagram'] {
+  .channelBadge[data-tone='instagram'],
+  .filterChannel[data-tone='instagram'] {
     background-color: var(--channel-instagram-surface);
     color: var(--channel-instagram-mark);
   }
 
-  .channelBadge[data-tone='email'] {
+  .channelBadge[data-tone='email'],
+  .filterChannel[data-tone='email'] {
     background-color: var(--channel-email-surface);
     color: var(--channel-email-mark);
   }
 
-  .channelBadge[data-tone='web'] {
+  .channelBadge[data-tone='messenger'],
+  .filterChannel[data-tone='messenger'] {
+    background-color: var(--channel-messenger-surface);
+    color: var(--channel-messenger-mark);
+  }
+
+  /* On the white open row the badge's cut follows the row, as 02 draws it. */
+  .queueRow[data-open] .channelBadge {
+    border-color: var(--panel-field);
+  }
+
+  .channelBadge[data-tone='web'],
+  .filterChannel[data-tone='web'] {
     background-color: var(--channel-web-surface);
     color: var(--channel-web-mark);
   }
@@ -363,7 +436,8 @@
   .rowTime {
     margin-inline-start: auto;
     flex: none;
-    font-size: var(--font-size-caption);
+    /* 02: 11px. */
+    font-size: 11px;
     color: var(--text-subtle);
   }
 
@@ -409,6 +483,10 @@
    * without it, and `text-overflow` then never fires.
    */
   .who {
+    /* 02: 14px / 600 / -0.14px. It declared none of the three and inherited them. */
+    font-size: 14px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: -0.01em;
     flex: 1 1 auto;
     min-inline-size: 0;
     overflow: hidden;

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { viewQuery, type InboxView } from './inbox-views';
+import { viewQuery, type InboxView, type QueueChannelFilter } from './inbox-views';
 import { serverApi } from '@/api/client/server-api';
 import {
   autoGreetingSchema,
@@ -140,6 +140,8 @@ export async function loadInbox(
   conversationId?: string,
   cursor?: string,
   view: InboxView = 'queue',
+  /** `null` is "All". Sent as the route's own `channel` filter. */
+  channel: QueueChannelFilter | null = null,
 ): Promise<InboxData> {
   const api = serverApi();
 
@@ -212,7 +214,12 @@ export async function loadInbox(
              * never appears. That is why this waited for the keyset rather than
              * scrolling on offset.
              */
-            query: { ...query, limit: QUEUE_CAP, cursor: cursor ?? '' },
+            query: {
+              ...query,
+              ...(channel === null ? {} : { channel }),
+              limit: QUEUE_CAP,
+              cursor: cursor ?? '',
+            },
           })
           .catch((cause: unknown) => {
             logger.warn('inbox.queue_failed', { cause });

@@ -9,7 +9,7 @@ import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
 import styles from '@/features/inbox/Inbox.module.css';
-import { parseInboxView } from '@/features/inbox/inbox-views';
+import { parseChannelFilter, parseInboxView } from '@/features/inbox/inbox-views';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { MessageStream } from '@/features/inbox/MessageStream';
 import { PageContainer } from '@/shell/PageContainer';
@@ -56,13 +56,15 @@ export default async function Page({
     readonly c?: string;
     readonly cursor?: string;
     readonly view?: string;
+    readonly channel?: string;
   }>;
 }) {
   const t = await getTranslations('inbox');
   const channelNames = await getTranslations('channels');
-  const { c, cursor, view: rawView } = await searchParams;
+  const { c, cursor, view: rawView, channel: rawChannel } = await searchParams;
   const view = parseInboxView(rawView);
-  const data = await loadInbox(c, cursor, view);
+  const channel = parseChannelFilter(rawChannel);
+  const data = await loadInbox(c, cursor, view, channel);
   /*
    * One `now` for the whole render. Computed per row, two conversations a
    * second apart could age differently within one screenshot — and the
@@ -121,6 +123,7 @@ export default async function Page({
             openId={c ?? null}
             meId={data.meId}
             view={view}
+            channel={channel}
           />
         </section>
 

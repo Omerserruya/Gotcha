@@ -462,6 +462,7 @@
      *     whatsapp   message-circle   #e4efe7 / #2e7d5b
      *     instagram  instagram        #f6e7e2 / #b4553f
      *     email      mail             #f0ede7 / #55524c
+     *     messenger  messages-square  #e3e8f2 / #3e5c99
      *     web/other  globe            #eae7e0 / #3a3833
      */
     --channel-whatsapp-surface: #e4efe7;
@@ -472,6 +473,9 @@
     --channel-email-mark: #55524c;
     --channel-web-surface: #eae7e0;
     --channel-web-mark: #3a3833;
+    /* 02's filter row draws Messenger as `messages-square`, #e3e8f2 / #3e5c99. */
+    --channel-messenger-surface: #e3e8f2;
+    --channel-messenger-mark: #3e5c99;
 
     /*
      * A settled conversation's avatar — quieter than a live one. 02 draws a

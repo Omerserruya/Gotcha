@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import type { ReactNode } from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -12,6 +12,7 @@ import navigation from '@/i18n/messages/en/navigation.json';
 import messages from '@/i18n/messages/en/inbox.json';
 
 import { ConversationList } from './ConversationList';
+import { QUEUE_CHANNEL_FILTERS } from './inbox-views';
 
 /*
  * ★ The established mock for this app's locale-aware `Link` — see
@@ -93,6 +94,12 @@ const show = async (
   hasMore = false,
   undatedCount?: number,
 ) => render(await ConversationList({ rows, cap, now: NOW, hasMore, undatedCount }));
+
+/*
+ * The ROW links. The header's filter chips are links too, so "every link"
+ * stopped meaning "every row" when the filter row arrived.
+ */
+const rowLinks = () => screen.getAllByRole('link').filter((link) => link.closest('ol') !== null);
 
 describe('★★ the cap is stated, because a silent one teaches a falsehood', () => {
   it('★★ says how many it is showing and that older ones are not reachable', async () => {
@@ -380,7 +387,7 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
   it('★★ every row is a link to that conversation', async () => {
     render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
 
-    const rows = screen.getAllByRole('link');
+    const rows = rowLinks();
     expect(rows.length).toBe(queue().length);
     expect(rows[0]).toHaveAttribute('href', expect.stringContaining('c=c1'));
   });
@@ -400,7 +407,7 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
     render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
 
     expect(screen.queryAllByRole('button')).toHaveLength(0);
-    for (const row of screen.getAllByRole('link')) {
+    for (const row of rowLinks()) {
       expect(row.tagName).toBe('A');
     }
   });
@@ -414,7 +421,7 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
      */
     render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
 
-    const href = screen.getAllByRole('link')[0]!.getAttribute('href') ?? '';
+    const href = rowLinks()[0]!.getAttribute('href') ?? '';
     expect(new URL(href, 'https://x.test').searchParams.get('c')).toBe('c1');
     expect(href).not.toContain('conversation=');
   });
@@ -429,7 +436,7 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
       await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false, openId: 'c2' }),
     );
 
-    const rows = screen.getAllByRole('link');
+    const rows = rowLinks();
     const current = rows.filter((row) => row.getAttribute('aria-current') === 'true');
 
     expect(current).toHaveLength(1);
@@ -440,7 +447,7 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
     // Both directions. A row that is always current is the same defect
     // wearing the opposite sign.
     render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
-    for (const row of screen.getAllByRole('link')) {
+    for (const row of rowLinks()) {
       expect(row).not.toHaveAttribute('aria-current');
     }
   });
@@ -534,7 +541,7 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
         hasMore: false,
       }),
     );
-    const circles = screen.getAllByRole('link').map((r) => r.firstElementChild?.textContent);
+    const circles = rowLinks().map((r) => r.firstElementChild?.textContent);
     expect(circles[0]).toBe('DC');
     expect(circles[1]).toBe('SO');
     expect(circles[1]).not.toContain('myshopify');
@@ -550,7 +557,7 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
       }),
     );
     // The name beside it already says "Someone"; the circle is decorative.
-    expect(screen.getAllByRole('link')[0]!.firstElementChild?.textContent).toBe('');
+    expect(rowLinks()[0]!.firstElementChild?.textContent).toBe('');
   });
 });
 
@@ -965,5 +972,106 @@ describe('⚠⚠ the heading names the view it is heading', () => {
     const heading = screen.getByTestId('conversation-list').querySelector('header');
     expect(heading?.textContent).toMatch(new RegExp(navigation.inbox.resolved, 'i'));
     expect(heading?.textContent).not.toMatch(/waiting in queue/i);
+  });
+});
+
+describe("★★ Wave 2 — 02's filter row, and every chip in it filters", () => {
+  const queue = () => [row({ id: 'c1' }), row({ id: 'c2' })];
+  const chips = () => within(screen.getByTestId('queue-filters')).getAllByRole('link');
+  const params = (el: Element) =>
+    new URL(el.getAttribute('href') ?? '', 'https://x.test').searchParams;
+
+  it('★★ "All" then the five channels, in 02\'s order, each named', async () => {
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+    expect(chips().map((c) => c.getAttribute('aria-label') ?? c.textContent)).toEqual([
+      'All',
+      'WhatsApp',
+      'Instagram',
+      'Messenger',
+      'Email',
+      'Web chat',
+    ]);
+  });
+
+  it('★★ each chip filters by its channel and keeps the view', async () => {
+    render(
+      await ConversationList({
+        rows: queue(),
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        view: 'resolved',
+      }),
+    );
+    const instagram = screen.getByTestId('filter-INSTAGRAM');
+    expect(params(instagram).get('channel')).toBe('INSTAGRAM');
+    expect(params(instagram).get('view')).toBe('resolved');
+    // "All" clears the channel and nothing else.
+    expect(params(screen.getByTestId('filter-all')).get('channel')).toBeNull();
+    expect(params(screen.getByTestId('filter-all')).get('view')).toBe('resolved');
+  });
+
+  it('★ the filter in force is the one marked current — exactly one', async () => {
+    render(
+      await ConversationList({
+        rows: queue(),
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        channel: 'EMAIL',
+      }),
+    );
+    const current = chips().filter((c) => c.getAttribute('aria-current') === 'true');
+    expect(current.map((c) => c.dataset.testid)).toEqual(['filter-EMAIL']);
+  });
+
+  it('★ and with no channel, "All" is current', async () => {
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+    const current = chips().filter((c) => c.getAttribute('aria-current') === 'true');
+    expect(current.map((c) => c.dataset.testid)).toEqual(['filter-all']);
+  });
+
+  it('⚠⚠ no two chips draw the same glyph', async () => {
+    /*
+     * Instagram fell back to the globe, and in a row of five channels that put
+     * two identical globes side by side meaning two different things.
+     */
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+    const glyphs = QUEUE_CHANNEL_FILTERS.map(
+      (id) => screen.getByTestId(`filter-${id}`).querySelector('svg')?.innerHTML,
+    );
+    expect(new Set(glyphs).size).toBe(QUEUE_CHANNEL_FILTERS.length);
+    expect(
+      screen.getByTestId('filter-INSTAGRAM').querySelector('[data-glyph="instagram"]'),
+    ).not.toBeNull();
+  });
+
+  it('⚠ "Filters" is absent — its panel does not exist', async () => {
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+    expect(screen.getByTestId('queue-filters').textContent).not.toMatch(/filters/i);
+  });
+
+  it('⚠⚠ a row keeps the view and the channel when it opens a conversation', async () => {
+    render(
+      await ConversationList({
+        rows: queue(),
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        view: 'resolved',
+        channel: 'WHATSAPP',
+      }),
+    );
+    const first = params(rowLinks()[0]!);
+    expect(first.get('c')).toBe('c1');
+    expect(first.get('view')).toBe('resolved');
+    expect(first.get('channel')).toBe('WHATSAPP');
+  });
+
+  it('★ an empty filtered list says it is the filter, not that nothing waits', async () => {
+    render(
+      await ConversationList({ rows: [], cap: 10, now: NOW, hasMore: false, channel: 'WEBCHAT' }),
+    );
+    expect(screen.getByTestId('queue-empty').textContent).toBe(messages.queue.filter.emptyFiltered);
   });
 });

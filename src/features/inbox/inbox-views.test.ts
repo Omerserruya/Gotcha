@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { INBOX_VIEW_IDS, parseInboxView, viewQuery } from './inbox-views';
+import {
+  inboxQuery,
+  INBOX_VIEW_IDS,
+  parseChannelFilter,
+  parseInboxView,
+  QUEUE_CHANNEL_FILTERS,
+  viewQuery,
+} from './inbox-views';
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -66,5 +73,42 @@ describe('★ an unknown view is the default, never an error page', () => {
     // Both directions: a parser that only knew `queue` would satisfy the test
     // above and turn every rail item back into the bug.
     for (const id of INBOX_VIEW_IDS) expect(parseInboxView(id)).toBe(id);
+  });
+});
+
+describe('★ the channel filter is one of the five the header draws', () => {
+  it("accepts each of them, in 02's order", () => {
+    expect(QUEUE_CHANNEL_FILTERS).toEqual([
+      'WHATSAPP',
+      'INSTAGRAM',
+      'MESSENGER',
+      'EMAIL',
+      'WEBCHAT',
+    ]);
+    for (const id of QUEUE_CHANNEL_FILTERS) expect(parseChannelFilter(id)).toBe(id);
+  });
+
+  it('⚠ and anything else is "All" — including real channels with no chip', () => {
+    // A narrowed list with no chip lit would say nothing about what narrowed it.
+    for (const raw of [undefined, '', 'GMAIL', 'whatsapp', 'SHOPIFY_LIVE_CHAT']) {
+      expect(parseChannelFilter(raw), String(raw)).toBeNull();
+    }
+  });
+});
+
+describe('⚠⚠ an inbox link keeps where the reader is', () => {
+  it('★★ carries the view and the channel along with the conversation', () => {
+    // The row link was `{ c }` alone: opening one from Resolved snapped the
+    // list back to the queue.
+    expect(inboxQuery({ view: 'resolved', channel: 'EMAIL', c: 'c9' })).toEqual({
+      view: 'resolved',
+      channel: 'EMAIL',
+      c: 'c9',
+    });
+  });
+
+  it('leaves out what is already the default, and never a cursor', () => {
+    expect(inboxQuery({ view: 'queue', channel: null })).toEqual({});
+    expect(inboxQuery({ view: 'queue', channel: null, c: null })).toEqual({});
   });
 });
