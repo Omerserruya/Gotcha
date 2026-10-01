@@ -67,6 +67,13 @@ export default async function Page({
             now={now}
             hasMore={data.hasMore}
             undatedCount={data.undatedCount}
+            /*
+              ⚠ The row for the conversation on screen was visually identical
+                to every other row. `c` is the parameter this page already
+                reads; passing it back down is what lets the queue say where
+                you are.
+            */
+            openId={c ?? null}
           />
         </section>
 

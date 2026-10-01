@@ -10,6 +10,7 @@ import {
 
 import styles from './Inbox.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { Link } from '@/i18n/navigation';
 
 /**
  * Screen 02's queue.
@@ -46,9 +47,18 @@ export async function ConversationList({
   now,
   hasMore,
   undatedCount,
+  openId,
 }: {
   /** `null` when the read failed. Never an empty queue. */
   readonly rows: readonly ConversationRow[] | null;
+  /**
+   * The conversation currently open, so its row can say so.
+   *
+   * ⚠ In the capture, the open conversation's row was VISUALLY IDENTICAL to
+   *   the other nine. A queue that cannot show you where you are is a list
+   *   you have to re-read after every reply.
+   */
+  readonly openId?: string | null;
   /** How many the page holds. Stated on screen, not implied. */
   readonly cap: number;
   readonly now: Date;
@@ -100,23 +110,52 @@ export async function ConversationList({
   const row = (conversation: ConversationRow, testid: string) => {
     const waiting = waitingMinutes(conversation, now);
     return (
-      <li key={conversation.id} className={styles.queueRow} data-testid={testid}>
+      <li key={conversation.id} className={styles.queueItem}>
         {/*
+          ════════════════════════════════════════════════════════════════════
+          ⚠⚠ THE ROWS WERE NOT CLICKABLE. AT ALL.
+          ════════════════════════════════════════════════════════════════════
+          Measured on the deployed build: a `DIV`, no role, no tabindex, zero
+          links or buttons inside, `cursor: auto`, no hover, and nothing on
+          right-click. **The only way into a conversation was to type
+          `?c=<id>` in the address bar** — on the screen whose entire job is
+          choosing which conversation to open.
+
+          ★ A LINK, NOT THE DESIGN'S `<button onClick>`. The prototype uses a
+            button because a static mock has no routing; we have a real URL.
+            An anchor gives middle-click, open-in-new-tab, the browser's own
+            context menu, keyboard focus and a status-bar preview — all of
+            which a button reimplements badly or not at all. That is the same
+            reading as the code field's caret: when the mock draws something
+            the platform provides, it is describing an outcome.
+
+          ⚠ AND THE PARAMETER IS `c`, NOT `conversation`. The only reader is
+            `inbox/page.tsx`, which destructures `c`. A walk URL quoted
+            `?conversation=` and it was the harness's, not ours.
+        */}
+        <Link
+          href={{ pathname: '/inbox', query: { c: conversation.id } }}
+          className={styles.queueRow}
+          data-testid={testid}
+          aria-current={conversation.id === openId ? 'true' : undefined}
+          data-open={conversation.id === openId ? '' : undefined}
+        >
+          {/*
           ★★ THE CUSTOMER'S NAME, WHICH WAS "Someone" ON EVERY ROW.
           The contract named a field the platform does not send, so the real
           `customerName` was stripped and the invented one defaulted to null.
           Ten of ten rows in the capture read the fallback, and it looked like
           the security fixtures redacting.
         */}
-        <span className={styles.who}>
-          {conversation.customerName === null ? (
-            t('queue.unnamed')
-          ) : (
-            /* A name is the data's direction, not the layout's. */
-            <UserText>{conversation.customerName}</UserText>
-          )}
-        </span>
-        {/*
+          <span className={styles.who}>
+            {conversation.customerName === null ? (
+              t('queue.unnamed')
+            ) : (
+              /* A name is the data's direction, not the layout's. */
+              <UserText>{conversation.customerName}</UserText>
+            )}
+          </span>
+          {/*
           ★★ THE CHANNEL'S NAME, NOT ITS ENUM. `SHOPIFY_LIVE_CHAT` was on
           screen; `channels.name.SHOPIFY_LIVE_CHAT` has said "Shopify live
           chat" in both languages all along.
@@ -125,8 +164,8 @@ export async function ConversationList({
           string: `channel` is an unconstrained column, every other screen
           here strips raw identifiers, and an agent cannot act on an enum name.
         */}
-        <span className={styles.channel}>
-          {/*
+          <span className={styles.channel}>
+            {/*
             Three states through one helper. `channelName` returns `null` only
             for an absent channel — a recognised one gets its name and an
             unrecognised one gets "another channel" — so the distinction this
@@ -135,27 +174,28 @@ export async function ConversationList({
             This used `channels.name.other` under a local key of its own; the
             two said the same thing in two places, which is one of them too many.
           */}
-          {channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel')}
-        </span>
-        {/*
+            {channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel')}
+          </span>
+          {/*
           ★ NULL IS NOT ZERO. A row we cannot age says nothing rather than
           claiming it has been waiting no time at all, which would sort it
           alongside the freshest thing in the queue.
         */}
-        {waiting === null ? null : (
-          <span className={styles.waiting} data-testid={`waiting-${conversation.id}`}>
-            {/*
+          {waiting === null ? null : (
+            <span className={styles.waiting} data-testid={`waiting-${conversation.id}`}>
+              {/*
               ★★ AT A SCALE SOMEBODY CAN READ. This printed raw minutes, so
               the capture showed `47061m` — thirty-two days, on the column an
               agent triages on, and illegible enough to be reported as a
               possible identifier.
             */}
-            {(() => {
-              const { scale, value } = waitingScale(waiting);
-              return t(`queue.waitingFor.${scale}` as 'queue.waitingFor.minutes', { value });
-            })()}
-          </span>
-        )}
+              {(() => {
+                const { scale, value } = waitingScale(waiting);
+                return t(`queue.waitingFor.${scale}` as 'queue.waitingFor.minutes', { value });
+              })()}
+            </span>
+          )}
+        </Link>
       </li>
     );
   };

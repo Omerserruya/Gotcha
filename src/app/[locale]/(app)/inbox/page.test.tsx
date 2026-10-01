@@ -41,6 +41,14 @@ vi.mock('next-intl/server', () => ({
 }));
 vi.mock('server-only', () => ({}));
 
+/*
+ * ⚠ `ConversationList` now imports the locale-aware `Link`, which pulls in
+ *   `next/navigation` — unresolvable in this environment. This page test
+ *   inspects the TREE rather than rendering it, so the real Link is never
+ *   needed; the mock exists so the module graph loads at all.
+ */
+vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
+
 /** Every panel that must not be nested inside another. */
 const ASYNC_PANELS = new Set<unknown>([
   ConversationList,
@@ -239,5 +247,36 @@ describe('★★ what the page decides before the verbs are drawn', () => {
     expect(await verbs({ greeting: null })).toMatchObject({ greeting: null });
     expect(await verbs({ greeting: true })).toMatchObject({ greeting: true });
     expect(await verbs({ greeting: false })).toMatchObject({ greeting: false });
+  });
+});
+
+describe('⚠⚠ the queue is told which conversation is open', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * FOUND BY A SURVIVING MUTATION, AND IT IS THE SAME GAP AS `onScreen`
+   * ════════════════════════════════════════════════════════════════════════
+   * `ConversationList` is thoroughly tested for what it does with `openId`,
+   * and replacing this page's `openId={c ?? null}` with `null` broke nothing:
+   * 149 tests green with the selected state destroyed.
+   *
+   * ★ Two halves each tested and the join between them tested by neither.
+   *   Guards assert hops; this is the hop.
+   */
+  it('★★ passes the `c` parameter through to the list', async () => {
+    loadInbox.mockResolvedValue(data());
+    const { default: Page } = await import('./page');
+    const tree = await Page({ searchParams: Promise.resolve({ c: 'c7' }) });
+
+    const props = propsOf<{ openId?: string | null }>(tree, ConversationList);
+    expect(props?.openId).toBe('c7');
+  });
+
+  it('⚠ and passes null when nothing is open, not undefined', async () => {
+    /*
+     * ★ `null` is "nothing is open"; `undefined` is "nobody said". They read
+     *   the same at the call site and differ the moment anyone adds a default.
+     */
+    const props = propsOf<{ openId?: string | null }>(await page(), ConversationList);
+    expect(props?.openId).toBeNull();
   });
 });

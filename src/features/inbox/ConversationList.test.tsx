@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +9,37 @@ import channels from '@/i18n/messages/en/channels.json';
 import messages from '@/i18n/messages/en/inbox.json';
 
 import { ConversationList } from './ConversationList';
+
+/*
+ * ★ The established mock for this app's locale-aware `Link` — see
+ *   `TeamPanel.test.tsx`. It renders a real anchor so `href` and the
+ *   element TYPE can both be asserted, which is the point here: the rows
+ *   were `div`s and the defect was that they were not links at all.
+ *
+ * ⚠ `href` is an object for a query-carrying route, so it is serialised the
+ *   way `next/link` would rather than dropped — a mock that stringified it
+ *   as "[object Object]" would pass a test for "has an href".
+ */
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: string | { pathname: string; query?: Record<string, string> };
+    children: ReactNode;
+  }) => {
+    const to =
+      typeof href === 'string'
+        ? href
+        : `${href.pathname}?${new URLSearchParams(href.query ?? {}).toString()}`;
+    return (
+      <a href={to} {...rest}>
+        {children}
+      </a>
+    );
+  },
+}));
 
 /*
  * ★ BOTH NAMESPACES, BECAUSE THE ROW READS BOTH.
@@ -292,5 +325,93 @@ describe('★★ the view-wide undated count, and its three states', () => {
   it('★ a real zero IS reported, because somebody looked and found none', async () => {
     await show([row()], 50, false, 0);
     expect(screen.queryByTestId('queue-undated')).toBeNull();
+  });
+});
+
+describe('⚠⚠ the rows were not clickable, on the screen whose job is clicking them', () => {
+  /* Two rows with known ids, so an `href` can be asserted against one. */
+  const queue = () => [row({ id: 'c1' }), row({ id: 'c2' })];
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * MEASURED ON THE DEPLOYED BUILD
+   * ════════════════════════════════════════════════════════════════════════
+   *     element        DIV
+   *     role/tabindex  none / none
+   *     links/buttons  0
+   *     cursor         auto
+   *     right-click    0 menu elements
+   *
+   * ★ The only way into a conversation was typing `?c=<id>` in the address
+   *   bar. That is not a styling gap — it is the screen's primary function
+   *   missing, and it explains "light years from the target" better than any
+   *   spacing value.
+   */
+  it('★★ every row is a link to that conversation', async () => {
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+
+    const rows = screen.getAllByRole('link');
+    expect(rows.length).toBe(queue().length);
+    expect(rows[0]).toHaveAttribute('href', expect.stringContaining('c=c1'));
+  });
+
+  it('⚠⚠ a LINK, not a button, because a conversation has a URL', async () => {
+    /*
+     * ★ The prototype draws `<button onClick>` because a static mock has no
+     *   routing. An anchor gives middle-click, open-in-new-tab, the browser's
+     *   own context menu — which the reviewer asked about by name — keyboard
+     *   focus and a status-bar preview. A button reimplements those badly or
+     *   not at all.
+     *
+     * ★ Same reading as the code field's caret: when the mock draws something
+     *   the platform provides, it is describing an outcome, not an
+     *   implementation.
+     */
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    for (const row of screen.getAllByRole('link')) {
+      expect(row.tagName).toBe('A');
+    }
+  });
+
+  it('⚠⚠ uses `c`, the parameter this app actually reads', async () => {
+    /*
+     * ★ `inbox/page.tsx` destructures `c`, and it is the only reader. A walk
+     *   quoted `?conversation=` — that was the harness's URL, not ours, and
+     *   building the link on it would have produced rows that navigate to a
+     *   page which opens nothing.
+     */
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+
+    const href = screen.getAllByRole('link')[0]!.getAttribute('href') ?? '';
+    expect(new URL(href, 'https://x.test').searchParams.get('c')).toBe('c1');
+    expect(href).not.toContain('conversation=');
+  });
+
+  it('★★ the open conversation says so, and the others do not', async () => {
+    /*
+     * ⚠ In the capture the open conversation's row was visually identical to
+     *   the other nine. A queue that cannot show you where you are is a list
+     *   you re-read after every reply.
+     */
+    render(
+      await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false, openId: 'c2' }),
+    );
+
+    const rows = screen.getAllByRole('link');
+    const current = rows.filter((row) => row.getAttribute('aria-current') === 'true');
+
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveAttribute('href', expect.stringContaining('c=c2'));
+  });
+
+  it('⚠ and with nothing open, no row claims to be current', async () => {
+    // Both directions. A row that is always current is the same defect
+    // wearing the opposite sign.
+    render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
+    for (const row of screen.getAllByRole('link')) {
+      expect(row).not.toHaveAttribute('aria-current');
+    }
   });
 });

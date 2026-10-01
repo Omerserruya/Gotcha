@@ -88,12 +88,57 @@
     list-style: none;
   }
 
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ THE ROW IS A LINK NOW, AND IT USED TO BE A `DIV` WITH NO CURSOR
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured on the deployed build: `cursor: auto`, transparent on hover,
+   * nothing on right-click, zero focusable elements. The queue looked like a
+   * read-only list because it WAS one.
+   *
+   * ★ The prototype draws `padding:13px 16px` with a `border-left:3px` edge
+   *   and a per-row background; this is the interactive half of that — the
+   *   avatar, preview, badges and tags are the other half and are not here
+   *   yet. Naming that rather than letting it look finished.
+   */
+  .queueItem {
+    list-style: none;
+  }
+
   .queueRow {
     display: flex;
     align-items: baseline;
     gap: var(--space-8);
-    padding: var(--space-8) 0;
+    padding: var(--space-8) var(--space-12);
     border-block-end: 1px solid var(--border-subtle);
+    color: inherit;
+    text-decoration: none;
+    /*
+     * The edge the design carries per row. Transparent until there is
+     * something to say, so the rows do not shift by three pixels when one
+     * becomes current.
+     */
+    border-inline-start: 3px solid transparent;
+  }
+
+  .queueRow:hover {
+    background-color: var(--panel-sunken);
+  }
+
+  /*
+   * ⚠ THE OPEN CONVERSATION LOOKED LIKE EVERY OTHER ROW. In the capture, the
+   *   one on screen to the right was visually identical to the other nine —
+   *   a queue that cannot show you where you are is a list you re-read after
+   *   every reply.
+   */
+  .queueRow[data-open] {
+    background-color: var(--panel-sunken);
+    border-inline-start-color: var(--action-base);
+  }
+
+  .queueRow:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
   }
 
   /*
