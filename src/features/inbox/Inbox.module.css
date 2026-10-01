@@ -225,8 +225,9 @@
   .queueFooter {
     flex: none;
     margin: 0;
-    padding: var(--space-12) var(--space-16);
-    background-color: var(--panel-inset);
+    /* 02: `padding:11px 18px` on `#F5F2EC`. */
+    padding: 11px 18px;
+    background-color: var(--panel-footer);
     border-block-start: 1px solid var(--border-subtle);
     border-end-start-radius: 18px;
     border-end-end-radius: 18px;
@@ -829,6 +830,22 @@
      */
     overflow: hidden;
     min-block-size: 0;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ ONE CAUSE BEHIND EVERY HEIGHT IN THE QUEUE: THE LINE-HEIGHT
+   * ════════════════════════════════════════════════════════════════════════
+   * 02 sets no line-height anywhere in the queue, so each line is the
+   * browser's `normal` for Archivo. We inherited the body's 1.6, and every
+   * line came out taller with padding, gaps and sizes all correct — measured:
+   * name 15h → 22h, row 86h → 94h, header 87h → 97h, footer 35h → 43h.
+   *
+   * ★ Here, on the panel, because the shell is closed and the body's 1.6 is
+   *   right for the rest of the product.
+   */
+  .queueColumn {
+    line-height: normal;
   }
 }
 

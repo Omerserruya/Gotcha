@@ -897,6 +897,23 @@ describe('⚠⚠ "a WINDOW YOU SCROLL INSIDE, not outside"', () => {
     expect(columns).toMatch(/overflow:\s*hidden/);
     expect(columns).toMatch(/min-block-size:\s*0/);
   });
+
+  it('⚠⚠ the queue lines are `normal`, not the body’s 1.6', () => {
+    /*
+     * 02 sets no line-height in the queue. Inheriting 1.6 made every line
+     * taller with every other value right: rows 94h against 86h, header 97h
+     * against 87h. Measured on the deployed build, one cause for all of it.
+     */
+    expect(rule('queueColumn')).toMatch(/line-height:\s*normal/);
+  });
+
+  it('★ the footer bar is 02’s: `padding:11px 18px` on #F5F2EC', () => {
+    expect(rule('queueFooter')).toMatch(/padding:\s*11px 18px/);
+    expect(rule('queueFooter')).toMatch(/background-color:\s*var\(--panel-footer\)/);
+    expect(readFileSync('src/design-system/tokens/tokens.css', 'utf8')).toMatch(
+      /--panel-footer:\s*#f5f2ec/i,
+    );
+  });
 });
 
 describe('★★ the Copilot wall is dark, and inherits only the panel’s bottom corner', () => {

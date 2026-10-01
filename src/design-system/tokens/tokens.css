@@ -357,6 +357,8 @@
     --panel-inset: #f3f0ea;
     --panel-sunken: #f1efe9;
     --panel-well: #f0ede7;
+    /* The bar that closes a panel — 02's queue footer. */
+    --panel-footer: #f5f2ec;
     --panel-field: #fff;
 
     --text-primary: #121212;
