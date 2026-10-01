@@ -335,7 +335,33 @@
   .surface:has([data-owns-panels]) {
     background-color: transparent;
     border-radius: 0;
-    overflow: visible;
+    /*
+     * ⚠⚠ `hidden`, NOT `visible`. It was visible, and that is why the panels
+     *    ran off the bottom of the viewport: a screen that owns its own
+     *    panels needs them CLIPPED to the frame, not allowed to grow past it.
+     */
+    overflow: hidden;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ "EVERY CONTAINER SHOULD BE A WINDOW YOU SCROLL INSIDE, NOT OUTSIDE"
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured on the rendered 02: the frame is a FIXED 900px with
+   * `overflow:hidden`, and each panel is exactly `876px` — 900 less its 12px
+   * padding top and bottom — also `overflow:hidden`, also `display:flex`.
+   *
+   * ★ A fixed-height flex column that hides its overflow has one purpose: it
+   *   is a window whose INNER region scrolls. The mock reports no scrollers
+   *   because its content is pre-trimmed, but nothing else explains the
+   *   structure.
+   *
+   * ⚠ So this stops scrolling for such a screen. The page itself must never
+   *   scroll — only the regions inside the panels do. Leaving `overflow-y:
+   *   auto` here is what produced panels with no bottom edge.
+   */
+  .main:has([data-owns-panels]) {
+    overflow: hidden;
   }
 
   .main {

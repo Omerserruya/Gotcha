@@ -96,6 +96,18 @@
     flex: 1;
   }
 
+  /*
+   * ⚠⚠ `min-block-size: 0` IS THE DECLARATION THE WHOLE THING TURNS ON.
+   *    Without it a flex child refuses to shrink below its content: the list
+   *    pushes the panel taller, the panel overflows the frame, and you get a
+   *    box with no bottom instead of a window that scrolls.
+   */
+  .queueScroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
   .queueList {
     display: flex;
     flex-direction: column;
@@ -123,6 +135,7 @@
    */
   /* 02: `padding:14px 18px`, bottom hairline, heading plus a count chip. */
   .queueHeader {
+    flex: none;
     display: flex;
     align-items: center;
     gap: var(--space-8);
@@ -147,8 +160,8 @@
   }
 
   .queueFooter {
+    flex: none;
     margin: 0;
-    margin-block-start: auto;
     padding: var(--space-12) var(--space-16);
     background-color: var(--panel-inset);
     border-block-start: 1px solid var(--border-subtle);
@@ -559,6 +572,15 @@
     gap: 10px;
     align-items: stretch;
     /*
+     * ⚠⚠ THE SCREEN IS THE FRAME'S HEIGHT, AND NOT ONE PIXEL MORE.
+     *    02's panels are `876px` — the 900px frame less its 12px padding —
+     *    and `min-block-size: 0` is what lets this grid shrink to it. Without
+     *    that, a grid refuses to go below its content, the panels grow past
+     *    the viewport, and the PAGE scrolls instead of the panels.
+     */
+    block-size: 100%;
+    min-block-size: 0;
+    /*
      * ⚠⚠ NO BACKGROUND HERE, AND IT USED TO BE `--panel-sunken`. That colour
      *    came from a different frame in the design file. Rendered, 02's page
      *    is `rgb(18,18,18)` — the DARK FRAME — and the three panels are light
@@ -600,6 +622,32 @@
    *   found nothing because ours are lowercase, which nearly produced six
    *   duplicate tokens for colours we already had.
    */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE CONVERSATION PANEL IS THE SAME SHAPE: FIXED, SCROLLING, FIXED
+   * ════════════════════════════════════════════════════════════════════════
+   * 02: a header at the top, the message stream scrolling, and the composer
+   * PINNED at the bottom — not at the end of a long page. Every direct child
+   * holds its height; only the stream gives.
+   *
+   * ★ `.stream` is `MessageStream`'s own root and a direct child here, so
+   *   this needs no wrapper in the JSX — the structure was already right and
+   *   nothing was telling it which part moves.
+   *
+   * ⚠ `min-block-size: 0` again. A flex child will not shrink below its
+   *   content without it, so the stream would push the composer off the
+   *   bottom rather than scrolling under it.
+   */
+  .conversationColumn > * {
+    flex: none;
+  }
+
+  .conversationColumn .stream {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
   .queueColumn,
   .conversationColumn,
   .contextColumn {
@@ -608,7 +656,14 @@
     min-inline-size: 0;
     background-color: var(--panel-base);
     border-radius: 18px;
+    /*
+     * ★ `overflow: hidden` is what makes the rows' square corners disappear
+     *   into the rounded panel AND what stops the panel growing past the
+     *   frame. One declaration, two jobs, and the second is the one Omer
+     *   asked for: a window you scroll inside.
+     */
     overflow: hidden;
+    min-block-size: 0;
   }
 }
 

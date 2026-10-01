@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import type { ReactNode } from 'react';
 
 import { render, screen } from '@testing-library/react';
@@ -831,5 +833,56 @@ describe('⚠⚠ "every thing in its own container" — the panel, and how a row
      */
     render(await ConversationList({ rows: [], cap: 10, now: NOW, hasMore: false }));
     expect(screen.getByTestId('queue-count')).toHaveTextContent('0');
+  });
+});
+
+describe('⚠⚠ "a WINDOW YOU SCROLL INSIDE, not outside"', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE PANELS RAN OFF THE BOTTOM AND THE PAGE SCROLLED INSTEAD
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured on the rendered 02: the frame is a fixed 900px with
+   * `overflow:hidden`, and each panel is exactly 876px — 900 less its 12px
+   * padding — also hidden, also a flex column. A fixed-height flex column
+   * that hides overflow is a window whose INNER region scrolls.
+   *
+   * ★ And the footer bar is the proof the structure is right: 02 welds it to
+   *   the panel's bottom with `border-radius: 0 0 18px 18px`. **A footer at
+   *   the bottom of a panel only works if the panel HAS a bottom.**
+   */
+  const css = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const rule = (selector: string) =>
+    new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+
+  it('★★ the list sits in a scroll region, and the header and footer do not', async () => {
+    render(await ConversationList({ rows: [row()], cap: 10, now: NOW, hasMore: false }));
+
+    const scroll = screen.getByTestId('conversation-list').querySelector('div');
+    expect(scroll).not.toBeNull();
+    expect(rule('queueScroll')).toMatch(/overflow-y:\s*auto/);
+    expect(rule('queueHeader')).toMatch(/flex:\s*none/);
+    expect(rule('queueFooter')).toMatch(/flex:\s*none/);
+  });
+
+  it('⚠⚠ and the scroll region can SHRINK, which is the whole thing', async () => {
+    /*
+     * ★★ `min-block-size: 0` is the declaration it all turns on. Without it a
+     *   flex child refuses to go below its content: the list pushes the panel
+     *   taller, the panel overflows the frame, and you get a box with no
+     *   bottom rather than a window that scrolls.
+     *
+     * ⚠ It is one line, it looks like boilerplate, and it is the difference
+     *   between the complaint and the design.
+     */
+    expect(rule('queueScroll')).toMatch(/min-block-size:\s*0/);
+  });
+
+  it('★ the panel itself clips, so rows cannot escape its rounded corners', async () => {
+    const columns = /\.queueColumn,[\s\S]*?\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(columns).toMatch(/overflow:\s*hidden/);
+    expect(columns).toMatch(/min-block-size:\s*0/);
   });
 });

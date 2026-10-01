@@ -443,89 +443,100 @@ export async function ConversationList({
       </header>
 
       {/*
-        ★★ THE CAP IS STATED, NOT IMPLIED. A list that stops at N and says
-        nothing teaches an agent that N is all there is.
+        ⚠⚠ THE SCROLLING REGION, AND IT IS THE WHOLE OF "A WINDOW YOU SCROLL
+           INSIDE". The header above and the footer below are `flex: none`;
+           this is `flex: 1` with `min-block-size: 0`, so the panel stays the
+           frame's height and the LIST moves inside it.
+
+        ★ Without the wrapper the list is a direct child of the panel and
+          pushes it taller — which is the bottom edge running off the screen.
       */}
+      <div className={styles.queueScroll}>
+        {/*
+          ★★ THE CAP IS STATED, NOT IMPLIED. A list that stops at N and says
+          nothing teaches an agent that N is all there is.
+        */}
 
-      {dated.length === 0 && undated.length === 0 ? (
-        <p className={styles.note} data-testid="queue-empty">
-          {t('queue.empty')}
-        </p>
-      ) : (
-        <ol className={styles.queueList}>{dated.map((c) => row(c, `conversation-${c.id}`))}</ol>
-      )}
-
-      {/*
-        ════════════════════════════════════════════════════════════════════
-        ★★ THE ROWS THE ORDERING CANNOT PLACE, SHOWN RATHER THAN SUNK
-        ════════════════════════════════════════════════════════════════════
-        `lastMessageAt` is maintained by convention and some writers skip it.
-        A null sinks to the floor of a recency list and is never seen — the
-        same defect as the pagination skip, and the reason this list is
-        capped in the first place.
-
-        Its own group says the true thing: open, and we cannot tell where
-        they belong. The count makes a growing problem visible instead of
-        gradual — if writers that forget are common, that number rising is
-        how anybody would ever find out, and it rises in front of the person
-        using the screen rather than only in an audit.
-
-        ════════════════════════════════════════════════════════════════════
-        ⚠ AND THIS COVERS THE VISIBLE TENTH OF THE PROBLEM
-        ════════════════════════════════════════════════════════════════════
-        **We can refuse to bury the rows that ADMIT they do not know. We
-        cannot find the ones that are quietly wrong.** A stale
-        `lastMessageAt` — a plausible timestamp from before the newest
-        message, written by a forgetful path — is indistinguishable from a
-        correct one at every layer we control. Nothing on the row disagrees
-        with it and the list looks entirely normal.
-
-        This is written here rather than only in a message because **a
-        partial fix that looks complete is how a known problem stops being
-        tracked**, and this one is shaped to look complete: a named group, a
-        count, a true sentence, all correct, covering the minority case.
-
-        The majority case is with the write-path audit and is not solvable
-        from this file.
-
-        ════════════════════════════════════════════════════════════════════
-        ⚠ AND THE GROUP ITSELF IS PER PAGE, BECAUSE NULLS SORT LAST
-        ════════════════════════════════════════════════════════════════════
-        The server orders `{ lastMessageAt: desc, nulls: last }`, so every
-        undated row sits at the **very end of the whole queue**. On a tenant
-        with more conversations than one page holds, this group is empty on
-        every page but the last — and an empty group reads as "none".
-
-        Found when the keyset endpoint landed and made the paging real. It
-        was already true of the capped list and I had not seen it: the group
-        I built to make a hidden problem visible was itself hidden by the
-        ordering, for exactly the tenants with enough conversations to have
-        the problem.
-
-        So the caption says which it is. A whole-queue count needs an
-        endpoint nobody offers yet.
-      */}
-      {showUndated ? (
-        <section data-testid="queue-undated">
-          {/*
-            ★★ THE VIEW-WIDE COUNT SUPERSEDES THE PER-PAGE ONE.
-
-            `undatedCount` is scoped to this view's filters and is
-            cursor-blind, so it answers the question the per-page group could
-            only gesture at. When it is absent — an older service, or a
-            failed read — the caption falls back to what this page can see
-            and says that is what it is.
-          */}
-          <p className={styles.note}>
-            {undatedCount !== undefined
-              ? t('queue.undatedInView', { count: undatedCount })
-              : hasMore
-                ? t('queue.undatedThisPage', { count: undated.length })
-                : t('queue.undated', { count: undated.length })}
+        {dated.length === 0 && undated.length === 0 ? (
+          <p className={styles.note} data-testid="queue-empty">
+            {t('queue.empty')}
           </p>
-          <ol className={styles.queueList}>{undated.map((c) => row(c, `undated-${c.id}`))}</ol>
-        </section>
-      ) : null}
+        ) : (
+          <ol className={styles.queueList}>{dated.map((c) => row(c, `conversation-${c.id}`))}</ol>
+        )}
+
+        {/*
+          ════════════════════════════════════════════════════════════════════
+          ★★ THE ROWS THE ORDERING CANNOT PLACE, SHOWN RATHER THAN SUNK
+          ════════════════════════════════════════════════════════════════════
+          `lastMessageAt` is maintained by convention and some writers skip it.
+          A null sinks to the floor of a recency list and is never seen — the
+          same defect as the pagination skip, and the reason this list is
+          capped in the first place.
+
+          Its own group says the true thing: open, and we cannot tell where
+          they belong. The count makes a growing problem visible instead of
+          gradual — if writers that forget are common, that number rising is
+          how anybody would ever find out, and it rises in front of the person
+          using the screen rather than only in an audit.
+
+          ════════════════════════════════════════════════════════════════════
+          ⚠ AND THIS COVERS THE VISIBLE TENTH OF THE PROBLEM
+          ════════════════════════════════════════════════════════════════════
+          **We can refuse to bury the rows that ADMIT they do not know. We
+          cannot find the ones that are quietly wrong.** A stale
+          `lastMessageAt` — a plausible timestamp from before the newest
+          message, written by a forgetful path — is indistinguishable from a
+          correct one at every layer we control. Nothing on the row disagrees
+          with it and the list looks entirely normal.
+
+          This is written here rather than only in a message because **a
+          partial fix that looks complete is how a known problem stops being
+          tracked**, and this one is shaped to look complete: a named group, a
+          count, a true sentence, all correct, covering the minority case.
+
+          The majority case is with the write-path audit and is not solvable
+          from this file.
+
+          ════════════════════════════════════════════════════════════════════
+          ⚠ AND THE GROUP ITSELF IS PER PAGE, BECAUSE NULLS SORT LAST
+          ════════════════════════════════════════════════════════════════════
+          The server orders `{ lastMessageAt: desc, nulls: last }`, so every
+          undated row sits at the **very end of the whole queue**. On a tenant
+          with more conversations than one page holds, this group is empty on
+          every page but the last — and an empty group reads as "none".
+
+          Found when the keyset endpoint landed and made the paging real. It
+          was already true of the capped list and I had not seen it: the group
+          I built to make a hidden problem visible was itself hidden by the
+          ordering, for exactly the tenants with enough conversations to have
+          the problem.
+
+          So the caption says which it is. A whole-queue count needs an
+          endpoint nobody offers yet.
+        */}
+        {showUndated ? (
+          <section data-testid="queue-undated">
+            {/*
+              ★★ THE VIEW-WIDE COUNT SUPERSEDES THE PER-PAGE ONE.
+
+              `undatedCount` is scoped to this view's filters and is
+              cursor-blind, so it answers the question the per-page group could
+              only gesture at. When it is absent — an older service, or a
+              failed read — the caption falls back to what this page can see
+              and says that is what it is.
+            */}
+            <p className={styles.note}>
+              {undatedCount !== undefined
+                ? t('queue.undatedInView', { count: undatedCount })
+                : hasMore
+                  ? t('queue.undatedThisPage', { count: undated.length })
+                  : t('queue.undated', { count: undated.length })}
+            </p>
+            <ol className={styles.queueList}>{undated.map((c) => row(c, `undated-${c.id}`))}</ol>
+          </section>
+        ) : null}
+      </div>
 
       {/*
         ════════════════════════════════════════════════════════════════════
