@@ -1,5 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import messages from '@/i18n/messages/en/auth.json';
 
 const completeAuthorization = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/flow-executor', () => ({ completeAuthorization }));
@@ -16,7 +19,12 @@ beforeEach(() => {
   Object.defineProperty(window, 'location', { value: { replace }, writable: true });
 });
 
-const show = () => render(<FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} />);
+const show = () =>
+  render(
+    <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+      <FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} />
+    </NextIntlClientProvider>,
+  );
 
 describe('⚠⚠ the last hop, without the provider drawing it', () => {
   it('★★ goes to our callback when the flow completes there', async () => {
@@ -63,23 +71,38 @@ describe('⚠⚠ the last hop, without the provider drawing it', () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith(AUTHORIZE));
   });
 
-  it('★ draws nothing — it is a hop, not a screen', () => {
+  it('⚠⚠ SHOWS something — it owns the screen for about 2.6 seconds', () => {
     /*
-     * ⚠ THIS ASSERTED AN EMPTY CONTAINER AND HAD TO BE RE-AIMED. The rule is
-     *   that nothing is DRAWN: it renders over a screen the person is already
-     *   looking at, and a spinner that appears and vanishes reads as a fault
-     *   rather than as progress.
+     * ══════════════════════════════════════════════════════════════════
+     * THIS TEST USED TO ASSERT THE OPPOSITE, AND IT WAS RIGHT AT THE TIME
+     * ══════════════════════════════════════════════════════════════════
+     * "Draws nothing — it is a hop, not a screen", on the reasoning that a
+     * spinner appearing and vanishing reads as a fault. **Measured from the
+     * submit click: eight elements on `rgb(18,18,18)` from 2.6s to 5.2s.**
      *
-     *   "No DOM at all" was a proxy for that, and it held only while the
-     *   component had nothing to say. It now carries its outcome in
-     *   attributes — because a log did not arrive anywhere — and the proxy
-     *   failed on a correct component. Assert the rule.
+     * ★ The reasoning was about a loader that ANIMATES IN. The conclusion
+     *   drawn from it — draw nothing at all — did not follow, and a reviewer
+     *   asked why there is a black screen after sign-in.
+     *
+     * ★ So it shows the brand and the same sentence the panel uses while its
+     *   own first stage lands, with no entrance animation: the give-up path
+     *   can navigate away in 200ms, and something that fades in would flash
+     *   and be torn out.
      */
     completeAuthorization.mockResolvedValue({ reason: 'stage', component: 'ak-stage-consent' });
     show();
+
     const marker = screen.getByTestId('finish-sign-in');
-    expect(marker).not.toBeVisible();
-    expect(marker.textContent).toBe('');
+    expect(marker).toBeVisible();
+    expect(marker.textContent).not.toBe('');
+  });
+
+  it('★★ and it says the same thing the panel says, not a new sentence', () => {
+    // `signIn.starting` — "One moment." Already bilingual, and the same
+    // situation: a stage machine working between screens.
+    completeAuthorization.mockResolvedValue({ reason: 'threw' });
+    show();
+    expect(screen.getByTestId('finish-sign-in').textContent).toContain(messages.signIn.starting);
   });
 
   it('⚠ uses replace, so the back button cannot land on a spent authorize URL', async () => {
@@ -171,7 +194,11 @@ describe('⚠⚠ it says what happened in the DOM, not only in a log', () => {
   it('⚠⚠ and `hold` stops before navigating, so the outcome can be read', async () => {
     completeAuthorization.mockResolvedValue({ reason: 'no-flow' });
 
-    render(<FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />);
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />
+      </NextIntlClientProvider>,
+    );
     const marker = await screen.findByTestId('finish-sign-in');
     await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'gave-up'));
     expect(replace).not.toHaveBeenCalled();
@@ -222,7 +249,9 @@ describe('⚠⚠ the give-up that had no name', () => {
     ]) {
       completeAuthorization.mockResolvedValue(answer);
       const { unmount } = render(
-        <FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />,
+        <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+          <FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />
+        </NextIntlClientProvider>,
       );
       const marker = await screen.findByTestId('finish-sign-in');
       await waitFor(() => expect(marker).toHaveAttribute('data-phase', 'gave-up'));
@@ -257,7 +286,11 @@ describe('⚠⚠ the eighth path: a back button onto a spent authorize URL', () 
   const showAt = (href: string) => {
     Object.defineProperty(window, 'location', { value: { replace, href }, writable: true });
     Object.defineProperty(window, 'history', { value: { replaceState }, writable: true });
-    return render(<FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />);
+    return render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />
+      </NextIntlClientProvider>,
+    );
   };
 
   it('★★ drops the parameter from this history entry', async () => {
@@ -309,7 +342,11 @@ describe('⚠⚠ the eighth path: a back button onto a spent authorize URL', () 
       writable: true,
     });
     Object.defineProperty(window, 'history', { value: { replaceState }, writable: true });
-    render(<FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} />);
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} />
+      </NextIntlClientProvider>,
+    );
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith(`${CALLBACK}?code=abc&state=s`));
   });

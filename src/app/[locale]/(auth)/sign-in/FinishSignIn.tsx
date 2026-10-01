@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from 'react';
 
+import { useTranslations } from 'next-intl';
+
 import { completeAuthorization, type AuthorizationOutcome } from '@/api/client/flow-executor';
 import { followableCompletion } from '@/api/contracts/auth-flow';
+import { Logo } from '@/design-system/brand/Logo';
 import { logger } from '@/observability/logger';
+
+import styles from './SignIn.module.css';
 
 /**
  * The last hop of sign-in, done with two fetches instead of a rendered page.
@@ -62,6 +67,7 @@ export function FinishSignIn({
    */
   readonly hold?: boolean;
 }) {
+  const t = useTranslations('auth');
   const [phase, setPhase] = useState<'working' | 'done' | 'gave-up'>('working');
   const [outcome, setOutcome] = useState<AuthorizationOutcome | null>(null);
   /*
@@ -148,18 +154,30 @@ export function FinishSignIn({
   }, [authorizeUrl, callbackUrl, hold]);
 
   /*
-   * An empty element rather than `null`. It renders for the length of two
-   * fetches on a screen the person is already looking at, so it must not draw
-   * anything — a spinner that appears and vanishes reads as a fault rather
-   * than as progress — but it must be FINDABLE, which `null` is not.
+   * ⚠⚠ THIS DREW NOTHING, AND IT OWNS THE SCREEN FOR ~2.6 SECONDS.
+   *
+   * Measured from the submit click: the panel until 2.2s, then eight elements
+   * on `#121212` until 5.2s. The comment that used to sit here said a spinner
+   * appearing and vanishing reads as a fault rather than as progress — true
+   * of one that ANIMATES IN, and the wrong conclusion to draw from it.
+   *
+   * ★ So: the brand, and the same sentence the panel shows while its own
+   *   first stage lands. No entrance animation, because the give-up path can
+   *   navigate away in 200ms.
+   *
+   * ★ The diagnostic attributes stay. They are how a walk tells "ran and gave
+   *   up" from "never ran", and that distinction cost a day to get.
    */
   return (
     <div
-      hidden
+      className={styles.finishing}
       data-testid="finish-sign-in"
       data-phase={phase}
       data-reason={giveUp ?? ''}
       data-component={outcome?.component ?? ''}
-    />
+    >
+      <Logo variant="framed" size={38} />
+      <p className={styles.finishingWord}>{t('signIn.starting')}</p>
+    </div>
   );
 }

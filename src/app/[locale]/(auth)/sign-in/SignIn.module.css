@@ -37,6 +37,47 @@
    *   order of thing — but it IS a deviation from "stick to the design", so it
    *   is written here rather than absorbed silently. Reported alongside.
    */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ 2.6 SECONDS OF AN EMPTY #121212 PAGE, AND IT WAS ASSERTED ON PURPOSE
+   * ════════════════════════════════════════════════════════════════════════
+   * Sampled every 350ms from the submit click: the panel at 0.4s, a navigation
+   * at 2.2s, then **eight elements on `rgb(18,18,18)` until 5.2s**. Our origin,
+   * our background, nothing drawn.
+   *
+   * ★ It is the finishing hop's own page. `FinishSignIn` rendered a hidden
+   *   marker and nothing else — and a test of mine asserted exactly that,
+   *   because at the time the component had nothing to say. **The design was
+   *   the defect**, not a regression against it.
+   *
+   * ★ The brand stays put. The person was looking at a frame with GOTCHA in
+   *   the corner a moment ago; keeping it means the screen does not blank and
+   *   repopulate, it simply waits.
+   *
+   * ⚠ NO ENTRANCE ANIMATION, DELIBERATELY. The give-up path navigates away,
+   *   sometimes in 200ms, and a loader that fades in over 300ms would flash
+   *   and be torn out — worse than the blank it replaces. It is stable across
+   *   both outcomes because it does not move.
+   */
+  .finishing {
+    min-block-size: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-16);
+    padding: var(--space-32);
+    color: var(--frame-text);
+  }
+
+  .finishingWord {
+    font-size: var(--font-size-meta);
+    /* On the DARK frame, so not `--text-subtle` — that is the light-card
+       role, and reaching for it here is the eyebrow mistake from this
+       morning. */
+    color: var(--frame-text-muted);
+  }
+
   .editorial {
     inline-size: 508px;
     flex: none;
