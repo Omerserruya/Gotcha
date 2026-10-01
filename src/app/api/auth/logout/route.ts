@@ -25,6 +25,22 @@ import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
  * too is best-effort - if the provider has no end-session endpoint we still
  * want the local sign-out to have happened.
  */
+/**
+ * The sealed id token, or null — and it NEVER throws.
+ *
+ * ★ Separate from the end-session call so that a hint we cannot read costs a
+ *   confirmation screen rather than the whole sign-out. Every failure here is
+ *   "no hint", which is the behaviour this route had before hints existed.
+ */
+async function readHint(request: NextRequest): Promise<string | null> {
+  try {
+    return await unsealIdToken(request.cookies.get(ID_TOKEN_COOKIE)?.value);
+  } catch (cause) {
+    logger.warn('auth.logout.hint_unreadable', { cause });
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   /*
    * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
@@ -43,43 +59,61 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // `appUrl`, not `new URL('/sign-in', …)`: an absolute path discards the
   // origin's own path, which is where this app is mounted.
+  /*
+   * ════════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ READ THE HINT FIRST, AND OUTSIDE THE TRY. THIS IS WHY.
+   * ════════════════════════════════════════════════════════════════════════════
+   * The first version read it INSIDE the try whose catch falls back to a
+   * local redirect. That catch exists for one thing — a provider with no
+   * `end_session_endpoint` — and putting anything else inside it means any
+   * failure there silently turns a sign-out into a redirect that signs
+   * nobody out of anything.
+   *
+   * ★ A sign-out that does not reach the provider is not a sign-out. It is
+   *   worse than the confirmation screen it was meant to remove, because the
+   *   screen at least ended the session.
+   */
+  const idToken = await readHint(request);
+
   let redirectTo = appUrl('/sign-in', env.APP_ORIGIN);
+  let reachedProvider = false;
+
   if (session) {
     try {
       /*
-       * ════════════════════════════════════════════════════════════════════
-       * ★★ `id_token_hint` WHEN WE HAVE ONE — AND WE NOW USUALLY DO
-       * ════════════════════════════════════════════════════════════════════
-       * This used to say the id token could not be kept because it pushed the
-       * session cookie past 4 KB. True, and the conclusion drawn from it was
-       * wrong: **the limit is per cookie, not per domain.** It now lives in
-       * its own cookie scoped to this path, so it is sent here and nowhere
-       * else.
-       *
-       * Without the hint, RP-initiated logout can only offer `client_id` —
+       * Without a hint, RP-initiated logout can only offer `client_id` —
        * which says which application is asking but not WHO — so the provider
        * asks the person to confirm, on its own page, in its own vocabulary.
-       * That screen is the entire cost, and it is what a reviewer
-       * photographed.
-       *
-       * ⚠ THE FALLBACK IS THE OLD BEHAVIOUR, DELIBERATELY. An older session,
-       *   a cleared cookie, a rotated secret, a grant with no id token: every
-       *   one of those omits the hint and gets the confirmation screen. **A
-       *   sign-out that asks is far better than a sign-out that fails**, and
-       *   a truncated or malformed hint risks the second.
+       * That screen is the entire cost of the fallback, and it is what a
+       * reviewer photographed.
        */
-      const idToken = await unsealIdToken(request.cookies.get(ID_TOKEN_COOKIE)?.value);
-
       redirectTo = buildEndSessionUrl(await oidcConfiguration(), {
         ...(idToken ? { id_token_hint: idToken } : { client_id: env.OIDC_CLIENT_ID }),
         post_logout_redirect_uri: appUrl('/sign-in', env.APP_ORIGIN),
       }).toString();
-    } catch {
-      // No end-session endpoint advertised; local sign-out is enough.
+      reachedProvider = true;
+    } catch (cause) {
+      /*
+       * ⚠ NO LONGER SILENT. This swallowed its reason, and a sign-out that
+       *   quietly stops calling the provider is the one failure that looks
+       *   like success from the outside — it lands on our sign-in page, which
+       *   is exactly where a working sign-out lands.
+       */
+      logger.error('auth.logout.no_end_session', { cause });
     }
   }
 
-  logger.info('auth.logout', { sessionId: session?.sid });
+  /*
+   * ⚠⚠ THE PROPERTY, STATED WHERE IT CAN BE SEEN: a session that existed
+   *   must have produced a provider URL. `redirectTo` being a valid string is
+   *   not the same as it pointing anywhere useful, and a local URL is a valid
+   *   string and a passing shape.
+   */
+  logger.info('auth.logout', {
+    sessionId: session?.sid,
+    reachedProvider,
+    hinted: Boolean(idToken),
+  });
 
   const response = NextResponse.json({ redirectTo });
   /*

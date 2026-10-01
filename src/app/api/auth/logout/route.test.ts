@@ -137,3 +137,81 @@ describe('⚠⚠ what the response clears', () => {
     expect(hint?.path).toMatch(/\/api\/auth\/logout$/);
   });
 });
+
+describe('⚠⚠ the property that broke: a session must reach the provider', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE SHIPPED BUG WAS NOT IN THE HINT LOGIC. IT WAS IN WHAT SURROUNDED IT.
+   * ════════════════════════════════════════════════════════════════════════
+   * Reading the hint sat INSIDE the try whose catch falls back to a local
+   * redirect. That catch exists for one thing — a provider with no
+   * `end_session_endpoint` — so anything else inside it silently turns a
+   * sign-out into a redirect that signs nobody out.
+   *
+   * ★ Measured on the deployed build: `redirectTo` was our own `/v2/sign-in`,
+   *   `end-session` was never called, and `authentik_session` SURVIVED. A
+   *   fresh authorization then returned a code with no credentials entered.
+   *
+   * ⚠ The existing tests all passed. They asserted the PARAMETERS of the
+   *   end-session call — which is a fact about the branch that builds it, and
+   *   says nothing about whether that branch is reached. A local URL is a
+   *   valid string and a passing shape.
+   */
+  it('⚠⚠ reaches the provider even when reading the hint explodes', async () => {
+    /*
+     * The exact shape of the regression. `unsealIdToken` throwing must cost a
+     * confirmation screen, never the provider call.
+     */
+    unsealIdToken.mockRejectedValue(new Error('key rotated'));
+
+    const response = await post(true);
+    expect(buildEndSessionUrl).toHaveBeenCalled();
+
+    const params = buildEndSessionUrl.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    expect(params.client_id).toBe('gotcha-app');
+
+    const body = (await response.json()) as { redirectTo: string };
+    expect(new URL(body.redirectTo).origin).toBe('https://auth-dev.gotcha.co.il');
+  });
+
+  it('⚠⚠ and the answer is a PROVIDER url, not merely a url', async () => {
+    /*
+     * ★ Asserted on `redirectTo` itself rather than on the call's arguments.
+     *   Every previous test here checked what we would pass IF we called —
+     *   and the bug was that we did not call.
+     */
+    for (const token of ['the.id.token', null]) {
+      unsealIdToken.mockResolvedValue(token);
+      const response = await post(token !== null);
+      const body = (await response.json()) as { redirectTo: string };
+
+      expect(new URL(body.redirectTo).origin, String(token)).toBe('https://auth-dev.gotcha.co.il');
+      expect(body.redirectTo, String(token)).not.toContain('dev.gotcha.co.il/v2/sign-in');
+    }
+  });
+
+  it('★ only a provider with no end-session endpoint may land locally', async () => {
+    /*
+     * The one legitimate reason for a local redirect — and it is now logged,
+     * because a sign-out that quietly stops calling the provider looks
+     * exactly like one that worked: it lands on our sign-in page either way.
+     */
+    buildEndSessionUrl.mockImplementation(() => {
+      throw new Error('no end_session_endpoint');
+    });
+
+    const response = await post(true);
+    const body = (await response.json()) as { redirectTo: string };
+    expect(body.redirectTo).toContain('/sign-in');
+  });
+
+  it('⚠ and with no session there is nothing to end, which is not the same thing', async () => {
+    // A signed-out caller must not be sent to the provider to sign out again.
+    readSession.mockResolvedValue(null);
+
+    const response = await post(false);
+    expect(buildEndSessionUrl).not.toHaveBeenCalled();
+    const body = (await response.json()) as { redirectTo: string };
+    expect(body.redirectTo).toContain('/sign-in');
+  });
+});
