@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { render, screen } from '@testing-library/react';
-import { createTranslator } from 'next-intl';
+import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import { conversationRowSchema, queueOrder, type ConversationRow } from '@/api/contracts/inbox';
@@ -50,6 +50,13 @@ vi.mock('@/i18n/navigation', () => ({
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'inbox' | 'channels') =>
     createTranslator({ locale: 'en', messages: { inbox: messages, channels }, namespace }),
+  /*
+   * ⚠ THE ZONE IS PINNED, AND THAT IS THE POINT OF MOCKING IT AT ALL.
+   *   `next-intl` is configured with `Asia/Jerusalem`; a formatter that used
+   *   the runner's zone would make the asserted times depend on where the
+   *   tests happen to run, and pass on a laptop while failing in CI.
+   */
+  getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
 const NOW = new Date('2026-09-25T12:00:00.000Z');
@@ -413,5 +420,113 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
     for (const row of screen.getAllByRole('link')) {
       expect(row).not.toHaveAttribute('aria-current');
     }
+  });
+});
+
+describe('⚠⚠ the row the design draws, and the line it exists for', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * `lastMessageBody` WAS IN THE CONTRACT AND RENDERED NOWHERE
+   * ════════════════════════════════════════════════════════════════════════
+   * Parsed by `conversationRowSchema` on every page load and discarded. The
+   * row's whole purpose — what the person actually said — was being fetched
+   * and thrown away, which is the fourth value today that existed and had no
+   * reader.
+   */
+  it('★★ shows the message preview', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ lastMessageBody: "My package still hasn't arrived" })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.getByTestId('preview-c1')).toHaveTextContent("My package still hasn't arrived");
+  });
+
+  it('⚠ and says nothing rather than an empty line when there is no message', async () => {
+    // A row with no last message is a real state — a conversation opened and
+    // never spoken in. An empty preview slot would reserve space for nothing.
+    render(
+      await ConversationList({
+        rows: [row({ lastMessageBody: null })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.queryByTestId('preview-c1')).toBeNull();
+  });
+
+  it('★★ shows the last-message TIME, in the configured zone', async () => {
+    /*
+     * ★ The design puts last-message time here and waiting-age in the tag
+     *   row. Both facts kept, each in its own slot, rather than one standing
+     *   in for the other — which is what we were doing.
+     *
+     * ⚠ 06:29 UTC is 09:29 in Asia/Jerusalem, which is the configured zone
+     *   and the time the design's own screenshot shows. A formatter using the
+     *   server's zone would render 06:29 and look right to whoever deployed
+     *   it.
+     */
+    render(
+      await ConversationList({
+        rows: [row({ lastMessageAt: '2026-09-25T06:29:00.000Z' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.getByTestId('time-c1')).toHaveTextContent('09:29');
+  });
+
+  it('★ and waiting-age is still there, moved to the tag row', async () => {
+    // It is what the queue is sorted by. The design keeps it — as a tag.
+    render(
+      await ConversationList({
+        rows: [row({ lastMessageAt: '2026-09-25T06:29:00.000Z' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.getByTestId('waiting-c1')).toBeInTheDocument();
+  });
+
+  it('⚠⚠ initials come from WORDS, never a slice of the raw name', async () => {
+    /*
+     * ★ `customerName` is not always a person. A Shopify live-chat row reads
+     *   "Shopper on urban-supply-gotcha-demo.myshopify.com" — slicing that
+     *   would put a fragment of a shop domain in the avatar circle.
+     */
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'c1', customerName: 'Dana Cohen' }),
+          row({ id: 'c2', customerName: 'Shopper on urban-supply-gotcha-demo.myshopify.com' }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    const circles = screen.getAllByRole('link').map((r) => r.firstElementChild?.textContent);
+    expect(circles[0]).toBe('DC');
+    expect(circles[1]).toBe('SO');
+    expect(circles[1]).not.toContain('myshopify');
+  });
+
+  it('⚠ an unnamed row gets an empty circle, not a placeholder glyph', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ customerName: null })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    // The name beside it already says "Someone"; the circle is decorative.
+    expect(screen.getAllByRole('link')[0]!.firstElementChild?.textContent).toBe('');
   });
 });

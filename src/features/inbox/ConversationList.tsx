@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
   channelName,
@@ -41,6 +41,28 @@ import { Link } from '@/i18n/navigation';
  * more ordering than that column can carry, and rows that admit they do not
  * know get their own group rather than the floor of the list.
  */
+/**
+ * Up to two initials for the avatar, from whatever the name turns out to be.
+ *
+ * ⚠⚠ `customerName` IS NOT A PERSON'S NAME HERE. A Shopify live-chat row
+ *    reads "Shopper on urban-supply-gotcha-demo.myshopify.com" — a
+ *    forty-character unbroken token. Taking the first letter of the first two
+ *    WORDS gives "SO", which is meaningless but harmless; taking a slice of
+ *    the raw string would put a fragment of a shop domain in a circle.
+ *
+ * ★ Empty for an unnamed row rather than a placeholder glyph: the circle is
+ *   decorative, `aria-hidden`, and the name beside it already says "Someone".
+ */
+function initials(name: string | null): string {
+  if (name === null) return '';
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 export async function ConversationList({
   rows,
   cap,
@@ -80,6 +102,8 @@ export async function ConversationList({
   readonly undatedCount?: number;
 }) {
   const t = await getTranslations('inbox');
+  /* The configured zone is `Asia/Jerusalem`; the server's is not. */
+  const format = await getFormatter();
   /*
    * The channel labels live in `channels`, where screen 13 already maintains
    * them in both languages. Reading them from there rather than copying ten
@@ -141,60 +165,112 @@ export async function ConversationList({
           data-open={conversation.id === openId ? '' : undefined}
         >
           {/*
-          ★★ THE CUSTOMER'S NAME, WHICH WAS "Someone" ON EVERY ROW.
-          The contract named a field the platform does not send, so the real
-          `customerName` was stripped and the invented one defaulted to null.
-          Ten of ten rows in the capture read the fallback, and it looked like
-          the security fixtures redacting.
-        */}
-          <span className={styles.who}>
-            {conversation.customerName === null ? (
-              t('queue.unnamed')
-            ) : (
-              /* A name is the data's direction, not the layout's. */
-              <UserText>{conversation.customerName}</UserText>
-            )}
-          </span>
-          {/*
-          ★★ THE CHANNEL'S NAME, NOT ITS ENUM. `SHOPIFY_LIVE_CHAT` was on
-          screen; `channels.name.SHOPIFY_LIVE_CHAT` has said "Shopify live
-          chat" in both languages all along.
+            ════════════════════════════════════════════════════════════════
+            ★★ THE DESIGN'S ROW IS THREE LINES BESIDE AN AVATAR
+            ════════════════════════════════════════════════════════════════
+            02's template, verbatim: a 40×40 initials circle, then
+            `flex-direction:column; gap:4px` carrying name+time, preview+
+            unread, and a tag row.
 
-          An unrecognised value gets "another channel" rather than its raw
-          string: `channel` is an unconstrained column, every other screen
-          here strips raw identifiers, and an agent cannot act on an enum name.
-        */}
-          <span className={styles.channel}>
-            {/*
-            Three states through one helper. `channelName` returns `null` only
-            for an absent channel — a recognised one gets its name and an
-            unrecognised one gets "another channel" — so the distinction this
-            row needs is the distinction the helper already draws.
-
-            This used `channels.name.other` under a local key of its own; the
-            two said the same thing in two places, which is one of them too many.
+            We drew name · channel · waiting-age on one baseline — three
+            facts, none of them the message.
           */}
-            {channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel')}
+          <span className={styles.avatar} aria-hidden="true">
+            {initials(conversation.customerName)}
           </span>
-          {/*
-          ★ NULL IS NOT ZERO. A row we cannot age says nothing rather than
-          claiming it has been waiting no time at all, which would sort it
-          alongside the freshest thing in the queue.
-        */}
-          {waiting === null ? null : (
-            <span className={styles.waiting} data-testid={`waiting-${conversation.id}`}>
+
+          <span className={styles.rowBody}>
+            <span className={styles.rowTop}>
               {/*
-              ★★ AT A SCALE SOMEBODY CAN READ. This printed raw minutes, so
-              the capture showed `47061m` — thirty-two days, on the column an
-              agent triages on, and illegible enough to be reported as a
-              possible identifier.
-            */}
-              {(() => {
-                const { scale, value } = waitingScale(waiting);
-                return t(`queue.waitingFor.${scale}` as 'queue.waitingFor.minutes', { value });
-              })()}
+                ★★ THE CUSTOMER'S NAME, WHICH WAS "Someone" ON EVERY ROW.
+                The contract named a field the platform does not send, so the
+                real `customerName` was stripped and the invented one
+                defaulted to null.
+              */}
+              <span className={styles.who}>
+                {conversation.customerName === null ? (
+                  t('queue.unnamed')
+                ) : (
+                  /* A name is the data's direction, not the layout's. */
+                  <UserText>{conversation.customerName}</UserText>
+                )}
+              </span>
+
+              {/*
+                ★ THE TIME OF THE LAST MESSAGE, which is what the design puts
+                  here — and waiting-age has moved to the tag row, which is
+                  where the design puts THAT. Both facts kept, each in its
+                  own slot, rather than one standing in for the other.
+
+                ⚠ Through `next-intl`'s formatter, so it renders in the
+                  configured `Asia/Jerusalem` rather than the server's zone.
+                  A time formatted on the server in UTC is wrong for every
+                  reader and looks right to whoever deployed it.
+              */}
+              {conversation.lastMessageAt === null ? null : (
+                <span className={styles.rowTime} data-testid={`time-${conversation.id}`}>
+                  {format.dateTime(new Date(conversation.lastMessageAt), {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              )}
             </span>
-          )}
+
+            {/*
+              ════════════════════════════════════════════════════════════════
+              ⚠⚠ THE MESSAGE PREVIEW — IN THE CONTRACT ALL ALONG, NEVER DRAWN
+              ════════════════════════════════════════════════════════════════
+              `lastMessageBody` is parsed by `conversationRowSchema` and
+              appeared NOWHERE outside it. The row's whole purpose — what the
+              person actually said — was being fetched on every page load and
+              discarded.
+
+              ★ The fourth value today that existed and had no reader.
+            */}
+            {conversation.lastMessageBody === null ? null : (
+              <span className={styles.preview} data-testid={`preview-${conversation.id}`}>
+                {/* Somebody else's words: their direction, not the layout's. */}
+                <UserText>{conversation.lastMessageBody}</UserText>
+              </span>
+            )}
+
+            <span className={styles.rowTags}>
+              {/*
+                ★ NULL IS NOT ZERO. A row we cannot age says nothing rather
+                  than claiming it has been waiting no time at all, which
+                  would sort it alongside the freshest thing in the queue.
+              */}
+              {waiting === null ? null : (
+                <span className={styles.waiting} data-testid={`waiting-${conversation.id}`}>
+                  {/*
+                    ★★ AT A SCALE SOMEBODY CAN READ. This printed raw minutes,
+                    so the capture showed `47061m` — thirty-two days, on the
+                    column an agent triages on.
+                  */}
+                  {(() => {
+                    const { scale, value } = waitingScale(waiting);
+                    return t(`queue.waitingFor.${scale}` as 'queue.waitingFor.minutes', { value });
+                  })()}
+                </span>
+              )}
+
+              {/*
+                ★★ THE CHANNEL'S NAME, NOT ITS ENUM. `SHOPIFY_LIVE_CHAT` was
+                on screen; `channels.name.SHOPIFY_LIVE_CHAT` has said "Shopify
+                live chat" in both languages all along.
+
+                ⚠ THE DESIGN DRAWS A LOGO BADGE HERE AND WE DRAW THE NAME.
+                  Its template is `background: url({{ c.chIcon }})` — a brand
+                  image per channel, and this product has no such assets. A
+                  lucide glyph would be a different mark, not that one, so the
+                  name stays until the logos exist.
+              */}
+              <span className={styles.channel}>
+                {channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel')}
+              </span>
+            </span>
+          </span>
         </Link>
       </li>
     );

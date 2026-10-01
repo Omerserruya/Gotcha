@@ -58,7 +58,19 @@ export default async function Page({
   const now = new Date();
 
   return (
-    <PageContainer title={t('title')} description={t('description')} wide>
+    /*
+      ════════════════════════════════════════════════════════════════════════
+      ⚠⚠ NO PAGE HEADER. THE DESIGN HAS NONE, AND IT COSTS ~100px OF CHROME.
+      ════════════════════════════════════════════════════════════════════════
+      We drew "Inbox" and "Every conversation, and what GOTCHA knows about the
+      person on the other end." above the three columns. 02 starts the queue
+      at the top of the frame — the sidebar already says which screen this is,
+      and the space goes to conversations.
+
+      ★ `title` and `description` are optional on `PageContainer`, so this is
+        a deletion rather than a new variant.
+    */
+    <PageContainer wide>
       <div className={styles.screen} data-testid="inbox-screen">
         <section className={styles.queueColumn} aria-label={t('queue.label')}>
           <ConversationList
