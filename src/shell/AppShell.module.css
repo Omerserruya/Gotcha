@@ -314,6 +314,30 @@
     overflow: hidden;
   }
 
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ A SCREEN THAT DRAWS ITS OWN PANELS GETS THE DARK FRAME, NOT THIS ONE
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured by RENDERING the design rather than reading its markup: 02's
+   * frame computes to `rgb(18,18,18)` and the three columns are `#FAF8F4`
+   * cards floating on it. **Light on near-black — that is the separation.**
+   *
+   * ★ This surface is one big light card holding everything, which is right
+   *   for every screen that is a document. It is wrong for the inbox, where
+   *   light panels on a light surface made the separation invisible — and a
+   *   reviewer asked "what separated????".
+   *
+   * ★ `:has()` rather than a prop threaded through `AppShell`: the fact
+   *   belongs to the CONTENT — "I draw my own panels" — and the shell should
+   *   not need to know which screens those are. One rule, and a screen opts
+   *   in by saying so about itself.
+   */
+  .surface:has([data-owns-panels]) {
+    background-color: transparent;
+    border-radius: 0;
+    overflow: visible;
+  }
+
   .main {
     flex: 1;
     min-block-size: 0;

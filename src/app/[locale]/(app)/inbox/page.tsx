@@ -70,8 +70,28 @@ export default async function Page({
       ★ `title` and `description` are optional on `PageContainer`, so this is
         a deletion rather than a new variant.
     */
-    <PageContainer wide>
-      <div className={styles.screen} data-testid="inbox-screen">
+    /*
+      ★ `bleed` — whose own comment names the Inbox as "the obvious one".
+        It removes the 40px gutters and the 1120px cap so the three panels
+        reach the dark frame's edges, as 02 draws them. Without it they sit
+        inside a document's margins and the frame shows as a border rather
+        than as the ground.
+    */
+    <PageContainer bleed>
+      <div
+        className={styles.screen}
+        data-testid="inbox-screen"
+        /*
+          ⚠⚠ THIS SCREEN DRAWS ITS OWN PANELS, SO THE SHELL'S LIGHT SURFACE
+             STEPS ASIDE. 02's page is `rgb(18,18,18)` and the three columns
+             are `#FAF8F4` cards on it — light on near-black is the
+             separation. On the shell's light surface they were invisible.
+
+          ★ Declared by the content about itself rather than threaded as a
+            prop: the shell should not have to know which screens these are.
+        */
+        data-owns-panels=""
+      >
         <section className={styles.queueColumn} aria-label={t('queue.label')}>
           <ConversationList
             rows={data.rows}

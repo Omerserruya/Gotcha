@@ -559,11 +559,15 @@
     gap: 10px;
     align-items: stretch;
     /*
-     * The page the panels sit on. 02: `#F1EFE9`, which is `--panel-sunken`.
-     * Without it the panels are `#FAF8F4` on `#FAF8F4` and the separation
-     * that makes them "separate parts" is invisible.
+     * ⚠⚠ NO BACKGROUND HERE, AND IT USED TO BE `--panel-sunken`. That colour
+     *    came from a different frame in the design file. Rendered, 02's page
+     *    is `rgb(18,18,18)` — the DARK FRAME — and the three panels are light
+     *    cards on it.
+     *
+     * ★ The shell already paints that frame. What this screen needs is for
+     *   the shell's light work-surface to step aside, which
+     *   `data-owns-panels` asks for.
      */
-    background-color: var(--panel-sunken);
   }
 
   /*

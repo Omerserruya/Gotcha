@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { ConversationList } from '@/features/inbox/ConversationList';
+import { PageContainer } from '@/shell/PageContainer';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
 import { MessageStream } from '@/features/inbox/MessageStream';
@@ -312,5 +313,71 @@ describe('⚠⚠ the verbs are told whether this conversation is resolved', () =
       const props = propsOf<{ resolved?: boolean }>(tree, ConversationVerbs);
       expect(props?.resolved, status).toBe(expected);
     }
+  });
+});
+
+describe('⚠⚠ the inbox draws its own panels, so the shell’s surface steps aside', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * MEASURED BY RENDERING THE DESIGN, NOT BY READING ITS MARKUP
+   * ════════════════════════════════════════════════════════════════════════
+   * 02's frame computes to `rgb(18,18,18)` and the three columns are
+   * `#FAF8F4` cards floating on it. **Light on near-black is the
+   * separation** — and we had light panels on the shell's light work
+   * surface, which is why a reviewer asked "what separated????".
+   *
+   * ★ The shell already paints that frame. What was missing is the screen
+   *   saying it owns its own panels, so the surface does not paint over it.
+   */
+  /*
+   * ★ Walked rather than rendered, like everything else in this file: the
+   *   async panels are mocked, so there is a TREE to inspect and no DOM.
+   */
+  const owners = (tree: ReactNode): ReactElement[] => {
+    const found: ReactElement[] = [];
+    walk(tree, [], (element) => {
+      if ((element.props as Record<string, unknown>)['data-owns-panels'] !== undefined) {
+        found.push(element);
+      }
+    });
+    return found;
+  };
+
+  it('★★ declares `data-owns-panels`, which is what the shell keys on', async () => {
+    const claimed = owners(await page());
+
+    expect(claimed).toHaveLength(1);
+    expect((claimed[0]!.props as Record<string, unknown>)['data-testid']).toBe('inbox-screen');
+  });
+
+  it('★★ and the container bleeds, so the panels reach the frame’s edges', async () => {
+    /*
+     * ⚠ A SURVIVING MUTATION, CAUGHT IN THE SAME COMMIT THIS TIME. Swapping
+     *   `bleed` for `wide` broke nothing: the attribute test above passes
+     *   either way, because it is about a different fact.
+     *
+     * ★ `bleed` removes the 40px gutters and the 1120px cap. Without it the
+     *   three panels sit inside a document's margins and the dark frame reads
+     *   as a border around a page rather than as the ground they float on —
+     *   which is the whole point of the dark.
+     */
+    let container: ReactElement | null = null;
+    walk(await page(), [], (element) => {
+      if (element.type === PageContainer) container = element;
+    });
+
+    const props = (container as ReactElement | null)?.props as
+      { bleed?: boolean; wide?: boolean } | undefined;
+    expect(props?.bleed).toBe(true);
+  });
+
+  it('⚠ and nothing else on this page claims it', async () => {
+    /*
+     * ★ The attribute makes an ANCESTOR transparent through `:has()`. A
+     *   second element carrying it would be harmless today and confusing the
+     *   moment somebody moves one of them — it reads as a local style and
+     *   acts at a distance.
+     */
+    expect(owners(await page())).toHaveLength(1);
   });
 });
