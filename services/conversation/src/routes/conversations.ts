@@ -193,6 +193,113 @@ router.post("/:id/return-to-ai", async (req: Request, res: Response) => {
 });
 
 // Allow both ADMIN and the assigned agent to transfer/reassign
+/*
+ * ARCHIVE AND MARK-UNREAD — the two context-menu actions the server could not do.
+ *
+ * The queue's right-click menu specifies seven actions. Five had routes. These
+ * two did not: archive had nothing at all, and "mark as unread" lived only as a
+ * `chatcenter:markedUnread` set in the browser's localStorage, so it was lost on
+ * another device, lost when site data was cleared, and invisible to the team.
+ *
+ * ★ They are deliberately different shapes. Archiving is a fact about the
+ *   CONVERSATION and everyone sees it. Marking unread is a fact about the
+ *   PERSON - a column would mean one agent marking unread marks it unread for
+ *   the whole team, which is neither what the old product did nor what anyone
+ *   would expect.
+ */
+
+/** Both archive routes need the same check: it exists, and it is ours. */
+async function findInTenant(tenantId: string, conversationId: string) {
+  return prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
+}
+
+router.post("/:id/archive", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const existing = await findInTenant(req.tenantId!, conversationId);
+    if (!existing) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    // Already archived is not an error: the menu can be opened twice, and the
+    // second click should leave the FIRST archive time standing rather than
+    // moving it.
+    if (existing.archivedAt) { res.json({ data: existing }); return; }
+
+    const conversation = await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { archivedAt: new Date() },
+    });
+    res.json({ data: conversation });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to archive conversation" });
+  }
+});
+
+router.delete("/:id/archive", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const existing = await findInTenant(req.tenantId!, conversationId);
+    if (!existing) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    const conversation = await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { archivedAt: null },
+    });
+    res.json({ data: conversation });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to unarchive conversation" });
+  }
+});
+
+router.post("/:id/unread", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const userId = req.user!.userId;
+    const existing = await findInTenant(req.tenantId!, conversationId);
+    if (!existing) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    /*
+     * `markedUnread` is set by hand and is NOT the same as "has unseen
+     * messages", which is derived from lastReadAt. A conversation you have
+     * read can still be deliberately marked unread - that is the entire point
+     * of the action, so clearing lastReadAt here would be wrong.
+     */
+    const state = await prisma.conversationReadState.upsert({
+      // ★ `tenantId` IS LOAD-BEARING HERE, NOT BELT-AND-BRACES. The tenant
+      // guard REFUSES an upsert whose where clause omits it
+      // ("where clause must include tenantId"), and Prisma 5's extended unique
+      // where accepts a non-unique field beside the compound key. Without it
+      // this route throws on its first call.
+      where: { userId_conversationId: { userId, conversationId }, tenantId: req.tenantId! },
+      create: { tenantId: req.tenantId!, userId, conversationId, markedUnread: true },
+      update: { markedUnread: true },
+    });
+    res.json({ data: state });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to mark conversation unread" });
+  }
+});
+
+router.delete("/:id/unread", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const userId = req.user!.userId;
+    const existing = await findInTenant(req.tenantId!, conversationId);
+    if (!existing) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    // Opening a conversation clears the manual mark AND moves the read point.
+    const state = await prisma.conversationReadState.upsert({
+      // Same reason as the mark-unread route above: the guard refuses an
+      // upsert with no tenantId in its where.
+      where: { userId_conversationId: { userId, conversationId }, tenantId: req.tenantId! },
+      create: { tenantId: req.tenantId!, userId, conversationId, markedUnread: false, lastReadAt: new Date() },
+      update: { markedUnread: false, lastReadAt: new Date() },
+    });
+    res.json({ data: state });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to mark conversation read" });
+  }
+});
+
 router.post("/:id/reassign", async (req: Request, res: Response) => {
   try {
     const { agentId, departmentId } = req.body;

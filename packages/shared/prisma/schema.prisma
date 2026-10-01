@@ -147,6 +147,7 @@ model Tenant {
   channelConfig           TenantChannelConfig?
   departments             Department[]
   departmentMembers       DepartmentMember[]
+  conversationReadStates  ConversationReadState[]
   businessProfile         BusinessProfile?
   businessDiscovery       BusinessDiscovery?
   scheduledNudges         ScheduledNudge[]
@@ -922,6 +923,7 @@ model User {
   tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations           Conversation[]       @relation("AssignedAgent")
   departmentMembers       DepartmentMember[]
+  conversationReadStates  ConversationReadState[]
   inAppNotifications      InAppNotification[]
   // Voice channels where this user is the default-ring target for inbound calls.
   defaultVoiceChannels    VoiceChannel[]       @relation("VoiceChannelDefaultAgent")
@@ -996,6 +998,13 @@ model Conversation {
   lastMessageAt      DateTime?          @map("last_message_at")
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
+  /// ★ ARCHIVE IS NOT A STATUS, DELIBERATELY.
+  ///
+  /// A conversation can be CLOSED and archived, or archived while still
+  /// WAITING. Adding ARCHIVED to ConversationStatus would make those mutually
+  /// exclusive and would silently change every count that groups by status -
+  /// archiving a closed conversation would remove it from the closed figure.
+  archivedAt         DateTime?          @map("archived_at")
   aiSummary          String?            @map("ai_summary")
   handovers          ConversationHandover[]
 
@@ -1072,6 +1081,7 @@ model Conversation {
   /// delete its rows so a number can be re-onboarded.
   channelAccount   ChannelAccount?           @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
   assignedAgent    User?                     @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  readStates       ConversationReadState[]
   department       Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   chatbotFlow      ChatbotFlow?              @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
   messages         Message[]
@@ -1491,6 +1501,40 @@ model Department {
   @@index([tenantId])
   @@index([parentId])
   @@map("departments")
+}
+
+/// ★★ READ STATE BELONGS TO THE PERSON, NOT THE CONVERSATION.
+///
+/// "I marked this unread" is a fact about one agent, not about the thread. A
+/// column on Conversation would mean one agent marking unread marks it unread
+/// for the whole team - which is not what the current product does, and not
+/// what anyone expects.
+///
+/// This replaces two things the browser was keeping on its own: the
+/// `chatcenter:markedUnread` localStorage set, and the client-side lastRead
+/// map. Both were per-BROWSER, so they were lost on another device, lost when
+/// site data was cleared, and invisible to the rest of the team.
+model ConversationReadState {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  userId         String    @map("user_id")
+  conversationId String    @map("conversation_id")
+  /// Set by hand from the queue. Distinct from "has unseen messages", which is
+  /// derived from lastReadAt - a conversation you have read can still be
+  /// deliberately marked unread, and that is the whole point of the action.
+  markedUnread   Boolean   @default(false) @map("marked_unread")
+  lastReadAt     DateTime? @map("last_read_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationId])
+  @@index([tenantId, userId, markedUnread])
+  @@index([conversationId])
+  @@map("conversation_read_states")
 }
 
 model DepartmentMember {
