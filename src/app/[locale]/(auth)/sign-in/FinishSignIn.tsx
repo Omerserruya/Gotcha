@@ -71,6 +71,38 @@ export function FinishSignIn({
    */
   const [giveUp, setGiveUp] = useState<string | undefined>(undefined);
 
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ THE SPENT AUTHORIZE URL MUST NOT STAY IN HISTORY
+   * ═════════════════════════════════════════════════════════════════════════
+   * Walked: pressing BACK onto `/en/sign-in?authorize=…` re-runs this hop
+   * against a one-time URL that has already been redeemed. The executor
+   * cannot complete it, we fall back to the authorize URL as designed — and
+   * the provider draws a page. Sixteen documents and one Authentik render,
+   * for a back button.
+   *
+   * ★ The fix is not in the fallback, which is correct: going to authorize is
+   *   right when the URL is live. It is that a SPENT url should not be
+   *   reachable. `replaceState` drops the parameter from this history entry,
+   *   so back lands on a clean `/en/sign-in` that starts a fresh flow.
+   *
+   * ⚠ Before the fetch, not after. The navigation may happen first, and an
+   *   entry rewritten after the browser has left is rewritten on the wrong
+   *   page.
+   */
+  useEffect(() => {
+    try {
+      const here = new URL(window.location.href);
+      if (here.searchParams.has('authorize')) {
+        here.searchParams.delete('authorize');
+        here.searchParams.delete('finishHold');
+        window.history.replaceState(null, '', here.toString());
+      }
+    } catch {
+      /* A history API that refuses is not a reason to fail a sign-in. */
+    }
+  }, []);
+
   useEffect(() => {
     let live = true;
 

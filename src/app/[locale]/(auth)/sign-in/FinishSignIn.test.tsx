@@ -239,3 +239,78 @@ describe('⚠⚠ the give-up that had no name', () => {
     expect(marker).toHaveAttribute('data-reason', '');
   });
 });
+
+describe('⚠⚠ the eighth path: a back button onto a spent authorize URL', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * WALKED: 16 DOCUMENTS AND ONE PROVIDER PAGE, FOR PRESSING BACK
+   * ════════════════════════════════════════════════════════════════════════
+   * The authorize URL is one-time. Back onto `/en/sign-in?authorize=…` re-runs
+   * the hop against a URL already redeemed; the executor cannot complete it,
+   * the fallback goes to authorize as designed, and the provider draws a page.
+   *
+   * ★ The fallback is not wrong — going to authorize is right when the URL is
+   *   live. The defect is that a SPENT url stayed reachable.
+   */
+  const replaceState = vi.fn();
+
+  const showAt = (href: string) => {
+    Object.defineProperty(window, 'location', { value: { replace, href }, writable: true });
+    Object.defineProperty(window, 'history', { value: { replaceState }, writable: true });
+    return render(<FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} hold />);
+  };
+
+  it('★★ drops the parameter from this history entry', async () => {
+    replaceState.mockClear();
+    completeAuthorization.mockResolvedValue({ reason: 'no-flow' });
+
+    showAt('https://auth-dev.gotcha.co.il/en/sign-in?authorize=https%3A%2F%2Fx&returnTo=%2Finbox');
+
+    await waitFor(() => expect(replaceState).toHaveBeenCalled());
+    const rewritten = new URL(replaceState.mock.calls.at(-1)![2] as string);
+    expect(rewritten.searchParams.has('authorize')).toBe(false);
+    // And what is not spent survives: the deep link still has to work.
+    expect(rewritten.searchParams.get('returnTo')).toBe('/inbox');
+  });
+
+  it('⚠ drops `finishHold` with it, so a held walk is not sticky', async () => {
+    replaceState.mockClear();
+    completeAuthorization.mockResolvedValue({ reason: 'no-flow' });
+
+    showAt('https://auth-dev.gotcha.co.il/en/sign-in?authorize=https%3A%2F%2Fx&finishHold=1');
+
+    await waitFor(() => expect(replaceState).toHaveBeenCalled());
+    const rewritten = new URL(replaceState.mock.calls.at(-1)![2] as string);
+    expect(rewritten.searchParams.has('finishHold')).toBe(false);
+  });
+
+  it('⚠ and rewrites nothing when there is no parameter to drop', async () => {
+    replaceState.mockClear();
+    completeAuthorization.mockResolvedValue({ reason: 'no-flow' });
+
+    showAt('https://auth-dev.gotcha.co.il/en/sign-in');
+    await waitFor(() => expect(completeAuthorization).toHaveBeenCalled());
+    expect(replaceState).not.toHaveBeenCalled();
+  });
+
+  it('★ a history API that refuses does not fail the sign-in', async () => {
+    /*
+     * The hop must survive a browser that will not rewrite history. This runs
+     * where somebody has just typed a password.
+     */
+    replaceState.mockClear();
+    replaceState.mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    completeAuthorization.mockResolvedValue({ to: `${CALLBACK}?code=abc&state=s` });
+
+    Object.defineProperty(window, 'location', {
+      value: { replace, href: 'https://auth-dev.gotcha.co.il/en/sign-in?authorize=x' },
+      writable: true,
+    });
+    Object.defineProperty(window, 'history', { value: { replaceState }, writable: true });
+    render(<FinishSignIn authorizeUrl={AUTHORIZE} callbackUrl={CALLBACK} />);
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(`${CALLBACK}?code=abc&state=s`));
+  });
+});
