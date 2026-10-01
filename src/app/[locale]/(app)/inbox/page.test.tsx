@@ -447,3 +447,34 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
     expect(chain.some((c) => c.includes('contextColumn'))).toBe(true);
   });
 });
+
+describe('⚠⚠ the page READS `view` — the whole of the bug', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE RAIL WROTE `?view=` AND THE PAGE DID NOT READ IT
+   * ════════════════════════════════════════════════════════════════════════
+   * `searchParams` declared only `c` and `cursor`. Every view rendered the
+   * same ten rows under the same heading. This is the hop that was broken, so
+   * it is the hop asserted — not the mapping, which has its own tests.
+   */
+  const withView = async (view: string | undefined) => {
+    loadInbox.mockResolvedValue(data());
+    const { default: Page } = await import('./page');
+    return Page({ searchParams: Promise.resolve(view === undefined ? {} : { view }) });
+  };
+
+  it('★★ passes the view to the loader', async () => {
+    await withView('resolved');
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'resolved');
+  });
+
+  it('★★ and to the list, so its heading names the view', async () => {
+    const props = propsOf<{ view?: string }>(await withView('mine'), ConversationList);
+    expect(props?.view).toBe('mine');
+  });
+
+  it('⚠ an invented view falls back to the queue rather than an error', async () => {
+    await withView('../../admin');
+    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue');
+  });
+});

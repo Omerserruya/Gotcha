@@ -14,6 +14,8 @@ import { Globe, Mail, MessageCircle } from 'lucide-react';
 
 import { Link } from '@/i18n/navigation';
 
+import type { InboxView } from './inbox-views';
+
 /**
  * Screen 02's queue.
  *
@@ -119,6 +121,7 @@ export async function ConversationList({
   undatedCount,
   openId,
   meId = null,
+  view = 'queue',
 }: {
   /** `null` when the read failed. Never an empty queue. */
   readonly rows: readonly ConversationRow[] | null;
@@ -138,6 +141,14 @@ export async function ConversationList({
    *   one place that had the fact and did not show it.
    */
   readonly meId?: string | null;
+  /**
+   * Which view this list is, so the header names it.
+   *
+   * ⚠ The header said "Waiting in queue" on every view — including Resolved,
+   *   whose rows are by definition not waiting. A heading that contradicts
+   *   the list under it is the same defect as a list that ignores the view.
+   */
+  readonly view?: InboxView;
   /** How many the page holds. Stated on screen, not implied. */
   readonly cap: number;
   readonly now: Date;
@@ -161,6 +172,11 @@ export async function ConversationList({
   const t = await getTranslations('inbox');
   /* The configured zone is `Asia/Jerusalem`; the server's is not. */
   const format = await getFormatter();
+  /*
+   * The view's name, from the RAIL's own keys — so the header and the
+   * highlighted rail item cannot disagree about what this list is.
+   */
+  const nav = await getTranslations('navigation');
   /*
    * The channel labels live in `channels`, where screen 13 already maintains
    * them in both languages. Reading them from there rather than copying ten
@@ -436,7 +452,7 @@ export async function ConversationList({
           number means. Two slots, one honest fact each.
       */}
       <header className={styles.queueHeader}>
-        <span className={styles.queueHeading}>{t('queue.heading')}</span>
+        <span className={styles.queueHeading}>{nav(`inbox.${view}`)}</span>
         <span className={styles.queueCount} data-testid="queue-count">
           {rows?.length ?? 0}
         </span>

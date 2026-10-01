@@ -9,6 +9,7 @@ import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
 import styles from '@/features/inbox/Inbox.module.css';
+import { parseInboxView } from '@/features/inbox/inbox-views';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { MessageStream } from '@/features/inbox/MessageStream';
 import { PageContainer } from '@/shell/PageContainer';
@@ -44,12 +45,24 @@ import { channelName } from '@/api/contracts/inbox';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams: Promise<{ readonly c?: string; readonly cursor?: string }>;
+  /*
+   * ⚠⚠ `view` WAS NOT HERE, AND THAT WAS THE WHOLE BUG. The rail writes
+   *    `?view=resolved` and highlights the right item; this type declared only
+   *    `c` and `cursor`, so the page ignored it and every view showed the same
+   *    ten rows — "Resolved" listing open conversations, "Assigned to me"
+   *    listing nine that were not.
+   */
+  readonly searchParams: Promise<{
+    readonly c?: string;
+    readonly cursor?: string;
+    readonly view?: string;
+  }>;
 }) {
   const t = await getTranslations('inbox');
   const channelNames = await getTranslations('channels');
-  const { c, cursor } = await searchParams;
-  const data = await loadInbox(c, cursor);
+  const { c, cursor, view: rawView } = await searchParams;
+  const view = parseInboxView(rawView);
+  const data = await loadInbox(c, cursor, view);
   /*
    * One `now` for the whole render. Computed per row, two conversations a
    * second apart could age differently within one screenshot — and the
@@ -107,6 +120,7 @@ export default async function Page({
             */
             openId={c ?? null}
             meId={data.meId}
+            view={view}
           />
         </section>
 

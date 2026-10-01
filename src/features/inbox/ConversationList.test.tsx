@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { conversationRowSchema, queueOrder, type ConversationRow } from '@/api/contracts/inbox';
 import channels from '@/i18n/messages/en/channels.json';
+import navigation from '@/i18n/messages/en/navigation.json';
 import messages from '@/i18n/messages/en/inbox.json';
 
 import { ConversationList } from './ConversationList';
@@ -50,8 +51,12 @@ vi.mock('@/i18n/navigation', () => ({
  * second set of words for one set of things.
  */
 vi.mock('next-intl/server', () => ({
-  getTranslations: async (namespace: 'inbox' | 'channels') =>
-    createTranslator({ locale: 'en', messages: { inbox: messages, channels }, namespace }),
+  getTranslations: async (namespace: 'inbox' | 'channels' | 'navigation') =>
+    createTranslator({
+      locale: 'en',
+      messages: { inbox: messages, channels, navigation },
+      namespace,
+    }),
   /*
    * ⚠ THE ZONE IS PINNED, AND THAT IS THE POINT OF MOCKING IT AT ALL.
    *   `next-intl` is configured with `Asia/Jerusalem`; a formatter that used
@@ -937,5 +942,28 @@ describe('⚠⚠ the queue is 352px at the width the design was drawn at', () =>
     const atDesignWidth = Math.min(Math.max((1218 * pct) / 100, floor), ceiling);
 
     expect(Math.round(atDesignWidth)).toBe(352);
+  });
+});
+
+describe('⚠⚠ the heading names the view it is heading', () => {
+  it('★★ says Resolved over the resolved list, not "Waiting in queue"', async () => {
+    /*
+     * ⚠ THE HEADING SAID "Waiting in queue" ON EVERY VIEW — including
+     *   Resolved, whose rows are by definition not waiting. A surviving
+     *   mutation found that the only test used the default view, where the
+     *   right heading and the wrong one are the same words.
+     */
+    render(
+      await ConversationList({
+        rows: [row()],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        view: 'resolved',
+      }),
+    );
+    const heading = screen.getByTestId('conversation-list').querySelector('header');
+    expect(heading?.textContent).toMatch(new RegExp(navigation.inbox.resolved, 'i'));
+    expect(heading?.textContent).not.toMatch(/waiting in queue/i);
   });
 });

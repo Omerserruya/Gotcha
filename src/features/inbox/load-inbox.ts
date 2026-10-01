@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { viewQuery, type InboxView } from './inbox-views';
 import { serverApi } from '@/api/client/server-api';
 import {
   autoGreetingSchema,
@@ -135,7 +136,11 @@ export interface InboxData {
   readonly greeting: boolean | null;
 }
 
-export async function loadInbox(conversationId?: string, cursor?: string): Promise<InboxData> {
+export async function loadInbox(
+  conversationId?: string,
+  cursor?: string,
+  view: InboxView = 'queue',
+): Promise<InboxData> {
   const api = serverApi();
 
   /*
@@ -165,37 +170,63 @@ export async function loadInbox(conversationId?: string, cursor?: string): Promi
    *   the data is identical — only the order is the fix, so only a test about
    *   order protects it.
    */
-  const [queue, me, colleagues, greeting] = await Promise.all([
-    api
-      .get({
-        endpoint: inboxEndpoints.list(),
-        payload: queuePageSchema,
-        // `data` sits beside `page` — checked, not assumed.
-        raw: true,
-        /*
-         * ★ KEYSET, NOT OFFSET. `cursor` switches the route over; the first
-         * page passes an empty one, which the route treats as keyset-from-the-
-         * start rather than falling back to `skip`.
-         *
-         * Offset on a recency ordering shows a duplicate and silently skips a
-         * row when a new message arrives between pages — somebody waiting who
-         * never appears. That is why this waited for the keyset rather than
-         * scrolling on offset.
-         */
-        query: { limit: QUEUE_CAP, cursor: cursor ?? '' },
-      })
-      .catch((cause: unknown) => {
-        logger.warn('inbox.queue_failed', { cause });
-        return null;
-      }),
+  /*
+   * The viewer, started first because ONE view needs it to build its query.
+   */
+  const meRead = api
+    .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
+    .then((it) => it.user.id)
+    .catch((cause: unknown) => {
+      logger.warn('inbox.me_failed', { cause });
+      return null;
+    });
 
-    api
-      .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
-      .then((it) => it.user.id)
-      .catch((cause: unknown) => {
-        logger.warn('inbox.me_failed', { cause });
-        return null;
-      }),
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠ `mine` IS THE ONE VIEW WITH A REAL DEPENDENCY, AND ONLY IT WAITS
+   * ════════════════════════════════════════════════════════════════════════
+   * "Assigned to me" needs `assignedAgentId=<the viewer's platform id>`, and
+   * only `/auth/me` knows it. So for that view the queue chains off `meRead`.
+   * Every other view starts its queue immediately — four reads in flight,
+   * exactly as `load-inbox.test.ts` asserts.
+   *
+   * ★ `colleagues` and `greeting` run alongside `me` either way: neither reads
+   *   the queue, so there is still no extra round for them.
+   */
+  const fetchQueue = (query: Record<string, string> | null) =>
+    query === null
+      ? Promise.resolve(null)
+      : api
+          .get({
+            endpoint: inboxEndpoints.list(),
+            payload: queuePageSchema,
+            // `data` sits beside `page` — checked, not assumed.
+            raw: true,
+            /*
+             * ★ KEYSET, NOT OFFSET. `cursor` switches the route over; the first
+             * page passes an empty one, which the route treats as keyset-from-the-
+             * start rather than falling back to `skip`.
+             *
+             * Offset on a recency ordering shows a duplicate and silently skips a
+             * row when a new message arrives between pages — somebody waiting who
+             * never appears. That is why this waited for the keyset rather than
+             * scrolling on offset.
+             */
+            query: { ...query, limit: QUEUE_CAP, cursor: cursor ?? '' },
+          })
+          .catch((cause: unknown) => {
+            logger.warn('inbox.queue_failed', { cause });
+            return null;
+          });
+
+  const queueRead =
+    view === 'mine'
+      ? meRead.then((id) => fetchQueue(viewQuery('mine', id)))
+      : fetchQueue(viewQuery(view, null));
+
+  const [queue, me, colleagues, greeting] = await Promise.all([
+    queueRead,
+    meRead,
     api
       .get({ endpoint: inboxEndpoints.agents(), payload: colleagueListSchema })
       .catch((cause: unknown) => {

@@ -77,3 +77,44 @@ describe('⚠⚠ two rounds, and the first one is four calls wide', () => {
     expect(requested().some((p) => p.includes('/messages'))).toBe(false);
   });
 });
+
+describe('⚠⚠ the view reaches the route', () => {
+  const queueCall = () =>
+    get.mock.calls.find((c) => pathOf(c[0]).endsWith('/conversations'))?.[0] as
+      { query: Record<string, string> } | undefined;
+
+  it('★★ Resolved sends status=CLOSED to the list route', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'resolved');
+    await settleMicrotasks();
+    expect(queueCall()?.query).toMatchObject({ status: 'CLOSED' });
+  });
+
+  it('★ and the default view still starts all four reads at once', async () => {
+    // The waterfall fix must survive the view being threaded through.
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'active');
+    await settleMicrotasks();
+    expect(requested()).toHaveLength(4);
+  });
+
+  it('⚠⚠ Assigned to me WAITS for the viewer — the one real dependency', async () => {
+    /*
+     * ★ `mine` needs `assignedAgentId=<me>`, which only `/auth/me` knows. So
+     *   for this view, and no other, the list is not requested until `me`
+     *   answers. Asserted as ABSENT first and PRESENT after — a list fired
+     *   early would carry no assignee and be the original bug.
+     */
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'mine');
+    await settleMicrotasks();
+
+    expect(requested().some((p) => p.endsWith('/conversations'))).toBe(false);
+
+    const meKey = requested().find((p) => p.includes('/auth/me'))!;
+    pending.get(meKey)!({ user: { id: 'u7' } });
+    await settleMicrotasks();
+
+    expect(queueCall()?.query).toMatchObject({ assignedAgentId: 'u7' });
+  });
+});
