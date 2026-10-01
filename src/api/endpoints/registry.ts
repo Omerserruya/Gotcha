@@ -1116,6 +1116,31 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/return-to-ai', { conversationId }),
 
   /**
+   * Put a conversation back in the queue — the design's *"requeue"*.
+   *
+   * ★★ ADDED FOR THE RIGHT-CLICK MENU, AND MEASURED RATHER THAN ASSUMED.
+   * `POST /api/conversations/{id}/release`, `conversationService.release`.
+   * Its OpenAPI entry is BYTE-IDENTICAL to `claim`'s on the request body —
+   * `required: false`, no Zod schema, `additionalProperties: true` — and
+   * `claim` is called with `{}` in production today. Same route family, same
+   * declared shape, one of them proven.
+   *
+   * ⚠ The schema says "shape is not verifiable from source", so `{}` is the
+   *   measured-adjacent choice rather than a documented one.
+   */
+  release: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/release', { conversationId }),
+
+  /**
+   * Mark a conversation resolved — the design's *"resolve"*.
+   *
+   * `POST /api/conversations/{id}/close`, `conversationService.close`, and the
+   * same request-body story as `release` above.
+   */
+  close: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/close', { conversationId }),
+
+  /**
    * Transfer to a named colleague. `{ agentId }`.
    *
    * ★ 403 UNLESS IT IS YOURS OR YOU ARE ADMIN. The route checks

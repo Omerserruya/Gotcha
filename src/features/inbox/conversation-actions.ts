@@ -158,3 +158,72 @@ export async function transferConversation(
     return { ok: false, reason: 'failed' };
   }
 }
+
+/**
+ * Put a conversation back in the queue — the design's *"requeue"*.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ ONE OF FIVE THE PLATFORM CAN DO, OUT OF THE SEVEN THE DESIGN NAMES
+ * ════════════════════════════════════════════════════════════════════════════
+ * 02: *"Right-click gives assign, pause AI, requeue, unread, resolve, archive,
+ * delete."* Measured against the platform's own OpenAPI:
+ *
+ *     assign (to me)    /claim        ✓ already here
+ *     assign (someone)  /reassign     ✓ already here
+ *     pause the AI      /claim        ✓ taking over IS the pause
+ *     requeue           /release      ← this
+ *     resolve           /close        ← below
+ *     mark unread       NO ENDPOINT ANYWHERE
+ *     archive           NO ENDPOINT ANYWHERE
+ *     delete            NO ENDPOINT ANYWHERE
+ *
+ * ⚠ The last three are not "not wired yet". There is no route for them in the
+ *   platform's API at all, so a menu item for them would be a control that
+ *   cannot work — the thirty-days label and the resend button again, three at
+ *   once and on a destructive action.
+ */
+export async function releaseConversation(conversationId: string): Promise<VerbResult> {
+  try {
+    await serverApi().post({
+      endpoint: inboxEndpoints.release(conversationId),
+      body: {},
+      payload: unchecked,
+      raw: true,
+    });
+    refresh();
+    return { ok: true };
+  } catch (cause) {
+    if (isApiError(cause)) {
+      /*
+       * ⚠ 409 IS NOT GIVEN THE SAME MEANING AS claim's OR returnToAi's.
+       *   Those two have documented conflicts — already claimed, no AI
+       *   employee. This route's conflict condition is not described in the
+       *   schema, so it reports the generic failure rather than inventing a
+       *   sentence about a state nobody has observed.
+       */
+      if (cause.status === 404) return { ok: false, reason: 'not_found' };
+    }
+    logger.warn('inbox.release_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/** Mark a conversation resolved — the design's *"resolve"*. */
+export async function closeConversation(conversationId: string): Promise<VerbResult> {
+  try {
+    await serverApi().post({
+      endpoint: inboxEndpoints.close(conversationId),
+      body: {},
+      payload: unchecked,
+      raw: true,
+    });
+    refresh();
+    return { ok: true };
+  } catch (cause) {
+    if (isApiError(cause)) {
+      if (cause.status === 404) return { ok: false, reason: 'not_found' };
+    }
+    logger.warn('inbox.close_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}
