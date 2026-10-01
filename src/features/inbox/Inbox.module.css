@@ -669,10 +669,28 @@
     flex: none;
   }
 
+  /*
+   * ⚠ NO INNER PADDING, AND EVERYTHING SAT FLUSH AGAINST THE PANEL EDGE.
+   *   02: the stream is `p:14px 24px 12px` with `gap:11px`, and the reply bar
+   *   and composer are 436 wide inside a 484 column — 24px either side — with
+   *   the composer 30px from the frame's bottom.
+   */
   .conversationPane .stream {
     flex: 1;
     min-block-size: 0;
     overflow-y: auto;
+    padding: var(--space-14) var(--space-24) var(--space-12);
+    gap: 11px;
+  }
+
+  .conversationPane > :not(.stream) {
+    margin-inline: var(--space-24);
+  }
+
+  /* The composer is the last thing in the pane: 18px of panel below it, so
+     its bottom sits 30px from the frame (18 + the frame's 12). */
+  .conversationPane > :last-child {
+    margin-block-end: 18px;
   }
 
   /*
@@ -710,6 +728,12 @@
     flex: 1;
     min-block-size: 0;
     overflow-y: auto;
+    /*
+     * 02 pads every Copilot section 18px either side. The contents arrive in
+     * Wave 5; the padding belongs to the container, so it is here now and
+     * nothing sits flush against the wall's edge in the meantime.
+     */
+    padding: var(--space-16) 18px;
   }
 
   .queueColumn,

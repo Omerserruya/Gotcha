@@ -3,6 +3,7 @@ import { isValidElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
+import { ConversationHeader } from '@/features/inbox/ConversationHeader';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { PageContainer } from '@/shell/PageContainer';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
@@ -413,6 +414,25 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
     const chain = ancestorsOf(await page(), IdentityPanel);
     expect(chain.some((c) => c.includes('conversationColumn'))).toBe(true);
     expect(chain.some((c) => c.includes('contextColumn'))).toBe(true);
+  });
+
+  it('⚠⚠ the header sits ABOVE the split, so the Copilot cannot cut through it', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * MEASURED: OUR COPILOT STARTED AT y=12 AND RAN THE FULL 876px
+     * ════════════════════════════════════════════════════════════════════════
+     * 02: header `[856x67]` across the whole chat panel, then the split
+     * `[856x809]`, Copilot at y=79. Ours had the header inside the
+     * conversation pane, so the dark wall reached the top of the panel and
+     * cut through the name and the three buttons.
+     *
+     * ★ Asserted as ancestry: the header is in the column and NOT in the
+     *   split. Header first, then the split.
+     */
+    const chain = ancestorsOf(await page(), ConversationHeader);
+    expect(chain.some((c) => c.includes('conversationColumn'))).toBe(true);
+    expect(chain.some((c) => c.includes('chatBody'))).toBe(false);
+    expect(chain.some((c) => c.includes('conversationPane'))).toBe(false);
   });
 
   it('⚠⚠ and it is still there with nothing open', async () => {

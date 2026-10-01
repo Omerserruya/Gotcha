@@ -130,6 +130,75 @@ export default async function Page({
             the state where somebody has nothing selected.
         */}
         <section className={styles.conversationColumn} aria-label={t('open.label')}>
+          {/*
+            ⚠⚠ THE HEADER SPANS THE WHOLE PANEL, AND THE COPILOT STARTS BELOW IT.
+            02: header `[856x67]` across the full chat panel, THEN the split
+            `[856x809]` = conversation `[484]` + Copilot `[372]` at y=79.
+            Ours had the header inside the conversation pane, so the dark
+            Copilot ran to the top of the panel and cut through the name and
+            the three buttons. Order matters: header first, then the split.
+          */}
+          {data.open === null ? null : (
+            <>
+              {/*
+                ★★ WHO IS DRIVING, ABOVE THE STREAM.
+                It is the first question an agent has on opening a conversation
+                and the controls that change it are the same answer. Below the
+                stream they would be read as "reply", which is the one thing
+                they are not.
+
+                `mine` is false whenever we could not read who is looking: the
+                transfer route would refuse it anyway, and a control that always
+                403s is worse than one that is absent.
+              */}
+              {/*
+                ★★ WHO THIS IS, ABOVE WHO IS DRIVING.
+                The column used to begin at the verbs and go straight into
+                messages, so an agent arriving from the queue read a wall of text
+                with no statement of who it is with, on what channel, or how long
+                they have waited — the three facts that decide how the first
+                sentence should be written.
+
+                A sibling, not a parent: both are async server components and
+                nesting one inside the other renders nothing.
+              */}
+              {/*
+                ★★ ONE BAR, WHICH IS WHAT I SAID AND NOT WHAT SHIPPED.
+                I described the header and the verbs as "one bordered bar". They
+                were siblings: the header had the border and the verbs sat outside
+                it, so "Take control" still read as detached — a walk said so, and
+                it was right. The description was of the intent, not the markup.
+
+                A plain `div` again, so both stay siblings of each other and of
+                `MessageStream`: all three are async or client components and none
+                may contain another.
+              */}
+              <div className={styles.openBar}>
+                <ConversationHeader conversation={data.open} now={now} />
+
+                <ConversationVerbs
+                  conversationId={data.open.id}
+                  mine={data.meId !== null && data.open.assignedAgentId === data.meId}
+                  handedOver={data.open.isHandedOver}
+                  /*
+                   * Two-state rather than three, and only because it was
+                   * checked: the list route puts no `select` on the conversation,
+                   * so `assignedAiAgentId` is genuinely on the wire and `null`
+                   * means no AI employee rather than "not sent".
+                   */
+                  hasAiEmployee={data.open.assignedAiAgentId !== null}
+                  greeting={data.greeting}
+                  colleagues={data.colleagues}
+                  /*
+                   * ⚠ `CLOSED` is the only status that means resolved. `OPEN`
+                   *   and `WAITING` are both live — and `WAITING` most of all,
+                   *   since somebody is waiting for a reply.
+                   */
+                  resolved={data.open.status === 'CLOSED'}
+                />
+              </div>
+            </>
+          )}
           <div className={styles.chatBody}>
             <div className={styles.conversationPane}>
               {data.open === null ? (
@@ -138,64 +207,6 @@ export default async function Page({
                 </p>
               ) : (
                 <>
-                  {/*
-                    ★★ WHO IS DRIVING, ABOVE THE STREAM.
-                    It is the first question an agent has on opening a conversation
-                    and the controls that change it are the same answer. Below the
-                    stream they would be read as "reply", which is the one thing
-                    they are not.
-
-                    `mine` is false whenever we could not read who is looking: the
-                    transfer route would refuse it anyway, and a control that always
-                    403s is worse than one that is absent.
-                  */}
-                  {/*
-                    ★★ WHO THIS IS, ABOVE WHO IS DRIVING.
-                    The column used to begin at the verbs and go straight into
-                    messages, so an agent arriving from the queue read a wall of text
-                    with no statement of who it is with, on what channel, or how long
-                    they have waited — the three facts that decide how the first
-                    sentence should be written.
-
-                    A sibling, not a parent: both are async server components and
-                    nesting one inside the other renders nothing.
-                  */}
-                  {/*
-                    ★★ ONE BAR, WHICH IS WHAT I SAID AND NOT WHAT SHIPPED.
-                    I described the header and the verbs as "one bordered bar". They
-                    were siblings: the header had the border and the verbs sat outside
-                    it, so "Take control" still read as detached — a walk said so, and
-                    it was right. The description was of the intent, not the markup.
-
-                    A plain `div` again, so both stay siblings of each other and of
-                    `MessageStream`: all three are async or client components and none
-                    may contain another.
-                  */}
-                  <div className={styles.openBar}>
-                    <ConversationHeader conversation={data.open} now={now} />
-
-                    <ConversationVerbs
-                      conversationId={data.open.id}
-                      mine={data.meId !== null && data.open.assignedAgentId === data.meId}
-                      handedOver={data.open.isHandedOver}
-                      /*
-                       * Two-state rather than three, and only because it was
-                       * checked: the list route puts no `select` on the conversation,
-                       * so `assignedAiAgentId` is genuinely on the wire and `null`
-                       * means no AI employee rather than "not sent".
-                       */
-                      hasAiEmployee={data.open.assignedAiAgentId !== null}
-                      greeting={data.greeting}
-                      colleagues={data.colleagues}
-                      /*
-                       * ⚠ `CLOSED` is the only status that means resolved. `OPEN`
-                       *   and `WAITING` are both live — and `WAITING` most of all,
-                       *   since somebody is waiting for a reply.
-                       */
-                      resolved={data.open.status === 'CLOSED'}
-                    />
-                  </div>
-
                   {/*
                     Renders nothing. It keeps this conversation current as delivery
                     changes, which is what makes the composer's "it will say so if it
