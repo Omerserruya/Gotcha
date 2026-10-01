@@ -93,7 +93,12 @@
       "CLOSED": "Closed"
     },
     "waitingUnknown": "No last-message time, so we can’t say how long they have waited.",
-    "noName": "No name yet"
+    "noName": "No name yet",
+    "waitingUnknownShort": "wait unknown",
+    "orders": {
+      "returning": "Returning · {count} orders",
+      "count": "{count, plural, one {# order} other {# orders}}"
+    }
   },
   "context": {
     "label": "About this customer"

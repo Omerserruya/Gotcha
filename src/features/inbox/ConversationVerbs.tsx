@@ -3,8 +3,6 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { Button } from '@/design-system/primitives/button/Button';
-
 import {
   claimConversation,
   closeConversation,
@@ -93,15 +91,15 @@ export function ConversationVerbs({
         "Hi, I'm Dana, taking over from here" is worse than no button.
       */}
       {!mine ? (
-        <Button
-          variant="primary"
-          size="sm"
+        <button
+          type="button"
+          className={styles.verbButton}
           data-testid={`claim-${conversationId}`}
           disabled={isPending}
           onClick={() => run(() => claimConversation(conversationId))}
         >
           {t('claim')}
-        </Button>
+        </button>
       ) : null}
 
       {/*
@@ -110,15 +108,15 @@ export function ConversationVerbs({
         there would be a control for a state the reader is already in.
       */}
       {handedOver ? (
-        <Button
-          variant="secondary"
-          size="sm"
+        <button
+          type="button"
+          className={styles.verbButton}
           data-testid={`return-${conversationId}`}
           disabled={isPending}
           onClick={() => run(() => returnToAi(conversationId))}
         >
           {t('returnToAi')}
-        </Button>
+        </button>
       ) : null}
 
       {/*
@@ -137,15 +135,15 @@ export function ConversationVerbs({
           that the controls are decorative.
       */}
       {!resolved ? (
-        <Button
-          variant="primary"
-          size="sm"
+        <button
+          type="button"
+          className={styles.verbButtonPrimary}
           data-testid={`resolve-${conversationId}`}
           disabled={isPending}
           onClick={() => run(() => closeConversation(conversationId))}
         >
           {t('resolve')}
-        </Button>
+        </button>
       ) : null}
 
       {/*
@@ -173,15 +171,15 @@ export function ConversationVerbs({
               </option>
             ))}
           </select>
-          <Button
-            variant="secondary"
-            size="sm"
+          <button
+            type="button"
+            className={styles.verbButton}
             data-testid={`transfer-${conversationId}`}
             disabled={isPending || transferTo === ''}
             onClick={() => run(() => transferConversation(conversationId, transferTo))}
           >
             {t('transfer')}
-          </Button>
+          </button>
         </span>
       ) : null}
 

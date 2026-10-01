@@ -488,6 +488,14 @@ describe('⚠⚠ the page READS `view` — the whole of the bug', () => {
     expect(propsOf<{ channel?: string | null }>(tree, ConversationList)?.channel).toBe('MESSENGER');
   });
 
+  it('★ the header gets the order read the Copilot already has', async () => {
+    const orders = { state: 'ok', summary: { orderCount: 6 } };
+    loadInbox.mockResolvedValue(data({ orders }));
+    const { default: Page } = await import('./page');
+    const tree = await Page({ searchParams: Promise.resolve({}) });
+    expect(propsOf<{ orders?: unknown }>(tree, ConversationHeader)?.orders).toBe(orders);
+  });
+
   it('⚠ a channel with no chip is "All"', async () => {
     loadInbox.mockResolvedValue(data());
     const { default: Page } = await import('./page');

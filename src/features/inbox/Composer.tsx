@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { Button } from '@/design-system/primitives/button/Button';
+import { ArrowUp } from 'lucide-react';
 
 import { sendReply, type SendResult } from './send-actions';
 import styles from './Inbox.module.css';
@@ -77,11 +77,12 @@ export function Composer({
         });
       }}
     >
-      <label className={styles.composerLabel} htmlFor="composer-body">
-        {/*
-          Where this goes, named. An agent with four conversations open should not
-          have to infer the channel from the thread above.
-        */}
+      {/*
+        ★ 02's CARD HAS NO VISIBLE LABEL — the placeholder and the channel in
+          the bar say what this is. The label stays, for whoever cannot see
+          either: a placeholder is not a name.
+      */}
+      <label className="srOnly" htmlFor="composer-body">
         {channelName ? t('labelOn', { channel: channelName }) : t('label')}
       </label>
 
@@ -90,55 +91,79 @@ export function Composer({
         className={styles.composerInput}
         data-testid="composer-body"
         value={text}
-        rows={3}
+        rows={1}
         disabled={isPending}
         placeholder={t('placeholder')}
         onChange={(event) => setText(event.target.value)}
       />
 
-      <div className={styles.composerActions}>
+      {/*
+        ════════════════════════════════════════════════════════════════════
+        ★★ 02's BAR: WHERE THIS GOES, THEN THE SEND BUTTON
+        ════════════════════════════════════════════════════════════════════
+        02 draws four attachment icons and three AI chips (Rewrite, Shorter,
+        Translate) at the left of this bar. None of them is built, and a
+        control that does nothing is worse than its absence — so the bar
+        holds the two things that work: the channel, and send.
+      */}
+      <div className={styles.composerBar}>
+        {/*
+          Where this goes, named. An agent with four conversations open should
+          not have to infer the channel from the thread above.
+        */}
+        {channelName ? <span className={styles.composerChannel}>{channelName}</span> : null}
+
         {/*
           Disabled on empty rather than sending and being refused: the route
           answers 400 for an empty body, and a round trip to be told what the
           screen already knew is worse than a control that says it is not ready.
+
+          ⚠ An arrow, as 02 draws it — and the words stay, for a screen
+            reader: "Send to the customer" is what pressing it does.
         */}
-        <Button
+        <button
           type="submit"
+          className={styles.composerSend}
           data-testid="composer-send"
           disabled={empty || isPending}
-          variant="primary"
         >
-          {isPending ? t('sending') : t('send')}
-        </Button>
+          <ArrowUp size={15} strokeWidth={2.2} aria-hidden="true" />
+          <span className="srOnly">{isPending ? t('sending') : t('send')}</span>
+        </button>
+      </div>
 
-        {/*
+      {/* Only when there is something to say, so an idle card is 02's height. */}
+      {result ? (
+        <div className={styles.composerActions}>
+          {/*
           ★★ "QUEUED", AND IT IS NOT A HEDGE. The route enqueued a row. Saying
           "sent" would be a claim about a phone we have heard nothing from, and
           the operator who believes it stops watching the one message that failed.
         */}
-        {result?.ok ? (
-          <p className={styles.composerNote} data-testid="composer-queued">
-            {t('queued')}
-          </p>
-        ) : null}
+          {result?.ok ? (
+            <p className={styles.composerNote} data-testid="composer-queued">
+              {t('queued')}
+            </p>
+          ) : null}
 
-        {result && !result.ok ? (
-          <p className={styles.composerProblem} data-testid="composer-problem">
-            {result.reason === 'channel_not_configured'
-              ? /*
-                 * Not "try again". The conversation arrived on a channel whose
-                 * credentials have since been removed, and nothing about the
-                 * message is at fault — so the sentence points at the channel.
-                 */
-                t('error.channelGone')
-              : result.reason === 'not_found'
-                ? t('error.gone')
-                : result.reason === 'empty'
-                  ? t('error.empty')
-                  : t('error.failed')}
-          </p>
-        ) : null}
-      </div>
+          {result && !result.ok ? (
+            <p className={styles.composerProblem} data-testid="composer-problem">
+              {result.reason === 'channel_not_configured'
+                ? /*
+                   * Not "try again". The conversation arrived on a channel whose
+                   * credentials have since been removed, and nothing about the
+                   * message is at fault — so the sentence points at the channel.
+                   */
+                  t('error.channelGone')
+                : result.reason === 'not_found'
+                  ? t('error.gone')
+                  : result.reason === 'empty'
+                    ? t('error.empty')
+                    : t('error.failed')}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </form>
   );
 }

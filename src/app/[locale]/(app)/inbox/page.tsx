@@ -191,7 +191,12 @@ export default async function Page({
                 may contain another.
               */}
               <div className={styles.openBar}>
-                <ConversationHeader conversation={data.open} now={now} />
+                <ConversationHeader
+                  conversation={data.open}
+                  now={now}
+                  /* The read the Copilot's orders panel already has — no second fetch. */
+                  orders={data.orders}
+                />
 
                 <ConversationVerbs
                   conversationId={data.open.id}

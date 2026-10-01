@@ -93,7 +93,12 @@
       "CLOSED": "סגורה"
     },
     "waitingUnknown": "אין זמן הודעה אחרונה, ולכן אי אפשר לדעת כמה זמן הם מחכים.",
-    "noName": "אין שם עדיין"
+    "noName": "אין שם עדיין",
+    "waitingUnknownShort": "זמן ההמתנה לא ידוע",
+    "orders": {
+      "returning": "לקוח חוזר · {count} הזמנות",
+      "count": "{count, plural, one {הזמנה אחת} other {# הזמנות}}"
+    }
   },
   "context": {
     "label": "על הלקוח הזה"

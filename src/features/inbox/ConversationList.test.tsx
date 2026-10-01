@@ -907,6 +907,12 @@ describe('⚠⚠ "a WINDOW YOU SCROLL INSIDE, not outside"', () => {
     expect(rule('queueColumn')).toMatch(/line-height:\s*normal/);
   });
 
+  it('★ waiting-age is a pill in 02’s neutral, so the third line is 17h', () => {
+    // As running text it was 11h, and that was the whole of 76 against 82.
+    expect(rule('waiting')).toMatch(/padding:\s*3px var\(--space-8\)/);
+    expect(rule('waiting')).toMatch(/background-color:\s*var\(--panel-well\)/);
+  });
+
   it('★ the footer bar is 02’s: `padding:11px 18px` on #F5F2EC', () => {
     expect(rule('queueFooter')).toMatch(/padding:\s*11px 18px/);
     expect(rule('queueFooter')).toMatch(/background-color:\s*var\(--panel-footer\)/);

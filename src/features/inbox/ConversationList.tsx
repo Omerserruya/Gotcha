@@ -9,6 +9,7 @@ import {
   type ConversationRow,
 } from '@/api/contracts/inbox';
 
+import { initials } from './initials';
 import styles from './Inbox.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Globe, Mail, MessageCircle, MessagesSquare, type LucideProps } from 'lucide-react';
@@ -120,28 +121,6 @@ function channelMark(channel: string | null): {
 } {
   if (channel === null) return { Icon: Globe, tone: 'web' };
   return CHANNEL_MARKS[channel as keyof typeof CHANNEL_MARKS] ?? { Icon: Globe, tone: 'web' };
-}
-
-/**
- * Up to two initials for the avatar, from whatever the name turns out to be.
- *
- * ⚠⚠ `customerName` IS NOT A PERSON'S NAME HERE. A Shopify live-chat row
- *    reads "Shopper on urban-supply-gotcha-demo.myshopify.com" — a
- *    forty-character unbroken token. Taking the first letter of the first two
- *    WORDS gives "SO", which is meaningless but harmless; taking a slice of
- *    the raw string would put a fragment of a shop domain in a circle.
- *
- * ★ Empty for an unnamed row rather than a placeholder glyph: the circle is
- *   decorative, `aria-hidden`, and the name beside it already says "Someone".
- */
-function initials(name: string | null): string {
-  if (name === null) return '';
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase() ?? '')
-    .join('');
 }
 
 export async function ConversationList({

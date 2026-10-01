@@ -1,12 +1,16 @@
+import { readFileSync } from 'node:fs';
+
 import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
+import { commerceContextSchema } from '@/api/contracts/customer-orders';
 import { conversationRowSchema } from '@/api/contracts/inbox';
 import channels from '@/i18n/messages/en/channels.json';
 import inbox from '@/i18n/messages/en/inbox.json';
 
 import { ConversationHeader } from './ConversationHeader';
+import { initials } from './initials';
 
 /**
  * Screen 02's header — the three facts that were nowhere on the screen.
@@ -108,8 +112,81 @@ describe('★★ who this is, on what channel, and how long they have waited', (
      */
     await show({ lastMessageAt: null });
     expect(screen.queryByTestId('conversation-waiting')).toBeNull();
-    expect(screen.getByTestId('conversation-waiting-unknown')).toHaveTextContent(
-      /can’t say how long/i,
+    // One line in 02's subline, so the line says the fact and the reason is
+    // the tooltip — still there, and still not "0m".
+    const unknown = screen.getByTestId('conversation-waiting-unknown');
+    expect(unknown).toHaveTextContent(/wait unknown/i);
+    expect(unknown).toHaveAttribute('title', expect.stringMatching(/can’t say how long/i));
+  });
+});
+
+describe('★★ 02’s chip — "Returning · 6 orders" — from the count we already had', () => {
+  const ctx = (raw: unknown) => commerceContextSchema.parse(raw);
+  const showWith = async (orders: ReturnType<typeof ctx> | null) =>
+    render(await ConversationHeader({ conversation: row(), now: NOW, orders }));
+
+  it('★★ more than one order is "Returning", with the count', async () => {
+    await showWith(ctx({ state: 'ok', data: { summary: { orderCount: 6 } } }));
+    expect(screen.getByTestId('conversation-orders')).toHaveTextContent('Returning · 6 orders');
+  });
+
+  it('★ one order is a count, not "Returning"', async () => {
+    await showWith(ctx({ state: 'ok', summary: { orderCount: 1 } }));
+    const chip = screen.getByTestId('conversation-orders');
+    expect(chip).toHaveTextContent('1 order');
+    expect(chip).not.toHaveTextContent(/returning/i);
+  });
+
+  it('⚠⚠ no chip for 0 — the contract defaults the count to 0, so 0 may mean "not sent"', async () => {
+    await showWith(ctx({ state: 'ok', data: { summary: {} } }));
+    expect(screen.queryByTestId('conversation-orders')).toBeNull();
+  });
+
+  it('⚠ and none when the read was not `ok`, or did not happen', async () => {
+    await showWith(ctx({ state: 'no_orders', summary: { orderCount: 3 } }));
+    expect(screen.queryByTestId('conversation-orders')).toBeNull();
+    await showWith(null);
+    expect(screen.queryByTestId('conversation-orders')).toBeNull();
+  });
+
+  it('★ the avatar carries the initials, as 02’s 34px disc does', async () => {
+    const { container } = await showWith(null);
+    expect(container.querySelector('header [aria-hidden="true"]')?.textContent).toBe(
+      initials(row().customerName),
     );
+  });
+});
+
+describe('★★ Wave 3 geometry, read from the stylesheet', () => {
+  const css = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  // A rule of its OWN — not a selector list's second entry, which shares the
+  // first one's declarations and would answer for a rule that may not exist.
+  const rule = (selector: string) =>
+    new RegExp(`(?<!,\\s*)\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+
+  it('★★ the header is ONE row across the panel, on the panel — not a card', () => {
+    const bar = rule('openBar');
+    expect(bar).toMatch(/padding:\s*var\(--space-16\) 22px/);
+    expect(bar).toMatch(/border-block-end:\s*1px solid var\(--border-subtle\)/);
+    expect(bar).toMatch(/align-items:\s*center/);
+    expect(bar).not.toMatch(/background-color|border-radius|flex-direction:\s*column/);
+    expect(bar).toMatch(/line-height:\s*normal/);
+  });
+
+  it('★ the verbs sit at the row’s end, and only Resolve is filled', () => {
+    expect(rule('verbs')).toMatch(/margin-inline-start:\s*auto/);
+    expect(rule('verbButton')).toMatch(/border:\s*1px solid var\(--border-default\)/);
+    expect(rule('verbButtonPrimary')).toMatch(/background-color:\s*var\(--action-base\)/);
+  });
+
+  it('★★ the composer is a white card that grows with what is typed', () => {
+    const card = rule('composer');
+    expect(card).toMatch(/background-color:\s*var\(--panel-field\)/);
+    expect(card).toMatch(/border-radius:\s*var\(--radius-card\)/);
+    expect(rule('composerInput')).toMatch(/field-sizing:\s*content/);
+    expect(rule('composerSend')).toMatch(/background-color:\s*var\(--action-send\)/);
   });
 });

@@ -525,6 +525,9 @@
     /* Ink-on-ink: the primary action inverts the frame. */
     --action-base: #121212;
     --action-text: #f7f5f1;
+    /* 02's composer send: the one violet control on the screen. */
+    --action-send: #8b76e8;
+    --action-send-text: #fff;
 
     --skeleton-base: #ede9e1;
 

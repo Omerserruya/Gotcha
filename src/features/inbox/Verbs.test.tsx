@@ -368,3 +368,17 @@ describe('⚠⚠ Resolve — 02’s third button, and the route existed all alon
     expect(claimConversation).not.toHaveBeenCalled();
   });
 });
+
+describe('★ 02 fills ONE header button, and it is Resolve', () => {
+  it('⚠ "Take control" is outlined like its siblings, not filled like Resolve', () => {
+    /*
+     * A surviving mutation filled it with nothing going red. 02 draws Assign
+     * and Pause AI outlined and only Resolve in #121212 — two filled buttons
+     * side by side would make the screen's one decisive action ambiguous.
+     */
+    show({ mine: false, handedOver: true, resolved: false });
+    const claim = screen.getByTestId('claim-c1');
+    expect(claim.className).toBe(screen.getByTestId('return-c1').className);
+    expect(claim.className).not.toBe(screen.getByTestId('resolve-c1').className);
+  });
+});
