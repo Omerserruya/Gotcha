@@ -902,8 +902,40 @@ describe('★★ the Copilot wall is dark, and inherits only the panel’s botto
     expect(tokens).toMatch(/--copilot-surface:\s*#171717/i);
   });
 
+  it('⚠⚠ its body scrolls and can SHRINK — the third of 02\u2019s three scrollers', () => {
+    // Same three declarations as the queue list and the message stream, and
+    // the same one that matters: without `min-block-size: 0` the body pushes
+    // the wall taller than the panel it is part of.
+    const body = /\.contextColumn\s*>\s*\.copilotBody\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(body).toMatch(/flex:\s*1/);
+    expect(body).toMatch(/min-block-size:\s*0/);
+    expect(body).toMatch(/overflow-y:\s*auto/);
+  });
+
   it('★ rounds ONLY the bottom-right, because the panel rounds the rest', () => {
     expect(context).toMatch(/border-end-end-radius:\s*18px/);
     expect(context).not.toMatch(/(?:^|\s)border-radius:/);
+  });
+});
+
+describe('⚠⚠ the queue is 352px at the width the design was drawn at', () => {
+  it('★★ the clamp’s percentage is of the CONTENT box, not the viewport', () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * IT WAS 21%, AND IT RENDERED 260px
+     * ════════════════════════════════════════════════════════════════════════
+     * A percentage width resolves against its containing block — the content
+     * area beside the rail, `[1218x876]` in 02's computed tree. 21% of 1218 is
+     * 256, the floor caught it, and the queue came out 92px narrower than
+     * drawn. Both of us had reasoned about 21% of 1440.
+     */
+    const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+    const m = /--size-inbox-queue:\s*clamp\((\d+)px,\s*([\d.]+)%,\s*(\d+)px\)/.exec(tokens);
+    expect(m).not.toBeNull();
+
+    const [, floor, pct, ceiling] = m!.map(Number) as [number, number, number, number];
+    const atDesignWidth = Math.min(Math.max((1218 * pct) / 100, floor), ceiling);
+
+    expect(Math.round(atDesignWidth)).toBe(352);
   });
 });

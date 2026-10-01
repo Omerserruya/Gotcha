@@ -701,6 +701,17 @@
     flex: none;
   }
 
+  /*
+   * The third of 02's three internal scrollers, and the same three
+   * declarations as the other two. `min-block-size: 0` again: without it the
+   * body pushes the wall taller than the panel it is part of.
+   */
+  .contextColumn > .copilotBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
   .queueColumn,
   .conversationColumn {
     display: flex;

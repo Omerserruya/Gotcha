@@ -207,7 +207,26 @@
      * controls — so it is wider than a column of navigation labels, and its
      * percentage is of a page that is already allowed to be 1600px.
      */
-    --size-inbox-queue: clamp(260px, 21%, 360px);
+    /*
+     * ════════════════════════════════════════════════════════════════════
+     * ⚠⚠ 21% WAS RESOLVED AGAINST THE WRONG BOX, AND IT RENDERED 260px
+     * ════════════════════════════════════════════════════════════════════
+     * It was `clamp(260px, 21%, 360px)`, chosen as "21% of 1440 is about
+     * 302, and the design's 352 sits inside the range". **A percentage width
+     * resolves against its CONTAINING BLOCK** — here the content area beside
+     * the rail, `[1218x876]` in 02's computed tree — not the viewport. 21% of
+     * 1218 is 256, the floor caught it, and at the exact width the design was
+     * drawn at the queue came out 92px narrower than drawn.
+     *
+     * ★ 352 / 1218 = 28.9%, so the same clamp now computes to the design's
+     *   value at the design's width and still flexes either side of it. The
+     *   floor and ceiling — the deliberate responsive part — are unchanged.
+     *
+     * ★ `--size-rail` beside it is right for the opposite reason: its 14.6%
+     *   resolves against the FRAME, which is 1440, and 14.6% of 1440 is 210.
+     *   Two percentages, two containing blocks.
+     */
+    --size-inbox-queue: clamp(260px, 28.9%, 360px);
     /*
      * ⚠ `--size-code-box: 44px` was here and is gone. The mock gives the code
      *   boxes `flex:1` — they divide the column rather than having a width —

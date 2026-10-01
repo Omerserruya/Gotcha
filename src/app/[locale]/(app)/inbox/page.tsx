@@ -236,31 +236,39 @@ export default async function Page({
               )}
             </div>
             <aside className={styles.contextColumn} aria-label={t('context.label')}>
-              <IdentityPanel
-                timeline={data.timeline}
-                conversation={
-                  data.open
-                    ? {
-                        contactName: data.open.customerName,
-                        channel: data.open.channel,
-                        /*
-                         * ★ THE HANDLE, WHICH THE PANEL WAS SAYING IT DID NOT HAVE.
-                         * It rendered *"No channel handle is recorded for this
-                         * person"* beside a row showing a channel, because nothing
-                         * passed one. Two true sentences about different things,
-                         * reading as a contradiction.
-                         */
-                        customerExternalId: data.open.customerExternalId,
-                      }
-                    : null
-                }
-              />
               {/*
-              04d's panel. `conversationId` is what its actions post to, and it
-              is `null` when nothing is open — the controls are then absent
-              rather than broken, because the endpoint has nowhere to route.
-            */}
-              <CustomerOrders orders={data.orders} conversationId={data.open?.id ?? null} />
+                ⚠ THE COPILOT’S SCROLLING BODY. 02: `[372x693] flex:1 1 0%
+                  ovf:hidden`, between a fixed 45px header and a pinned 71px
+                  input. Neither of those exists yet; the body is in place so
+                  that adding them does not mean restructuring this again.
+              */}
+              <div className={styles.copilotBody}>
+                <IdentityPanel
+                  timeline={data.timeline}
+                  conversation={
+                    data.open
+                      ? {
+                          contactName: data.open.customerName,
+                          channel: data.open.channel,
+                          /*
+                           * ★ THE HANDLE, WHICH THE PANEL WAS SAYING IT DID NOT HAVE.
+                           * It rendered *"No channel handle is recorded for this
+                           * person"* beside a row showing a channel, because nothing
+                           * passed one. Two true sentences about different things,
+                           * reading as a contradiction.
+                           */
+                          customerExternalId: data.open.customerExternalId,
+                        }
+                      : null
+                  }
+                />
+                {/*
+                04d's panel. `conversationId` is what its actions post to, and it
+                is `null` when nothing is open — the controls are then absent
+                rather than broken, because the endpoint has nowhere to route.
+              */}
+                <CustomerOrders orders={data.orders} conversationId={data.open?.id ?? null} />
+              </div>
             </aside>
           </div>
         </section>
