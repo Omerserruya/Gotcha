@@ -6,6 +6,7 @@ import {
   hasTranscript,
   messageSchema,
   quotedState,
+  senderLabel,
   renderableType,
   waitingMinutes,
   CONVERSATION_STATUSES,
@@ -331,5 +332,50 @@ describe('★★ deliveryOf — pending and failed were the same rendering: sile
     });
     expect(parsed.status).toBe('FAILED');
     expect(deliveryOf(parsed)).toBe('failed');
+  });
+});
+
+describe('★★ the contract keeps what the stream draws', () => {
+  it('★★ `replyTo` and `senderName` survive parsing — `z.object` stripped both', () => {
+    const parsed = messageSchema.parse({
+      id: 'm1',
+      direction: 'OUTBOUND',
+      body: 'x',
+      createdAt: '2026-09-25T09:14:00.000Z',
+      senderName: 'Support AI',
+      replyTo: {
+        id: 'm0',
+        body: null,
+        direction: 'INBOUND',
+        messageType: 'image',
+        senderName: null,
+      },
+    });
+    expect(parsed.senderName).toBe('Support AI');
+    expect(parsed.replyTo).toEqual({
+      id: 'm0',
+      body: '',
+      direction: 'INBOUND',
+      messageType: 'image',
+      senderName: null,
+    });
+  });
+
+  it('★ and both are optional — an older service sends neither', () => {
+    const parsed = messageSchema.parse({ id: 'm1', direction: 'INBOUND', createdAt: 'x' });
+    expect(parsed.replyTo).toBeNull();
+    expect(parsed.senderName).toBeNull();
+  });
+});
+
+describe('⚠ senderLabel — a login email is not a name', () => {
+  it.each([
+    ['OUTBOUND', 'Support AI', 'Support AI'],
+    ['OUTBOUND', 'dana@shop.co.il', null],
+    ['OUTBOUND', '   ', null],
+    ['OUTBOUND', null, null],
+    ['INBOUND', 'Dana Cohen', null],
+  ] as const)('%s %j → %j', (direction, senderName, expected) => {
+    expect(senderLabel({ direction, senderName })).toBe(expected);
   });
 });

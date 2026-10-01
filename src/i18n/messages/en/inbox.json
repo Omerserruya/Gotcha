@@ -29,7 +29,12 @@
     "pending": "Still sending",
     "sent": "Handed to the channel, not confirmed delivered",
     "failed": "This did not send. The customer never received it.",
-    "deliveryUnknown": "We can’t tell whether this arrived."
+    "deliveryUnknown": "We can’t tell whether this arrived.",
+    "quote": {
+      "customer": "Customer",
+      "team": "Your team",
+      "noText": "A message with no text"
+    }
   },
   "queue": {
     "cap": "Showing the {count} most recent.",

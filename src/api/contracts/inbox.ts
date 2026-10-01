@@ -386,6 +386,33 @@ export const messageSchema = z.object({
    */
   externalMessageId: z.string().nullable().default(null),
   /**
+   * Who sent it, as the writer put it — and writers disagree. A human agent's
+   * send writes their LOGIN EMAIL (`req.user.email`); an AI employee writes
+   * its name; the platform writes "System", a storefront shopper "Shopper".
+   * So it is shown only through `senderLabel`, which knows that.
+   */
+  senderName: z.string().nullish().default(null),
+  /**
+   * ★★ THE QUOTED MESSAGE, WHICH TRAVELLED WITH THE REPLY ALL ALONG.
+   * `listByConversation` includes `replyTo { id, body, direction,
+   * messageType, senderName, mediaUrl, fileName }` precisely so a quote from
+   * last week can be drawn without being on this page — and this schema
+   * stripped it. `null` when the reply's target is not stored.
+   */
+  replyTo: z
+    .object({
+      id: z.string(),
+      body: z
+        .string()
+        .nullish()
+        .transform((body) => body ?? ''),
+      direction: z.enum(['INBOUND', 'OUTBOUND']),
+      messageType: z.string().nullish().default('text'),
+      senderName: z.string().nullish().default(null),
+    })
+    .nullish()
+    .default(null),
+  /**
    * ★★ WHERE A SYSTEM MESSAGE KEEPS ITS MEANING.
    *
    * `createSystemMessage` writes `body: ""` and puts everything in metadata:
@@ -461,6 +488,26 @@ export type QuotedState = 'resolved' | 'unresolved' | 'none';
  * Rendering it as an ordinary message loses the fact that the customer was
  * answering something, which is often the only thing that makes it legible.
  */
+/**
+ * The sender worth naming on a message's time line, or `null`.
+ *
+ * ⚠ A human agent's send stores their LOGIN EMAIL as `senderName`. An email
+ *   is an identifier, not a name, and printing a colleague's address under
+ *   every reply is not what 02's "Support AI" slot is for. The platform tells
+ *   them apart the same way — `live-voice.service` counts humans by
+ *   `senderName contains "@"`.
+ *
+ * Outbound only: an inbound sender is the customer, whom the header names.
+ */
+export function senderLabel(message: {
+  readonly direction: 'INBOUND' | 'OUTBOUND';
+  readonly senderName?: string | null;
+}): string | null {
+  if (message.direction !== 'OUTBOUND') return null;
+  const name = message.senderName?.trim() ?? '';
+  return name === '' || name.includes('@') ? null : name;
+}
+
 export function quotedState(message: InboxMessage): QuotedState {
   if (message.replyToMessageId) return 'resolved';
   if (message.replyToExternalId) return 'unresolved';

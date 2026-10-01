@@ -7,6 +7,19 @@
    * feature gets assumed to exist.
    */
 
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ 02's STREAM — A BUBBLE, AND ITS TIME LINE UNDER IT
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured: each message is a column at `gap:5px` — the bubble, then
+   * `09:12 · Support AI · read` at 10.5px `#A8A39A`. Inbound: white,
+   * `1px #E6E2DA`, radius `14 14 14 4`. Outbound: `#121212` on `#F0EDE7`,
+   * radius `14 14 4 14`. Text 13.5px at 1.5. The corner that is 4px is the
+   * one nearest the sender.
+   *
+   * ⚠ `line-height: normal` on the stream, as on the queue: 02 sets one only
+   *   on the message text, and the body's 1.6 made every meta line taller.
+   */
   .stream {
     display: flex;
     flex-direction: column;
@@ -14,30 +27,43 @@
     margin: 0;
     padding: 0;
     list-style: none;
+    line-height: normal;
   }
 
   .message {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    max-inline-size: 42rem;
-    padding: var(--space-8) var(--space-12);
-    /* `--radius-8` and `--surface-raised` are both undefined: the bubble had
-       square corners and no fill at all. */
-    border-radius: var(--radius-item);
-    background: var(--panel-field);
+    align-items: flex-start;
+    gap: 5px;
+    /* 02: 314 of the 436px column. */
+    max-inline-size: 72%;
   }
 
-  /* Ours sits at the end of the line, theirs at the start — mirrored in
-     Hebrew by the logical property, with no second rule. */
-  /*
-   * Ours. Warm rather than the conventional blue: the palette is warm
-   * neutrals throughout, and the side the bubble sits on already says who
-   * sent it — the tint is the second signal, not the first.
-   */
   .message[data-direction='OUTBOUND'] {
     align-self: flex-end;
-    background: var(--panel-well);
+    align-items: flex-end;
+  }
+
+  /* Logical corners, so Hebrew mirrors the sharp one with no second rule. */
+  .bubble {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: 11px 15px;
+    border: 1px solid var(--border-default);
+    border-radius: 14px;
+    border-end-start-radius: var(--space-4);
+    background-color: var(--panel-field);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  .message[data-direction='OUTBOUND'] .bubble {
+    border-color: transparent;
+    border-radius: 14px;
+    border-end-end-radius: var(--space-4);
+    background-color: var(--action-base);
+    color: var(--panel-well);
   }
 
   .body {
@@ -46,10 +72,32 @@
   }
 
   /*
-   * A quote we could not resolve, and a medium we cannot read. Both are
-   * statements about what is missing, so they read as notes rather than as
-   * content somebody wrote.
+   * 02's quote: `padding:2px 0 2px 9px`, a 2px `#D8D3C9` rule, 8px above the
+   * reply — who said it at 10.5px, then one line of it at 12px.
    */
+  .quote {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    margin-block-end: var(--space-4);
+    padding-block: 2px;
+    padding-inline-start: 9px;
+    border-inline-start: 2px solid var(--border-emphasis);
+    color: var(--text-subtle);
+    line-height: normal;
+  }
+
+  .quoteWho {
+    font-size: 10.5px;
+  }
+
+  .quoteText {
+    font-size: var(--font-size-label);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .quoted,
   .mediaNote {
     margin: 0;
@@ -58,12 +106,26 @@
     font-style: italic;
   }
 
+  .message[data-direction='OUTBOUND'] .quoted,
+  .message[data-direction='OUTBOUND'] .mediaNote,
+  .message[data-direction='OUTBOUND'] .quote {
+    color: var(--text-faint);
+  }
+
+  /* 02: 10.5px `#A8A39A`, 4px in from the bubble's sender side, `·` between. */
   .meta {
     display: flex;
-    gap: var(--space-8);
+    flex-wrap: wrap;
+    gap: 0 var(--space-4);
     margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
+    padding-inline: var(--space-4);
+    font-size: 10.5px;
+    color: var(--text-faint);
+  }
+
+  .meta > * + *::before {
+    content: '·';
+    margin-inline-end: var(--space-4);
   }
 
   .note {
@@ -570,14 +632,15 @@
    * A system divider. No bubble, no side: it records what a colleague did,
    * and the stream's `align-self` would otherwise put it on the customer's.
    */
+  /* 02: `gap:12px; padding:2px 0`, `#EDE9E1` rules, 11px `#8C887F` text. */
   .divider {
     display: flex;
     align-items: center;
-    gap: var(--space-8);
+    gap: var(--space-12);
     align-self: stretch;
-    margin-block: var(--space-4);
-    color: var(--text-muted);
-    font-size: var(--font-size-caption);
+    padding-block: 2px;
+    color: var(--text-subtle);
+    font-size: 11px;
     text-align: center;
   }
 

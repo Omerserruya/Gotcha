@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
@@ -216,5 +218,95 @@ describe('★★ a message the customer never received', () => {
       }),
     ]);
     expect(screen.getByTestId('read-m1')).toBeInTheDocument();
+  });
+});
+
+describe('★★ Wave 4 — 02’s bubble, and its time line under it', () => {
+  it('★★ the time line is OUTSIDE the bubble, as 02 draws it', async () => {
+    await show([message()]);
+    const item = screen.getByTestId('message-m1');
+    const time = item.querySelector('time');
+    expect(time).not.toBeNull();
+    // The bubble is the item's first child; the time must not be inside it.
+    expect(item.firstElementChild?.contains(time)).toBe(false);
+  });
+
+  it('⚠ the time is 24-hour in the configured zone — 02’s `09:12`, not "12:14 PM"', async () => {
+    await show([message({ createdAt: '2026-09-25T09:14:00.000Z' })]);
+    expect(screen.getByTestId('message-m1').querySelector('time')?.textContent).toBe('12:14');
+  });
+
+  it('★ an AI employee’s reply names it on the time line', async () => {
+    await show([message({ direction: 'OUTBOUND', senderName: 'Support AI' })]);
+    expect(screen.getByTestId('sender-m1')).toHaveTextContent('Support AI');
+  });
+
+  it('⚠⚠ a colleague’s LOGIN EMAIL is never printed as a name', async () => {
+    await show([message({ direction: 'OUTBOUND', senderName: 'dana@shop.co.il' })]);
+    expect(screen.queryByTestId('sender-m1')).toBeNull();
+    expect(screen.getByTestId('message-m1').textContent).not.toContain('@');
+  });
+
+  it('★ and the customer’s own messages carry no sender — the header names them', async () => {
+    await show([message({ direction: 'INBOUND', senderName: 'Dana Cohen' })]);
+    expect(screen.queryByTestId('sender-m1')).toBeNull();
+  });
+});
+
+describe('★★ the quote travels with the reply — drawn even when it is not on the page', () => {
+  const replying = (replyTo: Record<string, unknown>) =>
+    message({ replyToMessageId: 'm0', replyTo: { id: 'm0', ...replyTo } });
+
+  it('★★ says who said it and what, inside the bubble', async () => {
+    await show([replying({ direction: 'INBOUND', body: 'Where is my parcel?' })]);
+    const quote = screen.getByTestId('quote-m1');
+    expect(quote).toHaveTextContent('Customer');
+    expect(quote).toHaveTextContent('Where is my parcel?');
+    expect(screen.getByTestId('message-m1').firstElementChild?.contains(quote)).toBe(true);
+  });
+
+  it('★ our own quoted reply names the AI employee, or "Your team" for a person', async () => {
+    await show([replying({ direction: 'OUTBOUND', body: 'On its way', senderName: 'Support AI' })]);
+    expect(screen.getByTestId('quote-m1')).toHaveTextContent('Support AI');
+  });
+
+  it('⚠ and never a colleague’s email', async () => {
+    await show([replying({ direction: 'OUTBOUND', body: 'On its way', senderName: 'a@b.co' })]);
+    expect(screen.getByTestId('quote-m1')).toHaveTextContent('Your team');
+    expect(screen.getByTestId('quote-m1').textContent).not.toContain('@');
+  });
+
+  it('★ a quoted photo with no text says so rather than drawing an empty line', async () => {
+    await show([replying({ direction: 'INBOUND', body: null, messageType: 'image' })]);
+    expect(screen.getByTestId('quote-m1')).toHaveTextContent('A message with no text');
+  });
+});
+
+describe('★ 02’s bubble geometry, read from the stylesheet', () => {
+  const css = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const block = (selector: string) =>
+    new RegExp(`(?:^|\\n)\\s*${selector.replace(/[.[\]'()=]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(
+      css,
+    )?.[1] ?? '';
+
+  it('★★ inbound is white and bordered; its sharp corner is the sender’s', () => {
+    const bubble = block('.bubble');
+    expect(bubble).toMatch(/background-color:\s*var\(--panel-field\)/);
+    expect(bubble).toMatch(/border:\s*1px solid var\(--border-default\)/);
+    expect(bubble).toMatch(/border-end-start-radius:\s*var\(--space-4\)/);
+  });
+
+  it('★★ outbound is 02’s dark bubble, sharp at the other corner', () => {
+    const out = block(".message[data-direction='OUTBOUND'] .bubble");
+    expect(out).toMatch(/background-color:\s*var\(--action-base\)/);
+    expect(out).toMatch(/border-end-end-radius:\s*var\(--space-4\)/);
+  });
+
+  it('⚠ the stream’s lines are `normal`, and only message text is 1.5', () => {
+    expect(block('.stream')).toMatch(/line-height:\s*normal/);
+    expect(block('.bubble')).toMatch(/line-height:\s*1\.5/);
   });
 });

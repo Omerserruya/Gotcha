@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import {
   hasTranscript,
   quotedState,
+  senderLabel,
   reactionOf,
   renderableType,
   resolveExternal,
@@ -179,6 +180,36 @@ export async function MessageStream({
             {...(type ? { 'data-type': type } : {})}
           >
             {/*
+              ★★ 02 DRAWS THE BUBBLE AND ITS TIME LINE AS TWO THINGS: the
+              message in a card, and `09:12 · Support AI · read` underneath it
+              in the open. The time was inside the bubble, so every message
+              carried a footer 02 does not have.
+            */}
+            <div className={styles.bubble}>
+              {/*
+              ★★ THE QUOTE ITSELF, FROM THE REPLY. 02 draws who said it and a
+              line of what they said, inside the bubble above the reply.
+              `replyTo` travels with the message, so the quote shows whether
+              or not the quoted message is on this page.
+            */}
+              {message.replyTo ? (
+                <div className={styles.quote} data-testid={`quote-${message.id}`}>
+                  <span className={styles.quoteWho}>
+                    {message.replyTo.direction === 'INBOUND'
+                      ? t('stream.quote.customer')
+                      : (senderLabel(message.replyTo) ?? t('stream.quote.team'))}
+                  </span>
+                  <span className={styles.quoteText}>
+                    {message.replyTo.body.trim() !== '' ? (
+                      <UserText>{message.replyTo.body}</UserText>
+                    ) : (
+                      t('stream.quote.noText')
+                    )}
+                  </span>
+                </div>
+              ) : null}
+
+              {/*
               ★★ A REPLY WHOSE QUOTE WE NEVER STORED IS STILL A REPLY.
               `replyToMessageId` can fail to resolve — the quoted message may
               predate GOTCHA or have been deleted — while
@@ -186,14 +217,14 @@ export async function MessageStream({
               nothing would lose the fact that the customer was answering
               something, which is often what makes the message legible.
             */}
-            {quoted === 'unresolved' ? (
-              <p className={styles.quoted} data-testid={`quoted-missing-${message.id}`}>
-                {t('stream.quotedMissing')}
-              </p>
-            ) : null}
+              {quoted === 'unresolved' ? (
+                <p className={styles.quoted} data-testid={`quoted-missing-${message.id}`}>
+                  {t('stream.quotedMissing')}
+                </p>
+              ) : null}
 
-            {type === 'audio' ? (
-              /*
+              {type === 'audio' ? (
+                /*
                 ★★ WE CANNOT READ IT OUT, AND THE DESIGN SAYS WE CAN.
                 An inbound voice note is stored as a file. The only
                 audio-specific code in the worker is a filename extension,
@@ -204,18 +235,18 @@ export async function MessageStream({
                 than rendering a player beside an absent transcript and
                 letting the agent conclude the transcript failed.
               */
-              <p className={styles.mediaNote} data-testid={`voice-${message.id}`}>
-                {hasTranscript(message) ? '' : t('stream.voiceNoTranscript')}
-              </p>
-            ) : null}
+                <p className={styles.mediaNote} data-testid={`voice-${message.id}`}>
+                  {hasTranscript(message) ? '' : t('stream.voiceNoTranscript')}
+                </p>
+              ) : null}
 
-            {type === 'image' || type === 'video' || type === 'document' ? (
-              <p className={styles.mediaNote} data-testid={`media-${message.id}`}>
-                {t(`stream.media.${type}` as 'stream.media.image')}
-              </p>
-            ) : null}
+              {type === 'image' || type === 'video' || type === 'document' ? (
+                <p className={styles.mediaNote} data-testid={`media-${message.id}`}>
+                  {t(`stream.media.${type}` as 'stream.media.image')}
+                </p>
+              ) : null}
 
-            {/*
+              {/*
               ════════════════════════════════════════════════════════════════
               ★★ "NOTHING TO SHOW" IS ABOUT WHAT WE RENDERED, NOT ABOUT THE
                  TYPE BEING UNRECOGNISED
@@ -230,25 +261,35 @@ export async function MessageStream({
               no body and no branch — location, template, interactive,
               system, and whatever is added next — lands here and says so.
             */}
-            {unsupported !== null ? (
-              <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
-                {t('stream.unsupported', { type: unsupported })}
-              </p>
-            ) : message.body.trim() !== '' ? (
-              /* Isolated: a customer writes in their language, not the page's. */
-              <p className={styles.body}>
-                <UserText>{message.body}</UserText>
-              </p>
-            ) : !rendered ? (
-              <p className={styles.mediaNote} data-testid={`unknown-${message.id}`}>
-                {t('stream.unknownType')}
-              </p>
-            ) : null}
+              {unsupported !== null ? (
+                <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
+                  {t('stream.unsupported', { type: unsupported })}
+                </p>
+              ) : message.body.trim() !== '' ? (
+                /* Isolated: a customer writes in their language, not the page's. */
+                <p className={styles.body}>
+                  <UserText>{message.body}</UserText>
+                </p>
+              ) : !rendered ? (
+                <p className={styles.mediaNote} data-testid={`unknown-${message.id}`}>
+                  {t('stream.unknownType')}
+                </p>
+              ) : null}
+            </div>
 
             <p className={styles.meta}>
               <time dateTime={message.createdAt}>
-                {format.dateTime(new Date(message.createdAt), { timeStyle: 'short' })}
+                {format.dateTime(new Date(message.createdAt), {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  /* 02 writes `09:12` in both languages; see the queue's time. */
+                  hour12: false,
+                })}
               </time>
+              {/* 02's middle slot — "Support AI" — when there is a name to put there. */}
+              {senderLabel(message) === null ? null : (
+                <span data-testid={`sender-${message.id}`}>{senderLabel(message)}</span>
+              )}
               {/*
                 ★ THE CUSTOMER READ IT. Labelled as theirs, because the same
                 word means the agent's queue elsewhere in this product and
