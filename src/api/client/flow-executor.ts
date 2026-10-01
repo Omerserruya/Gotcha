@@ -298,3 +298,50 @@ export async function completeAuthorization(authorizeUrl: string): Promise<Autho
     return { reason: 'threw' };
   }
 }
+
+/**
+ * Run the invalidation flow without a browser ever rendering it.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THERE IS NO REDIRECT TO FOLLOW, AND THAT IS NOT A PROBLEM
+ * ════════════════════════════════════════════════════════════════════════════
+ * Measured 2026-10-01: driving `default-invalidation-flow` through the
+ * executor answers **`ak-stage-session-end`** — a terminal render, not a stage
+ * awaiting input. An empty POST to it returns `ak-stage-flow-error`, with no
+ * `response_errors`, because there are no fields. **The flow has already
+ * ended by the time the executor replies.**
+ *
+ * ★ We spent a message planning to drive it to an `xak-flow-redirect` that
+ *   never comes. We do not need one. The session dies when the flow RUNS; all
+ *   the provider's page adds is buttons. So this fetches end-session, lets the
+ *   flow run, and leaves the landing to the caller.
+ *
+ * ⚠ IT MUST BE CALLED FROM THE PROVIDER'S OWN ORIGIN. Cross-origin, the
+ *   redirect chain is opaque and `response.url` — the only evidence the flow
+ *   ran — is unreadable. That is why sign-out now goes through the sign-in
+ *   page rather than straight at `end-session` from the product.
+ *
+ * @returns true when the chain landed on an invalidation flow, which is the
+ *          only observable proof the flow executed. False means the caller
+ *          should navigate to `end-session` itself — today's behaviour, which
+ *          ends the session and shows the provider's page.
+ */
+export async function runInvalidationFlow(endSessionUrl: string): Promise<boolean> {
+  try {
+    const ended = await fetch(endSessionUrl, { credentials: 'include' });
+
+    /*
+     * ⚠ `response.url` AFTER THE REDIRECTS. Landing on `/if/flow/` is what
+     *   says the flow was reached and executed. A 200 on its own does not:
+     *   an error page is also a 200.
+     */
+    return /\/if\/flow\/[a-z0-9-]+\/?$/.test(new URL(ended.url).pathname);
+  } catch {
+    /*
+     * Never throws. A sign-out that raises here would leave the person on the
+     * product with a dead session and no way forward; the caller's fallback
+     * is a navigation that works.
+     */
+    return false;
+  }
+}

@@ -2,7 +2,8 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import { SignInScreen } from './SignInScreen';
 import { FinishSignIn } from './FinishSignIn';
-import { isAuthorizeEndpoint } from '@/api/contracts/auth-flow';
+import { FinishSignOut } from './FinishSignOut';
+import { isProviderEndpoint } from '@/api/contracts/auth-flow';
 import { oidcConfiguration, productCallbackUrl } from '@/auth/oidc';
 import { appUrl } from '@/lib/base-path';
 import { Logo } from '@/design-system/brand/Logo';
@@ -73,9 +74,10 @@ export default async function SignInPage({
     returnTo?: string;
     authorize?: string;
     finishHold?: string;
+    signOut?: string;
   }>;
 }) {
-  const { error, returnTo, authorize, finishHold } = await searchParams;
+  const { error, returnTo, authorize, finishHold, signOut } = await searchParams;
   const locale = await getLocale();
   const t = await getTranslations('auth');
   /*
@@ -184,7 +186,27 @@ export default async function SignInPage({
   let finishing: string | null = null;
   if (typeof authorize === 'string' && authorize !== '') {
     const endpoint = (await oidcConfiguration()).serverMetadata().authorization_endpoint;
-    if (endpoint && isAuthorizeEndpoint(authorize, endpoint)) finishing = authorize;
+    if (endpoint && isProviderEndpoint(authorize, endpoint)) finishing = authorize;
+  }
+
+  /*
+   * ⚠⚠ CHECKED LIKE THE AUTHORIZE URL, AND FOR THE SAME REASON. It arrives
+   *   in our query string, so anybody can retype it, and this page is about to
+   *   fetch it with credentials. `isProviderEndpoint` compares against the
+   *   endpoint DISCOVERY reports — not a constant — on the server.
+   */
+  let signingOut: string | null = null;
+  if (typeof signOut === 'string' && signOut !== '') {
+    const endSession = (await oidcConfiguration()).serverMetadata().end_session_endpoint;
+    if (endSession && isProviderEndpoint(signOut, endSession)) signingOut = signOut;
+  }
+
+  if (signingOut) {
+    return (
+      <div className={styles.frame}>
+        <FinishSignOut endSessionUrl={signingOut} signedOutUrl={appPath(`/${locale}/sign-in`)} />
+      </div>
+    );
   }
 
   if (finishing) {

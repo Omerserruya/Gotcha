@@ -354,7 +354,11 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
  *   value observed — `/` — is precisely the one that must not be followed.
  */
 /**
- * Whether a URL we were handed is the provider's authorize endpoint.
+ * Whether a URL we were handed is a specific endpoint of the provider's.
+ *
+ * ★ Named for the question rather than for one caller. It started life as
+ *   `isAuthorizeEndpoint` and the second caller — sign-out, checking an
+ *   end-session URL — made the name the narrower thing, not the function.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * ⚠⚠ WITHOUT THIS, THE SIGN-IN PAGE IS A FETCH-AND-REDIRECT ANYONE CAN AIM
@@ -379,7 +383,7 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
  *   and the response's worth is decided later by `followableCompletion`,
  *   which requires the completion to be our registered callback.
  */
-export function isAuthorizeEndpoint(candidate: string, expectedEndpoint: string): boolean {
+export function isProviderEndpoint(candidate: string, expectedEndpoint: string): boolean {
   let target: URL;
   let expected: URL;
   try {

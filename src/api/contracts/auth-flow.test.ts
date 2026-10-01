@@ -13,7 +13,7 @@ import {
   factorEntry,
   recoveryFlowSlug,
   followableCompletion,
-  isAuthorizeEndpoint,
+  isProviderEndpoint,
 } from './auth-flow';
 
 /**
@@ -593,8 +593,8 @@ describe('⚠⚠ the authorize URL we were handed, before we fetch it', () => {
      * The query is NOT checked and must not be: it holds `state`, the PKCE
      * challenge and the nonce, all minted by our own route for this request.
      */
-    expect(isAuthorizeEndpoint(`${AUTHORIZE}?client_id=x&state=s&nonce=n`, AUTHORIZE)).toBe(true);
-    expect(isAuthorizeEndpoint(AUTHORIZE, AUTHORIZE)).toBe(true);
+    expect(isProviderEndpoint(`${AUTHORIZE}?client_id=x&state=s&nonce=n`, AUTHORIZE)).toBe(true);
+    expect(isProviderEndpoint(AUTHORIZE, AUTHORIZE)).toBe(true);
   });
 
   it('⚠⚠ refuses another origin, which is the attack', () => {
@@ -609,7 +609,7 @@ describe('⚠⚠ the authorize URL we were handed, before we fetch it', () => {
       'http://auth-dev.gotcha.co.il/application/o/authorize/',
       'https://dev.gotcha.co.il/application/o/authorize/',
     ]) {
-      expect(isAuthorizeEndpoint(bad, AUTHORIZE), bad).toBe(false);
+      expect(isProviderEndpoint(bad, AUTHORIZE), bad).toBe(false);
     }
   });
 
@@ -620,13 +620,13 @@ describe('⚠⚠ the authorize URL we were handed, before we fetch it', () => {
       'https://auth-dev.gotcha.co.il/if/flow/anything/',
       'https://auth-dev.gotcha.co.il/',
     ]) {
-      expect(isAuthorizeEndpoint(bad, AUTHORIZE), bad).toBe(false);
+      expect(isProviderEndpoint(bad, AUTHORIZE), bad).toBe(false);
     }
   });
 
   it('⚠ refuses anything that is not an absolute URL', () => {
     for (const bad of ['', '/application/o/authorize/', '//evil.example/x', 'javascript:1']) {
-      expect(isAuthorizeEndpoint(bad, AUTHORIZE), bad).toBe(false);
+      expect(isProviderEndpoint(bad, AUTHORIZE), bad).toBe(false);
     }
   });
 });
