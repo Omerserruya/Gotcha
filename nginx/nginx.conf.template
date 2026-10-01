@@ -1844,6 +1844,26 @@ http {
             limit_req zone=authentik burst=40 nodelay;
         }
 
+        # ★★ THE RESPONSE HEADER BLOCK IS ALREADY OVER THE DEFAULT.
+        #
+        # Measured on a real sign-in callback: 4,369 bytes of response headers,
+        # of which 2,783 are Set-Cookie (`gotcha_session` alone is 2,711).
+        # nginx's default `proxy_buffer_size` is one page — 4k — and that is the
+        # buffer the upstream's HEADER block must fit in. We are 273 bytes past
+        # it today, before anything is added.
+        #
+        # ⚠ The failure mode is not a dropped cookie, it is `upstream sent too
+        #   big header` and a 502 — and it would arrive the moment a second
+        #   cookie is set on this response, which is exactly what the sign-out
+        #   fix needs (an id_token hint is ~1,575 bytes sealed).
+        #
+        # ★ So this is raised BEFORE that lands, not after it breaks. 16k gives
+        #   room for the session cookie, a hint cookie and the security headers
+        #   together, with the same multiple left spare that 4k gave originally.
+        proxy_buffer_size 16k;
+        proxy_buffers     8 16k;
+        proxy_busy_buffers_size 32k;
+
         location ^~ /v2 {
             proxy_pass http://frontend_v2;
             proxy_http_version 1.1;
