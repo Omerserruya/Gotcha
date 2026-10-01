@@ -315,6 +315,9 @@
      * than a hole in the light panel it sits inside.
      */
     --copilot-surface: #171717;
+    /* 02's dark bars: an item's text, and the item that is raised. */
+    --copilot-text-muted: #b8b4ac;
+    --copilot-raised: #262626;
     /* Its input bar: `rgb(20,20,20)`, a step darker again. */
     --copilot-input-surface: #141414;
     --frame-raised: #171717;

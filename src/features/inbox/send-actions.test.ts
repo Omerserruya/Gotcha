@@ -114,3 +114,17 @@ describe('the other outcomes', () => {
     await expect(send('Hello')).resolves.toEqual({ ok: false, reason: 'failed' });
   });
 });
+
+describe('★ 02’s Reply — the target travels as `replyToMessageId`', () => {
+  it('sends it when there is one', async () => {
+    const { sendReply } = await import('./send-actions');
+    await sendReply('c1', 'Yes, it is', 'm9');
+    expect(post.mock.calls[0]![0].body).toEqual({ body: 'Yes, it is', replyToMessageId: 'm9' });
+  });
+
+  it('⚠ and sends no key at all when there is none — not an empty one', async () => {
+    const { sendReply } = await import('./send-actions');
+    await sendReply('c1', 'Hello', undefined);
+    expect(post.mock.calls[0]![0].body).toEqual({ body: 'Hello' });
+  });
+});

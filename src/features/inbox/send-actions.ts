@@ -73,7 +73,15 @@ export type SendResult =
  * is a control nobody has asked for; **defaulting to it is the correct behaviour
  * and passing nothing is how we get it.**
  */
-export async function sendReply(conversationId: string, body: string): Promise<SendResult> {
+export async function sendReply(
+  conversationId: string,
+  body: string,
+  /**
+   * The message this answers — 02's Reply. The route checks it belongs to
+   * this conversation and quotes it on the customer's channel.
+   */
+  replyToMessageId?: string,
+): Promise<SendResult> {
   const text = body.trim();
   /*
    * Checked here as well as on the route. The route answers 400 for an empty
@@ -87,7 +95,7 @@ export async function sendReply(conversationId: string, body: string): Promise<S
     await serverApi().post({
       endpoint: inboxEndpoints.sendMessage(conversationId),
       payload: unchecked,
-      body: { body: text },
+      body: replyToMessageId ? { body: text, replyToMessageId } : { body: text },
     });
     revalidatePath('/[locale]/(app)/inbox', 'page');
     return { ok: true };

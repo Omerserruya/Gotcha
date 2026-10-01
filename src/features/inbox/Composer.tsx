@@ -2,14 +2,17 @@
 
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ArrowUp, Image as ImageIcon, Paperclip, X } from 'lucide-react';
 
 import { composeDraft, type ComposeResult } from './compose-actions';
+import { REPLY_TO_EVENT, type ReplyTarget } from './reply-event';
 import { COMPOSE_KINDS, type ComposeKind } from './compose-kinds';
 import { sendReply, type SendResult } from './send-actions';
 import { MAX_MEDIA_BYTES, sendMedia, type MediaResult } from './send-media';
+import { Link } from '@/i18n/navigation';
+
 import styles from './Inbox.module.css';
 
 /**
@@ -81,9 +84,31 @@ export function Composer({
   const [isComposing, setComposing] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const body = useRef<HTMLTextAreaElement>(null);
+  /*
+   * ★ THE MESSAGE BEING ANSWERED — 02's Reply. Set by a message's button in
+   *   the stream, shown above the field, sent as `replyToMessageId`.
+   */
+  const [replying, setReplying] = useState<ReplyTarget | null>(null);
+
+  useEffect(() => {
+    const onReply = (event: Event) => {
+      setReplying((event as CustomEvent<ReplyTarget>).detail);
+      setResult(null);
+      body.current?.focus();
+    };
+    window.addEventListener(REPLY_TO_EVENT, onReply);
+    return () => window.removeEventListener(REPLY_TO_EVENT, onReply);
+  }, []);
 
   const empty = text.trim() === '';
   const busy = isPending || isComposing;
+  /*
+   * ⚠ A FILE CANNOT BE A REPLY: the media route takes no reply target. Sending
+   *   one while quietly dropping the other would be wrong either way, so with
+   *   both present Send waits and the box says why.
+   */
+  const conflict = file !== null && replying !== null;
 
   const choose = (chosen: File | undefined) => {
     setResult(null);
@@ -112,13 +137,13 @@ export function Composer({
       data-testid="composer"
       onSubmit={(event) => {
         event.preventDefault();
-        if ((empty && file === null) || busy) return;
+        if ((empty && file === null) || busy || conflict) return;
         setPending(true);
         void (async () => {
           try {
             const outcome =
               file === null
-                ? await sendReply(conversationId, text)
+                ? await sendReply(conversationId, text, replying?.id)
                 : await sendMedia(conversationId, file, text);
             setResult(outcome);
             /*
@@ -129,6 +154,7 @@ export function Composer({
             if (outcome.ok) {
               setText('');
               setFile(null);
+              setReplying(null);
               setBefore(null);
               setComposed(null);
               /*
@@ -154,7 +180,28 @@ export function Composer({
         {channelName ? t('labelOn', { channel: channelName }) : t('label')}
       </label>
 
+      {/* What is being answered, and the way to stop answering it. */}
+      {replying === null ? null : (
+        <div className={styles.composerQuote} data-testid="composer-replying">
+          <span className={styles.quote}>
+            <span className={styles.quoteWho}>{t('replyingTo', { who: replying.who })}</span>
+            <span className={styles.quoteText}>{replying.preview}</span>
+          </span>
+          <button
+            type="button"
+            className={styles.composerIcon}
+            data-testid="composer-reply-cancel"
+            aria-label={t('cancelReply')}
+            disabled={busy}
+            onClick={() => setReplying(null)}
+          >
+            <X size={13} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       <textarea
+        ref={body}
         id="composer-body"
         className={styles.composerInput}
         data-testid="composer-body"
@@ -293,7 +340,7 @@ export function Composer({
           type="submit"
           className={styles.composerSend}
           data-testid="composer-send"
-          disabled={(empty && file === null) || busy}
+          disabled={(empty && file === null) || busy || conflict}
         >
           <ArrowUp size={15} strokeWidth={2.2} aria-hidden="true" />
           <span className="srOnly">{isPending ? t('sending') : t('send')}</span>
@@ -301,8 +348,14 @@ export function Composer({
       </div>
 
       {/* Only when there is something to say, so an idle card is 02's height. */}
-      {result || composed || isComposing ? (
+      {result || composed || isComposing || conflict ? (
         <div className={styles.composerActions} aria-live="polite">
+          {conflict ? (
+            <p className={styles.composerProblem} data-testid="composer-conflict">
+              {t('noFileOnReply')}
+            </p>
+          ) : null}
+
           {isComposing ? (
             <p className={styles.composerNote} data-testid="compose-working">
               {t('compose.working')}
@@ -321,7 +374,19 @@ export function Composer({
 
           {composed && !composed.ok && composed.reason !== 'empty' ? (
             <p className={styles.composerProblem} data-testid="compose-problem">
-              {composed.reason === 'blank' ? t('compose.blank') : t('compose.failed')}
+              {composed.reason === 'units_exhausted' ? (
+                <>
+                  {t('compose.unitsExhausted')}{' '}
+                  {/* Where a top-up happens. Somebody without billing access is told so there. */}
+                  <Link href="/settings/billing" data-testid="compose-units-link">
+                    {t('compose.unitsLink')}
+                  </Link>
+                </>
+              ) : composed.reason === 'blank' ? (
+                t('compose.blank')
+              ) : (
+                t('compose.failed')
+              )}
             </p>
           ) : null}
 
@@ -349,9 +414,11 @@ export function Composer({
                   ? t('error.gone')
                   : result.reason === 'empty'
                     ? t('error.empty')
-                    : result.reason === 'too_large'
-                      ? t('error.tooLarge', { limit: MAX_MEDIA_BYTES / (1024 * 1024) })
-                      : t('error.failed')}
+                    : result.reason === 'quote_not_here'
+                      ? t('error.quoteGone')
+                      : result.reason === 'too_large'
+                        ? t('error.tooLarge', { limit: MAX_MEDIA_BYTES / (1024 * 1024) })
+                        : t('error.failed')}
             </p>
           ) : null}
         </div>

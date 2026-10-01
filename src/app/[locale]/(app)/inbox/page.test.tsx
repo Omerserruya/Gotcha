@@ -9,6 +9,7 @@ import { PageContainer } from '@/shell/PageContainer';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
 import { MessageStream } from '@/features/inbox/MessageStream';
+import { StreamPin } from '@/features/inbox/StreamPin';
 
 /**
  * Screen 02, assembled — tested on the tree rather than on the pixels.
@@ -514,5 +515,16 @@ describe('⚠⚠ the page READS `view` — the whole of the bug', () => {
     const { default: Page } = await import('./page');
     await Page({ searchParams: Promise.resolve({ channel: 'GMAIL' }) });
     expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'queue', null);
+  });
+});
+
+describe('⚠⚠ the open conversation is pinned to its latest message', () => {
+  it('★★ mounts StreamPin for the conversation that is open', async () => {
+    // A conversation opened at 10:03 with the latest message 2142px below.
+    const props = propsOf<{ conversationId?: string }>(
+      await page({ open: row({ id: 'c7' }) }),
+      StreamPin,
+    );
+    expect(props?.conversationId).toBe('c7');
   });
 });

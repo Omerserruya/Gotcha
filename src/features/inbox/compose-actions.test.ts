@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const post = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ post }) }));
 
+import { ApiError } from '@/api/client/api-error';
+
 import { composeDraft } from './compose-actions';
 import { COMPOSE_KINDS } from './compose-kinds';
 
@@ -60,6 +62,35 @@ describe('⚠ what it refuses, and what it reports', () => {
   it('an empty answer is "blank", not text', async () => {
     post.mockResolvedValue({ text: '   ' });
     expect(await composeDraft('c1', 'rewrite', 'draft')).toEqual({ ok: false, reason: 'blank' });
+  });
+
+  it('★★ the route’s 500 for exhausted units is told apart by its `ai_units:` message', async () => {
+    post.mockRejectedValue(
+      new ApiError({
+        kind: 'server',
+        status: 500,
+        developerMessage: 'ai_units:units_exhausted',
+        method: 'POST',
+        route: '/api/ai-assist/compose',
+      } as never),
+    );
+    expect(await composeDraft('c1', 'rewrite', 'draft')).toEqual({
+      ok: false,
+      reason: 'units_exhausted',
+    });
+  });
+
+  it('⚠ and any other 500 is still a plain failure', async () => {
+    post.mockRejectedValue(
+      new ApiError({
+        kind: 'server',
+        status: 500,
+        developerMessage: 'Failed to compose message',
+        method: 'POST',
+        route: '/x',
+      } as never),
+    );
+    expect(await composeDraft('c1', 'rewrite', 'draft')).toEqual({ ok: false, reason: 'failed' });
   });
 
   it('a failure is a failure', async () => {

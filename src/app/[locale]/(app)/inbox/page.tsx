@@ -5,6 +5,7 @@ import { ConversationHeader } from '@/features/inbox/ConversationHeader';
 import { Composer } from '@/features/inbox/Composer';
 import { CopilotPanel } from '@/features/inbox/CopilotPanel';
 import { StreamLive } from '@/features/inbox/StreamLive';
+import { StreamPin } from '@/features/inbox/StreamPin';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
@@ -240,6 +241,8 @@ export default async function Page({
                     fails" true rather than a sentence we wrote.
                   */}
                   <StreamLive conversationId={data.open.id} />
+                  {/* Renders nothing. Opens the stream at its latest message. */}
+                  <StreamPin conversationId={data.open.id} />
 
                   <MessageStream messages={data.messages} channel={data.open.channel} />
 

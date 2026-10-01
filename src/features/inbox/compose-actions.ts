@@ -51,6 +51,14 @@ export type ComposeResult =
   | { readonly ok: false; readonly reason: 'empty' }
   /** The model answered with nothing. Not the same as a failure, said apart. */
   | { readonly ok: false; readonly reason: 'blank' }
+  /**
+   * ★★ THE WORKSPACE HAS RUN OUT OF AI UNITS. Not "just now" and not "our
+   *   side": it lasts until somebody tops up, and that is in the workspace's
+   *   hands. The route answers 500 for it, but its body carries the error's
+   *   message, which `AiUnitsExhaustedError` builds as `ai_units:${reason}` —
+   *   a prefix from a class, not prose.
+   */
+  | { readonly ok: false; readonly reason: 'units_exhausted' }
   | { readonly ok: false; readonly reason: 'failed' };
 
 export async function composeDraft(
@@ -78,6 +86,9 @@ export async function composeDraft(
       conversationId,
       status: isApiError(cause) ? cause.status : undefined,
     });
+    if (isApiError(cause) && cause.developerMessage?.startsWith('ai_units:')) {
+      return { ok: false, reason: 'units_exhausted' };
+    }
     return { ok: false, reason: 'failed' };
   }
 }

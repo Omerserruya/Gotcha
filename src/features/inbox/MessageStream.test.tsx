@@ -303,10 +303,34 @@ describe('★ 02’s bubble geometry, read from the stylesheet', () => {
     const out = block(".message[data-direction='OUTBOUND'] .bubble");
     expect(out).toMatch(/background-color:\s*var\(--action-base\)/);
     expect(out).toMatch(/border-end-end-radius:\s*var\(--space-4\)/);
+    // 02: no border. A transparent 1px still made the box 2px larger.
+    expect(out).toMatch(/(?:^|\n)\s*border:\s*0;/);
   });
 
   it('⚠ the stream’s lines are `normal`, and only message text is 1.5', () => {
     expect(block('.stream')).toMatch(/line-height:\s*normal/);
     expect(block('.bubble')).toMatch(/line-height:\s*1\.5/);
+  });
+});
+
+describe('★ every message offers Reply, describing itself to the composer', () => {
+  it('★★ the button names the message: who said it and a line of it', async () => {
+    await show([message({ direction: 'INBOUND', body: 'Where is my parcel?' })]);
+    const heard: unknown[] = [];
+    const listen = (event: Event) => heard.push((event as CustomEvent).detail);
+    window.addEventListener('gotcha:reply-to', listen);
+    screen.getByTestId('reply-m1').click();
+    window.removeEventListener('gotcha:reply-to', listen);
+    expect(heard).toEqual([{ id: 'm1', who: 'Customer', preview: 'Where is my parcel?' }]);
+  });
+
+  it('⚠ and our own reply is attributed without a colleague’s email', async () => {
+    await show([message({ direction: 'OUTBOUND', body: 'On its way', senderName: 'a@b.co' })]);
+    const heard: Array<{ who: string }> = [];
+    const listen = (event: Event) => heard.push((event as CustomEvent).detail);
+    window.addEventListener('gotcha:reply-to', listen);
+    screen.getByTestId('reply-m1').click();
+    window.removeEventListener('gotcha:reply-to', listen);
+    expect(heard[0]?.who).toBe('Your team');
   });
 });

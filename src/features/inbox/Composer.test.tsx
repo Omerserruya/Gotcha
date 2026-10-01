@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -44,6 +45,13 @@ const compose = vi.hoisted(() =>
 vi.mock('./compose-actions', () => ({ composeDraft: compose }));
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 const show = (channelName: string | null = 'WhatsApp') =>
   render(
@@ -202,7 +210,9 @@ describe('★★ what it refuses to do', () => {
     show();
     await user.type(screen.getByTestId('composer-body'), '  Thanks for waiting  ');
     await user.click(screen.getByTestId('composer-send'));
-    await waitFor(() => expect(sent).toHaveBeenCalledWith('c1', '  Thanks for waiting  '));
+    await waitFor(() =>
+      expect(sent).toHaveBeenCalledWith('c1', '  Thanks for waiting  ', undefined),
+    );
   });
 });
 
@@ -384,5 +394,76 @@ describe('⚠⚠ the box comes BACK after a send or a rework', () => {
     await u.click(screen.getByTestId('compose-shorter'));
     await waitFor(() => expect(screen.getByTestId('compose-done')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByTestId('composer-body')).toBeEnabled());
+  });
+});
+
+describe('★★ out of AI units is said as what it is', () => {
+  it('★★ names the workspace’s units and where to top up — not "just now", not "our side"', async () => {
+    compose.mockResolvedValue({ ok: false, reason: 'units_exhausted' });
+    const u = userEvent.setup();
+    show();
+    await u.type(screen.getByTestId('composer-body'), 'draft');
+    await u.click(screen.getByTestId('compose-rewrite'));
+    const problem = await screen.findByTestId('compose-problem');
+    expect(problem).toHaveTextContent(/used up its AI units/i);
+    expect(problem.textContent).not.toMatch(/just now|our side/i);
+    expect(screen.getByTestId('compose-units-link')).toHaveAttribute('href', '/settings/billing');
+    expect(screen.getByTestId('composer-body')).toHaveValue('draft');
+  });
+});
+
+describe('★★ 02’s Reply — answering one message', () => {
+  const reply = (target = { id: 'm9', who: 'Customer', preview: 'Where is my parcel?' }) =>
+    act(() => {
+      window.dispatchEvent(new CustomEvent('gotcha:reply-to', { detail: target }));
+    });
+
+  it('★★ shows what is being answered, and the reply carries it', async () => {
+    const u = userEvent.setup();
+    show();
+    reply();
+    const strip = screen.getByTestId('composer-replying');
+    expect(strip).toHaveTextContent('Replying to Customer');
+    expect(strip).toHaveTextContent('Where is my parcel?');
+    expect(screen.getByTestId('composer-body')).toHaveFocus();
+
+    await u.type(screen.getByTestId('composer-body'), 'Tomorrow');
+    await u.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(sent).toHaveBeenCalledWith('c1', 'Tomorrow', 'm9'));
+    await waitFor(() => expect(screen.queryByTestId('composer-replying')).toBeNull());
+  });
+
+  it('★ can be cancelled — and then the reply is an ordinary one', async () => {
+    const u = userEvent.setup();
+    show();
+    reply();
+    await u.click(screen.getByTestId('composer-reply-cancel'));
+    await u.type(screen.getByTestId('composer-body'), 'Hi');
+    await u.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(sent).toHaveBeenCalledWith('c1', 'Hi', undefined));
+  });
+
+  it('⚠⚠ a file and a reply together: Send waits and says why — neither is dropped', async () => {
+    const u = userEvent.setup();
+    show();
+    await u.upload(screen.getByTestId('composer-file-input'), new File(['x'], 'a.png'));
+    reply();
+    expect(screen.getByTestId('composer-conflict')).toBeInTheDocument();
+    expect(screen.getByTestId('composer-send')).toBeDisabled();
+    expect(screen.getByTestId('composer-file')).toBeInTheDocument();
+    expect(screen.getByTestId('composer-replying')).toBeInTheDocument();
+  });
+
+  it('⚠ a quote the route refuses is said, and the words stay', async () => {
+    sent.mockResolvedValue({ ok: false, reason: 'quote_not_here' });
+    const u = userEvent.setup();
+    show();
+    reply();
+    await u.type(screen.getByTestId('composer-body'), 'Tomorrow');
+    await u.click(screen.getByTestId('composer-send'));
+    expect(await screen.findByTestId('composer-problem')).toHaveTextContent(
+      /isn’t in this conversation/,
+    );
+    expect(screen.getByTestId('composer-body')).toHaveValue('Tomorrow');
   });
 });

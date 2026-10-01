@@ -34,7 +34,9 @@
       "customer": "Customer",
       "team": "Your team",
       "noText": "A message with no text"
-    }
+    },
+    "reply": "Reply",
+    "replyTo": "Reply to this message"
   },
   "queue": {
     "cap": "Showing the {count} most recent.",
@@ -141,7 +143,8 @@
       "gone": "This conversation is no longer there.",
       "empty": "There is nothing to send yet.",
       "failed": "That didn’t go through. Your reply is still here.",
-      "tooLarge": "That file is over {limit} MB, the most this conversation can take. Nothing was sent."
+      "tooLarge": "That file is over {limit} MB, the most this conversation can take. Nothing was sent.",
+      "quoteGone": "The message you were replying to isn’t in this conversation any more. Your reply is still here."
     },
     "attachImage": "Attach a photo",
     "attachFile": "Attach a file",
@@ -156,7 +159,12 @@
       "label": "Rework the draft with GOTCHA",
       "failed": "GOTCHA couldn’t rework the draft just now. Your text is unchanged.",
       "blank": "GOTCHA came back with nothing, so your text is unchanged.",
-      "done": "GOTCHA rewrote the draft. Read it before you send — Undo puts yours back."
-    }
+      "done": "GOTCHA rewrote the draft. Read it before you send — Undo puts yours back.",
+      "unitsExhausted": "This workspace has used up its AI units, so GOTCHA can’t rework drafts until it’s topped up. Your text is unchanged.",
+      "unitsLink": "Usage & billing"
+    },
+    "replyingTo": "Replying to {who}",
+    "cancelReply": "Don’t reply to this message",
+    "noFileOnReply": "A file can’t be sent as a reply to a message"
   }
 }

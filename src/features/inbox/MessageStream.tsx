@@ -14,6 +14,8 @@ import {
 } from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
+import { ReplyButton } from './ReplyButton';
+import { STREAM_SCROLLER } from './stream-scroller';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
@@ -64,7 +66,13 @@ export async function MessageStream({
   }
 
   return (
-    <ol className={styles.stream} data-testid="message-stream" data-channel={channel ?? 'unknown'}>
+    <ol
+      className={styles.stream}
+      data-testid="message-stream"
+      data-channel={channel ?? 'unknown'}
+      /* What `StreamPin` scrolls to the latest message. */
+      {...{ [STREAM_SCROLLER]: '' }}
+    >
       {messages.map((message) => {
         /*
          * ════════════════════════════════════════════════════════════════
@@ -341,6 +349,28 @@ export async function MessageStream({
                 );
               })()}
             </p>
+
+            {/*
+              ★ 02's hover bar, with Reply — the one of its four actions with
+                a backend. The target is described here, where the quote's
+                words already are, so the composer can show what is being
+                answered before anything is sent.
+            */}
+            <ReplyButton
+              target={{
+                id: message.id,
+                who:
+                  message.direction === 'INBOUND'
+                    ? t('stream.quote.customer')
+                    : (senderLabel(message) ?? t('stream.quote.team')),
+                preview:
+                  message.body.trim() !== ''
+                    ? message.body.trim().slice(0, 140)
+                    : t('stream.quote.noText'),
+              }}
+              label={t('stream.reply')}
+              description={t('stream.replyTo')}
+            />
           </li>
         );
       })}
