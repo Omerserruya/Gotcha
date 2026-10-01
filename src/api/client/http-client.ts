@@ -143,6 +143,14 @@ export class HttpClient {
     const contributed =
       (await this.options.prepareHeaders?.({ method, route: endpoint.route })) ?? {};
 
+    /*
+     * ★ A FILE GOES AS ITSELF. `FormData` is sent untouched and WITHOUT our
+     *   content-type: the browser writes `multipart/form-data` with the
+     *   boundary, and a hand-set header would lack the boundary and corrupt
+     *   the upload. Everything else is JSON, as before.
+     */
+    const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+
     let response: Response;
     try {
       response = await fetch(buildUrl(this.options.baseUrl, endpoint.path, query), {
@@ -152,11 +160,11 @@ export class HttpClient {
         headers: {
           accept: 'application/json',
           [REQUEST_ID_HEADER]: requestId,
-          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(body === undefined || isForm ? {} : { 'content-type': 'application/json' }),
           ...contributed,
           ...headers,
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
       });
     } catch (cause) {
       if (didTimeOut()) {

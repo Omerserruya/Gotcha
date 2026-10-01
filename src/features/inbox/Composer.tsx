@@ -1,11 +1,15 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { useRef, useState } from 'react';
 
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Image as ImageIcon, Paperclip, X } from 'lucide-react';
 
+import { composeDraft, type ComposeResult } from './compose-actions';
+import { COMPOSE_KINDS, type ComposeKind } from './compose-kinds';
 import { sendReply, type SendResult } from './send-actions';
+import { MAX_MEDIA_BYTES, sendMedia, type MediaResult } from './send-media';
 import styles from './Inbox.module.css';
 
 /**
@@ -52,11 +56,55 @@ export function Composer({
   readonly channelName: string | null;
 }) {
   const t = useTranslations('inbox.composer');
+  const router = useRouter();
   const [text, setText] = useState('');
-  const [result, setResult] = useState<SendResult | null>(null);
-  const [isPending, startTransition] = useTransition();
+  /*
+   * A chosen file, HELD until Send. The media route sends on upload, so
+   * choosing a file must not be the moment it leaves.
+   */
+  const [file, setFile] = useState<File | null>(null);
+  const [result, setResult] = useState<SendResult | MediaResult | null>(null);
+  /*
+   * ★ WHAT THE DRAFT WAS BEFORE GOTCHA REWORKED IT. The chips replace
+   *   somebody's words; without this they would be gone with no way back.
+   */
+  const [before, setBefore] = useState<string | null>(null);
+  const [composed, setComposed] = useState<ComposeResult | null>(null);
+  /* The same plain flag as `isComposing`, for the same reason — see there. */
+  const [isPending, setPending] = useState(false);
+  /*
+   * ⚠ A PLAIN FLAG, NOT A SECOND TRANSITION. As `useTransition`, the pending
+   *   state never cleared after the reworked text arrived — the field and
+   *   Undo stayed disabled — because updates after an `await` are not part of
+   *   the transition. Set before the call, cleared in `finally`.
+   */
+  const [isComposing, setComposing] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const empty = text.trim() === '';
+  const busy = isPending || isComposing;
+
+  const choose = (chosen: File | undefined) => {
+    setResult(null);
+    setFile(chosen ?? null);
+  };
+
+  const rework = (kind: ComposeKind) => {
+    const draft = text;
+    setComposed(null);
+    setComposing(true);
+    void composeDraft(conversationId, kind, draft)
+      .then((outcome) => {
+        setComposed(outcome);
+        if (outcome.ok) {
+          setBefore(draft);
+          setText(outcome.text);
+        }
+      })
+      .catch(() => setComposed({ ok: false, reason: 'failed' }))
+      .finally(() => setComposing(false));
+  };
 
   return (
     <form
@@ -64,17 +112,37 @@ export function Composer({
       data-testid="composer"
       onSubmit={(event) => {
         event.preventDefault();
-        if (empty || isPending) return;
-        startTransition(async () => {
-          const outcome = await sendReply(conversationId, text);
-          setResult(outcome);
-          /*
-           * Cleared only on success. A failed send that empties the box loses
-           * somebody's words and gives them nothing to retry with — and the
-           * commonest failure here is recoverable.
-           */
-          if (outcome.ok) setText('');
-        });
+        if ((empty && file === null) || busy) return;
+        setPending(true);
+        void (async () => {
+          try {
+            const outcome =
+              file === null
+                ? await sendReply(conversationId, text)
+                : await sendMedia(conversationId, file, text);
+            setResult(outcome);
+            /*
+             * Cleared only on success. A failed send that empties the box loses
+             * somebody's words and gives them nothing to retry with — and the
+             * commonest failure here is recoverable.
+             */
+            if (outcome.ok) {
+              setText('');
+              setFile(null);
+              setBefore(null);
+              setComposed(null);
+              /*
+               * A text reply revalidates on the server; a file goes through the
+               * BFF, so the page is re-read from here.
+               */
+              if (file !== null) router.refresh();
+            }
+          } catch {
+            setResult({ ok: false, reason: 'failed' });
+          } finally {
+            setPending(false);
+          }
+        })();
       }}
     >
       {/*
@@ -92,21 +160,120 @@ export function Composer({
         data-testid="composer-body"
         value={text}
         rows={1}
-        disabled={isPending}
+        disabled={busy}
         placeholder={t('placeholder')}
         onChange={(event) => setText(event.target.value)}
       />
 
+      {/* The held file, with the way to take it back out. */}
+      {file === null ? null : (
+        <p className={styles.composerFile} data-testid="composer-file">
+          <Paperclip size={12} aria-hidden="true" />
+          <span className={styles.composerFileName}>{file.name}</span>
+          <span className={styles.composerFileNote}>{t('attached')}</span>
+          <button
+            type="button"
+            className={styles.composerIcon}
+            data-testid="composer-file-remove"
+            aria-label={t('removeFile', { name: file.name })}
+            disabled={busy}
+            onClick={() => choose(undefined)}
+          >
+            <X size={13} aria-hidden="true" />
+          </button>
+        </p>
+      )}
+
       {/*
         ════════════════════════════════════════════════════════════════════
-        ★★ 02's BAR: WHERE THIS GOES, THEN THE SEND BUTTON
+        ★★ 02's BAR — EVERY CONTROL IN IT DOES SOMETHING
         ════════════════════════════════════════════════════════════════════
-        02 draws four attachment icons and three AI chips (Rewrite, Shorter,
-        Translate) at the left of this bar. None of them is built, and a
-        control that does nothing is worse than its absence — so the bar
-        holds the two things that work: the channel, and send.
+        02 draws image · paperclip · mic · bookmark, a divider, Rewrite ·
+        Shorter · Translate, the channel and send. The mic and the bookmark
+        are not here: there is no voice-note send type and no saved-reply
+        model, and a control that does nothing is worse than its absence.
       */}
       <div className={styles.composerBar}>
+        <input
+          ref={imageInput}
+          type="file"
+          accept="image/*"
+          hidden
+          data-testid="composer-image-input"
+          onChange={(event) => {
+            choose(event.target.files?.[0]);
+            event.target.value = '';
+          }}
+        />
+        <input
+          ref={fileInput}
+          type="file"
+          hidden
+          data-testid="composer-file-input"
+          onChange={(event) => {
+            choose(event.target.files?.[0]);
+            event.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          className={styles.composerIcon}
+          data-testid="composer-attach-image"
+          aria-label={t('attachImage')}
+          title={t('attachImage')}
+          disabled={busy}
+          onClick={() => imageInput.current?.click()}
+        >
+          <ImageIcon size={15} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className={styles.composerIcon}
+          data-testid="composer-attach-file"
+          aria-label={t('attachFile')}
+          title={t('attachFile')}
+          disabled={busy}
+          onClick={() => fileInput.current?.click()}
+        >
+          <Paperclip size={15} aria-hidden="true" />
+        </button>
+
+        <span className={styles.composerDivider} aria-hidden="true" />
+
+        {/*
+          ★ They act on the draft, so with no draft they are not ready —
+            the same reasoning as Send.
+        */}
+        <span role="group" aria-label={t('compose.label')} className={styles.composerChips}>
+          {COMPOSE_KINDS.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              className={styles.composerChip}
+              data-testid={`compose-${kind}`}
+              disabled={empty || busy}
+              onClick={() => rework(kind)}
+            >
+              {t(`compose.${kind}`)}
+            </button>
+          ))}
+          {before === null ? null : (
+            <button
+              type="button"
+              className={styles.composerChip}
+              data-testid="compose-undo"
+              disabled={busy}
+              onClick={() => {
+                setText(before);
+                setBefore(null);
+                setComposed(null);
+              }}
+            >
+              {t('compose.undo')}
+            </button>
+          )}
+        </span>
+
         {/*
           Where this goes, named. An agent with four conversations open should
           not have to infer the channel from the thread above.
@@ -117,6 +284,7 @@ export function Composer({
           Disabled on empty rather than sending and being refused: the route
           answers 400 for an empty body, and a round trip to be told what the
           screen already knew is worse than a control that says it is not ready.
+          A held file is something to send, with or without words.
 
           ⚠ An arrow, as 02 draws it — and the words stay, for a screen
             reader: "Send to the customer" is what pressing it does.
@@ -125,7 +293,7 @@ export function Composer({
           type="submit"
           className={styles.composerSend}
           data-testid="composer-send"
-          disabled={empty || isPending}
+          disabled={(empty && file === null) || busy}
         >
           <ArrowUp size={15} strokeWidth={2.2} aria-hidden="true" />
           <span className="srOnly">{isPending ? t('sending') : t('send')}</span>
@@ -133,13 +301,35 @@ export function Composer({
       </div>
 
       {/* Only when there is something to say, so an idle card is 02's height. */}
-      {result ? (
-        <div className={styles.composerActions}>
+      {result || composed || isComposing ? (
+        <div className={styles.composerActions} aria-live="polite">
+          {isComposing ? (
+            <p className={styles.composerNote} data-testid="compose-working">
+              {t('compose.working')}
+            </p>
+          ) : null}
+
           {/*
-          ★★ "QUEUED", AND IT IS NOT A HEDGE. The route enqueued a row. Saying
-          "sent" would be a claim about a phone we have heard nothing from, and
-          the operator who believes it stops watching the one message that failed.
-        */}
+            ★ A rewrite is said, so nobody sends GOTCHA's words believing they
+              are their own.
+          */}
+          {composed?.ok ? (
+            <p className={styles.composerNote} data-testid="compose-done">
+              {t('compose.done')}
+            </p>
+          ) : null}
+
+          {composed && !composed.ok && composed.reason !== 'empty' ? (
+            <p className={styles.composerProblem} data-testid="compose-problem">
+              {composed.reason === 'blank' ? t('compose.blank') : t('compose.failed')}
+            </p>
+          ) : null}
+
+          {/*
+            ★★ "QUEUED", AND IT IS NOT A HEDGE. The route enqueued a row. Saying
+            "sent" would be a claim about a phone we have heard nothing from, and
+            the operator who believes it stops watching the one message that failed.
+          */}
           {result?.ok ? (
             <p className={styles.composerNote} data-testid="composer-queued">
               {t('queued')}
@@ -159,7 +349,9 @@ export function Composer({
                   ? t('error.gone')
                   : result.reason === 'empty'
                     ? t('error.empty')
-                    : t('error.failed')}
+                    : result.reason === 'too_large'
+                      ? t('error.tooLarge', { limit: MAX_MEDIA_BYTES / (1024 * 1024) })
+                      : t('error.failed')}
             </p>
           ) : null}
         </div>

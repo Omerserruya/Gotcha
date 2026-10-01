@@ -135,7 +135,23 @@
       "channelGone": "This channel is no longer connected, so nothing can be sent on it. Your reply is still here.",
       "gone": "This conversation is no longer there.",
       "empty": "There is nothing to send yet.",
-      "failed": "That didn’t go through. Your reply is still here."
+      "failed": "That didn’t go through. Your reply is still here.",
+      "tooLarge": "That file is over {limit} MB, the most this conversation can take. Nothing was sent."
+    },
+    "attachImage": "Attach a photo",
+    "attachFile": "Attach a file",
+    "removeFile": "Remove {name}",
+    "attached": "Will be sent with your reply",
+    "compose": {
+      "rewrite": "Rewrite",
+      "shorter": "Shorter",
+      "translate": "Translate",
+      "undo": "Undo",
+      "working": "Working on the draft…",
+      "label": "Rework the draft with GOTCHA",
+      "failed": "GOTCHA couldn’t rework the draft just now. Your text is unchanged.",
+      "blank": "GOTCHA came back with nothing, so your text is unchanged.",
+      "done": "GOTCHA rewrote the draft. Read it before you send — Undo puts yours back."
     }
   }
 }

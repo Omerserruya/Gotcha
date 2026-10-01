@@ -1172,6 +1172,94 @@
     padding: 0 var(--space-12) 11px;
   }
 
+  /* 02's image and paperclip: bare 15px glyphs in `#8C887F`, radius 8px. */
+  .composerIcon {
+    flex: none;
+    inline-size: 26px;
+    block-size: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background-color: transparent;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .composerIcon:hover:not(:disabled) {
+    background-color: var(--panel-inset);
+  }
+
+  /* 02: `[1x18] margin:0 6px #EDE9E1`. */
+  .composerDivider {
+    flex: none;
+    inline-size: 1px;
+    block-size: 18px;
+    margin-inline: var(--space-6);
+    background-color: var(--border-subtle);
+  }
+
+  .composerChips {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  /* 02: `padding:6px 11px; #F3F0EA; radius 7px; 11.5px #55524C`. */
+  .composerChip {
+    flex: none;
+    padding: var(--space-6) 11px;
+    border: 0;
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    color: var(--intent-neutral-text);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    line-height: normal;
+    cursor: pointer;
+  }
+
+  .composerChip:hover:not(:disabled) {
+    background-color: var(--panel-well);
+  }
+
+  .composerIcon:disabled,
+  .composerChip:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .composerIcon:focus-visible,
+  .composerChip:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 1px;
+  }
+
+  /* The held file: one line between the field and the bar. */
+  .composerFile {
+    margin: 0;
+    padding: 0 15px var(--space-8);
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  .composerFileName {
+    min-inline-size: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .composerFileNote {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
   /* 02: 11px `#8C887F`, 9px before the send button, pushed right. */
   .composerChannel {
     margin-inline: auto 9px;

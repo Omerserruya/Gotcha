@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import inbox from '@/i18n/messages/en/inbox.json';
 
 import { Composer } from './Composer';
+import type { ComposeResult } from './compose-actions';
 import type { SendResult } from './send-actions';
+import type { MediaResult } from './send-media';
 
 /**
  * The reply box.
@@ -27,6 +29,22 @@ import type { SendResult } from './send-actions';
 const sent = vi.hoisted(() => vi.fn<(id: string, body: string) => Promise<SendResult>>());
 vi.mock('./send-actions', () => ({ sendReply: sent }));
 
+/*
+ * ★ THE OTHER TWO WAYS OUT, MOCKED THE SAME WAY. `sendMedia` is a send — the
+ *   upload IS the send — and `composeDraft` is a billed model call. Neither
+ *   real one is reachable from this file.
+ */
+const media = vi.hoisted(() =>
+  vi.fn<(id: string, file: File, caption: string) => Promise<MediaResult>>(),
+);
+vi.mock('./send-media', () => ({ sendMedia: media, MAX_MEDIA_BYTES: 16 * 1024 * 1024 }));
+const compose = vi.hoisted(() =>
+  vi.fn<(id: string, kind: string, draft: string) => Promise<ComposeResult>>(),
+);
+vi.mock('./compose-actions', () => ({ composeDraft: compose }));
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
+
 const show = (channelName: string | null = 'WhatsApp') =>
   render(
     <NextIntlClientProvider locale="en" messages={{ inbox }}>
@@ -36,6 +54,9 @@ const show = (channelName: string | null = 'WhatsApp') =>
 
 beforeEach(() => {
   sent.mockReset().mockResolvedValue({ ok: true });
+  media.mockReset().mockResolvedValue({ ok: true });
+  compose.mockReset().mockResolvedValue({ ok: true, text: 'Reworked draft' });
+  refresh.mockReset();
 });
 
 describe('★★ it never says "sent"', () => {
@@ -233,5 +254,135 @@ describe('★★ a failed send keeps the words', () => {
     await user.type(screen.getByTestId('composer-body'), 'Hello');
     await user.click(screen.getByTestId('composer-send'));
     expect(await screen.findByTestId('composer-problem')).toHaveTextContent(/no longer there/i);
+  });
+});
+
+describe('★★ 02’s bar — the four controls that have a backend', () => {
+  const user = () => userEvent.setup();
+  const photo = () => new File(['x'], 'receipt.png', { type: 'image/png' });
+
+  it('⚠ draws no mic and no bookmark — neither has a backend', () => {
+    show();
+    expect(screen.queryByRole('button', { name: /voice|record|mic/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /saved|bookmark|template/i })).toBeNull();
+    expect(screen.getByTestId('composer-attach-image')).toBeInTheDocument();
+    expect(screen.getByTestId('composer-attach-file')).toBeInTheDocument();
+  });
+
+  it('★ the AI chips act on a draft, so with none they are not ready', async () => {
+    show();
+    for (const kind of ['rewrite', 'shorter', 'translate']) {
+      expect(screen.getByTestId(`compose-${kind}`)).toBeDisabled();
+    }
+    await user().type(screen.getByTestId('composer-body'), 'Hi');
+    expect(screen.getByTestId('compose-shorter')).toBeEnabled();
+  });
+
+  it('★★ Rewrite puts GOTCHA’s text in the BOX — it sends nothing — and says so', async () => {
+    const u = user();
+    show();
+    await u.type(screen.getByTestId('composer-body'), 'my draft');
+    await u.click(screen.getByTestId('compose-rewrite'));
+
+    expect(compose).toHaveBeenCalledWith('c1', 'rewrite', 'my draft');
+    await waitFor(() => expect(screen.getByTestId('composer-body')).toHaveValue('Reworked draft'));
+    expect(screen.getByTestId('compose-done')).toBeInTheDocument();
+    expect(sent).not.toHaveBeenCalled();
+    expect(media).not.toHaveBeenCalled();
+  });
+
+  it('★★ and Undo puts the person’s own words back', async () => {
+    const u = user();
+    show();
+    await u.type(screen.getByTestId('composer-body'), 'my draft');
+    await u.click(screen.getByTestId('compose-translate'));
+    // Enabled, not merely present: a click on a disabled button never fires.
+    await waitFor(() => expect(screen.getByTestId('compose-undo')).toBeEnabled());
+    await u.click(screen.getByTestId('compose-undo'));
+    expect(screen.getByTestId('composer-body')).toHaveValue('my draft');
+  });
+
+  it('⚠ a failed rework leaves the draft exactly as it was', async () => {
+    compose.mockResolvedValue({ ok: false, reason: 'failed' });
+    const u = user();
+    show();
+    await u.type(screen.getByTestId('composer-body'), 'my draft');
+    await u.click(screen.getByTestId('compose-shorter'));
+    await waitFor(() => expect(screen.getByTestId('compose-problem')).toBeInTheDocument());
+    expect(screen.getByTestId('composer-body')).toHaveValue('my draft');
+    expect(screen.queryByTestId('compose-undo')).toBeNull();
+  });
+
+  it('⚠⚠ choosing a file HOLDS it — the upload is the send, so choosing is not', async () => {
+    const u = user();
+    show();
+    await u.upload(screen.getByTestId('composer-image-input'), photo());
+    expect(screen.getByTestId('composer-file')).toHaveTextContent('receipt.png');
+    expect(media).not.toHaveBeenCalled();
+    // A file alone is something to send.
+    expect(screen.getByTestId('composer-send')).toBeEnabled();
+  });
+
+  it('★★ Send with a file sends the file, with the text as its caption', async () => {
+    const u = user();
+    show();
+    const file = photo();
+    await u.upload(screen.getByTestId('composer-file-input'), file);
+    await u.type(screen.getByTestId('composer-body'), 'Here it is');
+    await u.click(screen.getByTestId('composer-send'));
+
+    await waitFor(() => expect(media).toHaveBeenCalledWith('c1', file, 'Here it is'));
+    expect(sent).not.toHaveBeenCalled();
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(screen.queryByTestId('composer-file')).toBeNull();
+  });
+
+  it('★ a file can be taken back out before it goes', async () => {
+    const u = user();
+    show();
+    await u.upload(screen.getByTestId('composer-image-input'), photo());
+    await u.click(screen.getByTestId('composer-file-remove'));
+    expect(screen.queryByTestId('composer-file')).toBeNull();
+    expect(screen.getByTestId('composer-send')).toBeDisabled();
+  });
+
+  it('⚠ a refused file keeps the file AND the words, and says why', async () => {
+    media.mockResolvedValue({ ok: false, reason: 'too_large' });
+    const u = user();
+    show();
+    await u.upload(screen.getByTestId('composer-file-input'), photo());
+    await u.type(screen.getByTestId('composer-body'), 'caption');
+    await u.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(screen.getByTestId('composer-problem')).toHaveTextContent(/16 MB/));
+    expect(screen.getByTestId('composer-file')).toBeInTheDocument();
+    expect(screen.getByTestId('composer-body')).toHaveValue('caption');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('⚠⚠ the box comes BACK after a send or a rework', () => {
+  /*
+   * As `useTransition`, the pending state never cleared once the async work
+   * had set its result: the queued note showed, and the field, the chips and
+   * Send stayed disabled. Traced, then replaced with a flag cleared in
+   * `finally`. Whether a browser stuck the same way was not established — the
+   * flag is correct either way, and this pins it.
+   */
+  it('★ after a send, the field can be typed in again', async () => {
+    const u = userEvent.setup();
+    show();
+    await u.type(screen.getByTestId('composer-body'), 'hello');
+    await u.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(screen.getByTestId('composer-queued')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('composer-body')).toBeEnabled());
+  });
+
+  it('★ and after a rework', async () => {
+    const u = userEvent.setup();
+    show();
+    await u.type(screen.getByTestId('composer-body'), 'hello');
+    await u.click(screen.getByTestId('compose-shorter'));
+    await waitFor(() => expect(screen.getByTestId('compose-done')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('composer-body')).toBeEnabled());
   });
 });

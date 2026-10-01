@@ -1058,6 +1058,17 @@ export const inboxEndpoints = {
     endpoint('/api/ai-assist/{conversationId}/suggestions', { conversationId }),
 
   /**
+   * Drafts or refines ONE outbound message from a plain-language instruction.
+   *
+   * `{ instruction, surface, conversationId, currentDraft, locale? }` →
+   * `{ data: { text } }`. With `surface: 'inbox'` and a conversation, the
+   * route reads the last twenty messages itself, so "the customer's language"
+   * is something the instruction can ask for. Nothing is sent: the text comes
+   * back for a person to read.
+   */
+  compose: () => endpoint('/api/ai-assist/compose'),
+
+  /**
    * ⚠⚠ SENDS A MESSAGE TO A REAL PERSON. `POST` on the same path as the stream.
    *
    * `{ body, replyToMessageId?, emailReplyMode?, subject? }`, `body` min 1.
@@ -1078,6 +1089,25 @@ export const inboxEndpoints = {
    */
   sendMessage: (conversationId: string) =>
     endpoint('/api/conversations/{conversationId}/messages', { conversationId }),
+
+  /**
+   * ⚠⚠ SENDS A FILE TO A REAL PERSON, AND IT SENDS ON UPLOAD.
+   *
+   * `multipart/form-data`: one `file`, and `body` (or `caption`) as its
+   * caption. There is no draft step on the server — the request IS the send —
+   * so the composer holds the chosen file and posts it only when Send is
+   * pressed.
+   *
+   * ⚠ The route caps a file at 16MB with busboy's `fileSize`, which
+   *   TRUNCATES rather than refuses: an oversized file would go out cut short
+   *   with a 201. The composer refuses above the cap before posting.
+   *
+   * ⚠ It also requires `credentials.accessToken` on the channel account and
+   *   answers 400 "Channel not configured" without one — so channels that
+   *   authenticate otherwise may refuse files while accepting text.
+   */
+  sendMedia: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/messages/media', { conversationId }),
 
   /* ── Screen 02's three verbs ─────────────────────────────────────────── */
 
