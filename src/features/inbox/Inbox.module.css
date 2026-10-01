@@ -567,7 +567,11 @@
    */
   .screen {
     display: grid;
-    grid-template-columns: var(--size-inbox-queue) minmax(0, 1fr) var(--size-reading-half);
+    /*
+     * ⚠⚠ TWO PANELS. The computed tree shows `[352x876]` queue and
+     *    `[856x876]` chat side by side — and the Copilot INSIDE the chat.
+     */
+    grid-template-columns: var(--size-inbox-queue) minmax(0, 1fr);
     /* 02: the three panels sit 10px apart, not 16. */
     gap: 10px;
     align-items: stretch;
@@ -642,15 +646,63 @@
     flex: none;
   }
 
-  .conversationColumn .stream {
+  /*
+   * 02: `[856x809] flex` — a ROW holding the conversation and the Copilot,
+   * below the panel's own 67px header.
+   */
+  .chatBody {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    min-inline-size: 0;
+  }
+
+  .conversationPane {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .conversationPane > * {
+    flex: none;
+  }
+
+  .conversationPane .stream {
     flex: 1;
     min-block-size: 0;
     overflow-y: auto;
   }
 
-  .queueColumn,
-  .conversationColumn,
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE COPILOT IS DARK AND IT IS THE CHAT PANEL'S RIGHT-HAND WALL
+   * ════════════════════════════════════════════════════════════════════════
+   * `[372x809] bg:rgb(23,23,23) r:0 0 18px 18px ovf:hidden`, inside the
+   * `[856x876]` panel. **That radius is the giveaway** — it inherits the
+   * panel's bottom-right corner, which only a child can do.
+   *
+   * ⚠ It was a third sibling card on the light page. Two errors at once: the
+   *   wrong parent and the wrong colour.
+   */
   .contextColumn {
+    flex: 0 0 372px;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--copilot-surface);
+    border-end-end-radius: 18px;
+    color: var(--frame-text);
+  }
+
+  .contextColumn > * {
+    flex: none;
+  }
+
+  .queueColumn,
+  .conversationColumn {
     display: flex;
     flex-direction: column;
     min-inline-size: 0;

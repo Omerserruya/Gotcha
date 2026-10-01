@@ -381,3 +381,49 @@ describe('⚠⚠ the inbox draws its own panels, so the shell’s surface steps 
     expect(owners(await page())).toHaveLength(1);
   });
 });
+
+describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * FROM 02's COMPUTED TREE, NOT FROM ITS MARKUP
+   * ════════════════════════════════════════════════════════════════════════
+   * The chat panel is `[856x876]`, and INSIDE it a flex row holds the
+   * conversation beside `[372x809]` of Copilot at `rgb(23,23,23)` with
+   * `r:0 0 18px 18px` — the panel's own bottom-right corner, which only a
+   * CHILD can inherit. It is not a third card; it is a wall of the second.
+   */
+  const ancestorsOf = (tree: ReactNode, target: unknown): string[] => {
+    let found: string[] = [];
+    const visit = (node: ReactNode, chain: string[]): void => {
+      if (Array.isArray(node)) {
+        node.forEach((child) => visit(child, chain));
+        return;
+      }
+      if (!isValidElement(node)) return;
+      const props = node.props as { className?: string; children?: ReactNode };
+      const next = props.className ? [...chain, props.className] : chain;
+      if (node.type === target) found = next;
+      visit(props.children, next);
+    };
+    visit(tree, []);
+    return found;
+  };
+
+  it('★★ the identity panel sits INSIDE the conversation column', async () => {
+    const chain = ancestorsOf(await page(), IdentityPanel);
+    expect(chain.some((c) => c.includes('conversationColumn'))).toBe(true);
+    expect(chain.some((c) => c.includes('contextColumn'))).toBe(true);
+  });
+
+  it('⚠⚠ and it is still there with nothing open', async () => {
+    /*
+     * ★ THE BUG MY FIRST ATTEMPT INTRODUCED. The branch was two sections, and
+     *   moving the Copilot into the open one silently dropped it from the
+     *   empty one — the panel vanished exactly when somebody had nothing
+     *   selected. It is now one section with two bodies, and this is the
+     *   assertion that keeps it that way.
+     */
+    const chain = ancestorsOf(await page({ open: null }), IdentityPanel);
+    expect(chain.some((c) => c.includes('contextColumn'))).toBe(true);
+  });
+});

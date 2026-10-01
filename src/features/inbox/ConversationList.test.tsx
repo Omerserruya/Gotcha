@@ -886,3 +886,24 @@ describe('⚠⚠ "a WINDOW YOU SCROLL INSIDE, not outside"', () => {
     expect(columns).toMatch(/min-block-size:\s*0/);
   });
 });
+
+describe('★★ the Copilot wall is dark, and inherits only the panel’s bottom corner', () => {
+  const css = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const context = /\.contextColumn\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
+
+  it('⚠⚠ is the computed rgb(23,23,23), not the light panel colour', () => {
+    // A surviving mutation put it back on `--panel-base` with nothing going
+    // red. Dark against the panel's light is half of what makes it a wall.
+    expect(context).toMatch(/background-color:\s*var\(--copilot-surface\)/);
+    expect(tokens).toMatch(/--copilot-surface:\s*#171717/i);
+  });
+
+  it('★ rounds ONLY the bottom-right, because the panel rounds the rest', () => {
+    expect(context).toMatch(/border-end-end-radius:\s*18px/);
+    expect(context).not.toMatch(/(?:^|\s)border-radius:/);
+  });
+});

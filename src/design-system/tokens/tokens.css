@@ -290,6 +290,14 @@
      * THE FRAME - the dark chrome that holds the product
      * ───────────────────────────────────────────────────────────────────── */
     --frame-base: #121212;
+    /*
+     * The Copilot's wall. `rgb(23,23,23)` in the computed tree — a step
+     * lighter than the frame, so it reads as a surface ON the dark rather
+     * than a hole in the light panel it sits inside.
+     */
+    --copilot-surface: #171717;
+    /* Its input bar: `rgb(20,20,20)`, a step darker again. */
+    --copilot-input-surface: #141414;
     --frame-raised: #171717;
     --frame-chip: #242424;
     /* The selected sub-navigation row: a shade quieter than a chip. */
