@@ -72,12 +72,24 @@
     color: var(--text-muted);
   }
 
-  /* The queue. Ordering is worth only as much as `lastMessageAt` is. */
-
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ "SEE THAT THEY'RE IN A SEPARATE PART" — THE QUEUE IS A CARD
+   * ════════════════════════════════════════════════════════════════════════
+   * 02 gives the column its own surface with `border-radius:18px` and closes
+   * it with a footer bar. We drew rows straight onto the page background,
+   * which is why the column read as a list on a page rather than a panel
+   * beside two others.
+   *
+   * Ordering is worth only as much as `lastMessageAt` is — see below.
+   */
   .queue {
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
+    background-color: var(--panel-base);
+    border-radius: 18px;
+    overflow: hidden;
+    min-block-size: 0;
   }
 
   .queueList {
@@ -101,6 +113,47 @@
    *   avatar, preview, badges and tags are the other half and are not here
    *   yet. Naming that rather than letting it look finished.
    */
+  /*
+   * The bar that closes the card. 02: `#F5F2EC`, `border-top 1px #EDE9E1`,
+   * and the radius only on the bottom corners so it meets the card's edge.
+   */
+  .queueFooter {
+    margin: 0;
+    margin-block-start: auto;
+    padding: var(--space-12) var(--space-16);
+    background-color: var(--panel-inset);
+    border-block-start: 1px solid var(--border-subtle);
+    border-end-start-radius: 18px;
+    border-end-end-radius: 18px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /*
+   * 02's tags: `font-size:10.5px; padding:3px 8px; border-radius:6px`, and
+   * the colour carries the meaning rather than decorating.
+   */
+  .tagMine,
+  .tagNeutral {
+    flex: none;
+    font-size: 10.5px;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+
+  /* "You" — the one that says this row is the reader's problem. */
+  .tagMine {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  /* "Flow" — neutral, because a flow handling it is not a status. */
+  .tagNeutral {
+    background-color: var(--panel-well);
+    color: var(--text-secondary);
+  }
+
   .queueItem {
     list-style: none;
   }
@@ -309,11 +362,18 @@
    * column, which is the one value on the row whose whole purpose is to be read
    * at a glance.
    */
+  /*
+   * ⚠ WAITING-AGE IS OURS, NOT 02's. The design's tag row carries STATUS —
+   *   `Flow`, `You`, `Support AI` — and puts nothing about age there.
+   *
+   * ★ It stays because it is what this queue is sorted by and what an agent
+   *   triages on, but as muted running text rather than a pill: the row has
+   *   one coloured slot and the design spends it on status.
+   */
   .waiting {
-    white-space: nowrap;
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
+    flex: none;
+    font-size: 10.5px;
+    color: var(--text-subtle);
   }
 
   /* Who this is, across the channels we managed to join up. */

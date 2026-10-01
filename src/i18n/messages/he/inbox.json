@@ -46,6 +46,10 @@
       "minutes": "{value} דק׳ בהמתנה",
       "hours": "{value, plural, one {שעה בהמתנה} two {שעתיים בהמתנה} other {# שעות בהמתנה}}",
       "days": "{value, plural, one {יום בהמתנה} two {יומיים בהמתנה} other {# ימים בהמתנה}}"
+    },
+    "tag": {
+      "you": "אתם",
+      "flow": "תהליך"
     }
   },
   "identity": {

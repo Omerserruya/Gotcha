@@ -118,6 +118,7 @@ export async function ConversationList({
   hasMore,
   undatedCount,
   openId,
+  meId = null,
 }: {
   /** `null` when the read failed. Never an empty queue. */
   readonly rows: readonly ConversationRow[] | null;
@@ -129,6 +130,14 @@ export async function ConversationList({
    *   you have to re-read after every reply.
    */
   readonly openId?: string | null;
+  /**
+   * The viewer, so a row can say "You".
+   *
+   * ★ `loadInbox` already fetches it — it is one of the four calls in round
+   *   one — and the conversation header already uses it. The queue was the
+   *   one place that had the fact and did not show it.
+   */
+  readonly meId?: string | null;
   /** How many the page holds. Stated on screen, not implied. */
   readonly cap: number;
   readonly now: Date;
@@ -241,7 +250,16 @@ export async function ConversationList({
             in the CARD's own colour so it punches out of the disc rather
             than sitting on it.
           */}
-          <span className={styles.avatarStack} aria-hidden="true">
+          <span
+            className={styles.avatarStack}
+            /*
+              ⚠ NOT `aria-hidden` ANY MORE. The initials are decorative, but
+                the badge is now the only thing saying which channel this is —
+                it was a visible word a moment ago. Hiding the stack would
+                remove that fact from anybody using a screen reader.
+            */
+            title={channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel')}
+          >
             <span
               className={styles.avatar}
               data-settled={conversation.status === 'CLOSED' ? '' : undefined}
@@ -286,6 +304,18 @@ export async function ConversationList({
                   {format.dateTime(new Date(conversation.lastMessageAt), {
                     hour: '2-digit',
                     minute: '2-digit',
+                    /*
+                     * ⚠⚠ 24-HOUR, STATED RATHER THAN INHERITED. `hour12`
+                     *   follows the LOCALE by default, so `en` rendered
+                     *   "07:48 PM" and `he` would render "19:48" — the two
+                     *   locales disagreeing about a thing 02 states once, on
+                     *   every row, as `09:29`.
+                     *
+                     * ★ Pinning the zone was right and was not enough: the
+                     *   zone and the format are two separate defaults, and
+                     *   only one of them was wrong at a time.
+                     */
+                    hour12: false,
                   })}
                 </span>
               )}
@@ -340,9 +370,48 @@ export async function ConversationList({
                   lucide glyph would be a different mark, not that one, so the
                   name stays until the logos exist.
               */}
-              <span className={styles.channel}>
-                {channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel')}
-              </span>
+              {/*
+                ⚠⚠ THE CHANNEL TAG IS GONE, AND THE BADGE IS WHY. The avatar
+                   now carries a tinted channel mark, so printing the name
+                   here spent the row's ONE coloured slot on a duplicate —
+                   and 02 puts status in that slot, not provenance.
+
+                ★ `channelName` is still read for the badge's accessible
+                  name: the mark is a tint and a glyph, and neither says
+                  "WhatsApp" to somebody who cannot see it.
+              */}
+              {/*
+                ════════════════════════════════════════════════════════════
+                ★★ TWO TAGS ON REAL DATA, NOT SIX WHERE FOUR ARE FICTION
+                ════════════════════════════════════════════════════════════
+                The design renders nine tag texts across the inbox screens.
+                They split three ways:
+
+                  buildable   "You" (assignedAgentId === me), "Flow"
+                              (handledBy === 'flow' — an EXACT match for
+                              HANDLED_BY's literal word)
+                  needs a     "Support AI" / "Sales AI" — the row carries
+                  name        `assignedAiAgentId`, an id with no name
+                  no field    "Shipping issue", "High intent", "Waiting on
+                              returns", "Approval needed" — a classification
+                              nobody stores
+
+                ⚠ The last four are NOT approximations of `status`. "Waiting
+                  on returns" is not `WAITING`, and a mapping that looks
+                  right on three rows is the kind of invention that reads as
+                  working.
+              */}
+              {meId !== null && conversation.assignedAgentId === meId ? (
+                <span className={styles.tagMine} data-testid={`tag-you-${conversation.id}`}>
+                  {t('queue.tag.you')}
+                </span>
+              ) : null}
+
+              {conversation.handledBy === 'flow' ? (
+                <span className={styles.tagNeutral} data-testid={`tag-flow-${conversation.id}`}>
+                  {t('queue.tag.flow')}
+                </span>
+              ) : null}
             </span>
           </span>
         </Link>
@@ -356,9 +425,6 @@ export async function ConversationList({
         ★★ THE CAP IS STATED, NOT IMPLIED. A list that stops at N and says
         nothing teaches an agent that N is all there is.
       */}
-      <p className={styles.note} data-testid="queue-cap">
-        {hasMore ? t('queue.cap', { count: cap }) : t('queue.capAll', { count: rows.length })}
-      </p>
 
       {dated.length === 0 && undated.length === 0 ? (
         <p className={styles.note} data-testid="queue-empty">
@@ -439,6 +505,29 @@ export async function ConversationList({
           <ol className={styles.queueList}>{undated.map((c) => row(c, `undated-${c.id}`))}</ol>
         </section>
       ) : null}
+
+      {/*
+        ════════════════════════════════════════════════════════════════════
+        ★★ THE DESIGN'S FOOTER BAR, CARRYING OUR SENTENCE RATHER THAN ITS OWN
+        ════════════════════════════════════════════════════════════════════
+        02 ends the queue card with a bar — `#F5F2EC`, radius `0 0 18px 18px`,
+        `border-top 1px #EDE9E1` — reading *"Shift-click to pick several ·
+        right-click for actions"*.
+
+        ⚠ WE DO NOT SHIP THAT SENTENCE. It is the only thing that tells anyone
+          the context menu exists, and it promises multi-select the menu then
+          acts on. Neither is built, so printing it would be the screen
+          describing a feature it does not have.
+
+        ★ But the BAR is the home the cap caption never had. It used to sit
+          above the list, where the design puts the column header; it says
+          something true about the list and now it says it from the design's
+          own slot. One structural question answered without deleting the
+          sentence it was about.
+      */}
+      <p className={styles.queueFooter} data-testid="queue-cap">
+        {hasMore ? t('queue.cap', { count: cap }) : t('queue.capAll', { count: rows.length })}
+      </p>
     </div>
   );
 }

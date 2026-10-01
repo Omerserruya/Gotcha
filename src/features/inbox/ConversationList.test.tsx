@@ -205,7 +205,15 @@ describe('★★ what the row actually says about the customer', () => {
      * in `channels.name.*` in both languages the whole time.
      */
     await show([row({ channel: 'SHOPIFY_LIVE_CHAT' })]);
-    expect(screen.getByText(/shopify live chat/i)).toBeInTheDocument();
+
+    /*
+     * ⚠ THE NAME MOVED, THE RULE DID NOT. It used to print in the tag row;
+     *   the avatar now carries a tinted channel badge, so the word would be a
+     *   duplicate spending the row's one coloured slot. It is the badge's
+     *   accessible name instead — because a tint and a glyph say nothing to
+     *   somebody who cannot see them.
+     */
+    expect(screen.getByTitle(/shopify live chat/i)).toBeInTheDocument();
     expect(screen.queryByText(/SHOPIFY_LIVE_CHAT/)).toBeNull();
   });
 
@@ -216,8 +224,16 @@ describe('★★ what the row actually says about the customer', () => {
      * raw string, which every other screen here strips.
      */
     await show([row({ channel: 'SOME_NEW_CHANNEL' })]);
-    expect(screen.getByText(/another channel/i)).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/[A-Z]{2,}_[A-Z]{2,}/);
+    expect(screen.getByTitle(/another channel/i)).toBeInTheDocument();
+
+    /*
+     * ⚠ THE SWEEP NOW READS ATTRIBUTES TOO, AND THAT IS THE POINT. The rule
+     *   is that a raw enum never reaches a person — moving the name into a
+     *   `title` would have slipped past a check that only read text, and the
+     *   guard would have stayed green while the thing it guards moved out of
+     *   its view.
+     */
+    expect(document.body.innerHTML).not.toMatch(/[A-Z]{2,}_[A-Z]{2,}/);
   });
 });
 
@@ -614,5 +630,145 @@ describe('⚠⚠ a settled row is drawn quieter, and every row looked the same',
      *   quiet exactly the rows that need attention most.
      */
     expect(screen.getByTestId('conversation-c3')).not.toHaveAttribute('data-settled');
+  });
+});
+
+describe('⚠⚠ two tags on real data, not six where four are fiction', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE DESIGN RENDERS NINE TAG TEXTS. THEY SPLIT THREE WAYS.
+   * ════════════════════════════════════════════════════════════════════════
+   *   buildable   "You" (assignedAgentId === me) · "Flow" (handledBy)
+   *   needs a     "Support AI" / "Sales AI" — the row carries
+   *   name          `assignedAiAgentId`, an id with no name
+   *   no field    "Shipping issue" · "High intent" · "Waiting on returns" ·
+   *               "Approval needed" — a classification nobody stores
+   *
+   * ⚠ The last four are NOT approximations of `status`. "Waiting on returns"
+   *   is not `WAITING`, and a mapping that looks right on three rows is the
+   *   kind of invention that reads as working.
+   */
+  it('★★ says "You" only on rows assigned to the viewer', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1', assignedAgentId: 'u1' }), row({ id: 'c2', assignedAgentId: 'u2' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        meId: 'u1',
+      }),
+    );
+    expect(screen.getByTestId('tag-you-c1')).toBeInTheDocument();
+    expect(screen.queryByTestId('tag-you-c2')).toBeNull();
+  });
+
+  it('⚠⚠ and never when the viewer is unknown', async () => {
+    /*
+     * ★ `meId` is null when `/auth/me` failed — a real state, handled
+     *   elsewhere in this feature by withholding controls. A row claiming to
+     *   be "yours" when we do not know who you are is worse than no tag:
+     *   every row would claim it.
+     */
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'c1', assignedAgentId: 'u1' }),
+          /*
+           * ⚠⚠ THE CASE A SURVIVING MUTATION FOUND, AND IT IS THE COMMON ONE.
+           *   An UNASSIGNED row has `assignedAgentId: null`. With `meId` also
+           *   null, `null === null` is true — so without the explicit guard
+           *   **every unassigned row in the queue would claim to be yours**,
+           *   which on a triage column is the worst possible lie.
+           *
+           * ★ My first version only used an assigned row, where the
+           *   comparison is false anyway and the guard looks redundant.
+           */
+          row({ id: 'c2', assignedAgentId: null }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        meId: null,
+      }),
+    );
+    expect(screen.queryByTestId('tag-you-c1')).toBeNull();
+    expect(screen.queryByTestId('tag-you-c2')).toBeNull();
+  });
+
+  it('★★ says "Flow" on flow-handled rows, and not on the other two', async () => {
+    // `HANDLED_BY` is ['ai_agent','flow','human'] and the design's tag is the
+    // literal word "Flow" — an exact match, which is why it is buildable and
+    // "Support AI" is not.
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'c1', handledBy: 'flow' }),
+          row({ id: 'c2', handledBy: 'ai_agent' }),
+          row({ id: 'c3', handledBy: 'human' }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.getByTestId('tag-flow-c1')).toBeInTheDocument();
+    expect(screen.queryByTestId('tag-flow-c2')).toBeNull();
+    expect(screen.queryByTestId('tag-flow-c3')).toBeNull();
+  });
+});
+
+describe('★★ the cap caption found the home the design gave it', () => {
+  it('⚠⚠ is the card’s footer bar, and says nothing about a menu', async () => {
+    /*
+     * 02 closes the queue card with a bar reading "Shift-click to pick
+     * several · right-click for actions".
+     *
+     * ⚠ WE DO NOT SHIP THAT SENTENCE. It is the only thing telling anyone the
+     *   context menu exists, and it promises multi-select the menu acts on.
+     *   Neither is built, so printing it would be the screen describing a
+     *   feature it does not have.
+     *
+     * ★ But the BAR is the home the cap caption never had — it used to sit
+     *   where the design puts the column header.
+     */
+    render(await ConversationList({ rows: [row()], cap: 10, now: NOW, hasMore: false }));
+
+    const footer = screen.getByTestId('queue-cap');
+    expect(footer.textContent).not.toMatch(/right-click|shift-click/i);
+    /*
+     * ⚠ ASSERTED AS THE SENTENCE, NOT AS "CONTAINS A DIGIT". My first version
+     *   wanted `/\d/` — and the catalogue spells "One conversation" for a
+     *   count of one, so the proxy failed on correct copy. Fourth time today.
+     */
+    expect(footer.textContent).toMatch(/conversation/i);
+  });
+});
+
+describe('⚠⚠ 24-hour time, because the zone and the format are two defaults', () => {
+  it('★★ renders 09:29, not 07:48 PM', async () => {
+    /*
+     * ════════════════════════════════════════════════════════════════════════
+     * PINNING THE ZONE WAS RIGHT AND WAS NOT ENOUGH
+     * ════════════════════════════════════════════════════════════════════════
+     * `hour12` follows the LOCALE by default. The deployed build rendered
+     * "07:48 PM" in `en` while `he` would render "19:48" — the two locales
+     * disagreeing about a thing 02 states once, on every row, as `09:29`.
+     *
+     * ★ Two separate defaults, and only one of them was wrong at a time.
+     */
+    render(
+      await ConversationList({
+        rows: [row({ lastMessageAt: '2026-09-25T16:48:00.000Z' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    const time = screen.getByTestId('time-c1').textContent ?? '';
+
+    expect(time).toMatch(/^\d{2}:\d{2}$/);
+    expect(time).not.toMatch(/AM|PM/i);
+    // 16:48 UTC is 19:48 in Asia/Jerusalem — zone AND format together.
+    expect(time).toBe('19:48');
   });
 });

@@ -46,6 +46,10 @@
       "minutes": "{value}m waiting",
       "hours": "{value, plural, =1 {1 hour waiting} other {# hours waiting}}",
       "days": "{value, plural, =1 {1 day waiting} other {# days waiting}}"
+    },
+    "tag": {
+      "you": "You",
+      "flow": "Flow"
     }
   },
   "identity": {
