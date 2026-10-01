@@ -10,6 +10,8 @@ import {
 
 import styles from './Inbox.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { Globe, Mail, MessageCircle } from 'lucide-react';
+
 import { Link } from '@/i18n/navigation';
 
 /**
@@ -41,6 +43,52 @@ import { Link } from '@/i18n/navigation';
  * more ordering than that column can carry, and rows that admit they do not
  * know get their own group rather than the floor of the list.
  */
+/**
+ * The channel's mark: which lucide glyph, and which tint.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ⚠⚠ I REPORTED THIS AS UNBUILDABLE. IT WAS A MISREADING OF WHICH FILE.
+ * ════════════════════════════════════════════════════════════════════════════
+ * `GOTCHA Prototype.dc.html` is a TEMPLATE and draws the badge as
+ * `background: url({{ c.chIcon }})` — so I concluded the design wanted brand
+ * images we do not have. `GOTCHA Directions.dc.html` renders the same badge
+ * as `<i data-lucide="message-circle">`, and we have lucide.
+ *
+ * ★ Two files, two representations of one design. The prose and the mock were
+ *   two documents; the prototype and the directions are two more.
+ *
+ * ⚠ AN UNKNOWN CHANNEL GETS THE GLOBE, not nothing and not a guess. `channel`
+ *   is an unconstrained column — the same reason `channelName` answers
+ *   "another channel" rather than echoing a raw enum.
+ */
+const CHANNEL_MARKS = {
+  WHATSAPP: { Icon: MessageCircle, tone: 'whatsapp' },
+  EMAIL: { Icon: Mail, tone: 'email' },
+  /*
+   * ⚠⚠ INSTAGRAM KEEPS ITS COLOUR AND LOSES ITS GLYPH. `lucide-react@1.38.0`
+   *    exports 6,140 icons and NONE of them is a brand mark — they were
+   *    removed from the core package. Measured, not assumed.
+   *
+   * ★ A camera or a similar stand-in would be a DIFFERENT MARK presented as
+   *   Instagram's, which is worse than the generic one: a person scanning the
+   *   column would learn a symbol that means nothing elsewhere. The tint is
+   *   the design's own, so the row is still distinguishable at a glance, and
+   *   the channel's NAME is in the tag row either way.
+   *
+   * ⚠ This wants the real glyph. It is an asset request — the brand icons
+   *   live in `lucide-static` or a brand pack — not a code one.
+   */
+  INSTAGRAM: { Icon: Globe, tone: 'instagram' },
+} as const;
+
+function channelMark(channel: string | null): {
+  readonly Icon: typeof Globe;
+  readonly tone: string;
+} {
+  if (channel === null) return { Icon: Globe, tone: 'web' };
+  return CHANNEL_MARKS[channel as keyof typeof CHANNEL_MARKS] ?? { Icon: Globe, tone: 'web' };
+}
+
 /**
  * Up to two initials for the avatar, from whatever the name turns out to be.
  *
@@ -133,6 +181,7 @@ export async function ConversationList({
 
   const row = (conversation: ConversationRow, testid: string) => {
     const waiting = waitingMinutes(conversation, now);
+    const mark = channelMark(conversation.channel);
     return (
       <li key={conversation.id} className={styles.queueItem}>
         {/*
@@ -163,6 +212,17 @@ export async function ConversationList({
           data-testid={testid}
           aria-current={conversation.id === openId ? 'true' : undefined}
           data-open={conversation.id === openId ? '' : undefined}
+          /*
+            ★★ 02 DRAWS A SETTLED ROW QUIETER IN FIVE SEPARATE WAYS — name
+            weight, name colour, preview colour, avatar tint and time colour.
+            We drew every row identically, which is why the column read flat.
+
+            ⚠ `CLOSED` is the only one of the three statuses that means
+              settled. `OPEN` and `WAITING` are both live and are NOT
+              distinguished here: the design's third state is "unread", which
+              needs a field the contract does not have.
+          */
+          data-settled={conversation.status === 'CLOSED' ? '' : undefined}
         >
           {/*
             ════════════════════════════════════════════════════════════════
@@ -175,8 +235,22 @@ export async function ConversationList({
             We drew name · channel · waiting-age on one baseline — three
             facts, none of them the message.
           */}
-          <span className={styles.avatar} aria-hidden="true">
-            {initials(conversation.customerName)}
+          {/*
+            ★★ THE AVATAR IS A STACK, NOT A CIRCLE. 02: a 42×42 disc with an
+            18×18 channel badge at `right:-2 bottom:-2`, bordered `2px solid`
+            in the CARD's own colour so it punches out of the disc rather
+            than sitting on it.
+          */}
+          <span className={styles.avatarStack} aria-hidden="true">
+            <span
+              className={styles.avatar}
+              data-settled={conversation.status === 'CLOSED' ? '' : undefined}
+            >
+              {initials(conversation.customerName)}
+            </span>
+            <span className={styles.channelBadge} data-tone={mark.tone}>
+              <mark.Icon size={10} strokeWidth={2.4} />
+            </span>
           </span>
 
           <span className={styles.rowBody}>

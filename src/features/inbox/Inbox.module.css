@@ -143,17 +143,93 @@
    * 02's row, verbatim: `padding:13px 16px`, a 40×40 initials circle, then a
    * column of three lines at `gap:4px`.
    */
-  .avatar {
+  /*
+   * 02's avatar is a STACK: a 42×42 disc with an 18×18 channel badge at
+   * `right:-2 bottom:-2`, bordered in the card's own colour so it punches
+   * out of the disc rather than sitting on it.
+   */
+  .avatarStack {
+    position: relative;
     flex: none;
-    inline-size: 40px;
-    block-size: 40px;
+    inline-size: 42px;
+    block-size: 42px;
+  }
+
+  .avatar {
+    display: block;
+    inline-size: 42px;
+    block-size: 42px;
     border-radius: 50%;
     background-color: var(--avatar-surface);
     color: var(--text-secondary);
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: var(--font-weight-semibold);
-    line-height: 40px;
+    line-height: 42px;
     text-align: center;
+  }
+
+  /* One of the five ways 02 draws a settled row quieter. */
+  .avatar[data-settled] {
+    background-color: var(--avatar-surface-settled);
+    color: var(--text-subtle);
+  }
+
+  .channelBadge {
+    position: absolute;
+    inset-inline-end: -2px;
+    inset-block-end: -2px;
+    inline-size: 18px;
+    block-size: 18px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* `--panel-base` IS #faf8f4 — the design’s own badge border. The card
+       colour, not white: the badge cuts the disc’s edge rather than
+       floating on it. */
+    border: 2px solid var(--panel-base);
+  }
+
+  .channelBadge[data-tone='whatsapp'] {
+    background-color: var(--channel-whatsapp-surface);
+    color: var(--channel-whatsapp-mark);
+  }
+
+  .channelBadge[data-tone='instagram'] {
+    background-color: var(--channel-instagram-surface);
+    color: var(--channel-instagram-mark);
+  }
+
+  .channelBadge[data-tone='email'] {
+    background-color: var(--channel-email-surface);
+    color: var(--channel-email-mark);
+  }
+
+  .channelBadge[data-tone='web'] {
+    background-color: var(--channel-web-surface);
+    color: var(--channel-web-mark);
+  }
+
+  /*
+   * ⚠⚠ A SETTLED ROW IS QUIETER IN FIVE WAYS, AND WE DREW EVERY ROW THE SAME.
+   * 02: name weight 400 and `#55524C`, preview `#8C887F`, time `#A8A39A`,
+   * avatar tinted down. That is why the column read flat — not spacing.
+   *
+   * ★ `CLOSED` is the only status that means settled. `OPEN` and `WAITING`
+   *   are both live, and the design's third state — unread — needs a field
+   *   the contract does not have.
+   */
+  .queueRow[data-settled] .who {
+    font-weight: var(--font-weight-regular);
+    color: var(--text-secondary);
+  }
+
+  .queueRow[data-settled] .preview {
+    color: var(--text-subtle);
+  }
+
+  .queueRow[data-settled] .rowTime {
+    color: var(--text-faint);
   }
 
   .rowBody {

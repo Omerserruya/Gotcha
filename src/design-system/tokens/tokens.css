@@ -417,6 +417,41 @@
     --channel-6: #a8a39a;
 
     /* An avatar with no image falls back to initials on this. */
+    /*
+     * ════════════════════════════════════════════════════════════════════
+     * ⚠⚠ THE CHANNEL MARK, AND I SAID THIS COULD NOT BE BUILT
+     * ════════════════════════════════════════════════════════════════════
+     * I reported that 02 uses `background: url({{ c.chIcon }})` — a brand
+     * image per channel — and that we had no such assets. **That was the
+     * PROTOTYPE, which is a template.** `Directions.dc.html` renders the same
+     * badge with `<i data-lucide="message-circle">`, and we have lucide.
+     *
+     * ★ Two files, two representations of one design, and I grepped the one
+     *   whose templating happened to express the icon as a URL variable. The
+     *   prose and the mock were two documents; so are the prototype and the
+     *   directions.
+     *
+     * Each channel gets a tinted disc, from the rendered rows:
+     *     whatsapp   message-circle   #e4efe7 / #2e7d5b
+     *     instagram  instagram        #f6e7e2 / #b4553f
+     *     email      mail             #f0ede7 / #55524c
+     *     web/other  globe            #eae7e0 / #3a3833
+     */
+    --channel-whatsapp-surface: #e4efe7;
+    --channel-whatsapp-mark: #2e7d5b;
+    --channel-instagram-surface: #f6e7e2;
+    --channel-instagram-mark: #b4553f;
+    --channel-email-surface: #f0ede7;
+    --channel-email-mark: #55524c;
+    --channel-web-surface: #eae7e0;
+    --channel-web-mark: #3a3833;
+
+    /*
+     * A settled conversation's avatar — quieter than a live one. 02 draws a
+     * resolved row softer in five separate ways; this is one of them.
+     */
+    --avatar-surface-settled: #f2efe9;
+
     --avatar-surface: #efe9df;
     /* A deactivated colleague, or a paused AI employee. */
     --avatar-surface-muted: #efede8;

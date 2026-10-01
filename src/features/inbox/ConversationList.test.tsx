@@ -530,3 +530,89 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
     expect(screen.getAllByRole('link')[0]!.firstElementChild?.textContent).toBe('');
   });
 });
+
+describe('⚠⚠ the channel badge I said could not be built', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * I GREPPED THE PROTOTYPE AND CONCLUDED ABOUT THE DIRECTIONS
+   * ════════════════════════════════════════════════════════════════════════
+   * `GOTCHA Prototype.dc.html` is a TEMPLATE: it draws the badge as
+   * `background: url({{ c.chIcon }})`, so I reported that the design wanted
+   * brand images we do not have. `GOTCHA Directions.dc.html` renders the same
+   * badge as `<i data-lucide="message-circle">`.
+   *
+   * ★ Two files, two representations of one design — and I read the one whose
+   *   templating happened to express the icon as a URL variable. The fourth
+   *   wrong negative today, and the one that cost the most visible element in
+   *   the row.
+   */
+  const toneOf = (testid: string) =>
+    screen.getByTestId(testid).querySelector('[data-tone]')?.getAttribute('data-tone');
+
+  it('★★ tints each channel the design’s way', async () => {
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'c1', channel: 'WHATSAPP' }),
+          row({ id: 'c2', channel: 'EMAIL' }),
+          row({ id: 'c3', channel: 'INSTAGRAM' }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(toneOf('conversation-c1')).toBe('whatsapp');
+    expect(toneOf('conversation-c2')).toBe('email');
+    expect(toneOf('conversation-c3')).toBe('instagram');
+  });
+
+  it('⚠⚠ an unrecognised channel gets the globe, never nothing', async () => {
+    /*
+     * `channel` is an unconstrained column — the same reason `channelName`
+     * answers "another channel" rather than echoing a raw enum. A row with no
+     * mark would read as a different KIND of row rather than an unknown one.
+     */
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1', channel: 'SOMETHING_NEW' }), row({ id: 'c2', channel: null })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(toneOf('conversation-c1')).toBe('web');
+    expect(toneOf('conversation-c2')).toBe('web');
+  });
+});
+
+describe('⚠⚠ a settled row is drawn quieter, and every row looked the same', () => {
+  /*
+   * 02 draws a resolved conversation softer in five separate ways: name
+   * weight, name colour, preview colour, time colour, avatar tint. We drew
+   * every row identically — which is why the column read flat, and it is not
+   * a spacing problem.
+   */
+  it('★★ marks CLOSED rows, and leaves live ones alone', async () => {
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'c1', status: 'CLOSED' }),
+          row({ id: 'c2', status: 'OPEN' }),
+          row({ id: 'c3', status: 'WAITING' }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.getByTestId('conversation-c1')).toHaveAttribute('data-settled');
+    expect(screen.getByTestId('conversation-c2')).not.toHaveAttribute('data-settled');
+    /*
+     * ⚠ WAITING IS NOT SETTLED. It is the most live state in the queue —
+     *   somebody is waiting for a reply — and reading it as "done" would
+     *   quiet exactly the rows that need attention most.
+     */
+    expect(screen.getByTestId('conversation-c3')).not.toHaveAttribute('data-settled');
+  });
+});
