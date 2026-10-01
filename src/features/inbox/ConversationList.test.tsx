@@ -475,9 +475,9 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
     expect(screen.getByTestId('preview-c1')).toHaveTextContent("My package still hasn't arrived");
   });
 
-  it('⚠ and says nothing rather than an empty line when there is no message', async () => {
-    // A row with no last message is a real state — a conversation opened and
-    // never spoken in. An empty preview slot would reserve space for nothing.
+  it('⚠ keeps an EMPTY line when there is no body — no text invented', async () => {
+    // A media message has no body and the list sends no type. Dropping the
+    // line made those rows 69 tall among 82s; 02 has three lines on every row.
     render(
       await ConversationList({
         rows: [row({ lastMessageBody: null })],
@@ -486,7 +486,9 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
         hasMore: false,
       }),
     );
-    expect(screen.queryByTestId('preview-c1')).toBeNull();
+    const preview = screen.getByTestId('preview-c1');
+    expect(preview.textContent).toBe('');
+    expect(preview).toHaveAttribute('data-empty');
   });
 
   it('★★ shows the last-message TIME, in the configured zone', async () => {
@@ -866,8 +868,10 @@ describe('⚠⚠ "a WINDOW YOU SCROLL INSIDE, not outside"', () => {
     /\/\*[\s\S]*?\*\//g,
     '',
   );
+  // The selector's OWN rule: first on its line, not a descendant in another
+  // rule (`.queueRow[data-settled] .who`) and not a list's second entry.
   const rule = (selector: string) =>
-    new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+    new RegExp(`(?:^|\\n)\\s*(?<!,\\s*)\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
   it('★★ the list sits in a scroll region, and the header and footer do not', async () => {
     render(await ConversationList({ rows: [row()], cap: 10, now: NOW, hasMore: false }));
@@ -905,6 +909,15 @@ describe('⚠⚠ "a WINDOW YOU SCROLL INSIDE, not outside"', () => {
      * against 87h. Measured on the deployed build, one cause for all of it.
      */
     expect(rule('queueColumn')).toMatch(/line-height:\s*normal/);
+  });
+
+  it('⚠⚠ a name is 500, not 600 — 600 is 02’s UNREAD, and we cannot say that', () => {
+    expect(rule('who')).toMatch(/font-weight:\s*var\(--font-weight-medium\)/);
+  });
+
+  it('★ the open row drops its top line — width 0, not a transparent 1px', () => {
+    const open = /\.queueRow\[data-open\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(open).toMatch(/border-block-start-width:\s*0/);
   });
 
   it('★ waiting-age is a pill in 02’s neutral, so the third line is 17h', () => {

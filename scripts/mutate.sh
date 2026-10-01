@@ -97,6 +97,18 @@ if printf '%s\n' "$SUMMARY" | grep -q 'failed'; then
   exit 0
 fi
 
+# ⚠⚠ A FILE THAT DID NOT LOAD IS NOT A SURVIVOR. A mutation that leaves the
+# source unparseable fails its test FILES, not its tests: the `Tests` line
+# then counts only the files that still loaded — 157 of 250 once — and says
+# "passed". That read as SURVIVED for a mutation that tested nothing.
+FILES="$(printf '%s\n' "$OUTPUT" | grep -E '^ +Test Files +[0-9]' | tail -1)"
+if printf '%s\n' "$FILES" | grep -q 'failed'; then
+  echo "UNKNOWN  | $FILES | $SUMMARY" >&2
+  echo "  A test file failed to load — most likely the mutation does not compile." >&2
+  echo "  Rewrite the replacement as valid code; this run proves nothing." >&2
+  exit 2
+fi
+
 echo "SURVIVED | $SUMMARY"
 echo "  The code is broken and every assertion passed. Either the behaviour is"
 echo "  untested, or an existing guard makes this branch unreachable — both are"

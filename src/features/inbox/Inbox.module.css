@@ -308,7 +308,8 @@
   .queueRow[data-open] {
     background-color: var(--panel-field);
     border-inline-start-color: var(--action-base);
-    border-block-start-color: transparent;
+    /* 02: `border-top: 0` — the width, not a transparent line still 1px tall. */
+    border-block-start-width: 0;
   }
 
   /*
@@ -450,6 +451,8 @@
    * a list.
    */
   .preview {
+    /* 02 has three lines on every row; an empty preview keeps its line. */
+    min-block-size: 1lh;
     font-size: 12.5px;
     color: var(--text-secondary);
     white-space: nowrap;
@@ -485,9 +488,14 @@
    * without it, and `text-overflow` then never fires.
    */
   .who {
-    /* 02: 14px / 600 / -0.14px. It declared none of the three and inherited them. */
+    /*
+     * 02: 14px / -0.14px, and the WEIGHT IS A STATE: 600 unread, 500 read,
+     * 400 settled. We have no unread state on the wire, so every row drew
+     * 600 and claimed to be unread. 500 is the honest default; 600 waits for
+     * the list to send the per-agent read state the service already keeps.
+     */
     font-size: 14px;
-    font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-medium);
     letter-spacing: -0.01em;
     flex: 1 1 auto;
     min-inline-size: 0;
@@ -496,7 +504,6 @@
     text-overflow: ellipsis;
   }
 
-  .channel,
   /*
    * Never wrapped. "60 days waiting" broke across three lines in the narrow
    * column, which is the one value on the row whose whole purpose is to be read

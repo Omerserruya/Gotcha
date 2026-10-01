@@ -361,12 +361,22 @@ export async function ConversationList({
 
               ★ The fourth value today that existed and had no reader.
             */}
-            {conversation.lastMessageBody === null ? null : (
-              <span className={styles.preview} data-testid={`preview-${conversation.id}`}>
-                {/* Somebody else's words: their direction, not the layout's. */}
+            {/*
+              ⚠ AN EMPTY PREVIEW KEEPS ITS LINE. A media message has no body
+                and the list does not send its type, so there is nothing true
+                to write — but dropping the line made those rows 69 tall in a
+                column of 82s. The line stays, empty; no text is invented.
+            */}
+            <span
+              className={styles.preview}
+              data-testid={`preview-${conversation.id}`}
+              data-empty={conversation.lastMessageBody === null ? '' : undefined}
+            >
+              {conversation.lastMessageBody === null ? null : (
+                /* Somebody else's words: their direction, not the layout's. */
                 <UserText>{conversation.lastMessageBody}</UserText>
-              </span>
-            )}
+              )}
+            </span>
 
             <span className={styles.rowTags}>
               {/*

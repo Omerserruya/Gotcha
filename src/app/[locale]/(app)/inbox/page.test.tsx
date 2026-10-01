@@ -264,8 +264,8 @@ describe('⚠⚠ the queue is told which conversation is open', () => {
    * ★ Two halves each tested and the join between them tested by neither.
    *   Guards assert hops; this is the hop.
    */
-  it('★★ passes the `c` parameter through to the list', async () => {
-    loadInbox.mockResolvedValue(data());
+  it('★★ marks the conversation that is OPEN, which with `?c=` is that one', async () => {
+    loadInbox.mockResolvedValue(data({ open: row({ id: 'c7' }) }));
     const { default: Page } = await import('./page');
     const tree = await Page({ searchParams: Promise.resolve({ c: 'c7' }) });
 
@@ -273,12 +273,25 @@ describe('⚠⚠ the queue is told which conversation is open', () => {
     expect(props?.openId).toBe('c7');
   });
 
+  it('⚠⚠ and with no `?c=` it is the one the loader opened — not nothing', async () => {
+    /*
+     * Measured on the deployed build: the first conversation open in the
+     * pane and no row marked, because the list was told `c`, which was
+     * absent. The open conversation is the fact; `c` is one way to choose it.
+     */
+    const props = propsOf<{ openId?: string | null }>(
+      await page({ open: row({ id: 'first' }) }),
+      ConversationList,
+    );
+    expect(props?.openId).toBe('first');
+  });
+
   it('⚠ and passes null when nothing is open, not undefined', async () => {
     /*
      * ★ `null` is "nothing is open"; `undefined` is "nobody said". They read
      *   the same at the call site and differ the moment anyone adds a default.
      */
-    const props = propsOf<{ openId?: string | null }>(await page(), ConversationList);
+    const props = propsOf<{ openId?: string | null }>(await page({ open: null }), ConversationList);
     expect(props?.openId).toBeNull();
   });
 });

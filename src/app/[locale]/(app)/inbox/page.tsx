@@ -120,7 +120,12 @@ export default async function Page({
                 reads; passing it back down is what lets the queue say where
                 you are.
             */
-            openId={c ?? null}
+            /*
+              ⚠ THE OPEN CONVERSATION, NOT THE `c` PARAMETER. With no `?c=` the
+                loader opens the first row, and passing `c` marked nothing —
+                a conversation on screen with no row saying it was the one.
+            */
+            openId={data.open?.id ?? null}
             meId={data.meId}
             view={view}
             channel={channel}
