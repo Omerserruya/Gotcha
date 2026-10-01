@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { buildEndSessionUrl, oidcConfiguration } from '@/auth/oidc';
 import { readSession } from '@/auth/session-store';
-import { sessionCookieOptions } from '@/auth/session';
+import {
+  ID_TOKEN_COOKIE,
+  ID_TOKEN_COOKIE_PATH,
+  sessionCookieOptions,
+  unsealIdToken,
+} from '@/auth/session';
 import { serverEnv } from '@/config/env.server';
 import { assertSameOrigin } from '@/api/client/csrf';
 import { logger } from '@/observability/logger';
@@ -42,14 +47,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (session) {
     try {
       /*
-       * `id_token_hint` would be the stronger hint, but keeping an id token in
-       * the session pushed the cookie past the 4 KB browser limit (see
-       * MAX_COOKIE_BYTES). RP-initiated logout permits `client_id` instead
-       * when the hint is absent, which is what identifies us here. The cost is
-       * that the provider may ask the user to confirm the sign-out.
+       * ════════════════════════════════════════════════════════════════════
+       * ★★ `id_token_hint` WHEN WE HAVE ONE — AND WE NOW USUALLY DO
+       * ════════════════════════════════════════════════════════════════════
+       * This used to say the id token could not be kept because it pushed the
+       * session cookie past 4 KB. True, and the conclusion drawn from it was
+       * wrong: **the limit is per cookie, not per domain.** It now lives in
+       * its own cookie scoped to this path, so it is sent here and nowhere
+       * else.
+       *
+       * Without the hint, RP-initiated logout can only offer `client_id` —
+       * which says which application is asking but not WHO — so the provider
+       * asks the person to confirm, on its own page, in its own vocabulary.
+       * That screen is the entire cost, and it is what a reviewer
+       * photographed.
+       *
+       * ⚠ THE FALLBACK IS THE OLD BEHAVIOUR, DELIBERATELY. An older session,
+       *   a cleared cookie, a rotated secret, a grant with no id token: every
+       *   one of those omits the hint and gets the confirmation screen. **A
+       *   sign-out that asks is far better than a sign-out that fails**, and
+       *   a truncated or malformed hint risks the second.
        */
+      const idToken = await unsealIdToken(request.cookies.get(ID_TOKEN_COOKIE)?.value);
+
       redirectTo = buildEndSessionUrl(await oidcConfiguration(), {
-        client_id: env.OIDC_CLIENT_ID,
+        ...(idToken ? { id_token_hint: idToken } : { client_id: env.OIDC_CLIENT_ID }),
         post_logout_redirect_uri: appUrl('/sign-in', env.APP_ORIGIN),
       }).toString();
     } catch {
@@ -83,5 +105,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
    * adding a way to lose the session on a path this app does not control.
    */
   response.cookies.delete({ name: sessionCookieOptions().name, path: '/' });
+
+  /*
+   * ⚠⚠ AND THE HINT GOES WITH IT. A sealed id token that outlives the session
+   *   it describes is a stale credential sitting in a browser for nothing —
+   *   and on the next sign-out it would be sent as a hint for a session that
+   *   no longer exists.
+   *
+   * ★ The path must MATCH THE SETTER exactly. A delete whose path does not
+   *   match is a silent no-op, which is how a cookie survives a sign-out
+   *   while every test asserting "we called delete" still passes.
+   */
+  response.cookies.delete({ name: ID_TOKEN_COOKIE, path: ID_TOKEN_COOKIE_PATH });
   return response;
 }

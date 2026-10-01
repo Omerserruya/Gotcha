@@ -7,6 +7,7 @@ import { CompactEncrypt, compactDecrypt } from 'jose';
 import { z } from 'zod';
 
 import { serverEnv } from '@/config/env.server';
+import { appPath } from '@/lib/base-path';
 
 const hkdfAsync = promisify(hkdf);
 
@@ -135,6 +136,99 @@ export function isAccessTokenExpired(session: Session): boolean {
 }
 
 /** Cookie attributes. `Secure` is dropped only for plain-HTTP localhost. */
+/**
+ * The id token, sealed, in a cookie of its own.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ WHY IT IS NOT IN THE SESSION, AND WHY THAT WAS THE WRONG CONCLUSION
+ * ════════════════════════════════════════════════════════════════════════════
+ * `sessionSchema` records that the id token is "deliberately NOT kept here —
+ * see MAX_COOKIE_BYTES", and that was correct: adding it pushed the session
+ * cookie past the browser's limit. The conclusion drawn from it was that we
+ * therefore could not keep an id token at all, and **that does not follow.**
+ *
+ * ⚠ THE 4 KB LIMIT IS PER COOKIE, NOT PER DOMAIN. Measured 2026-10-01: a live
+ *   `gotcha_session` is 2,600 bytes with 1,481 of headroom, and a second
+ *   cookie gets its own 4,096 ceiling.
+ *
+ * ★ So it lives beside the session rather than inside it, scoped to the one
+ *   path that reads it. `gotcha_login` already does exactly this with
+ *   `path=/v2/api/auth`, so the technique is proven in this codebase rather
+ *   than borrowed.
+ *
+ * ── WHAT IT BUYS ──
+ * RP-initiated logout without an `id_token_hint` can only offer `client_id`,
+ * which does not tell the provider WHO is signing out — so it asks the person
+ * to confirm, on its own page, in its own vocabulary. That confirmation screen
+ * is the whole cost, and it is the one a reviewer photographed.
+ *
+ * ⚠ IT IS SENT ON NOTHING ELSE. Scoped to the logout path, it adds zero bytes
+ *   to every other request — which is the reason it can exist at all on a
+ *   product that already carries 2.6 KB of session.
+ */
+export const ID_TOKEN_COOKIE = 'gotcha_id_token';
+
+/** Only the logout route ever reads it. */
+export const ID_TOKEN_COOKIE_PATH = appPath('/api/auth/logout');
+
+export function idTokenCookieOptions(): {
+  name: string;
+  httpOnly: true;
+  secure: boolean;
+  sameSite: 'lax';
+  path: string;
+  maxAge: number;
+} {
+  const env = serverEnv();
+  return {
+    name: ID_TOKEN_COOKIE,
+    httpOnly: true,
+    secure: !env.APP_ORIGIN.startsWith('http://'),
+    sameSite: 'lax',
+    path: ID_TOKEN_COOKIE_PATH,
+    /* It is useless once the session it describes is gone. */
+    maxAge: env.SESSION_MAX_AGE_SECONDS,
+  };
+}
+
+/**
+ * Seals an id token for that cookie.
+ *
+ * ⚠ THROWS RATHER THAN TRUNCATES. A truncated `id_token_hint` is worse than an
+ *   absent one: the provider cannot verify it, and what it does with a
+ *   malformed hint is unspecified. The caller omits the cookie and the logout
+ *   falls back to `client_id` — a confirmation screen, which is a cost, where
+ *   a broken hint risks a sign-out that does not sign out.
+ */
+export async function sealIdToken(idToken: string): Promise<string> {
+  const key = await encryptionKey();
+  const sealed = await new CompactEncrypt(new TextEncoder().encode(idToken))
+    .setProtectedHeader(ENCRYPTION)
+    .encrypt(key);
+
+  const cookieBytes = ID_TOKEN_COOKIE.length + 1 + sealed.length;
+  if (cookieBytes > MAX_COOKIE_BYTES) throw new SessionTooLargeError(cookieBytes);
+
+  return sealed;
+}
+
+/** Decrypts it, or `null` for anything that is not currently readable. */
+export async function unsealIdToken(sealed: string | undefined): Promise<string | null> {
+  if (!sealed) return null;
+  try {
+    const key = await encryptionKey();
+    const { plaintext } = await compactDecrypt(sealed, key);
+    const token = new TextDecoder().decode(plaintext);
+    return token === '' ? null : token;
+  } catch {
+    /*
+     * Tampered, or encrypted under a rotated secret. Treated as absent, which
+     * costs a confirmation screen — never as a reason to fail the sign-out.
+     */
+    return null;
+  }
+}
+
 export function sessionCookieOptions(): {
   name: string;
   httpOnly: true;

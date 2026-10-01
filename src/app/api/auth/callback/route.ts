@@ -2,7 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { LOGIN_STATE_COOKIE, LOGIN_STATE_COOKIE_PATH, unsealLoginState } from '@/auth/login-state';
 import { authorizationCodeGrant, oidcConfiguration } from '@/auth/oidc';
-import { sealSession, sessionCookieOptions, type Session } from '@/auth/session';
+import {
+  idTokenCookieOptions,
+  sealIdToken,
+  sealSession,
+  sessionCookieOptions,
+  type Session,
+} from '@/auth/session';
 import { serverEnv } from '@/config/env.server';
 import { logger } from '@/observability/logger';
 import { appUrl } from '@/lib/base-path';
@@ -120,6 +126,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   logger.info('auth.callback.success', { sessionId: session.sid });
 
+  /*
+   * ══════════════════════════════════════════════════════════════════════
+   * ★★ THE ID TOKEN, FOR SIGNING OUT WITHOUT THE PROVIDER ASKING PERMISSION
+   * ══════════════════════════════════════════════════════════════════════
+   * Kept in its own cookie, scoped to the logout path, because the 4 KB limit
+   * is PER COOKIE and the session already uses 2.6 KB of one.
+   *
+   * ⚠ ITS FAILURE IS NOT THE SIGN-IN'S FAILURE. If it will not fit, or there
+   *   is no id token in the grant, the person still gets a session — they
+   *   simply see the provider's confirmation screen when they later sign out.
+   *   Failing the sign-in over a logout convenience would be absurd.
+   */
+  let sealedIdToken: string | null = null;
+  if (tokens.id_token) {
+    try {
+      sealedIdToken = await sealIdToken(tokens.id_token);
+    } catch (cause) {
+      logger.warn('auth.callback.id_token_too_large', { cause });
+    }
+  }
+
   let sealed;
   try {
     sealed = await sealSession(session);
@@ -146,6 +173,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const response = NextResponse.redirect(appUrl(loginState.r as `/${string}`, env.APP_ORIGIN));
   const cookieOptions = sessionCookieOptions();
   response.cookies.set(cookieOptions.name, sealed, cookieOptions);
+
+  /*
+   * ★ Beside the session, not inside it. Scoped to the logout path, so it
+   *   costs nothing on every other request this product makes.
+   */
+  if (sealedIdToken) {
+    const idTokenOptions = idTokenCookieOptions();
+    response.cookies.set(idTokenOptions.name, sealedIdToken, idTokenOptions);
+  }
   // Same constant as the setter: a delete whose path does not match is a
   // no-op, and a stale sealed state can be picked up by the next attempt.
   response.cookies.delete({ name: LOGIN_STATE_COOKIE, path: LOGIN_STATE_COOKIE_PATH });
