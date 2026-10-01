@@ -7,6 +7,7 @@ import { Button } from '@/design-system/primitives/button/Button';
 
 import {
   claimConversation,
+  closeConversation,
   returnToAi,
   transferConversation,
   type VerbResult,
@@ -41,6 +42,7 @@ export function ConversationVerbs({
   hasAiEmployee,
   greeting,
   colleagues,
+  resolved,
 }: {
   readonly conversationId: string;
   /** Is this conversation assigned to the person looking at it? */
@@ -62,6 +64,15 @@ export function ConversationVerbs({
    */
   readonly greeting: boolean | null;
   readonly colleagues: readonly { readonly id: string; readonly name: string }[];
+  /**
+   * Whether this conversation is already closed.
+   *
+   * ⚠ Resolve is not offered on something already resolved. The route would
+   *   accept it — `close` on a CLOSED conversation is a no-op — and a button
+   *   whose only effect is nothing is how a screen teaches somebody that its
+   *   controls are decorative.
+   */
+  readonly resolved: boolean;
 }) {
   const t = useTranslations('inbox.verbs');
   const [result, setResult] = useState<VerbResult | null>(null);
@@ -107,6 +118,33 @@ export function ConversationVerbs({
           onClick={() => run(() => returnToAi(conversationId))}
         >
           {t('returnToAi')}
+        </Button>
+      ) : null}
+
+      {/*
+        ════════════════════════════════════════════════════════════════════
+        ★★ RESOLVE — 02's THIRD BUTTON, AND THE ROUTE EXISTED ALL ALONG
+        ════════════════════════════════════════════════════════════════════
+        The design's conversation header carries three: Assign · Pause AI ·
+        Resolve, the last one filled `#121212`. We drew one.
+
+        ★ `closeConversation` posts to `/conversations/{id}/close`, which the
+          platform has always had — it was missing from THIS app, not from
+          the API. Measured against the OpenAPI rather than assumed.
+
+        ⚠ Not offered on something already closed: the route accepts it as a
+          no-op, and a button whose only effect is nothing teaches a reader
+          that the controls are decorative.
+      */}
+      {!resolved ? (
+        <Button
+          variant="primary"
+          size="sm"
+          data-testid={`resolve-${conversationId}`}
+          disabled={isPending}
+          onClick={() => run(() => closeConversation(conversationId))}
+        >
+          {t('resolve')}
         </Button>
       ) : null}
 

@@ -30,6 +30,17 @@ const claimConversation = vi.hoisted(() =>
     throw new Error('a test must never call claimConversation');
   }),
 );
+/*
+ * ★ Throws by default, like its neighbours. These verbs change a real
+ *   conversation; a mock that silently resolves would let a test "pass" while
+ *   exercising a call nobody meant to make. A test that WANTS the call
+ *   overrides it.
+ */
+const closeConversation = vi.hoisted(() =>
+  vi.fn(async () => {
+    throw new Error('a test must never call closeConversation');
+  }),
+);
 const returnToAi = vi.hoisted(() =>
   vi.fn(async () => {
     throw new Error('a test must never call returnToAi');
@@ -41,6 +52,7 @@ const transferConversation = vi.hoisted(() =>
   }),
 );
 vi.mock('./conversation-actions', () => ({
+  closeConversation,
   claimConversation,
   returnToAi,
   transferConversation,
@@ -66,6 +78,7 @@ const show = (over: Partial<Parameters<typeof ConversationVerbs>[0]> = {}) =>
         hasAiEmployee={true}
         greeting={null}
         colleagues={colleagues}
+        resolved={false}
         {...over}
       />
     </NextIntlClientProvider>,
@@ -320,5 +333,38 @@ describe('★★ both languages say all of it', () => {
     expect(en.verbs.returnToAi).toBe('Return to the AI');
     expect(JSON.stringify(en.verbs)).not.toMatch(/queue/i);
     expect(JSON.stringify(en.verbs)).not.toMatch(/pause/i);
+  });
+});
+
+describe('⚠⚠ Resolve — 02’s third button, and the route existed all along', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE DESIGN DRAWS THREE: ASSIGN · PAUSE AI · RESOLVE. WE DREW ONE.
+   * ════════════════════════════════════════════════════════════════════════
+   * `closeConversation` posts to `/conversations/{id}/close`, which the
+   * platform has always had — it was missing from THIS app, not from the API.
+   */
+  it('★★ is offered on a live conversation', async () => {
+    show({ resolved: false });
+    expect(screen.getByTestId('resolve-c1')).toBeInTheDocument();
+  });
+
+  it('⚠⚠ and NOT on one already closed', async () => {
+    /*
+     * ★ The route accepts it as a no-op. A button whose only effect is
+     *   nothing is how a screen teaches somebody that its controls are
+     *   decorative — the same reason `claim` is not drawn on a conversation
+     *   that is already yours, where re-claiming would re-greet the customer.
+     */
+    show({ resolved: true });
+    expect(screen.queryByTestId('resolve-c1')).toBeNull();
+  });
+
+  it('★ calls close, not claim', async () => {
+    closeConversation.mockResolvedValueOnce({ ok: true } as never);
+    show({ resolved: false });
+    await userEvent.click(screen.getByTestId('resolve-c1'));
+    expect(closeConversation).toHaveBeenCalledWith('c1');
+    expect(claimConversation).not.toHaveBeenCalled();
   });
 });

@@ -280,3 +280,37 @@ describe('⚠⚠ the queue is told which conversation is open', () => {
     expect(props?.openId).toBeNull();
   });
 });
+
+describe('⚠⚠ the verbs are told whether this conversation is resolved', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE THIRD TIME TODAY A PROP WAS WIRED AND NOT TESTED
+   * ════════════════════════════════════════════════════════════════════════
+   * `onScreen` this morning, `openId` this afternoon, now `resolved`. Each
+   * time the component was thoroughly tested for what it DOES with the value
+   * and nothing checked that the page SUPPLIES it — and each time a mutation
+   * found it rather than a reviewer.
+   *
+   * ★ The pattern is mine to break: the wiring test belongs in the same
+   *   commit as the prop, not after a mutation survives.
+   */
+  it('★★ passes CLOSED through, and nothing else', async () => {
+    for (const [status, expected] of [
+      ['CLOSED', true],
+      ['OPEN', false],
+      /*
+       * ⚠ WAITING IS THE MOST LIVE STATE IN THE QUEUE — somebody is waiting
+       *   for a reply. Treating it as resolved would hide the Resolve button
+       *   on exactly the conversations that need resolving.
+       */
+      ['WAITING', false],
+    ] as const) {
+      loadInbox.mockResolvedValue(data({ open: { ...data().open, status } }));
+      const { default: Page } = await import('./page');
+      const tree = await Page({ searchParams: Promise.resolve({}) });
+
+      const props = propsOf<{ resolved?: boolean }>(tree, ConversationVerbs);
+      expect(props?.resolved, status).toBe(expected);
+    }
+  });
+});

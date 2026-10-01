@@ -154,6 +154,12 @@ export default async function Page({
                 hasAiEmployee={data.open.assignedAiAgentId !== null}
                 greeting={data.greeting}
                 colleagues={data.colleagues}
+                /*
+                 * ⚠ `CLOSED` is the only status that means resolved. `OPEN`
+                 *   and `WAITING` are both live — and `WAITING` most of all,
+                 *   since somebody is waiting for a reply.
+                 */
+                resolved={data.open.status === 'CLOSED'}
               />
             </div>
 

@@ -75,7 +75,8 @@
       "not_yours": "You can only transfer a conversation you're holding. Take control first, and then you can pass it on.",
       "not_found": "This conversation, or the person you picked, isn't there any more. Reload to see where things stand.",
       "failed": "That didn't go through, and nothing changed. Try again in a moment."
-    }
+    },
+    "resolve": "Resolve"
   },
   "open": {
     "label": "This conversation",
