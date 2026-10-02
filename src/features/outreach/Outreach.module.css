@@ -1038,18 +1038,25 @@
     min-block-size: 120px;
   }
 
+  /*
+    Spread across the card, however many hours there are. A bar with no data
+    is a 3px baseline: a full-height grey bar read as "the same, high, every
+    hour" (measured on dev).
+  */
   .resBar {
     flex: 1;
-    max-inline-size: 47px;
+    min-inline-size: 0;
     display: flex;
     flex-direction: column;
+    justify-content: flex-end;
     gap: 6px;
   }
 
   .resBarTrack {
-    flex: 1;
-    border-radius: 6px;
-    background-color: var(--panel-inset);
+    flex: none;
+    block-size: 3px;
+    border-radius: 2px;
+    background-color: var(--border-emphasis);
   }
 
   .resBarLabel {

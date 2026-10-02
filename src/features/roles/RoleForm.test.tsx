@@ -12,7 +12,9 @@ import { RoleForm } from './RoleForm';
 const { createRole } = vi.hoisted(() => ({ createRole: vi.fn() }));
 vi.mock('./actions', () => ({ createRole }));
 
-beforeEach(() => createRole.mockReset());
+beforeEach(() => {
+  createRole.mockReset();
+});
 
 const permission = (key: string, domain: string, displayName: string): PermissionDef => ({
   key,

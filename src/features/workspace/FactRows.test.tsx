@@ -32,7 +32,9 @@ const saveWorkspace = saveWorkspaceFacts;
  * value that had been set before rendering, so the action resolved undefined
  * and the component threw.
  */
-beforeEach(() => saveWorkspaceFacts.mockReset());
+beforeEach(() => {
+  saveWorkspaceFacts.mockReset();
+});
 
 /**
  * The fact rows, against the design's list.

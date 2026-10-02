@@ -25,7 +25,9 @@ vi.mock('./whatsapp-actions', () => ({ connectNumber }));
  * evidence this screen will ever have.
  */
 
-beforeEach(() => connectNumber.mockReset());
+beforeEach(() => {
+  connectNumber.mockReset();
+});
 
 const candidate = (over: Record<string, unknown> = {}) => ({
   phoneNumberId: 'p1',
