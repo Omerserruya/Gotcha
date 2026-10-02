@@ -809,4 +809,358 @@
     font-size: var(--font-size-caption);
     color: var(--intent-urgent-text);
   }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04b, measured — the customer card
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .cardScreen {
+    flex: 1;
+    min-block-size: 0;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: normal;
+  }
+
+  /* 02: `padding:34px 44px 26px`, `gap:22px`, `#EDE9E1` underneath. */
+  .cardHeader {
+    flex: none;
+    display: flex;
+    align-items: flex-start;
+    gap: 22px;
+    padding: var(--space-34) 44px var(--space-26);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .cardDisc {
+    flex: none;
+    inline-size: 64px;
+    block-size: 64px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 20px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 64px;
+    text-align: center;
+  }
+
+  .cardWho {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .cardName {
+    margin: 0;
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .cardFacts {
+    margin: 7px 0 0;
+    font-size: 13.5px;
+    color: var(--text-muted);
+  }
+
+  /* The one serif italic in the product: 19px `#3A3833`, up to 720 wide. */
+  .cardSummary {
+    margin: var(--space-14) 0 0;
+    max-inline-size: 720px;
+    font-family: var(--font-serif);
+    font-style: var(--font-serif-style);
+    font-size: 19px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+  }
+
+  .cardSummary[data-empty] {
+    color: var(--text-subtle);
+  }
+
+  .cardActions {
+    flex: none;
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  /* 02: radius 9, `padding:8px 14px`, 12px. */
+  .cardButton,
+  .cardButtonPrimary {
+    padding: var(--space-8) var(--space-14);
+    border-radius: 9px;
+    font-size: var(--font-size-label);
+    text-decoration: none;
+  }
+
+  .cardButton {
+    border: 1px solid var(--border-default);
+    color: var(--intent-neutral-text);
+  }
+
+  .cardButtonPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .cardButtonPrimary[aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .cardButton:focus-visible,
+  .cardButtonPrimary:focus-visible,
+  .cardTab:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .cardBody {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+  }
+
+  /* 02: `padding:26px 44px`, `gap:16px`, `#EDE9E1` on its right. */
+  .cardMain {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: var(--space-26) 44px;
+    border-inline-end: 1px solid var(--border-subtle);
+  }
+
+  /* 02: 340, `padding:26px 30px`, `gap:16px`; the note pinned at the foot. */
+  .cardSide {
+    flex: none;
+    inline-size: 340px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: var(--space-26) 30px;
+  }
+
+  @media (width < 64rem) {
+    .cardBody {
+      flex-direction: column;
+    }
+
+    .cardSide {
+      inline-size: auto;
+    }
+  }
+
+  /* 02: `gap:20px`, `padding-bottom:10px`, `#EDE9E1` under the row. */
+  .cardTabs {
+    flex: none;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-20);
+    padding-block-end: var(--space-10);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .cardTab {
+    padding-block-end: 9px;
+    margin-block-end: -11px;
+    border-block-end: 2px solid transparent;
+    font-size: 13px;
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .cardTab[aria-current='page'] {
+    border-block-end-color: var(--action-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .cardTabsAside {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 02's stream: rows at `13px 0`, `gap:16px`, `#EDE9E1` between. */
+  .timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .timelineRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-16);
+    padding-block: 13px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .timelineRow:last-child {
+    border-block-end: 0;
+  }
+
+  .timelineDate {
+    flex: none;
+    inline-size: 62px;
+    padding-block-start: 2px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .timelineDot {
+    flex: none;
+    inline-size: 7px;
+    block-size: 7px;
+    margin-block-start: 5px;
+    border-radius: 50%;
+    background-color: var(--channel-4);
+  }
+
+  /* 02's dots: violet for what GOTCHA did, green for an order. */
+  .timelineRow[data-tone='action'] .timelineDot {
+    background-color: var(--channel-2);
+  }
+
+  .timelineRow[data-tone='order'] .timelineDot {
+    background-color: var(--channel-3);
+  }
+
+  .timelineText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .timelineTitle {
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .timelineLine {
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .timelineEmpty {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  /* The side's blocks: `#EDE9E1` above each but the first, 16 over it. */
+  .sideBlock + .sideBlock {
+    padding-block-start: var(--space-16);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .sideEyebrow {
+    margin: 0 0 var(--space-10);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .worth {
+    display: flex;
+    gap: var(--space-26);
+    margin: 0;
+  }
+
+  .worth > div {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+
+  .worth dt {
+    margin-block-start: 2px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .worthValue {
+    margin: 0;
+    font-size: 22px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .remembers {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  .reach {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 0;
+  }
+
+  .reach > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+    font-size: 12.5px;
+  }
+
+  .reach dt {
+    color: var(--intent-neutral-text);
+  }
+
+  .reach dd {
+    margin: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+    text-align: end;
+  }
+
+  .sideNone {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  /* 02: white, radius 14, `padding:14px 16px`, at the column's foot. */
+  .pinnedNote {
+    margin-block-start: auto;
+    padding: var(--space-14) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .pinnedTitle {
+    margin: 0;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .pinnedBody {
+    margin: var(--space-6) 0 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--intent-neutral-text);
+  }
 }

@@ -192,5 +192,39 @@
   "composition": {
     "heading": "Who your customers are",
     "byChannel": "By the channel they write on"
+  },
+  "card": {
+    "since": "with you since {when}",
+    "reaches": "reaches you on {channels}",
+    "noSummary": "No summary yet — GOTCHA writes one once there's enough to go on.",
+    "addNote": "Add note",
+    "message": "Message",
+    "tabs": {
+      "everything": "Everything",
+      "conversations": "Conversations",
+      "orders": "Orders",
+      "actions": "Actions",
+      "notes": "Notes"
+    },
+    "allChannels": "All channels",
+    "today": "Today",
+    "messages": "{count, plural, one {# message} other {# messages}}",
+    "aiActionDone": "GOTCHA · done",
+    "aiActionFailed": "GOTCHA · didn’t go through",
+    "handedTo": "Handed to {to}",
+    "handover": "Handed over",
+    "order": "Order {number}",
+    "note": "Note · {author}",
+    "empty": "Nothing here yet.",
+    "worth": "Worth",
+    "lifetime": "lifetime",
+    "orders": "orders",
+    "refunds": "refunds",
+    "remembers": "GOTCHA remembers",
+    "remembersNone": "Nothing yet.",
+    "reach": "Reach them",
+    "reachNone": "No handle recorded.",
+    "noteCard": "Note · {author}, {when}",
+    "noNote": "No notes yet."
   }
 }

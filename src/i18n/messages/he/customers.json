@@ -192,5 +192,39 @@
   "composition": {
     "heading": "מי הלקוחות שלך",
     "byChannel": "לפי הערוץ שבו הם כותבים"
+  },
+  "card": {
+    "since": "איתך מאז {when}",
+    "reaches": "פונה אליך ב־{channels}",
+    "noSummary": "עדיין אין סיכום — GOTCHA יכתוב אחד כשיהיה מספיק מידע.",
+    "addNote": "הוספת הערה",
+    "message": "הודעה",
+    "tabs": {
+      "everything": "הכול",
+      "conversations": "שיחות",
+      "orders": "הזמנות",
+      "actions": "פעולות",
+      "notes": "הערות"
+    },
+    "allChannels": "כל הערוצים",
+    "today": "היום",
+    "messages": "{count, plural, one {הודעה אחת} other {# הודעות}}",
+    "aiActionDone": "GOTCHA · בוצע",
+    "aiActionFailed": "GOTCHA · לא עבר",
+    "handedTo": "הועבר ל־{to}",
+    "handover": "הועבר",
+    "order": "הזמנה {number}",
+    "note": "הערה · {author}",
+    "empty": "עדיין אין כאן כלום.",
+    "worth": "שווי",
+    "lifetime": "לאורך הזמן",
+    "orders": "הזמנות",
+    "refunds": "החזרים",
+    "remembers": "GOTCHA זוכר",
+    "remembersNone": "עדיין כלום.",
+    "reach": "איך להשיג",
+    "reachNone": "לא נרשם מזהה.",
+    "noteCard": "הערה · {author}, {when}",
+    "noNote": "עדיין אין הערות."
   }
 }

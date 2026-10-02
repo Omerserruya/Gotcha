@@ -1,7 +1,14 @@
 import { CustomerActions } from '@/features/customers/CustomerActions';
-import { CustomerDetail } from '@/features/customers/CustomerDetail';
 import { CustomerNotes } from '@/features/customers/CustomerNotes';
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
+import {
+  CustomerHeader,
+  CustomerSide,
+  CustomerTabs,
+  CustomerTimelineList,
+  parseCustomerTab,
+} from '@/features/customers/CustomerScreen';
+import styles from '@/features/customers/Customers.module.css';
 import { loadCustomer } from '@/features/customers/load-customer';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -27,39 +34,62 @@ import { pageMetadata } from '@/shell/page-metadata';
  * conclusions do not conflict, and saying so here stops somebody later
  * reading one as contradicting the other.
  */
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  /** `?tab=` — 04b's tabs: everything, conversations, orders, actions, notes. */
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const { id } = await params;
+  const tab = parseCustomerTab((await searchParams)?.tab);
   const detail = await loadCustomer(id);
 
   return (
-    <PageContainer>
-      <CustomerDetail detail={detail} />
-      {/*
-        Screen 04d, BESIDE the detail rather than inside it.
-
-        Both are async server components, and nesting one in the other makes
-        the outer untestable — awaiting it yields a tree with an unresolved
-        async node and nothing renders. Screen 11 hit this with `ScanPanel`
-        and placed it the same way.
-      */}
-      <CustomerOrders orders={detail.orders} conversationId={detail.conversationId} />
-      {/*
-        Screen 04e, a SIBLING for the same reason 04d is: nested inside
-        another async component it would be an unresolved node to the
-        structural test, which does not run it. (React renders it —
-        the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).)
-      */}
-      <CustomerActions actions={detail.actions} />
-      {/*
-        Screen 04f. A sibling for the same reason 04d and 04e are: it keeps
-        the panel visible to the structural test.
-
-        `contactId` comes from the route rather than from the timeline: the
-        notes are keyed on the contact we were ASKED for, and the timeline
-        resolves merges. Passing the resolved one would write a note against
-        a different id than the page the author is looking at.
-      */}
-      <CustomerNotes notes={detail.notes} contactId={id} viewerUserId={detail.viewerUserId} />
+    /*
+      04b, measured: its own header across the panel (not the screen
+      header — a 64px disc and a 30px name), then a main column and a 340px
+      side, each scrolling inside itself.
+    */
+    <PageContainer layout="screen" flush>
+      <div className={styles.cardScreen} data-testid="customer-card">
+        <CustomerHeader detail={detail} contactId={id} />
+        <div className={styles.cardBody}>
+          <div className={styles.cardMain}>
+            <CustomerTabs contactId={id} tab={tab} />
+            {/*
+              Each tab's content is a sibling here, so the structural test can
+              see it. 04c–04f get their own frames next; until then Orders,
+              Actions and Notes are the existing panels, and Conversations the
+              timeline's conversations.
+            */}
+            {tab === 'everything' ? <CustomerTimelineList detail={detail} /> : null}
+            {tab === 'conversations' ? (
+              <CustomerTimelineList detail={detail} only="conversations" />
+            ) : null}
+            {tab === 'orders' ? (
+              <CustomerOrders orders={detail.orders} conversationId={detail.conversationId} />
+            ) : null}
+            {tab === 'actions' ? <CustomerActions actions={detail.actions} /> : null}
+            {tab === 'notes' ? (
+              /*
+                `contactId` comes from the route rather than from the timeline:
+                the notes are keyed on the contact we were ASKED for, and the
+                timeline resolves merges.
+              */
+              <CustomerNotes
+                notes={detail.notes}
+                contactId={id}
+                viewerUserId={detail.viewerUserId}
+              />
+            ) : null}
+          </div>
+          <aside className={styles.cardSide}>
+            <CustomerSide detail={detail} />
+          </aside>
+        </div>
+      </div>
     </PageContainer>
   );
 }
