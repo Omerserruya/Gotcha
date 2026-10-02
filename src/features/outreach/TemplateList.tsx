@@ -1,89 +1,303 @@
-import { getTranslations } from 'next-intl/server';
+import { getFormatter, getLocale, getTranslations } from 'next-intl/server';
 
-import { groupByName, isUnchanged, templateStance, type Template } from '@/api/contracts/templates';
+import { channelName } from '@/api/contracts/inbox';
+import {
+  bodyParts,
+  groupByName,
+  isUnchanged,
+  templateStance,
+  type Template,
+  type TemplateGroup,
+  type TemplateStance,
+} from '@/api/contracts/templates';
+import { Link } from '@/i18n/navigation';
 
 import styles from './Outreach.module.css';
 
 /**
- * Screen 05c — message templates.
+ * Screen 05c — message templates, measured.
  *
- * ── THE SCREEN IS THE REJECTION REASON ──
- * `rejectionReason` is the provider's own words and it is real. That is the
- * one thing here worth building a screen around, in the same way that
- * *"approved but never ran"* was screen 03's.
+ * A table card (684 wide; head `#F5F2EC` at `padding:11px 18px`; rows at
+ * `14px 18px`; the open one `#FCFBF8` with 02's 3px dark edge; the window
+ * note as its foot) beside a 440 column: the preview, a rejection when there
+ * is one, and "Worth knowing".
  *
- * **Without an ETA.** Nothing models how long a review takes, so *"Being
- * reviewed · 1 day"* is a number with no source — the state is real, the
- * duration is not. And **without a rewrite**: nothing proposes a fix, so
- * *"GOTCHA rewrote it"* would be a claim about work that does not happen.
+ * ── WHAT EACH PART IS MADE OF ──
+ *   USED · REPLIES   "—": nothing counts a template's sends or replies. 02's
+ *                    own spec lists both under "needs from the backend".
+ *   STATE            the platform's review status, said as what you can do
+ *   preview          the body as a message, its {{n}} filled with each
+ *                    variable's sample — highlighted — and its real buttons
+ *   Filled in from   the variables' descriptions
+ *   Who may send it  "—": nothing records which employees may
+ *   Approved         that it is, and whether it changed since (`version`);
+ *                    no approval DATE exists
  *
- * ── FIVE ROW STATES, NOT THREE ──
- * The design draws ready / reviewing / rejected. The platform has four
- * statuses, and `DRAFT` — written and never submitted — is real, common, and
- * has no row in the design.
- *
- * The fifth is not a status at all. A template bound to `EMAIL` has **no
- * reviewer**, so it says why it needs no approval rather than sitting beside
- * "ready" as though somebody granted one.
+ * ⚠ NOT DRAWN, BY STANDING RULINGS: 02's In flight / Templates / Calls /
+ * Finished tabs (the shell's rail carries these; the in-page tabs wait on
+ * Omer) and "New template" (creating outreach waits on his decision).
  */
-export async function TemplateList({ templates }: { readonly templates: readonly Template[] }) {
+
+/** One group per name: `@@unique([tenantId, name, language, channel])`. */
+export function templateGroups(templates: readonly Template[]): readonly TemplateGroup[] {
+  return groupByName(templates);
+}
+
+/** The group a `?template=` id belongs to, else the first. */
+export function selectedGroup(
+  groups: readonly TemplateGroup[],
+  wanted: string | undefined,
+): TemplateGroup | null {
+  return groups.find((group) => group.all.some((t) => t.id === wanted)) ?? groups[0] ?? null;
+}
+
+/** The body as one line, its variables in braces: "Hi {John} — the {lamp} is back". */
+function bodyLine(template: Template): string {
+  return bodyParts(template)
+    .map((part) => ('text' in part ? part.text : `{${part.variable}}`))
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export async function TemplateTable({
+  groups,
+  selectedId,
+}: {
+  readonly groups: readonly TemplateGroup[] | null;
+  readonly selectedId: string | null;
+}) {
   const t = await getTranslations('templates');
-  const groups = groupByName(templates);
+  const channels = await getTranslations('channels');
+
+  const chip = (stance: TemplateStance, template: Template) =>
+    stance === 'exempt'
+      ? t('stance.exempt', {
+          channel: channelName(template.channel, channels) ?? template.channel ?? '',
+        })
+      : t(`stance.${stance}` as 'stance.ready');
 
   return (
-    <div className={styles.templates} data-testid="template-list">
-      <ul className={styles.templateRows}>
-        {groups.map((group) => {
-          const stance = templateStance(group.primary);
-          return (
-            <li
-              key={group.name}
-              className={styles.templateRow}
-              data-testid={`template-${group.primary.id}`}
-              data-stance={stance}
-            >
-              <div className={styles.templateHead}>
-                <span className={styles.templateName}>{group.name}</span>
-                {/*
-                  Languages gathered from separate rows sharing this name —
-                  `@@unique([tenantId, name, language, channel])`. There is no
-                  translations field; this is a grouping.
-                */}
-                {group.languages.length > 0 ? (
-                  <span
-                    className={styles.templateLangs}
-                    data-testid={`languages-${group.primary.id}`}
+    <section className={styles.tplTable} data-testid="template-list">
+      <div className={styles.tplHead} aria-hidden="true">
+        <span>{t('head.template')}</span>
+        <span>{t('head.used')}</span>
+        <span>{t('head.replies')}</span>
+        <span>{t('head.state')}</span>
+      </div>
+
+      <div className={styles.tplRows}>
+        {groups === null ? (
+          <p className={styles.tplNone} data-testid="templates-unavailable">
+            {t('unavailable')}
+          </p>
+        ) : groups.length === 0 ? (
+          /*
+            The consequence, not just the absence: with no template you can
+            only continue conversations, never begin one. One line, the
+            consequence its tooltip.
+          */
+          <p className={styles.tplNone} data-testid="templates-empty" title={t('noneBody')}>
+            {t('none')}
+          </p>
+        ) : (
+          <ul className={styles.tplList}>
+            {groups.map((group) => {
+              const stance = templateStance(group.primary);
+              const open = group.primary.id === selectedId;
+              return (
+                <li key={group.name}>
+                  <Link
+                    href={{
+                      pathname: '/outreach/templates',
+                      query: { template: group.primary.id },
+                    }}
+                    className={styles.tplRow}
+                    aria-current={open ? 'true' : undefined}
+                    data-stance={stance}
+                    data-testid={`template-${group.primary.id}`}
                   >
-                    {group.languages.join(' · ')}
-                  </span>
-                ) : null}
-              </div>
+                    <span className={styles.tplText}>
+                      <span className={styles.tplName}>{group.name}</span>
+                      <span className={styles.tplLine}>{bodyLine(group.primary)}</span>
+                    </span>
+                    {/* Nothing counts a template's sends or replies: 02 lists both as backend needs. */}
+                    <span className={styles.tplFigure}>—</span>
+                    <span className={styles.tplFigure}>—</span>
+                    <span className={styles.tplState}>
+                      <span
+                        className={styles.tplChip}
+                        data-stance={stance}
+                        data-testid={`stance-${group.primary.id}`}
+                      >
+                        {chip(stance, group.primary)}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
-              <p className={styles.templateBody}>{group.primary.body}</p>
+      {/* 02's foot: inside the 24-hour window no template is needed. */}
+      <p className={styles.tplFoot} data-testid="window-note">
+        {t('window')}
+      </p>
+    </section>
+  );
+}
 
-              <p className={styles.templateState} data-testid={`stance-${group.primary.id}`}>
-                {t(`stance.${stance}` as 'stance.ready')}
-              </p>
+/** 05c's preview card: the template as the customer will see it. */
+export async function TemplatePreview({ group }: { readonly group: TemplateGroup | null }) {
+  const t = await getTranslations('templates');
+  const format = await getFormatter();
+  const locale = await getLocale();
 
-              {/*
-                The provider's own words, shown as theirs. No ETA beside it,
-                and no rewrite under it — neither exists.
-              */}
-              {stance === 'rejected' && group.primary.rejectionReason ? (
-                <p className={styles.templateReason} data-testid={`reason-${group.primary.id}`}>
-                  {t('rejectedBecause', { reason: group.primary.rejectionReason })}
-                </p>
-              ) : null}
+  if (group === null) {
+    return (
+      <section className={styles.tplCard} data-testid="template-preview">
+        <div className={styles.tplCardHead}>
+          <span className={styles.tplCardName}>—</span>
+        </div>
+        <div className={styles.tplStage} />
+      </section>
+    );
+  }
 
-              {stance === 'ready' && isUnchanged(group.primary) ? (
-                <p className={styles.templateMeta} data-testid={`unchanged-${group.primary.id}`}>
-                  {t('unchanged')}
-                </p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+  const template = group.primary;
+  const languageNames = new Intl.DisplayNames([locale], { type: 'language' });
+  const languages = format.list(
+    group.languages.map((code) => {
+      try {
+        return languageNames.of(code) ?? code;
+      } catch {
+        return code;
+      }
+    }),
+    { type: 'unit' },
+  );
+  const filledFrom = template.variables
+    .map((variable) => variable.description?.trim())
+    .filter((text): text is string => !!text);
+  const stance = templateStance(template);
+
+  return (
+    <section className={styles.tplCard} data-testid="template-preview">
+      <div className={styles.tplCardHead}>
+        <span className={styles.tplCardName}>{group.name}</span>
+        <span className={styles.tplLangs} data-testid="template-languages">
+          {languages}
+        </span>
+      </div>
+
+      {/* The stage: 02's `#F5F2EC`, the message as a bubble, its buttons under it. */}
+      <div className={styles.tplStage}>
+        <div className={styles.tplBubble} data-testid="template-bubble">
+          {template.headerType === 'text' && template.headerContent ? (
+            <strong className={styles.tplBubbleHead}>{template.headerContent}</strong>
+          ) : null}
+          <p className={styles.tplBubbleBody}>
+            {bodyParts(template).map((part, index) =>
+              'text' in part ? (
+                <span key={index}>{part.text}</span>
+              ) : (
+                <mark key={index} className={styles.tplVar} title={`{{${part.key}}}`}>
+                  {part.variable}
+                </mark>
+              ),
+            )}
+          </p>
+          {template.footer ? <p className={styles.tplBubbleFoot}>{template.footer}</p> : null}
+        </div>
+        {template.buttons.length > 0 ? (
+          <div className={styles.tplButtons}>
+            {template.buttons
+              .filter((button) => button.text.trim())
+              .map((button, index) => (
+                <span key={index} className={styles.tplButton}>
+                  {button.text}
+                </span>
+              ))}
+          </div>
+        ) : null}
+      </div>
+
+      <dl className={styles.tplFacts}>
+        <div>
+          <dt>{t('preview.filledFrom')}</dt>
+          <dd>{filledFrom.length > 0 ? format.list(filledFrom) : '—'}</dd>
+        </div>
+        {/* Nothing records which employees or automations may send it. */}
+        <div>
+          <dt>{t('preview.whoMay')}</dt>
+          <dd>—</dd>
+        </div>
+        <div>
+          <dt>{t('preview.approved')}</dt>
+          <dd data-ok={stance === 'ready' ? '' : undefined} data-testid="template-approved">
+            {stance === 'ready'
+              ? isUnchanged(template)
+                ? t('preview.unchanged')
+                : t('preview.changed', { version: template.version })
+              : stance === 'exempt'
+                ? t('preview.noReview')
+                : '—'}
+          </dd>
+        </div>
+      </dl>
+
+      {/* Neither exists yet: choosing a template for a campaign, or editing a copy. */}
+      <div className={styles.tplActions}>
+        <span className={styles.tplPrimary} aria-disabled="true">
+          {t('useInCampaign')}
+        </span>
+        <span className={styles.tplSecondary} aria-disabled="true">
+          {t('duplicate')}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * 02's rejection card — for the first rejected template, with WhatsApp's own
+ * words. Drawn only when one exists: a pink card announcing nothing would
+ * alarm. No rewrite exists to see, and no email fallback to send by, so both
+ * controls are drawn and not live.
+ */
+export async function RejectedCard({ groups }: { readonly groups: readonly TemplateGroup[] }) {
+  const t = await getTranslations('templates');
+  const rejected = groups.find((group) => templateStance(group.primary) === 'rejected');
+  if (!rejected) return null;
+  return (
+    <section className={styles.tplRejected} data-testid="template-rejected">
+      <p className={styles.tplRejectedTitle}>{t('rejected.title', { name: rejected.name })}</p>
+      <p className={styles.tplRejectedBody} data-testid={`reason-${rejected.primary.id}`}>
+        {rejected.primary.rejectionReason
+          ? t('rejectedBecause', { reason: rejected.primary.rejectionReason })
+          : t('rejected.noReason')}
+      </p>
+      <div className={styles.tplActions}>
+        <span className={styles.tplPrimary} aria-disabled="true">
+          {t('rejected.seeRewrite')}
+        </span>
+        <span className={styles.tplRejectedSecondary} aria-disabled="true">
+          {t('rejected.byEmail')}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+/** 02's "Worth knowing": what the reply rates say. Nothing counts them yet. */
+export async function WorthKnowing() {
+  const t = await getTranslations('templates');
+  return (
+    <section className={styles.tplWorth} data-testid="template-worth">
+      <p className={styles.tplWorthTitle}>{t('worth.title')}</p>
+      <p className={styles.tplWorthBody}>{t('worth.none')}</p>
+    </section>
   );
 }

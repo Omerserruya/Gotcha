@@ -374,104 +374,397 @@
     cursor: default;
   }
 
-  /* ── 05c · templates ─────────────────────────────────────────────────── */
-  .templates {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 05c, measured — the table card and a 440 column
+   * ════════════════════════════════════════════════════════════════════════
+   * `padding:22px 40px 30px`, `gap:14px`; each card the panel's height,
+   * scrolling inside itself.
+   */
+  .tplScreen {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    gap: var(--space-14);
+    padding: 22px var(--space-40) 30px;
+    line-height: normal;
+  }
+
+  /* White, radius 14, `#E6E2DA`; head, rows, and the window note at its foot. */
+  .tplTable {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  /* Columns: 256 · 120 · 120 · 150, as 02's head row sets them. */
+  .tplHead,
+  .tplRow {
+    display: grid;
+    grid-template-columns: minmax(0, 256px) 120px 120px 150px;
+    align-items: center;
+  }
+
+  .tplHead {
+    flex: none;
+    padding: 11px 18px;
+    background-color: var(--table-head-surface);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .tplRows {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .tplList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tplRow {
+    padding: var(--space-14) 18px;
+    border-block-end: 1px solid var(--row-divider);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .tplList > li:last-child .tplRow {
+    border-block-end: 0;
+  }
+
+  /* The open row: `#FCFBF8` and 02's 3px dark edge. */
+  .tplRow[aria-current='true'] {
+    padding-inline-start: 15px;
+    background-color: var(--panel-quiet);
+    border-inline-start: 3px solid var(--action-base);
+  }
+
+  .tplRow:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  .tplText {
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-inline-end: var(--space-12);
+  }
+
+  .tplName {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .tplRow[aria-current='true'] .tplName {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .tplLine {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .tplFigure {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  /* A template another channel sends needs no review, and reads as quieter. */
+  .tplRow[data-stance='exempt'] .tplName,
+  .tplRow[data-stance='exempt'] .tplFigure {
+    color: var(--text-subtle);
+    font-weight: var(--font-weight-regular);
+  }
+
+  .tplState {
+    min-inline-size: 0;
+  }
+
+  /* `padding:3px 9px`, radius 6, 11px; green, amber, terracotta, stone. */
+  .tplChip {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 6px;
+    background-color: var(--intent-neutral-surface);
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .tplChip[data-stance='ready'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .tplChip[data-stance='reviewing'],
+  .tplChip[data-stance='unsent'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .tplChip[data-stance='rejected'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .tplNone {
+    margin: 0;
+    padding: var(--space-16) 18px;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  /* The foot: `#F5F2EC`, `padding:12px 18px`, 11.5px. */
+  .tplFoot {
+    flex: none;
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* The 440 column: the preview, a rejection, "Worth knowing", 14 apart. */
+  .tplColumn {
+    flex: none;
+    inline-size: 440px;
+    min-block-size: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-14);
   }
 
-  /*
-   * Why templates exist at all. A fact about WhatsApp, not a claim about our
-   * data — nothing in our database can make it false, which is what separates
-   * it from a promise needing a mechanism behind it.
-   */
-  .windowNote {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
-    color: var(--text-body);
-    background-color: var(--panel-inset);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
-  }
-
-  .templateRows {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
+  .tplCard {
+    flex: none;
     overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
   }
 
-  .templateRow {
+  .tplCardHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-12);
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .tplCardName {
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .tplLangs {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* The stage: `#F5F2EC`, `padding:18px`; a 300px bubble, radius 12 12 12 4. */
+  .tplStage {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    padding-block: var(--space-14);
-    padding-inline: var(--space-16);
+    gap: 6px;
+    min-block-size: 60px;
+    padding: 18px;
+    background-color: var(--panel-footer);
   }
 
-  .templateRow + .templateRow {
-    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  .tplBubble {
+    max-inline-size: 300px;
+    padding: var(--space-12) var(--space-14);
+    border-radius: 12px 12px 12px 4px;
+    background-color: var(--panel-field);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
   }
 
-  .templateHead {
+  .tplBubbleHead {
+    display: block;
+    margin-block-end: var(--space-4);
+  }
+
+  .tplBubbleBody {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  .tplBubbleFoot {
+    margin: 6px 0 0;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* A variable, highlighted where the customer's own value will go. */
+  .tplVar {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background-color: var(--ai-avatar-surface);
+    color: inherit;
+  }
+
+  .tplButtons {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
+    gap: 6px;
+    max-inline-size: 300px;
+  }
+
+  .tplButton {
+    flex: 1;
+    padding: 7px var(--space-8);
+    border-radius: var(--space-8);
+    background-color: var(--panel-field);
+    font-size: 12px;
+    text-align: center;
+    color: var(--text-primary);
+  }
+
+  /* Facts: `padding:14px 18px`, `gap:9px`; label 120 in stone, value in ink. */
+  .tplFacts {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin: 0;
+    padding: var(--space-14) 18px;
+    font-size: 12px;
+  }
+
+  .tplFacts > div {
+    display: flex;
+    gap: var(--space-12);
+  }
+
+  .tplFacts dt {
+    flex: none;
+    inline-size: 120px;
+    color: var(--text-subtle);
+  }
+
+  .tplFacts dd {
+    margin: 0;
+    min-inline-size: 0;
+    color: var(--text-primary);
+  }
+
+  .tplFacts dd[data-ok] {
+    color: var(--signal-done-text);
+  }
+
+  .tplActions {
+    display: flex;
     gap: var(--space-8);
+    padding: 0 18px var(--space-16);
   }
 
-  .templateName {
-    font-size: var(--font-size-meta);
-    font-weight: 500;
+  /* `padding:7px 13px`, radius 8, 11.5px: dark, then outlined. */
+  .tplPrimary,
+  .tplSecondary,
+  .tplRejectedSecondary {
+    padding: 7px 13px;
+    border-radius: var(--space-8);
+    font-size: 11.5px;
   }
 
-  .templateLangs {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
+  .tplPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
   }
 
-  .templateBody {
+  .tplSecondary {
+    border: 1px solid var(--border-default);
+    color: var(--intent-neutral-text);
+  }
+
+  .tplActions > [aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* 02's rejection: the alert card, radius 14, `padding:16px 18px`. */
+  .tplRejected {
+    flex: none;
+    padding: var(--space-16) 18px;
+    background-color: var(--alert-surface);
+    border: 1px solid var(--alert-edge);
+    border-radius: var(--radius-card);
+  }
+
+  .tplRejected .tplActions {
+    padding: var(--space-12) 0 0;
+  }
+
+  .tplRejectedTitle {
     margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
-    color: var(--text-subtle);
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--alert-title);
   }
 
-  .templateState,
-  .templateMeta {
+  .tplRejectedBody {
+    margin: var(--space-6) 0 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--alert-text);
+  }
+
+  .tplRejectedSecondary {
+    border: 1px solid var(--alert-control-edge);
+    color: var(--alert-text);
+  }
+
+  /* "Worth knowing": the column's last card, taking what height is left. */
+  .tplWorth {
+    flex: 1 0 auto;
+    padding: var(--space-16) 18px;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .tplWorthTitle {
     margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
-  /* Rejected is the state this screen exists for, so it reads as itself. */
-  .templateRow[data-stance='rejected'] .templateState {
-    color: var(--intent-blocked-text);
-    font-weight: 500;
+  .tplWorthBody {
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--intent-neutral-text);
   }
 
-  .templateRow[data-stance='ready'] .templateState {
-    color: var(--intent-calm-text);
-  }
+  @media (width < 64rem) {
+    .tplScreen {
+      flex-direction: column;
+      overflow-y: auto;
+    }
 
-  /*
-   * The provider's own words. No ETA beside it and no rewrite beneath it —
-   * neither exists, and both were drawn.
-   */
-  .templateReason {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
-    color: var(--intent-blocked-text);
+    .tplColumn {
+      inline-size: auto;
+    }
   }
 
   /* ── Nothing sent yet ────────────────────────────────────────────────── */

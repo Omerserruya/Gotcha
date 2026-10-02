@@ -53,6 +53,33 @@ export const templateSchema = z.object({
   status: z.enum(TEMPLATE_STATUSES).catch('DRAFT'),
   /** The provider's own words. Real, and the centre of this screen. */
   rejectionReason: z.string().nullable().default(null),
+  /*
+   * ★ ON THE WIRE ALL ALONG. The list route answers whole rows, and `z.object`
+   * stripped these — the three things 05c's preview is made of: the header,
+   * the buttons ("See it", "Not now") and the variables with their samples
+   * and descriptions ("Filled in from").
+   */
+  headerType: z.string().nullish().default(null),
+  headerContent: z.string().nullish().default(null),
+  buttons: z
+    .array(
+      z.object({
+        type: z.string().default('QUICK_REPLY'),
+        text: z.string().default(''),
+      }),
+    )
+    .catch([])
+    .default([]),
+  variables: z
+    .array(
+      z.object({
+        key: z.string(),
+        sample: z.string().nullish().default(null),
+        description: z.string().nullish().default(null),
+      }),
+    )
+    .catch([])
+    .default([]),
   /** Increments on edit, so `1` means never changed since it was written. */
   version: z.number().default(1),
   isActive: z.boolean().default(true),
@@ -139,4 +166,44 @@ export function groupByName(templates: readonly Template[]): readonly TemplateGr
     languages: [...new Set(all.map((t) => t.language).filter(Boolean))],
     all,
   }));
+}
+
+/**
+ * A variable as the preview shows it: its sample when one was given — so the
+ * preview reads as a real message — else its description, else its number.
+ */
+export function variableLabel(
+  variable:
+    | { readonly key: string; readonly sample: string | null; readonly description: string | null }
+    | undefined,
+  key: string,
+): string {
+  return variable?.sample?.trim() || variable?.description?.trim() || key;
+}
+
+/**
+ * The body split at its `{{n}}` placeholders, so each can be highlighted.
+ * Meta substitutes positional placeholders only; anything else is text.
+ */
+export type BodyPart =
+  { readonly text: string } | { readonly variable: string; readonly key: string };
+
+export function bodyParts(template: Pick<Template, 'body' | 'variables'>): readonly BodyPart[] {
+  const parts: BodyPart[] = [];
+  const pattern = /\{\{\s*(\d+)\s*\}\}/g;
+  let last = 0;
+  for (const match of template.body.matchAll(pattern)) {
+    if (match.index > last) parts.push({ text: template.body.slice(last, match.index) });
+    const key = match[1]!;
+    parts.push({
+      key,
+      variable: variableLabel(
+        template.variables.find((v) => v.key === key),
+        key,
+      ),
+    });
+    last = match.index + match[0].length;
+  }
+  if (last < template.body.length) parts.push({ text: template.body.slice(last) });
+  return parts;
 }

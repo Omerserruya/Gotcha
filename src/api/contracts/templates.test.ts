@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  bodyParts,
   groupByName,
   isUnchanged,
   needsApproval,
   templateSchema,
   templateStance,
   type Template,
+  variableLabel,
 } from './templates';
 
 /**
@@ -26,6 +28,10 @@ const template = (over: Partial<Template> = {}): Template => ({
   footer: null,
   status: 'APPROVED',
   rejectionReason: null,
+  headerType: null,
+  headerContent: null,
+  buttons: [],
+  variables: [],
   version: 1,
   isActive: true,
   updatedAt: null,
@@ -129,5 +135,59 @@ describe('a template carries nothing that could become a false claim', () => {
   it('makes "never changed since" real rather than fictional', () => {
     expect(isUnchanged(template({ version: 1 }))).toBe(true);
     expect(isUnchanged(template({ version: 3 }))).toBe(false);
+  });
+});
+
+describe('★★ 05c’s preview is made of fields the list always sent', () => {
+  it('★ buttons and variables survive the parse — `z.object` stripped them before', () => {
+    const parsed = templateSchema.parse({
+      id: 't9',
+      name: 'Back in stock',
+      body: 'Hi {{1}} — the {{2}} is back.',
+      buttons: [{ type: 'QUICK_REPLY', text: 'See it' }, { text: 'Not now' }],
+      variables: [
+        { key: '1', sample: 'Dana', description: 'The customer' },
+        { key: '2', description: 'The product' },
+      ],
+    });
+    expect(parsed.buttons.map((b) => b.text)).toEqual(['See it', 'Not now']);
+    expect(parsed.variables[1]).toEqual({ key: '2', sample: null, description: 'The product' });
+  });
+
+  it('⚠ a malformed buttons or variables column does not reject the template', () => {
+    const parsed = templateSchema.parse({ id: 't9', name: 'x', buttons: 'oops', variables: {} });
+    expect(parsed.buttons).toEqual([]);
+    expect(parsed.variables).toEqual([]);
+  });
+});
+
+describe('★ bodyParts — each {{n}} its own part, labelled by sample, then description, then number', () => {
+  it('splits and labels', () => {
+    const parts = bodyParts({
+      body: 'Hi {{1}} — the {{ 2 }} is back. {{3}}',
+      variables: [
+        { key: '1', sample: 'Dana', description: 'The customer' },
+        { key: '2', sample: null, description: 'The product' },
+      ],
+    });
+    expect(parts).toEqual([
+      { text: 'Hi ' },
+      { key: '1', variable: 'Dana' },
+      { text: ' — the ' },
+      { key: '2', variable: 'The product' },
+      { text: ' is back. ' },
+      { key: '3', variable: '3' },
+    ]);
+  });
+
+  it('a body with no placeholders is one part, untouched', () => {
+    expect(bodyParts({ body: 'Thanks {name}', variables: [] })).toEqual([
+      { text: 'Thanks {name}' },
+    ]);
+  });
+
+  it('variableLabel ignores blanks', () => {
+    expect(variableLabel({ key: '1', sample: '  ', description: 'Who' }, '1')).toBe('Who');
+    expect(variableLabel(undefined, '4')).toBe('4');
   });
 });

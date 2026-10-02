@@ -515,6 +515,16 @@
     --ai-avatar-text: #4b3e8e;
     /* 02's AI link ("Summarise all of it"): the violet text over this underline. */
     --ai-link-underline: #cfc6f0;
+    /*
+     * 02's warning card — "Autumn early access was rejected", "An open
+     * promise": a pale terracotta field, its edge, a dark title, a warm body,
+     * and the outline of a control on it.
+     */
+    --alert-surface: #f9eeea;
+    --alert-edge: #efd5cb;
+    --alert-title: #7c2f14;
+    --alert-text: #8b5237;
+    --alert-control-edge: #e3c3b6;
     /* The faint tint behind an AI employee's row. */
     --row-ai-surface: #fcfbf8;
 
