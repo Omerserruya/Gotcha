@@ -113,7 +113,38 @@
     "actionUnavailable": "לא ניתן היה לבצע את זה כרגע: {reason}. שום דבר לא שונה.",
     "noReason": "לא ניתנה סיבה",
     "outcomeUnknown": "אנחנו לא יודעים אם זה עבר. אנא אל תנסו שוב — בדקו קודם את ההזמנה בחנות שלכם, וצרו איתנו קשר אם משהו נראה לא תקין.",
-    "noConversationToActThrough": "אי אפשר לפעול על ההזמנות האלה מכאן — אין שיחה עם האדם הזה שתישא את הפעולה."
+    "noConversationToActThrough": "אי אפשר לפעול על ההזמנות האלה מכאן — אין שיחה עם האדם הזה שתישא את הפעולה.",
+    "count": "{count, plural, one {הזמנה אחת} other {# הזמנות}}",
+    "openCount": "{count} פתוחות",
+    "synced": "מ-Shopify · סונכרן {when}",
+    "filterEmpty": "אין כאן הזמנות.",
+    "moreShort": "+{count} נוספים",
+    "qty": "כמות {count}",
+    "filter": {
+      "all": "הכול",
+      "open": "פתוחות",
+      "returns": "החזרות"
+    },
+    "fact": {
+      "tracking": "מעקב",
+      "shipTo": "משלוח אל",
+      "carrierCase": "פנייה למוביל",
+      "money": "כסף"
+    },
+    "openInShopify": "פתיחה ב-Shopify",
+    "side": {
+      "heading": "לאורך ההזמנות",
+      "average": "הזמנה ממוצעת",
+      "onTime": "הגיעו בזמן",
+      "open": "פתוחות עכשיו",
+      "buys": "מה הם קונים",
+      "buysNone": "עדיין כלום.",
+      "onFile": "בתיק",
+      "address": "כתובת",
+      "payment": "תשלום",
+      "returns": "החזרות",
+      "returnsValue": "{count, plural, =0 {אין} other {# הוחזרו או בוטלו}}"
+    }
   },
   "actions": {
     "title": "מה נעשה כאן",

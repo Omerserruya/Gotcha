@@ -12,7 +12,7 @@ vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 import { CustomerActions } from '@/features/customers/CustomerActions';
 import { CustomerNotes } from '@/features/customers/CustomerNotes';
-import { CustomerOrders } from '@/features/customers/CustomerOrders';
+import { OrderFilters, OrdersSide, OrdersTab } from '@/features/customers/OrdersTab';
 import {
   CustomerHeader,
   CustomerSide,
@@ -39,7 +39,7 @@ const mounted = (tree: ReactNode): unknown[] => {
   return found;
 };
 
-const page = async (tab?: string, channel?: string, more?: string) => {
+const page = async (tab?: string, channel?: string, more?: string, filter?: string) => {
   const { default: Page } = await import('./page');
   return Page({
     params: Promise.resolve({ id: 'k1' }),
@@ -47,6 +47,7 @@ const page = async (tab?: string, channel?: string, more?: string) => {
       ...(tab ? { tab } : {}),
       ...(channel ? { channel } : {}),
       ...(more ? { more } : {}),
+      ...(filter ? { filter } : {}),
     }),
   });
 };
@@ -108,7 +109,7 @@ describe('★★ 04b — the card, its tabs, its side', () => {
   });
 
   it.each([
-    ['orders', CustomerOrders],
+    ['orders', OrdersTab],
     ['actions', CustomerActions],
     ['notes', CustomerNotes],
   ] as const)('★ ?tab=%s shows that panel, and not the timeline', async (tab, panel) => {
@@ -132,5 +133,26 @@ describe('★ ?more= — older conversations, 50 events a step', () => {
     vi.mocked(loadCustomer).mockClear();
     await page('orders', undefined, '2');
     expect(vi.mocked(loadCustomer)).toHaveBeenCalledWith('k1', {});
+  });
+});
+
+describe('★★ 04d — its filters in the tab row, its own side', () => {
+  it('All/Open/Returns on the right of the tabs; "Across their orders" in the side', async () => {
+    const tree = await page('orders', undefined, undefined, 'returns');
+    const types = mounted(tree);
+    expect(types).toContain(OrdersSide);
+    expect(types).not.toContain(CustomerSide);
+    const filters = propsOf<{ filters: ReactElement<{ current: string }> }>(
+      tree,
+      CustomerTabRow,
+    )?.filters;
+    expect(isValidElement(filters) && filters.type).toBe(OrderFilters);
+    expect(filters?.props.current).toBe('returns');
+    expect(propsOf<{ filter: string }>(tree, OrdersTab)?.filter).toBe('returns');
+  });
+
+  it('⚠ an unknown ?filter= is All', async () => {
+    const tree = await page('orders', undefined, undefined, 'everything-please');
+    expect(propsOf<{ filter: string }>(tree, OrdersTab)?.filter).toBe('all');
   });
 });

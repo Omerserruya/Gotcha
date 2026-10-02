@@ -1556,4 +1556,413 @@
     outline: var(--border-width-thick) solid var(--border-focus);
     outline-offset: 2px;
   }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04d, measured — their orders (the tab; scoped, so the inbox's panel
+   * keeps `CustomerOrders`'s own styles)
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  /* The main column's stack: the lead, then cards 10 apart (02's `gap:10px`). */
+  .ordersTab {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .ordersTab .ordersSynced {
+    margin-inline-start: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* Cards 10 apart: the open one, then one line each. */
+  .ordersTab .orderList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  /* The open card: white, radius 12, `padding:16px 18px`, `gap:14px`. */
+  .ordersTab .orderCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: var(--space-16) 18px;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+  }
+
+  /* The troubled order is the one somebody came here about: 02's 3px edge. */
+  .ordersTab .orderCard[data-troubled='yes'] {
+    padding-inline-start: 16px;
+    border-inline-start: 3px solid var(--intent-urgent-edge);
+  }
+
+  .ordersTab .orderHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .ordersTab .orderNumber {
+    font-size: 15px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .ordersTab .orderDate {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderTotal {
+    margin-inline-start: auto;
+    font-size: 15px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  /*
+    The tone is the PLATFORM's judgement, not ours — re-deciding it here
+    would make this screen disagree with the Inbox about the same order.
+    02: `padding:3px 8px`, radius 6, 10.5px.
+  */
+  .ordersTab .chip {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 10.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .ordersTab .chip[data-tone='positive'] {
+    background-color: var(--signal-done-surface-soft);
+    color: var(--signal-done-text);
+  }
+
+  .ordersTab .chip[data-tone='warning'],
+  .ordersTab .chip[data-tone='danger'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .ordersTab .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .ordersTab .orderDetail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .ordersTab .orderItems {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .ordersTab .orderItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  /* 40px, radius 9 — the square stays where Shopify gave no image. */
+  .ordersTab .orderThumb {
+    flex: none;
+    inline-size: 40px;
+    block-size: 40px;
+    overflow: hidden;
+    border-radius: 9px;
+    background-color: var(--panel-inset);
+  }
+
+  .ordersTab .orderThumb img {
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  .ordersTab .orderItemText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ordersTab .orderItemTitle {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .ordersTab .orderItemQty {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderItemPrice {
+    flex: none;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  /* The tracker: 145px steps, a 10px dot and a 2px line to the next. */
+  .ordersTab .tracker {
+    margin: 0;
+    padding: var(--space-4) 0 0;
+    list-style: none;
+    display: flex;
+    gap: 6px;
+  }
+
+  .ordersTab .trackerStep {
+    flex: 1;
+    min-inline-size: 0;
+    max-inline-size: 145px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ordersTab .trackerRail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ordersTab .trackerDot {
+    flex: none;
+    inline-size: 10px;
+    block-size: 10px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    border: 2px solid var(--border-emphasis);
+    background-color: var(--panel-field);
+  }
+
+  .ordersTab .trackerStep[data-state='reached'] .trackerDot {
+    border-color: var(--signal-done-text);
+    background-color: var(--signal-done-text);
+  }
+
+  .ordersTab .trackerStep[data-state='failed'] .trackerDot {
+    border-color: var(--intent-urgent-edge);
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .ordersTab .trackerLine {
+    flex: 1;
+    block-size: 2px;
+    background-color: var(--border-subtle);
+  }
+
+  .ordersTab .trackerLine[data-on] {
+    background-color: var(--signal-done-text);
+  }
+
+  .ordersTab .trackerStep:last-child .trackerLine {
+    visibility: hidden;
+  }
+
+  .ordersTab .trackerLabel {
+    font-size: 11.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
+  }
+
+  .ordersTab .trackerStep[data-state='failed'] .trackerLabel {
+    color: var(--intent-urgent-text);
+  }
+
+  .ordersTab .trackerDate {
+    font-size: 10.5px;
+    color: var(--text-subtle);
+  }
+
+  /* `#F7F5F0`, radius 10, `padding:12px 14px`; label 90, value, twice. */
+  .ordersTab .orderFacts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px var(--space-14);
+    margin: 0;
+    padding: var(--space-12) var(--space-14);
+    border-radius: 10px;
+    background-color: var(--panel-footer);
+    font-size: var(--font-size-label);
+  }
+
+  .ordersTab .orderFacts > div {
+    display: flex;
+    gap: var(--space-14);
+    min-inline-size: 0;
+  }
+
+  .ordersTab .orderFacts dt {
+    flex: none;
+    inline-size: 90px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderFacts dd {
+    margin: 0;
+    min-inline-size: 0;
+    color: var(--text-secondary);
+  }
+
+  .ordersTab .orderFacts dd[data-attention] {
+    color: var(--intent-blocked-text);
+  }
+
+  .ordersTab .orderFoot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .ordersTab .orderFoot > .spineOpen {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+  }
+
+  .ordersTab .orderFoot > [aria-disabled='true'] {
+    opacity: 0.5;
+  }
+
+  /* 02's other orders: one line each, `padding:12px 16px`, `gap:14px`. */
+  .ordersTab .orderRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding: var(--space-12) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+  }
+
+  .ordersTab .orderRowNumber {
+    flex: none;
+    inline-size: 52px;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .ordersTab .orderRowDate {
+    flex: none;
+    inline-size: 64px;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderRowItems {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+
+  .ordersTab .orderRowNote {
+    flex: none;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderRowTotal {
+    flex: none;
+    min-inline-size: 56px;
+    text-align: end;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .ordersTab .orderMore,
+  .ordersTab .orderMoney,
+  .ordersTab .orderCan {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .orderActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    align-items: center;
+  }
+
+  /* 02: outlined at `padding:7px 12px`, radius 8, 11.5px; the first one dark. */
+  .ordersTab .orderAction {
+    padding: 7px var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: transparent;
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+    cursor: pointer;
+  }
+
+  .ordersTab .orderActions > .orderAction:first-child {
+    padding-inline: 13px;
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .ordersTab .orderAction:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .ordersTab .orderAction:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* 04d's "On file": label 70, value, 8 apart. */
+  .ordersTab .onFile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: 12.5px;
+  }
+
+  .ordersTab .onFile > div {
+    display: flex;
+    gap: var(--space-10);
+  }
+
+  .ordersTab .onFile dt {
+    flex: none;
+    inline-size: 70px;
+    color: var(--text-subtle);
+  }
+
+  .ordersTab .onFile dd {
+    margin: 0;
+    min-inline-size: 0;
+    color: var(--text-primary);
+  }
 }

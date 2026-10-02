@@ -1,6 +1,11 @@
 import { CustomerActions } from '@/features/customers/CustomerActions';
 import { CustomerNotes } from '@/features/customers/CustomerNotes';
-import { CustomerOrders } from '@/features/customers/CustomerOrders';
+import {
+  OrderFilters,
+  OrdersSide,
+  OrdersTab,
+  parseOrderFilter,
+} from '@/features/customers/OrdersTab';
 import {
   CustomerHeader,
   CustomerSide,
@@ -50,7 +55,7 @@ export default async function Page({
 }: {
   params: Promise<{ id: string }>;
   /** `?tab=` — 04b's tabs: everything, conversations, orders, actions, notes. */
-  searchParams?: Promise<{ tab?: string; channel?: string; more?: string }>;
+  searchParams?: Promise<{ tab?: string; channel?: string; more?: string; filter?: string }>;
 }) {
   const { id } = await params;
   const query = (await searchParams) ?? {};
@@ -93,6 +98,7 @@ export default async function Page({
     so the structural test can see them.
   */
   const channels = channelsOf(detail);
+  const orderFilter = parseOrderFilter(query.filter);
   const channel = query.channel && channels.includes(query.channel) ? query.channel : null;
   return (
     <PageContainer layout="screen" flush>
@@ -104,6 +110,8 @@ export default async function Page({
           filters={
             tab === 'conversations' ? (
               <ChannelFilters contactId={id} channels={channels} current={channel} />
+            ) : tab === 'orders' ? (
+              <OrderFilters contactId={id} current={orderFilter} />
             ) : null
           }
         />
@@ -113,7 +121,11 @@ export default async function Page({
               <ConversationsTab detail={detail} contactId={id} channel={channel} more={more} />
             ) : null}
             {tab === 'orders' ? (
-              <CustomerOrders orders={detail.orders} conversationId={detail.conversationId} />
+              <OrdersTab
+                orders={detail.orders}
+                conversationId={detail.conversationId}
+                filter={orderFilter}
+              />
             ) : null}
             {tab === 'actions' ? <CustomerActions actions={detail.actions} /> : null}
             {tab === 'notes' ? (
@@ -132,6 +144,8 @@ export default async function Page({
           <aside className={styles.subSide}>
             {tab === 'conversations' ? (
               <ConversationsSide detail={detail} />
+            ) : tab === 'orders' ? (
+              <OrdersSide orders={detail.orders} />
             ) : (
               <CustomerSide detail={detail} />
             )}
