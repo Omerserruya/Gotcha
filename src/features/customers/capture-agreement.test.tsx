@@ -125,9 +125,13 @@ describe('★ and so does 04e — the fixture the audit shots are taken of', () 
   const showActions = async () =>
     render(await CustomerActions({ actions: FIXTURE_DETAIL.actions }));
 
-  it('renders the four rows the spec counts', async () => {
+  it('renders the four rows the spec counts — the reply as its day', async () => {
+    // `fx-audit-1` is a reply: the conversation, collapsed to one row a day
+    // ("GOTCHA replied once") rather than an action on the account.
     await showActions();
-    expect(screen.getAllByTestId(/^action-fx-audit-/)).toHaveLength(4);
+    expect(screen.getAllByTestId(/^action-fx-audit-/)).toHaveLength(3);
+    expect(screen.getAllByTestId(/^action-day-replied-/)).toHaveLength(1);
+    expect(screen.queryByTestId('action-fx-audit-1')).toBeNull();
   });
 
   it('★★ shows the executed commerce row with its outcome UNRECORDED', async () => {

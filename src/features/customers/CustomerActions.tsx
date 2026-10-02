@@ -2,7 +2,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { Cog, User, Workflow } from 'lucide-react';
 
-import type { Approval } from '@/api/contracts/approvals';
+import { humanizeTag, type Approval } from '@/api/contracts/approvals';
 import {
   coverageGaps,
   outcomeOf,
@@ -99,6 +99,53 @@ const PREFIX_KEYS: readonly (readonly [string, string])[] = [
   ['ai.budget.aborted.', 'aiBudgetAborted'],
 ];
 
+/**
+ * ★★ THE CONVERSATION IS NOT AN ACTION ON THE ACCOUNT.
+ *
+ * A reply, a bot turn, a message sent: these are the conversation itself,
+ * which has its own tab. Drawn one per row they drowned 04e — "GOTCHA
+ * replied · Outcome not recorded", dozens deep — and inflated "by GOTCHA" to
+ * 54. So they collapse to one row per day ("GOTCHA replied 12 times") with no
+ * outcome chip, and stay out of the counts. Collapsed, not dropped: the record
+ * keeps its length.
+ */
+const CONVERSATION_ACTIONS: ReadonlySet<string> = new Set([
+  'ai.responded',
+  'ai.bot_turn',
+  'message.sent',
+]);
+
+export function isConversationActivity(event: AuditEvent): boolean {
+  return CONVERSATION_ACTIONS.has(event.action);
+}
+
+/**
+ * Does this row have an outcome to report? A tool GOTCHA used, an adapter
+ * call, a change to the customer's record in the store — yes. A pause, a
+ * refusal, a budget stop is itself the outcome; a chip there says nothing.
+ */
+export function expectsOutcome(event: AuditEvent): boolean {
+  return (
+    toolOf(event) !== null ||
+    event.action.startsWith('ai.tool_call.') ||
+    event.action.startsWith('commerce.customer_action_')
+  );
+}
+
+/**
+ * The approval's `reason` is the bot's stated reasoning — or, from the
+ * policy engine, a log line: "policy requires approval (catalog=always)".
+ * A `key=value` in it is the log, and the line is left empty rather than
+ * shown.
+ */
+export function humanReason(reason: string): string | null {
+  const text = reason.trim();
+  return text && !/\w=\S/.test(text) ? text : null;
+}
+
+/** The budget scopes `cost-budget.service.ts` writes, in words. */
+const BUDGET_SCOPES: ReadonlySet<string> = new Set(['turn', 'conversation', 'tenant_day']);
+
 export const ACTION_FILTERS = ['all', 'gotcha', 'team', 'money'] as const;
 export type ActionFilter = (typeof ACTION_FILTERS)[number];
 
@@ -145,7 +192,7 @@ interface Row {
     readonly tone: string;
     readonly outcome?: ActionOutcome;
     readonly testid?: string;
-  };
+  } | null;
   readonly line: string | null;
   readonly lineTestid?: string;
   readonly whoTestid?: string;
@@ -219,8 +266,16 @@ export async function CustomerActions({
     if (tool) return t('actions.name.adapterCall', { tool });
     for (const [prefix, k] of PREFIX_KEYS) {
       if (event.action.startsWith(prefix)) {
+        const detail = event.action.slice(prefix.length);
+        if (k === 'aiBudgetAborted') {
+          // `tenant_day` is a key, not a sentence: each scope has its own words.
+          return BUDGET_SCOPES.has(detail)
+            ? t(`actions.budget.${detail}` as 'actions.budget.tenant_day')
+            : t('actions.budget.other');
+        }
+        // The tool's own name, made legible: "shopify.lookup_order" → "Lookup order".
         return t(`actions.name.${k}` as 'actions.name.aiToolCall', {
-          detail: event.action.slice(prefix.length),
+          detail: humanizeTag(detail.split('.').pop() ?? detail),
         });
       }
     }
@@ -229,35 +284,94 @@ export async function CustomerActions({
     return event.action;
   };
 
+  /*
+    The conversation, one row per day and kind: what GOTCHA said, what the
+    team sent. A day's replies count `ai.responded`; a day with turns and no
+    recorded reply counts the turns, so nothing is silently zero.
+  */
+  const dayOf = (iso: string) =>
+    format.dateTime(new Date(iso), { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const days = new Map<
+    string,
+    {
+      at: string;
+      who: Who;
+      kind: 'replied' | 'sent';
+      responded: number;
+      turns: number;
+      sent: number;
+    }
+  >();
+  for (const event of audit.data.filter(isConversationActivity)) {
+    const who: Who = event.actorType ?? 'unknown';
+    const kind = event.action === 'message.sent' && who === 'user' ? 'sent' : 'replied';
+    const key = `${dayOf(event.createdAt)}|${kind}`;
+    const day = days.get(key) ?? {
+      at: event.createdAt,
+      who: kind === 'sent' ? 'user' : 'ai',
+      kind,
+      responded: 0,
+      turns: 0,
+      sent: 0,
+    };
+    if (event.createdAt > day.at) day.at = event.createdAt;
+    if (event.action === 'ai.responded') day.responded += 1;
+    else if (event.action === 'ai.bot_turn') day.turns += 1;
+    else day.sent += 1;
+    days.set(key, day);
+  }
+
   const rows: Row[] = [
-    ...audit.data.map((event): Row => {
-      const outcome: ActionOutcome = outcomeOf(event);
-      const hint = unrecordedHint(event);
+    ...[...days.entries()].map(([key, day]): Row => {
+      const count = day.kind === 'sent' ? day.sent : day.responded || day.turns + day.sent;
       return {
-        key: `e-${event.id}`,
-        at: event.createdAt,
-        who: event.actorType ?? 'unknown',
-        title: label(event),
-        /*
+        key: `d-${key}`,
+        at: day.at,
+        who: day.who,
+        title:
+          day.kind === 'sent'
+            ? t('actions.daySent', { count })
+            : t('actions.dayReplied', { count }),
+        chip: null,
+        line: null,
+        testid: `action-day-${day.kind}-${key.split('|')[0]!.replace(/\D/g, '')}`,
+        pending: false,
+        money: false,
+      };
+    }),
+    ...audit.data
+      .filter((event) => !isConversationActivity(event))
+      .map((event): Row => {
+        const outcome: ActionOutcome = outcomeOf(event);
+        const hint = unrecordedHint(event);
+        return {
+          key: `e-${event.id}`,
+          at: event.createdAt,
+          who: event.actorType ?? 'unknown',
+          title: label(event),
+          /*
           ★ FOUR OUTCOMES AND THE UNRECORDED ONE IS NOT STYLED AS A
           FAILURE. It is the most common state on this screen — no
           customer-keyed row records a verdict at all — so dressing it as
           bad would paint the whole log red.
         */
-        chip: {
-          label: t(`actions.outcome.${outcome}` as 'actions.outcome.worked'),
-          tone: OUTCOME_TONE[outcome],
-          outcome,
-          testid: `action-outcome-${event.id}`,
-        },
-        line: hint ? t(`actions.hint.${hint}` as 'actions.hint.named_ok') : null,
-        lineTestid: `action-hint-${event.id}`,
-        whoTestid: `action-who-${event.id}`,
-        testid: `action-${event.id}`,
-        pending: false,
-        money: MONEY.test(event.action),
-      };
-    }),
+          chip:
+            expectsOutcome(event) || outcome !== 'not_recorded'
+              ? {
+                  label: t(`actions.outcome.${outcome}` as 'actions.outcome.worked'),
+                  tone: OUTCOME_TONE[outcome],
+                  outcome,
+                  testid: `action-outcome-${event.id}`,
+                }
+              : null,
+          line: hint ? t(`actions.hint.${hint}` as 'actions.hint.named_ok') : null,
+          lineTestid: `action-hint-${event.id}`,
+          whoTestid: `action-who-${event.id}`,
+          testid: `action-${event.id}`,
+          pending: false,
+          money: MONEY.test(event.action),
+        };
+      }),
     ...(approvals ?? []).map((approval): Row => ({
       key: `p-${approval.id}`,
       at: approval.createdAt,
@@ -271,7 +385,7 @@ export async function CustomerActions({
         tone: APPROVAL_TONE[approval.status],
       },
       // The bot's stated reasoning — shown as reasoning, never as fact.
-      line: approval.reason.trim() || null,
+      line: humanReason(approval.reason),
       testid: `action-approval-${approval.id}`,
       pending: approval.status === 'PENDING',
       money: MONEY.test(approval.tool),
@@ -353,14 +467,16 @@ export async function CustomerActions({
               <article className={styles.spineCard}>
                 <span className={styles.spineTop}>
                   <span className={styles.actionTitle}>{row.title}</span>
-                  <span
-                    className={styles.spineChip}
-                    data-tone={row.chip.tone}
-                    data-outcome={row.chip.outcome}
-                    data-testid={row.chip.testid}
-                  >
-                    {row.chip.label}
-                  </span>
+                  {row.chip ? (
+                    <span
+                      className={styles.spineChip}
+                      data-tone={row.chip.tone}
+                      data-outcome={row.chip.outcome}
+                      data-testid={row.chip.testid}
+                    >
+                      {row.chip.label}
+                    </span>
+                  ) : null}
                 </span>
                 {row.line ? (
                   <span className={styles.actionLine} data-testid={row.lineTestid}>
@@ -447,7 +563,11 @@ export async function ActionsSide({
 }) {
   const t = await getTranslations('customers');
   const format = await getFormatter();
-  const events = actions.state === 'ok' ? actions.audit.data : null;
+  // Actions on the account, not the conversation — see `CONVERSATION_ACTIONS`.
+  const events =
+    actions.state === 'ok'
+      ? actions.audit.data.filter((event) => !isConversationActivity(event))
+      : null;
   const asked = approvals ?? [];
   const count = (n: number | null) => (n === null ? '—' : format.number(n));
   const read = events !== null && approvals !== null;

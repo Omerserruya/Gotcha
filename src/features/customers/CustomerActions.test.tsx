@@ -12,7 +12,14 @@ import messages from '@/i18n/messages/en/customers.json';
 
 import { approvalSchema } from '@/api/contracts/approvals';
 
-import { ActionFilters, ActionsSide, CustomerActions, parseActionFilter } from './CustomerActions';
+import {
+  ActionFilters,
+  ActionsSide,
+  CustomerActions,
+  expectsOutcome,
+  humanReason,
+  parseActionFilter,
+} from './CustomerActions';
 import type { AuditRead } from './load-customer';
 
 /**
@@ -56,7 +63,9 @@ const event = (over: Partial<AuditEvent> = {}): AuditEvent => ({
   id: 'a1',
   actorType: 'ai',
   actorId: null,
-  action: 'ai.responded',
+  // A tool GOTCHA used: an action on the account, with an outcome to report.
+  // (A reply is the conversation, and collapses — see its own tests.)
+  action: 'ai.tool_call.lookup_order',
   targetType: 'conversation',
   targetId: 'c1',
   createdAt: '2026-09-18T09:16:00.000Z',
@@ -339,12 +348,12 @@ describe('★★ 04e — one spine: what was done, and what GOTCHA asked for', (
 
 describe('★ 04e’s filters: All, GOTCHA, Team, Money', () => {
   const events = [
-    event({ id: 'ai', actorType: 'ai', action: 'ai.responded' }),
-    event({ id: 'team', actorType: 'user', action: 'message.sent' }),
+    event({ id: 'ai', actorType: 'ai', action: 'ai.tool_call.lookup_order' }),
+    event({ id: 'team', actorType: 'user', action: 'shopify_live_chat.product_message_sent' }),
     event({ id: 'shop', actorType: 'user', action: 'commerce.customer_action_executed' }),
     // Neither GOTCHA nor a person: the system, and an actor nobody recorded.
     event({ id: 'sys', actorType: 'system', action: 'security.cross_customer_access_denied' }),
-    event({ id: 'nobody', actorType: null, action: 'ai.bot_turn' }),
+    event({ id: 'nobody', actorType: null, action: 'ai.paused_for_approval' }),
   ];
   const ids = () =>
     [...document.querySelectorAll('li[data-testid]')].map((li) => li.getAttribute('data-testid'));
@@ -420,5 +429,147 @@ describe('★★ 04e’s side — counts of what was read, "—" for what was no
     render(await ActionsSide({ actions: { state: 'failed' }, approvals: null }));
     expect(screen.getByTestId('actions-who').textContent?.match(/—/g)).toHaveLength(3);
     expect(screen.getByTestId('actions-money')).toHaveTextContent('Waiting on approval—');
+  });
+});
+
+describe('★★ the conversation is not an action on the account (measured: drowned in replies)', () => {
+  const day = (h: number) => `2026-09-18T${String(h).padStart(2, '0')}:00:00.000Z`;
+
+  it('★★ a day of replies is one row — "GOTCHA replied 3 times" — with no outcome chip', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([
+          event({ id: 'r1', action: 'ai.responded', createdAt: day(9) }),
+          event({ id: 'r2', action: 'ai.responded', createdAt: day(10) }),
+          event({ id: 'r3', action: 'ai.responded', createdAt: day(11) }),
+          event({ id: 't1', action: 'ai.bot_turn', createdAt: day(11) }),
+        ]),
+      }),
+    );
+    const rows = screen.getAllByTestId(/^action-day-replied-/);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('GOTCHA replied 3 times');
+    expect(rows[0]!.querySelector('[data-outcome]')).toBeNull();
+    expect(screen.queryByTestId('action-r1')).toBeNull();
+  });
+
+  it('two days are two rows; the team’s messages are their own', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([
+          event({ id: 'a', action: 'ai.responded', createdAt: '2026-09-17T10:00:00.000Z' }),
+          event({ id: 'b', action: 'ai.responded', createdAt: '2026-09-18T10:00:00.000Z' }),
+          event({ id: 'c', actorType: 'user', action: 'message.sent', createdAt: day(12) }),
+          event({ id: 'd', actorType: 'user', action: 'message.sent', createdAt: day(13) }),
+        ]),
+      }),
+    );
+    expect(screen.getAllByTestId(/^action-day-replied-/)).toHaveLength(2);
+    expect(screen.getByTestId(/^action-day-sent-/)).toHaveTextContent('Your team sent 2 messages');
+  });
+
+  it('⚠ a day of turns with no recorded reply still counts — never a silent zero', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([
+          event({ id: 't1', action: 'ai.bot_turn', createdAt: day(9) }),
+          event({ id: 't2', action: 'ai.bot_turn', createdAt: day(10) }),
+        ]),
+      }),
+    );
+    expect(screen.getByTestId(/^action-day-replied-/)).toHaveTextContent('GOTCHA replied 2 times');
+  });
+
+  it('★★ and replies are not counted as things GOTCHA did', async () => {
+    render(
+      await ActionsSide({
+        actions: ok([
+          event({ id: 'r1', action: 'ai.responded' }),
+          event({ id: 'r2', action: 'ai.bot_turn' }),
+          event({ id: 'x', action: 'ai.tool_call.lookup_order' }),
+        ]),
+        approvals: [],
+      }),
+    );
+    expect(screen.getByTestId('actions-who')).toHaveTextContent('by GOTCHA1');
+  });
+});
+
+describe('★★ no internal key reaches the screen', () => {
+  it('★ the budget stop says which budget, in words — not "tenant_day"', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([
+          event({ id: 'b', action: 'ai.budget.aborted.tenant_day' }),
+          event({ id: 'c', action: 'ai.budget.aborted.conversation' }),
+          event({ id: 'z', action: 'ai.budget.aborted.weekly_cap' }),
+        ]),
+      }),
+    );
+    expect(screen.getByTestId('action-b')).toHaveTextContent(
+      "GOTCHA paused: the workspace's daily AI budget ran out",
+    );
+    expect(screen.getByTestId('action-c')).toHaveTextContent("this conversation's AI budget");
+    // A scope the platform adds later: still words, never the key.
+    expect(screen.getByTestId('action-z')).toHaveTextContent('GOTCHA paused: an AI budget ran out');
+    expect(document.body.textContent).not.toMatch(/tenant_day|weekly_cap/);
+  });
+
+  it('★ a tool GOTCHA used is named legibly', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([event({ id: 't', action: 'ai.tool_call.shopify.lookup_order' })]),
+      }),
+    );
+    expect(screen.getByTestId('action-t')).toHaveTextContent('GOTCHA used Lookup order');
+    expect(screen.getByTestId('action-t')).not.toHaveTextContent('shopify.lookup_order');
+  });
+
+  it('★★ a policy log line is not a reason: "catalog=always" leaves the line empty', async () => {
+    expect(humanReason('policy requires approval (catalog=always)')).toBeNull();
+    expect(humanReason('limit=100 exceeded')).toBeNull();
+    expect(humanReason('  ')).toBeNull();
+    expect(humanReason('The box arrived damaged in her photo.')).toBe(
+      'The box arrived damaged in her photo.',
+    );
+    render(
+      await CustomerActions({
+        actions: ok([]),
+        approvals: [approval({ reason: 'policy requires approval (catalog=always)' })],
+      }),
+    );
+    expect(screen.getByTestId('action-approval-p1')).not.toHaveTextContent('catalog');
+  });
+});
+
+describe('★ the outcome chip only where an outcome is expected', () => {
+  it('a tool, an adapter call and a store action carry one', () => {
+    expect(expectsOutcome(event({ action: 'ai.tool_call.lookup_order' }))).toBe(true);
+    expect(expectsOutcome(event({ action: 'adapter.ok.shopify.get_customer_orders' }))).toBe(true);
+    expect(expectsOutcome(event({ action: 'commerce.customer_action_executed' }))).toBe(true);
+  });
+
+  it('⚠ a pause, a refusal and a budget stop ARE the outcome — no chip', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([
+          event({ id: 'p', action: 'ai.paused_for_approval' }),
+          event({ id: 's', actorType: 'system', action: 'security.cross_customer_access_denied' }),
+          event({ id: 'b', action: 'ai.budget.aborted.turn' }),
+        ]),
+      }),
+    );
+    for (const id of ['p', 's', 'b']) {
+      expect(screen.getByTestId(`action-${id}`).querySelector('[data-outcome]')).toBeNull();
+    }
+  });
+
+  it('★ but a recorded verdict is shown wherever it exists', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([event({ id: 'v', action: 'ai.paused_for_approval', succeeded: false })]),
+      }),
+    );
+    expect(screen.getByTestId('action-outcome-v')).toHaveAttribute('data-outcome', 'failed');
   });
 });

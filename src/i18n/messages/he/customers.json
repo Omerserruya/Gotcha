@@ -208,12 +208,20 @@
       "waitingValue": "{count, plural, =0 {אין} one {בקשה אחת} other {# בקשות}}",
       "may": "מה GOTCHA רשאי לעשות עבורם",
       "change": "שינוי ב-Studio · יכולות"
+    },
+    "dayReplied": "{count, plural, one {GOTCHA ענה פעם אחת} other {GOTCHA ענה # פעמים}}",
+    "daySent": "{count, plural, one {הצוות שלח הודעה} other {הצוות שלח # הודעות}}",
+    "budget": {
+      "turn": "GOTCHA עצר: התשובה הגיעה לתקציב ה-AI שלה",
+      "conversation": "GOTCHA עצר: תקציב ה-AI של השיחה נגמר",
+      "tenant_day": "GOTCHA עצר: תקציב ה-AI היומי של סביבת העבודה נגמר",
+      "other": "GOTCHA עצר: תקציב AI נגמר"
     }
   },
   "teamNotes": {
     "title": "הערות",
     "write": "הוסיפו הערה על הלקוח הזה",
-    "save": "שמירה",
+    "save": "שמירת הערה",
     "saving": "שומרים…",
     "cancel": "ביטול",
     "edit": "עריכה",
@@ -240,6 +248,25 @@
       "no_crm": "נשמר ב-GOTCHA בלבד — לא מחובר CRM.",
       "not_linked": "נשמר ב-GOTCHA בלבד — ה-CRM שלכם מחובר, אבל האדם הזה לא מותאם לרשומה בו.",
       "nothing_to_push": "נשמר ב-GOTCHA בלבד — לא היה דרך מה לשלוח את זה."
+    },
+    "teamOnly": "לצוות בלבד",
+    "mayUse": "GOTCHA רשאי להשתמש",
+    "placeholder": "כתבו הערה על הלקוח…",
+    "placeholderNamed": "כתבו הערה על {name}…",
+    "filterEmpty": "אין כאן הערות.",
+    "filter": {
+      "all": "הכול",
+      "mayUse": "GOTCHA רשאי להשתמש",
+      "teamOnly": "לצוות בלבד"
+    },
+    "side": {
+      "heading": "הערות",
+      "notes": "הערות",
+      "mayUse": "GOTCHA רשאי להשתמש",
+      "teamOnly": "לצוות בלבד",
+      "reads": "מה GOTCHA קורא מכאן",
+      "readsNone": "עדיין כלום.",
+      "readsCaption": "הערות לצוות בלבד לעולם לא מוצגות ל-AI ולעולם לא מגיעות ללקוח."
     }
   },
   "titleCount": "{count, plural, =1 {לקוח אחד} other {# לקוחות}}",
