@@ -166,3 +166,14 @@ describe('★ order is for reading, not for ranking', () => {
     expect(container.textContent ?? '').not.toMatch(/@/);
   });
 });
+
+describe('⚠ no team is one line, not four disclaimers', () => {
+  it('says so once; the notes about absent numbers are its tooltip', async () => {
+    render(await TeamLoad({ agents: [] }));
+    const card = screen.getByTestId('team-load');
+    expect(card.querySelectorAll('p')).toHaveLength(1);
+    const none = screen.getByTestId('team-none');
+    expect(none).toHaveTextContent(/Nobody on the team takes conversations yet/);
+    expect(none.getAttribute('title')).toMatch(/grows with how long/);
+  });
+});

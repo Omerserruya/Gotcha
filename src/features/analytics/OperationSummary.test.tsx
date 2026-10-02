@@ -28,34 +28,50 @@ const insight = (id: string, impact: string, over: Record<string, unknown> = {})
     ...over,
   });
 
-describe('★★ "What changed" — the strongest finding, in Home’s own words', () => {
-  it('★★ leads with the highest-impact insight', async () => {
+describe('★★ "What changed" holds only a CHANGE — and today the platform emits none', () => {
+  it('⚠⚠ a standing fact is not drawn as a change — no dark card at all', async () => {
+    // "68 conversations came through WhatsApp in the last 30 days" sat over a
+    // strip reading 0 for the week. It is a level, not a change.
+    render(
+      await WhatChanged({
+        insights: [
+          insight('top', 'high', {
+            kind: 'channel.highest_volume',
+            values: { count: 68, channel: 'WHATSAPP', days: 30 },
+          }),
+        ],
+      }),
+    );
+    expect(screen.queryByTestId('what-changed')).toBeNull();
+  });
+
+  it('★ standing facts are "Also worth a look", strongest first, each naming its own period', async () => {
     render(
       await WhatChanged({
         insights: [
           insight('low', 'low'),
-          insight('top', 'high', { values: { percent: 61, days: 7, escalated: 1, analyzed: 2 } }),
+          insight('top', 'high', { values: { percent: 61, days: 30, escalated: 1, analyzed: 2 } }),
         ],
       }),
     );
-    expect(screen.getByTestId('what-changed')).toHaveTextContent('61%');
+    const list = screen.getByTestId('also-worth');
+    expect(list.querySelector('li')).toHaveTextContent('61%');
+    expect(list.querySelector('li')).toHaveTextContent('in the last 30 days');
   });
 
-  it('★ the rest are "Also worth a look", at most three', async () => {
+  it('★ at most three', async () => {
     render(
-      await WhatChanged({
-        insights: ['a', 'b', 'c', 'd', 'e'].map((id) => insight(id, 'medium')),
-      }),
+      await WhatChanged({ insights: ['a', 'b', 'c', 'd', 'e'].map((id) => insight(id, 'medium')) }),
     );
     expect(screen.getByTestId('also-worth').querySelectorAll('li')).toHaveLength(3);
   });
 
-  it('⚠ nothing standing out is said, and a failed read is not "nothing"', async () => {
-    const { unmount } = render(await WhatChanged({ insights: [] }));
-    expect(screen.getByTestId('what-changed')).toHaveTextContent(/Nothing stands out/);
+  it('⚠ nothing to say draws nothing, and a failed read says it failed', async () => {
+    const { container, unmount } = render(await WhatChanged({ insights: [] }));
+    expect(container.textContent).toBe('');
     unmount();
     render(await WhatChanged({ insights: null }));
-    expect(screen.getByTestId('what-changed')).toHaveTextContent(/couldn't read/);
+    expect(screen.getByTestId('insights-unavailable')).toHaveTextContent(/couldn't read/);
   });
 });
 
@@ -105,5 +121,21 @@ describe('★★ the strip — and a delta only where the platform computes one'
   it('⚠ an unread week says so, rather than five zeroes', async () => {
     render(await KpiStrip({ overview: null, timeSaved: null }));
     expect(screen.getByTestId('kpi-unavailable')).toBeInTheDocument();
+  });
+});
+
+describe('⚠⚠ a share of nothing is "—", not 0%', () => {
+  it('no conversations in the week: no percentage, and no time saved', async () => {
+    const empty = analyticsOverviewSchema.parse({
+      totalConversations: 0,
+      aiHandledPct: 0,
+      resolutionRate: 0,
+    });
+    render(await KpiStrip({ overview: empty, timeSaved: { secondsSaved: 0 } as never }));
+    for (const key of ['handledByGotcha', 'resolved', 'timeSaved']) {
+      const cell = screen.getByTestId(`kpi-${key}`);
+      expect(cell, key).toHaveTextContent('—');
+      expect(cell.textContent, key).not.toMatch(/0%|0s/);
+    }
   });
 });

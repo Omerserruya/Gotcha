@@ -128,6 +128,12 @@
     color: var(--copilot-highlight);
   }
 
+  /* With no statement beside it, the list takes the row. */
+  .also[data-alone] {
+    flex: 1;
+    inline-size: auto;
+  }
+
   .also {
     flex: none;
     inline-size: 300px;

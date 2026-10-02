@@ -45,7 +45,8 @@
   "teamShort": {
     "today": "Today's numbers — they reset at midnight.",
     "noSpeed": "No reply-speed column",
-    "humansOnly": "People only, not GOTCHA"
+    "humansOnly": "People only, not GOTCHA",
+    "none": "Nobody on the team takes conversations yet."
   },
   "askedShort": {
     "grouped": "Grouped by GOTCHA"

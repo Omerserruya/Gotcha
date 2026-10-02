@@ -45,7 +45,8 @@
   "teamShort": {
     "today": "נתוני היום — הם מתאפסים בחצות.",
     "noSpeed": "אין עמודת מהירות תשובה",
-    "humansOnly": "אנשים בלבד, לא GOTCHA"
+    "humansOnly": "אנשים בלבד, לא GOTCHA",
+    "none": "עדיין אין בצוות מי שמקבל שיחות."
   },
   "askedShort": {
     "grouped": "קובץ על ידי GOTCHA"

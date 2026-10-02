@@ -49,6 +49,26 @@ export async function TeamLoad({
     );
   }
 
+  /*
+   * ⚠ NO TEAM, ONE LINE. With nobody on the team, the card was four
+   *   disclaimers and no data. The fact is the line; the three notes about
+   *   numbers that are not there are its tooltip.
+   */
+  if (agents.length === 0) {
+    return (
+      <section className={styles.panel} data-testid="team-load">
+        <h2 className={styles.panelHeading}>{t('team.heading')}</h2>
+        <p
+          className={styles.note}
+          data-testid="team-none"
+          title={[t('team.today'), t('team.noSpeed'), t('team.humansOnly')].join(' ')}
+        >
+          {t('teamShort.none')}
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className={styles.panel} data-testid="team-load">
       <h2 className={styles.panelHeading}>{t('team.heading')}</h2>
@@ -64,11 +84,7 @@ export async function TeamLoad({
         {t('teamShort.today')}
       </p>
 
-      {agents.length === 0 ? (
-        <p className={styles.note} data-testid="team-none">
-          {t('team.none')}
-        </p>
-      ) : (
+      {
         <table className={styles.table}>
           <thead>
             <tr>
@@ -95,7 +111,7 @@ export async function TeamLoad({
             ))}
           </tbody>
         </table>
-      )}
+      }
 
       {/*
         ★★ THE REPLY-TIME COLUMN WAS HERE AND HAS BEEN REMOVED.
