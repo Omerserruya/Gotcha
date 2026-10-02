@@ -53,7 +53,7 @@ export default async function Page() {
   const { agents, topics } = await loadAnalytics();
 
   return (
-    <PageContainer title={t('title')} description={t('description')}>
+    <PageContainer layout="screen" title={t('title')} description={t('description')}>
       <div className={styles.screen} data-testid="analytics-screen">
         <AskedAbout topics={topics} />
         <TeamLoad agents={agents} />

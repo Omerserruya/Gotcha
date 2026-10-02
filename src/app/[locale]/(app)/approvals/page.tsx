@@ -67,7 +67,7 @@ export default async function Page() {
   // nothing needs you, the other means you do not know whether anything does.
   if (pending === null) {
     return (
-      <PageContainer title={t('title')} description={t('description')}>
+      <PageContainer layout="screen" title={t('title')} description={t('description')}>
         <p data-testid="approvals-unavailable">{t('unavailable')}</p>
       </PageContainer>
     );
@@ -80,7 +80,7 @@ export default async function Page() {
    */
   if (pending.length === 0) {
     return (
-      <PageContainer title={t('title')} description={t('description')}>
+      <PageContainer layout="screen" title={t('title')} description={t('description')}>
         <NothingWaiting
           decided={decided}
           mayBeIncomplete={decidedMayBeIncomplete}
@@ -91,7 +91,7 @@ export default async function Page() {
   }
 
   return (
-    <PageContainer title={t('title')} description={t('description')}>
+    <PageContainer layout="screen" title={t('title')} description={t('description')}>
       {/*
         The legend lists exactly the keys the screen honours — no `E`, because
         editing is not built, and `A` only focuses Approve. A legend that

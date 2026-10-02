@@ -49,4 +49,55 @@
     flex-direction: column;
     gap: var(--space-7);
   }
+
+  /*
+   * `layout="screen"` — 02's page, measured on four screens. See the prop.
+   * No divider under the header: the computed trees show none.
+   */
+  .screen {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    line-height: normal;
+  }
+
+  .screenHeader {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-24);
+    flex-wrap: wrap;
+    padding: 30px var(--space-40) var(--space-20);
+  }
+
+  .screenHeading {
+    min-inline-size: 0;
+  }
+
+  .screenTitle {
+    margin: 0;
+    font-size: var(--font-size-screen-title);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .screenDescription {
+    margin: var(--space-6) 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .screenAside {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .screenBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-20);
+    min-inline-size: 0;
+    padding: var(--space-24) var(--space-40) 30px;
+  }
 }

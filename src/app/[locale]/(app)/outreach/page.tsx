@@ -48,7 +48,7 @@ export default async function Page() {
 
   if (unavailable || inFlight === null || finished === null) {
     return (
-      <PageContainer title={t('title')} description={t('description')}>
+      <PageContainer layout="screen" title={t('title')} description={t('description')}>
         <p data-testid="outreach-unavailable">{t('unavailable')}</p>
       </PageContainer>
     );
@@ -57,7 +57,7 @@ export default async function Page() {
   if (inFlight.length === 0 && finished.length === 0) {
     // Nothing has ever been sent. A real state, and the one this tenant is in.
     return (
-      <PageContainer title={t('title')} description={t('description')}>
+      <PageContainer layout="screen" title={t('title')} description={t('description')}>
         <div className={styles.empty} data-testid="outreach-empty">
           <p className={styles.emptyLead}>{t('none')}</p>
           <p className={styles.emptyBody}>{t('noneBody')}</p>
@@ -67,7 +67,7 @@ export default async function Page() {
   }
 
   return (
-    <PageContainer title={t('title')} description={t('description')}>
+    <PageContainer layout="screen" title={t('title')} description={t('description')}>
       <div className={styles.screen} data-testid="outreach-screen">
         {inFlight.length > 0 ? (
           <section className={styles.section} data-testid="section-in-flight">

@@ -61,6 +61,8 @@
     --font-size-hero: 40px;
     --font-size-display: 36px;
     --font-size-title: 30px;
+    /* 02's screen title — Approvals, Customers, Outreach, Analytics. */
+    --font-size-screen-title: 26px;
     --font-size-serif-display: 32px;
     --font-size-serif-inline: 16px;
     --font-size-lead: 16px;

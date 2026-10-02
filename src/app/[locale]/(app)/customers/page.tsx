@@ -49,7 +49,7 @@ export default async function Page({
   const { rows, total, truncated, searchedField } = await loadCustomers(query);
 
   return (
-    <PageContainer title={t('title')} description={t('description')}>
+    <PageContainer layout="screen" title={t('title')} description={t('description')}>
       {/*
         A plain GET form: the query lives in the URL, so a search is linkable
         and survives a reload, and the page stays a server component.

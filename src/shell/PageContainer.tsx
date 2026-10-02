@@ -17,6 +17,7 @@ export function PageContainer({
   actions,
   bleed,
   wide,
+  layout = 'document',
   children,
 }: {
   /** Already translated. */
@@ -45,8 +46,38 @@ export function PageContainer({
    * and this one should go.
    */
   wide?: boolean;
+  /**
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ `screen` — 02's PAGE, NOT A DOCUMENT
+   * ════════════════════════════════════════════════════════════════════════
+   * Measured on Approvals, Customers, Outreach and Analytics alike: the
+   * header is a ROW across the full panel at `padding:30px 40px 20px` — a
+   * 26px/600 title over a 13px `#6B6660` line, and the page's stats, actions
+   * or tabs on the right, sitting on the header's bottom edge. The content
+   * runs the panel's full width at 40px either side. `document` (the
+   * default) is a column centred at 1120, which is right for settings and
+   * wrong for a screen of cards.
+   */
+  layout?: 'document' | 'screen';
   children?: ReactNode;
 }) {
+  if (layout === 'screen') {
+    return (
+      <div className={styles.screen}>
+        {title ? (
+          <header className={styles.screenHeader}>
+            <div className={styles.screenHeading}>
+              <h1 className={styles.screenTitle}>{title}</h1>
+              {description ? <p className={styles.screenDescription}>{description}</p> : null}
+            </div>
+            {actions ? <div className={styles.screenAside}>{actions}</div> : null}
+          </header>
+        ) : null}
+        <div className={styles.screenBody}>{children}</div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={[styles.container, bleed && styles.bleed, wide && styles.wide]
