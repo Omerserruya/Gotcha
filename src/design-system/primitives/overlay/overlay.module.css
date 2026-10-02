@@ -143,6 +143,14 @@
    * `margin:4px 9px`; Delete in `#E4A88F`; the submenu's `›` in `#6E6A63`.
    */
   .surface[data-appearance='dark'] {
+    /*
+     * 02's item is 30 = 8 + 14 + 8: `line-height: normal`. Inherited 1.6 made
+     * it 36 — the queue's defect again. And items stack at 02's 1px gap.
+     */
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    line-height: normal;
     min-inline-size: 210px;
     padding: var(--space-6);
     border: 0;

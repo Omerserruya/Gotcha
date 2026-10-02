@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
@@ -168,5 +170,17 @@ describe('★★ shift-click picks several, and the menu acts on all of them', (
     rightClick(screen.getByTestId('row-c1'));
     await userEvent.click(screen.getByTestId('menu-resolve'));
     expect(await screen.findByTestId('queue-menu-notice')).toHaveTextContent('Done for 1 of 2');
+  });
+});
+
+describe('★ 02’s item is 30 tall, and items stack at 1px', () => {
+  it('the dark menu’s lines are `normal` — inherited 1.6 made each item 36', () => {
+    const css = readFileSync(
+      'src/design-system/primitives/overlay/overlay.module.css',
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    const dark = /\.surface\[data-appearance='dark'\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(dark).toMatch(/line-height:\s*normal/);
+    expect(dark).toMatch(/gap:\s*1px/);
   });
 });

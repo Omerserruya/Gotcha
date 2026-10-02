@@ -28,10 +28,12 @@ import styles from './Inbox.module.css';
  *   Return to the AI    the only thing that clears the handover latch
  *   Transfer to someone reassign, to a named colleague
  *
- * **There is no "put back in the queue".** Omer ruled it out and the platform
- * agrees by accident: `release()` clears the assignment without clearing
- * `isHandedOver`, so a released conversation has no human AND the AI is still
- * switched off it. Nobody drives it and no screen says so.
+ * **"Put back in the queue" is not here — it is in the queue's right-click
+ * menu.** Omer first ruled it out, then approved 02's seven-item menu with it
+ * in (2026-10-02, the newer ruling stands). The caveat travels with it:
+ * `release()` clears the assignment without clearing `isHandedOver`, so a
+ * released conversation returns to the human queue with the AI still switched
+ * off — it waits for a person. Raised with Omer for when the inbox is revisited.
  */
 export function ConversationVerbs({
   conversationId,
