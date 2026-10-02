@@ -10,6 +10,7 @@ import {
 } from '@/api/contracts/inbox';
 
 import { initials } from './initials';
+import { QueueMenu } from './QueueMenu';
 import { QueueRowLink } from './QueueRowLink';
 import styles from './Inbox.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -132,6 +133,9 @@ export async function ConversationList({
   undatedCount,
   openId,
   meId = null,
+  role = null,
+  colleagues = [],
+  greeting = null,
   view = 'queue',
   channel = null,
 }: {
@@ -153,6 +157,13 @@ export async function ConversationList({
    *   one place that had the fact and did not show it.
    */
   readonly meId?: string | null;
+  /**
+   * The viewer's role, colleagues and greeting — what the right-click menu
+   * needs to offer only what the routes will do. See `menuPlan`.
+   */
+  readonly role?: string | null;
+  readonly colleagues?: readonly { readonly id: string; readonly name: string }[];
+  readonly greeting?: boolean | null;
   /**
    * Which view this list is, so the header names it.
    *
@@ -553,19 +564,36 @@ export async function ConversationList({
       */}
       <div className={styles.queueScroll}>
         {/*
+          ★★ 02's RIGHT-CLICK MENU, AND SHIFT-CLICK TO PICK SEVERAL — over the
+          rows, inside the scroll region. A client component around the rows:
+          the rows stay server-rendered, and the menu learns which one was
+          right-clicked from the row's own `data-conversation-id`.
+        */}
+        <QueueMenu
+          rows={rows.map((it) => ({
+            id: it.id,
+            status: it.status,
+            assignedAgentId: it.assignedAgentId,
+          }))}
+          meId={meId}
+          role={role}
+          colleagues={colleagues}
+          greeting={greeting}
+        >
+          {/*
           ★★ THE CAP IS STATED, NOT IMPLIED. A list that stops at N and says
           nothing teaches an agent that N is all there is.
         */}
 
-        {dated.length === 0 && undated.length === 0 ? (
-          <p className={styles.note} data-testid="queue-empty">
-            {channel === null ? t('queue.empty') : t('queue.filter.emptyFiltered')}
-          </p>
-        ) : (
-          <ol className={styles.queueList}>{dated.map((c) => row(c, `conversation-${c.id}`))}</ol>
-        )}
+          {dated.length === 0 && undated.length === 0 ? (
+            <p className={styles.note} data-testid="queue-empty">
+              {channel === null ? t('queue.empty') : t('queue.filter.emptyFiltered')}
+            </p>
+          ) : (
+            <ol className={styles.queueList}>{dated.map((c) => row(c, `conversation-${c.id}`))}</ol>
+          )}
 
-        {/*
+          {/*
           ════════════════════════════════════════════════════════════════════
           ★★ THE ROWS THE ORDERING CANNOT PLACE, SHOWN RATHER THAN SUNK
           ════════════════════════════════════════════════════════════════════
@@ -615,9 +643,9 @@ export async function ConversationList({
           So the caption says which it is. A whole-queue count needs an
           endpoint nobody offers yet.
         */}
-        {showUndated ? (
-          <section data-testid="queue-undated">
-            {/*
+          {showUndated ? (
+            <section data-testid="queue-undated">
+              {/*
               ★★ THE VIEW-WIDE COUNT SUPERSEDES THE PER-PAGE ONE.
 
               `undatedCount` is scoped to this view's filters and is
@@ -626,16 +654,17 @@ export async function ConversationList({
               failed read — the caption falls back to what this page can see
               and says that is what it is.
             */}
-            <p className={styles.note}>
-              {undatedCount !== undefined
-                ? t('queue.undatedInView', { count: undatedCount })
-                : hasMore
-                  ? t('queue.undatedThisPage', { count: undated.length })
-                  : t('queue.undated', { count: undated.length })}
-            </p>
-            <ol className={styles.queueList}>{undated.map((c) => row(c, `undated-${c.id}`))}</ol>
-          </section>
-        ) : null}
+              <p className={styles.note}>
+                {undatedCount !== undefined
+                  ? t('queue.undatedInView', { count: undatedCount })
+                  : hasMore
+                    ? t('queue.undatedThisPage', { count: undated.length })
+                    : t('queue.undated', { count: undated.length })}
+              </p>
+              <ol className={styles.queueList}>{undated.map((c) => row(c, `undated-${c.id}`))}</ol>
+            </section>
+          ) : null}
+        </QueueMenu>
       </div>
 
       {/*

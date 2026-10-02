@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 
 import type { ReactNode } from 'react';
 
-import { render, screen, within } from '@testing-library/react';
-import { createFormatter, createTranslator } from 'next-intl';
+import { render as rtlRender, screen, within } from '@testing-library/react';
+import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import { conversationRowSchema, queueOrder, type ConversationRow } from '@/api/contracts/inbox';
@@ -24,6 +24,19 @@ import { QUEUE_CHANNEL_FILTERS } from './inbox-views';
  *   way `next/link` would rather than dropped — a mock that stringified it
  *   as "[object Object]" would pass a test for "has an href".
  */
+/*
+ * ★ The rows sit inside `QueueMenu`, a client component with its own
+ *   translations — so every render here is inside the provider the app has.
+ */
+const render = (ui: ReactNode) =>
+  rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <NextIntlClientProvider locale="en" messages={{ inbox: messages }}>
+        {children}
+      </NextIntlClientProvider>
+    ),
+  });
+
 vi.mock('@/i18n/navigation', () => ({
   Link: ({
     href,
@@ -1109,5 +1122,24 @@ describe("★★ Wave 2 — 02's filter row, and every chip in it filters", () =
       await ConversationList({ rows: [], cap: 10, now: NOW, hasMore: false, channel: 'WEBCHAT' }),
     );
     expect(screen.getByTestId('queue-empty').textContent).toBe(messages.queue.filter.emptyFiltered);
+  });
+});
+
+describe('★ the list hands the menu what it needs', () => {
+  it('⚠ the rows are inside the menu’s area, carrying their ids', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ id: 'c1' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+        meId: 'me',
+        role: 'ADMIN',
+        colleagues: [],
+        greeting: null,
+      }),
+    );
+    const area = screen.getByTestId('queue-menu-area');
+    expect(area.querySelector('[data-conversation-id="c1"]')).not.toBeNull();
   });
 });

@@ -1188,6 +1188,16 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/reassign', { conversationId }),
 
   /**
+   * ⚠⚠ DELETES THE CONVERSATION AND EVERY MESSAGE IN IT. No undo.
+   *
+   * ADMIN and SYSTEM_ADMIN only (403 otherwise). A conversation that is not
+   * CLOSED is refused with 400 unless `?force=true` — Omer's ruling is that
+   * deleting an active one forces, so the menu sends it for those.
+   */
+  remove: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}', { conversationId }),
+
+  /**
    * The people a conversation can be transferred to.
    *
    * ★ UNGATED BEYOND SIGNING IN. `services/auth/src/routes/agents.ts:29` has

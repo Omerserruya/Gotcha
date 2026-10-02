@@ -15,13 +15,27 @@ import styles from './overlay.module.css';
 export const ContextMenu = RadixContextMenu.Root;
 export const ContextMenuTrigger = RadixContextMenu.Trigger;
 
+/**
+ * `dark` is 02's inbox menu — `#171717`, the panel's dark wall colour. The
+ * light default is every other menu in the product.
+ */
+export type MenuAppearance = 'light' | 'dark';
+
 export function ContextMenuContent({
   children,
+  appearance = 'light',
   ...rest
-}: ComponentPropsWithoutRef<typeof RadixContextMenu.Content>) {
+}: ComponentPropsWithoutRef<typeof RadixContextMenu.Content> & {
+  readonly appearance?: MenuAppearance;
+}) {
   return (
     <RadixContextMenu.Portal>
-      <RadixContextMenu.Content className={styles.surface} collisionPadding={8} {...rest}>
+      <RadixContextMenu.Content
+        className={styles.surface}
+        data-appearance={appearance}
+        collisionPadding={8}
+        {...rest}
+      >
         {children}
       </RadixContextMenu.Content>
     </RadixContextMenu.Portal>
@@ -45,4 +59,42 @@ export function ContextMenuItem({
 
 export function ContextMenuSeparator() {
   return <RadixContextMenu.Separator className={styles.separator} />;
+}
+
+/** A submenu — 02's "Assign to someone ›". */
+export const ContextMenuSub = RadixContextMenu.Sub;
+
+export function ContextMenuSubTrigger({
+  children,
+  ...rest
+}: ComponentPropsWithoutRef<typeof RadixContextMenu.SubTrigger>) {
+  return (
+    <RadixContextMenu.SubTrigger className={styles.item} {...rest}>
+      {children}
+      <span className={styles.subArrow} aria-hidden="true">
+        ›
+      </span>
+    </RadixContextMenu.SubTrigger>
+  );
+}
+
+export function ContextMenuSubContent({
+  children,
+  appearance = 'light',
+  ...rest
+}: ComponentPropsWithoutRef<typeof RadixContextMenu.SubContent> & {
+  readonly appearance?: MenuAppearance;
+}) {
+  return (
+    <RadixContextMenu.Portal>
+      <RadixContextMenu.SubContent
+        className={styles.surface}
+        data-appearance={appearance}
+        collisionPadding={8}
+        {...rest}
+      >
+        {children}
+      </RadixContextMenu.SubContent>
+    </RadixContextMenu.Portal>
+  );
 }

@@ -147,6 +147,8 @@ export interface InboxData {
   readonly detail: Promise<ConversationDetail> | null;
   /** `User.id` of the person looking, or `null` when we could not read it. */
   readonly meId: string | null;
+  /** Their role (`ADMIN`, `AGENT`, …), or `null` when we could not read it. */
+  readonly role: string | null;
   /** Active colleagues this viewer may transfer to. Never includes them. */
   readonly colleagues: readonly { readonly id: string; readonly name: string }[];
   /**
@@ -195,13 +197,14 @@ export async function loadInbox(
   /*
    * The viewer, started first because ONE view needs it to build its query.
    */
-  const meRead = api
+  const viewerRead = api
     .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
-    .then((it) => it.user.id)
+    .then((it) => ({ id: it.user.id, role: it.user.role ?? null }))
     .catch((cause: unknown) => {
       logger.warn('inbox.me_failed', { cause });
       return null;
     });
+  const meRead = viewerRead.then((viewer) => viewer?.id ?? null);
 
   /*
    * ════════════════════════════════════════════════════════════════════════
@@ -251,9 +254,9 @@ export async function loadInbox(
       ? meRead.then((id) => fetchQueue(viewQuery('mine', id)))
       : fetchQueue(viewQuery(view, null));
 
-  const [queue, me, colleagues, greeting] = await Promise.all([
+  const [queue, viewerMe, colleagues, greeting] = await Promise.all([
     queueRead,
-    meRead,
+    viewerRead,
     api
       .get({ endpoint: inboxEndpoints.agents(), payload: colleagueListSchema })
       .catch((cause: unknown) => {
@@ -312,8 +315,15 @@ export async function loadInbox(
    *                      promise the customer hears nothing.
    */
 
+  const me = viewerMe?.id ?? null;
   const viewer = {
     meId: me,
+    /*
+     * The viewer's role, for the queue's menu: Delete is ADMIN-only on the
+     * route (`role !== "ADMIN" && !== "SYSTEM_ADMIN"` → 403), and so is
+     * reassigning a conversation somebody else holds. `null` when unread.
+     */
+    role: viewerMe?.role ?? null,
     colleagues: transferableTo(colleagues, me),
     greeting,
   };

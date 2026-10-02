@@ -318,6 +318,10 @@
     /* 02's dark bars: an item's text, and the item that is raised. */
     --copilot-text-muted: #b8b4ac;
     --copilot-raised: #262626;
+    /* 02's dark inbox menu: icons, the submenu arrow, and Delete. */
+    --menu-dark-icon: #8e8a83;
+    --menu-dark-arrow: #6e6a63;
+    --menu-dark-danger: #e4a88f;
     /* Its input bar: `rgb(20,20,20)`, a step darker again. */
     --copilot-input-surface: #141414;
     --frame-raised: #171717;

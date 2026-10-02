@@ -586,3 +586,15 @@ describe('★★ the second round streams in, and the page does not wait for it'
     expect(props?.openId).toBe('c7');
   });
 });
+
+describe('⚠⚠ the queue menu is told who is looking — or Delete is offered to nobody', () => {
+  it('★★ the page hands the role, colleagues and greeting to the list', async () => {
+    const props = propsOf<{ role?: string | null; colleagues?: unknown; greeting?: unknown }>(
+      await page({ role: 'ADMIN', greeting: true }),
+      ConversationList,
+    );
+    expect(props?.role).toBe('ADMIN');
+    expect(props?.greeting).toBe(true);
+    expect(props?.colleagues).toEqual([{ id: 'u2', name: 'Dana' }]);
+  });
+});

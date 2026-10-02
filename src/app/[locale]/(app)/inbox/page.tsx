@@ -133,6 +133,9 @@ export default async function Page({
             */
             openId={data.open?.id ?? null}
             meId={data.meId}
+            role={data.role}
+            colleagues={data.colleagues}
+            greeting={data.greeting}
             view={view}
             channel={channel}
           />

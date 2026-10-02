@@ -52,6 +52,8 @@ export type VerbResult =
   | { readonly ok: false; readonly reason: 'not_yours' }
   /** 404 — the conversation, or the colleague, is not there. */
   | { readonly ok: false; readonly reason: 'not_found' }
+  /** 403 from delete: the viewer is not an admin. The menu hides it for them. */
+  | { readonly ok: false; readonly reason: 'not_allowed' }
   | { readonly ok: false; readonly reason: 'failed' };
 
 function refresh() {
@@ -224,6 +226,37 @@ export async function closeConversation(conversationId: string): Promise<VerbRes
       if (cause.status === 404) return { ok: false, reason: 'not_found' };
     }
     logger.warn('inbox.close_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/**
+ * Delete a conversation and its messages — the queue menu's last item.
+ *
+ * ⚠⚠ IRREVERSIBLE. The menu asks first, every time, and names how many.
+ *
+ * `force` for anything not CLOSED: the route refuses an active conversation
+ * without it, and Omer ruled that deleting an active one forces.
+ */
+export async function deleteConversation(
+  conversationId: string,
+  force: boolean,
+): Promise<VerbResult> {
+  try {
+    await serverApi().delete({
+      endpoint: inboxEndpoints.remove(conversationId),
+      query: force ? { force: 'true' } : undefined,
+      payload: unchecked,
+      raw: true,
+    });
+    refresh();
+    return { ok: true };
+  } catch (cause) {
+    if (isApiError(cause)) {
+      if (cause.status === 404) return { ok: false, reason: 'not_found' };
+      if (cause.status === 403) return { ok: false, reason: 'not_allowed' };
+    }
+    logger.warn('inbox.delete_failed', { cause });
     return { ok: false, reason: 'failed' };
   }
 }

@@ -1669,3 +1669,80 @@
     flex: 1;
   }
 }
+
+@layer features {
+  /*
+   * A row picked with shift-click: the well's colour and a quiet edge, so it
+   * reads as "picked" and never as "open" — open is white with a black edge.
+   */
+  .queueRow[data-selected] {
+    background-color: var(--panel-well);
+    border-inline-start-color: var(--text-faint);
+  }
+
+  /* What the selection is, and what the menu did when it could not do all. */
+  .queueNotice {
+    margin: 0;
+    padding: var(--space-8) var(--space-16);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    background-color: var(--panel-inset);
+  }
+
+  .queueNoticeAction {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  /* An item's label, with the greeting warning under it where it applies. */
+  .menuText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .menuHint {
+    font-size: 11px;
+    color: var(--menu-dark-icon);
+  }
+
+  .confirmNote {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .confirmActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-8);
+    margin-block-start: var(--space-16);
+  }
+
+  .confirmDanger {
+    padding: var(--space-6) 11px;
+    border: 0;
+    border-radius: 8px;
+    background-color: var(--intent-urgent-text);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    cursor: pointer;
+  }
+
+  .confirmDanger:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .confirmDanger:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+}

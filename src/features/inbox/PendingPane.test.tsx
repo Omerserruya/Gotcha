@@ -112,3 +112,18 @@ describe('⚠⚠ the overlay clears when the URL lands — not only when the ope
     expect(screen.getByTestId('row-c1')).toHaveAttribute('aria-current', 'true');
   });
 });
+
+describe('★★ shift-click picks the row, and opens nothing', () => {
+  it('toggles it into the selection without marking it open', async () => {
+    const { currentSelection, clearSelected } = await import('./queue-selection');
+    render(rows('c1'));
+    click(screen.getByTestId('row-c2'), { shiftKey: true });
+    expect(currentSelection()).toEqual(['c2']);
+    expect(screen.getByTestId('row-c2')).toHaveAttribute('data-selected');
+    expect(screen.queryByTestId('pending-pane')).toBeNull();
+    expect(screen.getByTestId('row-c1')).toHaveAttribute('aria-current', 'true');
+    click(screen.getByTestId('row-c2'), { shiftKey: true });
+    expect(currentSelection()).toEqual([]);
+    act(() => clearSelected());
+  });
+});

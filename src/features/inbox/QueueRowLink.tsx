@@ -5,6 +5,7 @@ import type { ComponentProps, MouseEvent, ReactNode } from 'react';
 import { Link } from '@/i18n/navigation';
 
 import { markPendingOpen, usePendingOpen, type PendingOpen } from './pending-open';
+import { toggleSelected, useSelection } from './queue-selection';
 
 /**
  * A queue row's link, which marks itself the moment it is clicked.
@@ -14,8 +15,8 @@ import { markPendingOpen, usePendingOpen, type PendingOpen } from './pending-ope
  *   server rendered. With a click pending, they follow the click — on this
  *   row and off every other — so exactly one row is marked throughout.
  *
- * A click that opens elsewhere (a new tab, a new window) is not this tab
- * navigating, and marks nothing.
+ * A click that opens elsewhere (a new tab) is not this tab navigating, and
+ * marks nothing. Shift-click picks the row for the queue menu.
  */
 export function QueueRowLink({
   href,
@@ -32,11 +33,22 @@ export function QueueRowLink({
   readonly children: ReactNode;
 }) {
   const pending = usePendingOpen();
+  const selected = useSelection().includes(target.id);
   const marked = pending === null ? open : pending.id === target.id;
 
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.defaultPrevented || event.button !== 0) return;
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    /*
+     * ★ 02: "Shift-click to pick several". Shift-click would otherwise open a
+     *   new window; in the queue it picks the row for the menu instead, and
+     *   opens nothing.
+     */
+    if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
+      toggleSelected(target.id);
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (open && pending === null) return;
     markPendingOpen(target);
   };
@@ -47,6 +59,10 @@ export function QueueRowLink({
       onClick={onClick}
       aria-current={marked ? 'true' : undefined}
       data-open={marked ? '' : undefined}
+      /* For the queue menu: which conversation a right-click landed on. */
+      data-conversation-id={target.id}
+      data-selected={selected ? '' : undefined}
+      aria-selected={selected || undefined}
       {...rest}
     >
       {children}
