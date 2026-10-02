@@ -89,8 +89,8 @@
     "unnamed": "Someone",
     "unavailable": "We couldn't read who this is just now.",
     "noHandles": "No channel handle is recorded for this person.",
-    "joinedUp": "Her channels — every one we've matched to this person.",
-    "thisChannelOnly": "The channel this conversation came in on. We can't show her other channels from here yet."
+    "joinedUp": "Their channels — every one we've matched to this person.",
+    "thisChannelOnly": "The channel this conversation came in on. We can't show their other channels from here yet."
   },
   "verbs": {
     "claim": "Take control",

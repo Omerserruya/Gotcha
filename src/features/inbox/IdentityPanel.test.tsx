@@ -38,7 +38,10 @@ describe('★★ the panel claims only what the data supports', () => {
         ]),
       }),
     );
-    expect(screen.getByTestId('identity-caption')).toHaveTextContent(/her channels/i);
+    const caption = screen.getByTestId('identity-caption');
+    expect(caption).toHaveTextContent(/their channels/i);
+    // The title's promise, asserted: it used to say "Her channels" and this test checked FOR it.
+    expect(caption).not.toHaveTextContent(/\bher\b/i);
   });
 
   it('shows a linked handle and a merged one alike', async () => {
@@ -130,7 +133,7 @@ describe('★★ from a conversation there is no join to show, and it says so', 
         conversation: { contactName: 'x', channel: 'SMS', customerExternalId: '+999' },
       }),
     );
-    expect(screen.getByTestId('identity-caption')).toHaveTextContent(/her channels/i);
+    expect(screen.getByTestId('identity-caption')).toHaveTextContent(/their channels/i);
     expect(screen.queryByTestId('handle-SMS')).toBeNull();
   });
 });

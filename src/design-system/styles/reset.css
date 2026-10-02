@@ -61,6 +61,24 @@
     overflow-wrap: break-word;
   }
 
+  /*
+   * ★ No browser bold. The UA draws headings, `b`, `strong` and `th` at 700,
+   * and 02 has 700 only in the wordmark — so a heading a module forgot to
+   * weigh rendered "Omer Serruya" at 19.5px/700 in the inbox. 600 is the top
+   * of 02's scale; a module's own weight still wins (this is the reset layer).
+   */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  b,
+  strong,
+  th {
+    font-weight: var(--font-weight-semibold);
+  }
+
   ul[role='list'],
   ol[role='list'] {
     list-style: none;
