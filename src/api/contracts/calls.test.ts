@@ -30,6 +30,7 @@ const call = (over: Partial<Call> = {}): Call => ({
   recordingStatus: 'available',
   endReason: null,
   customerNumber: '+447700900123',
+  customerId: null,
   ...over,
 });
 

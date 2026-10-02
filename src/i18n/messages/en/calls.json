@@ -31,5 +31,47 @@
     "them": "Them",
     "suggestions": "Things you could say"
   },
-  "availabilityUnknown": "We couldn't check whether voice is set up for this workspace, so there's nothing reliable to show here yet. This is our side, not yours — try again in a moment."
+  "availabilityUnknown": "We couldn't check whether voice is set up for this workspace, so there's nothing reliable to show here yet. This is our side, not yours — try again in a moment.",
+  "dialer": {
+    "title": "Who do you want to call?",
+    "sub": "Search a person, or paste a number",
+    "placeholder": "A name, a number or an email",
+    "customers": "Your customers",
+    "typeToSearch": "Type a name or a number.",
+    "searchFailed": "We couldn't search just now.",
+    "noMatch": "No one matches.",
+    "lists": "Or have GOTCHA call a list",
+    "listsNone": "Nothing yet.",
+    "call": "Call {name}",
+    "callSomeone": "Call",
+    "letGotcha": "Let GOTCHA call them",
+    "notYet": "Calling from here isn't available yet."
+  },
+  "stats": {
+    "week": "Calls this week",
+    "gotchaAnswered": "GOTCHA answered",
+    "average": "Average length",
+    "sale": "Ended in a sale"
+  },
+  "recent": {
+    "title": "Recent calls",
+    "filter": {
+      "all": "All",
+      "incoming": "Incoming",
+      "outgoing": "Outgoing",
+      "missed": "Missed"
+    },
+    "filterEmpty": "No calls here.",
+    "unknownNumber": "Unknown number",
+    "transcript": "Transcript",
+    "foot": "Every call is attached to the customer's conversation."
+  },
+  "when": {
+    "yesterday": "Yesterday"
+  },
+  "outcome": {
+    "missed": "Nobody picked up",
+    "notAnswered": "They didn't answer",
+    "failed": "The call didn't go through"
+  }
 }

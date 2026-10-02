@@ -66,6 +66,11 @@ export const callSchema = z.object({
   recordingStatus: z.string().nullable().default(null),
   endReason: z.string().nullable().default(null),
   customerNumber: z.string().default(''),
+  /**
+   * The contact, when the call was matched to one — on the wire and stripped
+   * until 05d needed to name the person and link to them.
+   */
+  customerId: z.string().nullish().default(null),
 });
 
 export type Call = z.infer<typeof callSchema>;

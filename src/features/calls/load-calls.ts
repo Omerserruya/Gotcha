@@ -111,7 +111,16 @@ export async function loadLiveCall(): Promise<{
   }
 }
 
-export async function loadCalls(direction?: 'inbound' | 'outbound'): Promise<CallsData> {
+export async function loadCalls(
+  options: {
+    /**
+     * The summary's window, in days back from now. 05d's strip is "Calls this
+     * week", and the route takes `from` — so the figure is the week's, not
+     * all-time under a week's label. Omitted, the summary is all-time.
+     */
+    readonly summaryDays?: number;
+  } = {},
+): Promise<CallsData> {
   const api = serverApi();
 
   let voiceEnabled: boolean;
@@ -153,12 +162,21 @@ export async function loadCalls(direction?: 'inbound' | 'outbound'): Promise<Cal
         // `{ data, nextCursor }` side by side, so unwrapping would lose the
         // cursor.
         raw: true,
-        ...(direction ? { query: { direction } } : {}),
       })
       .then((page) => page.data)
       .catch(degrade('calls.list_failed', null)),
     api
-      .get({ endpoint: callEndpoints.summary(), payload: callSummarySchema })
+      .get({
+        endpoint: callEndpoints.summary(),
+        payload: callSummarySchema,
+        ...(options.summaryDays
+          ? {
+              query: {
+                from: new Date(Date.now() - options.summaryDays * 86_400_000).toISOString(),
+              },
+            }
+          : {}),
+      })
       .catch(degrade('calls.summary_failed', null)),
   ]);
 

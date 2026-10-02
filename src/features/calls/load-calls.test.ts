@@ -139,3 +139,34 @@ describe('★★ the contract refuses to default the answer', () => {
     ).toBe(true);
   });
 });
+
+describe('★ the week’s summary', () => {
+  it('★ summaryDays reaches the route as `from` — so "this week" is the week’s figure', async () => {
+    get
+      .mockResolvedValueOnce(settings({ voiceCopilotEnabled: true }))
+      .mockResolvedValueOnce({ data: [], nextCursor: null })
+      .mockResolvedValueOnce({ total: 0 });
+    const { loadCalls } = await import('./load-calls');
+    const before = Date.now();
+    await loadCalls({ summaryDays: 7 });
+    const summaryCall = get.mock.calls.find(([req]) =>
+      (req as { endpoint: { path: string } }).endpoint.path.endsWith('/summary'),
+    )![0] as { query?: { from?: string } };
+    const from = Date.parse(summaryCall.query!.from!);
+    expect(before - from).toBeGreaterThanOrEqual(7 * 86_400_000 - 1000);
+    expect(before - from).toBeLessThanOrEqual(7 * 86_400_000 + 1000);
+  });
+
+  it('omitted, the summary is all-time — no `from`', async () => {
+    get
+      .mockResolvedValueOnce(settings({ voiceCopilotEnabled: true }))
+      .mockResolvedValueOnce({ data: [], nextCursor: null })
+      .mockResolvedValueOnce({ total: 0 });
+    const { loadCalls } = await import('./load-calls');
+    await loadCalls();
+    const summaryCall = get.mock.calls.find(([req]) =>
+      (req as { endpoint: { path: string } }).endpoint.path.endsWith('/summary'),
+    )![0] as { query?: unknown };
+    expect(summaryCall.query).toBeUndefined();
+  });
+});

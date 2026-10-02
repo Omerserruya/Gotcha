@@ -1,96 +1,433 @@
 @layer features {
   /*
-   * Screen 05d · Phone calls.
-   *
-   * A list of what happened, with the two numbers the summary route can
-   * honestly produce. The design's four-stat row is three stats and a
-   * conversion figure that does not exist.
+   * ════════════════════════════════════════════════════════════════════════
+   * 05d, measured — the dialer and a column: the week, the recent calls
+   * ════════════════════════════════════════════════════════════════════════
+   * `padding:22px 40px 30px`, `gap:14px`; a 400 dialer drawn in focus
+   * (`#C9BCF7`), the column the rest. Each card scrolls inside itself.
+   * The four-figure strip draws all four: what nothing records is "—".
    */
+  .screen {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    gap: var(--space-14);
+    padding: 22px var(--space-40) 30px;
+    line-height: normal;
+  }
 
-  .log {
+  .dialer {
+    flex: none;
+    inline-size: 400px;
     display: flex;
     flex-direction: column;
-    gap: var(--space-16);
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--signal-ai);
+    border-radius: var(--radius-card);
   }
 
-  .summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-24);
+  .dialerHead {
+    padding: 15px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .dialerTitle {
     margin: 0;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
-  .stat {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .stat dt {
-    font-size: var(--font-size-caption);
+  .dialerSub {
+    margin: 3px 0 0;
+    font-size: 11.5px;
     color: var(--text-subtle);
   }
 
-  .stat dd {
+  .dialerSearch {
+    padding: var(--space-14) 18px 0;
+  }
+
+  /* `#FAF8F4`, radius 10, `padding:11px 13px`. */
+  .dialerInput {
+    inline-size: 100%;
+    padding: 11px 13px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .dialerInput:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 1px;
+  }
+
+  .dialerBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding-block-start: var(--space-12);
+  }
+
+  .dialerEyebrow {
     margin: 0;
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-8);
-    font-size: var(--font-size-body-lg);
-  }
-
-  /*
-   * An average with no sample behind it. Rendered as words rather than as
-   * `0m 00s`, which would read as calls that connected and lasted no time —
-   * the route sends null plus a sample size precisely so this is possible.
-   */
-  .statUnknown {
-    font-size: var(--font-size-meta);
+    padding: 6px 18px var(--space-8);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
     color: var(--text-subtle);
   }
 
-  .statSample {
-    font-size: var(--font-size-caption);
+  .dialerEyebrowRule {
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-14);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .dialerNone {
+    margin: 0;
+    padding: var(--space-4) 18px var(--space-8);
+    font-size: 12.5px;
     color: var(--text-subtle);
   }
 
-  .calls {
-    list-style: none;
+  .dialerList {
     margin: 0;
     padding: 0;
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    overflow: hidden;
+    list-style: none;
   }
 
-  .call {
+  /* A person: `padding:11px 18px`, `gap:12px`; the first chosen, 02's dark edge. */
+  .dialerRow {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-8);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
+    align-items: center;
+    gap: var(--space-12);
+    padding: 11px 18px;
+    color: inherit;
+    text-decoration: none;
   }
 
-  .call + .call {
-    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  .dialerRow[aria-current='true'] {
+    padding-inline-start: 15px;
+    background-color: var(--panel-quiet);
+    border-inline-start: 3px solid var(--action-base);
   }
 
-  .callWho {
-    font-size: var(--font-size-meta);
+  .dialerRow:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
   }
 
-  .callMeta,
-  .callHas {
-    font-size: var(--font-size-caption);
+  .dialerDisc {
+    flex: none;
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 32px;
+    text-align: center;
+  }
+
+  .dialerWho {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .dialerName {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .dialerLine {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
     color: var(--text-subtle);
   }
 
-  /* A recording that failed is not a recording you can play. */
-  .callProblem {
-    font-size: var(--font-size-caption);
-    color: var(--intent-blocked-text);
+  /* The merchant's tag, in 02's violet chip. */
+  .dialerTag {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--ai-avatar-surface);
+    font-size: 11px;
+    color: var(--ai-avatar-text);
+  }
+
+  /* The foot: `padding:14px 18px`, `gap:10px`; dark "Call", outlined "Let GOTCHA". */
+  .dialerFoot {
+    flex: none;
+    display: flex;
+    gap: var(--space-10);
+    padding: var(--space-14) 18px;
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .dialerCall,
+  .dialerHand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    border-radius: 10px;
+    font-size: 12.5px;
+  }
+
+  .dialerCall {
+    padding: 10px 18px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .dialerHand {
+    padding: 10px var(--space-16);
+    border: 1px solid var(--border-default);
+    color: var(--intent-neutral-text);
+  }
+
+  .dialerFoot > [aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .column {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  /* The week: four cells at `padding:15px 18px`, `#EDE9E1` between. */
+  .stats {
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    margin: 0;
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .statCell {
+    padding: 15px 18px;
+  }
+
+  .statCell + .statCell {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .statCell dt {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .statCell dd {
+    margin: var(--space-4) 0 0;
+    font-size: 22px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .recent {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .recentHead {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .recentTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .recentFilters {
+    margin-inline-start: auto;
+    display: flex;
+    gap: 6px;
+  }
+
+  .recentFilter {
+    padding: var(--space-4) var(--space-10);
+    border-radius: 7px;
+    background-color: var(--panel-well);
+    font-size: 11px;
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+  }
+
+  .recentFilter[aria-current='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .recentFilter:focus-visible,
+  .recentTranscript:focus-visible,
+  .recentName:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .recentBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .recentNone {
+    margin: 0;
+    padding: var(--space-16) 18px;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .recentList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A call: `padding:13px 18px`, `gap:14px`, `#F7F5F1` under it. */
+  .recentRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .recentIcon {
+    flex: none;
+    inline-size: 26px;
+    block-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--space-8);
+    background-color: var(--panel-well);
+    color: var(--intent-neutral-text);
+  }
+
+  .recentIcon[data-missed] {
+    color: var(--intent-urgent-text);
+  }
+
+  .recentWho {
+    flex: none;
+    inline-size: 150px;
+    min-inline-size: 0;
+  }
+
+  .recentName {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  /* Mono 11/500, as 02 sets a length. */
+  .recentLength {
+    flex: none;
+    inline-size: 64px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .recentOutcome {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+
+  .recentDot {
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--signal-done);
+  }
+
+  .recentOutcome[data-tone='missed'] .recentDot {
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .recentOutcome[data-tone='other'] .recentDot {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .recentWhen {
+    flex: none;
+    inline-size: 80px;
+    text-align: end;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .recentTranscript {
+    flex: none;
+    font-size: 11px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .recentFoot {
+    flex: none;
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .screen {
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .dialer {
+      inline-size: auto;
+    }
   }
 
   /* ── 05e · a live call ───────────────────────────────────────────────── */
@@ -230,34 +567,5 @@
   .suggestion {
     font-size: var(--font-size-meta);
     line-height: var(--line-height-snug);
-  }
-
-  /* ── Voice not switched on ───────────────────────────────────────────── */
-  /*
-   * Not an error state. The gate 404s the whole router when the tenant has no
-   * voice, and that is a fact about the workspace rather than a fault — so it
-   * reads as an explanation, with the action that would change it.
-   */
-  .off,
-  .empty {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-  }
-
-  .offLead,
-  .emptyLead {
-    margin: 0;
-    font-size: var(--font-size-body-lg);
-    font-weight: 500;
-  }
-
-  .offBody,
-  .emptyBody {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
-    color: var(--text-body);
   }
 }

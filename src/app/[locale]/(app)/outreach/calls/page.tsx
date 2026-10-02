@@ -1,116 +1,77 @@
 import { getTranslations } from 'next-intl/server';
 
-import { CallLog } from '@/features/calls/CallLog';
+import {
+  CallStats,
+  DialerCard,
+  parseCallFilter,
+  RecentCalls,
+  type CallsState,
+} from '@/features/calls/CallsScreen';
 import styles from '@/features/calls/Calls.module.css';
 import { loadCalls, loadLiveCall } from '@/features/calls/load-calls';
 import { LiveCall } from '@/features/calls/LiveCall';
+import { loadCustomers } from '@/features/customers/load-customers';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Outreach · calls — screen 05d.
+ * Screen 05d — phone calls.
  *
- * ── THREE STATES, AND THE FIRST IS NOT A FAILURE ──
- * `voiceCopilotGate` answers **404 for the whole voice router** when
- * `tenant.voiceCopilotEnabled` is false — identical to the 404 a missing route
- * gives. So the screen reads `tenant-settings`, which is outside the gate,
- * and can then say *"voice is not switched on here"* as a fact rather than
- * guessing at an error. **The ambiguity is resolved by asking a different
- * question, not by reading the 404 more carefully.**
+ * One frame in every state: the dialer, the week's figures, and the recent
+ * calls card, whose body says why it is empty when it is — voice off, no
+ * number, a failed read — rather than the whole screen collapsing to a
+ * sentence. `?q=` searches, `?calls=` filters.
  *
- * ── WHAT IS ABSENT, AND WHY ──
- * **No "Or have GOTCHA call a list".** There is no AI calling campaign: no
- * model, no list-driven object, no per-call outcome capture tied to one.
- *
- * **No "Ended in a sale".** `converted` is a concept nowhere in this platform
- * and this is its **fourth appearance across four screens**.
- *
- * **No "Upset" badge.** Sentiment exists on 9 of 89 conversations here and is
- * 48+ days old where it exists.
- *
- * The transcript IS offered: a call is a conversation and its transcript is
- * `Message` rows on the VOICE channel, written one per final utterance with
- * the speaker on each.
+ * 05e lives on the same route: a call in progress heads the column, because
+ * it is the thing you need when there is one.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly q?: string; readonly calls?: string }>;
+}) {
   const t = await getTranslations('calls');
-  const { voiceEnabled, hasNumber, calls, summary, failed } = await loadCalls();
-  // 05e lives on the same route: a call in progress is the thing you need
-  // when there is one, and the log is what you need when there is not.
+  const params = (await searchParams) ?? {};
+  const query = (params.q ?? '').trim();
+  const filter = parseCallFilter(params.calls);
+
+  const [{ voiceEnabled, hasNumber, calls, summary, failed }, search] = await Promise.all([
+    // "This week": the last seven days, so Monday morning is not an empty week.
+    loadCalls({ summaryDays: 7 }),
+    query ? loadCustomers(query) : Promise.resolve(null),
+  ]);
   const { call: liveCall, transcript } =
     voiceEnabled === true ? await loadLiveCall() : { call: null, transcript: [] };
 
-  /*
-   * ★ WE COULD NOT FIND OUT, WHICH IS NOT "YOU DO NOT HAVE IT".
-   *
-   * The settings read is what resolves the gate's ambiguous 404. When IT
-   * fails there is no answer, and rendering the not-enabled panel would tell
-   * a merchant to go and ask for a feature that may already be on — which is
-   * what it would have done from the moment voice was switched on.
-   */
-  if (voiceEnabled === null) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <p data-testid="calls-availability-unknown">{t('availabilityUnknown')}</p>
-      </PageContainer>
-    );
-  }
-
-  if (voiceEnabled === false) {
-    // A fact about the workspace, not a fault. It reads as an explanation and
-    // names what would change it.
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <div className={styles.off} data-testid="calls-not-enabled">
-          <p className={styles.offLead}>{t('notEnabled')}</p>
-          <p className={styles.offBody}>{t('notEnabledBody')}</p>
-        </div>
-      </PageContainer>
-    );
-  }
-
-  if (failed || calls === null) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <p data-testid="calls-unavailable">{t('unavailable')}</p>
-      </PageContainer>
-    );
-  }
-
-  if (calls.length === 0 && !liveCall) {
-    /*
-     * ★ TWO EMPTY SCREENS, BECAUSE THERE ARE TWO REASONS TO BE EMPTY.
-     *
-     * "Calls appear here as they happen" is a promise, and it is only true
-     * for a workspace that can receive one. `hasActiveVoiceChannel` is the
-     * platform's own precondition — no ACTIVE VOICE channel means no call
-     * can arrive, so the honest sentence names the missing number instead of
-     * describing a future that cannot happen.
-     *
-     * `hasNumber === null` cannot reach here: it travels with
-     * `voiceEnabled === null`, which returned above.
-     */
-    const noNumber = hasNumber === false;
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <div className={styles.empty} data-testid={noNumber ? 'calls-no-number' : 'calls-empty'}>
-          <p className={styles.emptyLead}>{noNumber ? t('noNumber') : t('none')}</p>
-          <p className={styles.emptyBody}>{noNumber ? t('noNumberBody') : t('noneBody')}</p>
-        </div>
-      </PageContainer>
-    );
-  }
+  const state: CallsState =
+    voiceEnabled === null
+      ? 'unknown'
+      : voiceEnabled === false
+        ? 'off'
+        : failed || calls === null
+          ? 'failed'
+          : calls.length === 0
+            ? hasNumber === false
+              ? 'noNumber'
+              : 'none'
+            : 'ok';
 
   return (
-    <PageContainer title={t('title')} description={t('description')}>
-      {liveCall ? (
-        <LiveCall
-          conversationId={liveCall.conversationId}
-          customerNumber={liveCall.customerNumber}
-          initialTranscript={transcript}
-        />
-      ) : null}
-      <CallLog calls={calls} summary={summary} />
+    <PageContainer layout="screen" flush title={t('title')} description={t('description')}>
+      <div className={styles.screen} data-testid="calls-screen">
+        <DialerCard query={query} results={search === null ? (query ? null : []) : search.rows} />
+        <div className={styles.column}>
+          {liveCall ? (
+            <LiveCall
+              conversationId={liveCall.conversationId}
+              customerNumber={liveCall.customerNumber}
+              initialTranscript={transcript}
+            />
+          ) : null}
+          <CallStats week={voiceEnabled === true ? summary : null} />
+          <RecentCalls calls={calls ?? []} state={state} filter={filter} />
+        </div>
+      </div>
     </PageContainer>
   );
 }
