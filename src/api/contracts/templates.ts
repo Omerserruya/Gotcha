@@ -111,13 +111,21 @@ export function needsApproval(template: Template): boolean {
  * `exempt` is not a status — it is the absence of the question, and the row
  * says so rather than implying approval was granted.
  */
-export type TemplateStance = 'ready' | 'reviewing' | 'rejected' | 'unsent' | 'exempt';
+export type TemplateStance = 'ready' | 'reviewing' | 'rejected' | 'unsent' | 'exempt' | 'off';
 
 export function templateStance(template: Template): TemplateStance {
-  if (!needsApproval(template)) return 'exempt';
+  /*
+   * ★★ APPROVED IS NOT READY WHEN IT IS SWITCHED OFF. The bot takes only
+   * `isActive: true AND status: APPROVED` (`ai-bot.service.ts`), and flows
+   * and voice require the same — so an approved, inactive template cannot be
+   * sent by anything, and "Ready to send" on it was false (measured on dev).
+   * A template still in review, rejected or unsent already says it cannot
+   * be sent, and keeps saying why.
+   */
+  if (!needsApproval(template)) return template.isActive ? 'exempt' : 'off';
   switch (template.status) {
     case 'APPROVED':
-      return 'ready';
+      return template.isActive ? 'ready' : 'off';
     case 'PENDING_APPROVAL':
       return 'reviewing';
     case 'REJECTED':

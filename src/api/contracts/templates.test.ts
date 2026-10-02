@@ -191,3 +191,16 @@ describe('★ bodyParts — each {{n}} its own part, labelled by sample, then de
     expect(variableLabel(undefined, '4')).toBe('4');
   });
 });
+
+describe('★★ templateStance — the isActive gate', () => {
+  it('approved and active is ready; approved and inactive is off', () => {
+    expect(templateStance(templateSchema.parse({ id: 'a', name: 'a', status: 'APPROVED' }))).toBe(
+      'ready',
+    );
+    expect(
+      templateStance(
+        templateSchema.parse({ id: 'a', name: 'a', status: 'APPROVED', isActive: false }),
+      ),
+    ).toBe('off');
+  });
+});

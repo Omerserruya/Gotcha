@@ -10,7 +10,8 @@
     "reviewing": "Being reviewed",
     "rejected": "Rejected",
     "unsent": "Not sent for review",
-    "exempt": "{channel} only"
+    "exempt": "{channel} only",
+    "off": "Switched off"
   },
   "rejectedBecause": "WhatsApp's reason: {reason}",
   "unchanged": "Unchanged since it was written.",
@@ -26,7 +27,8 @@
     "approved": "Approved",
     "unchanged": "Yes · never changed since",
     "changed": "Yes · changed since, now version {version}",
-    "noReview": "No review needed"
+    "noReview": "No review needed",
+    "approvedOff": "Yes · switched off, so nothing sends it"
   },
   "useInCampaign": "Use in a campaign",
   "duplicate": "Duplicate and edit",

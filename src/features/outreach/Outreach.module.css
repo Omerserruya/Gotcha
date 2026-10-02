@@ -487,9 +487,11 @@
     color: var(--text-primary);
   }
 
-  /* A template another channel sends needs no review, and reads as quieter. */
+  /* No review needed, or switched off: either way the row reads as quieter. */
   .tplRow[data-stance='exempt'] .tplName,
-  .tplRow[data-stance='exempt'] .tplFigure {
+  .tplRow[data-stance='exempt'] .tplFigure,
+  .tplRow[data-stance='off'] .tplName,
+  .tplRow[data-stance='off'] .tplFigure {
     color: var(--text-subtle);
     font-weight: var(--font-weight-regular);
   }

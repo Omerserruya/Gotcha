@@ -10,7 +10,8 @@
     "reviewing": "בבדיקה",
     "rejected": "נדחתה",
     "unsent": "לא נשלחה לבדיקה",
-    "exempt": "{channel} בלבד"
+    "exempt": "{channel} בלבד",
+    "off": "כבויה"
   },
   "rejectedBecause": "הנימוק של וואטסאפ: {reason}",
   "unchanged": "לא שונתה מאז שנכתבה.",
@@ -26,7 +27,8 @@
     "approved": "אושרה",
     "unchanged": "כן · לא שונתה מאז",
     "changed": "כן · שונתה מאז, כעת גרסה {version}",
-    "noReview": "לא נדרשת בדיקה"
+    "noReview": "לא נדרשת בדיקה",
+    "approvedOff": "כן · כבויה, אז שום דבר לא שולח אותה"
   },
   "useInCampaign": "שימוש בקמפיין",
   "duplicate": "שכפול ועריכה",

@@ -146,7 +146,7 @@ describe('★★ the preview — the message as the customer sees it', () => {
   it('★ the facts: filled in from the descriptions; who may send "—"; approved, unchanged', async () => {
     render(await TemplatePreview({ group: templateGroups([template()])[0]! }));
     const preview = screen.getByTestId('template-preview');
-    expect(preview).toHaveTextContent('The customer and The product');
+    expect(preview).toHaveTextContent('The customer and the product');
     expect(preview).toHaveTextContent('Who may send it—');
     expect(screen.getByTestId('template-approved')).toHaveTextContent('never changed since');
   });
@@ -199,5 +199,67 @@ describe('★ the rejection, and what is worth knowing', () => {
   it('"Worth knowing" keeps its place with nothing yet', async () => {
     render(await WorthKnowing());
     expect(screen.getByTestId('template-worth')).toHaveTextContent('Nothing yet.');
+  });
+});
+
+describe('★★ switched off is not ready (measured: "Ready to send" on an inactive template)', () => {
+  it('★★ approved and inactive says "Switched off" — the bot’s own gate is isActive AND APPROVED', async () => {
+    render(
+      await TemplateTable({
+        groups: templateGroups([template({ isActive: false })]),
+        selectedId: null,
+      }),
+    );
+    const chip = screen.getByTestId('stance-t1');
+    expect(chip).toHaveTextContent('Switched off');
+    expect(chip).not.toHaveTextContent('Ready to send');
+    expect(chip).toHaveAttribute('data-stance', 'off');
+  });
+
+  it('an inactive template on another channel is switched off too', async () => {
+    render(
+      await TemplateTable({
+        groups: templateGroups([template({ channel: 'EMAIL', isActive: false })]),
+        selectedId: null,
+      }),
+    );
+    expect(screen.getByTestId('stance-t1')).toHaveTextContent('Switched off');
+  });
+
+  it('⚠ rejected and inactive keeps saying rejected — that is the reason it cannot send', async () => {
+    render(
+      await TemplateTable({
+        groups: templateGroups([template({ status: 'REJECTED', isActive: false })]),
+        selectedId: null,
+      }),
+    );
+    expect(screen.getByTestId('stance-t1')).toHaveTextContent('Rejected');
+  });
+
+  it('the preview: approved, and switched off, so nothing sends it', async () => {
+    render(await TemplatePreview({ group: templateGroups([template({ isActive: false })])[0]! }));
+    expect(screen.getByTestId('template-approved')).toHaveTextContent('switched off');
+    expect(screen.getByTestId('template-approved')).not.toHaveAttribute('data-ok');
+  });
+});
+
+describe('★ "Filled in from" is one sentence', () => {
+  it('lowercase after the first, no comma before "and"', async () => {
+    render(
+      await TemplatePreview({
+        group: templateGroups([
+          template({
+            variables: [
+              { key: '1', description: 'The customer' },
+              { key: '2', description: 'The product' },
+              { key: '3', description: 'When they asked' },
+            ],
+          }),
+        ])[0]!,
+      }),
+    );
+    expect(screen.getByTestId('template-filled-from')).toHaveTextContent(
+      /^The customer, the product and when they asked$/,
+    );
   });
 });

@@ -51,6 +51,15 @@ export function selectedGroup(
   return groups.find((group) => group.all.some((t) => t.id === wanted)) ?? groups[0] ?? null;
 }
 
+/**
+ * "a, b and c". English lists here drop the comma before "and" — `en`'s own
+ * list format keeps it, `en-GB`'s does not; other languages use their own.
+ */
+function joinWithAnd(items: readonly string[], locale: string): string {
+  const tag = locale.startsWith('en') ? 'en-GB' : locale;
+  return new Intl.ListFormat(tag, { style: 'long', type: 'conjunction' }).format(items);
+}
+
 /** The body as one line, its variables in braces: "Hi {John} — the {lamp} is back". */
 function bodyLine(template: Template): string {
   return bodyParts(template)
@@ -178,9 +187,17 @@ export async function TemplatePreview({ group }: { readonly group: TemplateGroup
     }),
     { type: 'unit' },
   );
+  /*
+    One sentence, not a list of labels: "The customer, the product and when
+    they asked" — lowercase after the first, and no comma before "and", as
+    the rest of the app writes a list.
+  */
   const filledFrom = template.variables
     .map((variable) => variable.description?.trim())
-    .filter((text): text is string => !!text);
+    .filter((text): text is string => !!text)
+    .map((text, index) =>
+      index === 0 ? text : text.charAt(0).toLocaleLowerCase(locale) + text.slice(1),
+    );
   const stance = templateStance(template);
 
   return (
@@ -227,7 +244,9 @@ export async function TemplatePreview({ group }: { readonly group: TemplateGroup
       <dl className={styles.tplFacts}>
         <div>
           <dt>{t('preview.filledFrom')}</dt>
-          <dd>{filledFrom.length > 0 ? format.list(filledFrom) : '—'}</dd>
+          <dd data-testid="template-filled-from">
+            {filledFrom.length > 0 ? joinWithAnd(filledFrom, locale) : '—'}
+          </dd>
         </div>
         {/* Nothing records which employees or automations may send it. */}
         <div>
@@ -241,9 +260,11 @@ export async function TemplatePreview({ group }: { readonly group: TemplateGroup
               ? isUnchanged(template)
                 ? t('preview.unchanged')
                 : t('preview.changed', { version: template.version })
-              : stance === 'exempt'
-                ? t('preview.noReview')
-                : '—'}
+              : stance === 'off' && template.status === 'APPROVED'
+                ? t('preview.approvedOff')
+                : stance === 'exempt' || stance === 'off'
+                  ? t('preview.noReview')
+                  : '—'}
           </dd>
         </div>
       </dl>
