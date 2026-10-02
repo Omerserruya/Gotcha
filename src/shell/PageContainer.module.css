@@ -52,7 +52,8 @@
 
   /*
    * `layout="screen"` — 02's page, measured on four screens. See the prop.
-   * No divider under the header: the computed trees show none.
+   * The divider under the header was missed at first: the trees recorded only
+   * `border-top`. Measured on all four sides since.
    */
   .screen {
     display: flex;
@@ -68,6 +69,8 @@
     gap: var(--space-24);
     flex-wrap: wrap;
     padding: 30px var(--space-40) var(--space-20);
+    /* 02: `border-bottom: 1px #EDE9E1` on all four — measured on all four sides. */
+    border-block-end: 1px solid var(--border-subtle);
   }
 
   .screenHeading {

@@ -49,6 +49,8 @@ describe('★ 02’s measurements, read from the stylesheet', () => {
     expect(rule('screenHeader')).toMatch(/padding:\s*30px var\(--space-40\) var\(--space-20\)/);
     expect(rule('screenHeader')).toMatch(/align-items:\s*flex-end/);
     expect(rule('screen')).not.toMatch(/max-inline-size/);
+    // The divider the first trees could not see — they recorded only border-top.
+    expect(rule('screenHeader')).toMatch(/border-block-end:\s*1px solid var\(--border-subtle\)/);
   });
 
   it('title 26/600; the line under it 13px #6B6660', () => {
