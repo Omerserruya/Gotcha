@@ -171,14 +171,51 @@ describe('★★ the outcome column, and the name that never decides it', () => 
     expect(screen.getByTestId('action-t')).toHaveTextContent(/shopify\.process_refund/);
   });
 
-  it('★ renders an action it has no words for VERBATIM', async () => {
+  it('★ an action it has no words for is KEPT — in words, with the key as its tooltip', async () => {
     /*
      * An unknown event is still something that happened. Hiding it would
      * shorten somebody's record silently, which is the failure the coverage
      * declarations exist to prevent one level up.
+     *
+     * ★ SUPERSEDED "VERBATIM" (2026-10-02): no code reaches the screen raw.
+     * `something.nobody_mapped` reads as words, and whoever is debugging
+     * finds the key on hover.
      */
-    await show(ok([event({ id: 'u', action: 'something.nobody.mapped' })]));
-    expect(screen.getByTestId('action-u')).toHaveTextContent('something.nobody.mapped');
+    await show(ok([event({ id: 'u', action: 'something.nobody_mapped' })]));
+    const row = screen.getByTestId('action-u');
+    expect(row).toHaveTextContent('Something nobody mapped');
+    expect(row).not.toHaveTextContent('something.nobody_mapped');
+    expect(row.querySelector('[title="something.nobody_mapped"]')).not.toBeNull();
+  });
+
+  it('★★ GOTCHA’s guards are said as what they do — a claim flagged is not a claim stopped', async () => {
+    /*
+     * `ai.unsupported_outcome_claim` strips the claim only when the reply can
+     * be cleaned; otherwise the reply goes out as written. So the sentence
+     * is that the reply CLAIMED it — never that GOTCHA was stopped.
+     */
+    await show(
+      ok([
+        event({ id: 'o', action: 'ai.unsupported_outcome_claim' }),
+        event({ id: 'a', action: 'ai.unsupported_action_claim' }),
+        event({ id: 'x', actorType: 'system', action: 'ai.exit_criteria_blocked' }),
+        event({ id: 'v', actorType: 'system', action: 'ai.output_validator.blocked' }),
+      ]),
+    );
+    expect(screen.getByTestId('action-o')).toHaveTextContent(
+      "GOTCHA's reply claimed something no tool had done",
+    );
+    expect(screen.getByTestId('action-o')).not.toHaveTextContent(/stopped/i);
+    expect(screen.getByTestId('action-a')).toHaveTextContent(
+      "said it was doing something it wasn't",
+    );
+    expect(screen.getByTestId('action-x')).toHaveTextContent(
+      'details it needed were still missing',
+    );
+    expect(screen.getByTestId('action-v')).toHaveTextContent('replaced before it went out');
+    // Known keys carry no tooltip: the words are ours by design, not a guess.
+    expect(screen.getByTestId('action-o').querySelector('[title]')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/ai\.[a-z_.]+/);
   });
 
   it('★ an unrecorded actor is named as unrecorded, not as the system', async () => {

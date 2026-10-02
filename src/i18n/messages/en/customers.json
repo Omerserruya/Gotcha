@@ -183,7 +183,11 @@
       "commerceExecuted": "A change to the customer's record was sent to the store",
       "commerceFailed": "A change to the customer's record did not go through",
       "commerceDenied": "A change to the customer's record was not allowed",
-      "commerceUnverified": "A change to the customer's record could not be confirmed with the store"
+      "commerceUnverified": "A change to the customer's record could not be confirmed with the store",
+      "unsupportedOutcomeClaim": "GOTCHA's reply claimed something no tool had done",
+      "unsupportedActionClaim": "GOTCHA's reply said it was doing something it wasn't",
+      "exitCriteriaBlocked": "GOTCHA was held back: details it needed were still missing",
+      "outputValidatorBlocked": "A reply was replaced before it went out: it broke a rule"
     },
     "lead": "Everything done on their account, newest first",
     "gapsShort": "{count, plural, one {One kind of action isn't counted here} other {# kinds of action aren't counted here}}",

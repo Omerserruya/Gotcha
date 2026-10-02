@@ -183,7 +183,11 @@
       "commerceExecuted": "שינוי ברשומת הלקוח נשלח לחנות",
       "commerceFailed": "שינוי ברשומת הלקוח לא עבר",
       "commerceDenied": "שינוי ברשומת הלקוח לא הותר",
-      "commerceUnverified": "לא ניתן היה לאמת מול החנות שינוי ברשומת הלקוח"
+      "commerceUnverified": "לא ניתן היה לאמת מול החנות שינוי ברשומת הלקוח",
+      "unsupportedOutcomeClaim": "התשובה של GOTCHA טענה למשהו שאף כלי לא ביצע",
+      "unsupportedActionClaim": "התשובה של GOTCHA אמרה שהוא עושה משהו שלא עשה",
+      "exitCriteriaBlocked": "GOTCHA נעצר: חסרים עדיין פרטים שהיה צריך",
+      "outputValidatorBlocked": "תשובה הוחלפה לפני שנשלחה: היא הפרה כלל"
     },
     "lead": "כל מה שנעשה בחשבון שלהם, מהחדש לישן",
     "gapsShort": "{count, plural, one {סוג פעולה אחד לא נספר כאן} other {# סוגי פעולות לא נספרים כאן}}",

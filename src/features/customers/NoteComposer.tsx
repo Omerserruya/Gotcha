@@ -91,30 +91,37 @@ export function NoteComposer({
           aria-label={t('teamNotes.aiUsable')}
           title={aiUsable ? t('teamNotes.aiUsableOn') : t('teamNotes.aiUsableOff')}
         >
-          <label className={styles.segment} data-on={!aiUsable ? '' : undefined}>
-            <input
-              type="radio"
-              name="note-ai-usable"
-              className="srOnly"
-              data-testid="note-team-only"
-              checked={!aiUsable}
-              onChange={() => setAiUsable(false)}
-              disabled={isPending}
-            />
+          {/*
+            ★ BUTTONS WITH aria-checked, NOT NATIVE RADIOS. React sets a
+            controlled radio's `checked` as a property, never the attribute,
+            so the chosen half was marked in colour and nowhere in the DOM —
+            measured on dev as "no option selected". The state is now on the
+            element, where an inspector and a screen reader both read it.
+          */}
+          <button
+            type="button"
+            role="radio"
+            className={styles.segment}
+            data-testid="note-team-only"
+            aria-checked={!aiUsable}
+            data-on={!aiUsable ? '' : undefined}
+            onClick={() => setAiUsable(false)}
+            disabled={isPending}
+          >
             {t('teamNotes.teamOnly')}
-          </label>
-          <label className={styles.segment} data-on={aiUsable ? '' : undefined}>
-            <input
-              type="radio"
-              name="note-ai-usable"
-              className="srOnly"
-              data-testid="note-ai-usable"
-              checked={aiUsable}
-              onChange={() => setAiUsable(true)}
-              disabled={isPending}
-            />
+          </button>
+          <button
+            type="button"
+            role="radio"
+            className={styles.segment}
+            data-testid="note-ai-usable"
+            aria-checked={aiUsable}
+            data-on={aiUsable ? '' : undefined}
+            onClick={() => setAiUsable(true)}
+            disabled={isPending}
+          >
             {t('teamNotes.mayUse')}
-          </label>
+          </button>
         </div>
         <span className="srOnly">
           {aiUsable ? t('teamNotes.aiUsableOn') : t('teamNotes.aiUsableOff')}

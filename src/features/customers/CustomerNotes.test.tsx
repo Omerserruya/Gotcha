@@ -231,6 +231,10 @@ describe('★★ 04f — the notes as 02 draws them', () => {
     );
     expect(screen.getByTestId('note-team-only')).toBeChecked();
     expect(screen.getByTestId('note-ai-usable')).not.toBeChecked();
+    // ★ On the element, not only in colour (measured: nothing marked it).
+    expect(screen.getByTestId('note-team-only')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('note-ai-usable')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
   });
 
   it('the filter links, and an unknown one is All', async () => {
@@ -276,5 +280,16 @@ describe('★★ 04f’s side — what GOTCHA reads is what the platform gives i
     render(await NotesSide({ notes: null }));
     expect(screen.getByTestId('notes-counts').textContent?.match(/—/g)).toHaveLength(3);
     expect(screen.getByTestId('notes-reads')).not.toHaveTextContent('Nothing yet.');
+  });
+});
+
+describe('★ the segment moves, and says so', () => {
+  it('choosing GOTCHA may use marks it, and unmarks Team only', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    await showWith([]);
+    fireEvent.click(screen.getByTestId('note-ai-usable'));
+    expect(screen.getByTestId('note-ai-usable')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('note-team-only')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('note-composer')).toHaveTextContent(/sent to your CRM/);
   });
 });

@@ -83,8 +83,10 @@ import styles from './Customers.module.css';
  *
  * ★ A LOOKUP, NOT A REWRITE. Every key here is a string this platform
  * actually writes against a conversation or a customer. An action with no
- * entry is rendered **verbatim** — an unknown event is still evidence, and a
- * screen that hid what it could not label would quietly shorten the record.
+ * entry is kept, in words (`humanizeTag`), with its key as the tooltip — an
+ * unknown event is still evidence, and a screen that hid what it could not
+ * label would quietly shorten the record. (It was rendered verbatim until
+ * 2026-10-02: no code reaches the screen raw.)
  */
 const ACTION_KEYS: Readonly<Record<string, string>> = {
   'ai.responded': 'aiResponded',
@@ -97,6 +99,16 @@ const ACTION_KEYS: Readonly<Record<string, string>> = {
   'commerce.customer_action_failed': 'commerceFailed',
   'commerce.customer_action_denied': 'commerceDenied',
   'commerce.customer_action_unverified': 'commerceUnverified',
+  /*
+   * GOTCHA's own guards, from `ai-bot.service.ts` and
+   * `output-validator.service.ts`, each said as what it DOES. The two claim
+   * checks strip the claim only when they can clean the reply, and otherwise
+   * let it go out — so "was stopped" would be false; "claimed" is always true.
+   */
+  'ai.unsupported_outcome_claim': 'unsupportedOutcomeClaim',
+  'ai.unsupported_action_claim': 'unsupportedActionClaim',
+  'ai.exit_criteria_blocked': 'exitCriteriaBlocked',
+  'ai.output_validator.blocked': 'outputValidatorBlocked',
 };
 
 /** `ai.tool_call.<tool>` and `ai.budget.aborted.<scope>` carry their tail. */
@@ -200,6 +212,8 @@ interface Row {
     readonly testid?: string;
   } | null;
   readonly line: string | null;
+  /** The platform's key, as the title's tooltip, when the title is our humanising of it. */
+  readonly rawKey?: string;
   readonly lineTestid?: string;
   readonly whoTestid?: string;
   readonly testid: string;
@@ -285,10 +299,21 @@ export async function CustomerActions({
         });
       }
     }
-    // Verbatim. An event we have no words for is still something that
-    // happened, and dropping it would shorten somebody's record silently.
-    return event.action;
+    /*
+      ★ AN UNKNOWN KEY IN WORDS, NEVER RAW — the rule that no code reaches
+      the screen outranks the older "verbatim". Still never dropped: an event
+      we have no words for is something that happened. The key itself is the
+      row's tooltip, for whoever is debugging.
+    */
+    return humanizeTag(event.action);
   };
+  /** The raw key, when the title is our wording of something we had no words for. */
+  const rawKeyOf = (event: AuditEvent): string | undefined =>
+    ACTION_KEYS[event.action] ||
+    toolOf(event) ||
+    PREFIX_KEYS.some(([prefix]) => event.action.startsWith(prefix))
+      ? undefined
+      : event.action;
 
   /*
     The conversation, one row per day and kind: what GOTCHA said, what the
@@ -355,6 +380,7 @@ export async function CustomerActions({
           at: event.createdAt,
           who: event.actorType ?? 'unknown',
           title: label(event),
+          rawKey: rawKeyOf(event),
           /*
           ★ FOUR OUTCOMES AND THE UNRECORDED ONE IS NOT STYLED AS A
           FAILURE. It is the most common state on this screen — no
@@ -472,7 +498,9 @@ export async function CustomerActions({
               </span>
               <article className={styles.spineCard}>
                 <span className={styles.spineTop}>
-                  <span className={styles.actionTitle}>{row.title}</span>
+                  <span className={styles.actionTitle} title={row.rawKey}>
+                    {row.title}
+                  </span>
                   {row.chip ? (
                     <span
                       className={styles.spineChip}

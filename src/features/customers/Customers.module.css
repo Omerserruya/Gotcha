@@ -674,7 +674,10 @@
 
   .segment {
     padding: var(--space-4) var(--space-10);
+    border: 0;
     border-radius: 6px;
+    background: transparent;
+    font: inherit;
     font-size: 11px;
     color: var(--intent-neutral-text);
     cursor: pointer;
@@ -685,7 +688,7 @@
     color: var(--text-primary);
   }
 
-  .segment:focus-within {
+  .segment:focus-visible {
     outline: var(--border-width-thick) solid var(--border-focus);
     outline-offset: 1px;
   }
