@@ -1,6 +1,7 @@
 import { serverApi } from '@/api/client/server-api';
 import { toolUsageListSchema, type ToolUsage } from '@/api/contracts/capabilities';
 import { aiEmployeesSchema, isBuilderDraft, type AiEmployee } from '@/api/contracts/people';
+import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
 import {
   hourlySchema,
   type Hourly,
@@ -20,7 +21,11 @@ import {
   type Insight,
   type TimeSaved,
 } from '@/api/contracts/analytics';
-import { aiEmployeeEndpoints, analyticsEndpoints } from '@/api/endpoints/registry';
+import {
+  aiEmployeeEndpoints,
+  analyticsEndpoints,
+  integrationEndpoints,
+} from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
@@ -121,6 +126,8 @@ export interface GotchaData {
   readonly tools: readonly ToolUsage[] | null;
   readonly ai: AiPerformance | null;
   readonly unanswered: UnansweredQuestions | null;
+  /** The connections, so a run of failures can be tied to the one that is down. */
+  readonly integrations: readonly Integration[] | null;
 }
 
 export async function loadGotcha(): Promise<GotchaData> {
@@ -132,7 +139,7 @@ export async function loadGotcha(): Promise<GotchaData> {
       logger.warn(event, { cause });
       return null;
     };
-  const [overview, timeSaved, tools, ai, unanswered] = await Promise.all([
+  const [overview, timeSaved, tools, ai, unanswered, integrations] = await Promise.all([
     api
       .get({
         endpoint: analyticsEndpoints.overview(),
@@ -162,8 +169,11 @@ export async function loadGotcha(): Promise<GotchaData> {
         raw: true,
       })
       .catch(failing<UnansweredQuestions>('analytics.unanswered_failed')),
+    api
+      .get({ endpoint: integrationEndpoints.list(), payload: integrationsSchema })
+      .catch(failing<Integration[]>('analytics.integrations_failed')),
   ]);
-  return { overview, timeSaved, tools, ai, unanswered };
+  return { overview, timeSaved, tools, ai, unanswered, integrations };
 }
 
 /** What 06c reads. Each `null` when its read failed; `hourly` keeps the days that answered. */

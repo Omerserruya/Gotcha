@@ -563,6 +563,17 @@
     background-color: var(--action-base);
   }
 
+  .gFix {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: 1px solid var(--border-emphasis);
+  }
+
+  .gFix:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
   .gDidFoot {
     margin: 0;
     padding-block-start: var(--space-12);

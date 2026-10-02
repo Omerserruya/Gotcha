@@ -92,7 +92,10 @@
       "title": "What it actually did",
       "none": "It didn't run anything this week.",
       "unavailable": "We couldn't read what it ran just now.",
-      "foot": "{failed} failed; {refused} were stopped by a rule, which is the rule working."
+      "foot": "{failed} failed; {refused} were stopped by a rule, which is the rule working.",
+      "allOneCause": "All {count} failures were {name} actions, and the {name} connection is down.",
+      "someOneCause": "{count} of the {total} failures were {name} actions, and the {name} connection is down.",
+      "reconnect": "Reconnect it"
     }
   },
   "teamTab": {

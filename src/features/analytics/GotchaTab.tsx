@@ -1,6 +1,8 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { humanizeTag } from '@/api/contracts/approvals';
+import { classifyDispatchError, humanizeTag } from '@/api/contracts/approvals';
+import type { Integration } from '@/api/contracts/integrations';
+import { Link } from '@/i18n/navigation';
 import type { ToolUsage } from '@/api/contracts/capabilities';
 import { UNANSWERED_PAGE } from '@/api/contracts/analytics';
 
@@ -39,6 +41,42 @@ export function failedCount(tools: readonly ToolUsage[]): number | null {
     total += tool.erroredCount + tool.unclassifiedFailureCount;
   }
   return total;
+}
+
+/**
+ * ★ WHY THEY FAILED, WHEN ONE CONNECTION ACCOUNTS FOR THEM — 02's "Both
+ * failures were the same payment method. Fix the automation." on real data.
+ *
+ * `/tool-usage` carries counts, not errors, so the reason comes from the
+ * connections: a failing tool belongs to an integration by its prefix
+ * (`shopify.…` → `shopify`), and that integration is failing with a
+ * connection-class error (the same classes as 03b). Two facts, said as two
+ * facts — "the failures were Shopify actions, and Shopify's connection is
+ * down" — not more causation than the data holds.
+ */
+export function failuresByDownConnection(
+  tools: readonly ToolUsage[],
+  integrations: readonly Integration[],
+): { readonly name: string; readonly count: number; readonly total: number } | null {
+  const failedOf = (tool: ToolUsage) =>
+    (tool.erroredCount ?? 0) + (tool.unclassifiedFailureCount ?? 0);
+  const total = tools.reduce((sum, tool) => sum + failedOf(tool), 0);
+  if (total === 0) return null;
+  // Down: in ERROR, or its last error is the connection's (401, token, OAuth).
+  const down = integrations.filter(
+    (integration) =>
+      integration.tenantConnection?.status === 'ERROR' ||
+      classifyDispatchError(integration.tenantConnection?.lastError) === 'connection',
+  );
+  let best: { name: string; count: number } | null = null;
+  for (const integration of down) {
+    const prefix = `${integration.slug.toLowerCase()}.`;
+    const count = tools
+      .filter((tool) => tool.toolName.toLowerCase().startsWith(prefix))
+      .reduce((sum, tool) => sum + failedOf(tool), 0);
+    if (count > 0 && (!best || count > best.count)) best = { name: integration.name, count };
+  }
+  return best ? { ...best, total } : null;
 }
 
 /** "shopify.lookup_order" → "Lookup order". */
@@ -118,7 +156,14 @@ export async function GotchaStrip({ data }: { readonly data: GotchaData }) {
   const failed = data.tools ? failedCount(data.tools) : null;
   const hours = data.timeSaved ? Math.round(data.timeSaved.secondsSaved / 3600) : null;
   const cells = [
-    { key: 'alone', value: data.overview ? `${format.number(data.overview.aiHandledPct)}%` : '—' },
+    {
+      key: 'alone',
+      // No percentage of nothing: with no conversations, "—", never "0%".
+      value:
+        data.overview && data.overview.totalConversations > 0
+          ? `${format.number(data.overview.aiHandledPct)}%`
+          : '—',
+    },
     { key: 'actions', value: actions === null ? '—' : format.number(actions) },
     { key: 'approval', value: data.ai ? format.number(data.ai.approvals.requested) : '—' },
     { key: 'failed', value: failed === null ? '—' : format.number(failed) },
@@ -172,13 +217,20 @@ export function lastSevenDayDates(now: Date): readonly Date[] {
   });
 }
 
-export async function WhatItDid({ tools }: { readonly tools: readonly ToolUsage[] | null }) {
+export async function WhatItDid({
+  tools,
+  integrations = null,
+}: {
+  readonly tools: readonly ToolUsage[] | null;
+  readonly integrations?: readonly Integration[] | null;
+}) {
   const t = await getTranslations('analytics');
   const format = await getFormatter();
   const top = (tools ?? []).slice(0, 6);
   const max = Math.max(1, ...top.map((tool) => tool.executionCount));
   const refused = (tools ?? []).reduce((sum, tool) => sum + tool.refusedCount, 0);
   const failed = tools ? failedCount(tools) : null;
+  const cause = tools && integrations ? failuresByDownConnection(tools, integrations) : null;
   return (
     <section className={styles.gDid} data-testid="gotcha-did">
       <h2 className={styles.gCardTitle}>{t('gotcha.did.title')}</h2>
@@ -207,7 +259,24 @@ export async function WhatItDid({ tools }: { readonly tools: readonly ToolUsage[
         </ul>
       )}
       {/* A refusal is a rule working; a failure is a call breaking. Said apart. */}
-      {tools !== null && top.length > 0 ? (
+      {cause ? (
+        <p className={styles.gDidFoot} data-testid="did-cause">
+          {cause.count === cause.total
+            ? t('gotcha.did.allOneCause', { count: format.number(cause.total), name: cause.name })
+            : t('gotcha.did.someOneCause', {
+                count: format.number(cause.count),
+                total: format.number(cause.total),
+                name: cause.name,
+              })}{' '}
+          <Link
+            href={{ pathname: '/settings/systems' }}
+            className={styles.gFix}
+            data-testid="did-reconnect"
+          >
+            {t('gotcha.did.reconnect')}
+          </Link>
+        </p>
+      ) : tools !== null && top.length > 0 ? (
         <p className={styles.gDidFoot} data-testid="did-foot">
           {t('gotcha.did.foot', {
             failed: failed === null ? '—' : format.number(failed),

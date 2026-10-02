@@ -8,8 +8,23 @@ import {
   timeSavedSchema,
 } from '@/api/contracts/analytics';
 import { toolUsageSchema } from '@/api/contracts/capabilities';
+import { integrationSchema } from '@/api/contracts/integrations';
 import analytics from '@/i18n/messages/en/analytics.json';
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: { pathname: string };
+    children: React.ReactNode;
+  }) => (
+    <a href={href.pathname} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'analytics') =>
     createTranslator({ locale: 'en', messages: { analytics }, namespace }),
@@ -19,6 +34,7 @@ vi.mock('next-intl/server', () => ({
 import {
   AloneChart,
   failedCount,
+  failuresByDownConnection,
   GotchaHero,
   GotchaStrip,
   lastSevenDayDates,
@@ -32,7 +48,11 @@ const tool = (over: Record<string, unknown>) =>
   toolUsageSchema.parse({ toolName: 'shopify.lookup_order', executionCount: 10, ...over });
 
 const data = (over: Partial<GotchaData> = {}): GotchaData => ({
-  overview: analyticsOverviewSchema.parse({ aiHandledCount: 2490, aiHandledPct: 88 }),
+  overview: analyticsOverviewSchema.parse({
+    totalConversations: 2830,
+    aiHandledCount: 2490,
+    aiHandledPct: 88,
+  }),
   timeSaved: timeSavedSchema.parse({ secondsSaved: 41 * 3600 }),
   tools: [
     tool({
@@ -51,6 +71,7 @@ const data = (over: Partial<GotchaData> = {}): GotchaData => ({
   ],
   ai: aiPerformanceSchema.parse({ approvals: { requested: 54 } }),
   unanswered: { data: [{ id: 'q1', question: 'Do you ship to Eilat?', askCount: 3 }] },
+  integrations: null,
   ...over,
 });
 
@@ -110,7 +131,14 @@ describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
     unmount();
     render(
       await GotchaStrip({
-        data: { overview: null, timeSaved: null, tools: null, ai: null, unanswered: null },
+        data: {
+          overview: null,
+          timeSaved: null,
+          tools: null,
+          ai: null,
+          unanswered: null,
+          integrations: null,
+        },
       }),
     );
     expect(screen.getByTestId('gotcha-strip').textContent?.match(/—/g)).toHaveLength(5);
@@ -137,5 +165,126 @@ describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
     const chart = screen.getByTestId('gotcha-alone');
     expect(chart.querySelectorAll('li')).toHaveLength(7);
     expect(chart).toHaveTextContent("Nothing splits a day's conversations");
+  });
+});
+
+describe('★★ measured on dev: 977 actions, 441 failed, all of them Shopify on a revoked token', () => {
+  const shopify = (status: string, lastError: string | null) =>
+    integrationSchema.parse({
+      id: 'i1',
+      slug: 'shopify',
+      name: 'Shopify',
+      authType: 'OAUTH2',
+      tenantConnection: { id: 'c1', status, lastError },
+    });
+  const failing = [
+    tool({
+      toolName: 'shopify.get_customer_by_phone',
+      executionCount: 825,
+      erroredCount: 400,
+      unclassifiedFailureCount: 0,
+    }),
+    tool({
+      toolName: 'shopify.lookup_order',
+      executionCount: 152,
+      erroredCount: 41,
+      unclassifiedFailureCount: 0,
+    }),
+  ];
+
+  it('★★ every failure on a tool of the down connection: one cause, said, with the way to fix it', async () => {
+    render(
+      await WhatItDid({
+        tools: failing,
+        integrations: [shopify('ERROR', 'token_refresh_failed: shopify_token_refresh_failed_401')],
+      }),
+    );
+    const cause = screen.getByTestId('did-cause');
+    expect(cause).toHaveTextContent(
+      'All 441 failures were Shopify actions, and the Shopify connection is down.',
+    );
+    expect(screen.getByTestId('did-reconnect')).toHaveAttribute('href', '/settings/systems');
+    expect(screen.queryByTestId('did-foot')).toBeNull();
+  });
+
+  it('some of them: says how many', () => {
+    expect(
+      failuresByDownConnection(
+        [
+          ...failing,
+          tool({
+            toolName: 'stripe.refund',
+            executionCount: 5,
+            erroredCount: 9,
+            unclassifiedFailureCount: 0,
+          }),
+        ],
+        [shopify('ERROR', 'token_refresh_failed')],
+      ),
+    ).toEqual({ name: 'Shopify', count: 441, total: 450 });
+  });
+
+  it('some of them, on the screen: how many of how many', async () => {
+    render(
+      await WhatItDid({
+        tools: [
+          ...failing,
+          tool({
+            toolName: 'stripe.refund',
+            executionCount: 5,
+            erroredCount: 9,
+            unclassifiedFailureCount: 0,
+          }),
+        ],
+        integrations: [shopify('ERROR', 'token_refresh_failed')],
+      }),
+    );
+    expect(screen.getByTestId('did-cause')).toHaveTextContent(
+      '441 of the 450 failures were Shopify actions, and the Shopify connection is down.',
+    );
+  });
+
+  it('a connection in ERROR with no error text: down all the same', () => {
+    expect(failuresByDownConnection(failing, [shopify('ERROR', null)])?.count).toBe(441);
+  });
+
+  it('a connection still CONNECTED but whose last error is the token: down', () => {
+    expect(
+      failuresByDownConnection(failing, [shopify('CONNECTED', 'oauth token expired')])?.count,
+    ).toBe(441);
+  });
+
+  it('⚠ a healthy connection is no cause — the plain foot stays', async () => {
+    render(await WhatItDid({ tools: failing, integrations: [shopify('CONNECTED', null)] }));
+    expect(screen.queryByTestId('did-cause')).toBeNull();
+    expect(screen.getByTestId('did-foot')).toHaveTextContent('441 failed');
+  });
+
+  it('no failures, no cause', () => {
+    expect(
+      failuresByDownConnection(
+        [
+          tool({
+            toolName: 'shopify.x',
+            executionCount: 3,
+            erroredCount: 0,
+            unclassifiedFailureCount: 0,
+          }),
+        ],
+        [shopify('ERROR', 'token_refresh_failed')],
+      ),
+    ).toBeNull();
+  });
+
+  it('★ no conversations: "—", never "0%" — no percentage of nothing', async () => {
+    render(
+      await GotchaStrip({
+        data: data({
+          overview: analyticsOverviewSchema.parse({ totalConversations: 0, aiHandledPct: 0 }),
+        }),
+      }),
+    );
+    expect(screen.getByTestId('gotcha-alone')).toHaveTextContent('—');
+    expect(screen.getByTestId('gotcha-alone')).not.toHaveTextContent('0%');
   });
 });

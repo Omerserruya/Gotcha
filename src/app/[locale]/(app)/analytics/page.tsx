@@ -80,7 +80,7 @@ export default async function Page({
           <GotchaStrip data={data} />
           <div className={styles.gBottom}>
             <AloneChart days={lastSevenDayDates(new Date())} />
-            <WhatItDid tools={data.tools} />
+            <WhatItDid tools={data.tools} integrations={data.integrations} />
           </div>
         </div>
       </PageContainer>
