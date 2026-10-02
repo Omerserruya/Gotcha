@@ -14,7 +14,7 @@ vi.mock('next-intl/server', () => ({
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
-import { DecisionStats } from '@/features/approvals/NothingWaiting';
+import { DecisionStats, NothingWaiting } from '@/features/approvals/NothingWaiting';
 import { PageContainer } from '@/shell/PageContainer';
 
 /*
@@ -106,5 +106,33 @@ describe('★★ 03 — things need your decision', () => {
     expect(props?.description).toBe('pending.soonest');
     // The queue runs to the panel's edges.
     expect(props?.flush).toBe(true);
+  });
+});
+
+describe('★ the history is reachable while items are pending — `?view=decided`', () => {
+  it('shows the decisions card, titled as the history, with the way back', async () => {
+    loadApprovals.mockResolvedValue({
+      pending: [
+        {
+          id: 'a',
+          summary: 'x',
+          tool: 't',
+          expiresAt: '2026-09-19T12:00:00.000Z',
+          createdAt: '2026-09-19T09:00:00.000Z',
+          riskTags: [],
+          requestedBy: 'bot',
+        },
+      ],
+      decided: [],
+      decidedMayBeIncomplete: false,
+      aiEmployees: [],
+      readAt: Date.parse('2026-09-19T10:00:00.000Z'),
+    });
+    const { default: Page } = await import('./page');
+    const tree = await Page({ searchParams: Promise.resolve({ view: 'decided' }) });
+    const props = propsOf<{ title: string; fill?: boolean }>(tree, PageContainer);
+    expect(props?.title).toBe('decided.heading');
+    expect(props?.fill).toBe(true);
+    expect(propsOf(tree, NothingWaiting)).not.toBeNull();
   });
 });

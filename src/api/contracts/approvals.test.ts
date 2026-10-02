@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   approvalSummary,
+  humanizeTag,
   describeApprovalAction,
   aiEmployeeIdOf,
   approvalSchema,
@@ -239,5 +240,13 @@ describe('★★ approvalSummary — a sentence from the record, for rows that s
     expect(approvalSummary(row('Cancel order #1006 and refund 89.50'))).toBe(
       'Cancel order #1006 and refund 89.50',
     );
+  });
+});
+
+describe('⚠⚠ every risk tag reaches the screen as words', () => {
+  it('★ and anything else is turned into words, never printed as the code', () => {
+    expect(humanizeTag('MOVES_MONEY')).toBe('Moves money');
+    expect(humanizeTag('cancel_order')).toBe('Cancel order');
+    expect(humanizeTag('shopify.process-refund')).toBe('Shopify process refund');
   });
 });

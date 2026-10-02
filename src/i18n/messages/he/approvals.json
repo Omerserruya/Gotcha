@@ -10,7 +10,10 @@
     "waiting": "{count, plural, one {בקשה אחת ממתינה} other {# בקשות ממתינות}}",
     "today": "היום",
     "yesterday": "אתמול",
-    "dayUnknown": "התאריך לא נרשם"
+    "dayUnknown": "התאריך לא נרשם",
+    "decidedToday": "הוחלט מוקדם יותר היום",
+    "decidedEarlier": "הוחלט קודם",
+    "backToQueue": "{count, plural, one {חזרה לבקשה שממתינה} other {חזרה ל־# שממתינות}}"
   },
   "detail": {
     "requestedBy": "התבקש על ידי {who}",
@@ -23,7 +26,12 @@
   "risk": {
     "HIGH": "סיכון גבוה",
     "IRREVERSIBLE": "לא ניתן לחזרה",
-    "FINANCIAL": "מזיז כסף"
+    "FINANCIAL": "מזיז כסף",
+    "commerce": "הזמנה בחנות",
+    "human_initiated": "התבקש על ידי אדם",
+    "SYSTEM_COPILOT": "משנה את סביבת העבודה",
+    "PLAN": "תוכנית",
+    "REQUIRES_APPROVAL": "דורש החלטה"
   },
   "action": {
     "approve": "אישור",

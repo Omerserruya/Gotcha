@@ -1,11 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Approval } from '@/api/contracts/approvals';
 
 import messages from '@/i18n/messages/en/approvals.json';
+
+import { KNOWN_RISK_TAGS } from '@/api/contracts/approvals';
 
 import { ApprovalsScreen } from './ApprovalsScreen';
 
@@ -25,6 +28,21 @@ import { ApprovalsScreen } from './ApprovalsScreen';
  */
 
 const { approve, reject } = vi.hoisted(() => ({ approve: vi.fn(), reject: vi.fn() }));
+
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: { pathname: string; query?: Record<string, string> };
+    children: ReactNode;
+  }) => (
+    <a href={`${href.pathname}?${new URLSearchParams(href.query ?? {})}`} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 vi.mock('./actions', () => ({
   approveRequest: approve,
@@ -60,10 +78,15 @@ const approval = (over: Partial<Approval> = {}): Approval => ({
   ...over,
 });
 
-function renderScreen(pending: readonly Approval[]) {
+function renderScreen(pending: readonly Approval[], decidedToday: number | null = null) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ approvals: messages }}>
-      <ApprovalsScreen pending={pending} requesterNames={{}} serverNow={NOW} />
+      <ApprovalsScreen
+        pending={pending}
+        requesterNames={{}}
+        serverNow={NOW}
+        decidedToday={decidedToday}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -446,5 +469,52 @@ describe('★★ 03, measured — what the new layout says', () => {
   it('⚠ an unreadable date never throws the render — the eyebrow simply has no time', () => {
     renderScreen([approval({ createdAt: 'not-a-date' })]);
     expect(screen.getByTestId('requested-by')).toHaveTextContent('Requested by an automation');
+  });
+});
+
+describe('★★ the supervisor’s three, against the test items', () => {
+  it('⚠⚠ no tag reaches the screen as a raw code — MOVES_MONEY reads "Moves money"', () => {
+    renderScreen([approval({ riskTags: ['MOVES_MONEY'] })]);
+    expect(screen.getByTestId('queue-a1')).toHaveTextContent('Moves money');
+    expect(screen.getByTestId('risk-MOVES_MONEY')).toHaveTextContent('Moves money');
+    expect(document.body.textContent).not.toContain('MOVES_MONEY');
+  });
+
+  it('⚠⚠ a deadline on another day names the day — "by 13:02" read as today', () => {
+    // NOW is Saturday 19 Sep 10:00 UTC; this expires Monday.
+    renderScreen([approval({ expiresAt: '2026-09-21T13:02:00.000Z' })]);
+    const card = screen.getByTestId('if-you-leave-it');
+    expect(card).toHaveTextContent(/by Mon \d{2}:\d{2}/);
+  });
+
+  it('★ a deadline today stays a time', () => {
+    renderScreen([approval({ expiresAt: '2026-09-19T11:00:00.000Z' })]);
+    expect(screen.getByTestId('if-you-leave-it').textContent).not.toMatch(/Mon|Sun|Sep/);
+  });
+
+  it('★★ 02’s "Decided earlier today · N" leads to the history', () => {
+    renderScreen([approval()], 7);
+    const link = screen.getByTestId('decided-link');
+    expect(link).toHaveTextContent('Decided earlier today');
+    expect(link).toHaveTextContent('7');
+    expect(link).toHaveAttribute('href', '/approvals?view=decided');
+  });
+
+  it('⚠ and no row when the history could not be read', () => {
+    renderScreen([approval()], null);
+    expect(screen.queryByTestId('decided-link')).toBeNull();
+  });
+});
+
+describe('⚠⚠ every risk tag the platform writes has words', () => {
+  it('★★ every tag the platform WRITES has a label — iterated, so a new one cannot slip by', async () => {
+    const labels = (await import('@/i18n/messages/en/approvals.json')).default.risk as Record<
+      string,
+      string
+    >;
+    for (const tag of KNOWN_RISK_TAGS) {
+      expect(labels[tag], tag).toBeTruthy();
+      expect(labels[tag], tag).not.toMatch(/_|^[A-Z]+$/);
+    }
   });
 });

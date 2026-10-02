@@ -10,7 +10,10 @@
     "waiting": "{count, plural, one {# request waiting} other {# requests waiting}}",
     "today": "Today",
     "yesterday": "Yesterday",
-    "dayUnknown": "Date not recorded"
+    "dayUnknown": "Date not recorded",
+    "decidedToday": "Decided earlier today",
+    "decidedEarlier": "Decided earlier",
+    "backToQueue": "{count, plural, one {Back to the one waiting} other {Back to the # waiting}}"
   },
   "detail": {
     "requestedBy": "Requested by {who}",
@@ -23,7 +26,12 @@
   "risk": {
     "HIGH": "High risk",
     "IRREVERSIBLE": "Can't be taken back",
-    "FINANCIAL": "Moves money"
+    "FINANCIAL": "Moves money",
+    "commerce": "Store order",
+    "human_initiated": "Asked for by a person",
+    "SYSTEM_COPILOT": "Changes your workspace",
+    "PLAN": "A plan",
+    "REQUIRES_APPROVAL": "Needs a decision"
   },
   "action": {
     "approve": "Approve",

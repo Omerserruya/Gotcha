@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import {
   decisionStance,
   isDecidable,
+  humanizeTag,
   isKnownRiskTag,
   isOutcomeUnknown,
   isRetryable,
@@ -13,6 +14,8 @@ import {
 } from '@/api/contracts/approvals';
 
 import { approveRequest, rejectRequest, retryExecution } from './actions';
+import { Link } from '@/i18n/navigation';
+
 import { MomentAfter } from './MomentAfter';
 import styles from './Approvals.module.css';
 
@@ -59,12 +62,18 @@ export function ApprovalsScreen({
   pending,
   requesterNames,
   serverNow,
+  decidedToday = null,
 }: {
   readonly pending: readonly Approval[];
   /** `id → who asked`, resolved server-side so no cuid reaches the browser. */
   readonly requesterNames: Readonly<Record<string, string>>;
   /** Epoch ms from the server, so the first client render matches the server's. */
   readonly serverNow: number;
+  /**
+   * How many decisions were made today, for 02's "Decided earlier today · 7"
+   * row — `null` when the history could not be read, and then no row.
+   */
+  readonly decidedToday?: number | null;
 }) {
   const t = useTranslations('approvals');
 
@@ -265,6 +274,10 @@ export function ApprovalsScreen({
 
   const showDays = days.length > 1 || days[0]?.key !== dayKey(now.toISOString());
 
+  /** Every tag as words: its label, or — for a value nobody labelled — `humanizeTag`. */
+  const riskLabel = (tag: string) =>
+    isKnownRiskTag(tag) ? t(`risk.${tag}` as 'risk.IRREVERSIBLE') : humanizeTag(tag);
+
   /** "2m", "1h", "3d" — 02's row times and deadlines. */
   const short = (ms: number) => {
     const minutes = Math.max(0, Math.round(ms / 60_000));
@@ -288,8 +301,25 @@ export function ApprovalsScreen({
       hour12: false,
     }).format(at);
   };
+  /*
+   * ⚠⚠ A DEADLINE DAYS AWAY READ AS TODAY. "If nobody decides by 13:02" for
+   *   one expiring on Saturday is a time with no day — the history list's
+   *   defect again. A time for today, a weekday and time this week, a date
+   *   beyond it.
+   */
+  const dayClock = (iso: string): string | null => {
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) return null;
+    if (at.toDateString() === now.toDateString()) return clock(iso);
+    const days = (at.getTime() - now.getTime()) / 86_400_000;
+    const options: Intl.DateTimeFormatOptions =
+      days > 0 && days < 6
+        ? { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }
+        : { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false };
+    return new Intl.DateTimeFormat(locale, options).format(at);
+  };
   const createdClock = selected ? clock(selected.createdAt) : null;
-  const expiresClock = selected ? clock(selected.expiresAt) : null;
+  const expiresClock = selected ? dayClock(selected.expiresAt) : null;
 
   return (
     <div className={styles.screen} data-testid="approvals-screen">
@@ -378,7 +408,7 @@ export function ApprovalsScreen({
                           ) : null}
                           {tag ? (
                             <span className={styles.queueTag} data-tag={tag}>
-                              {isKnownRiskTag(tag) ? t(`risk.${tag}` as 'risk.IRREVERSIBLE') : tag}
+                              {riskLabel(tag)}
                             </span>
                           ) : null}
                         </button>
@@ -389,6 +419,21 @@ export function ApprovalsScreen({
               </li>
             ))}
           </ul>
+
+          {/*
+            02's quiet row at the foot of the queue: what was already decided,
+            and the way to it — the history this screen keeps (`?view=decided`).
+          */}
+          {decidedToday === null ? null : (
+            <Link
+              href={{ pathname: '/approvals', query: { view: 'decided' } }}
+              className={styles.decidedLink}
+              data-testid="decided-link"
+            >
+              <span>{decidedToday > 0 ? t('queue.decidedToday') : t('queue.decidedEarlier')}</span>
+              {decidedToday > 0 ? <span>{decidedToday}</span> : null}
+            </Link>
+          )}
         </div>
 
         {selected ? (
@@ -426,7 +471,7 @@ export function ApprovalsScreen({
                           vanishing. Hiding a risk label because we have no
                           translation for it is the wrong way round here.
                         */}
-                        {isKnownRiskTag(tag) ? t(`risk.${tag}` as 'risk.IRREVERSIBLE') : tag}
+                        {riskLabel(tag)}
                       </li>
                     ))}
                   </ul>

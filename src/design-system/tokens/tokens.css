@@ -368,6 +368,8 @@
     --panel-well: #f0ede7;
     /* The bar that closes a panel — 02's queue footer. */
     --panel-footer: #f5f2ec;
+    /* A quiet row at the foot of a list — 03's "Decided earlier today". */
+    --panel-quiet: #fcfbf8;
     --panel-field: #fff;
 
     --text-primary: #121212;

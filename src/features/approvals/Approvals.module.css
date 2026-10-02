@@ -153,7 +153,9 @@
   }
 
   /* "Moves money" in 02's violet — a reach, not a danger. */
-  .queueTag[data-tag='FINANCIAL'] {
+  .queueTag[data-tag='FINANCIAL'],
+  .queueTag[data-tag='MOVES_MONEY'],
+  .queueTag[data-tag='commerce'] {
     background-color: var(--ai-avatar-surface);
     color: var(--ai-avatar-text);
   }
@@ -642,5 +644,28 @@
 
   .queueButton[data-lapsed='yes'] .queueWhen {
     color: var(--intent-blocked-text);
+  }
+
+  /* 02: `#FCFBF8`, `padding:13px 20px`, `#EDE9E1` above, 11.5px, count right. */
+  .decidedLink {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-10);
+    padding: 13px var(--space-20);
+    background-color: var(--panel-quiet);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .decidedLink:hover {
+    color: var(--text-secondary);
+  }
+
+  .decidedLink:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
   }
 }

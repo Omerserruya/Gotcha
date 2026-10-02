@@ -88,8 +88,42 @@ export const RISK_LEVELS = ['low', 'medium', 'high'] as const;
  *
  * So: do not "tidy" this by filtering to the known set.
  */
-export const KNOWN_RISK_TAGS = ['HIGH', 'IRREVERSIBLE', 'FINANCIAL'] as const;
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE VOCABULARY IS WHAT THE WRITERS WRITE — AND IT IS OPEN
+ * ════════════════════════════════════════════════════════════════════════════
+ * The first three came from the schema's own comment (`["HIGH","IRREVERSIBLE",
+ * "FINANCIAL"]`), and no writer in the monorepo produces any of them. The
+ * write sites produce `commerce`, the action's own name, `human_initiated`
+ * (commerce-actions.service), `SYSTEM_COPILOT` and `PLAN` (system-tools),
+ * and `REQUIRES_APPROVAL` (agent-tools). A test item carried `MOVES_MONEY`,
+ * written nowhere, and it reached the screen as the raw enum.
+ *
+ * Because action names make the set OPEN, a map can never be complete. So a
+ * tag with a label gets it, and any other is turned into words by
+ * `humanizeTag` — `MOVES_MONEY` reads "Moves money", `cancel_order` reads
+ * "Cancel order". Shown, never hidden (see above); never raw.
+ */
+export const KNOWN_RISK_TAGS = [
+  'HIGH',
+  'IRREVERSIBLE',
+  'FINANCIAL',
+  'commerce',
+  'human_initiated',
+  'SYSTEM_COPILOT',
+  'PLAN',
+  'REQUIRES_APPROVAL',
+] as const;
 export type KnownRiskTag = (typeof KNOWN_RISK_TAGS)[number];
+
+/** A code-shaped tag as words: `MOVES_MONEY` → "Moves money". */
+export function humanizeTag(tag: string): string {
+  const words = tag
+    .replace(/[_.\-]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : tag;
+}
 
 export function isKnownRiskTag(tag: string): tag is KnownRiskTag {
   return (KNOWN_RISK_TAGS as readonly string[]).includes(tag);

@@ -5,6 +5,7 @@ import { ApprovalsScreen } from '@/features/approvals/ApprovalsScreen';
 import { DecisionStats, NothingWaiting } from '@/features/approvals/NothingWaiting';
 import { decisionStats, loadApprovals, requesterName } from '@/features/approvals/load-approvals';
 import styles from '@/features/approvals/Approvals.module.css';
+import { Link } from '@/i18n/navigation';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -53,8 +54,14 @@ import { pageMetadata } from '@/shell/page-metadata';
  * `requestedBy` is `ai-agent:<cuid>` for every AI employee and the list route
  * refuses to resolve it, so the raw id would otherwise reach the page.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  /** `?view=decided` — the history, reachable while items are pending too. */
+  readonly searchParams?: Promise<{ readonly view?: string }>;
+} = {}) {
   const t = await getTranslations('approvals');
+  const { view } = (await searchParams) ?? {};
   const { pending, decided, decidedMayBeIncomplete, aiEmployees, readAt } = await loadApprovals();
 
   const nameFor = (list: readonly Approval[] | null) =>
@@ -70,6 +77,32 @@ export default async function Page() {
     return (
       <PageContainer layout="screen" title={t('title')} description={t('description')}>
         <p data-testid="approvals-unavailable">{t('unavailable')}</p>
+      </PageContainer>
+    );
+  }
+
+  /*
+   * The history, asked for from the queue's "Decided earlier today" row.
+   * The same card as 03c, with the way back to what is waiting.
+   */
+  if (view === 'decided' && pending.length > 0) {
+    return (
+      <PageContainer
+        layout="screen"
+        fill
+        title={t('decided.heading')}
+        description={t('pending.title', { count: pending.length })}
+        actions={
+          <Link href="/approvals" className={styles.keys} data-testid="back-to-queue">
+            {t('queue.backToQueue', { count: pending.length })}
+          </Link>
+        }
+      >
+        <NothingWaiting
+          decided={decided}
+          mayBeIncomplete={decidedMayBeIncomplete}
+          requesterNames={nameFor(decided)}
+        />
       </PageContainer>
     );
   }
@@ -152,6 +185,16 @@ export default async function Page() {
         // and it starts the client's clock at exactly the server's value, so
         // the first client render cannot disagree about what has lapsed.
         serverNow={readAt}
+        /* 02's "Decided earlier today · N", counted where the history is. */
+        decidedToday={
+          decided === null
+            ? null
+            : decided.filter(
+                (approval) =>
+                  approval.decidedAt !== null &&
+                  new Date(approval.decidedAt).toDateString() === new Date(readAt).toDateString(),
+              ).length
+        }
       />
     </PageContainer>
   );
