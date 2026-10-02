@@ -1,131 +1,237 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 
 import { isRetryable, type Approval } from '@/api/contracts/approvals';
 
 import styles from './Approvals.module.css';
 
+/** What 03b knows about the decision it follows. */
+export interface MomentOutcome {
+  readonly summary: string;
+  readonly dispatched: boolean | undefined;
+  readonly dispatchError: string | null | undefined;
+  readonly approval: Approval | undefined;
+}
+
+/** One decided request, enough to count a run of the same kind. */
+export interface DecidedTrace {
+  readonly id: string;
+  readonly tool: string;
+  readonly status: Approval['status'];
+}
+
 /**
- * Screen 03b — *"the moment after"*.
+ * How many of this kind were approved, this one included — and rejected.
+ * The history is the server's snapshot, which after a refresh contains this
+ * decision too, so it is excluded by id and counted once.
+ */
+export function runOf(
+  approval: Approval,
+  history: readonly DecidedTrace[],
+): { approved: number; rejected: number } {
+  const same = history.filter((h) => h.tool === approval.tool && h.id !== approval.id);
+  return {
+    approved: same.filter((h) => h.status === 'APPROVED').length + 1,
+    rejected: same.filter((h) => h.status === 'REJECTED').length,
+  };
+}
+
+/**
+ * Screen 03b — the moment after, measured.
  *
- * ── WHY THIS IS NOT THE SCREEN THAT WAS DRAWN ──
- * The design shows a confirmation with four green steps and a **live Undo for
- * the stated reversibility window**. There is no undo in this platform: no
- * route, no gateway path, no `undoneAt` or `reversalOf` field, enumerated
- * across the repository. `retry-execution` runs the action **forward**, which
- * on a refund is the opposite of reversing it.
+ * The right pane becomes the moment until you open the next request:
  *
- * So a countdown that cannot cancel anything is not built. What is built is
- * the thing the backend was reshaped to make visible, in its own words:
+ *   the confirmation   green-edged (`#C9D8B4`), a check, what was done, how
+ *                      long ago; then the chain — recorded, carried out (or
+ *                      not, in the provider's words), the customer told
+ *   what was sent      the message's state; its text is "—" (not recorded
+ *                      on the approval, and the detail route returns inbound
+ *                      messages only)
+ *   the pattern        after a run of the same kind: how many, from the
+ *                      decided history
+ *   up next            the next request and "Open it"
  *
- *   *"A manager approving is not the action happening… without this, a
- *   dispatch that failed left an APPROVED row indistinguishable from one that
- *   succeeded, nothing could retry it, and the customer was simply never told
- *   anything."*
- *
- * **At the moment after a decision, only the first of the design's four ticks
- * is true.** This panel holds the three facts in the order they become
- * knowable, and it is only interesting when one of them went wrong — which is
- * exactly when somebody needs to be looking at it.
- *
- *   1. **the decision** — certain, immediate
- *   2. **the execution** — from `dispatch` in the approve response itself,
- *      synchronously; no poll, no subscription, no optimistic guess
- *   3. **the customer** — `customerNotifiedAt`, which the backend uses as the
- *      once-only guard for the continuation message, so "they were told" is a
- *      **fact** here rather than an inference
- *
- * Retry sits where Undo was drawn. It is the affordance that exists, and it
- * answers the case the design has no state for at all.
+ * ⚠ Undo is drawn and not live: there is no undo in this platform, and its
+ * tooltip says so. Before a decision nothing mentions reversal at all — see
+ * the screen's own test — because a promise read before an irreversible act
+ * changes the act. "Add something", the discount, and "Let GOTCHA handle
+ * them" (a policy write) are drawn and not live too.
  */
 export function MomentAfter({
   outcome,
+  history,
+  next,
+  now,
+  onOpenNext,
   onRetry,
   busy,
 }: {
-  readonly outcome: {
+  readonly outcome: MomentOutcome;
+  readonly history: readonly DecidedTrace[];
+  readonly next: {
     readonly summary: string;
-    /** `undefined` where the route answered before reporting a dispatch. */
-    readonly dispatched: boolean | undefined;
-    readonly dispatchError: string | null | undefined;
-    /** The row as the server now holds it. */
-    readonly approval: Approval | undefined;
-  };
+    readonly eyebrow: string;
+    readonly line: string | null;
+  } | null;
+  readonly now: Date;
+  readonly onOpenNext: () => void;
   readonly onRetry: (id: string) => void;
   readonly busy: boolean;
 }) {
   const t = useTranslations('approvals');
+  const format = useFormatter();
   const { approval } = outcome;
+  const failed = outcome.dispatched === false;
   const customerTold = approval?.customerNotifiedAt != null;
+  const decidedAt = approval?.decidedAt ? new Date(approval.decidedAt) : null;
+  const run = approval ? runOf(approval, history) : null;
 
   return (
-    <section
-      className={styles.momentAfter}
+    <div
+      className={styles.moment}
       data-testid="moment-after"
-      data-dispatched={outcome.dispatched === false ? 'no' : 'yes'}
+      data-dispatched={failed ? 'no' : 'yes'}
     >
-      <h2 className={styles.momentHeading} data-testid="moment-decision">
-        {t('moment.decided', { summary: outcome.summary })}
-      </h2>
-
-      <ol className={styles.momentFacts}>
-        {/* 1 · The decision. The only one that is certain here. */}
-        <li className={styles.momentFact} data-testid="moment-fact-decision">
-          {t('moment.factDecision')}
-        </li>
-
-        {/*
-          2 · The execution, from the approve response. The design draws this
-          as always-green; it is the step that actually fails.
-        */}
-        <li
-          className={styles.momentFact}
-          data-testid="moment-fact-execution"
-          data-state={outcome.dispatched === false ? 'failed' : 'ok'}
-        >
-          {outcome.dispatched === false
-            ? t('moment.factExecutionFailed')
-            : t('moment.factExecutionRan')}
-          {outcome.dispatched === false && outcome.dispatchError ? (
-            <span className={styles.momentDetail} data-testid="moment-error">
-              {outcome.dispatchError}
+      <section className={styles.momentDone} data-failed={failed ? '' : undefined}>
+        <header className={styles.momentDoneHead}>
+          <span className={styles.momentCheck} aria-hidden="true">
+            {failed ? '!' : '✓'}
+          </span>
+          <h2 className={styles.momentTitle} data-testid="moment-decision">
+            {t('moment.decided', { summary: outcome.summary })}
+          </h2>
+          {decidedAt ? (
+            <span className={styles.momentAgo}>
+              {format.relativeTime(
+                decidedAt,
+                now.getTime() < decidedAt.getTime() ? decidedAt : now,
+              )}
             </span>
           ) : null}
-        </li>
+          <span className={styles.momentHeadActions}>
+            {/*
+              Where the design drew Undo, the one that is real when it failed:
+              this runs the action AGAIN, forward, and says so.
+            */}
+            {approval && isRetryable(approval) ? (
+              <button
+                type="button"
+                className={styles.momentButton}
+                data-testid="moment-retry"
+                disabled={busy}
+                onClick={() => onRetry(approval.id)}
+              >
+                {t('action.retry')}
+              </button>
+            ) : null}
+            <span
+              className={styles.momentButton}
+              aria-disabled="true"
+              title={t('moment.noUndo')}
+              data-testid="moment-undo"
+            >
+              {t('moment.undo')}
+            </span>
+          </span>
+        </header>
 
-        {/*
-          3 · The customer. A fact, not an inference — `customerNotifiedAt` is
-          the backend's own once-only guard for the continuation message.
+        <ol className={styles.momentChain}>
+          {/* 1 · The decision. The only one that is certain here. */}
+          <li className={styles.momentStep} data-testid="moment-fact-decision" data-state="ok">
+            {t('moment.factDecision')}
+          </li>
+          {/* 2 · The execution, from the approve response — the step that actually fails. */}
+          <li
+            className={styles.momentStep}
+            data-testid="moment-fact-execution"
+            data-state={failed ? 'failed' : 'ok'}
+          >
+            {failed ? t('moment.factExecutionFailed') : t('moment.factExecutionRan')}
+            {failed && outcome.dispatchError ? (
+              <span className={styles.momentDetail} data-testid="moment-error">
+                {outcome.dispatchError}
+              </span>
+            ) : null}
+          </li>
+          {/*
+            3 · The customer: `customerNotifiedAt`, the backend's own once-only
+            guard. "Not yet" is not "failed" — delivery may still be retried.
+          */}
+          <li
+            className={styles.momentStep}
+            data-testid="moment-fact-customer"
+            data-state={customerTold ? 'ok' : 'pending'}
+          >
+            {customerTold ? t('moment.factCustomerTold') : t('moment.factCustomerNotYet')}
+          </li>
+        </ol>
+      </section>
 
-          "Not yet" is deliberately not "failed": delivery may still be
-          retried, and saying it failed would be a claim we cannot support.
-        */}
-        <li
-          className={styles.momentFact}
-          data-testid="moment-fact-customer"
-          data-state={customerTold ? 'ok' : 'pending'}
-        >
-          {customerTold ? t('moment.factCustomerTold') : t('moment.factCustomerNotYet')}
-        </li>
-      </ol>
+      <section className={styles.momentCard} data-testid="moment-sent">
+        <header className={styles.momentCardHead}>
+          <span className={styles.momentDot} aria-hidden="true" />
+          <h3 className={styles.momentCardTitle}>{t('moment.sent.title')}</h3>
+          <span className={styles.momentCardMeta}>
+            {customerTold ? t('moment.sent.delivered') : t('moment.sent.notYet')}
+          </span>
+        </header>
+        <p className={styles.momentMessage}>—</p>
+        <div className={styles.momentCardActions}>
+          <span className={styles.momentButton} aria-disabled="true">
+            {t('moment.sent.add')}
+          </span>
+          <span className={styles.momentButton} aria-disabled="true">
+            {t('moment.sent.discount')}
+          </span>
+        </div>
+      </section>
 
-      {/*
-        Where the design drew Undo. This runs the action AGAIN, forward, and
-        the copy says so — there is nothing here that could be mistaken for
-        taking the refund back.
-      */}
-      {approval && isRetryable(approval) ? (
-        <button
-          type="button"
-          className={styles.retry}
-          data-testid="moment-retry"
-          disabled={busy}
-          onClick={() => onRetry(approval.id)}
-        >
-          {t('action.retry')}
-        </button>
+      {/* After a run of the same kind only: the offer is what a run makes. */}
+      {run && run.approved >= 2 ? (
+        <section className={styles.momentPattern} data-testid="moment-pattern">
+          <div>
+            <p className={styles.momentPatternTitle}>
+              {t('moment.pattern.title', { count: run.approved })}
+            </p>
+            <p className={styles.momentPatternBody}>
+              {t('moment.pattern.body', { approved: run.approved, rejected: run.rejected })}
+            </p>
+          </div>
+          <div className={styles.momentPatternActions}>
+            <span className={styles.momentPatternPrimary} aria-disabled="true">
+              {t('moment.pattern.handle')}
+            </span>
+            <span className={styles.momentPatternSecondary} aria-disabled="true">
+              {t('moment.pattern.keep')}
+            </span>
+          </div>
+        </section>
       ) : null}
-    </section>
+
+      <section className={styles.momentNext} data-testid="moment-next">
+        {next ? (
+          <>
+            <div className={styles.momentNextText}>
+              <p className={styles.momentNextEyebrow}>{next.eyebrow}</p>
+              <p className={styles.momentNextTitle}>{next.summary}</p>
+              {next.line ? <p className={styles.momentNextLine}>{next.line}</p> : null}
+            </div>
+            <button
+              type="button"
+              className={styles.momentOpen}
+              data-testid="moment-open-next"
+              onClick={onOpenNext}
+            >
+              {t('moment.next.open')}
+            </button>
+          </>
+        ) : (
+          <p className={styles.momentNextLine} data-testid="moment-nothing-next">
+            {t('moment.next.none')}
+          </p>
+        )}
+      </section>
+    </div>
   );
 }

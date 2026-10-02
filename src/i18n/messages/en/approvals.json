@@ -13,7 +13,9 @@
     "dayUnknown": "Date not recorded",
     "decidedToday": "Decided earlier today",
     "decidedEarlier": "Decided earlier",
-    "backToQueue": "{count, plural, one {Back to the one waiting} other {Back to the # waiting}}"
+    "backToQueue": "{count, plural, one {Back to the one waiting} other {Back to the # waiting}}",
+    "done": "done",
+    "didntRun": "didn't run"
   },
   "detail": {
     "requestedBy": "Requested by {who}",
@@ -95,12 +97,33 @@
     }
   },
   "moment": {
-    "decided": "Decided: {summary}",
+    "decided": "{summary}",
     "factDecision": "Your decision is recorded.",
     "factExecutionRan": "GOTCHA carried it out.",
     "factExecutionFailed": "GOTCHA could not carry it out.",
     "factCustomerTold": "The customer has been told.",
-    "factCustomerNotYet": "The customer hasn't been told yet."
+    "factCustomerNotYet": "The customer hasn't been told yet.",
+    "undo": "Undo",
+    "noUndo": "There's no undo for this yet.",
+    "sent": {
+      "title": "What GOTCHA sent them",
+      "delivered": "Already sent",
+      "notYet": "Not sent yet",
+      "add": "Add something",
+      "discount": "Send them a discount too"
+    },
+    "pattern": {
+      "title": "That's the {count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} like it",
+      "body": "{approved} approved like this here, {rejected, plural, =0 {none} other {#}} rejected.",
+      "handle": "Let GOTCHA handle them",
+      "keep": "Keep asking me"
+    },
+    "next": {
+      "eyebrow": "Up next",
+      "eyebrowExpires": "Up next · expires in {in}",
+      "open": "Open it",
+      "none": "Nothing else is waiting."
+    }
   },
   "stats": {
     "approvedWeek": "Approved this week",

@@ -13,7 +13,9 @@
     "dayUnknown": "התאריך לא נרשם",
     "decidedToday": "הוחלט מוקדם יותר היום",
     "decidedEarlier": "הוחלט קודם",
-    "backToQueue": "{count, plural, one {חזרה לבקשה שממתינה} other {חזרה ל־# שממתינות}}"
+    "backToQueue": "{count, plural, one {חזרה לבקשה שממתינה} other {חזרה ל־# שממתינות}}",
+    "done": "בוצע",
+    "didntRun": "לא רץ"
   },
   "detail": {
     "requestedBy": "התבקש על ידי {who}",
@@ -95,12 +97,33 @@
     }
   },
   "moment": {
-    "decided": "הוחלט: {summary}",
+    "decided": "{summary}",
     "factDecision": "ההחלטה שלך נרשמה.",
     "factExecutionRan": "GOTCHA ביצעה את זה.",
     "factExecutionFailed": "GOTCHA לא הצליחה לבצע את זה.",
     "factCustomerTold": "הלקוח קיבל הודעה.",
-    "factCustomerNotYet": "הלקוח עוד לא קיבל הודעה."
+    "factCustomerNotYet": "הלקוח עוד לא קיבל הודעה.",
+    "undo": "ביטול",
+    "noUndo": "עדיין אין אפשרות לבטל את זה.",
+    "sent": {
+      "title": "מה GOTCHA שלח להם",
+      "delivered": "כבר נשלח",
+      "notYet": "עדיין לא נשלח",
+      "add": "להוסיף משהו",
+      "discount": "לשלוח גם הנחה"
+    },
+    "pattern": {
+      "title": "זו הפעם ה-{count} כזו",
+      "body": "{approved} כאלה אושרו כאן, {rejected, plural, =0 {אף אחת לא} other {#}} נדחו.",
+      "handle": "ש-GOTCHA יטפל בהן",
+      "keep": "להמשיך לשאול אותי"
+    },
+    "next": {
+      "eyebrow": "הבא בתור",
+      "eyebrowExpires": "הבא בתור · פג בעוד {in}",
+      "open": "לפתוח",
+      "none": "שום דבר אחר לא ממתין."
+    }
   },
   "stats": {
     "approvedWeek": "אושרו השבוע",

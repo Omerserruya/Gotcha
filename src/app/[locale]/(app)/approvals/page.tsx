@@ -185,6 +185,8 @@ export default async function Page({
         // and it starts the client's clock at exactly the server's value, so
         // the first client render cannot disagree about what has lapsed.
         serverNow={readAt}
+        /* 03b's "That's the twelfth like it" — counted from the history, by tool. */
+        decidedHistory={(decided ?? []).map(({ id, tool, status }) => ({ id, tool, status }))}
         /* 02's "Decided earlier today · N", counted where the history is. */
         decidedToday={
           decided === null

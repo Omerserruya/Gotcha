@@ -527,3 +527,174 @@ describe('★ REQUIRES_APPROVAL is not a pill here — every item on this screen
     expect(screen.getByTestId('queue-a1')).not.toHaveTextContent(/needs a decision/i);
   });
 });
+
+describe('★★ 03b — the moment after owns the pane until you move on', () => {
+  const two = [
+    approval({ id: 'a1', summary: 'Refund 179 for order 1842' }),
+    approval({ id: 'a2', summary: 'Cancel order 4812', expiresAt: '2026-09-19T10:38:00.000Z' }),
+  ];
+  const decidedOk = () =>
+    approve.mockResolvedValue({
+      ok: true,
+      dispatched: true,
+      approval: approval({
+        id: 'a1',
+        status: 'APPROVED',
+        decidedAt: '2026-09-19T09:59:56.000Z',
+        customerNotifiedAt: '2026-09-19T09:59:58.000Z',
+      }),
+    });
+
+  function renderWith(
+    pending: readonly Approval[],
+    history: { id: string; tool: string; status: Approval['status'] }[] = [],
+  ) {
+    return render(
+      <NextIntlClientProvider locale="en" messages={{ approvals: messages }}>
+        <ApprovalsScreen
+          pending={pending}
+          requesterNames={{}}
+          serverNow={NOW}
+          decidedHistory={history}
+        />
+      </NextIntlClientProvider>,
+    );
+  }
+
+  it('★★ after approving: the decided row stays at the queue’s head as done, and the pane is the moment', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith(two);
+    await user.click(screen.getByTestId('approve'));
+
+    expect(await screen.findByTestId('queue-done')).toHaveTextContent('Refund 179 for order 1842');
+    expect(screen.getByTestId('queue-done')).toHaveTextContent('done');
+    expect(screen.getByTestId('approval-moment')).toBeInTheDocument();
+    // The next request's controls wait behind "Open it".
+    expect(screen.queryByTestId('approve')).toBeNull();
+  });
+
+  it('★ "Up next" names the next request and its deadline; "Open it" opens it', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith(two);
+    await user.click(screen.getByTestId('approve'));
+
+    const next = await screen.findByTestId('moment-next');
+    expect(next).toHaveTextContent('Cancel order 4812');
+    expect(next).toHaveTextContent(/Up next · expires in/i);
+    await user.click(screen.getByTestId('moment-open-next'));
+    expect(screen.queryByTestId('approval-moment')).toBeNull();
+    expect(screen.getByTestId('approval-detail')).toHaveTextContent('Cancel order 4812');
+    expect(screen.queryByTestId('queue-done')).toBeNull();
+  });
+
+  it('★ one keystroke away: A after a decision opens the next — and decides nothing', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith(two);
+    await user.click(screen.getByTestId('approve'));
+    await screen.findByTestId('approval-moment');
+    approve.mockClear();
+
+    await user.keyboard('a');
+    expect(screen.queryByTestId('approval-moment')).toBeNull();
+    expect(approve).not.toHaveBeenCalled();
+  });
+
+  it('choosing another row leaves the moment too', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith(two);
+    await user.click(screen.getByTestId('approve'));
+    await screen.findByTestId('approval-moment');
+    await user.click(screen.getByTestId('queue-a2'));
+    expect(screen.queryByTestId('approval-moment')).toBeNull();
+  });
+
+  it('⚠ the last one decided: nothing else is waiting, said plainly', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith([two[0]!]);
+    await user.click(screen.getByTestId('approve'));
+    expect(await screen.findByTestId('moment-nothing-next')).toHaveTextContent(
+      'Nothing else is waiting.',
+    );
+  });
+
+  it('★★ Undo is drawn after the decision and NOT live — there is no undo; and never before', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith(two);
+    // Before deciding: no word of reversal (the rule the earlier test guards).
+    expect(document.body.textContent).not.toMatch(/undo/i);
+    await user.click(screen.getByTestId('approve'));
+    const undo = await screen.findByTestId('moment-undo');
+    expect(undo).toHaveAttribute('aria-disabled', 'true');
+    expect(undo).toHaveAttribute('title', "There's no undo for this yet.");
+    expect(undo.tagName).not.toBe('BUTTON');
+  });
+
+  it('what was sent: its state from customerNotifiedAt; the text is "—", never invented', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith(two);
+    await user.click(screen.getByTestId('approve'));
+    const sent = await screen.findByTestId('moment-sent');
+    expect(sent).toHaveTextContent('Already sent');
+    expect(sent).toHaveTextContent('—');
+  });
+
+  it('⚠ not notified: "Not sent yet" — never "sent" on a guess', async () => {
+    approve.mockResolvedValue({
+      ok: true,
+      dispatched: true,
+      approval: approval({ id: 'a1', status: 'APPROVED', customerNotifiedAt: null }),
+    });
+    const user = userEvent.setup();
+    renderWith(two);
+    await user.click(screen.getByTestId('approve'));
+    const sent = await screen.findByTestId('moment-sent');
+    expect(sent).toHaveTextContent('Not sent yet');
+    expect(sent).not.toHaveTextContent('Already sent');
+  });
+
+  it('★ the pattern appears after a run of the same kind — counted from the history, this one once', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith(two, [
+      { id: 'h1', tool: 'issue_refund', status: 'APPROVED' },
+      { id: 'h2', tool: 'issue_refund', status: 'APPROVED' },
+      { id: 'h3', tool: 'issue_refund', status: 'REJECTED' },
+      { id: 'h4', tool: 'cancel_order', status: 'APPROVED' },
+      // The refreshed history already holds this decision: not counted twice.
+      { id: 'a1', tool: 'issue_refund', status: 'APPROVED' },
+    ]);
+    await user.click(screen.getByTestId('approve'));
+    const pattern = await screen.findByTestId('moment-pattern');
+    expect(pattern).toHaveTextContent("That's the 3rd like it");
+    expect(pattern).toHaveTextContent('3 approved like this here, 1 rejected.');
+  });
+
+  it('⚠ the first of its kind gets no offer — a run is what makes one', async () => {
+    decidedOk();
+    const user = userEvent.setup();
+    renderWith(two, [{ id: 'h4', tool: 'cancel_order', status: 'APPROVED' }]);
+    await user.click(screen.getByTestId('approve'));
+    await screen.findByTestId('approval-moment');
+    expect(screen.queryByTestId('moment-pattern')).toBeNull();
+  });
+
+  it('a decision that did not run says so on the queue row too', async () => {
+    approve.mockResolvedValue({
+      ok: true,
+      dispatched: false,
+      dispatchError: 'refund window closed',
+      approval: approval({ id: 'a1', status: 'APPROVED', executionState: 'FAILED' }),
+    });
+    const user = userEvent.setup();
+    renderWith(two);
+    await user.click(screen.getByTestId('approve'));
+    expect(await screen.findByTestId('queue-done')).toHaveTextContent("didn't run");
+  });
+});

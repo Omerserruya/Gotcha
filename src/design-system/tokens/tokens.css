@@ -525,6 +525,13 @@
     --alert-title: #7c2f14;
     --alert-text: #8b5237;
     --alert-control-edge: #e3c3b6;
+    /* 03b's confirmation edge: the calm green, drawn as a card's border. */
+    --calm-edge: #c9d8b4;
+    /* 02's violet offer card ("That's the twelfth like it"). */
+    --ai-card-surface: #f6f3fe;
+    --ai-card-edge: #ddd5f7;
+    --ai-card-title: #3e3379;
+    --ai-card-text: #4a4470;
     /* The faint tint behind an AI employee's row. */
     --row-ai-surface: #fcfbf8;
 

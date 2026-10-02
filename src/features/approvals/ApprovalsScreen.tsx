@@ -17,7 +17,7 @@ import {
 import { approveRequest, rejectRequest, retryExecution } from './actions';
 import { Link } from '@/i18n/navigation';
 
-import { MomentAfter } from './MomentAfter';
+import { MomentAfter, type DecidedTrace, type MomentOutcome } from './MomentAfter';
 import styles from './Approvals.module.css';
 
 /**
@@ -64,6 +64,7 @@ export function ApprovalsScreen({
   requesterNames,
   serverNow,
   decidedToday = null,
+  decidedHistory = [],
 }: {
   readonly pending: readonly Approval[];
   /** `id → who asked`, resolved server-side so no cuid reaches the browser. */
@@ -75,6 +76,8 @@ export function ApprovalsScreen({
    * row — `null` when the history could not be read, and then no row.
    */
   readonly decidedToday?: number | null;
+  /** The decided history, enough to count a run of one kind (03b's pattern). */
+  readonly decidedHistory?: readonly DecidedTrace[];
 }) {
   const t = useTranslations('approvals');
 
@@ -108,12 +111,9 @@ export function ApprovalsScreen({
    * the interesting case is a decision that did NOT execute, and a panel that
    * fades after four seconds is a panel that hides exactly that.
    */
-  const [moment, setMoment] = useState<{
-    summary: string;
-    dispatched: boolean | undefined;
-    dispatchError: string | null | undefined;
-    approval: Approval | undefined;
-  } | null>(null);
+  const [moment, setMoment] = useState<
+    (MomentOutcome & { readonly id: string; readonly requester: string | null }) | null
+  >(null);
 
   const approveRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
@@ -165,6 +165,8 @@ export function ApprovalsScreen({
       const index = pending.findIndex((a) => a.id === selected?.id);
       const next = pending[Math.min(pending.length - 1, Math.max(0, index + delta))];
       if (!next || next.id === selected?.id) return;
+      // Moving on is leaving the moment: the next request takes the pane.
+      setMoment(null);
       setSelectedId(next.id);
       setReason('');
       // Focus follows selection: the roving tabindex stays coherent and the
@@ -192,6 +194,13 @@ export function ApprovalsScreen({
           break;
         case 'a':
         case 'A':
+          // After a decision, the first key opens the next one — 03b's "one
+          // keystroke away". It decides nothing.
+          if (moment) {
+            event.preventDefault();
+            setMoment(null);
+            break;
+          }
           // Focuses. Does NOT decide — Enter on the focused button does.
           if (decidable) {
             event.preventDefault();
@@ -200,6 +209,11 @@ export function ApprovalsScreen({
           break;
         case 'r':
         case 'R':
+          if (moment) {
+            event.preventDefault();
+            setMoment(null);
+            break;
+          }
           if (decidable) {
             event.preventDefault();
             reasonRef.current?.focus();
@@ -210,7 +224,7 @@ export function ApprovalsScreen({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [decidable, move]);
+  }, [decidable, move, moment]);
 
   async function onApprove() {
     if (!selected || busy) return;
@@ -233,13 +247,22 @@ export function ApprovalsScreen({
         ? t('announce.approvedButFailed', { summary: selected.summary })
         : t('announce.approvedAndRan', { summary: selected.summary }),
     );
+    /*
+      03b: the pane becomes the moment, and the next request is selected
+      behind it — "already up", one key or "Open it" away. Not `move`, which
+      is leaving the moment.
+    */
+    const index = pending.findIndex((a) => a.id === selected.id);
+    const nextUp = pending[index + 1] ?? pending[index - 1] ?? null;
     setMoment({
+      id: selected.id,
+      requester: requesterNames[selected.id] ?? null,
       summary: selected.summary,
       dispatched: result.dispatched,
       dispatchError: result.dispatchError,
       approval: result.approval,
     });
-    move(1);
+    if (nextUp) setSelectedId(nextUp.id);
   }
 
   async function onReject() {
@@ -355,6 +378,32 @@ export function ApprovalsScreen({
             data-testid="approval-queue"
             aria-label={t('queue.label')}
           >
+            {/*
+              03b: the request just decided stays at the head of the queue,
+              green, "done" — or "didn't run" when it did not — until you move
+              on. It is not a button: it is no longer waiting on you.
+            */}
+            {moment ? (
+              <li className={styles.queueDay}>
+                <div
+                  className={styles.queueDone}
+                  data-testid="queue-done"
+                  data-failed={moment.dispatched === false ? '' : undefined}
+                >
+                  <span className={styles.queueTop}>
+                    <span className={styles.queueSummary}>{moment.summary}</span>
+                    <span className={styles.queueWhen} data-done="">
+                      {moment.dispatched === false ? t('queue.didntRun') : t('queue.done')}
+                    </span>
+                  </span>
+                  {moment.requester ? (
+                    <span className={styles.queueMeta}>
+                      {t('detail.requestedBy', { who: moment.requester })}
+                    </span>
+                  ) : null}
+                </div>
+              </li>
+            ) : null}
             {days.map((day) => (
               <li key={day.key} className={styles.queueDay}>
                 {/*
@@ -385,6 +434,7 @@ export function ApprovalsScreen({
                           tabIndex={current ? 0 : -1}
                           className={styles.queueButton}
                           onClick={() => {
+                            setMoment(null);
                             setSelectedId(approval.id);
                             setReason('');
                           }}
@@ -437,10 +487,46 @@ export function ApprovalsScreen({
           )}
         </div>
 
-        {selected ? (
+        {moment ? (
+          <section className={styles.detail} data-testid="approval-moment" aria-live="off">
+            <MomentAfter
+              outcome={moment}
+              history={decidedHistory}
+              now={now}
+              next={
+                selected && selected.id !== moment.id
+                  ? {
+                      summary: selected.summary,
+                      eyebrow: (() => {
+                        const left = Date.parse(selected.expiresAt) - now.getTime();
+                        return Number.isFinite(left) && left > 0
+                          ? t('moment.next.eyebrowExpires', { in: short(left) })
+                          : t('moment.next.eyebrow');
+                      })(),
+                      line:
+                        [
+                          requesterNames[selected.id]
+                            ? t('detail.requestedBy', { who: requesterNames[selected.id]! })
+                            : null,
+                          clock(selected.createdAt),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || null,
+                    }
+                  : null
+              }
+              onOpenNext={() => {
+                setMoment(null);
+                queueRef.current
+                  ?.querySelector<HTMLElement>(`[data-id="${selected?.id}"]`)
+                  ?.focus();
+              }}
+              onRetry={onRetry}
+              busy={busy}
+            />
+          </section>
+        ) : selected ? (
           <section className={styles.detail} data-testid="approval-detail" aria-live="off">
-            {moment ? <MomentAfter outcome={moment} onRetry={onRetry} busy={busy} /> : null}
-
             {/*
               02's head: an eyebrow (who asked, when) and the request at 34px.
               02's right-hand "Reversible · Yes — within 24h" is not drawn:

@@ -402,68 +402,354 @@
     line-height: normal;
   }
 
-  /* ── 03b · the moment after ──────────────────────────────────────────── */
   /*
-   * Where the design drew a confirmation with a live Undo. There is no undo in
-   * this platform, so this panel holds the three facts that ARE knowable, and
-   * it stays until the next decision rather than fading: the interesting case
-   * is the one that did not execute, and a panel that disappears after four
-   * seconds is a panel that hides exactly that.
+   * ════════════════════════════════════════════════════════════════════════
+   * 03b, measured — the moment after
+   * ════════════════════════════════════════════════════════════════════════
+   * The pane, `gap:14px`: the confirmation, what was sent, the pattern, and
+   * "Up next" at its foot. The decided row stays green at the queue's head.
    */
-  .momentAfter {
+  .queueDone {
     display: flex;
     flex-direction: column;
-    gap: var(--space-10);
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-16);
-    padding-inline: var(--space-20);
+    gap: 5px;
+    padding: var(--space-14) var(--space-20);
+    background-color: var(--intent-calm-surface);
   }
 
-  /* A dispatch that failed is not a success with a footnote. */
-  .momentAfter[data-dispatched='no'] {
-    border-color: var(--intent-blocked-edge, var(--border-emphasis));
+  .queueDone .queueSummary {
+    color: var(--intent-neutral-text);
+  }
+
+  .queueWhen[data-done] {
+    color: var(--signal-done-text);
+  }
+
+  .queueDone[data-failed] {
     background-color: var(--intent-blocked-surface);
   }
 
-  .momentHeading {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 600;
-  }
-
-  .momentFacts {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    margin: 0;
-    padding: 0;
-    counter-reset: moment;
-  }
-
-  .momentFact {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    font-size: var(--font-size-meta);
-    color: var(--text-body);
-  }
-
-  .momentFact[data-state='failed'] {
+  .queueDone[data-failed] .queueWhen[data-done] {
     color: var(--intent-blocked-text);
-    font-weight: 500;
   }
 
-  /* Not yet is not the same as failed: delivery may still be retried. */
-  .momentFact[data-state='pending'] {
+  .moment {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  /* White, radius 14, `1px #C9D8B4`; the head `#F1F5EC` at `15px 18px`. */
+  .momentDone {
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--calm-edge);
+    border-radius: var(--radius-card);
+  }
+
+  .momentDone[data-failed] {
+    border-color: var(--intent-blocked-edge);
+  }
+
+  .momentDoneHead {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 15px 18px;
+    background-color: var(--intent-calm-surface);
+  }
+
+  .momentDone[data-failed] .momentDoneHead {
+    background-color: var(--intent-blocked-surface);
+  }
+
+  .momentCheck {
+    flex: none;
+    inline-size: 19px;
+    block-size: 19px;
+    border-radius: 50%;
+    background-color: var(--signal-done-text);
+    color: var(--panel-field);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 19px;
+    text-align: center;
+  }
+
+  .momentDone[data-failed] .momentCheck {
+    background-color: var(--intent-blocked-text);
+  }
+
+  .momentTitle {
+    margin: 0;
+    min-inline-size: 0;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--intent-calm-text);
+  }
+
+  .momentAgo {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--signal-done-text-soft);
+  }
+
+  .momentHeadActions {
+    margin-inline-start: auto;
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  /* `padding:6px 13px`, radius 8, white with the card's edge, 11.5px. */
+  .momentButton {
+    padding: 6px 13px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .momentDoneHead .momentButton {
+    border-color: var(--calm-edge);
+    color: var(--intent-calm-text);
+  }
+
+  button.momentButton {
+    cursor: pointer;
+  }
+
+  .momentButton[aria-disabled='true'],
+  .momentButton:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  button.momentButton:focus-visible,
+  .momentOpen:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* The chain: steps along one row, `padding:14px 18px`, a dot before each. */
+  .momentChain {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8) var(--space-32);
+    margin: 0;
+    padding: var(--space-14) 18px;
+    list-style: none;
+  }
+
+  .momentStep {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+    font-size: var(--font-size-label);
+    color: var(--intent-neutral-text);
+  }
+
+  .momentStep::before {
+    content: '';
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    align-self: center;
+    border-radius: 50%;
+    background-color: var(--signal-done);
+  }
+
+  .momentStep[data-state='failed'] {
+    color: var(--intent-blocked-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .momentStep[data-state='failed']::before {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  /* Not yet is not failed: delivery may still be retried. */
+  .momentStep[data-state='pending'] {
     color: var(--text-subtle);
+  }
+
+  .momentStep[data-state='pending']::before {
+    background-color: var(--border-emphasis);
   }
 
   .momentDetail {
+    flex-basis: 100%;
     font-size: var(--font-size-caption);
+    font-weight: var(--font-weight-regular);
     color: var(--text-subtle);
+  }
+
+  /* "What GOTCHA sent": white, radius 14; head `12px 18px` with a violet dot. */
+  .momentCard {
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .momentCardHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding: var(--space-12) 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .momentDot {
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--step-next);
+  }
+
+  .momentCardTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .momentCardMeta {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .momentMessage {
+    margin: 0;
+    padding: var(--space-14) 18px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+
+  .momentCardActions {
+    display: flex;
+    gap: var(--space-8);
+    padding: 0 18px var(--space-14);
+  }
+
+  /* 02's violet offer: `padding:17px 20px`, `gap:16px`, radius 14. */
+  .momentPattern {
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    padding: 17px var(--space-20);
+    background-color: var(--ai-card-surface);
+    border: 1px solid var(--ai-card-edge);
+    border-radius: var(--radius-card);
+  }
+
+  .momentPattern > div:first-child {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .momentPatternTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--ai-card-title);
+  }
+
+  .momentPatternBody {
+    margin: 5px 0 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ai-card-text);
+  }
+
+  .momentPatternActions {
+    flex: none;
+    inline-size: 174px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .momentPatternPrimary,
+  .momentPatternSecondary {
+    padding: 9px 15px;
+    border-radius: 9px;
+    font-size: var(--font-size-label);
+    text-align: center;
+  }
+
+  .momentPatternPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .momentPatternSecondary {
+    border: 1px solid var(--ai-card-edge);
+    color: var(--ai-card-text);
+  }
+
+  .momentPatternActions > [aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* "Up next": at the pane's foot, `padding:16px 18px`, the title 17/600. */
+  .momentNext {
+    margin-block-start: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    padding: var(--space-16) 18px;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .momentNextText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .momentNextEyebrow {
+    margin: 0;
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .momentNextTitle {
+    margin: 7px 0 0;
+    font-size: 17px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .momentNextLine {
+    margin: var(--space-4) 0 0;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  /* "Open it": dark, radius 10, `padding:11px 20px`, 13/500. */
+  .momentOpen {
+    flex: none;
+    padding: 11px var(--space-20);
+    border: 0;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
   }
 
   /* ── 03c · nothing waiting ───────────────────────────────────────────── */
