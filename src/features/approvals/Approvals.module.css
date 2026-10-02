@@ -201,7 +201,7 @@
     margin: var(--space-12) 0 0;
     font-size: 34px;
     font-weight: var(--font-weight-semibold);
-    letter-spacing: -0.02em;
+    letter-spacing: var(--letter-spacing-hero);
     color: var(--text-primary);
   }
 
@@ -742,6 +742,7 @@
     margin: 7px 0 0;
     font-size: 17px;
     font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }
 

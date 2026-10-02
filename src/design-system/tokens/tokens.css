@@ -125,6 +125,16 @@
     --letter-spacing-serif: -0.01em;
     --letter-spacing-normal: 0;
     --letter-spacing-heading: -0.02em;
+    /*
+     * 02's tracking scale, by size, for weight 600 (measured over its source):
+     *   17–25px  heading  -0.02em      27–28px  large   -0.028em
+     *   26px     display  -0.025em     29–40px  hero    -0.03em
+     *   42px     xlarge   -0.035em     44–52px  giant   -0.04em
+     * `tracking.test.ts` holds every 600 style at 17px and up to it.
+     */
+    --letter-spacing-large: -0.028em;
+    --letter-spacing-xlarge: -0.035em;
+    --letter-spacing-giant: -0.04em;
     --letter-spacing-eyebrow: 0.2em;
     /* The rail's group label runs marginally tighter than a page eyebrow. */
     --letter-spacing-eyebrow-rail: 0.18em;

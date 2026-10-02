@@ -904,6 +904,7 @@
     margin: 0;
     font-size: var(--font-size-title);
     font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-hero);
     color: var(--text-primary);
   }
 
@@ -1144,6 +1145,7 @@
     margin: 0;
     font-size: 22px;
     font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }
 
@@ -1274,6 +1276,7 @@
     margin: 0;
     font-size: 17px;
     font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }
 

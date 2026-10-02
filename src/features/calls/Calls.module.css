@@ -242,6 +242,7 @@
     margin: var(--space-4) 0 0;
     font-size: 22px;
     font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }
 

@@ -71,6 +71,7 @@
   .runwayCount strong {
     font-size: var(--font-size-title);
     font-weight: 600;
+    letter-spacing: var(--letter-spacing-hero);
     color: var(--text-primary);
   }
 
