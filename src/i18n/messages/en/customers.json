@@ -16,7 +16,9 @@
     "count": "{count, plural, =0 {No one yet} =1 {One person} other {# people}}",
     "none": "Nobody has talked to you yet.",
     "unnamed": "No name or handle on this contact",
-    "truncated": "Showing the first {shown} records. There are {total} in all, and some may turn out to be the same person."
+    "truncated": "Showing the first {shown} records. There are {total} in all, and some may turn out to be the same person.",
+    "footer": "{count, plural, =1 {One person} other {# people}}",
+    "footerTruncated": "Showing the first {shown} of {total} records"
   },
   "channel": {
     "WHATSAPP": "WhatsApp",
@@ -183,5 +185,12 @@
       "not_linked": "Kept in GOTCHA only — your CRM is connected, but this person isn't matched to a record in it.",
       "nothing_to_push": "Kept in GOTCHA only — there was nothing to send it through."
     }
+  },
+  "titleCount": "{count, plural, =1 {One customer} other {# customers}}",
+  "subline": "One person, however many channels they write from.",
+  "identityShort": "Someone writing on two channels may appear twice.",
+  "composition": {
+    "heading": "Who your customers are",
+    "byChannel": "By the channel they write on"
   }
 }

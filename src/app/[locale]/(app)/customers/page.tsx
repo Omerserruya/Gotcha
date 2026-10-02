@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
-import { CustomerList } from '@/features/customers/CustomerList';
+import { collapseToPeople } from '@/api/contracts/customers';
+import { Composition, CustomerList } from '@/features/customers/CustomerList';
 import styles from '@/features/customers/Customers.module.css';
 import { loadCustomers } from '@/features/customers/load-customers';
 import { PageContainer } from '@/shell/PageContainer';
@@ -48,42 +49,62 @@ export default async function Page({
   const query = q?.trim() ?? '';
   const { rows, total, truncated, searchedField } = await loadCustomers(query);
 
-  return (
-    <PageContainer layout="screen" title={t('title')} description={t('description')}>
-      {/*
-        A plain GET form: the query lives in the URL, so a search is linkable
-        and survives a reload, and the page stays a server component.
-      */}
-      <form className={styles.search} action="" method="get" data-testid="customer-search">
-        <label className={styles.searchLabel} htmlFor="customer-q">
-          {t('search.label')}
-        </label>
-        <input
-          id="customer-q"
-          name="q"
-          type="search"
-          className={styles.searchInput}
-          defaultValue={query}
-          placeholder={t('search.placeholder')}
-          data-testid="customer-search-input"
-        />
-        <button type="submit" className={styles.searchSubmit}>
-          {t('search.label')}
-        </button>
-      </form>
+  /*
+   * ★ 04: the count IS the title — "4,180 customers". People, counted from
+   *   the rows collapsed by `personId`, and only when the list is whole: a
+   *   truncated list's `total` counts records, and attaching it to "customers"
+   *   is the mismatch this screen once had.
+   */
+  const people = rows === null ? null : collapseToPeople(rows).length;
+  const title =
+    people !== null && people > 0 && !truncated ? t('titleCount', { count: people }) : t('title');
 
+  return (
+    <PageContainer
+      layout="screen"
+      /* A window: the header stays, the list scrolls inside its card. */
+      fill
+      title={title}
+      description={t('subline')}
+      actions={
+        /*
+          A plain GET form: the query lives in the URL, so a search is
+          linkable and survives a reload, and the page stays a server
+          component. 02's search field, 260 wide; Enter searches.
+        */
+        <form className={styles.search} action="" method="get" data-testid="customer-search">
+          <label className="srOnly" htmlFor="customer-q">
+            {t('search.label')}
+          </label>
+          <input
+            id="customer-q"
+            name="q"
+            type="search"
+            className={styles.searchInput}
+            defaultValue={query}
+            placeholder={t('search.placeholder')}
+            data-testid="customer-search-input"
+          />
+        </form>
+      }
+    >
       {rows === null ? (
         // A failed read and an empty tenant are opposite facts: one means
         // nobody has talked to you, the other means you do not know.
         <p data-testid="customers-unavailable">{t('unavailable')}</p>
       ) : (
-        <CustomerList
-          rows={rows}
-          total={total}
-          truncated={truncated}
-          searchedField={searchedField}
-          query={query}
-        />
+        <div className={styles.columns}>
+          <CustomerList
+            rows={rows}
+            total={total}
+            truncated={truncated}
+            searchedField={searchedField}
+            query={query}
+          />
+          <aside className={styles.side}>
+            <Composition rows={rows} truncated={truncated} />
+          </aside>
+        </div>
       )}
     </PageContainer>
   );

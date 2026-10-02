@@ -9,6 +9,9 @@ import {
   type CustomerRow,
 } from '@/api/contracts/customers';
 
+import fill from '@/design-system/styles/fill.module.css';
+import { channelMark } from '@/features/inbox/channel-marks';
+
 import styles from './Customers.module.css';
 
 /**
@@ -110,104 +113,145 @@ export async function CustomerList({
   }
 
   return (
-    <div className={styles.list} data-testid="customer-list">
-      {/*
-        "Contacts", not "people" — see the note above. The count is the route's
-        real `prisma.contact.count`, so it is the number that match rather than
-        the number on screen.
-      */}
-      {/*
-        People, counted from the same array that is rendered below — so the
-        header and the list cannot disagree. That is the invariant, and the
-        capture asserts it rather than asserting a number.
-      */}
-      {/*
-        The limit, stated before the list rather than under it. A reader who
-        sees two rows for one person needs to know why BEFORE concluding the
-        product is broken — or, worse, concluding it worked.
-      */}
-      <p className={styles.identityLimit} data-testid="identity-limit">
-        {t('identityLimit')}
-      </p>
+    /*
+      ══════════════════════════════════════════════════════════════════════
+      ★★ 04's LIST CARD — a window, rows at 67, a footer at its base
+      ══════════════════════════════════════════════════════════════════════
+      White, `1px #E6E2DA`, radius 14 (`fillCard`). Rows at `13px 18px`,
+      `gap:14px`, `#F0EDE7` between them: a 40px initials disc with the
+      channel's badge, the name at 14px/600 with the person's first tag as a
+      chip, and under it a 12px line of how to reach them. The rows scroll
+      inside the card (`fillScroll`); the footer bar sits at its base.
 
-      <p className={styles.count} data-testid="customer-count">
-        {t('list.count', { count: people.length })}
-      </p>
-
-      <ul className={styles.rows}>
+      Not drawn: 02's "what is true about them today" sentence, lifetime
+      value, order count and last contact. None is on the list: the route
+      returns contact fields only, and `lastInteractionAt` is never written.
+    */
+    <section className={`${fill.fillCard} ${styles.listCard}`} data-testid="customer-list">
+      <ul className={`${fill.fillScroll} ${styles.rows}`}>
         {people.map(({ key, primary: row, channels }) => {
           const label = customerLabel(row);
+          const mark = channelMark(channels[0] ?? row.channel ?? null);
+          /*
+            How to reach them, as one line: the handle we hold and every other
+            channel they use. A WhatsApp row's name IS its number, so the
+            number is not repeated under it.
+          */
+          const handle = row.phone ?? row.email ?? row.externalId;
+          const reach = [
+            handle && handle !== label ? handle : null,
+            ...channels.map((channel) =>
+              isKnownChannel(channel) ? t(`channel.${channel}` as 'channel.WHATSAPP') : channel,
+            ),
+          ].filter(Boolean);
           return (
             <li key={key} className={styles.row} data-testid={`customer-${row.id}`}>
               {/*
-                `displayName` is often null on a channel like WhatsApp, where
-                the number IS how the business knows them. Falling back to the
-                handle beats inventing "Unknown", which would be less
-                informative than the identifier we hold.
+                ★ THE ROW IS A LINK. `row` is the PRIMARY contact of a person
+                group — the rows are collapsed by `personId` — so this opens
+                the person, not one of their channel identities.
               */}
-              {/*
-                ★ THE ROW IS A LINK, AND IT WAS NOT.
-
-                This list shipped with no `<Link>`, no `href` and no
-                `onClick`. A merchant saw a list of their customers and could
-                not open one — which is worse than a missing screen, because
-                a list of people implies a destination and this one had none.
-                Nothing said so; it simply did not respond.
-
-                `row` is the PRIMARY contact of a person group — the rows are
-                collapsed by `personId` — so this opens the person, not one
-                of their channel identities.
-              */}
-              <Link className={styles.rowName} href={`/customers/${row.id}`}>
-                {label ?? t('list.unnamed')}
-              </Link>
-
-              {/*
-                Every channel this person reaches you on, not just the first.
-                Channel is a mark on the row and never a section — the design
-                is right about that, and collapsing by `personId` is what
-                makes it possible to show more than one.
-              */}
-              {channels.map((channel) => (
-                <span
-                  key={channel}
-                  className={styles.rowChannel}
-                  data-testid={`channel-${row.id}-${channel}`}
-                >
-                  {isKnownChannel(channel)
-                    ? t(`channel.${channel}` as 'channel.WHATSAPP')
-                    : channel}
+              <Link className={styles.rowLink} href={`/customers/${row.id}`}>
+                <span className={styles.avatarStack} aria-hidden="true">
+                  <span className={styles.avatar}>{initialsOf(label)}</span>
+                  <span className={styles.channelBadge} data-tone={mark.tone}>
+                    <mark.Icon size={9} strokeWidth={2.4} />
+                  </span>
                 </span>
-              ))}
-
-              {row.email && row.email !== label ? (
-                <span className={styles.rowDetail}>{row.email}</span>
-              ) : null}
-
-              {row.tags.length > 0 ? (
-                <ul className={styles.tags}>
-                  {row.tags.map((tag) => (
-                    <li key={tag} className={styles.tag}>
-                      {tag}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+                <span className={styles.rowBody}>
+                  <span className={styles.rowTop}>
+                    <span className={styles.rowName}>{label ?? t('list.unnamed')}</span>
+                    {row.tags[0] ? <span className={styles.rowChip}>{row.tags[0]}</span> : null}
+                  </span>
+                  <span className={styles.rowLine}>
+                    {channels.map((channel) => (
+                      <span
+                        key={channel}
+                        className="srOnly"
+                        data-testid={`channel-${row.id}-${channel}`}
+                      >
+                        {isKnownChannel(channel)
+                          ? t(`channel.${channel}` as 'channel.WHATSAPP')
+                          : channel}
+                      </span>
+                    ))}
+                    <span aria-hidden="true">{reach.join(' · ')}</span>
+                  </span>
+                </span>
+              </Link>
             </li>
           );
         })}
       </ul>
 
       {/*
-        The route returns at most 500 rows. Said in its own sentence and in
-        RECORDS, never people — `total` counts rows before collapsing, so
-        attaching it to "people" is the mismatch this screen just had.
+        02's footer bar: how many, and — one line, with the reason as its
+        tooltip — the limit of the join. Two entries for one person are why
+        a reader needs it, so it is on the card and not under a link.
       */}
-      {truncated ? (
-        <p className={styles.truncated} data-testid="customers-truncated">
-          {t('list.truncated', { shown: rows.length, total })}
-        </p>
-      ) : null}
-    </div>
+      <p className={styles.listFooter}>
+        <span data-testid="customer-count">
+          {truncated
+            ? t('list.footerTruncated', { shown: rows.length, total })
+            : t('list.footer', { count: people.length })}
+        </span>
+        {' · '}
+        <span data-testid="identity-limit" title={t('identityLimit')}>
+          {t('identityShort')}
+        </span>
+      </p>
+    </section>
+  );
+}
+
+/** Up to two initials from the label's words; empty when there is none. */
+function initialsOf(label: string | null): string {
+  if (!label) return '';
+  return label
+    .split(/\s+/)
+    .filter((word) => /\p{L}/u.test(word))
+    .slice(0, 2)
+    .map((word) => word.match(/\p{L}/u)?.[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+/**
+ * 04's right-hand "Who your customers are", by the channel they write on —
+ * counted from the people on this list. Only when the list is whole: from a
+ * truncated one it would describe the first 500, not the business.
+ */
+export async function Composition({
+  rows,
+  truncated,
+}: {
+  readonly rows: readonly CustomerRow[] | null;
+  readonly truncated: boolean;
+}) {
+  if (rows === null || rows.length === 0 || truncated) return null;
+  const t = await getTranslations('customers');
+  const counts = new Map<string, number>();
+  for (const { channels } of collapseToPeople(rows)) {
+    for (const channel of channels) counts.set(channel, (counts.get(channel) ?? 0) + 1);
+  }
+  const max = Math.max(...counts.values());
+  const bars = [...counts.entries()].sort((x, y) => y[1] - x[1]);
+  return (
+    <section className={styles.sideCard} data-testid="customer-composition">
+      <h2 className={styles.sideTitle}>{t('composition.heading')}</h2>
+      <p className={styles.sideNote}>{t('composition.byChannel')}</p>
+      <ul className={styles.bars}>
+        {bars.map(([channel, count]) => (
+          <li key={channel} className={styles.bar} data-testid={`composition-${channel}`}>
+            <span className={styles.barLabel}>
+              {isKnownChannel(channel) ? t(`channel.${channel}` as 'channel.WHATSAPP') : channel}
+            </span>
+            <span className={styles.barTrack} aria-hidden="true">
+              <span className={styles.barFill} style={{ inlineSize: `${(count / max) * 100}%` }} />
+            </span>
+            <span className={styles.barCount}>{count}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

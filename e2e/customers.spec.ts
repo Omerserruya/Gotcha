@@ -402,10 +402,13 @@ for (const size of SIZES) {
 
       const limit = page.getByTestId('identity-limit');
       await expect(limit).toBeVisible();
-      await expect(limit).toHaveText(/appear here twice/i);
-      // The reason, not just the symptom — and the reason is specific.
-      await expect(limit).toHaveText(/same phone number/i);
-      await expect(limit).toHaveText(/instagram never provides one/i);
+      /*
+       * One line on 02's footer bar now — 02 shows states, it does not explain
+       * them — and the reason, still specific, is its tooltip.
+       */
+      await expect(limit).toHaveText(/appear twice/i);
+      await expect(limit).toHaveAttribute('title', /same phone number/i);
+      await expect(limit).toHaveAttribute('title', /instagram never provides one/i);
 
       await shoot(page, `${size.name}-2c-identity-limit`);
     });
