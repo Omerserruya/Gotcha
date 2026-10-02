@@ -109,6 +109,29 @@ const streamPageSchema = z.object({
   data: z.array(messageSchema),
 });
 
+/**
+ * Everything about the OPEN conversation — the second round.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ A PROMISE ON `InboxData`, NOT A FIELD THE PAGE WAITS FOR
+ * ════════════════════════════════════════════════════════════════════════════
+ * Omer: *"Why does it take time to load each conversation?"* The page awaited
+ * this round before painting anything, so a click showed nothing until the
+ * slowest of four reads returned. It is started here — it runs while the page
+ * renders — and read inside `<Suspense>`: the frame, the queue and the header
+ * paint at once, and the conversation streams in when it is ready.
+ *
+ * ★ It never rejects. Each read catches its own failure, as before, so a
+ *   boundary reading it can never fall into an error page over one panel.
+ */
+export interface ConversationDetail {
+  readonly messages: readonly InboxMessage[] | null;
+  readonly timeline: CustomerTimeline | null;
+  readonly orders: CommerceContextResponse | null;
+  /** Never `null`: `loadCopilot` returns which KIND of nothing it got. */
+  readonly copilot: CopilotRead;
+}
+
 export interface InboxData {
   readonly rows: readonly ConversationRow[] | null;
   /** More pages exist. `false` when the read failed — we claim nothing. */
@@ -120,11 +143,8 @@ export interface InboxData {
    */
   readonly undatedCount: number | undefined;
   readonly open: ConversationRow | null;
-  readonly messages: readonly InboxMessage[] | null;
-  readonly timeline: CustomerTimeline | null;
-  readonly orders: CommerceContextResponse | null;
-  /** Never `null`: `loadCopilot` returns which KIND of nothing it got. */
-  readonly copilot: CopilotRead;
+  /** `null` when nothing is open. See `ConversationDetail`. */
+  readonly detail: Promise<ConversationDetail> | null;
   /** `User.id` of the person looking, or `null` when we could not read it. */
   readonly meId: string | null;
   /** Active colleagues this viewer may transfer to. Never includes them. */
@@ -298,24 +318,14 @@ export async function loadInbox(
     greeting,
   };
 
-  if (!open) {
-    return {
-      rows,
-      ...paging,
-      ...viewer,
-      open: null,
-      messages: null,
-      timeline: null,
-      orders: null,
-      /*
-       * Nothing is open, so nothing was asked. Not a failure and not a refusal —
-       * `unavailable` is the closest honest answer and the panel is not rendered
-       * in this branch anyway.
-       */
-      copilot: { state: 'unavailable' },
-    };
-  }
+  // ★ Started, not awaited: it runs while the page renders. See `ConversationDetail`.
+  return { rows, ...paging, ...viewer, open, detail: open ? loadConversation(open.id) : null };
+}
 
+/** The second round, for one conversation. Never rejects. */
+export async function loadConversation(conversationId: string): Promise<ConversationDetail> {
+  const api = serverApi();
+  const open = { id: conversationId };
   const [messages, timeline, orders, copilot] = await Promise.all([
     api
       .get({ endpoint: inboxEndpoints.messages(open.id), payload: streamPageSchema, raw: true })
@@ -372,5 +382,5 @@ export async function loadInbox(
     loadCopilot(open.id),
   ]);
 
-  return { rows, ...paging, ...viewer, open, messages, timeline, orders, copilot };
+  return { messages, timeline, orders, copilot };
 }

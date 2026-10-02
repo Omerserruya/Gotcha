@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { isValidElement } from 'react';
+import { isValidElement, Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
@@ -8,8 +8,13 @@ import { ConversationList } from '@/features/inbox/ConversationList';
 import { PageContainer } from '@/shell/PageContainer';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
-import { MessageStream } from '@/features/inbox/MessageStream';
-import { StreamPin } from '@/features/inbox/StreamPin';
+import { Composer } from '@/features/inbox/Composer';
+import {
+  ConversationContext,
+  ConversationStream,
+  OrdersChip,
+} from '@/features/inbox/ConversationDetail';
+import { PendingPane } from '@/features/inbox/PendingPane';
 
 /**
  * Screen 02, assembled — tested on the tree rather than on the pixels.
@@ -55,7 +60,8 @@ vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 /** Every panel that must not be nested inside another. */
 const ASYNC_PANELS = new Set<unknown>([
   ConversationList,
-  MessageStream,
+  ConversationStream,
+  ConversationContext,
   IdentityPanel,
   CustomerOrders,
 ]);
@@ -114,20 +120,33 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const data = (over: Record<string, unknown> = {}) => ({
-  rows: [row()],
-  hasMore: false,
-  nextCursor: null,
-  undatedCount: 0,
-  open: row(),
-  messages: [],
-  timeline: null,
-  orders: null,
-  meId: 'me',
-  colleagues: [{ id: 'u2', name: 'Dana' }],
-  greeting: null,
-  ...over,
-});
+/*
+ * The second round is a PROMISE on `InboxData` now (`detail`), read inside
+ * `<Suspense>`. Tests still say `messages`, `orders` and so on; the fixture
+ * folds them into `detail`, which is what the page actually receives.
+ */
+const data = (over: Record<string, unknown> = {}) => {
+  const base = {
+    rows: [row()],
+    hasMore: false,
+    nextCursor: null,
+    undatedCount: 0,
+    open: row() as ReturnType<typeof row> | null,
+    messages: [] as unknown,
+    timeline: null as unknown,
+    orders: null as unknown,
+    copilot: { state: 'unavailable' } as unknown,
+    meId: 'me',
+    colleagues: [{ id: 'u2', name: 'Dana' }],
+    greeting: null,
+    ...over,
+  };
+  const { messages, timeline, orders, copilot, ...shell } = base;
+  return {
+    ...shell,
+    detail: base.open ? Promise.resolve({ messages, timeline, orders, copilot }) : null,
+  };
+};
 
 const page = async (over: Record<string, unknown> = {}) => {
   loadInbox.mockResolvedValue(data(over));
@@ -144,9 +163,10 @@ describe('★★ four panels, and none of them inside another', () => {
     const { panels } = found(await page());
 
     expect(panels).toContain(ConversationList);
-    expect(panels).toContain(MessageStream);
-    expect(panels).toContain(IdentityPanel);
-    expect(panels).toContain(CustomerOrders);
+    // The stream and the wall stream in: each reads the second round inside
+    // its own `<Suspense>`. What THEY mount is ConversationDetail.test's.
+    expect(panels).toContain(ConversationStream);
+    expect(panels).toContain(ConversationContext);
   });
 
   it('★★ NONE is a descendant of another — the trap that has cost five screens', async () => {
@@ -169,7 +189,7 @@ describe('★★ four panels, and none of them inside another', () => {
     expect(panels).toContain(ConversationList);
     expect(panels).toContain(IdentityPanel);
     expect(panels).toContain(CustomerOrders);
-    expect(panels).not.toContain(MessageStream);
+    expect(panels).not.toContain(ConversationStream);
   });
 });
 
@@ -181,13 +201,15 @@ describe('★★ 04d’s commerce panel, not a second one', () => {
      * its data as a prop and reads nothing itself.
      */
     const orders = { state: 'ok', data: {} };
-    const props = propsOf<{ orders: unknown; conversationId: string | null }>(
-      await page({ orders }),
-      CustomerOrders,
-    );
+    const props = propsOf<{
+      detail: Promise<{ orders: unknown }>;
+      conversation: { id: string };
+    }>(await page({ orders }), ConversationContext);
 
-    expect(props?.orders).toBe(orders);
-    expect(props?.conversationId).toBe('conv1');
+    // The wall reads the same second round; it hands `orders` on — see
+    // ConversationDetail.test for the hand-over to CustomerOrders.
+    expect((await props!.detail).orders).toBe(orders);
+    expect(props?.conversation.id).toBe('conv1');
   });
 
   it('★ gets a null conversation id when nothing is open, so its actions are absent', async () => {
@@ -425,7 +447,8 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
   };
 
   it('★★ the identity panel sits INSIDE the conversation column', async () => {
-    const chain = ancestorsOf(await page(), IdentityPanel);
+    // The wall's contents stream in as `ConversationContext`, which mounts it.
+    const chain = ancestorsOf(await page(), ConversationContext);
     expect(chain.some((c) => c.includes('conversationColumn'))).toBe(true);
     expect(chain.some((c) => c.includes('contextColumn'))).toBe(true);
   });
@@ -504,10 +527,13 @@ describe('⚠⚠ the page READS `view` — the whole of the bug', () => {
 
   it('★ the header gets the order read the Copilot already has', async () => {
     const orders = { state: 'ok', summary: { orderCount: 6 } };
-    loadInbox.mockResolvedValue(data({ orders }));
+    const shell = data({ orders });
+    loadInbox.mockResolvedValue(shell);
     const { default: Page } = await import('./page');
     const tree = await Page({ searchParams: Promise.resolve({}) });
-    expect(propsOf<{ orders?: unknown }>(tree, ConversationHeader)?.orders).toBe(orders);
+    // The chip is a slot holding a `<Suspense>` around `OrdersChip`.
+    const chip = propsOf<{ chip?: ReactNode }>(tree, ConversationHeader)?.chip;
+    expect(propsOf<{ detail?: unknown }>(chip, OrdersChip)?.detail).toBe(shell.detail);
   });
 
   it('⚠ a channel with no chip is "All"', async () => {
@@ -518,13 +544,45 @@ describe('⚠⚠ the page READS `view` — the whole of the bug', () => {
   });
 });
 
-describe('⚠⚠ the open conversation is pinned to its latest message', () => {
-  it('★★ mounts StreamPin for the conversation that is open', async () => {
-    // A conversation opened at 10:03 with the latest message 2142px below.
-    const props = propsOf<{ conversationId?: string }>(
+describe('★★ the second round streams in, and the page does not wait for it', () => {
+  it('★★ the stream and the wall are each inside a `<Suspense>`, keyed by the conversation', async () => {
+    /*
+     * Keyed, so opening another conversation shows the skeleton again rather
+     * than the last one's messages under the new one's name.
+     */
+    const tree = await page({ open: row({ id: 'c7' }) });
+    const keys: unknown[] = [];
+    walk(tree, [], (element) => {
+      if (element.type !== Suspense) return;
+      const inner = (element.props as { children?: ReactNode }).children;
+      if (
+        isValidElement(inner) &&
+        (inner.type === ConversationStream || inner.type === ConversationContext)
+      ) {
+        keys.push(element.key);
+      }
+    });
+    expect(keys).toEqual(['c7', 'c7']);
+  });
+
+  it('★ and the composer is NOT inside one — it is there to type into at once', async () => {
+    const tree = await page();
+    let insideSuspense = false;
+    const visit = (node: ReactNode, under: boolean): void => {
+      if (Array.isArray(node)) return node.forEach((child) => visit(child, under));
+      if (!isValidElement(node)) return;
+      if (node.type === Composer) insideSuspense = under;
+      visit((node.props as { children?: ReactNode }).children, under || node.type === Suspense);
+    };
+    visit(tree, false);
+    expect(insideSuspense).toBe(false);
+  });
+
+  it('★★ the pending overlay is told what is open, so a click knows when it landed', async () => {
+    const props = propsOf<{ openId: string | null }>(
       await page({ open: row({ id: 'c7' }) }),
-      StreamPin,
+      PendingPane,
     );
-    expect(props?.conversationId).toBe('c7');
+    expect(props?.openId).toBe('c7');
   });
 });

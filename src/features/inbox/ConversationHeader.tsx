@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
 
 import {
   channelName,
@@ -43,23 +44,25 @@ export function orderCountOf(orders: CommerceContextResponse | null): number | n
 export async function ConversationHeader({
   conversation,
   now,
-  orders = null,
+  chip = null,
 }: {
   readonly conversation: ConversationRow;
   /** One `now` for the whole render — the capture runs at three viewports. */
   readonly now: Date;
   /**
-   * The commerce read the Copilot's orders panel already has, for 02's
-   * "Returning · 6 orders" chip.
+   * 02's "Returning · 6 orders" chip — `OrdersChip`, inside a `<Suspense>`.
+   *
+   * ⚠ A slot rather than the order read: the read is the second round, and
+   *   the header must paint before it returns. The chip arrives beside the
+   *   name when the count is known.
    */
-  readonly orders?: CommerceContextResponse | null;
+  readonly chip?: ReactNode;
 }) {
   const t = await getTranslations('inbox');
   const channels = await getTranslations('channels');
 
   const minutes = waitingMinutes(conversation, now);
   const waiting = minutes === null ? null : waitingScale(minutes);
-  const orderCount = orderCountOf(orders);
 
   return (
     <header className={styles.openHeader} data-testid="conversation-header">
@@ -89,20 +92,11 @@ export async function ConversationHeader({
           </h2>
 
           {/*
-            ★★ 02's CHIP, FROM THE COUNT WE ALREADY HAD. "Returning · 6 orders"
-            looked like data we lacked; the commerce read carries `orderCount`.
-
-            ⚠ "RETURNING" IS OUR DEFINITION: more than one order — they came
-              back. One order is stated as a count and not called returning.
-              No chip when the count is absent, zero or unreadable.
+            ★★ 02's CHIP, FROM THE COUNT WE ALREADY HAD — see `OrdersChip`.
+            "Returning" means more than one order (our definition); no chip
+            for a count that is absent, zero or unreadable.
           */}
-          {orderCount === null ? null : (
-            <span className={styles.openChip} data-testid="conversation-orders">
-              {orderCount > 1
-                ? t('open.orders.returning', { count: orderCount })
-                : t('open.orders.count', { count: orderCount })}
-            </span>
-          )}
+          {chip}
         </div>
 
         {/*

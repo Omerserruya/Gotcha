@@ -949,6 +949,8 @@
 
   .queueColumn,
   .conversationColumn {
+    /* The click's overlay (`PendingPane`) is placed against it. */
+    position: relative;
     display: flex;
     flex-direction: column;
     min-inline-size: 0;
@@ -1453,5 +1455,217 @@
     font-size: var(--font-size-caption);
     color: var(--intent-urgent-text);
     max-inline-size: var(--size-reading);
+  }
+}
+
+@layer features {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ OMER'S CONTENT PLACEHOLDERS — the box of the real thing, quietly
+   * ════════════════════════════════════════════════════════════════════════
+   * Every size below is the measured size of what it stands in for (see
+   * `Skeletons.tsx`), so the content lands without moving anything. The
+   * colour is the panel's own well, and the motion a slow pulse — nothing
+   * that draws the eye — which stops for anyone who asked for less motion.
+   */
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  .skeletonLine,
+  .skeletonPill,
+  .skeletonChip,
+  .skeletonDisc,
+  .skeletonBubble,
+  .skeletonBlock {
+    display: block;
+    flex: none;
+    background-color: var(--panel-well);
+    animation: skeleton-pulse 1.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeletonLine,
+    .skeletonPill,
+    .skeletonChip,
+    .skeletonDisc,
+    .skeletonBubble,
+    .skeletonBlock {
+      animation: none;
+    }
+  }
+
+  .skeletonLine {
+    block-size: 11px;
+    border-radius: 4px;
+  }
+
+  /* The queue's title row is 16 tall; its two lines sit in it. */
+  .skeletonLine[data-size='title'] {
+    inline-size: 120px;
+    /* The row is 16 tall because its text is; the line must be, too. */
+    block-size: 16px;
+  }
+
+  .skeletonLine[data-size='count'] {
+    inline-size: 16px;
+  }
+
+  /* A row's three lines: 15 + 15 + 17 at gap 4 — 55, as the real text. */
+  .skeletonLine[data-size='name'] {
+    inline-size: 45%;
+    block-size: 15px;
+  }
+
+  .skeletonLine[data-size='preview'] {
+    inline-size: 85%;
+    block-size: 15px;
+  }
+
+  .skeletonLine[data-size='tag'] {
+    inline-size: 64px;
+    block-size: 17px;
+    border-radius: 6px;
+  }
+
+  .skeletonLine[data-size='facts'] {
+    inline-size: 60%;
+    block-size: 12px;
+  }
+
+  /* On the dark wall, the wall's own raised colour. */
+  .skeletonLine[data-size='dark'],
+  .contextSkeleton .skeletonBlock {
+    background-color: var(--copilot-raised);
+  }
+
+  .skeletonLine[data-size='dark'] {
+    inline-size: 70%;
+    block-size: 12px;
+  }
+
+  /* The filter row: "All" at 36×24, then five 28px squares. */
+  .skeletonPill {
+    inline-size: 36px;
+    block-size: 24px;
+    border-radius: 8px;
+  }
+
+  .skeletonChip {
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 8px;
+  }
+
+  .skeletonDisc {
+    border-radius: 50%;
+  }
+
+  .skeletonDisc[data-size='42'] {
+    inline-size: 42px;
+    block-size: 42px;
+  }
+
+  .skeletonDisc[data-size='34'] {
+    inline-size: 34px;
+    block-size: 34px;
+  }
+
+  /* 82: the real row's padding, gap and top hairline around 55 of lines. */
+  .skeletonRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-12);
+    padding: 13px var(--space-16);
+    border-block-start: 1px solid var(--border-subtle);
+    border-inline-start: 3px solid transparent;
+  }
+
+  .skeletonLines {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .openHeader .skeletonLines {
+    gap: 2px;
+  }
+
+  /* The stream's own box: it fills the pane, padded as the stream is. */
+  .streamSkeleton {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    padding: var(--space-14) var(--space-24) var(--space-12);
+    overflow: hidden;
+  }
+
+  .conversationPane > .streamSkeleton {
+    margin-inline: 0;
+  }
+
+  .skeletonBubble {
+    inline-size: 62%;
+    block-size: 42px;
+    border-radius: 14px;
+    border-end-start-radius: var(--space-4);
+  }
+
+  .skeletonBubble[data-side='out'] {
+    align-self: flex-end;
+    inline-size: 48%;
+    border-end-start-radius: 14px;
+    border-end-end-radius: var(--space-4);
+  }
+
+  /* The composer card at its idle height. */
+  .skeletonComposer {
+    block-size: 86px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .contextSkeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  .contextSkeleton .skeletonBlock {
+    block-size: 120px;
+    border-radius: var(--radius-card);
+  }
+
+  /*
+   * The click's answer, over the whole panel until the server's lands. The
+   * conversation being left stays mounted underneath it.
+   */
+  .pendingPane {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-base);
+  }
+
+  .pendingPane > * {
+    flex: none;
+  }
+
+  .pendingPane > .chatBody {
+    flex: 1;
   }
 }

@@ -9,6 +9,7 @@ import { conversationRowSchema } from '@/api/contracts/inbox';
 import channels from '@/i18n/messages/en/channels.json';
 import inbox from '@/i18n/messages/en/inbox.json';
 
+import { OrdersChip } from './ConversationDetail';
 import { ConversationHeader } from './ConversationHeader';
 import { initials } from './initials';
 
@@ -122,8 +123,26 @@ describe('★★ who this is, on what channel, and how long they have waited', (
 
 describe('★★ 02’s chip — "Returning · 6 orders" — from the count we already had', () => {
   const ctx = (raw: unknown) => commerceContextSchema.parse(raw);
+  /*
+   * The chip streams in beside the name (`OrdersChip`, in a `<Suspense>` the
+   * header carries as its `chip` slot), so it is rendered the way the page
+   * does: the header with the chip in it.
+   */
   const showWith = async (orders: ReturnType<typeof ctx> | null) =>
-    render(await ConversationHeader({ conversation: row(), now: NOW, orders }));
+    render(
+      await ConversationHeader({
+        conversation: row(),
+        now: NOW,
+        chip: await OrdersChip({
+          detail: Promise.resolve({
+            messages: null,
+            timeline: null,
+            orders,
+            copilot: { state: 'unavailable' },
+          }),
+        }),
+      }),
+    );
 
   it('★★ more than one order is "Returning", with the count', async () => {
     await showWith(ctx({ state: 'ok', data: { summary: { orderCount: 6 } } }));

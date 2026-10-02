@@ -1,18 +1,23 @@
 import { getTranslations } from 'next-intl/server';
+import { Suspense } from 'react';
 
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { ConversationHeader } from '@/features/inbox/ConversationHeader';
 import { Composer } from '@/features/inbox/Composer';
-import { CopilotPanel } from '@/features/inbox/CopilotPanel';
+import {
+  ConversationContext,
+  ConversationStream,
+  OrdersChip,
+} from '@/features/inbox/ConversationDetail';
 import { StreamLive } from '@/features/inbox/StreamLive';
-import { StreamPin } from '@/features/inbox/StreamPin';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
 import styles from '@/features/inbox/Inbox.module.css';
 import { parseChannelFilter, parseInboxView } from '@/features/inbox/inbox-views';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
-import { MessageStream } from '@/features/inbox/MessageStream';
+import { PendingPane } from '@/features/inbox/PendingPane';
+import { ContextSkeleton, StreamSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 import { channelName } from '@/api/contracts/inbox';
@@ -200,8 +205,17 @@ export default async function Page({
                 <ConversationHeader
                   conversation={data.open}
                   now={now}
-                  /* The read the Copilot's orders panel already has — no second fetch. */
-                  orders={data.orders}
+                  /*
+                    The chip needs the order read, which is the second round, so
+                    it streams in beside the name; the header does not wait.
+                  */
+                  chip={
+                    data.detail ? (
+                      <Suspense key={data.open.id} fallback={null}>
+                        <OrdersChip detail={data.detail} />
+                      </Suspense>
+                    ) : null
+                  }
                 />
 
                 <ConversationVerbs
@@ -241,22 +255,28 @@ export default async function Page({
                     fails" true rather than a sentence we wrote.
                   */}
                   <StreamLive conversationId={data.open.id} />
-                  {/* Renders nothing. Opens the stream at its latest message. */}
-                  <StreamPin conversationId={data.open.id} />
-
-                  <MessageStream messages={data.messages} channel={data.open.channel} />
-
                   {/*
-                    ★★ BELOW THE STREAM, AND A SIBLING OF IT.
-                    A suggested reply belongs next to where a reply gets written, which
-                    is the bottom of this column. And both are async server components,
-                    so neither may contain the other.
+                    ════════════════════════════════════════════════════════
+                    ★★ THE STREAM STREAMS. Omer: "I want it to feel instant."
+                    ════════════════════════════════════════════════════════
+                    It waited for the whole page before; now the frame, the
+                    queue, the header and the composer paint, and the stream
+                    — with the Copilot's strip under it and the pin to its
+                    latest message — arrives when its read does.
 
-                    `loadCopilot` is awaited in `loadInbox` alongside every other read:
-                    a 402 here is an ordinary commercial state and must not take the
-                    conversation down with it.
+                    ★ Keyed by the conversation, so opening another one shows
+                      the skeleton again rather than the last one's messages
+                      under the new one's name.
                   */}
-                  <CopilotPanel read={data.copilot} />
+                  {data.detail ? (
+                    <Suspense key={data.open.id} fallback={<StreamSkeleton />}>
+                      <ConversationStream
+                        detail={data.detail}
+                        conversationId={data.open.id}
+                        channel={data.open.channel}
+                      />
+                    </Suspense>
+                  ) : null}
 
                   {/*
                     ⚠⚠ THE ONE CONTROL ON THIS PROJECT WHOSE PURPOSE IS TO BE PRESSED.
@@ -265,9 +285,8 @@ export default async function Page({
                     anywhere. No automated run presses it; no human presses it on dev
                     until Omer has said so.
 
-                    Last in the column, so the order reading down is: who this is · who
-                    is driving · what was said · what GOTCHA would say · what you are
-                    about to say.
+                    Outside the boundary: it needs nothing from the second round,
+                    so it is there to type into before the messages are.
                   */}
                   <Composer
                     conversationId={data.open.id}
@@ -284,34 +303,45 @@ export default async function Page({
                   that adding them does not mean restructuring this again.
               */}
               <div className={styles.copilotBody}>
-                <IdentityPanel
-                  timeline={data.timeline}
-                  conversation={
-                    data.open
-                      ? {
-                          contactName: data.open.customerName,
-                          channel: data.open.channel,
-                          /*
-                           * ★ THE HANDLE, WHICH THE PANEL WAS SAYING IT DID NOT HAVE.
-                           * It rendered *"No channel handle is recorded for this
-                           * person"* beside a row showing a channel, because nothing
-                           * passed one. Two true sentences about different things,
-                           * reading as a contradiction.
-                           */
-                          customerExternalId: data.open.customerExternalId,
-                        }
-                      : null
-                  }
-                />
-                {/*
-                04d's panel. `conversationId` is what its actions post to, and it
-                is `null` when nothing is open — the controls are then absent
-                rather than broken, because the endpoint has nowhere to route.
-              */}
-                <CustomerOrders orders={data.orders} conversationId={data.open?.id ?? null} />
+                {data.open && data.detail ? (
+                  <Suspense key={data.open.id} fallback={<ContextSkeleton />}>
+                    <ConversationContext
+                      detail={data.detail}
+                      conversation={{
+                        id: data.open.id,
+                        contactName: data.open.customerName,
+                        channel: data.open.channel,
+                        /*
+                         * ★ THE HANDLE, WHICH THE PANEL WAS SAYING IT DID NOT HAVE.
+                         * It rendered *"No channel handle is recorded for this
+                         * person"* beside a row showing a channel, because nothing
+                         * passed one.
+                         */
+                        customerExternalId: data.open.customerExternalId,
+                      }}
+                    />
+                  </Suspense>
+                ) : (
+                  /*
+                    Nothing open: both panels draw their own absence, as before.
+                    `conversationId` null leaves the order controls absent rather
+                    than broken — the endpoint has nowhere to route.
+                  */
+                  <>
+                    <IdentityPanel timeline={null} conversation={null} />
+                    <CustomerOrders orders={null} conversationId={null} />
+                  </>
+                )}
               </div>
             </aside>
           </div>
+
+          {/*
+            ★★ THE CLICK'S ANSWER, BEFORE THE SERVER'S. Over the panel: the
+            clicked row's name and the stream's skeleton, from the moment of the
+            click until the new page lands. Renders nothing otherwise.
+          */}
+          <PendingPane openId={data.open?.id ?? null} />
         </section>
       </div>
     </PageContainer>

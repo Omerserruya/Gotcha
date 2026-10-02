@@ -10,6 +10,7 @@ import {
 } from '@/api/contracts/inbox';
 
 import { initials } from './initials';
+import { QueueRowLink } from './QueueRowLink';
 import styles from './Inbox.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Globe, Mail, MessageCircle, MessagesSquare, type LucideProps } from 'lucide-react';
@@ -244,12 +245,22 @@ export async function ConversationList({
             `inbox/page.tsx`, which destructures `c`. A walk URL quoted
             `?conversation=` and it was the harness's, not ours.
         */}
-        <Link
+        <QueueRowLink
           href={{ pathname: '/inbox', query: inboxQuery({ view, channel, c: conversation.id }) }}
           className={styles.queueRow}
           data-testid={testid}
-          aria-current={conversation.id === openId ? 'true' : undefined}
-          data-open={conversation.id === openId ? '' : undefined}
+          /*
+            ★★ MARKED ON CLICK, NOT ON THE SERVER'S ANSWER. `open` is what the
+            server rendered; the link follows a pending click until the new
+            page lands — see `QueueRowLink`. What the pane shows meanwhile
+            comes from this row, which is already loaded.
+          */
+          open={conversation.id === openId}
+          pending={{
+            id: conversation.id,
+            name: conversation.customerName,
+            channelLabel: channelName(conversation.channel, channelNames),
+          }}
           /*
             ★★ 02 DRAWS A SETTLED ROW QUIETER IN FIVE SEPARATE WAYS — name
             weight, name colour, preview colour, avatar tint and time colour.
@@ -453,7 +464,7 @@ export async function ConversationList({
               ) : null}
             </span>
           </span>
-        </Link>
+        </QueueRowLink>
       </li>
     );
   };

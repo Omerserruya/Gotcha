@@ -132,3 +132,32 @@ describe('⚠⚠ the view reaches the route', () => {
     expect(queueCall()?.query).not.toHaveProperty('channel');
   });
 });
+
+describe('★★ the page does not wait for the conversation — the second round is a promise', () => {
+  it('⚠⚠ loadInbox resolves while the conversation’s own reads are still in flight', async () => {
+    /*
+     * Omer: "why does it take time to load each conversation". The page awaited
+     * messages, timeline, orders and the Copilot before painting anything.
+     * Round one settles here; round two is left unanswered on purpose.
+     */
+    const { loadInbox } = await import('./load-inbox');
+    const result = loadInbox();
+    await settleMicrotasks();
+    for (const key of requested()) {
+      const answer = pending.get(key)!;
+      if (key.endsWith('/conversations'))
+        answer({
+          data: [{ id: 'c1', status: 'OPEN' }],
+          page: { hasMore: false, nextCursor: null },
+        });
+      else if (key.includes('/auth/me')) answer({ user: { id: 'u1' } });
+      else if (key.includes('auto-greeting')) answer({ template: '' });
+      else answer([]);
+    }
+    const shell = await result;
+    expect(shell.open?.id).toBe('c1');
+    expect(shell.detail).toBeInstanceOf(Promise);
+    // The stream was asked for — and has not answered — yet the shell is here.
+    expect(requested().some((p) => p.includes('/messages'))).toBe(true);
+  });
+});
