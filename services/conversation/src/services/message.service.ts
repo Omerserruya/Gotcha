@@ -156,6 +156,19 @@ export async function create(data: CreateMessageData) {
   return message;
 }
 
+/**
+ * ⚠ UNCALLED, AND IT WILL FAIL THE MOMENT SOMETHING CALLS IT.
+ *
+ * Nothing calls this as of 2026-10-02 (delivery status is updated elsewhere).
+ * Its lookup below is by `externalMessageId` alone, with no `tenantId`, and
+ * `Message` is tenant-guarded - so the guard refuses it on the first call.
+ *
+ * Whether that failure is LOUD depends entirely on the caller. Status updates
+ * are usually fire-and-forget from a webhook, behind `.catch(...)`, and in that
+ * shape the refusal becomes a log line while receipts silently stop advancing.
+ * So before wiring this up: give it a `tenantId` parameter and scope the lookup,
+ * rather than relying on the error to announce itself.
+ */
 export async function updateStatus(messageId: string, status: "SENT" | "DELIVERED" | "READ" | "FAILED") {
   const message = await prisma.message.findFirst({
     where: { externalMessageId: messageId },
