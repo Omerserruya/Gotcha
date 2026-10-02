@@ -56,18 +56,30 @@ export default async function Page({
               : 'none'
             : 'ok';
 
+  /*
+    05e: a call in progress IS the page — the transcript and Copilot, the
+    call's own header across the top — rather than a strip above the log.
+  */
+  if (liveCall) {
+    return (
+      <PageContainer layout="screen" flush>
+        <LiveCall
+          conversationId={liveCall.conversationId}
+          customerNumber={liveCall.customerNumber}
+          customerId={liveCall.customerId}
+          direction={liveCall.direction}
+          startedAt={liveCall.answeredAt ?? liveCall.startedAt}
+          initialTranscript={transcript}
+        />
+      </PageContainer>
+    );
+  }
+
   return (
     <PageContainer layout="screen" flush title={t('title')} description={t('description')}>
       <div className={styles.screen} data-testid="calls-screen">
         <DialerCard query={query} results={search === null ? (query ? null : []) : search.rows} />
         <div className={styles.column}>
-          {liveCall ? (
-            <LiveCall
-              conversationId={liveCall.conversationId}
-              customerNumber={liveCall.customerNumber}
-              initialTranscript={transcript}
-            />
-          ) : null}
           <CallStats week={voiceEnabled === true ? summary : null} />
           <RecentCalls calls={calls ?? []} state={state} filter={filter} />
         </div>

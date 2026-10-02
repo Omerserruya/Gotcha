@@ -29,7 +29,22 @@
     "listening": "Listening. Lines appear as each person finishes speaking.",
     "you": "You",
     "them": "Them",
-    "suggestions": "Things you could say"
+    "suggestions": "Things you could say",
+    "theyCalled": "they called you",
+    "youCalled": "you called them",
+    "notYet": "Not available from here yet.",
+    "transcript": "Live transcript",
+    "kept": "The transcript is kept in this conversation.",
+    "addNote": "Add a note",
+    "copilot": "Copilot",
+    "copilotListening": "Copilot is listening",
+    "found": "What it found while they talked",
+    "foundNone": "Nothing found yet.",
+    "sayThis": "Say this",
+    "sayNone": "Nothing to suggest yet.",
+    "doNow": "Do this now, without hanging up",
+    "doNone": "Nothing to do yet.",
+    "ask": "Ask Copilot something…"
   },
   "availabilityUnknown": "We couldn't check whether voice is set up for this workspace, so there's nothing reliable to show here yet. This is our side, not yours — try again in a moment.",
   "dialer": {

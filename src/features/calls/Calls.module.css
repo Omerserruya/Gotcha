@@ -430,59 +430,124 @@
     }
   }
 
-  /* ── 05e · a live call ───────────────────────────────────────────────── */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 05e, measured — on a call
+   * ════════════════════════════════════════════════════════════════════════
+   * The call's header across the panel, then the transcript (818) and
+   * Copilot in the dark (400), each scrolling inside itself.
+   */
   .liveCall {
+    flex: 1;
+    min-block-size: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-14);
+    line-height: normal;
   }
 
+  /* `padding:22px 40px 18px`, `gap:16px`, `#EDE9E1` under it. */
   .liveHead {
+    flex: none;
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-12);
+    align-items: center;
+    gap: var(--space-16);
+    padding: 22px var(--space-40) 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .liveDisc {
+    flex: none;
+    inline-size: 44px;
+    block-size: 44px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 14px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 44px;
+    text-align: center;
+  }
+
+  .liveWhoBlock {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .liveTop {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
   }
 
   .liveWho {
-    margin: 0;
-    font-size: var(--font-size-body-lg);
-    font-weight: 600;
+    font-size: 18px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
+  /* "On the call · 1:24": `#F1F5EC`, radius 8, `padding:5px 11px`, a green dot. */
   .liveState {
-    margin: 0;
-    font-size: var(--font-size-caption);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px;
+    border-radius: var(--space-8);
+    background-color: var(--intent-calm-surface);
+    font-size: 11.5px;
+    color: var(--intent-calm-text);
+  }
+
+  .liveState::before {
+    content: '';
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--signal-done-text);
+  }
+
+  .liveState[data-ended] {
+    background-color: var(--panel-well);
+    color: var(--intent-neutral-text);
+  }
+
+  .liveState[data-ended]::before {
+    background-color: var(--border-emphasis);
+  }
+
+  .liveLine {
+    font-size: 11.5px;
     color: var(--text-subtle);
   }
 
-  /* TWO controls. Mute is absent, not disabled — see LiveCall.tsx. */
   .liveActions {
-    margin-inline-start: auto;
+    flex: none;
     display: flex;
     gap: var(--space-8);
   }
 
   .liveAction,
   .liveEnd {
+    padding: 9px var(--space-14);
+    border-radius: 9px;
     font: inherit;
-    font-size: var(--font-size-caption);
-    border-radius: var(--radius-control);
-    padding-block: var(--space-8);
-    padding-inline: var(--space-14);
+    font-size: var(--font-size-label);
     cursor: pointer;
   }
 
   .liveAction {
-    color: var(--text-body);
-    background: none;
-    border: var(--border-width-thin) solid var(--border-default);
+    border: 1px solid var(--border-default);
+    background: transparent;
+    color: var(--intent-neutral-text);
   }
 
   .liveEnd {
-    color: var(--panel-base);
-    background-color: var(--intent-blocked-text);
-    border: none;
+    padding-inline: var(--space-16);
+    border: 0;
+    background-color: var(--danger-action);
+    color: var(--danger-action-text);
   }
 
   .liveAction:disabled,
@@ -491,81 +556,272 @@
     cursor: default;
   }
 
-  .transcript {
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-14);
-    padding-inline: var(--space-16);
+  .liveBody {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
   }
 
-  /*
-   * Before anyone has finished a sentence. Only FINAL utterances are
-   * published, so a pause here is normal rather than a fault — the copy says
-   * when a line will appear instead of implying something is wrong.
-   */
+  .liveMain {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* `padding:16px 30px 12px`, `gap:12px`. */
+  .liveMainHead {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-16) 30px var(--space-12);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .liveTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /* 02's waveform: twelve thin bars; flat once the call ends. */
+  .liveWave {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    block-size: 14px;
+  }
+
+  .liveWave > span {
+    inline-size: 2px;
+    block-size: 60%;
+    border-radius: 1px;
+    background-color: var(--border-emphasis);
+  }
+
+  .liveWave > span:nth-child(3n) {
+    block-size: 100%;
+  }
+
+  .liveWave > span:nth-child(4n + 1) {
+    block-size: 35%;
+  }
+
+  .liveWave[data-ended] > span {
+    block-size: 2px;
+  }
+
+  .transcript {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: 18px 30px;
+  }
+
   .transcriptWaiting {
     margin: 0;
-    font-size: var(--font-size-meta);
+    font-size: 12.5px;
     color: var(--text-subtle);
   }
 
   .transcriptLines {
-    list-style: none;
     margin: 0;
     padding: 0;
+    list-style: none;
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
+    gap: var(--space-14);
   }
 
+  /* A line: the time (52, mono 10.5/500), then who and what, `gap:12px`. */
   .transcriptLine {
     display: flex;
-    gap: var(--space-8);
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
+    gap: var(--space-12);
+  }
+
+  .lineTime {
+    flex: none;
+    inline-size: 52px;
+    padding-block-start: 3px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .lineBody {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
   }
 
   .speaker {
-    flex: none;
-    inline-size: var(--size-fact-label);
-    font-size: var(--font-size-caption);
+    font-size: 11px;
     color: var(--text-subtle);
   }
 
-  /* The customer's words carry the weight; the agent's are context. */
-  .transcriptLine[data-speaker='customer'] .said {
+  .said {
+    font-size: 13.5px;
+    line-height: 1.55;
     color: var(--text-primary);
   }
 
+  /* The customer's words carry the weight; the agent's are context. */
   .transcriptLine[data-speaker='agent'] .said {
-    color: var(--text-body);
+    color: var(--text-secondary);
   }
 
-  .suggestions {
-    background-color: var(--panel-inset);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-14);
-  }
-
-  .suggestionsLead {
-    margin: 0 0 var(--space-6);
-    font-size: var(--font-size-caption);
+  /* `padding:12px 30px 18px`, `#EDE9E1` above. */
+  .liveFoot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding: var(--space-12) 30px 18px;
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: 11.5px;
     color: var(--text-subtle);
   }
 
-  .suggestionList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .liveNote {
+    margin-inline-start: auto;
+    padding: 6px var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+  }
+
+  .liveNote[aria-disabled='true'] {
+    opacity: 0.5;
+  }
+
+  .liveNote:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* Copilot: 400, the dark panel, blocks at `14px 18px` with `#262626` between. */
+  .copilot {
+    flex: none;
+    inline-size: 400px;
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    overflow-y: auto;
+    background-color: var(--copilot-surface);
+    color: var(--frame-text);
+  }
+
+  .copilotHead {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 15px 18px;
+    border-block-end: 1px solid var(--copilot-raised);
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+  }
+
+  .copilotDot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+  }
+
+  .copilotDot[data-ended] {
+    background-color: var(--menu-dark-icon);
+  }
+
+  .copilotBlock {
+    padding: var(--space-14) 18px;
+    border-block-end: 1px solid var(--copilot-raised);
+  }
+
+  .copilotEyebrow {
+    margin: 0 0 var(--space-10);
+    font-size: 11.5px;
+    color: var(--menu-dark-icon);
+  }
+
+  .copilotTitle {
+    margin: 0 0 var(--space-10);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    color: var(--frame-text);
+  }
+
+  .copilotNone {
+    margin: 0;
+    font-size: 12px;
+    color: var(--menu-dark-icon);
+  }
+
+  /* "Say this": `#1F1F1F`, radius 12, `padding:12px`, a violet edge. */
+  .sayCard {
+    padding: var(--space-12);
+    border: 1px solid var(--copilot-say-edge);
+    border-radius: 12px;
+    background-color: var(--frame-subtle);
+  }
+
+  .sayLead {
+    margin: 0 0 var(--space-8);
+    font-size: 11px;
+    color: var(--signal-ai);
+  }
+
+  .suggestionList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
   }
 
   .suggestion {
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--copilot-text-strong);
+  }
+
+  .copilotAsk {
+    margin-block-start: auto;
+    padding: var(--space-14) 18px;
+  }
+
+  .copilotInput {
+    inline-size: 100%;
+    padding: 11px 13px;
+    border: 0;
+    border-radius: 11px;
+    background-color: var(--frame-subtle);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--frame-text);
+  }
+
+  .copilotInput::placeholder {
+    color: var(--menu-dark-icon);
+  }
+
+  .copilotInput:disabled {
+    cursor: default;
+  }
+
+  @media (width < 64rem) {
+    .liveBody {
+      flex-direction: column;
+    }
+
+    .copilot {
+      inline-size: auto;
+    }
   }
 }

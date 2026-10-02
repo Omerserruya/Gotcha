@@ -37,6 +37,20 @@ function deliver(event: RealtimeEvent): void {
   act(() => listeners.get(event.type)!(event));
 }
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: { pathname: string; query?: Record<string, string> };
+    children: React.ReactNode;
+  }) => (
+    <a href={`${href.pathname}?${new URLSearchParams(href.query ?? {})}`} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('@/realtime/realtime-provider', () => ({
   useRealtimeEvent: (type: RealtimeEventType, listener: (event: RealtimeEvent) => void) => {
     listeners.set(type, listener);
@@ -167,10 +181,16 @@ describe('frames for another call never reach this one', () => {
 });
 
 describe('the controls are the two that exist', () => {
-  it('offers transfer and end', () => {
+  it('★★ draws transfer and end — and NOT live: they were buttons that did nothing', () => {
+    /*
+     * Superseded: these were live-looking buttons with no handler. Hanging up
+     * or moving a customer's live call waits on Omer, like Send; until then
+     * they are drawn disabled and say why.
+     */
     renderCall();
-    expect(screen.getByTestId('transfer')).toBeInTheDocument();
-    expect(screen.getByTestId('end-call')).toBeInTheDocument();
+    expect(screen.getByTestId('transfer')).toBeDisabled();
+    expect(screen.getByTestId('end-call')).toBeDisabled();
+    expect(screen.getByTestId('end-call')).toHaveAttribute('title', 'Not available from here yet.');
   });
 
   it('offers no mute, not even a disabled one', () => {
@@ -185,15 +205,16 @@ describe('the controls are the two that exist', () => {
     expect(document.body.textContent).not.toMatch(/\bmute\b/i);
   });
 
-  it('stops offering controls once the call has ended', () => {
+  it('when the call ends, it says so — the controls were never live', () => {
     renderCall();
+    expect(screen.getByTestId('live-state')).toHaveTextContent('On the call');
     deliver({
       type: 'call.ended',
       tenantId: 't1',
       at: Date.now(),
       conversationId: 'conv-1',
     });
-    expect(screen.getByTestId('transfer')).toBeDisabled();
+    expect(screen.getByTestId('live-state')).toHaveTextContent('The call ended');
     expect(screen.getByTestId('end-call')).toBeDisabled();
   });
 });
@@ -224,5 +245,84 @@ describe('nothing on this screen claims what the platform cannot do', () => {
     expect(screen.getByTestId('suggestions')).toHaveTextContent(/things you could say/i);
     // There is no route that speaks on an agent's behalf.
     expect(document.body.textContent).not.toMatch(/\bsend\b|\bsay it\b/i);
+  });
+});
+
+describe('★★ 05e — the call as a page', () => {
+  function renderFull(over: Partial<Parameters<typeof LiveCall>[0]> = {}) {
+    listeners.clear();
+    return render(
+      <NextIntlClientProvider locale="en" messages={{ calls: messages }}>
+        <LiveCall
+          conversationId="conv-1"
+          customerNumber="972524189930"
+          initialTranscript={[]}
+          customerId="k1"
+          direction="inbound"
+          startedAt="2026-10-02T09:00:00.000Z"
+          {...over}
+        />
+      </NextIntlClientProvider>,
+    );
+  }
+
+  it('the header: the number in display form, who called whom, on the call', () => {
+    renderFull();
+    const call = screen.getByTestId('live-call');
+    expect(call).toHaveTextContent('+972 52 418 9930');
+    expect(call).toHaveTextContent('they called you');
+    expect(screen.getByTestId('live-state')).toHaveTextContent('On the call');
+  });
+
+  it('★ each line carries its time from the call’s start', () => {
+    renderFull({
+      initialTranscript: [
+        {
+          id: 'm1',
+          direction: 'INBOUND',
+          body: 'Hi, I called last week about a parcel.',
+          senderName: null,
+          createdAt: '2026-10-02T09:00:04.000Z',
+        },
+      ],
+    });
+    deliver(
+      transcript({
+        seq: 1,
+        at: Date.parse('2026-10-02T09:01:18.000Z'),
+        text: 'Can you also tell me',
+      }),
+    );
+    expect(screen.getByTestId('line--1')).toHaveTextContent('0:04');
+    expect(screen.getByTestId('line-1')).toHaveTextContent('1:18');
+  });
+
+  it('⚠ a time before the start, or no start, is no time — never a negative', () => {
+    renderFull({ startedAt: null });
+    deliver(transcript({ seq: 1, at: Date.parse('2026-10-02T09:01:18.000Z') }));
+    // The time cell is empty — not "NaN:NaN", which a \d:\d\d check would let through.
+    expect(screen.getByTestId('line-1').querySelector('span')?.textContent).toBe('');
+  });
+
+  it('⚠ a line stamped before the start has no time — never "-0:03"', () => {
+    renderFull();
+    deliver(transcript({ seq: 2, at: Date.parse('2026-10-02T08:59:57.000Z') }));
+    expect(screen.getByTestId('line-2').querySelector('span')?.textContent).toBe('');
+  });
+
+  it('Copilot: every block drawn — found, say this, do now — empty in its shape', () => {
+    renderFull();
+    expect(screen.getByTestId('copilot-found')).toHaveTextContent('Nothing found yet.');
+    expect(screen.getByTestId('suggestions-block')).toHaveTextContent('Nothing to suggest yet.');
+    expect(screen.getByTestId('copilot-do')).toHaveTextContent('Nothing to do yet.');
+    expect(screen.getByPlaceholderText('Ask Copilot something…')).toBeDisabled();
+  });
+
+  it('Add a note goes to the person’s notes; with no person it is drawn and not live', () => {
+    const { unmount } = renderFull();
+    expect(screen.getByTestId('live-note')).toHaveAttribute('href', '/customers/k1?tab=notes');
+    unmount();
+    renderFull({ customerId: null });
+    expect(screen.getByText('Add a note')).toHaveAttribute('aria-disabled', 'true');
   });
 });

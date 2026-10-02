@@ -329,6 +329,11 @@
     --menu-dark-danger: #e4a88f;
     /* Its input bar: `rgb(20,20,20)`, a step darker again. */
     --copilot-input-surface: #141414;
+    /* 05e's "Say this" card: a violet edge on the dark panel. */
+    --copilot-say-edge: #3a3457;
+    /* 05e's "End call": the one destructive control on a live call. */
+    --danger-action: #c0442a;
+    --danger-action-text: #fff;
     --frame-raised: #171717;
     --frame-chip: #242424;
     /* The selected sub-navigation row: a shade quieter than a chip. */
