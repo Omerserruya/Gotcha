@@ -197,11 +197,22 @@ export type AuditRead =
    */
   | { readonly state: 'not_asked' };
 
-export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
+export async function loadCustomer(
+  contactId: string,
+  /**
+   * Events per page — 04c's "older conversations below" asks for more. The
+   * route's default is 50 and its cap 200; omitted, the route decides.
+   */
+  options: { readonly limit?: number } = {},
+): Promise<CustomerDetail> {
   const api = serverApi();
 
   const timeline = await api
-    .get({ endpoint: customerEndpoints.timeline(contactId), payload: timelineSchema })
+    .get({
+      endpoint: customerEndpoints.timeline(contactId),
+      payload: timelineSchema,
+      ...(options.limit ? { query: { limit: options.limit } } : {}),
+    })
     .catch((cause: unknown) => {
       logger.warn('customer.timeline_failed', { cause });
       return null;

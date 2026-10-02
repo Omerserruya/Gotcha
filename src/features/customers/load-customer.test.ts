@@ -225,6 +225,19 @@ describe('★★ the audit envelope, where `data` is a sibling and not the paylo
     expect(detail.readsFailed).toContain('approvals');
   });
 
+  it('★ a limit is sent to the timeline as `limit`; none, and the route decides', async () => {
+    const { loadCustomer } = await import('./load-customer');
+    await loadCustomer('c1', { limit: 150 });
+    const timelineCall = (calls: Record<string, unknown>[]) =>
+      calls.find((c) =>
+        (c.endpoint as { path: string }).path.startsWith('/api/identity/c1/timeline'),
+      );
+    expect(timelineCall(capture.calls)?.query).toEqual({ limit: 150 });
+    capture.calls = [];
+    await loadCustomer('c1');
+    expect(timelineCall(capture.calls)?.query).toBeUndefined();
+  });
+
   it('★ reports nothing as failed when every read succeeds', async () => {
     // A list that fills up on a healthy page would make the fixture gate
     // preserve failures that never happened.

@@ -44,7 +44,10 @@ import {
   ConversationsTab,
   CustomerTabRow,
   CustomerTopBar,
+  MAX_MORE,
+  parseMore,
   PromiseCard,
+  timelineLimit,
 } from './CustomerSubtabs';
 import type { CustomerDetail } from './load-customer';
 
@@ -54,9 +57,18 @@ const message = (over: Partial<TimelineEvent>): TimelineEvent =>
     ...over,
   }) as TimelineEvent;
 
+/** A whole history of these events: totals agree with them, nothing more to page. */
 const withEvents = (events: TimelineEvent[]): CustomerDetail => ({
   ...FIXTURE_DETAIL,
-  timeline: { ...FIXTURE_DETAIL.timeline!, events },
+  timeline: {
+    ...FIXTURE_DETAIL.timeline!,
+    events,
+    totals: {
+      ...FIXTURE_DETAIL.timeline!.totals,
+      conversations: new Set(events.map((e) => e.conversationId)).size,
+    },
+    page: { ...FIXTURE_DETAIL.timeline!.page, hasMore: false },
+  },
 });
 
 describe('★★ 04c–04f’s compact header', () => {
@@ -71,7 +83,37 @@ describe('★★ 04c–04f’s compact header', () => {
     expect(screen.getByTestId('customer-message')).toBeInTheDocument();
   });
 
-  it('⚠ "with you since" only when the whole history is here; otherwise "—"', async () => {
+  it('★★ the same facts line as 04b — never a lone "—" under the name', async () => {
+    const reaching: CustomerDetail = {
+      ...FIXTURE_DETAIL,
+      timeline: {
+        ...FIXTURE_DETAIL.timeline!,
+        page: { ...FIXTURE_DETAIL.timeline!.page, hasMore: true },
+        identityChannels: [
+          { ...FIXTURE_DETAIL.timeline!.identityChannels[0]!, channel: 'WHATSAPP' },
+        ],
+      },
+    };
+    render(await CustomerTopBar({ detail: reaching, contactId: 'k1' }));
+    expect(screen.getByTestId('customer-top-facts')).toHaveTextContent('reaches you on WhatsApp');
+    expect(screen.getByTestId('customer-top-bar').textContent).not.toMatch(/(^|\s)—(\s|$)/);
+  });
+
+  it('⚠ with no facts at all, no line — rather than a dash that looks broken', async () => {
+    const bare: CustomerDetail = {
+      ...FIXTURE_DETAIL,
+      timeline: {
+        ...FIXTURE_DETAIL.timeline!,
+        page: { ...FIXTURE_DETAIL.timeline!.page, hasMore: true },
+        identityChannels: [],
+      },
+    };
+    render(await CustomerTopBar({ detail: bare, contactId: 'k1' }));
+    expect(screen.queryByTestId('customer-top-facts')).toBeNull();
+    expect(screen.getByTestId('customer-top-bar')).not.toHaveTextContent('—');
+  });
+
+  it('⚠ "with you since" only when the whole history is here', async () => {
     const partial: CustomerDetail = {
       ...FIXTURE_DETAIL,
       timeline: {
@@ -81,7 +123,6 @@ describe('★★ 04c–04f’s compact header', () => {
     };
     render(await CustomerTopBar({ detail: partial, contactId: 'k1' }));
     expect(screen.getByTestId('customer-top-bar')).not.toHaveTextContent('with you since');
-    expect(screen.getByTestId('customer-top-bar')).toHaveTextContent('—');
   });
 });
 
@@ -162,7 +203,7 @@ describe('★★ 04c — every conversation as a card on one spine', () => {
   ]);
 
   it('★★ one card per conversation, newest first, the newest marked', async () => {
-    render(await ConversationsTab({ detail, channel: null }));
+    render(await ConversationsTab({ detail, contactId: 'k1', channel: null, more: 0 }));
     const cards = [...screen.getByTestId('conversation-cards').querySelectorAll('li')];
     expect(cards.map((li) => li.dataset.testid)).toEqual(['conversation-new', 'conversation-old']);
     expect(cards[0]!.querySelector('article')).toHaveAttribute('data-newest');
@@ -170,7 +211,7 @@ describe('★★ 04c — every conversation as a card on one spine', () => {
   });
 
   it('★ the title is their first words, the line their latest, the pill the count', async () => {
-    render(await ConversationsTab({ detail, channel: null }));
+    render(await ConversationsTab({ detail, contactId: 'k1', channel: null, more: 0 }));
     const card = screen.getByTestId('conversation-new');
     expect(card).toHaveTextContent('Where is my order');
     expect(card).toHaveTextContent('Thanks, and the invoice?');
@@ -179,7 +220,7 @@ describe('★★ 04c — every conversation as a card on one spine', () => {
   });
 
   it('★ ?channel= keeps that channel’s conversations only', async () => {
-    render(await ConversationsTab({ detail, channel: 'EMAIL' }));
+    render(await ConversationsTab({ detail, contactId: 'k1', channel: 'EMAIL', more: 0 }));
     const cards = [...screen.getByTestId('conversation-cards').querySelectorAll('li')];
     expect(cards.map((li) => li.dataset.testid)).toEqual(['conversation-old']);
     expect(screen.getByText(/One conversation/)).toBeInTheDocument();
@@ -189,16 +230,107 @@ describe('★★ 04c — every conversation as a card on one spine', () => {
     render(
       await ConversationsTab({
         detail: withEvents([message({ conversationId: 'imp', origin: 'HISTORICAL_IMPORT' })]),
+        contactId: 'k1',
         channel: null,
+        more: 0,
       }),
     );
     expect(screen.getByTestId('conversation-imp')).toHaveTextContent('Imported');
   });
 
   it('⚠ no conversations: the heading stays, and one line says so', async () => {
-    render(await ConversationsTab({ detail: withEvents([]), channel: null }));
+    render(
+      await ConversationsTab({ detail: withEvents([]), contactId: 'k1', channel: null, more: 0 }),
+    );
     expect(screen.getByTestId('conversations-empty')).toBeInTheDocument();
     expect(screen.getByText(/0 conversations/)).toBeInTheDocument();
+  });
+});
+
+describe('★★ the true total, and the older ones below — one number on one screen', () => {
+  const page = (over: { conversations: number; hasMore: boolean }) =>
+    ({
+      ...FIXTURE_DETAIL,
+      timeline: {
+        ...FIXTURE_DETAIL.timeline!,
+        events: [
+          message({ id: 'x1', conversationId: 'c-a', createdAt: '2026-02-01T09:00:00.000Z' }),
+          message({ id: 'x2', conversationId: 'c-b', createdAt: '2026-01-01T09:00:00.000Z' }),
+        ],
+        totals: { ...FIXTURE_DETAIL.timeline!.totals, conversations: over.conversations },
+        page: { ...FIXTURE_DETAIL.timeline!.page, hasMore: over.hasMore },
+      },
+    }) satisfies CustomerDetail;
+
+  it('★★ the heading says the person’s total, as the side does — not the page’s 20', async () => {
+    render(
+      await ConversationsTab({
+        detail: page({ conversations: 70, hasMore: true }),
+        contactId: 'k1',
+        channel: null,
+        more: 0,
+      }),
+    );
+    expect(screen.getByText(/70 conversations/)).toBeInTheDocument();
+    const older = screen.getByTestId('conversations-older');
+    expect(older).toHaveTextContent('68 older conversations below');
+    expect(older).toHaveAttribute('href', '/customers/k1?tab=conversations&more=1');
+  });
+
+  it('⚠ at the route’s cap the count stays, and there is nothing to press', async () => {
+    render(
+      await ConversationsTab({
+        detail: page({ conversations: 70, hasMore: true }),
+        contactId: 'k1',
+        channel: null,
+        more: MAX_MORE,
+      }),
+    );
+    const older = screen.getByTestId('conversations-older');
+    expect(older.tagName).toBe('P');
+    expect(older).toHaveTextContent('68 older conversations below');
+  });
+
+  it('nothing older: no foot', async () => {
+    render(
+      await ConversationsTab({
+        detail: page({ conversations: 2, hasMore: false }),
+        contactId: 'k1',
+        channel: null,
+        more: 0,
+      }),
+    );
+    expect(screen.queryByTestId('conversations-older')).toBeNull();
+  });
+
+  it('⚠ under a channel filter the per-channel total is unknown: more, without a number', async () => {
+    render(
+      await ConversationsTab({
+        detail: page({ conversations: 70, hasMore: true }),
+        contactId: 'k1',
+        channel: 'WHATSAPP',
+        more: 1,
+      }),
+    );
+    const older = screen.getByTestId('conversations-older');
+    expect(older).toHaveTextContent('Show older conversations');
+    expect(older).toHaveAttribute(
+      'href',
+      '/customers/k1?tab=conversations&more=2&channel=WHATSAPP',
+    );
+  });
+
+  it('parseMore and timelineLimit: 50 a step, never past 200', () => {
+    expect(parseMore(undefined)).toBe(0);
+    expect(parseMore('x')).toBe(0);
+    expect(parseMore('-1')).toBe(0);
+    expect(parseMore('2')).toBe(2);
+    expect(parseMore('99')).toBe(MAX_MORE);
+    expect(timelineLimit(0)).toBe(50);
+    expect(timelineLimit(2)).toBe(150);
+    expect(timelineLimit(MAX_MORE)).toBe(200);
+    // The guard itself: should MAX_MORE ever grow, the route's cap still holds.
+    expect(timelineLimit(9)).toBe(200);
   });
 });
 

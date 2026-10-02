@@ -51,6 +51,55 @@ function initialsOf(name: string | null): string {
     .join('');
 }
 
+/**
+ * 02's facts line — "with you since …", "reaches you on …" — for 04b's
+ * header and 04c–04f's compact one alike, so the two cannot drift.
+ *
+ * "With you since" only when the history is whole: the oldest event of a
+ * page that has more would be a date that is merely the edge of the page.
+ */
+export async function customerFacts(detail: CustomerDetail): Promise<readonly string[]> {
+  const t = await getTranslations('customers');
+  const channels = await getTranslations('channels');
+  const format = await getFormatter();
+  const reaches = [
+    ...new Set(
+      (detail.timeline?.identityChannels ?? []).map((c) => channelName(c.channel, channels)),
+    ),
+  ].filter(Boolean) as string[];
+  const events = detail.timeline?.events ?? [];
+  const oldest =
+    detail.timeline && !detail.timeline.page.hasMore && events.length > 0
+      ? events.reduce((min, e) => (e.createdAt < min ? e.createdAt : min), events[0]!.createdAt)
+      : null;
+  return [
+    oldest
+      ? t('card.since', {
+          when: format.dateTime(new Date(oldest), { month: 'long', year: 'numeric' }),
+        })
+      : null,
+    reaches.length > 0 ? t('card.reaches', { channels: format.list(reaches) }) : null,
+  ].filter((fact): fact is string => fact !== null);
+}
+
+/**
+ * 02's short dates, day first: "Today", "25 Aug" this year, "Mar 24" for an
+ * earlier one. Built from parts, because `{ day, month }` in `en` is
+ * "Aug 25" — month first, which is not what 02 writes.
+ */
+export function shortDate(
+  iso: string,
+  now: Date,
+  format: Awaited<ReturnType<typeof getFormatter>>,
+  today: string,
+): string {
+  const at = new Date(iso);
+  if (at.toDateString() === now.toDateString()) return today;
+  return at.getFullYear() === now.getFullYear()
+    ? `${format.dateTime(at, { day: 'numeric' })} ${format.dateTime(at, { month: 'short' })}`
+    : format.dateTime(at, { month: 'short', year: '2-digit' });
+}
+
 /** 02's header: a 64px disc, the name at 30px, a line of facts, the summary in serif italic. */
 export async function CustomerHeader({
   detail,
@@ -60,32 +109,9 @@ export async function CustomerHeader({
   readonly contactId: string;
 }) {
   const t = await getTranslations('customers');
-  const channels = await getTranslations('channels');
-  const format = await getFormatter();
   const contact = detail.timeline?.contact ?? null;
   const name = contact?.displayName ?? contact?.externalId ?? null;
-  const reaches = [
-    ...new Set(
-      (detail.timeline?.identityChannels ?? []).map((c) => channelName(c.channel, channels)),
-    ),
-  ].filter(Boolean) as string[];
-  /*
-   * "With you since" only when the history is whole: the oldest event of a
-   * page that has more would be a date that is merely the edge of the page.
-   */
-  const events = detail.timeline?.events ?? [];
-  const oldest =
-    detail.timeline && !detail.timeline.page.hasMore && events.length > 0
-      ? events.reduce((min, e) => (e.createdAt < min ? e.createdAt : min), events[0]!.createdAt)
-      : null;
-  const facts = [
-    oldest
-      ? t('card.since', {
-          when: format.dateTime(new Date(oldest), { month: 'long', year: 'numeric' }),
-        })
-      : null,
-    reaches.length > 0 ? t('card.reaches', { channels: format.list(reaches) }) : null,
-  ].filter(Boolean);
+  const facts = await customerFacts(detail);
   const summary = detail.brief?.summary?.trim() || null;
 
   return (
@@ -306,14 +332,7 @@ export async function CustomerTimelineList({
   }
   rows.sort((a, b) => b.at.localeCompare(a.at));
 
-  /* 02: "Today", "25 Aug" this year, "Mar 24" for an earlier one. */
-  const dateOf = (iso: string) => {
-    const at = new Date(iso);
-    if (at.toDateString() === now.toDateString()) return t('card.today');
-    return at.getFullYear() === now.getFullYear()
-      ? format.dateTime(at, { day: 'numeric', month: 'short' })
-      : format.dateTime(at, { month: 'short', year: '2-digit' });
-  };
+  const dateOf = (iso: string) => shortDate(iso, now, format, t('card.today'));
 
   if (rows.length === 0) {
     return (

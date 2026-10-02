@@ -1384,9 +1384,11 @@
     padding-block-end: var(--space-14);
   }
 
+  /* Mono, as 04b's dates: 10.5/500, the day first. */
   .spineWhen {
     flex: none;
     inline-size: 72px;
+    font-family: var(--font-mono);
     padding-block-start: 2px;
     display: flex;
     flex-direction: column;
@@ -1533,5 +1535,25 @@
     background-color: var(--panel-field);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
+  }
+
+  /* 02's foot: "19 older conversations below", under the last card. */
+  .spineOlder {
+    align-self: flex-start;
+    margin-inline-start: 110px;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+    border-block-end: 1px solid var(--border-emphasis);
+  }
+
+  p.spineOlder {
+    margin-block: 0;
+    border-block-end: 0;
+  }
+
+  .spineOlder:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
   }
 }

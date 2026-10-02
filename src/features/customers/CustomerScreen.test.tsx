@@ -36,6 +36,7 @@ import {
   CustomerTabs,
   CustomerTimelineList,
   parseCustomerTab,
+  shortDate,
 } from './CustomerScreen';
 import type { CustomerDetail } from './load-customer';
 
@@ -175,5 +176,23 @@ describe('★★ the side: WORTH, GOTCHA remembers, Reach them, the pinned note 
     expect(screen.getByTestId('customer-remembers')).toHaveTextContent('Nothing yet.');
     expect(screen.getByTestId('customer-reach')).toHaveTextContent('No handle recorded.');
     expect(screen.getByTestId('customer-pinned-note')).toHaveTextContent('No notes yet.');
+  });
+});
+
+describe('★★ 02’s dates are day first — "25 Aug", not "Aug 25"', () => {
+  const format = createFormatter({ locale: 'en', timeZone: 'UTC' });
+  const now = new Date('2026-10-02T12:00:00.000Z');
+
+  it('this year: the day, then the month', () => {
+    expect(shortDate('2026-08-25T09:00:00.000Z', now, format, 'Today')).toBe('25 Aug');
+    expect(shortDate('2026-06-02T09:00:00.000Z', now, format, 'Today')).toBe('2 Jun');
+  });
+
+  it('an earlier year: the month and the year’s two digits', () => {
+    expect(shortDate('2024-03-24T09:00:00.000Z', now, format, 'Today')).toBe('Mar 24');
+  });
+
+  it('today is the word', () => {
+    expect(shortDate('2026-10-02T08:00:00.000Z', now, format, 'Today')).toBe('Today');
   });
 });

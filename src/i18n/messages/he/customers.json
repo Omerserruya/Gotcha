@@ -232,7 +232,9 @@
       "summarise": "לסכם הכול",
       "openIt": "לפתוח",
       "imported": "יובא",
-      "noWords": "לא נרשמו מילים בשיחה הזו."
+      "noWords": "לא נרשמו מילים בשיחה הזו.",
+      "older": "{count, plural, one {שיחה ישנה אחת למטה} other {# שיחות ישנות למטה}}",
+      "showOlder": "הצגת שיחות ישנות"
     },
     "pattern": {
       "heading": "בדפוס שלהם",

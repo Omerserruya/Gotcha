@@ -232,7 +232,9 @@
       "summarise": "Summarise all of it",
       "openIt": "Open it",
       "imported": "Imported",
-      "noWords": "No words recorded in this conversation."
+      "noWords": "No words recorded in this conversation.",
+      "older": "{count, plural, one {One older conversation below} other {# older conversations below}}",
+      "showOlder": "Show older conversations"
     },
     "pattern": {
       "heading": "In their own pattern",

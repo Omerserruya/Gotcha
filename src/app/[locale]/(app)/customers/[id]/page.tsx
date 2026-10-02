@@ -15,6 +15,8 @@ import {
   ConversationsTab,
   CustomerTabRow,
   CustomerTopBar,
+  parseMore,
+  timelineLimit,
 } from '@/features/customers/CustomerSubtabs';
 import styles from '@/features/customers/Customers.module.css';
 import { loadCustomer } from '@/features/customers/load-customer';
@@ -48,12 +50,18 @@ export default async function Page({
 }: {
   params: Promise<{ id: string }>;
   /** `?tab=` — 04b's tabs: everything, conversations, orders, actions, notes. */
-  searchParams?: Promise<{ tab?: string; channel?: string }>;
+  searchParams?: Promise<{ tab?: string; channel?: string; more?: string }>;
 }) {
   const { id } = await params;
   const query = (await searchParams) ?? {};
   const tab = parseCustomerTab(query.tab);
-  const detail = await loadCustomer(id);
+  /*
+    `?more=` is 04c's "older conversations below": each step asks the
+    timeline for 50 more events. Read only on that tab, so the other tabs
+    keep the route's default page.
+  */
+  const more = tab === 'conversations' ? parseMore(query.more) : 0;
+  const detail = await loadCustomer(id, more > 0 ? { limit: timelineLimit(more) } : {});
 
   if (tab === 'everything') {
     return (
@@ -102,7 +110,7 @@ export default async function Page({
         <div className={styles.cardBody}>
           <div className={styles.subMain}>
             {tab === 'conversations' ? (
-              <ConversationsTab detail={detail} channel={channel} />
+              <ConversationsTab detail={detail} contactId={id} channel={channel} more={more} />
             ) : null}
             {tab === 'orders' ? (
               <CustomerOrders orders={detail.orders} conversationId={detail.conversationId} />

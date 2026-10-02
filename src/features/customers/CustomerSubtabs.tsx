@@ -6,7 +6,7 @@ import { channelName } from '@/api/contracts/inbox';
 import { channelMark } from '@/features/inbox/channel-marks';
 import { Link } from '@/i18n/navigation';
 
-import { CUSTOMER_TABS } from './CustomerScreen';
+import { CUSTOMER_TABS, customerFacts, shortDate } from './CustomerScreen';
 import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
 
@@ -27,14 +27,10 @@ export async function CustomerTopBar({
   readonly contactId: string;
 }) {
   const t = await getTranslations('customers');
-  const format = await getFormatter();
   const contact = detail.timeline?.contact ?? null;
   const name = contact?.displayName ?? contact?.externalId ?? null;
-  const events = detail.timeline?.events ?? [];
-  const oldest =
-    detail.timeline && !detail.timeline.page.hasMore && events.length > 0
-      ? events.reduce((min, e) => (e.createdAt < min ? e.createdAt : min), events[0]!.createdAt)
-      : null;
+  // 04b's facts, the same words: a lone "—" under a name reads as broken.
+  const facts = await customerFacts(detail);
   const initials = (name ?? '')
     .split(/\s+/)
     .filter((word) => /\p{L}/u.test(word))
@@ -56,13 +52,11 @@ export async function CustomerTopBar({
         </span>
         <span>
           <span className={styles.topName}>{name ?? t('list.unnamed')}</span>
-          <span className={styles.topFacts}>
-            {oldest
-              ? t('card.since', {
-                  when: format.dateTime(new Date(oldest), { month: 'long', year: 'numeric' }),
-                })
-              : '—'}
-          </span>
+          {facts.length > 0 ? (
+            <span className={styles.topFacts} data-testid="customer-top-facts">
+              {facts.join(' · ')}
+            </span>
+          ) : null}
         </span>
       </span>
       <span className={styles.cardActions}>
@@ -196,10 +190,15 @@ export function channelsOf(detail: CustomerDetail): readonly string[] {
  */
 export async function ConversationsTab({
   detail,
+  contactId,
   channel,
+  more,
 }: {
   readonly detail: CustomerDetail;
+  readonly contactId: string;
   readonly channel: string | null;
+  /** How many times the page has asked for older ones — see `MAX_MORE`. */
+  readonly more: number;
 }) {
   const t = await getTranslations('customers');
   const names = await getTranslations('channels');
@@ -228,20 +227,30 @@ export async function ConversationsTab({
     })
     .sort((a, b) => b.at.localeCompare(a.at));
 
-  const day = (iso: string) => {
-    const at = new Date(iso);
-    if (at.toDateString() === now.toDateString()) return t('card.today');
-    return at.getFullYear() === now.getFullYear()
-      ? format.dateTime(at, { day: 'numeric', month: 'short' })
-      : format.dateTime(at, { month: 'short', year: '2-digit' });
-  };
+  const day = (iso: string) => shortDate(iso, now, format, t('card.today'));
+
+  /*
+   * ★★ THE TOTAL IS THE PERSON'S, NOT THE PAGE'S. The cards are what one
+   * page of events holds — 20 of 70 on the measured customer — and the side
+   * says 70. The heading says 70 too, and the foot says how many are not
+   * drawn yet, as 02 does ("19 older conversations below").
+   *
+   * With a channel filter the per-channel total is unknown, so the heading
+   * counts what is drawn and the foot offers more without a number.
+   */
+  const total =
+    channel === null
+      ? Math.max(detail.timeline?.totals.conversations ?? 0, cards.length)
+      : cards.length;
+  const older = channel === null ? total - cards.length : null;
+  const mayLoadMore = (detail.timeline?.page.hasMore ?? false) && more < MAX_MORE;
   const time = (iso: string) =>
     format.dateTime(new Date(iso), { hour: '2-digit', minute: '2-digit', hour12: false });
 
   return (
     <>
       <p className={styles.tabLead}>
-        <span>{t('card.conv.heading', { count: cards.length })}</span>
+        <span>{t('card.conv.heading', { count: total })}</span>
         {/*
           02's "Summarise all of it". The brief IS the summary, generated on
           its own schedule; there is no "summarise now" route, so the link is
@@ -303,8 +312,48 @@ export async function ConversationsTab({
           })}
         </ol>
       )}
+      {(older !== null && older > 0) || (older === null && mayLoadMore) ? (
+        mayLoadMore ? (
+          <Link
+            href={{
+              pathname: `/customers/${contactId}`,
+              query: {
+                tab: 'conversations',
+                more: String(more + 1),
+                ...(channel ? { channel } : {}),
+              },
+            }}
+            className={styles.spineOlder}
+            scroll={false}
+            data-testid="conversations-older"
+          >
+            {older === null ? t('card.conv.showOlder') : t('card.conv.older', { count: older })}
+          </Link>
+        ) : (
+          <p className={styles.spineOlder} data-testid="conversations-older">
+            {t('card.conv.older', { count: older ?? 0 })}
+          </p>
+        )
+      ) : null}
     </>
   );
+}
+
+/**
+ * How far "older conversations" can reach: the route caps a page at 200
+ * events, and each step asks for 50 more — so three steps past the first.
+ */
+export const MAX_MORE = 3;
+
+/** The timeline limit for `?more=`: 50 a step, never past the route's 200. */
+export function timelineLimit(more: number): number {
+  return Math.min(200, 50 * (1 + more));
+}
+
+/** `?more=` as a step count — anything else is the first page. */
+export function parseMore(raw: string | undefined): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, MAX_MORE) : 0;
 }
 
 /** 04c's side: their pattern, how they write, what they ask — and the promise card. */

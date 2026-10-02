@@ -39,11 +39,15 @@ const mounted = (tree: ReactNode): unknown[] => {
   return found;
 };
 
-const page = async (tab?: string, channel?: string) => {
+const page = async (tab?: string, channel?: string, more?: string) => {
   const { default: Page } = await import('./page');
   return Page({
     params: Promise.resolve({ id: 'k1' }),
-    searchParams: Promise.resolve({ ...(tab ? { tab } : {}), ...(channel ? { channel } : {}) }),
+    searchParams: Promise.resolve({
+      ...(tab ? { tab } : {}),
+      ...(channel ? { channel } : {}),
+      ...(more ? { more } : {}),
+    }),
   });
 };
 
@@ -111,5 +115,22 @@ describe('★★ 04b — the card, its tabs, its side', () => {
     const types = mounted(await page(tab));
     expect(types).toContain(panel);
     expect(types).not.toContain(CustomerTimelineList);
+  });
+});
+
+describe('★ ?more= — older conversations, 50 events a step', () => {
+  it('★ asks the loader for the larger page, and hands the step to 04c', async () => {
+    const { loadCustomer } = await import('@/features/customers/load-customer');
+    vi.mocked(loadCustomer).mockClear();
+    const tree = await page('conversations', undefined, '2');
+    expect(vi.mocked(loadCustomer)).toHaveBeenCalledWith('k1', { limit: 150 });
+    expect(propsOf<{ more: number }>(tree, ConversationsTab)?.more).toBe(2);
+  });
+
+  it('⚠ only on the conversations tab — the others keep the route’s own page', async () => {
+    const { loadCustomer } = await import('@/features/customers/load-customer');
+    vi.mocked(loadCustomer).mockClear();
+    await page('orders', undefined, '2');
+    expect(vi.mocked(loadCustomer)).toHaveBeenCalledWith('k1', {});
   });
 });
