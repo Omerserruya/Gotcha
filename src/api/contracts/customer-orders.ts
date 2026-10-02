@@ -37,8 +37,29 @@ import { z } from 'zod';
 
 /* ── Money and chips ─────────────────────────────────────────────────────── */
 
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ `amount` IS A DECIMAL STRING ON THE WIRE, AND THIS SAID NUMBER
+ * ════════════════════════════════════════════════════════════════════════════
+ * `commerce-context.types.ts`: `amount: string; // decimal string … never a
+ * float`. With `z.number()` here, EVERY `ok` response failed to parse and 04d
+ * would have said it could not read the orders the moment a store connected.
+ * It never fired because the only state this tenant produces carries no
+ * money — the dormant-branch shape again, found while drawing 04d's prices.
+ *
+ * A string is read as a number for formatting only; nothing here sums across
+ * currencies. Empty, absent and unparseable are all `null`, never 0: a missing
+ * price must not render as a confident zero.
+ */
+const amountSchema = z.preprocess((value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}, z.number().nullable());
+
 export const moneySchema = z.object({
-  amount: z.number().nullable().default(null),
+  amount: amountSchema.default(null),
   currency: z.string().nullable().default(null),
 });
 export type Money = z.infer<typeof moneySchema>;
@@ -63,11 +84,69 @@ export type StatusChip = z.infer<typeof statusChipSchema>;
 export const orderItemSchema = z.object({
   title: z.string().default(''),
   quantity: z.number().default(0),
+  imageUrl: z.string().nullish().default(null),
 });
+
+/**
+ * Shopify's milestones for one order, localised server-side: placed,
+ * payment, fulfilled, shipped, delivered — then cancelled or refunded when
+ * those happened. 04d's tracker. `at` is null when the step was reached and
+ * Shopify gave no time.
+ */
+export const milestoneSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  at: z.string().nullish().default(null),
+  reached: z.boolean().default(false),
+  failed: z.boolean().default(false),
+});
+export type Milestone = z.infer<typeof milestoneSchema>;
+
+/** The expandable detail — every field optional, as theirs is. */
+export const orderDetailSchema = z.object({
+  lineItems: z
+    .array(
+      z.object({
+        lineItemId: z.string(),
+        title: z.string().default(''),
+        variantTitle: z.string().nullish().default(null),
+        quantity: z.number().default(0),
+        unitPrice: moneySchema.nullish().default(null),
+        lineTotal: moneySchema.nullish().default(null),
+        imageUrl: z.string().nullish().default(null),
+      }),
+    )
+    .default([]),
+  tracking: z
+    .array(
+      z.object({
+        number: z.string().nullish().default(null),
+        url: z.string().nullish().default(null),
+        company: z.string().nullish().default(null),
+      }),
+    )
+    .default([]),
+  shippingAddress: z.string().nullish().default(null),
+  refunds: z
+    .array(
+      z.object({
+        at: z.string(),
+        amount: moneySchema.nullish().default(null),
+        reason: z.string().nullish().default(null),
+      }),
+    )
+    .default([]),
+});
+export type OrderDetail = z.infer<typeof orderDetailSchema>;
 
 export const orderCardSchema = z.object({
   orderId: z.string(),
   orderNumber: z.string().default(''),
+  /**
+   * The order in Shopify's admin, built server-side from the shop domain.
+   * Linked only through `shopifyAdminHref`, which checks it is one.
+   */
+  adminUrl: z.string().nullish().default(null),
   createdAt: z.string().nullable().default(null),
   total: moneySchema.default({ amount: null, currency: null }),
   financial: statusChipSchema.nullish().default(null),
@@ -78,6 +157,8 @@ export const orderCardSchema = z.object({
   items: z.array(orderItemSchema).default([]),
   /** "+N items" beyond those listed. Rendered, so a card never looks complete when it is not. */
   extraItemCount: z.number().default(0),
+  timeline: z.array(milestoneSchema).default([]),
+  detail: orderDetailSchema.nullish().default(null),
   refundedAmount: moneySchema.default({ amount: null, currency: null }),
   /**
    * ★ THE AUTHORITATIVE CEILING FOR A REFUND, and the reason it is read even
@@ -141,6 +222,18 @@ export const commerceSummarySchema = z.object({
   email: z.string().nullish().default(null),
   phone: z.string().nullish().default(null),
   currency: z.string().nullish().default(null),
+  /**
+   * Named for 04d's side and 04b's WORTH — all on the wire, stripped until
+   * now. Each absent when the provider gave no value, and drawn as "—" then.
+   */
+  averageOrderValue: moneySchema.nullish().default(null),
+  customerSince: z.string().nullish().default(null),
+  defaultAddress: z.string().nullish().default(null),
+  /** Grouped by currency, never combined. */
+  totalSpentByCurrency: z.array(moneySchema).default([]),
+  shopCurrencyTotal: moneySchema.nullish().default(null),
+  openOrderCount: z.number().nullish().default(null),
+  refundedOrCancelledCount: z.number().nullish().default(null),
 });
 export type CommerceSummary = z.infer<typeof commerceSummarySchema>;
 
@@ -298,4 +391,26 @@ export function didExecute(result: OrderActionResult | null): boolean {
  */
 export function isWaitingOnAPerson(result: OrderActionResult | null): boolean {
   return result?.state === 'pending_approval';
+}
+
+/**
+ * `adminUrl` as an href, or null.
+ *
+ * Parsed, not prefix-checked: the URL parser strips tab and newline before
+ * reading, so `https:` plus a prefix test is not a URL check. https only, and
+ * a Shopify admin host — `*.myshopify.com` or `admin.shopify.com` — so a
+ * corrupted shop domain cannot turn "Open in Shopify" into a link elsewhere.
+ */
+export function shopifyAdminHref(adminUrl: string | null | undefined): string | null {
+  if (!adminUrl) return null;
+  let url: URL;
+  try {
+    url = new URL(adminUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) return null;
+  const host = url.hostname.toLowerCase();
+  if (!(host.endsWith('.myshopify.com') || host === 'admin.shopify.com')) return null;
+  return url.href;
 }

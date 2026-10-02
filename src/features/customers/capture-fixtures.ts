@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { commerceContextSchema } from '@/api/contracts/customer-orders';
 import type { CustomerDetail } from '@/features/customers/load-customer';
 import type { CustomerRow } from '@/api/contracts/customers';
 import { captureFixturesEnabled } from '@/features/security/capture-fixtures';
@@ -453,13 +454,35 @@ export const FIXTURE_DETAIL: CustomerDetail = {
    * that is what the real response does and a fixture with invented labels
    * would photograph a screen nobody will ever see.
    */
-  orders: {
+  /*
+   * ★★ WIRE-SHAPED, AND PARSED BY THE REAL CONTRACT.
+   *
+   * Amounts are decimal STRINGS, as `commerce-context.types.ts` sends them;
+   * the milestones are the ones `buildTimeline` writes, in its order and
+   * with its labels; `adminUrl` is `adminUrl()`'s shape. Parsing it here is
+   * what makes the fixture a test of the contract: the number-typed
+   * `amount` it replaced would have thrown on this object.
+   */
+  orders: commerceContextSchema.parse({
     state: 'ok',
-    missing: [],
-    summary: null,
     data: {
-      summary: { orderCount: 2, name: 'Avery Stone', email: null, phone: null, currency: 'ILS' },
+      provider: 'shopify',
+      summary: {
+        orderCount: 2,
+        name: 'Avery Stone',
+        currency: 'ILS',
+        averageOrderValue: { amount: '300.00', currency: 'ILS' },
+        customerSince: '2025-11-03T10:00:00.000Z',
+        defaultAddress: 'Avery Stone, Herzl 12, Haifa, Israel',
+        totalSpentByCurrency: [{ amount: '600.00', currency: 'ILS' }],
+        shopCurrencyTotal: { amount: '600.00', currency: 'ILS' },
+        lastOrderAt: '2026-09-16T11:02:00.000Z',
+        repeatCustomer: true,
+        openOrderCount: 1,
+        refundedOrCancelledCount: 0,
+      },
       fetchedAt: '2026-09-18T09:20:00.000Z',
+      cacheTtlSeconds: 60,
       /*
        * ★ THE ID 04e's `supplied: ['shopifyCustomerId']` CLAIMS WE SENT.
        * `verified: true` is the only shape this can take: the service sets
@@ -473,42 +496,93 @@ export const FIXTURE_DETAIL: CustomerDetail = {
         {
           orderId: 'fixture-order-1',
           orderNumber: '#1246',
+          adminUrl: 'https://fixture-store.myshopify.com/admin/orders/fixture-order-1',
           createdAt: '2026-09-16T11:02:00.000Z',
-          total: { amount: 420, currency: 'ILS' },
+          total: { amount: '420.00', currency: 'ILS' },
           financial: { key: 'paid', label: 'Paid', tone: 'positive' },
           fulfillment: { key: 'partial', label: 'Partially fulfilled', tone: 'warning' },
           cancelled: false,
           refund: null,
-          shipping: null,
+          shipping: { key: 'shipped', label: 'Shipped', tone: 'neutral' },
           items: [
-            { title: 'Olive oil, 750ml', quantity: 6 },
-            { title: 'Sea salt, coarse', quantity: 2 },
+            { title: 'Olive oil, 750ml', quantity: 6, imageUrl: null },
+            { title: 'Sea salt, coarse', quantity: 2, imageUrl: null },
           ],
           extraItemCount: 3,
-          refundedAmount: { amount: null, currency: null },
-          refundableMaximum: { amount: 420, currency: 'ILS' },
+          refundedAmount: { amount: '0.00', currency: 'ILS' },
+          refundableMaximum: { amount: '420.00', currency: 'ILS' },
+          timeline: [
+            { key: 'placed', label: 'Order placed', at: '2026-09-16T11:02:00.000Z', reached: true },
+            {
+              key: 'payment',
+              label: 'Payment confirmed',
+              at: '2026-09-16T11:03:00.000Z',
+              reached: true,
+            },
+            { key: 'fulfilled', label: 'Fulfilled', at: '2026-09-17T08:40:00.000Z', reached: true },
+            { key: 'shipped', label: 'Shipped', at: null, reached: true },
+            { key: 'delivered', label: 'Delivered', at: null, reached: false },
+          ],
+          detail: {
+            lineItems: [
+              {
+                lineItemId: 'li-1',
+                title: 'Olive oil, 750ml',
+                variantTitle: 'Early harvest',
+                quantity: 6,
+                unitPrice: { amount: '45.00', currency: 'ILS' },
+                lineTotal: { amount: '270.00', currency: 'ILS' },
+                imageUrl: null,
+              },
+              {
+                lineItemId: 'li-2',
+                title: 'Sea salt, coarse',
+                quantity: 2,
+                unitPrice: { amount: '25.00', currency: 'ILS' },
+                lineTotal: { amount: '50.00', currency: 'ILS' },
+                imageUrl: null,
+              },
+            ],
+            itemCount: 11,
+            tracking: [{ number: 'RR204917IL', company: 'Israel Post' }],
+            shippingAddress: 'Avery Stone, Herzl 12, Haifa, Israel',
+            tags: [],
+            refunds: [],
+          },
           eligibility: {
             cancellable: false,
             refundable: true,
             returnable: true,
             exchangeable: false,
-            reasonIfNot: null,
           },
         },
         {
           orderId: 'fixture-order-2',
           orderNumber: '#1203',
+          adminUrl: 'https://fixture-store.myshopify.com/admin/orders/fixture-order-2',
           createdAt: '2026-08-02T15:31:00.000Z',
-          total: { amount: 180, currency: 'ILS' },
+          total: { amount: '180.00', currency: 'ILS' },
           financial: { key: 'paid', label: 'Paid', tone: 'positive' },
           fulfillment: { key: 'delivered', label: 'Delivered', tone: 'positive' },
           cancelled: false,
           refund: null,
-          shipping: null,
-          items: [{ title: 'Olive oil, 750ml', quantity: 2 }],
+          shipping: { key: 'delivered', label: 'Delivered', tone: 'positive' },
+          items: [{ title: 'Olive oil, 750ml', quantity: 2, imageUrl: null }],
           extraItemCount: 0,
-          refundedAmount: { amount: null, currency: null },
-          refundableMaximum: { amount: null, currency: null },
+          refundedAmount: { amount: '0.00', currency: 'ILS' },
+          refundableMaximum: { amount: '0.00', currency: 'ILS' },
+          timeline: [
+            { key: 'placed', label: 'Order placed', at: '2026-08-02T15:31:00.000Z', reached: true },
+            {
+              key: 'payment',
+              label: 'Payment confirmed',
+              at: '2026-08-02T15:31:00.000Z',
+              reached: true,
+            },
+            { key: 'fulfilled', label: 'Fulfilled', at: '2026-08-03T09:00:00.000Z', reached: true },
+            { key: 'shipped', label: 'Shipped', at: null, reached: true },
+            { key: 'delivered', label: 'Delivered', at: null, reached: true },
+          ],
           eligibility: {
             cancellable: false,
             refundable: false,
@@ -519,7 +593,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
         },
       ],
     },
-  },
+  }),
   conversationId: 'fixture-conv-1',
   noConversations: false,
   /*
