@@ -733,4 +733,157 @@
     font-size: 11.5px;
     color: var(--text-subtle);
   }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 06d, measured — what conversations are worth
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  /* "What you lost": the alert card, 300 wide, `padding:18px 20px`. */
+  .sLost {
+    flex: none;
+    inline-size: 300px;
+    padding: 18px var(--space-20);
+    background-color: var(--alert-surface);
+    border: 1px solid var(--alert-edge);
+    border-radius: var(--radius-card);
+  }
+
+  .sLostTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--alert-title);
+  }
+
+  .sLostBody {
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--alert-text);
+  }
+
+  .sLostLink {
+    display: inline-block;
+    margin-block-start: var(--space-10);
+    font-size: 11.5px;
+    color: var(--alert-text);
+    border-block-end: 1px solid var(--alert-control-edge);
+  }
+
+  .sLostLink[aria-disabled='true'] {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  /* "Where the money came from": 724, white, radius 14, `padding:18px 20px`. */
+  .sSources {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .sSources > .gNone {
+    flex: 1;
+  }
+
+  /* "What people ask for and don't get": 400, head `13px 18px`, foot `#F5F2EC`. */
+  .sAsked {
+    flex: none;
+    inline-size: 400px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .sAskedHead {
+    display: flex;
+    align-items: baseline;
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .sAskedBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .sAskedNone {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  .sAskedList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sAskedRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-12) 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .sAskedText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sAskedTerm {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .sAskedSub {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .sAskedCount {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .sAskedValue {
+    flex: none;
+    min-inline-size: 64px;
+    text-align: end;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .sAskedFoot {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .sLost,
+    .sAsked {
+      inline-size: auto;
+    }
+  }
 }

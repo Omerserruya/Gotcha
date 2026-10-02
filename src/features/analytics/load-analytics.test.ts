@@ -9,6 +9,7 @@ import {
   lastSevenUtcDates,
   loadAnalytics,
   loadGotcha,
+  loadSales,
   loadTeam,
 } from './load-analytics';
 
@@ -131,5 +132,17 @@ describe('★ 06c’s reads', () => {
       return [];
     });
     expect((await loadTeam()).hourly).toBeNull();
+  });
+});
+
+describe('★ 06d’s read', () => {
+  it('product demand is read raw — `{ weekKey, data }` — and a failure is null', async () => {
+    get.mockResolvedValue({ weekKey: '2026-W40', data: [] });
+    await loadSales();
+    const req = get.mock.calls[0]![0] as { endpoint: { path: string }; raw?: boolean };
+    expect(req.endpoint.path).toBe('/api/analytics/product-demand');
+    expect(req.raw).toBe(true);
+    get.mockRejectedValue(new Error('down'));
+    expect((await loadSales()).demand).toBeNull();
   });
 });

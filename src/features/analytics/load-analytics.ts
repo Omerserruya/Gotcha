@@ -3,6 +3,8 @@ import { toolUsageListSchema, type ToolUsage } from '@/api/contracts/capabilitie
 import { aiEmployeesSchema, isBuilderDraft, type AiEmployee } from '@/api/contracts/people';
 import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
 import {
+  productDemandSchema,
+  type ProductDemand,
   hourlySchema,
   type Hourly,
   aiPerformanceSchema,
@@ -226,4 +228,24 @@ export async function loadTeam(): Promise<TeamData> {
   ]);
   const answered = days.filter((day): day is { date: string; hours: Hourly } => day !== null);
   return { agents, aiEmployees, overview, hourly: answered.length > 0 ? answered : null };
+}
+
+/**
+ * What 06d reads: this week's unmet catalogue demand. Nothing attributes
+ * revenue to a conversation, so that is the whole of what Sales can show.
+ */
+export async function loadSales(): Promise<{ readonly demand: ProductDemand | null }> {
+  const demand = await serverApi()
+    .get({
+      endpoint: analyticsEndpoints.productDemand(),
+      payload: productDemandSchema,
+      query: { limit: 10 },
+      // `{ weekKey, data }`: unwrapping would hand the array to an object schema.
+      raw: true,
+    })
+    .catch((cause: unknown) => {
+      logger.warn('analytics.product_demand_failed', { cause });
+      return null;
+    });
+  return { demand };
 }

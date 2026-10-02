@@ -130,5 +130,44 @@
       "aiEmployee": "AI employee",
       "foot": "Open now and taken today are today's numbers. Replies and outcomes aren't measured per person yet, so nobody here is ranked."
     }
+  },
+  "sales": {
+    "title": "What conversations are worth",
+    "subline": "Last 7 days",
+    "hero": {
+      "eyebrow": "The number that matters",
+      "title": "What conversations sold isn't known yet.",
+      "line": "Sales aren't tied to the conversation that led to them, so there's nothing honest to add up.",
+      "which": "See which conversations",
+      "compare": "Compare with last month"
+    },
+    "lost": {
+      "title": "What you lost",
+      "body": "{asks} {asks, plural, one {ask} other {asks}} this week for {terms, plural, one {something} other {# things}} you don't stock.",
+      "none": "Nobody asked for anything you don't stock this week.",
+      "write": "Write to them now"
+    },
+    "strip": {
+      "revenue": "Revenue from conversations",
+      "wanted": "People who wanted to buy",
+      "bought": "Of them, bought",
+      "average": "Average order",
+      "carts": "Carts recovered"
+    },
+    "sources": {
+      "title": "Where the money came from",
+      "none": "Nothing ties a sale to the conversation, recommendation or campaign behind it yet.",
+      "foot": "How reply speed affects buying isn't measured yet."
+    },
+    "asked": {
+      "title": "What people ask for and don't get",
+      "week": "this week",
+      "unavailable": "We couldn't read this week's searches just now.",
+      "none": "Nothing asked for went unfound this week.",
+      "notStocked": "not stocked",
+      "running": "asked {weeks} weeks running",
+      "asks": "{n} {count, plural, one {ask} other {asks}}",
+      "foot": "{term} was searched for {n} {count, plural, one {time} other {times}} this week and isn't in your catalogue."
+    }
   }
 }

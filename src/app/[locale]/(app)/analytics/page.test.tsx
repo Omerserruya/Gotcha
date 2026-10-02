@@ -30,7 +30,13 @@ import { TeamLoad } from '@/features/analytics/TeamLoad';
 const loadAnalytics = vi.hoisted(() => vi.fn());
 const loadGotcha = vi.hoisted(() => vi.fn());
 const loadTeam = vi.hoisted(() => vi.fn());
-vi.mock('@/features/analytics/load-analytics', () => ({ loadAnalytics, loadGotcha, loadTeam }));
+const loadSales = vi.hoisted(() => vi.fn());
+vi.mock('@/features/analytics/load-analytics', () => ({
+  loadAnalytics,
+  loadGotcha,
+  loadTeam,
+  loadSales,
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
   getFormatter: async () => ({}),
@@ -180,6 +186,23 @@ describe('★★ 06c — ?tab=team', () => {
     const types: unknown[] = [];
     walk(tree, [], (element) => types.push(element.type));
     for (const part of [TeamHero, HandoverCard, TeamStrip, TeamTable]) {
+      expect(types).toContain(part);
+    }
+    expect(loadAnalytics).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ 06d — ?tab=sales', () => {
+  it('mounts its five parts with the demand read only', async () => {
+    const { AskedNotGot, MoneySources, SalesHero, SalesStrip, WhatYouLost } =
+      await import('@/features/analytics/SalesTab');
+    loadSales.mockResolvedValue({ demand: null });
+    loadAnalytics.mockClear();
+    const { default: Page } = await import('./page');
+    const tree = await Page({ searchParams: Promise.resolve({ tab: 'sales' }) });
+    const types: unknown[] = [];
+    walk(tree, [], (element) => types.push(element.type));
+    for (const part of [SalesHero, WhatYouLost, SalesStrip, MoneySources, AskedNotGot]) {
       expect(types).toContain(part);
     }
     expect(loadAnalytics).not.toHaveBeenCalled();

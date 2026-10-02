@@ -672,3 +672,28 @@ export function busiestHour(
   }
   return best?.at ?? null;
 }
+
+/**
+ * `GET /api/analytics/product-demand?limit` → `{ weekKey, data }`: what people
+ * searched the catalogue for this ISO week and did not find.
+ *
+ * ⚠ `askedBy` IS NOT PEOPLE. The writer (`recordProductDemand`) increments it
+ * on every ask that carries an asker key, with no de-duplication — so it is a
+ * count of keyed asks, and a screen must never say "N people". `askCount` is
+ * the asks; that is the figure shown. Terms are stored lowercased.
+ */
+export const productDemandSchema = z.looseObject({
+  weekKey: z.string().default(''),
+  data: z
+    .array(
+      z.looseObject({
+        id: z.string(),
+        term: z.string(),
+        askCount: z.number().default(1),
+        inCatalogue: z.boolean().default(false),
+        weeksRunning: z.number().default(1),
+      }),
+    )
+    .default([]),
+});
+export type ProductDemand = z.infer<typeof productDemandSchema>;

@@ -11,7 +11,19 @@ import {
   WhatItDid,
   WhereStopped,
 } from '@/features/analytics/GotchaTab';
-import { loadAnalytics, loadGotcha, loadTeam } from '@/features/analytics/load-analytics';
+import {
+  loadAnalytics,
+  loadGotcha,
+  loadSales,
+  loadTeam,
+} from '@/features/analytics/load-analytics';
+import {
+  AskedNotGot,
+  MoneySources,
+  SalesHero,
+  SalesStrip,
+  WhatYouLost,
+} from '@/features/analytics/SalesTab';
 import { HandoverCard, TeamHero, TeamStrip, TeamTable } from '@/features/analytics/TeamTab';
 import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
 import { TeamLoad } from '@/features/analytics/TeamLoad';
@@ -99,6 +111,26 @@ export default async function Page({
           </div>
           <TeamStrip data={data} />
           <TeamTable agents={data.agents} aiEmployees={data.aiEmployees} />
+        </div>
+      </PageContainer>
+    );
+  }
+
+  /* 06d — what conversations were worth; only unmet demand is recorded. */
+  if (tab === 'sales') {
+    const { demand } = await loadSales();
+    return (
+      <PageContainer layout="screen" title={t('sales.title')} description={t('sales.subline')}>
+        <div className={styles.gScreen} data-testid="analytics-sales">
+          <div className={styles.gTop}>
+            <SalesHero />
+            <WhatYouLost demand={demand} />
+          </div>
+          <SalesStrip />
+          <div className={styles.gBottom}>
+            <MoneySources />
+            <AskedNotGot demand={demand} />
+          </div>
         </div>
       </PageContainer>
     );
