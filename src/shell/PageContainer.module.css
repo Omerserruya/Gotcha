@@ -81,6 +81,8 @@
     margin: 0;
     font-size: var(--font-size-screen-title);
     font-weight: var(--font-weight-semibold);
+    /* 02: `letter-spacing:-0.025em` on all 50 of its screen titles — missed until measured. */
+    letter-spacing: var(--letter-spacing-display);
     color: var(--text-primary);
   }
 

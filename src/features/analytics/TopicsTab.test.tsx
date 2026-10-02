@@ -3,7 +3,7 @@ import { createFormatter, createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { askedAboutSchema } from '@/api/contracts/analytics';
+import { askedAboutSchema, namedTopics } from '@/api/contracts/analytics';
 import analytics from '@/i18n/messages/en/analytics.json';
 
 vi.mock('next-intl/server', () => ({
@@ -23,6 +23,7 @@ import {
   biggestRise,
   HowTheySound,
   MIN_BASE,
+  TopicByDay,
   TopicsHero,
   TopicTable,
   topicRows,
@@ -116,5 +117,57 @@ describe('★★ 06e on screen', () => {
     const card = screen.getByTestId('topics-sound');
     expect(card.textContent?.match(/—/g)).toHaveLength(3);
     expect(card).toHaveTextContent("Tone isn't counted yet.");
+  });
+});
+
+describe('★★ the classifier\'s "no result" is not a topic', () => {
+  // Dev, measured: the tenant's only intent this week was `unknown`, 5 rows.
+  const DEV = data({ week: [topic('unknown', 5)], before: [] });
+  const DAYS = [new Date('2026-10-01T00:00:00Z')];
+
+  it('★★ "unknown" and "general" are not rows — and never "new"', () => {
+    expect(topicRows([topic('unknown', 5), topic('General', 3)], [])).toEqual([]);
+    expect(topicRows([...WEEK, topic('general', 9)], BEFORE).map((r) => r.key)).not.toContain(
+      'general',
+    );
+  });
+
+  it('★★ on dev\'s data: "not grouped", and the foot counts what it couldn\'t place', async () => {
+    render(await TopicTable({ data: DEV }));
+    expect(screen.queryByTestId('topic-unknown')).not.toBeInTheDocument();
+    expect(screen.getByTestId('topics-none')).toHaveTextContent("aren't grouped into topics");
+    expect(screen.getByTestId('topics-unplaced')).toHaveTextContent(
+      "5 questions GOTCHA couldn't place this week.",
+    );
+  });
+
+  it('★ with real topics beside them, the rows stay and the foot still counts', async () => {
+    render(await TopicTable({ data: data({ week: [...WEEK, topic('general', 1)] }) }));
+    expect(screen.getByTestId('topic-order_status')).toBeInTheDocument();
+    expect(screen.queryByTestId('topic-general')).not.toBeInTheDocument();
+    expect(screen.getByTestId('topics-unplaced')).toHaveTextContent(
+      "1 question GOTCHA couldn't place",
+    );
+  });
+
+  it('no foot count when everything was placed', async () => {
+    render(await TopicTable({ data: data() }));
+    expect(screen.queryByTestId('topics-unplaced')).not.toBeInTheDocument();
+  });
+
+  it('★★ it does not title the by-day card, nor the dark one', async () => {
+    render(await TopicByDay({ data: DEV, days: DAYS }));
+    expect(screen.getByTestId('topics-by-day')).toHaveTextContent('A topic, by day');
+    expect(screen.getByTestId('topics-by-day')).not.toHaveTextContent(/unknown/i);
+    render(await TopicsHero({ data: DEV }));
+    expect(screen.getByTestId('topics-hero')).not.toHaveTextContent(/unknown/i);
+  });
+
+  it('★ nor is it a topic on 06\'s "What people ask about"', () => {
+    expect(namedTopics([topic('unknown', 5), topic('returns', 2)]).map((r) => r.intent)).toEqual([
+      'returns',
+    ]);
+    // A customer's own words (no intent) are never mistaken for the label.
+    expect(namedTopics([topic(null, 2, 'general')])).toHaveLength(1);
   });
 });

@@ -129,24 +129,34 @@ export async function WhereStopped({ data }: { readonly data: GotchaData }) {
     ? data.unanswered.data.length >= UNANSWERED_PAGE
       ? `${format.number(UNANSWERED_PAGE)}+`
       : format.number(data.unanswered.data.length)
-    : '—';
-  const rows = [
+    : null;
+  /*
+    `null` is a figure we do not have, and it gets its own sentence: a "—"
+    dropped into "— asked for a person outright." does not read.
+  */
+  const rows: readonly {
+    key: 'person' | 'unknown' | 'approval';
+    count: string | null;
+    tone: string;
+  }[] = [
     // No handover cause is stored: "asked for a person" cannot be counted.
-    { key: 'person', count: '—', tone: 'amber' },
+    { key: 'person', count: null, tone: 'amber' },
     { key: 'unknown', count: unknown, tone: 'red' },
     {
       key: 'approval',
-      count: data.ai ? format.number(data.ai.approvals.requested) : '—',
+      count: data.ai ? format.number(data.ai.approvals.requested) : null,
       tone: 'violet',
     },
-  ] as const;
+  ];
   return (
     <section className={styles.gStopped} data-testid="gotcha-stopped">
       <h2 className={styles.gCardTitle}>{t('gotcha.stopped.title')}</h2>
       <ul className={styles.gStoppedList}>
         {rows.map((row) => (
           <li key={row.key} data-tone={row.tone} data-testid={`stopped-${row.key}`}>
-            {t(`gotcha.stopped.${row.key}`, { count: row.count })}
+            {row.count === null
+              ? t(`gotcha.stopped.${row.key}None`)
+              : t(`gotcha.stopped.${row.key}`, { count: row.count })}
           </li>
         ))}
       </ul>
@@ -284,10 +294,12 @@ export async function WhatItDid({
         </p>
       ) : tools !== null && top.length > 0 ? (
         <p className={styles.gDidFoot} data-testid="did-foot">
-          {t('gotcha.did.foot', {
-            failed: failed === null ? '—' : format.number(failed),
-            refused: format.number(refused),
-          })}
+          {failed === null
+            ? t('gotcha.did.footNoFailed', { refused: format.number(refused) })
+            : t('gotcha.did.foot', {
+                failed: format.number(failed),
+                refused: format.number(refused),
+              })}
         </p>
       ) : null}
     </section>

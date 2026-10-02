@@ -32,7 +32,13 @@ import {
   SalesStrip,
   WhatYouLost,
 } from '@/features/analytics/SalesTab';
-import { HandoverCard, TeamHero, TeamStrip, TeamTable } from '@/features/analytics/TeamTab';
+import {
+  HandoverCard,
+  TeamHero,
+  TeamStrip,
+  TeamTable,
+  teamSubline,
+} from '@/features/analytics/TeamTab';
 import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
 import { TeamLoad } from '@/features/analytics/TeamLoad';
 import { PageContainer } from '@/shell/PageContainer';
@@ -97,6 +103,7 @@ export default async function Page({
     return (
       <PageContainer
         layout="screen"
+        fill
         actions={tabs}
         title={t('gotcha.title')}
         description={t('gotcha.subline')}
@@ -122,9 +129,10 @@ export default async function Page({
     return (
       <PageContainer
         layout="screen"
+        fill
         actions={tabs}
         title={t('teamTab.title')}
-        description={t('teamTab.subline')}
+        description={await teamSubline(data)}
       >
         <div className={styles.gScreen} data-testid="analytics-team">
           <div className={styles.gTop}>
@@ -144,6 +152,7 @@ export default async function Page({
     return (
       <PageContainer
         layout="screen"
+        fill
         actions={tabs}
         title={t('sales.title')}
         description={t('sales.subline')}
@@ -169,6 +178,7 @@ export default async function Page({
     return (
       <PageContainer
         layout="screen"
+        fill
         actions={tabs}
         title={t('topics.title')}
         description={t('topics.subline')}
@@ -199,6 +209,7 @@ export default async function Page({
     */
     <PageContainer
       layout="screen"
+      fill
       actions={tabs}
       title={t('screenTitle')}
       description={t('screenSubline')}

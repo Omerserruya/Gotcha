@@ -1,7 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { humanizeTag } from '@/api/contracts/approvals';
-import type { AskedAbout } from '@/api/contracts/analytics';
+import { isUnplaced, type AskedAbout } from '@/api/contracts/analytics';
 import { Link } from '@/i18n/navigation';
 
 import type { TopicsData } from './load-analytics';
@@ -18,7 +18,9 @@ import styles from './Analytics.module.css';
  *                before — so "Change" is real, and a topic with none the week
  *                before is "new". Rows the route made from raw message
  *                bodies (no intents in range) are customers' words, not
- *                topics, and are not listed as topics.
+ *                topics, and are not listed as topics. Nor is the
+ *                classifier's "no result" (`unknown`, `general`): those are
+ *                counted in the foot as questions GOTCHA couldn't place.
  *   what changed the biggest rise among topics asked at least 5 times the
  *                week before — a rise from 1 to 3 is not news
  *   the side     the question GOTCHA most often could not answer
@@ -52,7 +54,7 @@ export function topicRows(
     (before ?? []).filter((row) => row.intent).map((row) => [row.intent!, row.count]),
   );
   return week
-    .filter((row) => row.intent && row.count > 0)
+    .filter((row) => row.intent && row.count > 0 && !isUnplaced(row))
     .map((row) => {
       const was = before === null ? undefined : (previous.get(row.intent!) ?? 0);
       return {
@@ -154,7 +156,11 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
   const t = await getTranslations('analytics');
   const format = await getFormatter();
   const rows = data.week ? topicRows(data.week, data.before) : [];
-  const ungrouped = data.week !== null && rows.length === 0 && data.week.some((row) => !row.intent);
+  const unplaced = (data.week ?? []).filter(isUnplaced).reduce((sum, row) => sum + row.count, 0);
+  const ungrouped =
+    data.week !== null &&
+    rows.length === 0 &&
+    (unplaced > 0 || data.week.some((row) => !row.intent));
   return (
     <section className={styles.tTable} data-testid="topics-table">
       <div className={styles.eHead} aria-hidden="true">
@@ -203,7 +209,14 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
           </ul>
         )}
       </div>
-      <p className={styles.tFoot}>{t('topics.table.foot')}</p>
+      <p className={styles.tFoot} data-testid="topics-foot">
+        {unplaced > 0 ? (
+          <span data-testid="topics-unplaced">
+            {t('topics.table.unplaced', { count: unplaced, n: format.number(unplaced) })}{' '}
+          </span>
+        ) : null}
+        {t('topics.table.foot')}
+      </p>
     </section>
   );
 }

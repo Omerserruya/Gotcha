@@ -601,7 +601,23 @@ export const askedAboutListSchema = z.array(askedAboutSchema);
  * for it would be the one thing this panel must not do.
  */
 export function namedTopics(rows: readonly AskedAbout[]): readonly AskedAbout[] {
-  return rows.filter((r) => (r.question ?? '').trim().length > 0);
+  return rows.filter((r) => (r.question ?? '').trim().length > 0 && !isUnplaced(r));
+}
+
+/**
+ * ★★ THE CLASSIFIER'S "NO RESULT", WHICH IS NOT A TOPIC.
+ *
+ * From the write sites, not from what dev happens to hold: the AI service
+ * starts at `"general"` and writes it back when classification fails, the
+ * incoming worker's heuristic falls back to `"general"`, and the stored rows
+ * also carry `"unknown"`. The backend's own normalizer maps both to OTHER.
+ * Measured on dev: the tenant's ONLY intent was `unknown` — so 06e listed
+ * "Unknown" as a topic, marked it "new", and titled the by-day card with it.
+ */
+export const UNPLACED_INTENTS: ReadonlySet<string> = new Set(['unknown', 'general']);
+
+export function isUnplaced(row: AskedAbout): boolean {
+  return row.intent !== null && UNPLACED_INTENTS.has(row.intent.trim().toLowerCase());
 }
 
 /** `GET /api/analytics/ai-performance?from&to` — the fields 06b reads. */

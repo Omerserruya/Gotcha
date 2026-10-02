@@ -13,7 +13,7 @@ vi.mock('next-intl/server', () => ({
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
-import { HandoverCard, imbalance, TeamHero, TeamStrip, TeamTable } from './TeamTab';
+import { HandoverCard, imbalance, TeamHero, TeamStrip, TeamTable, teamSubline } from './TeamTab';
 
 const agent = (id: string, name: string, open: number, today = 0) =>
   agentLoadSchema.parse({ agentId: id, name, activeConversations: open, claimedToday: today });
@@ -164,5 +164,28 @@ describe('★★ measured on dev: no Agent-role people — the card says what is
     expect(screen.getByTestId('team-foot')).toHaveTextContent(
       'Only people with the Agent role are counted here',
     );
+  });
+});
+
+describe('★ the header says what the table counts — 02\'s "three people, two teams"', () => {
+  const team = (agents: unknown, aiEmployees: unknown) =>
+    ({ agents, aiEmployees, overview: null, hourly: null }) as Parameters<typeof teamSubline>[0];
+
+  it("★ on dev's data: one AI employee and no Agent-role people", async () => {
+    expect(await teamSubline(team([], [ai('a1', 'Noa')]))).toBe('Last 7 days · 1 AI employee');
+  });
+
+  it('both kinds, each counted and pluralised', async () => {
+    expect(
+      await teamSubline(
+        team([agent('p1', 'Dana', 1), agent('p2', 'Yossi', 0)], [ai('a1', 'Noa'), ai('a2', 'Ari')]),
+      ),
+    ).toBe('Last 7 days · 2 people, 2 AI employees');
+    expect(await teamSubline(team([agent('p1', 'Dana', 1)], []))).toBe('Last 7 days · 1 person');
+  });
+
+  it('nothing counted, or nothing read: the period alone — never "0 people"', async () => {
+    expect(await teamSubline(team([], []))).toBe('Last 7 days');
+    expect(await teamSubline(team(null, null))).toBe('Last 7 days');
   });
 });

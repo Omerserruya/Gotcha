@@ -85,7 +85,15 @@
    * Screen 06, measured — the statement, the strip, two cards
    * ════════════════════════════════════════════════════════════════════════
    */
+  /*
+   * The body is a window (`PageContainer fill`): this column takes its height,
+   * and its last row takes what is left, down to the frame's bottom — 02's
+   * footers sit at the bottom of their cards, not under the content.
+   */
   .screen {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-16);
@@ -211,8 +219,9 @@
 
   /* 02's bottom row: a wide card and a 330px one. */
   .bottomRow {
+    flex: 1;
+    min-block-size: 240px;
     display: flex;
-    align-items: flex-start;
     gap: var(--space-14);
   }
 
@@ -515,6 +524,14 @@
     border-radius: var(--radius-card);
   }
 
+  /* The list takes the card's height, so the foot sits at the card's bottom. */
+  .gDid > .gDidList,
+  .gDid > .gNone {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
   .gDidList {
     display: flex;
     flex-direction: column;
@@ -625,12 +642,17 @@
     border-radius: var(--radius-card);
   }
 
-  /* Columns: the person, then 130 · 130 · 130 · 130 · 150 (02's widths, plus "Taken today"). */
+  /* Columns: the person, then 105 · 105 · 105 · 105 · 170 — 02's 130 · 130 · 130 · 150 with "Taken today" added, rebalanced so the last head is one line. */
   .tHead,
   .tRow {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 110px 110px 110px 110px 150px;
+    grid-template-columns: minmax(0, 1fr) 105px 105px 105px 105px 170px;
     align-items: center;
+  }
+
+  /* One line each: "Load through the week" wrapped at 150 (02's single line). */
+  .tHead > span {
+    white-space: nowrap;
   }
 
   .tHead {

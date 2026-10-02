@@ -242,3 +242,28 @@ describe('★★ 06e — ?tab=topics', () => {
     expect(current).toBe('topics');
   });
 });
+
+describe('★★ every tab is a window — the last row runs to the frame’s bottom', () => {
+  it('each tab’s page is `fill`, enumerated from the tab registry', async () => {
+    /*
+     * Measured on all five: without `fill` the body stopped at its content,
+     * ~200px of empty sheet under the cards, and the footers 02 puts at the
+     * frame's bottom sat in the middle of the page.
+     */
+    const { ANALYTICS_TABS } = await import('@/features/analytics/AnalyticsTabs');
+    const { PageContainer } = await import('@/shell/PageContainer');
+    loadAnalytics.mockResolvedValue({ agents: [], topics: [] });
+    loadGotcha.mockResolvedValue({});
+    loadTeam.mockResolvedValue({ agents: null, aiEmployees: null });
+    loadSales.mockResolvedValue({ demand: null });
+    loadTopics.mockResolvedValue({ week: null, before: null, unanswered: null });
+    const { default: Page } = await import('./page');
+    for (const tab of ANALYTICS_TABS) {
+      const tree = (await Page({ searchParams: Promise.resolve({ tab }) })) as ReactElement<{
+        fill?: boolean;
+      }>;
+      expect(tree.type, tab).toBe(PageContainer);
+      expect(tree.props.fill, `?tab=${tab} is not fill`).toBe(true);
+    }
+  });
+});

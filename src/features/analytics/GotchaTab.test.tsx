@@ -104,11 +104,34 @@ describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
     expect(hero).toHaveTextContent('about 41 hours');
   });
 
-  it('⚠ where it stopped: approval and not-known counted; a person asked for "—"', async () => {
+  it('⚠ where it stopped: approval and not-known counted; a person asked for, said as not counted', async () => {
     render(await WhereStopped({ data: data() }));
     expect(screen.getByTestId('stopped-approval')).toHaveTextContent('54 needed your approval.');
     expect(screen.getByTestId('stopped-unknown')).toHaveTextContent("1 it didn't know");
-    expect(screen.getByTestId('stopped-person')).toHaveTextContent('— asked for a person');
+    // Measured: "— asked for a person outright." A dash mid-sentence does not read.
+    expect(screen.getByTestId('stopped-person')).toHaveTextContent(
+      "Asking for a person outright isn't counted yet.",
+    );
+  });
+
+  it('★★ no dash inside a sentence — a figure it could not read gets its own sentence', async () => {
+    render(await WhereStopped({ data: data({ ai: null, unanswered: null }) }));
+    expect(screen.getByTestId('stopped-unknown')).toHaveTextContent(
+      "We couldn't count what it didn't know just now.",
+    );
+    expect(screen.getByTestId('stopped-approval')).toHaveTextContent(
+      "We couldn't count what needed your approval just now.",
+    );
+    expect(screen.getByTestId('gotcha-stopped')).not.toHaveTextContent('—');
+  });
+
+  it('★★ nor in the foot of what it did, when failures are not split for every tool', async () => {
+    const tools = data().tools!.map((tool) => ({ ...tool, erroredCount: undefined }));
+    render(await WhatItDid({ tools }));
+    expect(screen.getByTestId('did-foot')).not.toHaveTextContent('—');
+    expect(screen.getByTestId('did-foot')).toHaveTextContent(
+      "3 were stopped by a rule, which is the rule working. Failures aren't told apart",
+    );
   });
 
   it('★ a full page of unanswered questions is "50+", never 50', async () => {

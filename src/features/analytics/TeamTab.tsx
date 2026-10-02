@@ -70,6 +70,22 @@ export function queueState(agents: readonly AgentLoad[]): QueueState {
   return uneven ? { kind: 'uneven', ...uneven } : { kind: 'even' };
 }
 
+/**
+ * The header's line says what the table counts — 02's "Last 7 days · three
+ * people, two teams". Teams are not modelled; people and AI employees are,
+ * and a kind with none is left out rather than said as "0 people".
+ */
+export async function teamSubline(data: TeamData): Promise<string> {
+  const t = await getTranslations('analytics');
+  const parts = [
+    data.agents?.length ? t('teamTab.sublinePeople', { count: data.agents.length }) : null,
+    data.aiEmployees?.length ? t('teamTab.sublineAi', { count: data.aiEmployees.length }) : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0
+    ? t('teamTab.sublineCounted', { who: parts.join(', ') })
+    : t('teamTab.subline');
+}
+
 export async function TeamHero({ agents }: { readonly agents: readonly AgentLoad[] | null }) {
   const t = await getTranslations('analytics');
   const state = agents ? queueState(agents) : null;

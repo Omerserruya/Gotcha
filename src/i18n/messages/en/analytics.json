@@ -73,8 +73,11 @@
     "stopped": {
       "title": "Where it stopped",
       "person": "{count} asked for a person outright.",
+      "personNone": "Asking for a person outright isn't counted yet.",
       "unknown": "{count} it didn't know the answer to.",
-      "approval": "{count} needed your approval."
+      "unknownNone": "We couldn't count what it didn't know just now.",
+      "approval": "{count} needed your approval.",
+      "approvalNone": "We couldn't count what needed your approval just now."
     },
     "strip": {
       "alone": "Answered first by GOTCHA",
@@ -94,6 +97,7 @@
       "none": "It didn't run anything this week.",
       "unavailable": "We couldn't read what it ran just now.",
       "foot": "{failed} failed; {refused} were stopped by a rule, which is the rule working.",
+      "footNoFailed": "{refused} were stopped by a rule, which is the rule working. Failures aren't told apart for every action yet.",
       "allOneCause": "All {count} failures were {name} actions, and the {name} connection is down.",
       "someOneCause": "{count} of the {total} failures were {name} actions, and the {name} connection is down.",
       "reconnect": "Reconnect it"
@@ -102,6 +106,9 @@
   "teamTab": {
     "title": "How your team is doing",
     "subline": "Last 7 days",
+    "sublineCounted": "Last 7 days · {who}",
+    "sublinePeople": "{count, plural, one {# person} other {# people}}",
+    "sublineAi": "{count, plural, one {# AI employee} other {# AI employees}}",
     "hero": {
       "eyebrow": "Worth a word",
       "uneven": "{heavy} is carrying <figure>{ratio, plural, =2 {twice} other {# times}}</figure> the queue {light} is.",
@@ -138,7 +145,7 @@
   },
   "sales": {
     "title": "What conversations are worth",
-    "subline": "Last 7 days",
+    "subline": "Last 7 days · what people asked for and didn't find",
     "hero": {
       "eyebrow": "The number that matters",
       "title": "What conversations sold isn't known yet.",
@@ -177,7 +184,7 @@
   },
   "topics": {
     "title": "What people are asking about",
-    "subline": "Last 7 days, against the week before",
+    "subline": "Last 7 days · GOTCHA groups questions itself, against the week before",
     "hero": {
       "eyebrow": "What changed",
       "rise": "{topic} questions are up <figure>{pct}%</figure> on the week before.",
@@ -203,6 +210,7 @@
       "unavailable": "We couldn't read this week's topics just now.",
       "none": "No topics this week.",
       "ungrouped": "Questions aren't grouped into topics yet this week.",
+      "unplaced": "{n} {count, plural, one {question} other {questions}} GOTCHA couldn't place this week.",
       "foot": "GOTCHA groups questions itself. How each topic ends, and how much it handled alone, aren't counted yet."
     },
     "byDay": {
