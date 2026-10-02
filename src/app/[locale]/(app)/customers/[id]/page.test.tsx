@@ -10,7 +10,7 @@ vi.mock('next-intl/server', () => ({ getTranslations: async () => (key: string) 
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
-import { CustomerActions } from '@/features/customers/CustomerActions';
+import { ActionFilters, ActionsSide, CustomerActions } from '@/features/customers/CustomerActions';
 import { CustomerNotes } from '@/features/customers/CustomerNotes';
 import { OrderFilters, OrdersSide, OrdersTab } from '@/features/customers/OrdersTab';
 import {
@@ -154,5 +154,23 @@ describe('★★ 04d — its filters in the tab row, its own side', () => {
   it('⚠ an unknown ?filter= is All', async () => {
     const tree = await page('orders', undefined, undefined, 'everything-please');
     expect(propsOf<{ filter: string }>(tree, OrdersTab)?.filter).toBe('all');
+  });
+});
+
+describe('★★ 04e — its filters, the approvals, its own side', () => {
+  it('All/GOTCHA/Team/Money in the tab row; the approvals reach the spine; "Who did what" in the side', async () => {
+    const tree = await page('actions', undefined, undefined, 'money');
+    const types = mounted(tree);
+    expect(types).toContain(ActionsSide);
+    expect(types).not.toContain(CustomerSide);
+    const filters = propsOf<{ filters: ReactElement<{ current: string }> }>(
+      tree,
+      CustomerTabRow,
+    )?.filters;
+    expect(isValidElement(filters) && filters.type).toBe(ActionFilters);
+    expect(filters?.props.current).toBe('money');
+    const props = propsOf<{ filter: string; approvals: unknown }>(tree, CustomerActions);
+    expect(props?.filter).toBe('money');
+    expect(props?.approvals).toEqual([]);
   });
 });

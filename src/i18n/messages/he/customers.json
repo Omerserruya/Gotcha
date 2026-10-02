@@ -157,7 +157,8 @@
       "ai": "GOTCHA",
       "user": "מישהו מהצוות שלכם",
       "system": "המערכת",
-      "unknown": "לא נרשם"
+      "unknown": "לא נרשם",
+      "flow": "אוטומציה"
     },
     "outcome": {
       "worked": "נרשם כבוצע",
@@ -183,6 +184,30 @@
       "commerceFailed": "שינוי ברשומת הלקוח לא עבר",
       "commerceDenied": "שינוי ברשומת הלקוח לא הותר",
       "commerceUnverified": "לא ניתן היה לאמת מול החנות שינוי ברשומת הלקוח"
+    },
+    "lead": "כל מה שנעשה בחשבון שלהם, מהחדש לישן",
+    "gapsShort": "{count, plural, one {סוג פעולה אחד לא נספר כאן} other {# סוגי פעולות לא נספרים כאן}}",
+    "waitingOnYou": "ממתין לך",
+    "openInApprovals": "פתיחה באישורים",
+    "filterEmpty": "אין כאן כלום.",
+    "filter": {
+      "all": "הכול",
+      "gotcha": "GOTCHA",
+      "team": "צוות",
+      "money": "כסף"
+    },
+    "side": {
+      "who": "מי עשה מה",
+      "byGotcha": "על ידי GOTCHA",
+      "byTeam": "על ידי הצוות",
+      "byAutomations": "על ידי אוטומציות",
+      "money": "כסף שזז בחשבון",
+      "refunded": "הוחזר",
+      "discounts": "הנחות",
+      "waiting": "ממתין לאישור",
+      "waitingValue": "{count, plural, =0 {אין} one {בקשה אחת} other {# בקשות}}",
+      "may": "מה GOTCHA רשאי לעשות עבורם",
+      "change": "שינוי ב-Studio · יכולות"
     }
   },
   "teamNotes": {

@@ -1,5 +1,8 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
+import { Cog, User, Workflow } from 'lucide-react';
+
+import type { Approval } from '@/api/contracts/approvals';
 import {
   coverageGaps,
   outcomeOf,
@@ -8,8 +11,11 @@ import {
   type ActionOutcome,
   type AuditEvent,
 } from '@/api/contracts/customer-actions';
-import type { AuditRead } from './load-customer';
+import { Link } from '@/i18n/navigation';
 
+import { shortDate } from './CustomerScreen';
+import { PromiseCard } from './CustomerSubtabs';
+import type { AuditRead } from './load-customer';
 import styles from './Customers.module.css';
 
 /**
@@ -93,9 +99,88 @@ const PREFIX_KEYS: readonly (readonly [string, string])[] = [
   ['ai.budget.aborted.', 'aiBudgetAborted'],
 ];
 
-export async function CustomerActions({ actions }: { readonly actions: AuditRead }) {
+export const ACTION_FILTERS = ['all', 'gotcha', 'team', 'money'] as const;
+export type ActionFilter = (typeof ACTION_FILTERS)[number];
+
+export function parseActionFilter(raw: string | undefined): ActionFilter {
+  return (ACTION_FILTERS as readonly string[]).includes(raw ?? '') ? (raw as ActionFilter) : 'all';
+}
+
+/** Who acted, as 04e's disc draws it. `flow` is an automation's approval request. */
+type Who = 'ai' | 'user' | 'flow' | 'system' | 'unknown';
+
+/**
+ * Money-moving, by the platform's own names: a refund, a cancel, a
+ * discount, or any commerce action on the customer's record.
+ */
+const MONEY = /refund|cancel|discount|commerce\./i;
+
+/** `requestedBy` is `"bot"`, `"flow:<id>"` or `"ai-agent:<id>"` — never a person. */
+function whoAsked(approval: Approval): Who {
+  return approval.requestedBy.startsWith('flow:') ? 'flow' : 'ai';
+}
+
+const OUTCOME_TONE: Readonly<Record<ActionOutcome, string>> = {
+  worked: 'positive',
+  failed: 'danger',
+  contradicts: 'warning',
+  not_recorded: 'neutral',
+};
+
+const APPROVAL_TONE: Readonly<Record<Approval['status'], string>> = {
+  PENDING: 'waiting',
+  APPROVED: 'positive',
+  REJECTED: 'neutral',
+  EXPIRED: 'neutral',
+  CANCELLED: 'neutral',
+};
+
+interface Row {
+  readonly key: string;
+  readonly at: string;
+  readonly who: Who;
+  readonly title: string;
+  readonly chip: {
+    readonly label: string;
+    readonly tone: string;
+    readonly outcome?: ActionOutcome;
+    readonly testid?: string;
+  };
+  readonly line: string | null;
+  readonly lineTestid?: string;
+  readonly whoTestid?: string;
+  readonly testid: string;
+  readonly pending: boolean;
+  readonly money: boolean;
+}
+
+/**
+ * 04e — everything done on their account, one spine, newest first.
+ *
+ * Two records feed it, each the platform's own: the audit log (what was
+ * done, with the four reads above) and the approvals GOTCHA asked for in
+ * their conversations — 02's "Asked to refund ₪179 on #1842 · Waiting on
+ * you". An approval is drawn with the backend's sentence, its status, and
+ * the bot's stated reasoning as the line.
+ *
+ * ⚠ 02's Approve / Decline / Change amount are NOT drawn as controls here.
+ * Deciding belongs to 03, where the risk and the reasoning are laid out,
+ * and 03 has no address for one approval to deep-link to; a waiting row
+ * says "Open in Approvals" instead. Put to Omer.
+ */
+export async function CustomerActions({
+  actions,
+  approvals = [],
+  filter = 'all',
+}: {
+  readonly actions: AuditRead;
+  /** GOTCHA's approval requests in this person's conversations. */
+  readonly approvals?: readonly Approval[] | null;
+  readonly filter?: ActionFilter;
+}) {
   const t = await getTranslations('customers');
   const format = await getFormatter();
+  const now = new Date();
 
   if (actions.state === 'not_asked') {
     /*
@@ -111,7 +196,6 @@ export async function CustomerActions({ actions }: { readonly actions: AuditRead
     // couldn't read it" would send somebody to check a system that is fine.
     return (
       <section className={styles.actions} data-testid="customer-actions-forbidden">
-        <h2 className={styles.detailHeading}>{t('actions.title')}</h2>
         <p className={styles.unavailable}>{t('actions.forbidden')}</p>
       </section>
     );
@@ -120,7 +204,6 @@ export async function CustomerActions({ actions }: { readonly actions: AuditRead
   if (actions.state === 'failed') {
     return (
       <section className={styles.actions} data-testid="customer-actions-failed">
-        <h2 className={styles.detailHeading}>{t('actions.title')}</h2>
         <p className={styles.unavailable}>{t('actions.failed')}</p>
       </section>
     );
@@ -146,70 +229,156 @@ export async function CustomerActions({ actions }: { readonly actions: AuditRead
     return event.action;
   };
 
+  const rows: Row[] = [
+    ...audit.data.map((event): Row => {
+      const outcome: ActionOutcome = outcomeOf(event);
+      const hint = unrecordedHint(event);
+      return {
+        key: `e-${event.id}`,
+        at: event.createdAt,
+        who: event.actorType ?? 'unknown',
+        title: label(event),
+        /*
+          ★ FOUR OUTCOMES AND THE UNRECORDED ONE IS NOT STYLED AS A
+          FAILURE. It is the most common state on this screen — no
+          customer-keyed row records a verdict at all — so dressing it as
+          bad would paint the whole log red.
+        */
+        chip: {
+          label: t(`actions.outcome.${outcome}` as 'actions.outcome.worked'),
+          tone: OUTCOME_TONE[outcome],
+          outcome,
+          testid: `action-outcome-${event.id}`,
+        },
+        line: hint ? t(`actions.hint.${hint}` as 'actions.hint.named_ok') : null,
+        lineTestid: `action-hint-${event.id}`,
+        whoTestid: `action-who-${event.id}`,
+        testid: `action-${event.id}`,
+        pending: false,
+        money: MONEY.test(event.action),
+      };
+    }),
+    ...(approvals ?? []).map((approval): Row => ({
+      key: `p-${approval.id}`,
+      at: approval.createdAt,
+      who: whoAsked(approval),
+      title: approval.summary,
+      chip: {
+        label:
+          approval.status === 'PENDING'
+            ? t('actions.waitingOnYou')
+            : t(`card.approval.${approval.status}`),
+        tone: APPROVAL_TONE[approval.status],
+      },
+      // The bot's stated reasoning — shown as reasoning, never as fact.
+      line: approval.reason.trim() || null,
+      testid: `action-approval-${approval.id}`,
+      pending: approval.status === 'PENDING',
+      money: MONEY.test(approval.tool),
+    })),
+  ]
+    .filter((row) =>
+      filter === 'gotcha'
+        ? row.who === 'ai'
+        : filter === 'team'
+          ? row.who === 'user'
+          : filter === 'money'
+            ? row.money
+            : true,
+    )
+    .sort((a, b) => b.at.localeCompare(a.at));
+
+  const time = (iso: string) =>
+    format.dateTime(new Date(iso), { hour: '2-digit', minute: '2-digit', hour12: false });
+
   return (
     <section className={styles.actions} data-testid="customer-actions">
-      <h2 className={styles.detailHeading}>{t('actions.title')}</h2>
+      <p className={styles.tabLead}>
+        <span>{t('actions.lead')}</span>
+        {/*
+          ★★ WHAT THIS LIST IS NOT, in 02's note slot. An empty or short log
+          cannot say why it is short; the endpoint declares its own gaps, and
+          they are printed rather than trusted to be noticed. One line; the
+          endpoint's own sentences are its tooltip.
+        */}
+        {gaps.length > 0 ? (
+          <span
+            className={styles.actionsNote}
+            data-testid="actions-gaps"
+            title={gaps.map((gap) => gap.detail).join(' ')}
+          >
+            {t('actions.gapsShort', { count: gaps.length })}
+            {gaps.map((gap) => (
+              <span key={gap.target} className="srOnly" data-testid={`actions-gap-${gap.target}`}>
+                {gap.detail}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </p>
 
-      {audit.data.length === 0 ? (
+      {rows.length === 0 ? (
         <p className={styles.actionsEmpty} data-testid="actions-empty">
-          {t('actions.none')}
+          {filter === 'all' ? t('actions.none') : t('actions.filterEmpty')}
         </p>
       ) : (
-        <ol className={styles.actionList}>
-          {audit.data.map((event) => {
-            const outcome: ActionOutcome = outcomeOf(event);
-            const hint = unrecordedHint(event);
-            return (
-              <li key={event.id} className={styles.actionRow} data-testid={`action-${event.id}`}>
-                <span className={styles.actionWho} data-testid={`action-who-${event.id}`}>
-                  {t(`actions.actor.${event.actorType ?? 'unknown'}` as 'actions.actor.ai')}
+        <ol className={styles.spine}>
+          {rows.map((row) => (
+            <li key={row.key} className={styles.spineRow} data-testid={row.testid}>
+              <span className={styles.spineWhen}>
+                <span>{shortDate(row.at, now, format, t('card.today'))}</span>
+                {new Date(row.at).toDateString() === now.toDateString() ? (
+                  <span className={styles.spineTime}>{time(row.at)}</span>
+                ) : null}
+              </span>
+              <span className={styles.spineRail}>
+                <span className={styles.actorDisc} data-who={row.who} data-testid={row.whoTestid}>
+                  {row.who === 'ai' ? (
+                    <span aria-hidden="true">AI</span>
+                  ) : row.who === 'user' ? (
+                    <User size={11} strokeWidth={2.2} aria-hidden="true" />
+                  ) : row.who === 'flow' ? (
+                    <Workflow size={11} strokeWidth={2.2} aria-hidden="true" />
+                  ) : row.who === 'system' ? (
+                    <Cog size={11} strokeWidth={2.2} aria-hidden="true" />
+                  ) : (
+                    <span aria-hidden="true">?</span>
+                  )}
+                  <span className="srOnly">
+                    {t(`actions.actor.${row.who}` as 'actions.actor.ai')}
+                  </span>
                 </span>
-                <span className={styles.actionWhat}>{label(event)}</span>
-                <time className={styles.actionWhen} dateTime={event.createdAt}>
-                  {format.dateTime(new Date(event.createdAt), {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
-                </time>
-                {/*
-                  ★ FOUR OUTCOMES AND THE UNRECORDED ONE IS NOT STYLED AS A
-                  FAILURE. It is the most common state on this screen — no
-                  customer-keyed row records a verdict at all — so dressing
-                  it as bad would paint the whole log red.
-                */}
-                <span
-                  className={styles.actionOutcome}
-                  data-outcome={outcome}
-                  data-testid={`action-outcome-${event.id}`}
-                >
-                  {t(`actions.outcome.${outcome}` as 'actions.outcome.worked')}
+                <span className={styles.spineLine} aria-hidden="true" />
+              </span>
+              <article className={styles.spineCard}>
+                <span className={styles.spineTop}>
+                  <span className={styles.actionTitle}>{row.title}</span>
+                  <span
+                    className={styles.spineChip}
+                    data-tone={row.chip.tone}
+                    data-outcome={row.chip.outcome}
+                    data-testid={row.chip.testid}
+                  >
+                    {row.chip.label}
+                  </span>
                 </span>
-                {hint ? (
-                  <span className={styles.actionHint} data-testid={`action-hint-${event.id}`}>
-                    {t(`actions.hint.${hint}` as 'actions.hint.named_ok')}
+                {row.line ? (
+                  <span className={styles.actionLine} data-testid={row.lineTestid}>
+                    {row.line}
                   </span>
                 ) : null}
-              </li>
-            );
-          })}
-        </ol>
-      )}
-
-      {/*
-        ★★ WHAT THIS LIST IS NOT. An empty or short log cannot say why it is
-        short, and "nothing was done" is the wrong thing for a screen to
-        imply. The endpoint declares its own gaps; they are printed rather
-        than trusted to be noticed.
-      */}
-      {gaps.length > 0 ? (
-        <ul className={styles.actionGaps} data-testid="actions-gaps">
-          {gaps.map((gap) => (
-            <li key={gap.target} data-testid={`actions-gap-${gap.target}`}>
-              {gap.detail}
+                {row.pending ? (
+                  <span className={styles.spineFoot}>
+                    <Link href="/approvals" className={styles.actionDecide}>
+                      {t('actions.openInApprovals')}
+                    </Link>
+                  </span>
+                ) : null}
+              </article>
             </li>
           ))}
-        </ul>
-      ) : null}
+        </ol>
+      )}
 
       {/*
         A bounded read that discloses its bound is fine; one that quietly
@@ -228,5 +397,119 @@ export async function CustomerActions({ actions }: { readonly actions: AuditRead
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** 04e's filters: All, GOTCHA, Team, Money. */
+export async function ActionFilters({
+  contactId,
+  current,
+}: {
+  readonly contactId: string;
+  readonly current: ActionFilter;
+}) {
+  const t = await getTranslations('customers');
+  return (
+    <>
+      {ACTION_FILTERS.map((key) => (
+        <Link
+          key={key}
+          href={{
+            pathname: `/customers/${contactId}`,
+            query: key === 'all' ? { tab: 'actions' } : { tab: 'actions', filter: key },
+          }}
+          className={styles.filterPill}
+          aria-current={current === key ? 'true' : undefined}
+          data-testid={`action-filter-${key}`}
+        >
+          {t(`actions.filter.${key}`)}
+        </Link>
+      ))}
+    </>
+  );
+}
+
+/**
+ * 04e's side: who did what, money moved, what GOTCHA may do — and the
+ * promise card.
+ *
+ * The counts are of what this page read: the audit page and the approvals
+ * in their conversations. Money amounts are not on either record (an
+ * approval's amount lives in `params`, which never leaves the server), so
+ * the money block counts what waits rather than summing what it cannot see.
+ */
+export async function ActionsSide({
+  actions,
+  approvals,
+}: {
+  readonly actions: AuditRead;
+  readonly approvals: readonly Approval[] | null;
+}) {
+  const t = await getTranslations('customers');
+  const format = await getFormatter();
+  const events = actions.state === 'ok' ? actions.audit.data : null;
+  const asked = approvals ?? [];
+  const count = (n: number | null) => (n === null ? '—' : format.number(n));
+  const read = events !== null && approvals !== null;
+  const byGotcha = read
+    ? events.filter((e) => e.actorType === 'ai').length +
+      asked.filter((a) => whoAsked(a) === 'ai').length
+    : null;
+  const byTeam = events ? events.filter((e) => e.actorType === 'user').length : null;
+  const byAutomations = read
+    ? events.filter((e) => e.actorType === 'system').length +
+      asked.filter((a) => whoAsked(a) === 'flow').length
+    : null;
+  const waiting =
+    approvals === null
+      ? null
+      : asked.filter((a) => a.status === 'PENDING' && MONEY.test(a.tool)).length;
+
+  return (
+    <>
+      <section className={styles.sideBlock} data-testid="actions-who">
+        <h2 className={styles.sideEyebrow}>{t('actions.side.who')}</h2>
+        <dl className={`${styles.worth} ${styles.pattern}`}>
+          <div>
+            <dt>{t('actions.side.byGotcha')}</dt>
+            <dd className={styles.worthValue}>{count(byGotcha)}</dd>
+          </div>
+          <div>
+            <dt>{t('actions.side.byTeam')}</dt>
+            <dd className={styles.worthValue}>{count(byTeam)}</dd>
+          </div>
+          <div>
+            <dt>{t('actions.side.byAutomations')}</dt>
+            <dd className={styles.worthValue}>{count(byAutomations)}</dd>
+          </div>
+        </dl>
+      </section>
+      <section className={styles.sideBlock} data-testid="actions-money">
+        <h2 className={styles.sideEyebrow}>{t('actions.side.money')}</h2>
+        <dl className={styles.moneyMoved}>
+          <div>
+            <dt>{t('actions.side.refunded')}</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>{t('actions.side.discounts')}</dt>
+            <dd>—</dd>
+          </div>
+          <div data-attention={waiting ? '' : undefined}>
+            <dt>{t('actions.side.waiting')}</dt>
+            <dd>{waiting === null ? '—' : t('actions.side.waitingValue', { count: waiting })}</dd>
+          </div>
+        </dl>
+      </section>
+      {/* The policy GOTCHA acts under is not read on this page; the place to change it is. */}
+      <section className={styles.sideBlock} data-testid="actions-may">
+        <h2 className={styles.sideEyebrow}>{t('actions.side.may')}</h2>
+        <p className={styles.sideNone}>—</p>
+        <Link href="/studio/capabilities" className={styles.tabLeadLink}>
+          {t('actions.side.change')}
+        </Link>
+      </section>
+      <PromiseCard heading={t('card.promise.heading')} none={t('card.promise.none')} />
+    </>
   );
 }

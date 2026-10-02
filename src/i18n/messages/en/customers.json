@@ -157,7 +157,8 @@
       "ai": "GOTCHA",
       "user": "Someone on your team",
       "system": "The system",
-      "unknown": "Not recorded"
+      "unknown": "Not recorded",
+      "flow": "An automation"
     },
     "outcome": {
       "worked": "Recorded as done",
@@ -183,6 +184,30 @@
       "commerceFailed": "A change to the customer's record did not go through",
       "commerceDenied": "A change to the customer's record was not allowed",
       "commerceUnverified": "A change to the customer's record could not be confirmed with the store"
+    },
+    "lead": "Everything done on their account, newest first",
+    "gapsShort": "{count, plural, one {One kind of action isn't counted here} other {# kinds of action aren't counted here}}",
+    "waitingOnYou": "Waiting on you",
+    "openInApprovals": "Open in Approvals",
+    "filterEmpty": "Nothing here.",
+    "filter": {
+      "all": "All",
+      "gotcha": "GOTCHA",
+      "team": "Team",
+      "money": "Money"
+    },
+    "side": {
+      "who": "Who did what",
+      "byGotcha": "by GOTCHA",
+      "byTeam": "by your team",
+      "byAutomations": "by automations",
+      "money": "Money moved on their account",
+      "refunded": "Refunded",
+      "discounts": "Discounts",
+      "waiting": "Waiting on approval",
+      "waitingValue": "{count, plural, =0 {None} one {# request} other {# requests}}",
+      "may": "What GOTCHA may do for them",
+      "change": "Change in Studio · Capabilities"
     }
   },
   "teamNotes": {

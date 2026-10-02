@@ -580,83 +580,10 @@
     color: var(--text-muted);
   }
 
-  .actions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-12);
-  }
-
   .actionsEmpty {
     margin: 0;
     font-size: var(--font-size-caption);
     color: var(--text-muted);
-  }
-
-  .actionList {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .actionRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-8);
-    padding: var(--space-8) 0;
-    border-block-end: 1px solid var(--border-subtle);
-  }
-
-  .actionWho {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-  }
-
-  .actionWhat {
-    flex: 1 1 12rem;
-  }
-
-  .actionWhen {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /*
-   * ★★ `not_recorded` IS THE COMMON CASE AND MUST NOT LOOK LIKE A FAILURE.
-   * No customer-keyed row in this platform records a verdict, so styling an
-   * unrecorded outcome as bad would paint an ordinary log red and invent an
-   * alarm nobody raised.
-   */
-  .actionOutcome {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-  }
-
-  .actionOutcome[data-outcome='worked'] {
-    /* `--signal-done-text`: this is the "done" vocabulary, not the
-       "opportunity" one. `--intent-positive-text` does not exist. */
-    color: var(--signal-done-text);
-  }
-
-  .actionOutcome[data-outcome='failed'] {
-    color: var(--intent-urgent-text);
-  }
-
-  /* A row that contradicts itself is a defect somebody must see. */
-  .actionOutcome[data-outcome='contradicts'] {
-    padding: 0 var(--space-4);
-    border: 1px solid var(--intent-urgent-edge);
-    color: var(--intent-urgent-text);
-  }
-
-  .actionHint {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-    font-style: italic;
   }
 
   /* What the log cannot account for, said rather than left to be noticed. */
@@ -1940,8 +1867,12 @@
     cursor: not-allowed;
   }
 
-  /* 04d's "On file": label 70, value, 8 apart. */
-  .ordersTab .onFile {
+  /*
+   * 04d's "On file": label 70, value, 8 apart — one row each, as REACH THEM.
+   * Unscoped: the side column is outside `.ordersTab`, and scoped it never
+   * applied, so each label sat over its value.
+   */
+  .onFile {
     display: flex;
     flex-direction: column;
     gap: var(--space-8);
@@ -1949,20 +1880,132 @@
     font-size: 12.5px;
   }
 
-  .ordersTab .onFile > div {
+  .onFile > div {
     display: flex;
     gap: var(--space-10);
   }
 
-  .ordersTab .onFile dt {
+  .onFile dt {
     flex: none;
     inline-size: 70px;
     color: var(--text-subtle);
   }
 
-  .ordersTab .onFile dd {
+  .onFile dd {
     margin: 0;
     min-inline-size: 0;
     color: var(--text-primary);
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04e, measured — what was done on their account
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  /* 02's note slot, right of the lead: 11.5px subtle. */
+  .actionsNote {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+    cursor: help;
+  }
+
+  /* 22px round: GOTCHA violet with "AI", the team and automations in stone. */
+  .actorDisc {
+    flex: none;
+    inline-size: 22px;
+    block-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: var(--intent-neutral-surface);
+    color: var(--intent-neutral-text);
+    font-size: 9px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .actorDisc[data-who='ai'] {
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
+  }
+
+  .actorDisc[data-who='user'] {
+    background-color: var(--avatar-surface);
+  }
+
+  .actionTitle {
+    min-inline-size: 0;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .actionLine {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--intent-neutral-text);
+  }
+
+  /* The chip's tones: done green, waiting amber, failed terracotta. */
+  .spineChip[data-tone='positive'] {
+    background-color: var(--signal-done-surface-soft);
+    color: var(--signal-done-text);
+  }
+
+  .spineChip[data-tone='waiting'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .spineChip[data-tone='danger'],
+  .spineChip[data-tone='warning'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* 02's dark first control: `padding:5px 11px`, radius 7, 11px. */
+  .actionDecide {
+    padding: 5px 11px;
+    border-radius: 7px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: 11px;
+    text-decoration: none;
+  }
+
+  .actionDecide:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* "Money moved": label, value at the end, 8 apart; waiting in amber. */
+  .moneyMoved {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: 12.5px;
+  }
+
+  .moneyMoved > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-10);
+    color: var(--text-primary);
+  }
+
+  .moneyMoved dd {
+    margin: 0;
+  }
+
+  .moneyMoved > [data-attention] {
+    color: var(--intent-blocked-text);
   }
 }

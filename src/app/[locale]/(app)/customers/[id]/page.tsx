@@ -1,4 +1,9 @@
-import { CustomerActions } from '@/features/customers/CustomerActions';
+import {
+  ActionFilters,
+  ActionsSide,
+  CustomerActions,
+  parseActionFilter,
+} from '@/features/customers/CustomerActions';
 import { CustomerNotes } from '@/features/customers/CustomerNotes';
 import {
   OrderFilters,
@@ -99,6 +104,7 @@ export default async function Page({
   */
   const channels = channelsOf(detail);
   const orderFilter = parseOrderFilter(query.filter);
+  const actionFilter = parseActionFilter(query.filter);
   const channel = query.channel && channels.includes(query.channel) ? query.channel : null;
   return (
     <PageContainer layout="screen" flush>
@@ -112,6 +118,8 @@ export default async function Page({
               <ChannelFilters contactId={id} channels={channels} current={channel} />
             ) : tab === 'orders' ? (
               <OrderFilters contactId={id} current={orderFilter} />
+            ) : tab === 'actions' ? (
+              <ActionFilters contactId={id} current={actionFilter} />
             ) : null
           }
         />
@@ -127,7 +135,13 @@ export default async function Page({
                 filter={orderFilter}
               />
             ) : null}
-            {tab === 'actions' ? <CustomerActions actions={detail.actions} /> : null}
+            {tab === 'actions' ? (
+              <CustomerActions
+                actions={detail.actions}
+                approvals={detail.approvals}
+                filter={actionFilter}
+              />
+            ) : null}
             {tab === 'notes' ? (
               /*
                 `contactId` comes from the route rather than from the timeline:
@@ -146,6 +160,8 @@ export default async function Page({
               <ConversationsSide detail={detail} />
             ) : tab === 'orders' ? (
               <OrdersSide orders={detail.orders} />
+            ) : tab === 'actions' ? (
+              <ActionsSide actions={detail.actions} approvals={detail.approvals} />
             ) : (
               <CustomerSide detail={detail} />
             )}

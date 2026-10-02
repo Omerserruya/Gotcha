@@ -34,6 +34,8 @@ import { CustomerNotes } from './CustomerNotes';
  * this session wrote say the same thing.
  */
 
+// `CustomerActions` links into Approvals and Studio; the router is not in jsdom.
+vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'customers') =>
     createTranslator({ locale: 'en', messages: { customers: messages }, namespace }),

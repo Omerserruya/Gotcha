@@ -10,7 +10,9 @@ import {
 } from '@/api/contracts/customer-actions';
 import messages from '@/i18n/messages/en/customers.json';
 
-import { CustomerActions } from './CustomerActions';
+import { approvalSchema } from '@/api/contracts/approvals';
+
+import { ActionFilters, ActionsSide, CustomerActions, parseActionFilter } from './CustomerActions';
 import type { AuditRead } from './load-customer';
 
 /**
@@ -23,6 +25,27 @@ import type { AuditRead } from './load-customer';
  * than leaving the gap to look like coverage.
  */
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: string | { pathname: string; query?: Record<string, string> };
+    children: React.ReactNode;
+  }) => (
+    <a
+      href={
+        typeof href === 'string'
+          ? href
+          : `${href.pathname}?${new URLSearchParams(href.query ?? {})}`
+      }
+      {...rest}
+    >
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'customers') =>
     createTranslator({ locale: 'en', messages: { customers: messages }, namespace }),
@@ -246,5 +269,156 @@ describe('★★ two branches nothing in the platform can currently reach', () =
     expect(unrecordedHint(row)).toBe('named_err');
     await show(ok([row]));
     expect(screen.getByTestId('action-hint-h')).toHaveTextContent(/never recorded/i);
+  });
+});
+
+const approval = (over: Record<string, unknown> = {}) =>
+  approvalSchema.parse({
+    id: 'p1',
+    conversationId: 'c1',
+    tool: 'shopify.process_refund',
+    summary: 'Process refund of 179 for order #1842',
+    reason: 'The box arrived damaged in her photo.',
+    status: 'PENDING',
+    requestedBy: 'bot',
+    expiresAt: '2026-09-19T09:00:00.000Z',
+    createdAt: '2026-09-18T09:31:00.000Z',
+    ...over,
+  });
+
+describe('★★ 04e — one spine: what was done, and what GOTCHA asked for', () => {
+  it('★★ a waiting approval: the sentence, "Waiting on you", the reasoning, and where to decide', async () => {
+    render(await CustomerActions({ actions: ok([event()]), approvals: [approval()] }));
+    const row = screen.getByTestId('action-approval-p1');
+    expect(row).toHaveTextContent('Process refund of 179 for order #1842');
+    expect(row).toHaveTextContent('Waiting on you');
+    expect(row).toHaveTextContent('The box arrived damaged in her photo.');
+    expect(row.querySelector('a')).toHaveAttribute('href', '/approvals');
+    // No decision control is drawn here: deciding is 03's.
+    expect(row.querySelector('button')).toBeNull();
+  });
+
+  it('a decided one says how it was decided, with no link', async () => {
+    render(
+      await CustomerActions({ actions: ok([]), approvals: [approval({ status: 'APPROVED' })] }),
+    );
+    const row = screen.getByTestId('action-approval-p1');
+    expect(row).toHaveTextContent('Approved');
+    expect(row.querySelector('a')).toBeNull();
+  });
+
+  it('★ both records in one order, newest first', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([
+          event({ id: 'old', createdAt: '2026-09-01T09:00:00.000Z' }),
+          event({ id: 'new', createdAt: '2026-09-20T09:00:00.000Z' }),
+        ]),
+        approvals: [approval({ createdAt: '2026-09-10T09:00:00.000Z' })],
+      }),
+    );
+    const ids = [...document.querySelectorAll('li[data-testid]')].map((li) =>
+      li.getAttribute('data-testid'),
+    );
+    expect(ids).toEqual(['action-new', 'action-approval-p1', 'action-old']);
+  });
+
+  it('★ who: GOTCHA as "AI", a flow’s request as an automation', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([]),
+        approvals: [approval({ id: 'f', requestedBy: 'flow:abc' })],
+      }),
+    );
+    expect(screen.getByTestId('action-approval-f').querySelector('[data-who]')).toHaveAttribute(
+      'data-who',
+      'flow',
+    );
+  });
+});
+
+describe('★ 04e’s filters: All, GOTCHA, Team, Money', () => {
+  const events = [
+    event({ id: 'ai', actorType: 'ai', action: 'ai.responded' }),
+    event({ id: 'team', actorType: 'user', action: 'message.sent' }),
+    event({ id: 'shop', actorType: 'user', action: 'commerce.customer_action_executed' }),
+    // Neither GOTCHA nor a person: the system, and an actor nobody recorded.
+    event({ id: 'sys', actorType: 'system', action: 'security.cross_customer_access_denied' }),
+    event({ id: 'nobody', actorType: null, action: 'ai.bot_turn' }),
+  ];
+  const ids = () =>
+    [...document.querySelectorAll('li[data-testid]')].map((li) => li.getAttribute('data-testid'));
+
+  it('GOTCHA: its own actions and what it asked for', async () => {
+    render(
+      await CustomerActions({
+        actions: ok(events),
+        approvals: [approval(), approval({ id: 'flowed', requestedBy: 'flow:x' })],
+        filter: 'gotcha',
+      }),
+    );
+    // Not the system, not an automation's request, not an unrecorded actor.
+    expect(ids().sort()).toEqual(['action-ai', 'action-approval-p1']);
+  });
+
+  it('Team: what a person did', async () => {
+    render(await CustomerActions({ actions: ok(events), approvals: [approval()], filter: 'team' }));
+    expect(ids().sort()).toEqual(['action-shop', 'action-team']);
+  });
+
+  it('Money: refunds, cancels and the customer’s record in the store', async () => {
+    render(
+      await CustomerActions({ actions: ok(events), approvals: [approval()], filter: 'money' }),
+    );
+    expect(ids().sort()).toEqual(['action-approval-p1', 'action-shop']);
+  });
+
+  it('⚠ a filter that keeps nothing says so — not the empty-log sentence', async () => {
+    render(await CustomerActions({ actions: ok([events[0]!]), approvals: [], filter: 'team' }));
+    expect(screen.getByTestId('actions-empty')).toHaveTextContent('Nothing here.');
+  });
+
+  it('the links, and an unknown filter is All', async () => {
+    render(await ActionFilters({ contactId: 'k1', current: 'money' }));
+    expect(screen.getByTestId('action-filter-money')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByTestId('action-filter-team')).toHaveAttribute(
+      'href',
+      '/customers/k1?tab=actions&filter=team',
+    );
+    expect(parseActionFilter('team')).toBe('team');
+    expect(parseActionFilter('x')).toBe('all');
+  });
+});
+
+describe('★★ 04e’s side — counts of what was read, "—" for what was not', () => {
+  it('who did what, what waits on money, where to change what GOTCHA may do', async () => {
+    render(
+      await ActionsSide({
+        actions: ok([
+          event({ id: 'a', actorType: 'ai' }),
+          event({ id: 'b', actorType: 'user' }),
+          event({ id: 'c', actorType: 'system' }),
+        ]),
+        approvals: [approval(), approval({ id: 'f', requestedBy: 'flow:x', status: 'APPROVED' })],
+      }),
+    );
+    const who = screen.getByTestId('actions-who');
+    expect(who).toHaveTextContent('by GOTCHA2');
+    expect(who).toHaveTextContent('by your team1');
+    expect(who).toHaveTextContent('by automations2');
+    const money = screen.getByTestId('actions-money');
+    expect(money).toHaveTextContent('Waiting on approval1 request');
+    expect(money).toHaveTextContent('Refunded—');
+    expect(screen.getByTestId('actions-may').querySelector('a')).toHaveAttribute(
+      'href',
+      '/studio/capabilities',
+    );
+    expect(screen.getByTestId('promise-card')).toBeInTheDocument();
+  });
+
+  it('⚠ unread records are "—", never 0', async () => {
+    render(await ActionsSide({ actions: { state: 'failed' }, approvals: null }));
+    expect(screen.getByTestId('actions-who').textContent?.match(/—/g)).toHaveLength(3);
+    expect(screen.getByTestId('actions-money')).toHaveTextContent('Waiting on approval—');
   });
 });
