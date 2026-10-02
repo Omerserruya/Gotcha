@@ -10,7 +10,12 @@ import {
   type CallSummary,
   type TranscriptLine,
 } from '@/api/contracts/calls';
-import { callEndpoints, tenantSettingsEndpoints } from '@/api/endpoints/registry';
+import { customerRowSchema } from '@/api/contracts/customers';
+import {
+  callEndpoints,
+  customerEndpoints,
+  tenantSettingsEndpoints,
+} from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
@@ -83,6 +88,12 @@ export interface CallsData {
 export async function loadLiveCall(): Promise<{
   readonly call: Call | null;
   readonly transcript: readonly TranscriptLine[];
+  /**
+   * The matched contact's name — "Dana Cohen", not her number. `null` when the
+   * call is unmatched, the contact has no name, or the read failed: the
+   * screen falls back to the number, which is how the business knows them.
+   */
+  readonly contactName: string | null;
 }> {
   const api = serverApi();
   try {
@@ -92,22 +103,41 @@ export async function loadLiveCall(): Promise<{
       raw: true,
     });
     const call = active.data[0] ?? null;
-    if (!call) return { call: null, transcript: [] };
+    if (!call) return { call: null, transcript: [], contactName: null };
 
-    const lines = await api
-      .get({ endpoint: callEndpoints.transcript(call.id), payload: transcriptSchema, raw: true })
-      .then((page) => page.data)
-      .catch((cause) => {
-        // A call with no readable transcript is still a call. The screen
-        // shows it and says it is listening, rather than hiding the call.
-        logger.warn('calls.transcript_failed', { cause });
-        return [] as TranscriptLine[];
-      });
+    /*
+      ★ The contact, beside the transcript. Measured on a matched call: the
+      screen had the id and never read the name, so the disc said "#", the
+      header the number, and every line "Them".
+    */
+    const [lines, contactName] = await Promise.all([
+      api
+        .get({ endpoint: callEndpoints.transcript(call.id), payload: transcriptSchema, raw: true })
+        .then((page) => page.data)
+        .catch((cause) => {
+          // A call with no readable transcript is still a call. The screen
+          // shows it and says it is listening, rather than hiding the call.
+          logger.warn('calls.transcript_failed', { cause });
+          return [] as TranscriptLine[];
+        }),
+      call.customerId
+        ? api
+            .get({
+              endpoint: customerEndpoints.detail(call.customerId),
+              payload: customerRowSchema,
+            })
+            .then((contact) => contact.displayName?.trim() || null)
+            .catch((cause) => {
+              logger.warn('calls.contact_failed', { cause });
+              return null;
+            })
+        : Promise.resolve(null),
+    ]);
 
-    return { call, transcript: lines };
+    return { call, transcript: lines, contactName };
   } catch (cause) {
     logger.warn('calls.active_failed', { cause });
-    return { call: null, transcript: [] };
+    return { call: null, transcript: [], contactName: null };
   }
 }
 

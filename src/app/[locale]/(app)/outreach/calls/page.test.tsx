@@ -42,7 +42,7 @@ const reads = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   loadCalls.mockReset().mockResolvedValue(reads());
-  loadLiveCall.mockReset().mockResolvedValue({ call: null, transcript: [] });
+  loadLiveCall.mockReset().mockResolvedValue({ call: null, transcript: [], contactName: null });
   loadCustomers
     .mockReset()
     .mockResolvedValue({ rows: [], total: 0, truncated: false, searchedField: null });
@@ -109,10 +109,13 @@ describe('★★ 05e — a call in progress is the page', () => {
         answeredAt: '2026-10-02T09:00:05.000Z',
       },
       transcript: [],
+      contactName: 'Dana Cohen',
     });
     const tree = await page();
     const live = find<{ customerId: string; direction: string; startedAt: string }>(tree, LiveCall);
     expect(live).toMatchObject({
+      // ★ Measured: the page had the id and never passed the name.
+      contactName: 'Dana Cohen',
       customerId: 'k1',
       direction: 'inbound',
       startedAt: '2026-10-02T09:00:05.000Z',

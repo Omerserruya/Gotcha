@@ -318,6 +318,41 @@ describe('★★ 05e — the call as a page', () => {
     expect(screen.getByPlaceholderText('Ask Copilot something…')).toBeDisabled();
   });
 
+  it('★★ a matched caller is named in all three places — disc, header, and their lines', () => {
+    renderFull({ contactName: 'Dana Cohen' });
+    deliver(transcript({ seq: 1, at: Date.parse('2026-10-02T09:00:04.000Z') }));
+    const head = screen.getByTestId('live-call').querySelector('header')!;
+    expect(head).toHaveTextContent(/^DCDana Cohen/);
+    // The speaker, exactly: 02's lines say "Dana", not "Dana Cohen".
+    expect(screen.getByTestId('line-1').querySelector('span > span')?.textContent).toBe('Dana');
+    expect(screen.getByTestId('line-1')).not.toHaveTextContent('Them');
+  });
+
+  it('unmatched, the number is the name and the disc says so — "#", never invented initials', () => {
+    renderFull({ contactName: null, customerId: null });
+    deliver(transcript({ seq: 1 }));
+    expect(screen.getByTestId('live-call').querySelector('header')).toHaveTextContent(
+      /^#\+972 52 418 9930/,
+    );
+    expect(screen.getByTestId('line-1')).toHaveTextContent('Them');
+  });
+
+  it('★ Copilot\'s "stop" is drawn and not live — nothing pauses it on a call', () => {
+    renderFull();
+    expect(screen.getByTestId('copilot-stop')).toBeDisabled();
+    expect(screen.getByTestId('copilot-stop')).toHaveAttribute(
+      'title',
+      'Not available from here yet.',
+    );
+  });
+
+  it('★ the "Careful" card is drawn in its shape — nothing produces a warning yet', () => {
+    renderFull();
+    expect(screen.getByTestId('copilot-careful')).toHaveTextContent(
+      'CarefulNothing to watch for yet.',
+    );
+  });
+
   it('Add a note goes to the person’s notes; with no person it is drawn and not live', () => {
     const { unmount } = renderFull();
     expect(screen.getByTestId('live-note')).toHaveAttribute('href', '/customers/k1?tab=notes');

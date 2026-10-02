@@ -30,7 +30,8 @@ import styles from './Calls.module.css';
  *                        Omer, like Send; until then they say so.
  *   What it found,       nothing retrieves context during a call yet
  *   Do this now,
- *   Ask Copilot
+ *   Careful, Ask Copilot
+ *   stop                 nothing pauses Copilot on a call
  *
  * ── NOT DRAWN, BY STANDING RULINGS (their tests guard them) ──
  *   Mute — nothing implements it, and on a live call a control that fails
@@ -151,6 +152,8 @@ export function LiveCall({
       .slice(0, 2)
       .map((word) => word.match(/\p{L}/u)?.[0]?.toUpperCase() ?? '')
       .join('') || '#';
+  // 02's lines say "Dana", the header "Dana Cohen".
+  const firstName = contactName?.trim().split(/\s+/)[0] || null;
   const elapsed = now === null ? null : since(now);
 
   return (
@@ -243,7 +246,7 @@ export function LiveCall({
                     <span className={styles.lineTime}>{since(line.at) ?? ''}</span>
                     <span className={styles.lineBody}>
                       <span className={styles.speaker}>
-                        {line.speaker === 'agent' ? t('live.you') : (contactName ?? t('live.them'))}
+                        {line.speaker === 'agent' ? t('live.you') : (firstName ?? t('live.them'))}
                       </span>
                       <span className={styles.said}>{line.text}</span>
                     </span>
@@ -279,6 +282,16 @@ export function LiveCall({
               aria-hidden="true"
             />
             <span>{ended ? t('live.copilot') : t('live.copilotListening')}</span>
+            {/* 02's "stop": nothing pauses Copilot on a call, so it says so. */}
+            <button
+              type="button"
+              className={styles.copilotStop}
+              data-testid="copilot-stop"
+              disabled
+              title={t('live.notYet')}
+            >
+              {t('live.stop')}
+            </button>
           </header>
 
           <section className={styles.copilotBlock} data-testid="copilot-found">
@@ -314,6 +327,11 @@ export function LiveCall({
           </section>
 
           <div className={styles.copilotAsk}>
+            {/* 02's "Careful" card — drawn in its shape: nothing produces a warning yet. */}
+            <section className={styles.carefulCard} data-testid="copilot-careful">
+              <p className={styles.carefulTitle}>{t('live.careful')}</p>
+              <p className={styles.carefulBody}>{t('live.carefulNone')}</p>
+            </section>
             <label className="srOnly" htmlFor="copilot-ask">
               {t('live.ask')}
             </label>

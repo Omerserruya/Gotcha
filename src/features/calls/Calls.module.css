@@ -485,6 +485,8 @@
   .liveWho {
     font-size: 18px;
     font-weight: var(--font-weight-semibold);
+    /* 02: `-0.02em` on the name — measured, as the screen titles were. */
+    letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }
 
@@ -791,9 +793,48 @@
     color: var(--copilot-text-strong);
   }
 
+  /* The foot: the "Careful" card over the ask box, `padding:14px 18px`, gap 10. */
   .copilotAsk {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
     margin-block-start: auto;
     padding: var(--space-14) 18px;
+  }
+
+  /* "stop", at the header's end: 11px `#8E8A83`. */
+  .copilotStop {
+    margin-inline-start: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--menu-dark-icon);
+  }
+
+  .copilotStop:disabled {
+    cursor: default;
+  }
+
+  /* "Careful": `#1F1F1F`, radius 11, `padding:12px 13px`. */
+  .carefulCard {
+    padding: var(--space-12) 13px;
+    border-radius: 11px;
+    background-color: var(--frame-subtle);
+  }
+
+  .carefulTitle {
+    margin: 0 0 5px;
+    font-size: 11.5px;
+    color: var(--signal-ai);
+  }
+
+  .carefulBody {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--frame-text-body);
   }
 
   .copilotInput {

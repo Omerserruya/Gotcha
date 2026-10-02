@@ -40,8 +40,13 @@ export default async function Page({
     loadCalls({ summaryDays: 7 }),
     query ? loadCustomers(query) : Promise.resolve(null),
   ]);
-  const { call: liveCall, transcript } =
-    voiceEnabled === true ? await loadLiveCall() : { call: null, transcript: [] };
+  const {
+    call: liveCall,
+    transcript,
+    contactName,
+  } = voiceEnabled === true
+    ? await loadLiveCall()
+    : { call: null, transcript: [], contactName: null };
 
   const state: CallsState =
     voiceEnabled === null
@@ -67,6 +72,7 @@ export default async function Page({
           conversationId={liveCall.conversationId}
           customerNumber={liveCall.customerNumber}
           customerId={liveCall.customerId}
+          contactName={contactName}
           direction={liveCall.direction}
           startedAt={liveCall.answeredAt ?? liveCall.startedAt}
           initialTranscript={transcript}

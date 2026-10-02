@@ -170,3 +170,49 @@ describe('★ the week’s summary', () => {
     expect(summaryCall.query).toBeUndefined();
   });
 });
+
+describe("★★ loadLiveCall — the caller's name, beside the transcript", () => {
+  const call = (over: Record<string, unknown> = {}) => ({
+    id: 'v1',
+    conversationId: 'c1',
+    customerNumber: '972524189930',
+    customerId: 'k1',
+    direction: 'inbound',
+    startedAt: '2026-10-02T09:00:00.000Z',
+    ...over,
+  });
+  const route = (contact: () => Promise<unknown>, active = call()) =>
+    get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) => {
+      const path = String(endpoint.path ?? endpoint);
+      if (path.includes('/contacts/')) return contact();
+      if (path.includes('transcript')) return { data: [] };
+      return { data: [active] };
+    });
+
+  it("★★ a matched call carries the contact's name", async () => {
+    route(async () => ({ id: 'k1', displayName: '  Dana Cohen ' }));
+    const { loadLiveCall } = await import('./load-calls');
+    expect((await loadLiveCall()).contactName).toBe('Dana Cohen');
+  });
+
+  it('⚠ the contact read failing is not the call failing — the number stands in', async () => {
+    route(async () => {
+      throw new Error('500');
+    });
+    const { loadLiveCall } = await import('./load-calls');
+    const read = await loadLiveCall();
+    expect(read.call?.id).toBe('v1');
+    expect(read.contactName).toBeNull();
+  });
+
+  it('a contact with no name, or an unmatched call: null — and no contact read for the latter', async () => {
+    route(async () => ({ id: 'k1', displayName: '   ' }));
+    const { loadLiveCall } = await import('./load-calls');
+    expect((await loadLiveCall()).contactName).toBeNull();
+    get.mockReset();
+    const contact = vi.fn();
+    route(contact, call({ customerId: null }));
+    expect((await loadLiveCall()).contactName).toBeNull();
+    expect(contact).not.toHaveBeenCalled();
+  });
+});
