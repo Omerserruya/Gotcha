@@ -31,6 +31,17 @@ const state = vi.hoisted(() => ({
   contacts: [] as any[],
   notes: [] as any[],
   seq: 0,
+  // Users live in a TENANT, as `User` rows do: one per tenant a person belongs to.
+  users: [
+    { id: "u1", tenantId: "t1", name: "Yael Cohen", email: "yael@example.com" },
+    // A SECOND, distinct person. The re-attribution test below used to assert
+    // "Yael Cohen" for u9, which only passed because the old fake answered
+    // "Yael Cohen" for every id - so it could not tell the accepting person
+    // from the original author.
+    { id: "u9", tenantId: "t1", name: "Noam Levi", email: "noam@example.com" },
+  ] as any[],
+  viewerEmail: undefined as string | undefined,
+  seenUserWhere: null as any,
   seenListWhere: null as any,
   seenTake: 0 as number,
   fetch: { calls: [] as any[], reply: { ok: true, status: 200, body: { data: { vendor: "hubspot", note_id: "crm_1" } } } },
@@ -39,7 +50,28 @@ const state = vi.hoisted(() => ({
 vi.mock("@chatcenter/shared", () => ({
   prisma: {
     contact: { findFirst: async ({ where }: any) => state.contacts.find((c) => c.id === where.id) ?? null },
-    user: { findFirst: async () => ({ name: "Yael Cohen", email: "yael@example.com" }) },
+    user: {
+      /*
+       * ★ THIS FAKE USED TO IGNORE ITS `where` AND ALWAYS ANSWER "Yael Cohen".
+       *
+       * That is why the suite stayed green while every real note failed to
+       * save: the route looked the author up by `id` alone, the real tenant
+       * guard refused it ("User.findFirst blocked: where clause is missing
+       * tenantId"), and a fake that never read the where could not see the
+       * missing key. A double more forgiving than the guard it stands in for
+       * passes exactly the bug the guard exists to stop.
+       *
+       * So it now refuses the same way the guard does, and matches on both
+       * keys the way the database does.
+       */
+      findFirst: async ({ where }: any) => {
+        state.seenUserWhere = where;
+        if (!where || where.tenantId === undefined) {
+          throw new Error("[TenantGuard] User.findFirst blocked: where clause is missing tenantId.");
+        }
+        return state.users.find((u) => u.id === where.id && u.tenantId === where.tenantId) ?? null;
+      },
+    },
     customerNote: {
       findMany: async (args: any) => { state.seenListWhere = args.where; state.seenTake = args.take; return state.notes.filter((n) => !n.deletedAt).map((n) => ({ ...n })); },
       findFirst: async ({ where }: any) => state.notes.find((n) => n.id === where.id) ?? null,
@@ -62,7 +94,7 @@ vi.mock("@chatcenter/shared", () => ({
       },
     },
   },
-  authenticate: (req: any, _r: any, n: any) => { req.user = { userId: state.viewer, role: "AGENT" }; n(); },
+  authenticate: (req: any, _r: any, n: any) => { req.user = { userId: state.viewer, role: "AGENT", email: state.viewerEmail }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "t1"; n(); },
   requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
 }));
@@ -75,6 +107,8 @@ app.use("/api/identity", notesRouter);
 
 beforeEach(() => {
   state.viewer = "u1";
+  state.viewerEmail = undefined;
+  state.seenUserWhere = null;
   state.contacts = [{ id: "c1", mergedIntoId: null, personId: "p1" }];
   state.notes = [];
   state.seq = 0;
@@ -360,7 +394,10 @@ describe("a note the AI proposed", () => {
     expect(res.body.note.status).toBe("PUBLISHED");
     // A team note credited to the AI is a note nobody agreed to.
     expect(res.body.note.authorUserId).toBe("u9");
-    expect(res.body.note.authorName).toBe("Yael Cohen");
+    // u9's OWN name - not the original author's. Asserting "Yael Cohen" here
+    // passed against a fake that named everyone Yael, so it proved nothing
+    // about who was credited.
+    expect(res.body.note.authorName).toBe("Noam Levi");
   });
 
   it("mirrors it once accepted", async () => {
@@ -552,5 +589,37 @@ describe("the one read that may reach a model", () => {
     await promptSafeNotes({ tenantId: "t1", contactId: "c1", limit: 9999 });
 
     expect(state.seenTake).toBe(50);
+  });
+});
+
+describe("the author lookup goes through the tenant guard", () => {
+  it("★ scopes the user lookup to the tenant, or the guard refuses it", async () => {
+    // Without `tenantId` the real guard throws "User.findFirst blocked: where
+    // clause is missing tenantId", the route 500s, and no note can be saved on
+    // any screen. The fake above now refuses the same way.
+    state.contacts.push({ id: "c1", tenantId: "t1", personId: "p1", mergedIntoId: null });
+    const res = await request(app).post("/api/identity/c1/notes")
+      .set("Authorization", "Bearer tok").send({ body: "Prefers a call after 6pm." });
+
+    expect(res.status).toBe(201);
+    expect(state.seenUserWhere).toEqual({ id: "u1", tenantId: "t1" });
+    expect(res.body.note.authorName).toBe("Yael Cohen");
+  });
+
+  it("★ names a SYSTEM_ADMIN from another tenant by email, not by a raw id", async () => {
+    // A platform admin acting in a tenant they do not belong to has no User row
+    // HERE, so the tenant-scoped lookup finds nothing. Their email is already on
+    // the principal; reaching into their home tenant to read a name would mean
+    // opting out of the guard for a display string.
+    state.contacts.push({ id: "c1", tenantId: "t1", personId: "p1", mergedIntoId: null });
+    state.viewer = "admin-from-elsewhere";
+    state.viewerEmail = "ops@gotcha.co.il";
+
+    const res = await request(app).post("/api/identity/c1/notes")
+      .set("Authorization", "Bearer tok").send({ body: "Escalated by the platform team." });
+
+    expect(res.status).toBe(201);
+    expect(res.body.note.authorUserId).toBe("admin-from-elsewhere");
+    expect(res.body.note.authorName).toBe("ops@gotcha.co.il");
   });
 });

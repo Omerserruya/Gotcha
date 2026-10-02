@@ -56,12 +56,21 @@ async function author(req: Request): Promise<NoteAuthor> {
   const userId = (req as any).user?.userId ?? null;
   if (!userId || userId === "system") return { userId: null, name: "GOTCHA AI" };
   const user = await prisma.user.findFirst({
-    where: { id: userId },
+    // ★ `tenantId` IS REQUIRED, NOT DEFENSIVE. `User` is tenant-guarded, and the
+    // guard REFUSES a findFirst whose where clause omits it - so without this
+    // every note failed to save, on every screen, with "where clause is missing
+    // tenantId". The other user lookup in this service (approvals.ts) already
+    // scopes this way.
+    where: { id: userId, tenantId: req.tenantId },
     // `name` and `email` are the per-tenant display mirror of Identity; there
     // are no firstName/lastName columns on User.
     select: { name: true, email: true },
   });
-  const name = user?.name?.trim() || user?.email || userId;
+  // A SYSTEM_ADMIN acting in a tenant they are not a member of has no User row
+  // HERE, so the scoped lookup finds nothing. Their email is already on the
+  // principal, which names them honestly without reaching into another
+  // tenant's rows; the raw id is the last resort, as before.
+  const name = user?.name?.trim() || user?.email || (req as any).user?.email || userId;
   return { userId, name };
 }
 

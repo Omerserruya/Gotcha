@@ -530,7 +530,17 @@ router.get("/:id/transcript", async (req: Request, res: Response) => {
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const messages = await prisma.message.findMany({
-      where: { conversationId: session.conversationId, channel: "VOICE" },
+      // ★ `tenantId` IS REQUIRED, AND ITS ABSENCE MEANT THIS ROUTE NEVER WORKED.
+      //
+      // `Message` has been tenant-guarded since 2026-04-15 (b8a9f493); this
+      // route was written on 2026-05-12 (d2433aab). The guard refuses a
+      // findMany with no tenantId in its where, the catch below turned that into
+      // `500 failed_to_load_transcript`, and so a call's transcript has failed
+      // to load from the day it was written.
+      //
+      // It changes no rows: `session` came from `loadSessionForTenant`, so
+      // `conversationId` is already this tenant's. It only satisfies the guard.
+      where: { tenantId: req.tenantId!, conversationId: session.conversationId, channel: "VOICE" },
       orderBy: { createdAt: "asc" },
       take: limit + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
