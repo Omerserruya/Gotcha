@@ -6,7 +6,7 @@ import { channelName } from '@/api/contracts/inbox';
 import { channelMark } from '@/features/inbox/channel-marks';
 import { Link } from '@/i18n/navigation';
 
-import { CUSTOMER_TABS, customerFacts, shortDate } from './CustomerScreen';
+import { CUSTOMER_TABS, customerFacts, initialsOf, shortDate } from './CustomerScreen';
 import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
 
@@ -31,12 +31,6 @@ export async function CustomerTopBar({
   const name = contact?.displayName ?? contact?.externalId ?? null;
   // 04b's facts, the same words: a lone "—" under a name reads as broken.
   const facts = await customerFacts(detail);
-  const initials = (name ?? '')
-    .split(/\s+/)
-    .filter((word) => /\p{L}/u.test(word))
-    .slice(0, 2)
-    .map((word) => word.match(/\p{L}/u)?.[0]?.toUpperCase() ?? '')
-    .join('');
 
   return (
     <header className={styles.topBar} data-testid="customer-top-bar">
@@ -48,10 +42,11 @@ export async function CustomerTopBar({
       </span>
       <span className={styles.topWho}>
         <span className={styles.topDisc} aria-hidden="true">
-          {initials}
+          {initialsOf(name)}
         </span>
         <span>
-          <span className={styles.topName}>{name ?? t('list.unnamed')}</span>
+          {/* The page's one h1: the person, as 04b's large header has it. */}
+          <h1 className={styles.topName}>{name ?? t('list.unnamed')}</h1>
           {facts.length > 0 ? (
             <span className={styles.topFacts} data-testid="customer-top-facts">
               {facts.join(' · ')}

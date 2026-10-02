@@ -4,7 +4,12 @@ import {
   CustomerActions,
   parseActionFilter,
 } from '@/features/customers/CustomerActions';
-import { CustomerNotes } from '@/features/customers/CustomerNotes';
+import {
+  CustomerNotes,
+  NoteFilters,
+  NotesSide,
+  parseNoteFilter,
+} from '@/features/customers/CustomerNotes';
 import {
   OrderFilters,
   OrdersSide,
@@ -105,6 +110,7 @@ export default async function Page({
   const channels = channelsOf(detail);
   const orderFilter = parseOrderFilter(query.filter);
   const actionFilter = parseActionFilter(query.filter);
+  const noteFilter = parseNoteFilter(query.filter);
   const channel = query.channel && channels.includes(query.channel) ? query.channel : null;
   return (
     <PageContainer layout="screen" flush>
@@ -120,6 +126,8 @@ export default async function Page({
               <OrderFilters contactId={id} current={orderFilter} />
             ) : tab === 'actions' ? (
               <ActionFilters contactId={id} current={actionFilter} />
+            ) : tab === 'notes' ? (
+              <NoteFilters contactId={id} current={noteFilter} />
             ) : null
           }
         />
@@ -152,6 +160,8 @@ export default async function Page({
                 notes={detail.notes}
                 contactId={id}
                 viewerUserId={detail.viewerUserId}
+                filter={noteFilter}
+                customerName={detail.timeline?.contact?.displayName ?? null}
               />
             ) : null}
           </div>
@@ -162,6 +172,8 @@ export default async function Page({
               <OrdersSide orders={detail.orders} />
             ) : tab === 'actions' ? (
               <ActionsSide actions={detail.actions} approvals={detail.approvals} />
+            ) : tab === 'notes' ? (
+              <NotesSide notes={detail.notes} />
             ) : (
               <CustomerSide detail={detail} />
             )}

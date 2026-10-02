@@ -602,30 +602,35 @@
    * `teamNotes` rather than a second `notes` block in the same namespace.
    */
 
+  /* 04f's column: the composer, then cards 10 apart. */
   .notesPanel {
     display: flex;
     flex-direction: column;
-    gap: var(--space-12);
+    gap: var(--space-10);
   }
 
   .notesEmpty {
     margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
+    font-size: 12.5px;
+    color: var(--text-subtle);
   }
 
+  /* 02's composer: white, radius 12, a 1px dark edge. */
   .composer {
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
-    padding: var(--space-12);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    border: 1px solid var(--action-base);
+    border-radius: 12px;
   }
 
-  .composerLabel {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
+  /* `padding:12px 15px 8px`, 13.5px; the placeholder in 02's pale stone. */
+  .composer > .composerInput {
+    padding: var(--space-12) 15px var(--space-8);
+    border: 0;
+    border-radius: 12px 12px 0 0;
+    background: transparent;
+    font-size: 13.5px;
   }
 
   .composerInput {
@@ -637,72 +642,169 @@
     resize: block;
   }
 
-  .composerToggle {
+  .composerInput::placeholder {
+    color: var(--text-disabled);
+  }
+
+  .composer > .composerInput:focus-visible {
+    outline: none;
+  }
+
+  .composer:focus-within {
+    box-shadow: 0 0 0 var(--border-width-thick) var(--border-focus);
+  }
+
+  /* The foot: `padding:0 12px 10px`, `gap:8px`. */
+  .composerBar {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
     gap: var(--space-8);
+    padding: 0 var(--space-12) var(--space-10);
   }
 
-  /*
-   * ★ THE CONSEQUENCE, NOT THE FIELD NAME. A note marked AI-usable reaches
-   * the merchant's CRM and can come back out of the bot's mouth, so the hint
-   * says that rather than restating the label.
-   */
-  .composerHint {
-    flex-basis: 100%;
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
+  /* `padding:3px`, `gap:2px`, `#F0EDE7`, radius 8; the chosen half white. */
+  .segmented {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--space-8);
+    background-color: var(--panel-well);
+    cursor: help;
   }
 
+  .segment {
+    padding: var(--space-4) var(--space-10);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--intent-neutral-text);
+    cursor: pointer;
+  }
+
+  .segment[data-on] {
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+  }
+
+  .segment:focus-within {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 1px;
+  }
+
+  /* "Save note": `padding:6px 13px`, dark, radius 8, 11.5px. */
   .composerSubmit {
-    align-self: flex-start;
+    margin-inline-start: auto;
+    padding: 6px 13px;
+    border: 0;
+    border-radius: var(--space-8);
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .composerSubmit:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .composerSubmit:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
   }
 
   .noteList {
     display: flex;
     flex-direction: column;
-    gap: var(--space-12);
+    gap: var(--space-10);
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
+  /* A card: `padding:14px 16px`, `gap:12px`, white, radius 12. */
   .note {
     display: flex;
+    gap: var(--space-12);
+    padding: var(--space-14) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+  }
+
+  /* 28px: the author in stone; a note the AI wrote in violet. */
+  .noteDisc {
+    flex: none;
+    inline-size: 28px;
+    block-size: 28px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 28px;
+    text-align: center;
+  }
+
+  .noteDisc[data-ai] {
+    background-color: var(--signal-ai);
+    color: var(--text-primary);
+  }
+
+  .noteMain {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    padding-block-end: var(--space-12);
-    border-block-end: 1px solid var(--border-subtle);
+    gap: 6px;
   }
 
   .noteHead {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-8);
+    align-items: center;
+    gap: 9px;
   }
 
   .noteAuthor {
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
   .noteWhen,
   .noteEdited {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* Right of the head: "Team only" in stone, "GOTCHA may use" in violet. */
+  .noteChip {
+    margin-inline-start: auto;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-well);
+    font-size: 10.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .noteChip[data-ai] {
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
   }
 
   .noteBody {
     margin: 0;
     white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
   }
 
-  /* Where the note lives. Quiet: for most notes this is not news. */
+  /* Where the note lives: 02's 11px meta line. Quiet: for most notes this is not news. */
   .noteDest {
     margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
+    font-size: 11px;
+    color: var(--text-subtle);
   }
 
   /*
@@ -714,9 +816,25 @@
     margin: 0;
     padding: var(--space-4) var(--space-8);
     border: 1px solid var(--intent-urgent-edge);
+    border-radius: 6px;
     background: var(--intent-urgent-surface);
-    font-size: var(--font-size-caption);
+    font-size: 11px;
     color: var(--intent-urgent-text);
+  }
+
+  /* 04f's side: what GOTCHA reads, one note a line, and the caption under it. */
+  .notesRead {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .notesCaption {
+    margin: var(--space-10) 0 0;
+    font-size: var(--font-size-label);
+    line-height: 1.5;
+    color: var(--text-subtle);
   }
 
   .noteControls {
@@ -1147,7 +1265,9 @@
     text-align: center;
   }
 
+  /* An h1 now: the page's heading is the person. */
   .topName {
+    margin: 0;
     font-size: 17px;
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);

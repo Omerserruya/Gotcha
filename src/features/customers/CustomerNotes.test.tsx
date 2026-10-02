@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { noteSchema, type Note } from '@/api/contracts/customer-notes';
 import messages from '@/i18n/messages/en/customers.json';
 
-import { CustomerNotes } from './CustomerNotes';
+import { CustomerNotes, NoteFilters, NotesSide, parseNoteFilter } from './CustomerNotes';
 
 /**
  * Screen 04f.
@@ -17,6 +17,21 @@ import { CustomerNotes } from './CustomerNotes';
  * the merchant's own CRM where we cannot correct it.
  */
 
+// The filters link within the page; the router is not in jsdom.
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: { pathname: string; query?: Record<string, string> };
+    children: React.ReactNode;
+  }) => (
+    <a href={`${href.pathname}?${new URLSearchParams(href.query ?? {})}`} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'customers') =>
     createTranslator({ locale: 'en', messages: { customers: messages }, namespace }),
@@ -169,5 +184,97 @@ describe('★ classic notes, and what the cut left out', () => {
     await show([]);
     expect(screen.getByTestId('note-ai-usable')).not.toBeChecked();
     expect(screen.getByTestId('note-composer')).toHaveTextContent(/stays in GOTCHA/i);
+  });
+});
+
+const showWith = async (
+  notes: readonly Note[] | null,
+  props: { filter?: 'all' | 'mayUse' | 'teamOnly'; customerName?: string | null } = {},
+) =>
+  render(
+    <NextIntlClientProvider locale="en" messages={{ customers: messages }}>
+      {await CustomerNotes({ notes, contactId: 'c1', viewerUserId: 'u1', ...props })}
+    </NextIntlClientProvider>,
+  );
+
+describe('★★ 04f — the notes as 02 draws them', () => {
+  it('★ each card says who may hear it: "Team only" or "GOTCHA may use"', async () => {
+    await showWith([note({ id: 'a', aiUsable: true }), note({ id: 'b', aiUsable: false })]);
+    expect(screen.getByTestId('note-chip-a')).toHaveTextContent('GOTCHA may use');
+    expect(screen.getByTestId('note-chip-a')).toHaveAttribute('data-ai');
+    expect(screen.getByTestId('note-chip-b')).toHaveTextContent('Team only');
+    expect(screen.getByTestId('note-chip-b')).not.toHaveAttribute('data-ai');
+  });
+
+  it('★ the filters keep what they name', async () => {
+    const notes = [note({ id: 'a', aiUsable: true }), note({ id: 'b', aiUsable: false })];
+    const { unmount } = await showWith(notes, { filter: 'mayUse' });
+    expect(screen.getByTestId('note-a')).toBeInTheDocument();
+    expect(screen.queryByTestId('note-b')).toBeNull();
+    unmount();
+    await showWith(notes, { filter: 'teamOnly' });
+    expect(screen.getByTestId('note-b')).toBeInTheDocument();
+    expect(screen.queryByTestId('note-a')).toBeNull();
+  });
+
+  it('⚠ a filter that keeps nothing is not "nobody wrote anything"', async () => {
+    await showWith([note({ aiUsable: false })], { filter: 'mayUse' });
+    expect(screen.getByTestId('team-notes-filter-empty')).toHaveTextContent('No notes here.');
+    expect(screen.queryByTestId('team-notes-empty')).toBeNull();
+  });
+
+  it('the composer: 02’s placeholder with their name, and Team only chosen', async () => {
+    await showWith([], { customerName: 'Matan Amran' });
+    expect(screen.getByTestId('note-body')).toHaveAttribute(
+      'placeholder',
+      'Write a note about Matan Amran…',
+    );
+    expect(screen.getByTestId('note-team-only')).toBeChecked();
+    expect(screen.getByTestId('note-ai-usable')).not.toBeChecked();
+  });
+
+  it('the filter links, and an unknown one is All', async () => {
+    render(await NoteFilters({ contactId: 'k1', current: 'teamOnly' }));
+    expect(screen.getByTestId('note-filter-teamOnly')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByTestId('note-filter-mayUse')).toHaveAttribute(
+      'href',
+      '/customers/k1?tab=notes&filter=mayUse',
+    );
+    expect(parseNoteFilter('mayUse')).toBe('mayUse');
+    expect(parseNoteFilter('pinned')).toBe('all');
+  });
+});
+
+describe('★★ 04f’s side — what GOTCHA reads is what the platform gives it', () => {
+  it('counts, and the notes marked for GOTCHA — the same rule as `promptSafeNotes`', async () => {
+    render(
+      await NotesSide({
+        notes: [
+          note({ id: 'a', aiUsable: true, body: 'Invoices go to Cohen Design.' }),
+          note({ id: 'b', aiUsable: false, body: 'Very patient.' }),
+          note({
+            id: 'gone',
+            aiUsable: true,
+            body: 'Deleted one.',
+            deletedAt: '2026-09-19T00:00:00.000Z',
+          }),
+        ],
+      }),
+    );
+    const counts = screen.getByTestId('notes-counts');
+    expect(counts).toHaveTextContent('notes2');
+    expect(counts).toHaveTextContent('GOTCHA may use1');
+    expect(counts).toHaveTextContent('team only1');
+    const reads = screen.getByTestId('notes-reads');
+    expect(reads).toHaveTextContent('Invoices go to Cohen Design.');
+    expect(reads).not.toHaveTextContent('Very patient.');
+    expect(reads).not.toHaveTextContent('Deleted one.');
+    expect(reads).toHaveTextContent('Team-only notes are never shown to the AI');
+  });
+
+  it('⚠ unread notes are "—", not zero and not "Nothing yet."', async () => {
+    render(await NotesSide({ notes: null }));
+    expect(screen.getByTestId('notes-counts').textContent?.match(/—/g)).toHaveLength(3);
+    expect(screen.getByTestId('notes-reads')).not.toHaveTextContent('Nothing yet.');
   });
 });

@@ -11,7 +11,7 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 import { ActionFilters, ActionsSide, CustomerActions } from '@/features/customers/CustomerActions';
-import { CustomerNotes } from '@/features/customers/CustomerNotes';
+import { CustomerNotes, NoteFilters, NotesSide } from '@/features/customers/CustomerNotes';
 import { OrderFilters, OrdersSide, OrdersTab } from '@/features/customers/OrdersTab';
 import {
   CustomerHeader,
@@ -172,5 +172,23 @@ describe('★★ 04e — its filters, the approvals, its own side', () => {
     const props = propsOf<{ filter: string; approvals: unknown }>(tree, CustomerActions);
     expect(props?.filter).toBe('money');
     expect(props?.approvals).toEqual([]);
+  });
+});
+
+describe('★★ 04f — its filters, its side, the name for the composer', () => {
+  it('All/GOTCHA may use/Team only in the tab row; "Notes" and "What GOTCHA reads" in the side', async () => {
+    const tree = await page('notes', undefined, undefined, 'teamOnly');
+    const types = mounted(tree);
+    expect(types).toContain(NotesSide);
+    expect(types).not.toContain(CustomerSide);
+    const filters = propsOf<{ filters: ReactElement<{ current: string }> }>(
+      tree,
+      CustomerTabRow,
+    )?.filters;
+    expect(isValidElement(filters) && filters.type).toBe(NoteFilters);
+    expect(filters?.props.current).toBe('teamOnly');
+    const props = propsOf<{ filter: string; customerName: string | null }>(tree, CustomerNotes);
+    expect(props?.filter).toBe('teamOnly');
+    expect(props?.customerName).toBeTruthy();
   });
 });

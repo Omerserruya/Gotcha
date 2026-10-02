@@ -25,7 +25,14 @@ import styles from './Customers.module.css';
  * next, and the cost of guessing wrong is the bot repeating a private remark
  * to the customer it is about.
  */
-export function NoteComposer({ contactId }: { readonly contactId: string }) {
+export function NoteComposer({
+  contactId,
+  customerName = null,
+}: {
+  readonly contactId: string;
+  /** For 02's placeholder, "Write a note about Dana…". */
+  readonly customerName?: string | null;
+}) {
   const t = useTranslations('customers');
   const [body, setBody] = useState('');
   const [aiUsable, setAiUsable] = useState(false);
@@ -50,8 +57,9 @@ export function NoteComposer({ contactId }: { readonly contactId: string }) {
   }
 
   return (
+    /* 02's composer: one white card, a 1px dark edge, the controls along its foot. */
     <div className={styles.composer} data-testid="note-composer">
-      <label className={styles.composerLabel} htmlFor="note-body">
+      <label className="srOnly" htmlFor="note-body">
         {t('teamNotes.write')}
       </label>
       <textarea
@@ -59,40 +67,69 @@ export function NoteComposer({ contactId }: { readonly contactId: string }) {
         className={styles.composerInput}
         data-testid="note-body"
         value={body}
-        rows={3}
+        rows={2}
+        placeholder={
+          customerName
+            ? t('teamNotes.placeholderNamed', { name: customerName })
+            : t('teamNotes.placeholder')
+        }
         onChange={(event) => setBody(event.target.value)}
         disabled={isPending}
       />
 
-      {/*
-        ★ THE ONE CONTROL THE CUT KEPT, AND IT SAYS WHAT IT DOES.
-        "Team only" versus "GOTCHA may use this" — phrased as the consequence
-        rather than as a field name, because the consequence is that the
-        sentence can come back out of the bot's mouth.
-      */}
-      <label className={styles.composerToggle}>
-        <input
-          type="checkbox"
-          data-testid="note-ai-usable"
-          checked={aiUsable}
-          onChange={(event) => setAiUsable(event.target.checked)}
-          disabled={isPending}
-        />
-        <span>{t('teamNotes.aiUsable')}</span>
-        <span className={styles.composerHint}>
+      <div className={styles.composerBar}>
+        {/*
+          ★ THE ONE CONTROL THE CUT KEPT, AND IT SAYS WHAT IT DOES.
+          02's segmented "Team only | GOTCHA may use" — the consequence, not a
+          field name, because the consequence is that the sentence can come
+          back out of the bot's mouth. Team only is the default: it fails
+          closed, as the column does. What each choice does is its tooltip.
+        */}
+        <div
+          className={styles.segmented}
+          role="radiogroup"
+          aria-label={t('teamNotes.aiUsable')}
+          title={aiUsable ? t('teamNotes.aiUsableOn') : t('teamNotes.aiUsableOff')}
+        >
+          <label className={styles.segment} data-on={!aiUsable ? '' : undefined}>
+            <input
+              type="radio"
+              name="note-ai-usable"
+              className="srOnly"
+              data-testid="note-team-only"
+              checked={!aiUsable}
+              onChange={() => setAiUsable(false)}
+              disabled={isPending}
+            />
+            {t('teamNotes.teamOnly')}
+          </label>
+          <label className={styles.segment} data-on={aiUsable ? '' : undefined}>
+            <input
+              type="radio"
+              name="note-ai-usable"
+              className="srOnly"
+              data-testid="note-ai-usable"
+              checked={aiUsable}
+              onChange={() => setAiUsable(true)}
+              disabled={isPending}
+            />
+            {t('teamNotes.mayUse')}
+          </label>
+        </div>
+        <span className="srOnly">
           {aiUsable ? t('teamNotes.aiUsableOn') : t('teamNotes.aiUsableOff')}
         </span>
-      </label>
 
-      <button
-        type="button"
-        className={styles.composerSubmit}
-        data-testid="note-save"
-        disabled={isPending || empty || tooLong}
-        onClick={submit}
-      >
-        {isPending ? t('teamNotes.saving') : t('teamNotes.save')}
-      </button>
+        <button
+          type="button"
+          className={styles.composerSubmit}
+          data-testid="note-save"
+          disabled={isPending || empty || tooLong}
+          onClick={submit}
+        >
+          {isPending ? t('teamNotes.saving') : t('teamNotes.save')}
+        </button>
+      </div>
 
       {tooLong ? (
         <p className={styles.noteProblem} data-testid="note-too-long">

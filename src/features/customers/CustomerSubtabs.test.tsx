@@ -74,6 +74,8 @@ const withEvents = (events: TimelineEvent[]): CustomerDetail => ({
 describe('★★ 04c–04f’s compact header', () => {
   it('the crumb back to Customers, the name, and both actions', async () => {
     render(await CustomerTopBar({ detail: FIXTURE_DETAIL, contactId: 'k1' }));
+    // The page's one h1 is the person, as on 04b.
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     const bar = screen.getByTestId('customer-top-bar');
     expect(bar.querySelector('a[href="/customers"]')).toHaveTextContent('Customers');
     expect(screen.getByTestId('customer-add-note')).toHaveAttribute(

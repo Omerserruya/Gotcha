@@ -41,7 +41,7 @@ export function parseCustomerTab(raw: string | undefined): Tab {
 }
 
 /** Up to two initials, from words that have letters. */
-function initialsOf(name: string | null): string {
+export function initialsOf(name: string | null): string {
   if (!name) return '';
   return name
     .split(/\s+/)
