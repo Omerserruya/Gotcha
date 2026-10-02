@@ -67,7 +67,8 @@
       "title": "It answered first in <figure>{n}</figure> {count, plural, one {conversation} other {conversations}}.",
       "hours": "That's about {hours} hours your team didn't spend typing.",
       "passedOver": "See what it passed over",
-      "why": "Why did it escalate?"
+      "why": "Why did it escalate?",
+      "quiet": "No conversations this week, so there's nothing to credit GOTCHA with yet."
     },
     "stopped": {
       "title": "Where it stopped",
@@ -107,7 +108,10 @@
       "even": "Open conversations are spread evenly right now.",
       "measured": "Counted as conversations open now — a queue, not a measure of anyone.",
       "rebalance": "Rebalance the queue",
-      "week": "Look at their week"
+      "week": "Look at their week",
+      "tooFew": "There aren't two people counted here to compare a queue between.",
+      "noneOpen": "No one has an open conversation right now.",
+      "oneHoldsAll": "{who} holds every open conversation right now."
     },
     "handover": {
       "title": "The handover works",
@@ -128,7 +132,8 @@
       "resolved": "Resolved",
       "load": "Load through the week",
       "aiEmployee": "AI employee",
-      "foot": "Open now and taken today are today's numbers. Replies and outcomes aren't measured per person yet, so nobody here is ranked."
+      "foot": "Open now and taken today are today's numbers. Replies and outcomes aren't measured per person yet, so nobody here is ranked.",
+      "agentsOnly": "Only people with the Agent role are counted here, so admins who answer conversations aren't."
     }
   },
   "sales": {

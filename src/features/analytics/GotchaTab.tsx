@@ -6,6 +6,7 @@ import { Link } from '@/i18n/navigation';
 import type { ToolUsage } from '@/api/contracts/capabilities';
 import { UNANSWERED_PAGE } from '@/api/contracts/analytics';
 
+import { hadConversations, hoursSaved } from './figures';
 import type { GotchaData } from './load-analytics';
 import styles from './Analytics.module.css';
 
@@ -87,22 +88,28 @@ export function toolWords(name: string): string {
 export async function GotchaHero({ data }: { readonly data: GotchaData }) {
   const t = await getTranslations('analytics');
   const format = await getFormatter();
-  const hours = data.timeSaved ? Math.round(data.timeSaved.secondsSaved / 3600) : null;
+  const hours = hoursSaved(data.timeSaved);
+  // No conversations: nothing to credit GOTCHA with — said, not "0 … 0 hours".
+  const quiet = data.overview !== null && !hadConversations(data.overview);
   return (
     <section className={styles.gHero} data-testid="gotcha-hero">
       <p className={styles.gHeroEyebrow}>{t('gotcha.hero.eyebrow')}</p>
       <p className={styles.gHeroTitle}>
-        {data.overview
-          ? t.rich('gotcha.hero.title', {
-              count: data.overview.aiHandledCount,
-              n: format.number(data.overview.aiHandledCount),
-              figure: (chunks) => <span className={styles.gHeroFigure}>{chunks}</span>,
-            })
-          : '—'}
+        {quiet
+          ? t('gotcha.hero.quiet')
+          : data.overview
+            ? t.rich('gotcha.hero.title', {
+                count: data.overview.aiHandledCount,
+                n: format.number(data.overview.aiHandledCount),
+                figure: (chunks) => <span className={styles.gHeroFigure}>{chunks}</span>,
+              })
+            : '—'}
       </p>
-      <p className={styles.gHeroLine}>
-        {hours === null ? '—' : t('gotcha.hero.hours', { hours: format.number(hours) })}
-      </p>
+      {hours !== null && !quiet ? (
+        <p className={styles.gHeroLine}>
+          {t('gotcha.hero.hours', { hours: format.number(hours) })}
+        </p>
+      ) : null}
       <div className={styles.gActions}>
         <span className={styles.gLight} aria-disabled="true">
           {t('gotcha.hero.passedOver')}
@@ -154,15 +161,14 @@ export async function GotchaStrip({ data }: { readonly data: GotchaData }) {
     ? data.tools.reduce((sum, tool) => sum + tool.executionCount, 0)
     : null;
   const failed = data.tools ? failedCount(data.tools) : null;
-  const hours = data.timeSaved ? Math.round(data.timeSaved.secondsSaved / 3600) : null;
+  const hours = hoursSaved(data.timeSaved);
   const cells = [
     {
       key: 'alone',
       // No percentage of nothing: with no conversations, "—", never "0%".
-      value:
-        data.overview && data.overview.totalConversations > 0
-          ? `${format.number(data.overview.aiHandledPct)}%`
-          : '—',
+      value: hadConversations(data.overview)
+        ? `${format.number(data.overview!.aiHandledPct)}%`
+        : '—',
     },
     { key: 'actions', value: actions === null ? '—' : format.number(actions) },
     { key: 'approval', value: data.ai ? format.number(data.ai.approvals.requested) : '—' },

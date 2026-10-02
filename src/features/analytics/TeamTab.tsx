@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { busiestHour, byName, type AgentLoad } from '@/api/contracts/analytics';
 import type { AiEmployee } from '@/api/contracts/people';
 
+import { hadConversations } from './figures';
 import type { TeamData } from './load-analytics';
 import styles from './Analytics.module.css';
 
@@ -42,26 +43,57 @@ export function imbalance(
   return ratio >= 2 ? { heavy, light, ratio: Math.floor(ratio) } : null;
 }
 
+/**
+ * What the dark card can truthfully say about the queue — five cases, not
+ * two: "spread evenly" across fewer than two people, or across one who holds
+ * everything, is true of nothing (measured on dev: one AI employee, no
+ * Agent-role people, "spread evenly").
+ */
+export type QueueState =
+  | { readonly kind: 'tooFew' }
+  | { readonly kind: 'noneOpen' }
+  | { readonly kind: 'oneHoldsAll'; readonly who: AgentLoad }
+  | {
+      readonly kind: 'uneven';
+      readonly heavy: AgentLoad;
+      readonly light: AgentLoad;
+      readonly ratio: number;
+    }
+  | { readonly kind: 'even' };
+
+export function queueState(agents: readonly AgentLoad[]): QueueState {
+  if (agents.length < 2) return { kind: 'tooFew' };
+  const holding = agents.filter((agent) => agent.activeConversations > 0);
+  if (holding.length === 0) return { kind: 'noneOpen' };
+  if (holding.length === 1) return { kind: 'oneHoldsAll', who: holding[0]! };
+  const uneven = imbalance(agents);
+  return uneven ? { kind: 'uneven', ...uneven } : { kind: 'even' };
+}
+
 export async function TeamHero({ agents }: { readonly agents: readonly AgentLoad[] | null }) {
   const t = await getTranslations('analytics');
-  const uneven = agents ? imbalance(agents) : null;
+  const state = agents ? queueState(agents) : null;
   const nameOf = (agent: AgentLoad) => agent.name ?? t('team.unnamed');
   return (
     <section className={styles.gHero} data-testid="team-hero">
       <p className={styles.gHeroEyebrow}>{t('teamTab.hero.eyebrow')}</p>
       <p className={styles.gHeroTitle}>
-        {agents === null
+        {state === null
           ? '—'
-          : uneven
+          : state.kind === 'uneven'
             ? t.rich('teamTab.hero.uneven', {
-                heavy: nameOf(uneven.heavy),
-                light: nameOf(uneven.light),
-                ratio: uneven.ratio,
+                heavy: nameOf(state.heavy),
+                light: nameOf(state.light),
+                ratio: state.ratio,
                 figure: (chunks) => <span className={styles.gHeroAmber}>{chunks}</span>,
               })
-            : t('teamTab.hero.even')}
+            : state.kind === 'oneHoldsAll'
+              ? t('teamTab.hero.oneHoldsAll', { who: nameOf(state.who) })
+              : t(`teamTab.hero.${state.kind}`)}
       </p>
-      <p className={styles.gHeroLine}>{t('teamTab.hero.measured')}</p>
+      {state && (state.kind === 'uneven' || state.kind === 'oneHoldsAll') ? (
+        <p className={styles.gHeroLine}>{t('teamTab.hero.measured')}</p>
+      ) : null}
       <div className={styles.gActions}>
         <span className={styles.gLight} aria-disabled="true">
           {t('teamTab.hero.rebalance')}
@@ -96,7 +128,10 @@ export async function TeamStrip({ data }: { readonly data: TeamData }) {
   const cells = [
     {
       key: 'people',
-      value: data.overview ? format.number(data.overview.humanHandledCount) : '—',
+      // No figure of nothing: with no conversations, "—" — see `hadConversations`.
+      value: hadConversations(data.overview)
+        ? format.number(data.overview!.humanHandledCount)
+        : '—',
     },
     // Not separable from GOTCHA's in what the platform measures.
     { key: 'firstReply', value: '—' },
@@ -214,7 +249,9 @@ export async function TeamTable({
         )}
       </div>
       <p className={styles.tFoot} data-testid="team-foot">
-        {t('teamTab.table.foot')}
+        {t('teamTab.table.foot')}{' '}
+        {/* A real absence, stated: `getAgentStats` selects role AGENT. */}
+        {t('teamTab.table.agentsOnly')}
       </p>
     </section>
   );

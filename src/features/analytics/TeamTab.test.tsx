@@ -81,7 +81,10 @@ describe('★★ busiest hour — UTC keys, read in the reader’s zone', () => 
         data: {
           agents: null,
           aiEmployees: null,
-          overview: analyticsOverviewSchema.parse({ humanHandledCount: 350 }),
+          overview: analyticsOverviewSchema.parse({
+            totalConversations: 400,
+            humanHandledCount: 350,
+          }),
           hourly: [{ date: '2026-10-01', hours: [{ hour: '09:00', inbound: 7, outbound: 0 }] }],
         },
       }),
@@ -127,5 +130,39 @@ describe('★★ one table — people and AI employees, alphabetical, no ranking
   it('the handover card keeps its place', async () => {
     render(await HandoverCard());
     expect(screen.getByTestId('team-handover')).toHaveTextContent('Nothing measures yet');
+  });
+});
+
+describe('★★ measured on dev: no Agent-role people — the card says what is true', () => {
+  it.each([
+    [[], 'tooFew', "There aren't two people counted here"],
+    [[agent('a', 'A', 3)], 'tooFew', "There aren't two people counted here"],
+    [[agent('a', 'A', 0), agent('b', 'B', 0)], 'noneOpen', 'No one has an open conversation'],
+    [
+      [agent('a', 'Shira', 5), agent('b', 'Tomer', 0)],
+      'oneHoldsAll',
+      'Shira holds every open conversation',
+    ],
+    [[agent('a', 'A', 5), agent('b', 'B', 4)], 'even', 'spread evenly'],
+  ] as const)('%#: %s', async (agents, kind, words) => {
+    const { queueState } = await import('./TeamTab');
+    expect(queueState(agents).kind).toBe(kind);
+    render(await TeamHero({ agents }));
+    expect(screen.getByTestId('team-hero')).toHaveTextContent(words);
+  });
+
+  it('⚠ "spread evenly" is never said of fewer than two, or of one who holds them all', async () => {
+    for (const agents of [[], [agent('a', 'A', 3)], [agent('a', 'A', 5), agent('b', 'B', 0)]]) {
+      const { unmount } = render(await TeamHero({ agents }));
+      expect(screen.getByTestId('team-hero')).not.toHaveTextContent('spread evenly');
+      unmount();
+    }
+  });
+
+  it('the table says who is not counted: admins who answer', async () => {
+    render(await TeamTable({ agents: [], aiEmployees: [ai('m', 'Maya')] }));
+    expect(screen.getByTestId('team-foot')).toHaveTextContent(
+      'Only people with the Agent role are counted here',
+    );
   });
 });
