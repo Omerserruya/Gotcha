@@ -35,7 +35,9 @@ const page = async (template?: string) => {
 
 const row = (id: string, name: string) => templateSchema.parse({ id, name, status: 'APPROVED' });
 
-beforeEach(() => loadTemplates.mockReset());
+beforeEach(() => {
+  loadTemplates.mockReset();
+});
 
 describe('★★ 05c — the table, the preview, the rejection, worth knowing', () => {
   it('★ ?template= picks the preview, and the table marks the same row', async () => {

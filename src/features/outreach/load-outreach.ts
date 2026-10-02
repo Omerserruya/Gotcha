@@ -1,7 +1,13 @@
 import 'server-only';
 
 import { serverApi } from '@/api/client/server-api';
-import { campaignsSchema, isInFlight, type Campaign } from '@/api/contracts/outreach';
+import { ApiError } from '@/api/client/api-error';
+import {
+  campaignSchema,
+  campaignsSchema,
+  isInFlight,
+  type Campaign,
+} from '@/api/contracts/outreach';
 import { outreachEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
@@ -47,5 +53,32 @@ export async function loadOutreach(): Promise<OutreachData> {
   } catch (cause) {
     logger.warn('outreach.list_failed', { cause });
     return { inFlight: null, finished: null, unavailable: true };
+  }
+}
+
+/**
+ * One campaign, for 05b. `GET /api/broadcasts/:id` answers `{ data: { ...row,
+ * analytics } }`; the client unwraps `data`, and `analytics` repeats the
+ * counters the row already carries.
+ *
+ * Three answers: the campaign, `missing` (a 404 — no such campaign here, a
+ * fact) and `failed` (we could not read it, ours).
+ */
+export type CampaignRead =
+  | { readonly state: 'ok'; readonly campaign: Campaign }
+  | { readonly state: 'missing' }
+  | { readonly state: 'failed' };
+
+export async function loadCampaign(id: string): Promise<CampaignRead> {
+  try {
+    const campaign = await serverApi().get({
+      endpoint: outreachEndpoints.detail(id),
+      payload: campaignSchema,
+    });
+    return { state: 'ok', campaign };
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.kind === 'not_found') return { state: 'missing' };
+    logger.warn('outreach.campaign_failed', { cause });
+    return { state: 'failed' };
   }
 }

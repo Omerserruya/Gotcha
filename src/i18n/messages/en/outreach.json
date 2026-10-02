@@ -67,5 +67,44 @@
     "delivery": "Delivery",
     "deliveredShort": "Delivered and opened aren’t counted yet.",
     "repliedShort": "Replies can’t be traced back to a campaign yet."
+  },
+  "results": {
+    "finished": "Finished {when}",
+    "brought": {
+      "eyebrow": "What it brought in",
+      "from": "from {count} messages",
+      "none": "Sales aren't tied to campaigns yet, so what it brought in isn't known.",
+      "pause": "Pause the rest",
+      "again": "Send this again in a month"
+    },
+    "quiet": {
+      "title": "Who read it and said nothing",
+      "none": "Reads aren't recorded for campaigns yet, so the quiet ones can't be picked out.",
+      "follow": "Let it follow up",
+      "leave": "Leave them"
+    },
+    "strip": {
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "opened": "Opened",
+      "replied": "Replied",
+      "bought": "Bought",
+      "optedOut": "Opted out",
+      "failed": "{count} didn't arrive"
+    },
+    "hours": {
+      "title": "When people replied",
+      "span": "sent over {count, plural, one {one hour} other {# hours}} from {from}",
+      "none": "Replies aren't linked to campaigns yet."
+    },
+    "replies": {
+      "title": "What they wrote back",
+      "none": "Nothing recorded yet.",
+      "foot": "Replies aren't grouped by what they asked for yet."
+    },
+    "back": "All outreach",
+    "unavailable": "We couldn't read this campaign just now.",
+    "missing": "There's no such campaign here.",
+    "seeResults": "See what it did"
   }
 }

@@ -1,7 +1,9 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { isStoppable, type Campaign } from '@/api/contracts/outreach';
+import { isInFlight, isStoppable, type Campaign } from '@/api/contracts/outreach';
 import { channelName } from '@/api/contracts/inbox';
+
+import { Link } from '@/i18n/navigation';
 
 import styles from './Outreach.module.css';
 import { StopCampaign } from './StopCampaign';
@@ -161,6 +163,17 @@ export async function CampaignCard({
       ) : null}
 
       {isStoppable(campaign) ? <StopCampaign id={campaign.id} name={campaign.name} /> : null}
+
+      {/* 05b: once it has gone out, what it did is a page of its own. */}
+      {detailed && !isInFlight(campaign) && campaign.status !== 'DRAFT' ? (
+        <Link
+          href={`/outreach/campaigns/${campaign.id}`}
+          className={styles.cardResults}
+          data-testid={`results-${campaign.id}`}
+        >
+          {t('results.seeResults')}
+        </Link>
+      ) : null}
     </article>
   );
 }

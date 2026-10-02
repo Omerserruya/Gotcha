@@ -16,6 +16,8 @@ import { CampaignCard } from './CampaignCard';
  * it. **The screen was accepted on its empty state.**
  */
 
+// 05b's link; the router is not in jsdom.
+vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'outreach') =>
     createTranslator({ locale: 'en', messages: { outreach: messages }, namespace }),
@@ -123,5 +125,31 @@ describe('★ "When" says it once', () => {
     const when = screen.getByTestId('when-c9');
     expect(when.textContent?.match(/Sending/g)).toHaveLength(1);
     expect(when).toHaveTextContent(/Sending since/);
+  });
+});
+
+describe('★ 05b — a campaign that has gone out links to what it did', () => {
+  it.each([
+    ['COMPLETED', true],
+    ['CANCELLED', true],
+    ['FAILED', true],
+    ['SENDING', false],
+    ['SCHEDULED', false],
+    ['DRAFT', false],
+  ] as const)('%s → link: %s', async (status, linked) => {
+    const { container } = render(
+      await CampaignCard({
+        campaign: campaignSchema.parse({
+          id: 'b1',
+          name: 'x',
+          status,
+          createdAt: '2026-10-02T08:00:00.000Z',
+        }),
+        detailed: true,
+      }),
+    );
+    const link = container.querySelector('[data-testid="results-b1"]');
+    if (linked) expect(link).toHaveAttribute('href', '/outreach/campaigns/b1');
+    else expect(link).toBeNull();
   });
 });
