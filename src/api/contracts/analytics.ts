@@ -597,3 +597,38 @@ export const askedAboutListSchema = z.array(askedAboutSchema);
 export function namedTopics(rows: readonly AskedAbout[]): readonly AskedAbout[] {
   return rows.filter((r) => (r.question ?? '').trim().length > 0);
 }
+
+/** `GET /api/analytics/ai-performance?from&to` — the fields 06b reads. */
+export const aiPerformanceSchema = z.looseObject({
+  totalAIMessages: z.number().default(0),
+  totalHumanMessages: z.number().default(0),
+  approvals: z
+    .looseObject({
+      requested: z.number().default(0),
+      approved: z.number().default(0),
+      rejected: z.number().default(0),
+      pending: z.number().default(0),
+      expired: z.number().default(0),
+    })
+    .default({ requested: 0, approved: 0, rejected: 0, pending: 0, expired: 0 }),
+});
+export type AiPerformance = z.infer<typeof aiPerformanceSchema>;
+
+/**
+ * `GET /api/analytics/unanswered-questions?from&to&limit` → `{ period, data }`.
+ * The route returns at most 50 rows and no total, so a full page is "50 or
+ * more", never 50.
+ */
+export const UNANSWERED_PAGE = 50;
+export const unansweredQuestionsSchema = z.looseObject({
+  data: z
+    .array(
+      z.looseObject({
+        id: z.string(),
+        question: z.string(),
+        askCount: z.number().default(1),
+      }),
+    )
+    .default([]),
+});
+export type UnansweredQuestions = z.infer<typeof unansweredQuestionsSchema>;

@@ -50,5 +50,49 @@
   },
   "askedShort": {
     "grouped": "Grouped by GOTCHA"
+  },
+  "tabs": {
+    "label": "Analytics",
+    "overview": "Overview",
+    "gotcha": "GOTCHA",
+    "team": "Team",
+    "sales": "Sales",
+    "topics": "Topics"
+  },
+  "gotcha": {
+    "title": "What GOTCHA did",
+    "subline": "Last 7 days",
+    "hero": {
+      "eyebrow": "Where it earns its keep",
+      "title": "It answered first in <figure>{n}</figure> {count, plural, one {conversation} other {conversations}}.",
+      "hours": "That's about {hours} hours your team didn't spend typing.",
+      "passedOver": "See what it passed over",
+      "why": "Why did it escalate?"
+    },
+    "stopped": {
+      "title": "Where it stopped",
+      "person": "{count} asked for a person outright.",
+      "unknown": "{count} it didn't know the answer to.",
+      "approval": "{count} needed your approval."
+    },
+    "strip": {
+      "alone": "Answered first by GOTCHA",
+      "actions": "Actions run",
+      "approval": "Needed approval",
+      "failed": "Failed",
+      "saved": "Time saved",
+      "hours": "{hours}h"
+    },
+    "alone": {
+      "title": "Alone, or with a person",
+      "legend": "alone · passed over",
+      "none": "Nothing splits a day's conversations by who answered them yet."
+    },
+    "did": {
+      "title": "What it actually did",
+      "none": "It didn't run anything this week.",
+      "unavailable": "We couldn't read what it ran just now.",
+      "foot": "{failed} failed; {refused} were stopped by a rule, which is the rule working."
+    }
   }
 }

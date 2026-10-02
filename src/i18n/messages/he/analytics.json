@@ -50,5 +50,49 @@
   },
   "askedShort": {
     "grouped": "קובץ על ידי GOTCHA"
+  },
+  "tabs": {
+    "label": "אנליטיקה",
+    "overview": "סקירה",
+    "gotcha": "GOTCHA",
+    "team": "צוות",
+    "sales": "מכירות",
+    "topics": "נושאים"
+  },
+  "gotcha": {
+    "title": "מה GOTCHA עשה",
+    "subline": "7 הימים האחרונים",
+    "hero": {
+      "eyebrow": "איפה הוא מרוויח את שלו",
+      "title": "הוא ענה ראשון ב-<figure>{n}</figure> {count, plural, one {שיחה} other {שיחות}}.",
+      "hours": "זה בערך {hours} שעות שהצוות לא בילה בהקלדה.",
+      "passedOver": "לראות מה הוא העביר",
+      "why": "למה הוא העביר הלאה?"
+    },
+    "stopped": {
+      "title": "איפה הוא עצר",
+      "person": "{count} ביקשו אדם ישר.",
+      "unknown": "{count} שהוא לא ידע לענות עליהם.",
+      "approval": "{count} שהיו צריכים את האישור שלך."
+    },
+    "strip": {
+      "alone": "נענו ראשונים על ידי GOTCHA",
+      "actions": "פעולות שרצו",
+      "approval": "נדרש אישור",
+      "failed": "נכשלו",
+      "saved": "זמן שנחסך",
+      "hours": "{hours} ש׳"
+    },
+    "alone": {
+      "title": "לבד, או עם אדם",
+      "legend": "לבד · הועבר",
+      "none": "עדיין שום דבר לא מפצל את שיחות היום לפי מי שענה."
+    },
+    "did": {
+      "title": "מה הוא עשה בפועל",
+      "none": "הוא לא הריץ שום דבר השבוע.",
+      "unavailable": "לא הצלחנו לקרוא מה הוא הריץ כרגע.",
+      "foot": "{failed} נכשלו; {refused} נעצרו על ידי כלל, כלומר הכלל עבד."
+    }
   }
 }

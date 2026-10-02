@@ -241,4 +241,349 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+
+  /* 02's tabs: pills `padding:6px 12px`, radius 7, 11.5px; the open one dark. */
+  .tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .tab {
+    padding: 6px var(--space-12);
+    border-radius: 7px;
+    background-color: var(--panel-well);
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+  }
+
+  .tab[aria-current='page'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .tab:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 06b, measured — what GOTCHA did
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .gScreen {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  .gTop,
+  .gBottom {
+    display: flex;
+    gap: var(--space-14);
+  }
+
+  .gBottom {
+    flex: 1;
+    min-block-size: 300px;
+  }
+
+  /* The dark card: `#171717`, radius 14, `padding:18px 20px`. */
+  .gHero {
+    flex: 1;
+    min-inline-size: 0;
+    padding: 18px var(--space-20);
+    border-radius: var(--radius-card);
+    background-color: var(--frame-raised);
+  }
+
+  .gHeroEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--menu-dark-icon);
+  }
+
+  .gHeroTitle {
+    margin: var(--space-10) 0 0;
+    font-size: 17px;
+    color: var(--frame-text);
+  }
+
+  .gHeroFigure {
+    color: var(--signal-done);
+  }
+
+  .gHeroLine {
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    color: var(--frame-text-secondary);
+  }
+
+  .gActions {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-start: var(--space-14);
+  }
+
+  .gLight,
+  .gDarkOutline {
+    padding: 6px var(--space-12);
+    border-radius: var(--space-8);
+    font-size: 11.5px;
+  }
+
+  .gLight {
+    background-color: var(--frame-text);
+    color: var(--text-primary);
+  }
+
+  .gDarkOutline {
+    border: 1px solid var(--frame-line);
+    color: var(--frame-text-body);
+  }
+
+  .gActions > [aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* "Where it stopped": white, radius 14, 300 wide; a dot before each cause. */
+  .gStopped {
+    flex: none;
+    inline-size: 300px;
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .gCardTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .gCardMeta {
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .gCardFoot,
+  .gNone {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .gStoppedList {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin: var(--space-12) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .gStoppedList > li {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .gStoppedList > li::before {
+    content: '';
+    flex: none;
+    inline-size: 5px;
+    block-size: 5px;
+    border-radius: 50%;
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .gStoppedList > li[data-tone='red']::before {
+    background-color: var(--intent-urgent-edge);
+  }
+
+  .gStoppedList > li[data-tone='violet']::before {
+    background-color: var(--step-next);
+  }
+
+  /* Five cells at `padding:15px 18px`; figures 25/600. */
+  .gStrip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    margin: 0;
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .gCell {
+    padding: 15px 18px;
+  }
+
+  .gCell + .gCell {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .gCell dt {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .gCell dd {
+    margin: var(--space-4) 0 0;
+    font-size: 25px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /* "Alone, or with a person": white, radius 14, `padding:18px 20px`; a bar a day, 12 apart. */
+  .gChart {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .gChartHead {
+    display: flex;
+    align-items: baseline;
+  }
+
+  .gBars {
+    flex: 1;
+    min-block-size: 140px;
+    display: flex;
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* As 05b's: a day with no data is a 3px baseline, never a full grey bar. */
+  .gBar {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .gBarTrack {
+    flex: none;
+    block-size: 3px;
+    border-radius: 2px;
+    background-color: var(--border-emphasis);
+  }
+
+  .gBarLabel {
+    font-size: 10.5px;
+    text-align: center;
+    color: var(--text-subtle);
+  }
+
+  /* "What it actually did": 330 wide; a row per tool, its bar `4px` on `#EDE9E1`. */
+  .gDid {
+    flex: none;
+    inline-size: 330px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .gDidList {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .gDidRow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .gDidTop {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+    font-size: 12.5px;
+  }
+
+  .gDidName {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
+
+  .gDidCount {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .gDidTrack {
+    block-size: 4px;
+    border-radius: 2px;
+    background-color: var(--border-subtle);
+  }
+
+  .gDidFill {
+    display: block;
+    block-size: 100%;
+    border-radius: 2px;
+    background-color: var(--action-base);
+  }
+
+  .gDidFoot {
+    margin: 0;
+    padding-block-start: var(--space-12);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  @media (width < 64rem) {
+    .gTop,
+    .gBottom {
+      flex-direction: column;
+    }
+
+    .gStopped,
+    .gDid {
+      inline-size: auto;
+    }
+
+    .gStrip {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
 }

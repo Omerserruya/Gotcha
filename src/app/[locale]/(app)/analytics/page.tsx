@@ -2,7 +2,16 @@ import { getTranslations } from 'next-intl/server';
 
 import styles from '@/features/analytics/Analytics.module.css';
 import { AskedAbout } from '@/features/analytics/AskedAbout';
-import { loadAnalytics } from '@/features/analytics/load-analytics';
+import { parseAnalyticsTab } from '@/features/analytics/AnalyticsTabs';
+import {
+  AloneChart,
+  GotchaHero,
+  GotchaStrip,
+  lastSevenDayDates,
+  WhatItDid,
+  WhereStopped,
+} from '@/features/analytics/GotchaTab';
+import { loadAnalytics, loadGotcha } from '@/features/analytics/load-analytics';
 import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
 import { TeamLoad } from '@/features/analytics/TeamLoad';
 import { PageContainer } from '@/shell/PageContainer';
@@ -49,8 +58,34 @@ import { pageMetadata } from '@/shell/page-metadata';
  *   keeps both visible to the structural test — it does not run a nested
  *   async component. (React does: the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).)
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly tab?: string }>;
+} = {}) {
   const t = await getTranslations('analytics');
+  const tab = parseAnalyticsTab((await searchParams)?.tab);
+
+  /* 06b — what GOTCHA did, and where it stopped. Its own reads. */
+  if (tab === 'gotcha') {
+    const data = await loadGotcha();
+    return (
+      <PageContainer layout="screen" title={t('gotcha.title')} description={t('gotcha.subline')}>
+        <div className={styles.gScreen} data-testid="analytics-gotcha">
+          <div className={styles.gTop}>
+            <GotchaHero data={data} />
+            <WhereStopped data={data} />
+          </div>
+          <GotchaStrip data={data} />
+          <div className={styles.gBottom}>
+            <AloneChart days={lastSevenDayDates(new Date())} />
+            <WhatItDid tools={data.tools} />
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
   const { agents, topics, overview, timeSaved, insights } = await loadAnalytics();
 
   return (

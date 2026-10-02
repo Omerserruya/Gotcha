@@ -28,12 +28,14 @@ import { TeamLoad } from '@/features/analytics/TeamLoad';
  */
 
 const loadAnalytics = vi.hoisted(() => vi.fn());
-vi.mock('@/features/analytics/load-analytics', () => ({ loadAnalytics }));
+const loadGotcha = vi.hoisted(() => vi.fn());
+vi.mock('@/features/analytics/load-analytics', () => ({ loadAnalytics, loadGotcha }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
   getFormatter: async () => ({}),
 }));
 vi.mock('server-only', () => ({}));
+vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 const PANELS = new Set<unknown>([AskedAbout, TeamLoad]);
 
@@ -140,5 +142,28 @@ describe('★★ 06’s summary gets the week the loader read', () => {
       overview,
       timeSaved,
     });
+  });
+});
+
+describe('★★ 06b — ?tab=gotcha has its own reads and its own parts', () => {
+  it('mounts the dark card, where it stopped, the strip, the chart and what it did — and not 06', async () => {
+    const { AloneChart, GotchaHero, GotchaStrip, WhatItDid, WhereStopped } =
+      await import('@/features/analytics/GotchaTab');
+    loadGotcha.mockResolvedValue({
+      overview: null,
+      timeSaved: null,
+      tools: null,
+      ai: null,
+      unanswered: null,
+    });
+    const { default: Page } = await import('./page');
+    const tree = await Page({ searchParams: Promise.resolve({ tab: 'gotcha' }) });
+    const types: unknown[] = [];
+    walk(tree, [], (element) => types.push(element.type));
+    for (const part of [GotchaHero, WhereStopped, GotchaStrip, AloneChart, WhatItDid]) {
+      expect(types).toContain(part);
+    }
+    expect(types).not.toContain(TeamLoad);
+    expect(loadAnalytics).not.toHaveBeenCalled();
   });
 });

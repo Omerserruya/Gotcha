@@ -1,5 +1,11 @@
 import { serverApi } from '@/api/client/server-api';
+import { toolUsageListSchema, type ToolUsage } from '@/api/contracts/capabilities';
 import {
+  aiPerformanceSchema,
+  unansweredQuestionsSchema,
+  UNANSWERED_PAGE,
+  type AiPerformance,
+  type UnansweredQuestions,
   agentLoadListSchema,
   analyticsOverviewSchema,
   askedAboutListSchema,
@@ -103,4 +109,56 @@ export async function loadAnalytics(): Promise<AnalyticsData> {
   ]);
 
   return { agents, topics, overview, timeSaved, insights };
+}
+
+/** What 06b reads: the week, from five routes. Each `null` when its read failed. */
+export interface GotchaData {
+  readonly overview: AnalyticsOverview | null;
+  readonly timeSaved: TimeSaved | null;
+  readonly tools: readonly ToolUsage[] | null;
+  readonly ai: AiPerformance | null;
+  readonly unanswered: UnansweredQuestions | null;
+}
+
+export async function loadGotcha(): Promise<GotchaData> {
+  const api = serverApi();
+  const week = lastSevenDays();
+  const failing =
+    <T>(event: string) =>
+    (cause: unknown): T | null => {
+      logger.warn(event, { cause });
+      return null;
+    };
+  const [overview, timeSaved, tools, ai, unanswered] = await Promise.all([
+    api
+      .get({
+        endpoint: analyticsEndpoints.overview(),
+        payload: analyticsOverviewSchema,
+        query: week,
+      })
+      .catch(failing<AnalyticsOverview>('analytics.overview_failed')),
+    api
+      .get({ endpoint: analyticsEndpoints.timeSaved(), payload: timeSavedSchema, query: week })
+      .catch(failing<TimeSaved>('analytics.time_saved_failed')),
+    api
+      .get({ endpoint: analyticsEndpoints.toolUsage(), payload: toolUsageListSchema, query: week })
+      .catch(failing<ToolUsage[]>('analytics.tool_usage_failed')),
+    api
+      .get({
+        endpoint: analyticsEndpoints.aiPerformance(),
+        payload: aiPerformanceSchema,
+        query: week,
+      })
+      .catch(failing<AiPerformance>('analytics.ai_performance_failed')),
+    api
+      .get({
+        endpoint: analyticsEndpoints.unansweredQuestions(),
+        payload: unansweredQuestionsSchema,
+        query: { ...week, limit: UNANSWERED_PAGE },
+        // `{ period, data }`: unwrapping would hand the array to an object schema.
+        raw: true,
+      })
+      .catch(failing<UnansweredQuestions>('analytics.unanswered_failed')),
+  ]);
+  return { overview, timeSaved, tools, ai, unanswered };
 }

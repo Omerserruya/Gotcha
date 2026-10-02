@@ -145,6 +145,10 @@ export const analyticsEndpoints = {
    * to persist and the next request regroups from the raw column.
    */
   topQuestions: () => endpoint('/api/analytics/top-questions'),
+  /** AI vs human messages, resolution, and the approval governance figures. `{ data }`. */
+  aiPerformance: () => endpoint('/api/analytics/ai-performance'),
+  /** Questions GOTCHA could not answer. `{ period, data }` — `data` a sibling, so `raw`. */
+  unansweredQuestions: () => endpoint('/api/analytics/unanswered-questions'),
   /**
    * Screen 10 — how often each tool has actually run.
    *
