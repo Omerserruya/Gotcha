@@ -8,6 +8,14 @@ import {
   CustomerTimelineList,
   parseCustomerTab,
 } from '@/features/customers/CustomerScreen';
+import {
+  ChannelFilters,
+  channelsOf,
+  ConversationsSide,
+  ConversationsTab,
+  CustomerTabRow,
+  CustomerTopBar,
+} from '@/features/customers/CustomerSubtabs';
 import styles from '@/features/customers/Customers.module.css';
 import { loadCustomer } from '@/features/customers/load-customer';
 import { PageContainer } from '@/shell/PageContainer';
@@ -40,33 +48,61 @@ export default async function Page({
 }: {
   params: Promise<{ id: string }>;
   /** `?tab=` — 04b's tabs: everything, conversations, orders, actions, notes. */
-  searchParams?: Promise<{ tab?: string }>;
+  searchParams?: Promise<{ tab?: string; channel?: string }>;
 }) {
   const { id } = await params;
-  const tab = parseCustomerTab((await searchParams)?.tab);
+  const query = (await searchParams) ?? {};
+  const tab = parseCustomerTab(query.tab);
   const detail = await loadCustomer(id);
 
+  if (tab === 'everything') {
+    return (
+      /*
+        04b, measured: its own header across the panel (not the screen
+        header — a 64px disc and a 30px name), then a main column and a 340px
+        side, each scrolling inside itself.
+      */
+      <PageContainer layout="screen" flush>
+        <div className={styles.cardScreen} data-testid="customer-card">
+          <CustomerHeader detail={detail} contactId={id} />
+          <div className={styles.cardBody}>
+            <div className={styles.cardMain}>
+              <CustomerTabs contactId={id} tab={tab} />
+              <CustomerTimelineList detail={detail} />
+            </div>
+            <aside className={styles.cardSide}>
+              <CustomerSide detail={detail} />
+            </aside>
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  /*
+    04c–04f: the compact header, the tab row with that tab's filters, then
+    the tab's main column and its side. Each tab's parts are siblings here,
+    so the structural test can see them.
+  */
+  const channels = channelsOf(detail);
+  const channel = query.channel && channels.includes(query.channel) ? query.channel : null;
   return (
-    /*
-      04b, measured: its own header across the panel (not the screen
-      header — a 64px disc and a 30px name), then a main column and a 340px
-      side, each scrolling inside itself.
-    */
     <PageContainer layout="screen" flush>
-      <div className={styles.cardScreen} data-testid="customer-card">
-        <CustomerHeader detail={detail} contactId={id} />
+      <div className={styles.cardScreen} data-testid="customer-card" data-tab={tab}>
+        <CustomerTopBar detail={detail} contactId={id} />
+        <CustomerTabRow
+          contactId={id}
+          tab={tab}
+          filters={
+            tab === 'conversations' ? (
+              <ChannelFilters contactId={id} channels={channels} current={channel} />
+            ) : null
+          }
+        />
         <div className={styles.cardBody}>
-          <div className={styles.cardMain}>
-            <CustomerTabs contactId={id} tab={tab} />
-            {/*
-              Each tab's content is a sibling here, so the structural test can
-              see it. 04c–04f get their own frames next; until then Orders,
-              Actions and Notes are the existing panels, and Conversations the
-              timeline's conversations.
-            */}
-            {tab === 'everything' ? <CustomerTimelineList detail={detail} /> : null}
+          <div className={styles.subMain}>
             {tab === 'conversations' ? (
-              <CustomerTimelineList detail={detail} only="conversations" />
+              <ConversationsTab detail={detail} channel={channel} />
             ) : null}
             {tab === 'orders' ? (
               <CustomerOrders orders={detail.orders} conversationId={detail.conversationId} />
@@ -85,8 +121,12 @@ export default async function Page({
               />
             ) : null}
           </div>
-          <aside className={styles.cardSide}>
-            <CustomerSide detail={detail} />
+          <aside className={styles.subSide}>
+            {tab === 'conversations' ? (
+              <ConversationsSide detail={detail} />
+            ) : (
+              <CustomerSide detail={detail} />
+            )}
           </aside>
         </div>
       </div>

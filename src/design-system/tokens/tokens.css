@@ -513,6 +513,8 @@
      */
     --ai-avatar-surface: #eae4fb;
     --ai-avatar-text: #4b3e8e;
+    /* 02's AI link ("Summarise all of it"): the violet text over this underline. */
+    --ai-link-underline: #cfc6f0;
     /* The faint tint behind an AI employee's row. */
     --row-ai-surface: #fcfbf8;
 

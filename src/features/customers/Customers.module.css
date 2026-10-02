@@ -1163,4 +1163,375 @@
     line-height: 1.5;
     color: var(--intent-neutral-text);
   }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 04c–04f, measured — the sub-tabs' compact shell
+   * ════════════════════════════════════════════════════════════════════════
+   */
+
+  /* 02: `padding:22px 44px 18px`, `gap:18px`, `#EDE9E1` underneath. */
+  .topBar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 22px 44px 18px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .crumb {
+    font-size: 12.5px;
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .crumbSlash {
+    font-size: 12.5px;
+    color: var(--text-disabled);
+  }
+
+  .topWho {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .topWho > span:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  /* 38px, `#EFE9DF`, 12/600. */
+  .topDisc {
+    flex: none;
+    inline-size: 38px;
+    block-size: 38px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    line-height: 38px;
+    text-align: center;
+  }
+
+  .topName {
+    font-size: 17px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .topFacts {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* 02: `padding:16px 44px 0`, `gap:20px`; tabs carry 11px under them. */
+  .tabRow {
+    flex: none;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-20);
+    padding: var(--space-16) 44px 0;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .tabRow .cardTab {
+    padding-block-end: 11px;
+    margin-block-end: -1px;
+  }
+
+  /* The open tab's filters: `gap:6px`, 9 under them. */
+  .tabFilters {
+    margin-inline-start: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-block-end: 9px;
+  }
+
+  /* "All channels": `padding:5px 11px`, radius 7, 11.5px; dark when on. */
+  .filterPill {
+    padding: 5px 11px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    color: var(--intent-neutral-text);
+    background-color: var(--panel-inset);
+    text-decoration: none;
+  }
+
+  .filterPill[aria-current='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /* 26×26 tinted squares, radius 7. */
+  .filterSquare {
+    inline-size: 26px;
+    block-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    background-color: var(--channel-web-surface);
+    color: var(--channel-web-mark);
+  }
+
+  .filterSquare[aria-current='true'] {
+    outline: 1.5px solid var(--action-base);
+    outline-offset: 1px;
+  }
+
+  .filterPill:focus-visible,
+  .filterSquare:focus-visible,
+  .crumb:focus-visible,
+  .spineOpen:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .filterSquare[data-tone='whatsapp'],
+  .spineMark[data-tone='whatsapp'] {
+    background-color: var(--channel-whatsapp-surface);
+    color: var(--channel-whatsapp-mark);
+  }
+
+  .filterSquare[data-tone='instagram'],
+  .spineMark[data-tone='instagram'] {
+    background-color: var(--channel-instagram-surface);
+    color: var(--channel-instagram-mark);
+  }
+
+  .filterSquare[data-tone='email'],
+  .spineMark[data-tone='email'] {
+    background-color: var(--channel-email-surface);
+    color: var(--channel-email-mark);
+  }
+
+  .filterSquare[data-tone='messenger'],
+  .spineMark[data-tone='messenger'] {
+    background-color: var(--channel-messenger-surface);
+    color: var(--channel-messenger-mark);
+  }
+
+  /* 02: main `padding:22px 44px`, `#EDE9E1` on its right. */
+  .subMain {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: 22px 44px;
+    border-inline-end: 1px solid var(--border-subtle);
+  }
+
+  /* 340, `padding:22px 30px`, `gap:16px`; the promise card at its foot. */
+  .subSide {
+    flex: none;
+    inline-size: 340px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding: 22px 30px;
+  }
+
+  @media (width < 64rem) {
+    .subSide {
+      inline-size: auto;
+    }
+  }
+
+  /* "24 conversations…" at 12.5 `#55524C`, the AI link at its right. */
+  .tabLead {
+    margin: 0;
+    display: flex;
+    gap: var(--space-12);
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .tabLeadLink {
+    margin-inline-start: auto;
+    font-size: 11.5px;
+    color: var(--ai-avatar-text);
+    border-block-end: 1px solid var(--ai-link-underline);
+  }
+
+  .tabLeadLink[aria-disabled='true'] {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  /* The spine: rows with 14 under them, `gap:14px`. */
+  .spine {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .spineRow {
+    display: flex;
+    gap: var(--space-14);
+    padding-block-end: var(--space-14);
+  }
+
+  .spineWhen {
+    flex: none;
+    inline-size: 72px;
+    padding-block-start: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .spineTime {
+    font-weight: var(--font-weight-regular);
+    color: var(--text-disabled);
+  }
+
+  .spineRail {
+    flex: none;
+    inline-size: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .spineMark {
+    flex: none;
+    inline-size: 22px;
+    block-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    background-color: var(--channel-web-surface);
+    color: var(--channel-web-mark);
+  }
+
+  /* 1px `#EDE9E1`, down to the next row's mark. */
+  .spineLine {
+    flex: 1;
+    inline-size: 1px;
+    background-color: var(--border-subtle);
+  }
+
+  .spineRow:last-child .spineLine {
+    visibility: hidden;
+  }
+
+  /* White, radius 12, `padding:13px 16px`; the newest with a 3px edge. */
+  .spineCard {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 13px var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+  }
+
+  .spineCard[data-newest] {
+    padding-inline-start: 14px;
+    border-inline-start: 3px solid var(--intent-urgent-edge);
+  }
+
+  .spineTop {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-inline-size: 0;
+  }
+
+  .spineTitle {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .spineCard[data-newest] .spineTitle {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /* `padding:3px 8px`, radius 6, 10.5px. */
+  .spineChip {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 10.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .spineMeta {
+    flex: none;
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .spineLineText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .spineFoot {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-block-start: 3px;
+  }
+
+  /* `padding:4px 9px`, `#F3F0EA`, radius 6, 11px. */
+  .spinePill {
+    padding: var(--space-4) 9px;
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 11px;
+    color: var(--intent-neutral-text);
+  }
+
+  .spineOpen {
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: 1px solid var(--border-emphasis);
+  }
+
+  /* 04c's stats: 22px apart, where 04b's WORTH is 26. */
+  .pattern {
+    gap: 22px;
+  }
+
+  /* 02's "An open promise": radius 14, `padding:14px 16px`, at the foot. */
+  .promiseCard {
+    margin-block-start: auto;
+    padding: var(--space-14) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
 }

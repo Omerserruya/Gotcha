@@ -95,8 +95,9 @@ export interface CustomerDetail {
    * conversations; the supervisor found them in the database and none on
    * the screen. They are read from the approvals list, one read per status,
    * and kept when their conversation is one of this person's or their
-   * `contactId` is — `contactId` is optional at the write site, so the
-   * conversation is the join that holds.
+   * `contactId` is. `contactId` is optional at the write site, and on dev
+   * it was set on 0 of that customer's 28 rows — so the conversation is the
+   * join that holds, and `?contactId=` alone would return nothing.
    *
    * ⚠ The list route caps each status at 100, tenant-wide: on a busy tenant
    * an older action can fall outside the window. `null` when every read
