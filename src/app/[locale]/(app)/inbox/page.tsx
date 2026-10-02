@@ -37,11 +37,14 @@ import { channelName } from '@/api/contracts/inbox';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ EVERY PANEL IS AN ASYNC SERVER COMPONENT AND THEY ARE ALL SIBLINGS
  * ════════════════════════════════════════════════════════════════════════════
- * `ConversationList`, `MessageStream`, `IdentityPanel` and `CustomerOrders`
- * are each `async`. **An async server component nested inside another renders
- * nothing** — silently, with no error and no empty element to notice. It has
- * cost five screens in this project. They are siblings here, and the only
- * thing between them is markup.
+ * `ConversationList` and the streamed parts (`ConversationStream`,
+ * `ConversationContext`) are each `async`, and siblings here: the structural
+ * test walks this tree without running nested async components, so siblings
+ * are what it can see.
+ *
+ * ⚠ CORRECTED: this used to say a nested async component "renders nothing".
+ *   It does not — React Server Components render them, and the stream below
+ *   is exactly that, inside `<Suspense>` (measured in a browser, 8bb92d6).
  *
  * ── AND `CustomerOrders` IS 04d's PANEL, GIVEN ITS DATA ──
  * Same component, same contract, loaded once by `loadInbox`. A second
@@ -190,8 +193,8 @@ export default async function Page({
                 they have waited — the three facts that decide how the first
                 sentence should be written.
 
-                A sibling, not a parent: both are async server components and
-                nesting one inside the other renders nothing.
+                A sibling, not a parent — which keeps both visible to the
+                structural test (it does not run nested async components).
               */}
               {/*
                 ★★ ONE BAR, WHICH IS WHAT I SAID AND NOT WHAT SHIPPED.

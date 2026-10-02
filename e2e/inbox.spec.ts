@@ -39,11 +39,14 @@ import { recordUnreached, shoot as captureScreen } from './shoot';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE SHOT THIS SPEC EXISTS FOR: FOUR PANELS, IN A REAL BROWSER
  * ════════════════════════════════════════════════════════════════════════════
- * Every panel is an async server component, and an async server component
- * nested inside another **renders nothing** — silently, with no error and
- * nothing in a log. `page.test.tsx` checks the element tree, which is the
- * only place jsdom can reach it. This is the other half: the browser is where
- * the defect actually manifests, and it has been found here five times.
+ * Every panel is an async server component. `page.test.tsx` checks the
+ * element tree, which is the only place jsdom can reach it — and it does not
+ * run a nested async component, so a panel inside another is invisible there.
+ * This is the other half: the browser shows what actually rendered.
+ *
+ * ⚠ CORRECTED: this note used to say a nested async component "renders
+ *   nothing". React Server Components render them — the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).
+ *   The limit is the structural test's, not React's.
  *
  * ── WHAT THIS TENANT MAY NOT BE ABLE TO SHOW ──
  * Written without knowing the demo tenant's queue. Anything state-dependent

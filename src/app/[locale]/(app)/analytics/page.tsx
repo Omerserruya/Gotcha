@@ -44,9 +44,9 @@ import { pageMetadata } from '@/shell/page-metadata';
  * here would be two screens to keep in step, and the day one gains a qualifier
  * the other contradicts it.
  *
- * ★ Both panels are async server components and they are SIBLINGS. An async
- * server component nested inside another renders nothing, silently — five
- * screens in this project have paid for that.
+ * ★ Both panels are async server components and they are SIBLINGS, which
+ *   keeps both visible to the structural test — it does not run a nested
+ *   async component. (React does: the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).)
  */
 export default async function Page() {
   const t = await getTranslations('analytics');

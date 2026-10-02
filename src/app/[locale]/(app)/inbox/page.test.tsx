@@ -22,10 +22,14 @@ import { PendingPane } from '@/features/inbox/PendingPane';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHY THIS IS A STRUCTURAL TEST AND NOT A RENDER
  * ════════════════════════════════════════════════════════════════════════════
- * All four panels are `async` server components, and **an async server
- * component nested inside another renders nothing** — silently, with no
- * error, no empty element and nothing in a log. It has cost five screens in
- * this project and a capture found it every time.
+ * The panels are `async` server components, and THIS TEST cannot run a
+ * nested one: it calls the page as a function and walks the element tree, so
+ * an async component inside another is an unresolved node it cannot see into.
+ *
+ * ⚠ CORRECTED: this note used to say a nested async component "renders
+ *   nothing". React Server Components render them — the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).
+ *   What is streamed is tested by calling those components directly
+ *   (`ConversationDetail.test.tsx`).
  *
  * jsdom cannot render an async component at all, so a render-based test would
  * have to resolve them by hand — and resolving them is exactly what the

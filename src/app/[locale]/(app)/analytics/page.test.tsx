@@ -85,8 +85,8 @@ describe('★★ the screen exists, which is what was missing', () => {
   });
 
   it('★★ neither panel is inside the other', async () => {
-    // An async server component nested inside another renders nothing, with no
-    // error and nothing in a log.
+    // This test cannot see inside a nested async component — it does not run
+    // one — so a panel inside another would be invisible to it.
     expect(inspect(await page()).nested).toEqual([]);
   });
 

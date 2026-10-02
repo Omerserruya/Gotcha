@@ -44,16 +44,15 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       */}
       <CustomerOrders orders={detail.orders} conversationId={detail.conversationId} />
       {/*
-        Screen 04e, a SIBLING for the same reason 04d is: an async server
-        component nested inside another yields a tree with an unresolved
-        async node and renders nothing, with no error to explain it. Three
-        screens have now been placed this way.
+        Screen 04e, a SIBLING for the same reason 04d is: nested inside
+        another async component it would be an unresolved node to the
+        structural test, which does not run it. (React renders it —
+        the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).)
       */}
       <CustomerActions actions={detail.actions} />
       {/*
-        Screen 04f. A sibling for the same reason 04d and 04e are — an async
-        server component nested inside another renders nothing, with no error
-        to explain it. Fourth screen placed this way.
+        Screen 04f. A sibling for the same reason 04d and 04e are: it keeps
+        the panel visible to the structural test.
 
         `contactId` comes from the route rather than from the timeline: the
         notes are keyed on the contact we were ASKED for, and the timeline

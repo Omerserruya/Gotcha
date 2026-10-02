@@ -62,7 +62,8 @@ export default async function Page() {
         ★★ A SPLIT, AND THE WRAPPER IS A PLAIN `div` ON PURPOSE.
         The rail is a SIBLING of the permissions panel, not a child — both are
         async server components, and nesting one in the other yields a tree with
-        an unresolved node that renders nothing. Fifth screen placed this way.
+        an unresolved node to the structural test, which does not run it. (React
+        itself renders nested async components; the limit is the test's.)
 
         A `div` is not a component, so wrapping both in one changes nothing about
         that: they are still siblings. Before this they were siblings in document
