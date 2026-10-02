@@ -57,8 +57,8 @@ export async function AskedAbout({
         knows we know — rather than concluding the counts are broken, which is
         what an uncaptioned list would teach them.
       */}
-      <p className={styles.note} data-testid="asked-caption">
-        {t('asked.grouped')}
+      <p className={styles.note} data-testid="asked-caption" title={t('asked.grouped')}>
+        {t('askedShort.grouped')}
       </p>
 
       {rows.length === 0 ? (

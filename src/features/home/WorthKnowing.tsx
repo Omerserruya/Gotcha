@@ -32,8 +32,7 @@ export async function WorthKnowing({ insights }: { insights: readonly Insight[] 
   const channelNames = await getTranslations('channels');
 
   // Highest impact first, and only then the order the backend returned.
-  const rank = { high: 0, medium: 1, low: 2 } as const;
-  const top = insights ? [...insights].sort((a, b) => rank[a.impact] - rank[b.impact])[0] : null;
+  const top = insights ? rankInsights(insights)[0] : null;
 
   return (
     <section className={styles.insightCard}>
@@ -59,7 +58,7 @@ export async function WorthKnowing({ insights }: { insights: readonly Insight[] 
   );
 }
 
-function kindKey(kind: string): string {
+export function kindKey(kind: string): string {
   return KNOWN_KINDS.has(kind) ? `kind.${kind}` : 'kind.fallback';
 }
 
@@ -91,3 +90,9 @@ function kindKey(kind: string): string {
  * exactly the kind of thing that changes without anyone thinking about this
  * file, and it is why the fix is at the spread anyway.
  */
+
+/** Highest impact first, and only then the order the backend returned. */
+export function rankInsights(insights: readonly Insight[]): readonly Insight[] {
+  const rank = { high: 0, medium: 1, low: 2 } as const;
+  return [...insights].sort((a, b) => rank[a.impact] - rank[b.impact]);
+}

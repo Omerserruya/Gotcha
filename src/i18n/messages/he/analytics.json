@@ -20,5 +20,34 @@
     "asked": "נשאל {count} פעמים",
     "none": "עדיין לא קובץ שום דבר. זה מתמלא ככל ששיחות מנותחות.",
     "unavailable": "לא הצלחנו לקרוא כרגע על מה אנשים שואלים."
+  },
+  "screenTitle": "איך העבודה מתנהלת",
+  "screenSubline": "7 הימים האחרונים, בהשוואה לשבוע שלפניהם",
+  "changed": {
+    "eyebrow": "מה השתנה",
+    "also": "עוד שווה מבט",
+    "none": "שום דבר לא בולט השבוע.",
+    "unavailable": "לא הצלחנו לקרוא מה השתנה כרגע."
+  },
+  "kpi": {
+    "conversations": "שיחות",
+    "handledByGotcha": "טופלו על ידי GOTCHA",
+    "resolved": "נפתרו",
+    "avgReply": "זמן תשובה ממוצע",
+    "timeSaved": "זמן שנחסך",
+    "delta": "{value}%",
+    "seconds": "{n} שנ׳",
+    "minutes": "{n} דק׳",
+    "hours": "{n} שע׳",
+    "unknown": "—",
+    "unavailable": "לא הצלחנו לקרוא את נתוני השבוע כרגע."
+  },
+  "teamShort": {
+    "today": "נתוני היום — הם מתאפסים בחצות.",
+    "noSpeed": "אין עמודת מהירות תשובה",
+    "humansOnly": "אנשים בלבד, לא GOTCHA"
+  },
+  "askedShort": {
+    "grouped": "קובץ על ידי GOTCHA"
   }
 }

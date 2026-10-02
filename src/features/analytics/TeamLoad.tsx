@@ -60,8 +60,8 @@ export async function TeamLoad({
         and a figure under the wrong period label is wrong in a way no
         reader can see.
       */}
-      <p className={styles.note} data-testid="team-period">
-        {t('team.today')}
+      <p className={styles.note} data-testid="team-period" title={t('team.today')}>
+        {t('teamShort.today')}
       </p>
 
       {agents.length === 0 ? (
@@ -111,8 +111,9 @@ export async function TeamLoad({
         anybody. An absent column is better than an unfair one, and the note
         below says it is absent rather than leaving a reader to wonder.
       */}
-      <p className={styles.note} data-testid="team-no-speed">
-        {t('team.noSpeed')}
+      {/* One line on the screen; the reason, which matters, is its tooltip. */}
+      <p className={styles.note} data-testid="team-no-speed" title={t('team.noSpeed')}>
+        {t('teamShort.noSpeed')}
       </p>
 
       {/*
@@ -122,8 +123,8 @@ export async function TeamLoad({
         here — and unstated, the first question is why, and the second is
         whether their work is being counted somewhere invisible.
       */}
-      <p className={styles.note} data-testid="team-humans-only">
-        {t('team.humansOnly')}
+      <p className={styles.note} data-testid="team-humans-only" title={t('team.humansOnly')}>
+        {t('teamShort.humansOnly')}
       </p>
     </section>
   );

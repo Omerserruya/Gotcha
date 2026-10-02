@@ -320,6 +320,9 @@
     /* 02's dark bars: an item's text, and the item that is raised. */
     --copilot-text-muted: #b8b4ac;
     --copilot-raised: #262626;
+    /* 02's dark statement: its text, and the number it lifts. */
+    --copilot-text-strong: #edeae4;
+    --copilot-highlight: #e8d9a8;
     /* 02's dark inbox menu: icons, the submenu arrow, and Delete. */
     --menu-dark-icon: #8e8a83;
     --menu-dark-arrow: #6e6a63;

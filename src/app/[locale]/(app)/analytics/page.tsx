@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import styles from '@/features/analytics/Analytics.module.css';
 import { AskedAbout } from '@/features/analytics/AskedAbout';
 import { loadAnalytics } from '@/features/analytics/load-analytics';
+import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
 import { TeamLoad } from '@/features/analytics/TeamLoad';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -50,24 +51,33 @@ import { pageMetadata } from '@/shell/page-metadata';
  */
 export default async function Page() {
   const t = await getTranslations('analytics');
-  const { agents, topics } = await loadAnalytics();
+  const { agents, topics, overview, timeSaved, insights } = await loadAnalytics();
 
   return (
-    <PageContainer layout="screen" title={t('title')} description={t('description')}>
+    /*
+      06, measured: the title is a question answered — "How the operation is
+      doing" — over the period it covers. 02's tabs (Overview · GOTCHA · Team ·
+      Sales · Topics) are not drawn: the other four screens do not exist, and
+      a tab that opens nothing is worse than its absence.
+    */
+    <PageContainer layout="screen" title={t('screenTitle')} description={t('screenSubline')}>
       <div className={styles.screen} data-testid="analytics-screen">
-        <AskedAbout topics={topics} />
-        <TeamLoad agents={agents} />
-
+        <WhatChanged insights={insights} />
+        <KpiStrip overview={overview} timeSaved={timeSaved} />
         {/*
-          ★★ THE SECTION THAT IS NOT HERE, SAID ON THE SCREEN.
-          A reader arriving from the design looks for "what GOTCHA did" and
-          finds two panels. An absence that explains itself only has to
-          explain itself once — and the alternative was a tab with nothing
-          behind it, which explains nothing and looks finished.
+          02's bottom row: a wide card and a 330px one. The wide one is
+          "Conversations a day" in 02 — the platform counts MESSAGES a day and
+          does not split GOTCHA from the team, so that chart is not drawn, and
+          the team's load takes its place. "What people ask about" is 02's own
+          right-hand card.
+
+          Siblings, not nested: the structural test cannot see inside a nested
+          async component (it does not run one).
         */}
-        <p className={styles.note} data-testid="analytics-no-gotcha-section">
-          {t('noGotchaSection')}
-        </p>
+        <div className={styles.bottomRow}>
+          <TeamLoad agents={agents} />
+          <AskedAbout topics={topics} />
+        </div>
       </div>
     </PageContainer>
   );

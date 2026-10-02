@@ -28,8 +28,9 @@ describe('★★ the caption is load-bearing', () => {
      */
     await show([topic()]);
     const caption = screen.getByTestId('asked-caption');
-    expect(caption).toHaveTextContent(/grouped these questions itself/i);
-    expect(caption).toHaveTextContent(/hasn't learned to merge them/i);
+    expect(caption).toHaveTextContent(/grouped by GOTCHA/i);
+    expect(caption.getAttribute('title')).toMatch(/grouped these questions itself/i);
+    expect(caption.getAttribute('title')).toMatch(/hasn't learned to merge them/i);
   });
 
   it('renders the label verbatim — we did not write it', async () => {

@@ -3,6 +3,7 @@ import { isValidElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AskedAbout } from '@/features/analytics/AskedAbout';
+import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
 import { TeamLoad } from '@/features/analytics/TeamLoad';
 
 /**
@@ -103,16 +104,14 @@ describe('★★ the screen exists, which is what was missing', () => {
 });
 
 describe('★★ the section that is not here says so', () => {
-  it('★★ states why there is no "what GOTCHA did", rather than drawing an empty tab', async () => {
+  it('★★ shows states, not explanations — the "no GOTCHA section" paragraph is gone', async () => {
     /*
-     * It was held on an escalation aggregation that does not exist:
-     * `ConversationHandover.reason` is a four-value code — escalation,
-     * takeover, assignment, routing — with no route over it, and nothing
-     * counts machine causes. An empty tab inside an assembled screen is the
-     * defect this screen was built to remove, so the absence is a sentence.
+     * It explained an absence (the handover cause is not recorded). 02 shows
+     * states and does not explain them; GOTCHA's share is now a FIGURE in the
+     * strip, which is the state the paragraph stood in for.
      */
     const { testids } = inspect(await page());
-    expect(testids).toContain('analytics-no-gotcha-section');
+    expect(testids).not.toContain('analytics-no-gotcha-section');
   });
 
   it('★ and there is no tab row, because two panels are not sections', async () => {
@@ -120,5 +119,26 @@ describe('★★ the section that is not here says so', () => {
     // would have been named for a section with no data behind it.
     const { testids } = inspect(await page());
     expect(testids.filter((id) => /tab/i.test(id))).toEqual([]);
+  });
+});
+
+describe('★★ 06’s summary gets the week the loader read', () => {
+  it('the findings to "What changed", the figures to the strip', async () => {
+    const overview = { totalConversations: 12 };
+    const insights = [{ id: 'i1' }];
+    const timeSaved = { secondsSaved: 60 };
+    const tree = await page({ overview, insights, timeSaved });
+    const find = <T,>(type: unknown): T | null => {
+      let found: T | null = null;
+      walk(tree, [], (element) => {
+        if (element.type === type) found = element.props as T;
+      });
+      return found;
+    };
+    expect(find<{ insights: unknown }>(WhatChanged)?.insights).toBe(insights);
+    expect(find<{ overview: unknown; timeSaved: unknown }>(KpiStrip)).toEqual({
+      overview,
+      timeSaved,
+    });
   });
 });

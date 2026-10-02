@@ -20,5 +20,34 @@
     "asked": "asked {count} times",
     "none": "Nothing has been grouped yet. This fills in as conversations are analysed.",
     "unavailable": "We couldn't read what people are asking about just now."
+  },
+  "screenTitle": "How the operation is doing",
+  "screenSubline": "Last 7 days, compared with the week before",
+  "changed": {
+    "eyebrow": "What changed",
+    "also": "Also worth a look",
+    "none": "Nothing stands out this week.",
+    "unavailable": "We couldn't read what changed just now."
+  },
+  "kpi": {
+    "conversations": "Conversations",
+    "handledByGotcha": "Handled by GOTCHA",
+    "resolved": "Resolved",
+    "avgReply": "Average reply",
+    "timeSaved": "Time saved",
+    "delta": "{value}%",
+    "seconds": "{n}s",
+    "minutes": "{n}m",
+    "hours": "{n}h",
+    "unknown": "—",
+    "unavailable": "We couldn't read this week's figures just now."
+  },
+  "teamShort": {
+    "today": "Today's numbers — they reset at midnight.",
+    "noSpeed": "No reply-speed column",
+    "humansOnly": "People only, not GOTCHA"
+  },
+  "askedShort": {
+    "grouped": "Grouped by GOTCHA"
   }
 }

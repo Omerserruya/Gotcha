@@ -76,7 +76,8 @@ describe('★★ the two absences a reader would otherwise infer', () => {
      * their work is counted somewhere invisible.
      */
     await show([agent()]);
-    expect(screen.getByTestId('team-humans-only')).toHaveTextContent(/human team/i);
+    expect(screen.getByTestId('team-humans-only').getAttribute('title')).toMatch(/human team/i);
+    expect(screen.getByTestId('team-humans-only')).toHaveTextContent(/people only/i);
   });
 
   it('★★ ships no outcome column and no proxy for one', async () => {
@@ -129,7 +130,10 @@ describe('★★ the reply-time column, and why it is gone', () => {
     // A reader holding the design looks for a speed column. An absence that
     // explains itself only has to explain itself once.
     await show([agent()]);
-    expect(screen.getByTestId('team-no-speed')).toHaveTextContent(/grows with how long/i);
+    // One line on screen; the reason — which is the point — is its tooltip.
+    expect(screen.getByTestId('team-no-speed').getAttribute('title')).toMatch(
+      /grows with how long/i,
+    );
   });
 
   it('★ a failed read is not an empty team', async () => {

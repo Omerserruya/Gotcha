@@ -1,9 +1,15 @@
 import { serverApi } from '@/api/client/server-api';
 import {
   agentLoadListSchema,
+  analyticsOverviewSchema,
   askedAboutListSchema,
+  insightsSchema,
+  timeSavedSchema,
   type AgentLoad,
+  type AnalyticsOverview,
   type AskedAbout,
+  type Insight,
+  type TimeSaved,
 } from '@/api/contracts/analytics';
 import { analyticsEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
@@ -36,12 +42,30 @@ import { logger } from '@/observability/logger';
 export interface AnalyticsData {
   readonly agents: readonly AgentLoad[] | null;
   readonly topics: readonly AskedAbout[] | null;
+  /**
+   * 06's figures for the last seven days. `overview` computes its own prior
+   * period of the same length, so its deltas are "against the week before" —
+   * which is what the subline says.
+   */
+  readonly overview: AnalyticsOverview | null;
+  readonly timeSaved: TimeSaved | null;
+  /** The findings — the same `insights` Home's "Worth knowing" reads. */
+  readonly insights: readonly Insight[] | null;
+}
+
+/** The week the screen describes: the last seven days, to now. */
+export function lastSevenDays(now: Date = new Date()): { from: string; to: string } {
+  return {
+    from: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    to: now.toISOString(),
+  };
 }
 
 export async function loadAnalytics(): Promise<AnalyticsData> {
   const api = serverApi();
 
-  const [agents, topics] = await Promise.all([
+  const week = lastSevenDays();
+  const [agents, topics, overview, timeSaved, insights] = await Promise.all([
     api
       .get({ endpoint: analyticsEndpoints.agents(), payload: agentLoadListSchema })
       .catch((cause: unknown) => {
@@ -54,7 +78,29 @@ export async function loadAnalytics(): Promise<AnalyticsData> {
         logger.warn('analytics.top_questions_failed', { cause });
         return null;
       }),
+    api
+      .get({
+        endpoint: analyticsEndpoints.overview(),
+        payload: analyticsOverviewSchema,
+        query: week,
+      })
+      .catch((cause: unknown) => {
+        logger.warn('analytics.overview_failed', { cause });
+        return null;
+      }),
+    api
+      .get({ endpoint: analyticsEndpoints.timeSaved(), payload: timeSavedSchema, query: week })
+      .catch((cause: unknown) => {
+        logger.warn('analytics.time_saved_failed', { cause });
+        return null;
+      }),
+    api
+      .get({ endpoint: analyticsEndpoints.insights(), payload: insightsSchema })
+      .catch((cause: unknown) => {
+        logger.warn('analytics.insights_failed', { cause });
+        return null;
+      }),
   ]);
 
-  return { agents, topics };
+  return { agents, topics, overview, timeSaved, insights };
 }

@@ -7,14 +7,24 @@
    * ranking colour, no emphasis that would turn a count into a verdict.
    */
 
+  /* 02's cards: white, `1px #E6E2DA`, radius 14, `padding:18px 20px`. */
   .panel {
     display: flex;
     flex-direction: column;
     gap: var(--space-8);
+    min-inline-size: 0;
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
   }
 
-  .panelHeading {
+  .panelHeading,
+  .cardTitle {
     margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
   .note {
@@ -70,11 +80,159 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Screen 06 · two panels, stacked. */
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * Screen 06, measured — the statement, the strip, two cards
+   * ════════════════════════════════════════════════════════════════════════
+   */
   .screen {
     display: flex;
     flex-direction: column;
-    gap: var(--space-24);
-    max-inline-size: var(--size-reading);
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  .changedRow {
+    display: flex;
+    gap: var(--space-14);
+  }
+
+  /* 02's statement: `#171717`, radius 14, `padding:18px 20px`. */
+  .changed {
+    flex: 1;
+    min-inline-size: 0;
+    padding: 18px var(--space-20);
+    background-color: var(--copilot-surface);
+    border-radius: var(--radius-card);
+  }
+
+  .changedEyebrow {
+    margin: 0 0 var(--space-12);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--menu-dark-icon);
+  }
+
+  .changedStatement {
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.45;
+    color: var(--copilot-text-strong);
+  }
+
+  /* 02 lifts the number in a warm sand: `#E8D9A8`. */
+  .changedStatement b {
+    font-weight: var(--font-weight-regular);
+    color: var(--copilot-highlight);
+  }
+
+  .also {
+    flex: none;
+    inline-size: 300px;
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .alsoList {
+    list-style: none;
+    margin: var(--space-12) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .alsoItem {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--text-body);
+  }
+
+  .alsoItem b {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /* 02's strip: one card, five cells at `15px 18px`, `#EDE9E1` between. */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    margin: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .kpi {
+    padding: 15px 18px;
+  }
+
+  .kpi + .kpi {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .kpi dt {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .kpi dd {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin: var(--space-4) 0 0;
+  }
+
+  .kpiValue {
+    font-size: 25px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .kpiDelta {
+    font-size: 11px;
+    color: var(--signal-done-text);
+  }
+
+  .kpiDelta[data-direction='down'] {
+    color: var(--text-subtle);
+  }
+
+  /* 02's bottom row: a wide card and a 330px one. */
+  .bottomRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-14);
+  }
+
+  .bottomRow > :first-child {
+    flex: 1;
+  }
+
+  .bottomRow > :last-child {
+    flex: none;
+    inline-size: 330px;
+  }
+
+  @media (width < 64rem) {
+    .changedRow,
+    .bottomRow {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .also,
+    .bottomRow > :last-child {
+      inline-size: auto;
+    }
+
+    .kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 }
