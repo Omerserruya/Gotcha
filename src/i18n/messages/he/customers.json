@@ -216,6 +216,24 @@
       "conversation": "GOTCHA עצר: תקציב ה-AI של השיחה נגמר",
       "tenant_day": "GOTCHA עצר: תקציב ה-AI היומי של סביבת העבודה נגמר",
       "other": "GOTCHA עצר: תקציב AI נגמר"
+    },
+    "policy": {
+      "kind": {
+        "REFUND": "החזרים",
+        "CANCEL_ORDER": "ביטול הזמנה",
+        "COUPON": "קופונים",
+        "COMPENSATION": "פיצוי",
+        "DISCOUNT": "הנחות",
+        "CUSTOMER_WRITE": "שינויים ברשומה שלהם"
+      },
+      "never": "{name}: אף פעם — כבוי.",
+      "neverByDefault": "{name}: אף פעם — לא נקבע כלל.",
+      "unset": "{name}: לא נקבע כלל.",
+      "noLimit": "{name}: מותר, ללא מגבלה.",
+      "limits": "{name}: {rules}.",
+      "upTo": "עד {amount}",
+      "upToPercent": "עד {percent} מההזמנה",
+      "approvalAbove": "אדם מאשר מעל {amount}"
     }
   },
   "teamNotes": {

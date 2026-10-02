@@ -20,7 +20,12 @@ import { customerAuditSchema, type CustomerAudit } from '@/api/contracts/custome
 import { noteListSchema, type Note } from '@/api/contracts/customer-notes';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { APPROVAL_STATUSES, approvalsSchema, type Approval } from '@/api/contracts/approvals';
-import { approvalEndpoints, authEndpoints } from '@/api/endpoints/registry';
+import { businessPoliciesSchema, type BusinessPolicies } from '@/api/contracts/business-policies';
+import {
+  approvalEndpoints,
+  authEndpoints,
+  businessPolicyEndpoints,
+} from '@/api/endpoints/registry';
 import { ApiError } from '@/api/client/api-error';
 import { customerEndpoints } from '@/api/endpoints/registry';
 import { withDetailFixtures } from './capture-fixtures';
@@ -104,6 +109,14 @@ export interface CustomerDetail {
    * failed; a partial failure keeps what came back.
    */
   readonly approvals: readonly Approval[] | null;
+  /**
+   * 04e's "What GOTCHA may do for them": the tenant's business rules for
+   * refunds, cancels, discounts and the rest — the same for every customer,
+   * read here because this is where 02 shows them. `null` when the read
+   * failed or the viewer may not read them (`settings:business-policies:read`
+   * or ADMIN); a 403 is an answer and is not reported as a failed read.
+   */
+  readonly policies: BusinessPolicies | null;
   /**
    * The viewer's `User.id`, for deciding who may edit a note.
    *
@@ -237,6 +250,7 @@ export async function loadCustomer(
         actions: { state: 'not_asked' },
         notes: null,
         approvals: null,
+        policies: null,
         viewerUserId: null,
         // The timeline is the failure, and the page renders as one. Nothing
         // else was attempted, so nothing else can be reported as failing.
@@ -299,7 +313,19 @@ export async function loadCustomer(
     return [...byId.values()].filter(ownedHere);
   });
 
-  const [brief, memory, crm, orders, notes, viewerUserId, approvals] = await Promise.all([
+  const policiesRead = api
+    .get({ endpoint: businessPolicyEndpoints.list(), payload: businessPoliciesSchema })
+    .catch((cause: unknown): BusinessPolicies | null => {
+      if (cause instanceof ApiError && cause.kind === 'authorization') {
+        logger.info('customer.policies_forbidden', { cause });
+        return null;
+      }
+      readsFailed.push('policies');
+      logger.warn('customer.policies_failed', { cause });
+      return null;
+    });
+
+  const [brief, memory, crm, orders, notes, viewerUserId, approvals, policies] = await Promise.all([
     /*
      * ★ BY CONTACT, NOT BY CONVERSATION — Backend added the entry point
      * after this screen reported the door problem.
@@ -387,6 +413,7 @@ export async function loadCustomer(
       .then((me) => me.user.id)
       .catch(failing<string>('viewer', 'customer.viewer_failed')),
     approvalsRead,
+    policiesRead,
   ]);
 
   /*
@@ -465,6 +492,7 @@ export async function loadCustomer(
       actions,
       notes,
       approvals,
+      policies,
       viewerUserId,
       readsFailed,
     },

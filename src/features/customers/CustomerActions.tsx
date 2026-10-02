@@ -4,6 +4,12 @@ import { Cog, User, Workflow } from 'lucide-react';
 
 import { humanizeTag, type Approval } from '@/api/contracts/approvals';
 import {
+  POLICY_KINDS,
+  policyLines,
+  type BusinessPolicies,
+  type PolicyLine,
+} from '@/api/contracts/business-policies';
+import {
   coverageGaps,
   outcomeOf,
   toolOf,
@@ -557,12 +563,52 @@ export async function ActionFilters({
 export async function ActionsSide({
   actions,
   approvals,
+  policies = null,
+  currency = null,
 }: {
   readonly actions: AuditRead;
   readonly approvals: readonly Approval[] | null;
+  /** The tenant's business rules; `null` when unread or not readable by this viewer. */
+  readonly policies?: BusinessPolicies | null;
+  /** The shop's currency, for the rules' amounts — which carry none of their own. */
+  readonly currency?: string | null;
 }) {
   const t = await getTranslations('customers');
   const format = await getFormatter();
+  const amount = (n: number) =>
+    currency
+      ? format.number(n, { style: 'currency', currency, maximumFractionDigits: 2 })
+      : format.number(n);
+  const kindName = (kind: string) =>
+    (POLICY_KINDS as readonly string[]).includes(kind)
+      ? t(`actions.policy.kind.${kind}` as 'actions.policy.kind.REFUND')
+      : humanizeTag(kind);
+  /*
+    Each rule as the engine applies it — see `describePolicy`. The percent is
+    a fraction of the order in the engine (`cap = maxPercentOfOrder × order`),
+    so it is shown as one.
+  */
+  const sentence = (line: PolicyLine): string => {
+    const name = kindName(line.kind);
+    if (line.shape === 'never') {
+      return t(line.byDefault ? 'actions.policy.neverByDefault' : 'actions.policy.never', { name });
+    }
+    if (line.shape === 'unset') return t('actions.policy.unset', { name });
+    const parts = [
+      line.max !== null ? t('actions.policy.upTo', { amount: amount(line.max) }) : null,
+      line.percent !== null
+        ? t('actions.policy.upToPercent', {
+            percent: format.number(line.percent, { style: 'percent', maximumFractionDigits: 1 }),
+          })
+        : null,
+      line.approvalAbove !== null
+        ? t('actions.policy.approvalAbove', { amount: amount(line.approvalAbove) })
+        : null,
+    ].filter(Boolean);
+    return parts.length > 0
+      ? t('actions.policy.limits', { name, rules: parts.join('; ') })
+      : t('actions.policy.noLimit', { name });
+  };
   // Actions on the account, not the conversation — see `CONVERSATION_ACTIONS`.
   const events =
     actions.state === 'ok'
@@ -624,7 +670,17 @@ export async function ActionsSide({
       {/* The policy GOTCHA acts under is not read on this page; the place to change it is. */}
       <section className={styles.sideBlock} data-testid="actions-may">
         <h2 className={styles.sideEyebrow}>{t('actions.side.may')}</h2>
-        <p className={styles.sideNone}>—</p>
+        {policies ? (
+          <ul className={styles.remembers} data-testid="actions-policies">
+            {policyLines(policies).map((line) => (
+              <li key={line.kind} data-testid={`policy-${line.kind}`}>
+                {sentence(line)}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.sideNone}>—</p>
+        )}
         <Link href="/studio/capabilities" className={styles.tabLeadLink}>
           {t('actions.side.change')}
         </Link>

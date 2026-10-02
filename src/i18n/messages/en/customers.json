@@ -216,6 +216,24 @@
       "conversation": "GOTCHA paused: this conversation's AI budget ran out",
       "tenant_day": "GOTCHA paused: the workspace's daily AI budget ran out",
       "other": "GOTCHA paused: an AI budget ran out"
+    },
+    "policy": {
+      "kind": {
+        "REFUND": "Refunds",
+        "CANCEL_ORDER": "Cancelling an order",
+        "COUPON": "Coupons",
+        "COMPENSATION": "Compensation",
+        "DISCOUNT": "Discounts",
+        "CUSTOMER_WRITE": "Changes to their record"
+      },
+      "never": "{name}: never — switched off.",
+      "neverByDefault": "{name}: never — no rule set.",
+      "unset": "{name}: no rule set.",
+      "noLimit": "{name}: allowed, no limit set.",
+      "limits": "{name}: {rules}.",
+      "upTo": "up to {amount}",
+      "upToPercent": "up to {percent} of the order",
+      "approvalAbove": "a person approves above {amount}"
     }
   },
   "teamNotes": {

@@ -172,6 +172,10 @@ describe('★★ 04e — its filters, the approvals, its own side', () => {
     const props = propsOf<{ filter: string; approvals: unknown }>(tree, CustomerActions);
     expect(props?.filter).toBe('money');
     expect(props?.approvals).toEqual([]);
+    // The rules, and the shop's currency for their amounts (the fixture's ILS).
+    const side = propsOf<{ policies: unknown; currency: string | null }>(tree, ActionsSide);
+    expect(side?.policies).toBeTruthy();
+    expect(side?.currency).toBe('ILS');
   });
 });
 

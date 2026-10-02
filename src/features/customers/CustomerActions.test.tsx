@@ -11,6 +11,7 @@ import {
 import messages from '@/i18n/messages/en/customers.json';
 
 import { approvalSchema } from '@/api/contracts/approvals';
+import { businessPoliciesSchema } from '@/api/contracts/business-policies';
 
 import {
   ActionFilters,
@@ -571,5 +572,52 @@ describe('★ the outcome chip only where an outcome is expected', () => {
       }),
     );
     expect(screen.getByTestId('action-outcome-v')).toHaveAttribute('data-outcome', 'failed');
+  });
+});
+
+describe('★★ What GOTCHA may do — the tenant’s rules, in words', () => {
+  const policies = businessPoliciesSchema.parse({
+    actionKinds: ['REFUND', 'CANCEL_ORDER', 'DISCOUNT', 'CUSTOMER_WRITE', 'COUPON'],
+    policies: [
+      { actionKind: 'REFUND', config: { maxAmount: 300, managerApprovalAboveAmount: 100 } },
+      { actionKind: 'CANCEL_ORDER', enabled: false },
+      { actionKind: 'COUPON', config: { maxPercentOfOrder: 0.1 } },
+    ],
+  });
+
+  it('★ each kind as one sentence, amounts in the shop’s currency', async () => {
+    render(await ActionsSide({ actions: ok([]), approvals: [], policies, currency: 'ILS' }));
+    expect(screen.getByTestId('policy-REFUND')).toHaveTextContent(
+      /^Refunds: up to ₪300(\.00)?; a person approves above ₪100(\.00)?\.$/,
+    );
+    expect(screen.getByTestId('policy-CANCEL_ORDER')).toHaveTextContent(
+      'Cancelling an order: never — switched off.',
+    );
+    expect(screen.getByTestId('policy-DISCOUNT')).toHaveTextContent(
+      'Discounts: never — no rule set.',
+    );
+    expect(screen.getByTestId('policy-CUSTOMER_WRITE')).toHaveTextContent(
+      'Changes to their record: no rule set.',
+    );
+    // The engine's percent is a fraction of the order.
+    expect(screen.getByTestId('policy-COUPON')).toHaveTextContent(
+      'Coupons: up to 10% of the order.',
+    );
+  });
+
+  it('⚠ no sentence claims GOTCHA acts "on its own" — the tool catalog may still ask', async () => {
+    render(await ActionsSide({ actions: ok([]), approvals: [], policies, currency: 'ILS' }));
+    expect(screen.getByTestId('actions-policies')).not.toHaveTextContent(/on its own/i);
+  });
+
+  it('without a currency, amounts are plain numbers — no symbol invented', async () => {
+    render(await ActionsSide({ actions: ok([]), approvals: [], policies }));
+    expect(screen.getByTestId('policy-REFUND')).toHaveTextContent('Refunds: up to 300;');
+  });
+
+  it('⚠ unread, or not readable by this viewer: "—", with the place to change them', async () => {
+    render(await ActionsSide({ actions: ok([]), approvals: [], policies: null }));
+    expect(screen.getByTestId('actions-may')).toHaveTextContent('—');
+    expect(screen.queryByTestId('actions-policies')).toBeNull();
   });
 });

@@ -171,7 +171,16 @@ export default async function Page({
             ) : tab === 'orders' ? (
               <OrdersSide orders={detail.orders} />
             ) : tab === 'actions' ? (
-              <ActionsSide actions={detail.actions} approvals={detail.approvals} />
+              <ActionsSide
+                actions={detail.actions}
+                approvals={detail.approvals}
+                policies={detail.policies}
+                currency={
+                  detail.orders?.state === 'ok'
+                    ? (detail.orders.data?.summary?.currency ?? null)
+                    : (detail.orders?.summary?.currency ?? null)
+                }
+              />
             ) : tab === 'notes' ? (
               <NotesSide notes={detail.notes} />
             ) : (

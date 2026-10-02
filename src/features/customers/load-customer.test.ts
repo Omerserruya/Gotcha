@@ -36,6 +36,8 @@ vi.mock('@/api/client/server-api', () => ({
       capture.calls.push(req as unknown as Record<string, unknown>);
       const body = BODIES[req.endpoint.path.split('?')[0]!];
       if (body === undefined) throw new Error(`no stub for ${req.endpoint.path}`);
+      // A stubbed failure: the client throws what the route's status maps to.
+      if (body instanceof Error) throw body;
       /*
        * `http-client.ts`: unwrap `{ data }` unless `raw`. Copied because
        * this is the rule the defect turned on — a paraphrase that behaved
@@ -133,6 +135,12 @@ beforeEach(() => {
   BODIES = {
     '/api/identity/c1/timeline': TIMELINE,
     '/api/approvals': { data: APPROVALS },
+    '/api/business-policies': {
+      data: {
+        actionKinds: ['REFUND', 'DISCOUNT'],
+        policies: [{ actionKind: 'REFUND', enabled: true, config: { maxAmount: 100 } }],
+      },
+    },
     '/api/audit-logs/customer/c1': AUDIT,
     // The timeline carries an externalId, so the memory read IS attempted
     // and must be stubbed — otherwise it fails and this file reports a
@@ -215,6 +223,30 @@ describe('★★ the audit envelope, where `data` is a sibling and not the paylo
     const { loadCustomer } = await import('./load-customer');
     const detail = await loadCustomer('c1');
     expect(detail.approvals?.map((a) => a.id).sort()).toEqual(['by-route-id', 'by-survivor']);
+  });
+
+  it('★ the business rules arrive, enveloped as the route sends them', async () => {
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+    expect(detail.policies?.policies[0]?.config.maxAmount).toBe(100);
+    expect(detail.policies?.actionKinds).toEqual(['REFUND', 'DISCOUNT']);
+  });
+
+  it('★★ a 403 on the rules is an answer — not a failed read', async () => {
+    const { ApiError } = await import('@/api/client/api-error');
+    BODIES['/api/business-policies'] = new ApiError({ kind: 'authorization', status: 403 });
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+    expect(detail.policies).toBeNull();
+    expect(detail.readsFailed).not.toContain('policies');
+  });
+
+  it('⚠ any other failure on the rules is a failed read, by name', async () => {
+    delete BODIES['/api/business-policies'];
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+    expect(detail.policies).toBeNull();
+    expect(detail.readsFailed).toContain('policies');
   });
 
   it('⚠ approvals: null and named only when every status read failed', async () => {

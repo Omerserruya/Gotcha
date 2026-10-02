@@ -162,6 +162,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     actions: { state: 'failed' },
     notes: null,
     approvals: null,
+    policies: null,
     viewerUserId: null,
     readsFailed: ['actions'],
   };
@@ -212,6 +213,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       actions: { state: 'not_asked' },
       notes: null,
       approvals: null,
+      policies: null,
       viewerUserId: null,
       readsFailed: [],
     };
@@ -248,6 +250,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       actions: { state: 'not_asked' },
       notes: null,
       approvals: null,
+      policies: null,
       viewerUserId: null,
       readsFailed: [],
     };

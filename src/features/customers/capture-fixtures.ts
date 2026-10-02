@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { businessPoliciesSchema } from '@/api/contracts/business-policies';
 import { commerceContextSchema } from '@/api/contracts/customer-orders';
 import type { CustomerDetail } from '@/features/customers/load-customer';
 import type { CustomerRow } from '@/api/contracts/customers';
@@ -713,6 +714,31 @@ export const FIXTURE_DETAIL: CustomerDetail = {
   ],
   viewerUserId: 'fixture-viewer-1',
   approvals: [],
+  /*
+   * Wire-shaped — `{ actionKinds, policies }`, the latest version per kind —
+   * and parsed by the real contract. A refund rule with both limits, a
+   * cancel rule switched off; the other four kinds fall to the engine's
+   * defaults, which is what most tenants will show.
+   */
+  policies: businessPoliciesSchema.parse({
+    actionKinds: ['REFUND', 'CANCEL_ORDER', 'COUPON', 'COMPENSATION', 'DISCOUNT', 'CUSTOMER_WRITE'],
+    policies: [
+      {
+        id: 'fx-policy-refund',
+        actionKind: 'REFUND',
+        enabled: true,
+        version: 3,
+        config: { maxAmount: 300, managerApprovalAboveAmount: 100 },
+      },
+      {
+        id: 'fx-policy-cancel',
+        actionKind: 'CANCEL_ORDER',
+        enabled: false,
+        version: 1,
+        config: {},
+      },
+    ],
+  }),
   // The fixture stands for a page where every read succeeded. A real page
   // that did not gets its failures carried through — see `keepFailures`.
   readsFailed: [],
@@ -945,6 +971,7 @@ function keepFailures(detail: CustomerDetail): CustomerDetail {
     ...(failed.has('actions') ? { actions: detail.actions } : {}),
     ...(failed.has('notes') ? { notes: null } : {}),
     ...(failed.has('approvals') ? { approvals: null } : {}),
+    ...(failed.has('policies') ? { policies: null } : {}),
     ...(failed.has('viewer') ? { viewerUserId: null } : {}),
     readsFailed: detail.readsFailed,
   };
