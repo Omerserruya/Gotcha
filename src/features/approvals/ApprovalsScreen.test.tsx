@@ -48,6 +48,7 @@ const approval = (over: Partial<Approval> = {}): Approval => ({
   requestedBy: 'bot',
   requestedByName: null,
   decidedByName: null,
+  decisionChannel: null,
   decidedAt: null,
   decisionReason: null,
   expiresAt: '2026-09-19T11:00:00.000Z',

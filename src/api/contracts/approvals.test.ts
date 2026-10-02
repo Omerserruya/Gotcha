@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  approvalSummary,
+  describeApprovalAction,
   aiEmployeeIdOf,
   approvalSchema,
   decisionStance,
@@ -37,6 +39,7 @@ const approval = (over: Partial<Approval> = {}): Approval => ({
   requestedBy: 'bot',
   requestedByName: null,
   decidedByName: null,
+  decisionChannel: null,
   decidedAt: null,
   decisionReason: null,
   expiresAt: IN_AN_HOUR,
@@ -187,5 +190,54 @@ describe('aiEmployeeIdOf — a machine identifier must not reach a person', () =
 
   it('is null rather than empty for a malformed prefix', () => {
     expect(aiEmployeeIdOf(approval({ requestedBy: 'ai-agent:' }))).toBeNull();
+  });
+});
+
+describe('★★ approvalSummary — a sentence from the record, for rows that stored a breadcrumb', () => {
+  // The platform's own cases (packages/shared/src/lib/__tests__/approval-summary.test.ts).
+  it('names the act, for the tools that actually reach approval', () => {
+    expect(
+      describeApprovalAction('shopify.cancel_order', { order_name: '#1006', reason: 'customer' }),
+    ).toBe('Cancel order #1006');
+    expect(describeApprovalAction('shopify.resend_confirmation', { order_name: '#1006' })).toBe(
+      'Resend confirmation for order #1006',
+    );
+    expect(
+      describeApprovalAction('create_task', { subject: 'Follow up with Dana', contact_id: 'c1' }),
+    ).toBe('Create task: Follow up with Dana');
+  });
+
+  it('drops the provider', () => {
+    expect(describeApprovalAction('integration_cancel_order', { order_name: '#77' })).toBe(
+      'Cancel order #77',
+    );
+    expect(describeApprovalAction('integration.hubspot.create_deal', { name: 'Acme' })).toBe(
+      'Create deal: Acme',
+    );
+  });
+
+  it('⚠⚠ carries the refund amount and INVENTS NO CURRENCY', () => {
+    const s = describeApprovalAction('shopify.process_refund', {
+      amount: 179,
+      order_name: '#1006',
+      notify: true,
+    });
+    expect(s).toBe('Process refund of 179 for order #1006');
+    expect(s).not.toMatch(/[₪$€£]/);
+  });
+
+  it('★★ replaces the breadcrumb, the signature and the bare tool name — and nothing else', () => {
+    const row = (summary: string) => ({
+      summary,
+      tool: 'shopify.cancel_order',
+      params: { order_name: '#9' },
+    });
+    expect(approvalSummary(row('ai-bot inbox tool call'))).toBe('Cancel order #9');
+    expect(approvalSummary(row('issue_refund()'))).toBe('Cancel order #9');
+    expect(approvalSummary(row('shopify.cancel_order'))).toBe('Cancel order #9');
+    // A sentence somebody wrote is kept as written.
+    expect(approvalSummary(row('Cancel order #1006 and refund 89.50'))).toBe(
+      'Cancel order #1006 and refund 89.50',
+    );
   });
 });

@@ -324,96 +324,139 @@
    * own rather than as a message sitting in a gap, which is the difference
    * between "the product is doing its job" and "something is missing".
    */
-  .nothingWaiting {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 03c — 02's "What you decided earlier" card, measured
+   * ════════════════════════════════════════════════════════════════════════
+   * White, `1px #E6E2DA`, radius 14, clipped. A header row at `14px 18px`:
+   * the heading 12.5/600, a count 11.5 `#8C887F`. Rows at `12px 18px`,
+   * `gap:14px`: a 56px time in mono 10.5/500, the action 12.5px, how it
+   * ended 11px in its colour. A `#F5F2EC` footer bar at `12px 18px`.
+   * `line-height: normal`, as everywhere 02 is measured.
+   */
+  .decidedCard {
     display: flex;
     flex-direction: column;
-    gap: var(--space-24);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    line-height: normal;
   }
 
-  .restHeader {
+  .decidedCardHeader {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-  }
-
-  .restLead {
-    margin: 0;
-    font-size: var(--font-size-body-lg);
-    font-weight: 500;
-  }
-
-  .restBody {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    color: var(--text-body);
-  }
-
-  .decided {
-    display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
     gap: var(--space-12);
+    padding: var(--space-14) 18px;
+    /* 02: `1px #F0EDE7` under the heading. */
+    border-block-end: 1px solid var(--panel-well);
   }
 
   .decidedHeading {
     margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 500;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .decidedCount {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .decidedNote {
+    margin: 0;
+    padding: 0 18px var(--space-14);
+    font-size: 12.5px;
+    color: var(--text-subtle);
   }
 
   .decidedList {
     list-style: none;
     margin: 0;
     padding: 0;
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    overflow: hidden;
   }
 
   .decidedRow {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
+    align-items: center;
+    gap: var(--space-14);
+    padding: var(--space-12) 18px;
+    /* 02: `1px #F7F5F1` between rows, none under the last. */
+    border-block-end: 1px solid var(--row-divider);
   }
 
-  .decidedRow + .decidedRow {
-    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  .decidedRow:last-child {
+    border-block-end: 0;
+  }
+
+  .decidedWhen {
+    flex: none;
+    inline-size: 56px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
   }
 
   .decidedSummary {
-    margin: 0;
-    font-size: var(--font-size-meta);
+    flex: 1;
+    min-inline-size: 0;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .decidedMeta,
-  .decidedReason {
-    margin: 0;
-    font-size: var(--font-size-caption);
+  .decidedStatus {
+    flex: none;
+    font-size: 11px;
     color: var(--text-subtle);
   }
 
-  /*
-   * Approved and then it did not run. This is the one thing the design's list
-   * of green ticks could never show, and it is why the row carries the
-   * execution axis at all.
-   */
-  .decidedProblem {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
+  /* 02: Approved `#4F7A2E`, Rejected `#B0472A`, a deadline that passed amber. */
+  .decidedStatus[data-tone='approved'] {
+    color: var(--signal-done-text);
+  }
+
+  .decidedStatus[data-tone='rejected'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .decidedStatus[data-tone='lapsed'] {
     color: var(--intent-blocked-text);
   }
 
-  /* "Your most recent", never "all". The route caps at 100 per status. */
-  .decidedCaveat {
-    margin: 0;
-    max-inline-size: var(--size-reading);
+  /* Approved and it did not run, or nobody recorded whether it did. */
+  .decidedStatus[data-tone='problem'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .decidedFooter {
+    margin: auto 0 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--panel-footer);
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
+  }
+
+  /* 02's header figures: the label quiet, the number 11.5/600. */
+  .headerStats {
+    display: flex;
+    gap: var(--space-16);
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    line-height: normal;
+  }
+
+  .headerStats strong {
+    margin-inline-start: var(--space-4);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 }
 

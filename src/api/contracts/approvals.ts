@@ -95,42 +95,67 @@ export function isKnownRiskTag(tag: string): tag is KnownRiskTag {
   return (KNOWN_RISK_TAGS as readonly string[]).includes(tag);
 }
 
-export const approvalSchema = z.object({
-  id: z.string().min(1),
-  /** Nullable by design: System Copilot plans are not conversation-scoped. */
-  conversationId: z.string().nullable().default(null),
-  contactId: z.string().nullable().default(null),
-  tool: z.string().min(1),
-  /** The backend's own one-line human-facing sentence. The headline. */
-  summary: z.string().min(1),
-  /** The bot's stated reasoning. Shown as reasoning, never as fact. */
-  reason: z.string().default(''),
-  /** Denormalised on purpose so it survives the rule being deleted. */
-  policyRuleName: z.string().nullable().default(null),
-  riskLevel: z.enum(RISK_LEVELS).catch('medium'),
-  /** `["HIGH","IRREVERSIBLE","FINANCIAL"]`. A LABEL — see `IRREVERSIBLE`. */
-  riskTags: z.array(z.string()).default([]),
-  status: z.enum(APPROVAL_STATUSES).catch('PENDING'),
-  /** `"bot"` | `"flow:<id>"` | `"ai-agent:<id>"` — never a person. */
-  requestedBy: z.string().default('bot'),
-  /** Null for anything with a `:` in `requestedBy`, which is every AI employee. */
-  requestedByName: z.string().nullable().default(null),
-  decidedByName: z.string().nullable().default(null),
-  decidedAt: z.string().nullable().default(null),
-  decisionReason: z.string().nullable().default(null),
-  expiresAt: z.string(),
-  createdAt: z.string(),
+export const approvalSchema = z
+  .object({
+    id: z.string().min(1),
+    /** Nullable by design: System Copilot plans are not conversation-scoped. */
+    conversationId: z.string().nullable().default(null),
+    contactId: z.string().nullable().default(null),
+    tool: z.string().min(1),
+    /** The backend's own one-line human-facing sentence. The headline. */
+    summary: z.string().min(1),
+    /** The bot's stated reasoning. Shown as reasoning, never as fact. */
+    reason: z.string().default(''),
+    /** Denormalised on purpose so it survives the rule being deleted. */
+    policyRuleName: z.string().nullable().default(null),
+    riskLevel: z.enum(RISK_LEVELS).catch('medium'),
+    /** `["HIGH","IRREVERSIBLE","FINANCIAL"]`. A LABEL — see `IRREVERSIBLE`. */
+    riskTags: z.array(z.string()).default([]),
+    status: z.enum(APPROVAL_STATUSES).catch('PENDING'),
+    /** `"bot"` | `"flow:<id>"` | `"ai-agent:<id>"` — never a person. */
+    requestedBy: z.string().default('bot'),
+    /** Null for anything with a `:` in `requestedBy`, which is every AI employee. */
+    requestedByName: z.string().nullable().default(null),
+    decidedByName: z.string().nullable().default(null),
+    /**
+     * Where the decision was made — `whatsapp` for a manager's reply, `web` in
+     * the app, `null` on older rows. Was on the wire and stripped.
+     */
+    decisionChannel: z.string().nullish().default(null),
+    /**
+     * The action's own parameters — read by the TRANSFORM below to give an old
+     * row a sentence, and then dropped. See there.
+     */
+    params: z.unknown().optional(),
+    decidedAt: z.string().nullable().default(null),
+    decisionReason: z.string().nullable().default(null),
+    expiresAt: z.string(),
+    createdAt: z.string(),
 
-  executionState: z.enum(EXECUTION_STATES).catch('NOT_STARTED'),
-  executionError: z.string().nullable().default(null),
-  executionAttempts: z.number().default(0),
-  /**
-   * Set once the customer has been told. The backend uses its presence as the
-   * once-only guard for the continuation message, which makes "the customer
-   * knows" a **fact on this screen rather than an inference**.
+    executionState: z.enum(EXECUTION_STATES).catch('NOT_STARTED'),
+    executionError: z.string().nullable().default(null),
+    executionAttempts: z.number().default(0),
+    /**
+     * Set once the customer has been told. The backend uses its presence as the
+     * once-only guard for the continuation message, which makes "the customer
+     * knows" a **fact on this screen rather than an inference**.
+     */
+    customerNotifiedAt: z.string().nullable().default(null),
+  })
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ⚠⚠ `params` IS READ HERE AND GOES NO FURTHER
+   * ════════════════════════════════════════════════════════════════════════
+   * The list route spreads the raw row, and `params` can carry anything the
+   * tool was given — a card number, in the test that guards this. The parse
+   * runs on the server, so the sentence is derived HERE (`approvalSummary`)
+   * and `params` is dropped in the same step: no screen, prop or client
+   * bundle ever holds it.
    */
-  customerNotifiedAt: z.string().nullable().default(null),
-});
+  .transform(({ params, ...approval }) => ({
+    ...approval,
+    summary: approvalSummary({ summary: approval.summary, tool: approval.tool, params }),
+  }));
 
 export const approvalsSchema = z.array(approvalSchema);
 export type Approval = z.infer<typeof approvalSchema>;
@@ -286,4 +311,73 @@ export function aiEmployeeIdOf(approval: Approval): string | null {
   return approval.requestedBy.startsWith(prefix)
     ? approval.requestedBy.slice(prefix.length) || null
     : null;
+}
+
+/**
+ * The row's sentence — the stored `summary`, unless it is not one.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ 27 OF 54 ROWS SAID "ai-bot inbox tool call"
+ * ════════════════════════════════════════════════════════════════════════════
+ * `summary` is a plain String, and writers used to put a debug breadcrumb, a
+ * function signature (`issue_refund()`) or the tool's name in it. The platform
+ * now writes a sentence with `describeApprovalAction(tool, params)` — for NEW
+ * rows. Old ones keep the breadcrumb, but every one still carries `tool` and
+ * `params`, so the sentence is derived here from that record: real data, not
+ * invented. (Backend could do this once in the list route; that is on hold.)
+ *
+ * ⚠ A PORT, kept in step by the platform's own cases
+ *   (`packages/shared/src/lib/__tests__/approval-summary.test.ts`), copied
+ *   into `approvals.test.ts`. English, as the stored summaries are, and with
+ *   NO currency: `params.amount` carries none, and a symbol would be invented.
+ */
+export function approvalSummary(approval: {
+  readonly summary: string;
+  readonly tool: string;
+  readonly params?: unknown;
+}): string {
+  return isNotASentence(approval.summary, approval.tool)
+    ? describeApprovalAction(approval.tool, approval.params)
+    : approval.summary;
+}
+
+/** The conventions measured in the data, and nothing broader. */
+export function isNotASentence(summary: string, tool: string): boolean {
+  const text = summary.trim();
+  return (
+    text === '' ||
+    /\btool call\b/i.test(text) ||
+    /^[a-z0-9_.]+\(.*\)$/i.test(text) ||
+    text === tool.trim()
+  );
+}
+
+/** A port of the platform's `describeApprovalAction` — see `approvalSummary`. */
+export function describeApprovalAction(tool: string, params: unknown = {}): string {
+  const bare = String(tool || '')
+    .split('.')
+    .pop()!
+    .replace(/^integration_/, '');
+  const words = bare.replace(/_+/g, ' ').trim();
+  if (!words) return 'Approve this action';
+  const verb = words.charAt(0).toUpperCase() + words.slice(1);
+
+  const p = (params && typeof params === 'object' ? params : {}) as Record<string, unknown>;
+  const scalar = (v: unknown): string => {
+    if (typeof v === 'string') return v.trim();
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+    return '';
+  };
+  const order = scalar(p.order_name) || scalar(p.orderName);
+  const subject = scalar(p.subject) || scalar(p.title) || scalar(p.name);
+  const amount = scalar(p.amount);
+
+  let out = verb;
+  if (amount && /refund/i.test(words)) out += ` of ${amount}`;
+  if (order) {
+    out += /\border$/i.test(verb) ? ` ${order}` : ` for order ${order}`;
+  } else if (subject) {
+    out += `: ${subject}`;
+  }
+  return out;
 }

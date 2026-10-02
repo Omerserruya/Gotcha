@@ -115,3 +115,37 @@ export function requesterName(
   if (!id) return null;
   return aiEmployees?.find((ai) => ai.id === id)?.name ?? null;
 }
+
+/**
+ * 02's header figures for 03c: "Approved this week 42 · Avg decision 16s".
+ *
+ * Computed from the decisions already loaded — no new read. Over the last
+ * seven days: how many were approved, and the mean time from asking to
+ * deciding across approvals and rejections.
+ *
+ * ⚠ `null` when the list may be cut. `GET /api/approvals` caps at 100 per
+ *   status with no date filter, so a week busier than that would be counted
+ *   short — a figure somebody plans around, quietly wrong. Absent beats low.
+ */
+export function decisionStats(
+  decided: readonly Approval[] | null,
+  mayBeIncomplete: boolean,
+  now: Date = new Date(),
+): { readonly approvedThisWeek: number; readonly avgDecisionSeconds: number | null } | null {
+  if (decided === null || mayBeIncomplete) return null;
+  const since = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const thisWeek = decided.filter(
+    (approval) => approval.decidedAt !== null && Date.parse(approval.decidedAt) >= since,
+  );
+  const durations = thisWeek
+    .filter((approval) => approval.status === 'APPROVED' || approval.status === 'REJECTED')
+    .map((approval) => (Date.parse(approval.decidedAt!) - Date.parse(approval.createdAt)) / 1000)
+    .filter((seconds) => Number.isFinite(seconds) && seconds >= 0);
+  return {
+    approvedThisWeek: thisWeek.filter((approval) => approval.status === 'APPROVED').length,
+    avgDecisionSeconds:
+      durations.length === 0
+        ? null
+        : Math.round(durations.reduce((sum, seconds) => sum + seconds, 0) / durations.length),
+  };
+}

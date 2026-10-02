@@ -2,8 +2,8 @@ import { getTranslations } from 'next-intl/server';
 
 import type { Approval } from '@/api/contracts/approvals';
 import { ApprovalsScreen } from '@/features/approvals/ApprovalsScreen';
-import { NothingWaiting } from '@/features/approvals/NothingWaiting';
-import { loadApprovals, requesterName } from '@/features/approvals/load-approvals';
+import { DecisionStats, NothingWaiting } from '@/features/approvals/NothingWaiting';
+import { decisionStats, loadApprovals, requesterName } from '@/features/approvals/load-approvals';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -80,7 +80,16 @@ export default async function Page() {
    */
   if (pending.length === 0) {
     return (
-      <PageContainer layout="screen" title={t('title')} description={t('description')}>
+      /*
+        ★ 03c's title is the STATE, not the page's name — "Nothing waiting on
+          you" — with 02's figures on the right.
+      */
+      <PageContainer
+        layout="screen"
+        title={t('rest.title')}
+        description={t('rest.lead')}
+        actions={<DecisionStats stats={decisionStats(decided, decidedMayBeIncomplete)} />}
+      >
         <NothingWaiting
           decided={decided}
           mayBeIncomplete={decidedMayBeIncomplete}

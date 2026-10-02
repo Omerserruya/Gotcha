@@ -2,6 +2,8 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { decisionStance, isOutcomeUnknown, type Approval } from '@/api/contracts/approvals';
 
+import type { decisionStats } from './load-approvals';
+
 import styles from './Approvals.module.css';
 
 /**
@@ -38,140 +40,197 @@ export async function NothingWaiting({
   decided,
   mayBeIncomplete,
   requesterNames,
+  now = new Date(),
 }: {
-  /** Approved and rejected, newest first. `null` is a failed read. */
   readonly decided: readonly Approval[] | null;
-  /** The route's `take: 100` may have cut today's earliest decisions. */
   readonly mayBeIncomplete: boolean;
   readonly requesterNames: Readonly<Record<string, string>>;
+  /** One `now` for the render: "today" decides whether a row shows a time or a date. */
+  readonly now?: Date;
 }) {
   const t = await getTranslations('approvals');
   const format = await getFormatter();
 
+  /*
+   * ★ A TIME FOR TODAY, A DATE FOR EARLIER. 02's column is `09:41` because
+   *   its list is today's. Ours spans days, and a time alone on a list that
+   *   does was the defect a walk found: 29 rows at "12:43 AM" and no day.
+   */
+  const today = now.toDateString();
+  const when = (iso: string) => {
+    const at = new Date(iso);
+    return at.toDateString() === today
+      ? format.dateTime(at, { hour: '2-digit', minute: '2-digit', hour12: false })
+      : format.dateTime(at, { day: 'numeric', month: 'short' });
+  };
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ 03c: THE STATE IS THE PAGE TITLE, AND THIS IS THE RECORD
+   * ════════════════════════════════════════════════════════════════════════
+   * 02 says "Nothing waiting on you" in the title and gives the body to the
+   * record of decisions — one card, one row per decision: when, what, and
+   * how it ended. Our two explanatory paragraphs above it are gone; 02 shows
+   * states, it does not explain them.
+   *
+   * Not drawn, and why: the dark "handled without asking you" card needs an
+   * auto-handled count and value nobody records; Undo has no route; the
+   * footer's "Rejecting with a reason teaches GOTCHA" describes learning
+   * nothing derives.
+   */
   return (
-    <div className={styles.nothingWaiting} data-testid="nothing-waiting">
-      <header className={styles.restHeader}>
-        <p className={styles.restLead} data-testid="nothing-waiting-lead">
-          {t('rest.lead')}
-        </p>
-        <p className={styles.restBody}>{t('rest.body')}</p>
+    <section className={styles.decidedCard} data-testid="nothing-waiting">
+      <header className={styles.decidedCardHeader}>
+        <h2 className={styles.decidedHeading}>{t('decided.heading')}</h2>
+        {decided && decided.length > 0 ? (
+          <span className={styles.decidedCount}>
+            {mayBeIncomplete
+              ? t('decided.latest', { count: decided.length })
+              : t('decided.count', { count: decided.length })}
+          </span>
+        ) : null}
       </header>
 
-      <section className={styles.decided} data-testid="decided-section">
-        <h2 className={styles.decidedHeading}>{t('decided.heading')}</h2>
-
-        {decided === null ? (
-          <p className={styles.unknownOutcome} data-testid="decided-unavailable">
-            {t('decided.unavailable')}
-          </p>
-        ) : decided.length === 0 ? (
-          <p className={styles.restBody} data-testid="decided-empty">
-            {t('decided.none')}
-          </p>
-        ) : (
-          <>
-            <ul className={styles.decidedList} data-testid="decided-list">
-              {decided.map((approval) => {
-                const stance = decisionStance(approval);
-                return (
-                  <li
-                    key={approval.id}
-                    className={styles.decidedRow}
-                    data-testid={`decided-${approval.id}`}
-                    data-stance={stance}
+      {decided === null ? (
+        <p className={styles.decidedNote} data-testid="decided-unavailable">
+          {t('decided.unavailable')}
+        </p>
+      ) : decided.length === 0 ? (
+        <p className={styles.decidedNote} data-testid="decided-empty">
+          {t('decided.none')}
+        </p>
+      ) : (
+        <ol className={styles.decidedList} data-testid="decided-list">
+          {decided.map((approval) => {
+            const stance = decisionStance(approval);
+            const failed = stance === 'approved' && approval.executionState === 'FAILED';
+            const unknown = isOutcomeUnknown(approval);
+            /*
+             * ★ WHO DECIDED, ON HOVER. 02's row does not name the decider; the
+             *   status's tooltip does.
+             */
+            /*
+             * Who decided, and where — the status's tooltip. "someone" where the
+             * platform holds no name: 26 of dev's 29 rows carry test-fixture
+             * labels (`dev-e2e`, `qa-manager`), not user ids, and for those
+             * "someone" is the truth.
+             */
+            const who = approval.decidedByName ?? t('decided.someone');
+            const channel =
+              approval.decisionChannel === 'whatsapp' || approval.decisionChannel === 'web'
+                ? t(`decided.channel.${approval.decisionChannel}`)
+                : null;
+            const by =
+              channel === null ? t('decided.by', { who }) : t('decided.byVia', { who, channel });
+            const asked = requesterNames[approval.id];
+            return (
+              <li
+                key={approval.id}
+                className={styles.decidedRow}
+                data-testid={`decided-${approval.id}`}
+                data-stance={stance}
+              >
+                <span className={styles.decidedWhen}>
+                  {approval.decidedAt ? (
+                    <time dateTime={approval.decidedAt} data-testid={`when-${approval.id}`}>
+                      {when(approval.decidedAt)}
+                    </time>
+                  ) : null}
+                </span>
+                <span
+                  className={styles.decidedSummary}
+                  title={asked ? t('decided.askedBy', { who: asked }) : undefined}
+                >
+                  {approval.summary}
+                </span>
+                {/*
+                  ★★ HOW IT ENDED, IN ONE WORD — and the two endings 02's tidy
+                  column could never show, said as plainly: approved and then
+                  failed to run, and approved before anything recorded whether
+                  it ran. The full sentence is the tooltip.
+                */}
+                {failed ? (
+                  <span
+                    className={styles.decidedStatus}
+                    data-tone="problem"
+                    data-testid={`failed-${approval.id}`}
+                    title={t('decided.didNotRun')}
                   >
-                    <p className={styles.decidedSummary}>{approval.summary}</p>
+                    {t('decided.status.didNotRun')}
+                  </span>
+                ) : unknown ? (
+                  <span
+                    className={styles.decidedStatus}
+                    data-tone="problem"
+                    data-testid={`unknown-${approval.id}`}
+                    title={t('decided.outcomeUnknown')}
+                  >
+                    {t('decided.status.outcomeUnknown')}
+                  </span>
+                ) : stance === 'rejected' && approval.decisionReason ? (
+                  <span
+                    className={styles.decidedStatus}
+                    data-tone="rejected"
+                    data-testid={`reason-${approval.id}`}
+                    title={by}
+                  >
+                    {t('decided.status.rejectedBecause', { reason: approval.decisionReason })}
+                  </span>
+                ) : (
+                  <span className={styles.decidedStatus} data-tone={stance} title={by}>
+                    {t(`decided.status.${stance}` as 'decided.status.approved')}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
 
-                    <p className={styles.decidedMeta}>
-                      {/*
-                        ══════════════════════════════════════════════════════
-                        ★★ A TIME WITH NO DATE, ON A LIST SPANNING DAYS
-                        ══════════════════════════════════════════════════════
-                        A browser walk found 29 rows here reading "Approved by
-                        someone at 12:43 AM", cycling through morning and
-                        afternoon across what must be several days. `dateStyle`
-                        was absent, so every row claimed a time and none said
-                        which day.
+      {/*
+        `GET /api/approvals` takes one status, has no date filter, and caps at
+        100 per status — so the card says when it may be cut, in 02's footer
+        bar, as one line.
+      */}
+      {decided && decided.length > 0 && mayBeIncomplete ? (
+        <p className={styles.decidedFooter} data-testid="decided-incomplete">
+          {t('decided.incompleteShort')}
+        </p>
+      ) : null}
+    </section>
+  );
+}
 
-                        ★ AND THE QUEUE'S REASONING DOES NOT APPLY HERE. I
-                          argued against paging the pending queue because the
-                          oldest item is the one that most needs deciding and
-                          hiding it is the failure. **This is not a work queue,
-                          it is a reference list** — the decisions are made, and
-                          what a reader wants from it is when. Different list,
-                          different answer.
-
-                        ★★ AND AN ABSENT `decidedAt` RENDERED AS `''`, so the
-                        row read "Approved by someone at " with a dangling
-                        preposition. `decidedAt` is nullable on the contract, so
-                        that is a real row and not a defensive branch. It now
-                        takes a message with no time clause in it, rather than a
-                        sentence with a hole.
-                      */}
-                      {approval.decidedAt
-                        ? t(`decided.${stance}` as 'decided.approved', {
-                            who: approval.decidedByName ?? t('decided.someone'),
-                            when: format.dateTime(new Date(approval.decidedAt), {
-                              dateStyle: 'medium',
-                              timeStyle: 'short',
-                            }),
-                          })
-                        : t(`decided.${stance}NoTime` as 'decided.approvedNoTime', {
-                            who: approval.decidedByName ?? t('decided.someone'),
-                          })}
-                      {requesterNames[approval.id]
-                        ? ` · ${t('decided.askedBy', { who: requesterNames[approval.id]! })}`
-                        : null}
-                    </p>
-
-                    {/*
-                      The rejection reason, shown because it is real. What the
-                      design claims ABOUT it — that GOTCHA learned a threshold
-                      from it — is not: nothing derives one.
-                    */}
-                    {stance === 'rejected' && approval.decisionReason ? (
-                      <p className={styles.decidedReason} data-testid={`reason-${approval.id}`}>
-                        {t('decided.because', { reason: approval.decisionReason })}
-                      </p>
-                    ) : null}
-
-                    {/*
-                      The second axis, on the screen that summarises the first.
-                      An approval granted and then failed to execute is exactly
-                      what someone reviewing their own decisions needs to see,
-                      and it is the one thing the design's tidy list of green
-                      ticks could never show.
-                    */}
-                    {stance === 'approved' && approval.executionState === 'FAILED' ? (
-                      <p className={styles.decidedProblem} data-testid={`failed-${approval.id}`}>
-                        {t('decided.didNotRun')}
-                      </p>
-                    ) : null}
-
-                    {isOutcomeUnknown(approval) ? (
-                      <p className={styles.decidedProblem} data-testid={`unknown-${approval.id}`}>
-                        {t('decided.outcomeUnknown')}
-                      </p>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-
-            {/*
-              `GET /api/approvals` takes one status, has no date filter, and
-              caps at 100 per status. A count captioned "today" that silently
-              means "of the last 100" is the kind of number somebody plans
-              around, so the screen says which it is.
-            */}
-            {mayBeIncomplete ? (
-              <p className={styles.decidedCaveat} data-testid="decided-incomplete">
-                {t('decided.incomplete')}
-              </p>
-            ) : null}
-          </>
-        )}
-      </section>
-    </div>
+/**
+ * 02's header figures — "Approved this week 42 · Avg decision 16s" — for the
+ * page's `actions` slot. Nothing when they cannot be stood behind.
+ */
+export async function DecisionStats({
+  stats,
+}: {
+  readonly stats: ReturnType<typeof decisionStats>;
+}) {
+  if (stats === null) return null;
+  const t = await getTranslations('approvals');
+  const seconds = stats.avgDecisionSeconds;
+  const avg =
+    seconds === null
+      ? null
+      : seconds < 60
+        ? t('stats.seconds', { n: seconds })
+        : seconds < 3600
+          ? t('stats.minutes', { n: Math.round(seconds / 60) })
+          : t('stats.hours', { n: Math.round(seconds / 3600) });
+  return (
+    <p className={styles.headerStats} data-testid="decision-stats">
+      <span>
+        {t('stats.approvedWeek')} <strong>{stats.approvedThisWeek}</strong>
+      </span>
+      {avg === null ? null : (
+        <span>
+          {t('stats.avgDecision')} <strong>{avg}</strong>
+        </span>
+      )}
+    </p>
   );
 }

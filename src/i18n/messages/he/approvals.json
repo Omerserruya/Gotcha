@@ -46,10 +46,11 @@
   },
   "rest": {
     "lead": "שום דבר לא ממתין להחלטה שלך.",
-    "body": "כל מה שעלה היה בתוך הגבולות שהגדרת. GOTCHA טיפלה בזה והמשיכה."
+    "body": "כל מה שעלה היה בתוך הגבולות שהגדרת. GOTCHA טיפלה בזה והמשיכה.",
+    "title": "אין שום דבר שמחכה לך"
   },
   "decided": {
-    "heading": "מה שהחלטת",
+    "heading": "מה החלטת קודם",
     "none": "עוד לא החלטת על שום דבר.",
     "unavailable": "לא הצלחנו לקרוא את ההחלטות הקודמות שלך כרגע.",
     "approved": "אושר על ידי {who} ב-{when}",
@@ -65,7 +66,25 @@
     "approvedNoTime": "אושר על ידי {who}",
     "rejectedNoTime": "נדחה על ידי {who}",
     "lapsedNoTime": "המועד חלף — הועבר לאדם",
-    "cancelledNoTime": "בוטל"
+    "cancelledNoTime": "בוטל",
+    "count": "{count, plural, one {החלטה אחת} other {# החלטות}}",
+    "latest": "{count} האחרונות שלך",
+    "by": "הוחלט על ידי {who}",
+    "status": {
+      "approved": "אושר",
+      "rejected": "נדחה",
+      "rejectedBecause": "נדחה · {reason}",
+      "lapsed": "המועד עבר",
+      "cancelled": "בוטל",
+      "didNotRun": "אושר · לא בוצע",
+      "outcomeUnknown": "אושר · התוצאה לא ידועה"
+    },
+    "incompleteShort": "ההחלטות האחרונות שלך — הרשימה מחזיקה את המאה האחרונות מכל סוג.",
+    "byVia": "הוחלט על ידי {who} דרך {channel}",
+    "channel": {
+      "whatsapp": "WhatsApp",
+      "web": "האפליקציה"
+    }
   },
   "moment": {
     "decided": "הוחלט: {summary}",
@@ -74,5 +93,12 @@
     "factExecutionFailed": "GOTCHA לא הצליחה לבצע את זה.",
     "factCustomerTold": "הלקוח קיבל הודעה.",
     "factCustomerNotYet": "הלקוח עוד לא קיבל הודעה."
+  },
+  "stats": {
+    "approvedWeek": "אושרו השבוע",
+    "avgDecision": "זמן החלטה ממוצע",
+    "seconds": "{n} שנ׳",
+    "minutes": "{n} דק׳",
+    "hours": "{n} שע׳"
   }
 }

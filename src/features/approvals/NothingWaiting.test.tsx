@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
@@ -5,7 +7,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { approvalSchema, type Approval } from '@/api/contracts/approvals';
 import messages from '@/i18n/messages/en/approvals.json';
 
-import { NothingWaiting } from './NothingWaiting';
+import { decisionStats } from './load-approvals';
+import { DecisionStats, NothingWaiting } from './NothingWaiting';
 
 /**
  * What you decided — screen 03's other list, and the state this tenant is in.
@@ -29,7 +32,7 @@ vi.mock('next-intl/server', () => ({
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'UTC' }),
 }));
 
-const approval = (over: Partial<Approval> = {}): Approval =>
+const approval = (over: Record<string, unknown> = {}): Approval =>
   approvalSchema.parse({
     id: 'a1',
     tool: 'issue_refund',
@@ -42,58 +45,80 @@ const approval = (over: Partial<Approval> = {}): Approval =>
     ...over,
   });
 
+const NOW = new Date('2026-09-20T09:00:00.000Z');
 const show = async (decided: readonly Approval[] | null, mayBeIncomplete = false) =>
-  render(await NothingWaiting({ decided, mayBeIncomplete, requesterNames: {} }));
+  render(await NothingWaiting({ decided, mayBeIncomplete, requesterNames: {}, now: NOW }));
 
 describe('★★ a decision carries the day it was made, not just the time', () => {
-  it('★★ names the date as well as the time', async () => {
+  it('★★ an earlier day shows its DATE — a time alone was the same on every day', async () => {
     /*
      * A list spanning several days with times only cannot be read at all: "12:43
-     * AM" is the same string on every one of those days. This is a REFERENCE
-     * list, not a work queue — the decisions are made, and when is the thing a
-     * reader wants from it.
+     * AM" was the same string on every one of those days. 02's column is a time
+     * because its list is today's; ours shows a date for anything earlier.
      */
     await show([approval()]);
-    const row = screen.getByTestId('decided-a1');
-    expect(row).toHaveTextContent('Sep 15, 2026');
-    expect(row).toHaveTextContent('Approved by Dana');
+    expect(screen.getByTestId('when-a1')).toHaveTextContent('Sep 15');
   });
 
-  it('★★ says nothing about a time it does not have, rather than a dangling "at"', async () => {
+  it('★ today shows the time, as 02’s column does', async () => {
+    await show([approval({ decidedAt: '2026-09-20T07:41:00.000Z' })]);
+    expect(screen.getByTestId('when-a1')).toHaveTextContent('07:41');
+  });
+
+  it('★★ claims no time it does not have — no year, no clock, not the epoch', async () => {
     /*
-     * `decidedAt` is nullable on the contract, so this is a real row. It used to
-     * interpolate `''`, so the row read "Approved by someone at " — a sentence
-     * with a hole in it, which reads as a rendering fault rather than as missing
-     * data.
+     * `decidedAt` is nullable on the contract, so this is a real row. Mutations
+     * have produced both "at " with a hole and "Jan 1, 1970" from `new
+     * Date(null)`; the property that must hold is that the row claims no time.
      */
     await show([approval({ decidedAt: null, decidedByName: null })]);
     const row = screen.getByTestId('decided-a1');
-    expect(row).toHaveTextContent(/approved by someone/i);
-
-    /*
-     * ★★ THE PROPERTY, NOT THE OLD SYMPTOM. The first version of this asserted
-     * the absence of a dangling "at", because that is what the defect looked
-     * like. A mutation forcing the timed branch then PASSED it — `new Date(null)`
-     * is the epoch, so the row read "Approved by someone at Jan 1, 1970, 12:00
-     * AM". A different defect, worse than the original, and invisible to an
-     * assertion aimed at the wording of the first one.
-     *
-     * What must be true is that a row with no recorded time claims no time: no
-     * year, no clock. That holds against the empty string, the epoch, and
-     * whatever the next accident interpolates.
-     */
     expect(row.textContent).not.toMatch(/\b(19|20)\d{2}\b/);
     expect(row.textContent).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(screen.queryByTestId('when-a1')).toBeNull();
+  });
+});
+
+describe('★★ how it ended, in one word — and never "someone"', () => {
+  it('★ approved, with who decided as its tooltip', async () => {
+    await show([approval()]);
+    const status = screen.getByText('Approved');
+    expect(status).toHaveAttribute('title', 'Decided by Dana');
   });
 
-  it('★ keeps the same treatment for a rejection', async () => {
-    await show([approval({ id: 'a2', status: 'REJECTED', decidedAt: null })]);
-    expect(screen.getByTestId('decided-a2')).toHaveTextContent(/rejected by Dana/i);
-  });
-
-  it('names "someone" only when the platform gave no name', async () => {
+  it('★ "someone" where the platform holds no name — true for dev’s fixture-labelled rows', async () => {
+    // 26 of dev's 29 decided rows carry `dev-e2e` / `qa-manager`, not user ids.
     await show([approval({ decidedByName: null })]);
-    expect(screen.getByTestId('decided-a1')).toHaveTextContent(/approved by someone/i);
+    expect(screen.getByText('Approved')).toHaveAttribute('title', 'Decided by someone');
+  });
+
+  it('★ and where it was decided — a manager’s WhatsApp reply says so', async () => {
+    await show([approval({ decisionChannel: 'whatsapp' })]);
+    expect(screen.getByText('Approved')).toHaveAttribute('title', 'Decided by Dana via WhatsApp');
+  });
+
+  it('★★ a stored breadcrumb is replaced by the sentence its own record gives', async () => {
+    await show([
+      approval({
+        summary: 'ai-bot inbox tool call',
+        tool: 'shopify.cancel_order',
+        params: { order_name: '#4812' },
+      }),
+    ]);
+    expect(screen.getByTestId('decided-a1')).toHaveTextContent('Cancel order #4812');
+    expect(screen.getByTestId('decided-a1').textContent).not.toMatch(/tool call/);
+  });
+
+  it('★ a rejection shows its reason in the status, as 02’s "Rejected · outside policy"', async () => {
+    await show([approval({ id: 'a2', status: 'REJECTED', decisionReason: 'outside policy' })]);
+    expect(screen.getByTestId('reason-a2')).toHaveTextContent('Rejected · outside policy');
+  });
+
+  it('★★ approved and then it did not run — the ending 02’s tidy column cannot show', async () => {
+    await show([approval({ executionState: 'FAILED' })]);
+    const failed = screen.getByTestId('failed-a1');
+    expect(failed).toHaveTextContent(/didn’t run/);
+    expect(failed.getAttribute('title')).toMatch(/didn't run/);
   });
 });
 
@@ -118,6 +143,66 @@ describe('★★ the three states of the decided list', () => {
     // `take: 100` per kind. A list that is silently partial is a record somebody
     // will trust as complete.
     await show([approval()], true);
-    expect(screen.getByText(/not all of them/i)).toBeInTheDocument();
+    expect(screen.getByTestId('decided-incomplete')).toHaveTextContent(/most recent decisions/i);
+  });
+
+  it('★ and when it may be, the count says "your latest", not a total', async () => {
+    await show([approval()], true);
+    expect(screen.getByTestId('nothing-waiting')).toHaveTextContent('Your latest 1');
+  });
+});
+
+describe('★★ 02’s header figures — only when they can be stood behind', () => {
+  it('★ approved this week, and the mean time from asking to deciding', async () => {
+    const stats = decisionStats(
+      [
+        approval({
+          id: 'a',
+          decidedAt: '2026-09-19T10:00:16.000Z',
+          createdAt: '2026-09-19T10:00:00.000Z',
+        }),
+        approval({
+          id: 'b',
+          status: 'REJECTED',
+          decidedAt: '2026-09-19T11:00:16.000Z',
+          createdAt: '2026-09-19T11:00:00.000Z',
+        }),
+        // Eight days ago: not this week.
+        approval({
+          id: 'c',
+          decidedAt: '2026-09-12T10:00:00.000Z',
+          createdAt: '2026-09-12T09:00:00.000Z',
+        }),
+      ],
+      false,
+      NOW,
+    );
+    expect(stats).toEqual({ approvedThisWeek: 1, avgDecisionSeconds: 16 });
+    render(await DecisionStats({ stats }));
+    expect(screen.getByTestId('decision-stats')).toHaveTextContent('Approved this week 1');
+    expect(screen.getByTestId('decision-stats')).toHaveTextContent('Avg decision 16s');
+  });
+
+  it('⚠⚠ none at all when the list may be cut — a short count is worse than none', async () => {
+    expect(decisionStats([approval()], true, NOW)).toBeNull();
+    const { container } = render(await DecisionStats({ stats: null }));
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('★ 03c’s card, measured on all four sides of every border', () => {
+  const css = readFileSync('src/features/approvals/Approvals.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const rule = (selector: string) =>
+    new RegExp(`(?:^|\\n)\\s*${selector.replace(/[.:-]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(
+      css,
+    )?.[1] ?? '';
+
+  it('a #F0EDE7 rule under the heading, #F7F5F1 between rows, none under the last', () => {
+    expect(rule('.decidedCardHeader')).toMatch(/border-block-end:\s*1px solid var\(--panel-well\)/);
+    expect(rule('.decidedRow')).toMatch(/border-block-end:\s*1px solid var\(--row-divider\)/);
+    expect(rule('.decidedRow:last-child')).toMatch(/border-block-end:\s*0/);
   });
 });

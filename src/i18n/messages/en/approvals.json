@@ -46,10 +46,11 @@
   },
   "rest": {
     "lead": "Nothing needs a decision from you.",
-    "body": "Everything that came up was inside the limits you set. GOTCHA handled it and kept going."
+    "body": "Everything that came up was inside the limits you set. GOTCHA handled it and kept going.",
+    "title": "Nothing waiting on you"
   },
   "decided": {
-    "heading": "What you decided",
+    "heading": "What you decided earlier",
     "none": "You haven't decided anything yet.",
     "unavailable": "We couldn't read your past decisions just now.",
     "approved": "Approved by {who} at {when}",
@@ -65,7 +66,25 @@
     "approvedNoTime": "Approved by {who}",
     "rejectedNoTime": "Rejected by {who}",
     "lapsedNoTime": "Deadline passed — handed to a person",
-    "cancelledNoTime": "Cancelled"
+    "cancelledNoTime": "Cancelled",
+    "count": "{count, plural, one {# decision} other {# decisions}}",
+    "latest": "Your latest {count}",
+    "by": "Decided by {who}",
+    "status": {
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "rejectedBecause": "Rejected · {reason}",
+      "lapsed": "Deadline passed",
+      "cancelled": "Cancelled",
+      "didNotRun": "Approved · didn’t run",
+      "outcomeUnknown": "Approved · outcome unknown"
+    },
+    "incompleteShort": "Your most recent decisions — the list holds the last hundred of each kind.",
+    "byVia": "Decided by {who} via {channel}",
+    "channel": {
+      "whatsapp": "WhatsApp",
+      "web": "the app"
+    }
   },
   "moment": {
     "decided": "Decided: {summary}",
@@ -74,5 +93,12 @@
     "factExecutionFailed": "GOTCHA could not carry it out.",
     "factCustomerTold": "The customer has been told.",
     "factCustomerNotYet": "The customer hasn't been told yet."
+  },
+  "stats": {
+    "approvedWeek": "Approved this week",
+    "avgDecision": "Avg decision",
+    "seconds": "{n}s",
+    "minutes": "{n}m",
+    "hours": "{n}h"
   }
 }
