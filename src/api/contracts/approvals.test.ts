@@ -12,6 +12,9 @@ import {
   isFlaggedIrreversible,
   isOutcomeUnknown,
   isRetryable,
+  classifyDispatchError,
+  plainErrorText,
+  providerOf,
   type Approval,
 } from './approvals';
 
@@ -248,5 +251,53 @@ describe('⚠⚠ every risk tag reaches the screen as words', () => {
     expect(humanizeTag('MOVES_MONEY')).toBe('Moves money');
     expect(humanizeTag('cancel_order')).toBe('Cancel order');
     expect(humanizeTag('shopify.process-refund')).toBe('Shopify process refund');
+  });
+});
+
+describe('★★ classifyDispatchError — the operator’s classes, the platform’s rules', () => {
+  it.each([
+    [
+      'Token refresh failed for shopify: shopify_token_refresh_failed_401: <!DOCTYPE html>…',
+      'connection',
+    ],
+    ['oauth error invalid_request', 'connection'],
+    ['order already refunded', 'already_done'],
+    ['Cannot cancel: order has outstanding fulfillments', 'after_shipping'],
+    ['missing scope write_orders', 'not_permitted'],
+    ['403 forbidden', 'not_permitted'],
+    ['policy_limit_exceeded: requested 300', 'not_permitted'],
+    ['ETIMEDOUT timeout', 'provider_unavailable'],
+    ['upstream 502', 'provider_unavailable'],
+    ['amount exceeds the maximum', 'exceeds_limit'],
+    ['something odd', 'unknown'],
+    ['', 'unknown'],
+  ])('%s → %s', (error, expected) => {
+    expect(classifyDispatchError(error)).toBe(expected);
+  });
+
+  it('a 401 is the connection, not a permission — its repair is reconnecting', () => {
+    expect(classifyDispatchError('request failed with 401')).toBe('connection');
+  });
+});
+
+describe('★ plainErrorText — a tooltip, never a page', () => {
+  it('drops an HTML document and its tags, collapses, cuts', () => {
+    expect(plainErrorText('Failed: x_401: <!DOCTYPE html><html><body>big</body></html>')).toBe(
+      'Failed: x_401',
+    );
+    expect(plainErrorText('a <b>bold</b>   word')).toBe('a bold word');
+    // A document with no <html> tag: its text must go with it, not survive the tag strip.
+    expect(plainErrorText('x_401: <!DOCTYPE html> <head><title>unauthorized</title></head>')).toBe(
+      'x_401',
+    );
+    expect(plainErrorText('x'.repeat(300))).toHaveLength(160);
+    expect(plainErrorText('')).toBeNull();
+    expect(plainErrorText('<html></html>')).toBeNull();
+  });
+
+  it('providerOf names who refused from the tool’s prefix', () => {
+    expect(providerOf('shopify.process_refund')).toBe('Shopify');
+    expect(providerOf('integration_cancel_order')).toBeNull();
+    expect(providerOf('issue_refund')).toBeNull();
   });
 });

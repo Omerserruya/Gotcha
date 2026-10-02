@@ -587,6 +587,17 @@
     color: var(--text-subtle);
   }
 
+  .momentFix {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .momentFix:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
   /* "What GOTCHA sent": white, radius 14; head `12px 18px` with a violet dot. */
   .momentCard {
     overflow: hidden;

@@ -2,7 +2,14 @@
 
 import { useFormatter, useTranslations } from 'next-intl';
 
-import { isRetryable, type Approval } from '@/api/contracts/approvals';
+import {
+  classifyDispatchError,
+  isRetryable,
+  plainErrorText,
+  providerOf,
+  type Approval,
+} from '@/api/contracts/approvals';
+import { Link } from '@/i18n/navigation';
 
 import styles from './Approvals.module.css';
 
@@ -86,6 +93,18 @@ export function MomentAfter({
   const customerTold = approval?.customerNotifiedAt != null;
   const decidedAt = approval?.decidedAt ? new Date(approval.decidedAt) : null;
   const run = approval ? runOf(approval, history) : null;
+  /*
+    ★ RETRY ON THE DISPATCH, NOT ONLY ON THE ROW. The approve route answers
+    with the row as it was BEFORE dispatch, so `executionState` there is never
+    FAILED — measured on dev, a failed refund offered no retry. The response's
+    own `dispatch.ok` is the fact.
+  */
+  const retryable =
+    approval !== undefined && (isRetryable(approval) || (failed && approval.status === 'APPROVED'));
+  const failure = failed ? classifyDispatchError(outcome.dispatchError) : null;
+  const provider = approval
+    ? (providerOf(approval.tool) ?? t('moment.failure.theStore'))
+    : t('moment.failure.theStore');
 
   return (
     <div
@@ -114,7 +133,7 @@ export function MomentAfter({
               Where the design drew Undo, the one that is real when it failed:
               this runs the action AGAIN, forward, and says so.
             */}
-            {approval && isRetryable(approval) ? (
+            {retryable && approval ? (
               <button
                 type="button"
                 className={styles.momentButton}
@@ -125,14 +144,17 @@ export function MomentAfter({
                 {t('action.retry')}
               </button>
             ) : null}
-            <span
-              className={styles.momentButton}
-              aria-disabled="true"
-              title={t('moment.noUndo')}
-              data-testid="moment-undo"
-            >
-              {t('moment.undo')}
-            </span>
+            {/* Undo belongs to an action that was carried out; a failed one has nothing to undo. */}
+            {failed ? null : (
+              <span
+                className={styles.momentButton}
+                aria-disabled="true"
+                title={t('moment.noUndo')}
+                data-testid="moment-undo"
+              >
+                {t('moment.undo')}
+              </span>
+            )}
           </span>
         </header>
 
@@ -148,9 +170,31 @@ export function MomentAfter({
             data-state={failed ? 'failed' : 'ok'}
           >
             {failed ? t('moment.factExecutionFailed') : t('moment.factExecutionRan')}
-            {failed && outcome.dispatchError ? (
-              <span className={styles.momentDetail} data-testid="moment-error">
-                {outcome.dispatchError}
+            {/*
+              ★ Why, as a sentence by class — never the provider's text, which
+              arrived once as Shopify's whole HTML error page. The text, plain
+              and cut short, is the tooltip for whoever is debugging.
+            */}
+            {failure ? (
+              <span
+                className={styles.momentDetail}
+                data-testid="moment-error"
+                data-failure={failure}
+                title={plainErrorText(outcome.dispatchError) ?? undefined}
+              >
+                {t(`moment.failure.${failure}` as 'moment.failure.unknown', { provider })}
+                {failure === 'connection' ? (
+                  <>
+                    {' '}
+                    <Link
+                      href={{ pathname: '/settings/systems' }}
+                      className={styles.momentFix}
+                      data-testid="moment-reconnect"
+                    >
+                      {t('moment.failure.reconnect')}
+                    </Link>
+                  </>
+                ) : null}
               </span>
             ) : null}
           </li>

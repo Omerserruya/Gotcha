@@ -429,3 +429,68 @@ export function describeApprovalAction(tool: string, params: unknown = {}): stri
   }
   return out;
 }
+
+/**
+ * Why a dispatch failed, as a class the operator can act on.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE PROVIDER'S TEXT NEVER REACHES THE SCREEN RAW
+ * ════════════════════════════════════════════════════════════════════════════
+ * Measured on dev: a revoked Shopify token came back as "Token refresh failed
+ * for shopify: shopify_token_refresh_failed_401: <!DOCTYPE html> <html …" —
+ * Shopify's whole error page, printed under the decision. The classes follow
+ * the platform's own `toCustomerSafeReason` (`routes/approvals.ts`), with one
+ * split it does not need: a refused CONNECTION (401, token, OAuth) is apart
+ * from a refused PERMISSION, because its repair is reconnecting the store and
+ * retrying is pointless until then.
+ */
+export const DISPATCH_FAILURES = [
+  'connection',
+  'already_done',
+  'after_shipping',
+  'not_permitted',
+  'provider_unavailable',
+  'exceeds_limit',
+  'unknown',
+] as const;
+export type DispatchFailure = (typeof DISPATCH_FAILURES)[number];
+
+export function classifyDispatchError(error: string | null | undefined): DispatchFailure {
+  const e = String(error ?? '').toLowerCase();
+  if (!e) return 'unknown';
+  if (/already (cancelled|canceled|refunded)|already_(cancelled|canceled|refunded)/.test(e)) {
+    return 'already_done';
+  }
+  if (/fulfil|shipped|dispatched/.test(e)) return 'after_shipping';
+  // Before the platform's broader permission class: 401 and a failed token
+  // refresh are the store's connection, not this action's permission.
+  if (/\b401\b|token|oauth|unauthori[sz]ed|reconnect/.test(e)) return 'connection';
+  if (/scope|permission|forbidden|\b403\b|policy|blocked|revalidat/.test(e)) return 'not_permitted';
+  if (/timeout|econnrefused|enotfound|unavailable|\b5\d\d\b/.test(e)) return 'provider_unavailable';
+  if (/limit|exceed|maximum|too (large|many)/.test(e)) return 'exceeds_limit';
+  return 'unknown';
+}
+
+/**
+ * The provider's text for a tooltip: tags and everything inside an HTML
+ * document dropped, whitespace collapsed, cut to `max`. For whoever is
+ * debugging — never a line on the screen.
+ */
+export function plainErrorText(error: string | null | undefined, max = 160): string | null {
+  const text = String(error ?? '')
+    .replace(/<!doctype[\s\S]*$/i, '')
+    .replace(/<html[\s\S]*$/i, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[:\s]+$/, '');
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+/** "shopify.process_refund" → "Shopify": who refused, from the tool's own prefix. */
+export function providerOf(tool: string): string | null {
+  const prefix = tool.includes('.') ? tool.split('.')[0]! : null;
+  if (!prefix || prefix === 'integration') return null;
+  return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+}

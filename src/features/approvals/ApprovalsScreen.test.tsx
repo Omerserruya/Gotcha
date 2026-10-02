@@ -246,7 +246,12 @@ describe('the moment after keeps the two axes apart', () => {
     const panel = await screen.findByTestId('moment-after');
     expect(panel).toHaveAttribute('data-dispatched', 'no');
     expect(screen.getByTestId('moment-fact-execution')).toHaveAttribute('data-state', 'failed');
-    expect(screen.getByTestId('moment-error')).toHaveTextContent('refund window closed');
+    // The provider's words are the tooltip, never the line (measured: raw HTML).
+    expect(screen.getByTestId('moment-error')).not.toHaveTextContent('refund window closed');
+    expect(screen.getByTestId('moment-error')).toHaveAttribute(
+      'title',
+      'shopify: refund window closed',
+    );
   });
 
   it('does not claim the customer was told when nothing recorded it', async () => {
@@ -696,5 +701,72 @@ describe('★★ 03b — the moment after owns the pane until you move on', () =
     renderWith(two);
     await user.click(screen.getByTestId('approve'));
     expect(await screen.findByTestId('queue-done')).toHaveTextContent("didn't run");
+  });
+});
+
+describe('★★ 03b, measured on dev — a failure said in words, retry on the dispatch, no Undo on nothing', () => {
+  const SHOPIFY_401 =
+    'Token refresh failed for shopify: shopify_token_refresh_failed_401: <!DOCTYPE html> <html lang="en"> <head> <meta charset="utf-8"> <title>unauthorized - Oauth error invalid_request</title></head><body>…</body></html>';
+  const failedWith = (error: string) =>
+    approve.mockResolvedValue({
+      ok: true,
+      dispatched: false,
+      dispatchError: error,
+      // ★ The route answers with the row as it was BEFORE dispatch.
+      approval: approval({
+        id: 'a1',
+        tool: 'shopify.process_refund',
+        status: 'APPROVED',
+        executionState: 'NOT_STARTED',
+      }),
+    });
+
+  it('★★ a revoked store token: a sentence, the way to fix it — and no HTML anywhere', async () => {
+    failedWith(SHOPIFY_401);
+    const user = userEvent.setup();
+    renderScreen([approval(), approval({ id: 'a2' })]);
+    await user.click(screen.getByTestId('approve'));
+    const why = await screen.findByTestId('moment-error');
+    expect(why).toHaveAttribute('data-failure', 'connection');
+    expect(why).toHaveTextContent(
+      "The store connection needs reconnecting — Shopify refused GOTCHA's access.",
+    );
+    expect(screen.getByTestId('moment-reconnect')).toHaveAttribute('href', '/settings/systems?');
+    expect(document.body.textContent).not.toMatch(/<!DOCTYPE|<html|<title>/i);
+    // The tooltip is plain and short: the error page itself is gone.
+    expect(why.getAttribute('title')).toBe(
+      'Token refresh failed for shopify: shopify_token_refresh_failed_401',
+    );
+  });
+
+  it('★★ retry is offered when the dispatch failed, though the returned row predates it', async () => {
+    failedWith('shopify: 503 service unavailable');
+    const user = userEvent.setup();
+    renderScreen([approval(), approval({ id: 'a2' })]);
+    await user.click(screen.getByTestId('approve'));
+    expect(await screen.findByTestId('moment-retry')).toBeInTheDocument();
+    expect(screen.getByTestId('moment-error')).toHaveAttribute(
+      'data-failure',
+      'provider_unavailable',
+    );
+  });
+
+  it('★★ no Undo beside an action that did not run; Undo only beside one that did', async () => {
+    failedWith('shopify: 503');
+    const user = userEvent.setup();
+    const { unmount } = renderScreen([approval(), approval({ id: 'a2' })]);
+    await user.click(screen.getByTestId('approve'));
+    await screen.findByTestId('moment-after');
+    expect(screen.queryByTestId('moment-undo')).toBeNull();
+    unmount();
+
+    approve.mockResolvedValue({
+      ok: true,
+      dispatched: true,
+      approval: approval({ id: 'a1', status: 'APPROVED' }),
+    });
+    renderScreen([approval(), approval({ id: 'a2' })]);
+    await user.click(screen.getByTestId('approve'));
+    expect(await screen.findByTestId('moment-undo')).toBeInTheDocument();
   });
 });

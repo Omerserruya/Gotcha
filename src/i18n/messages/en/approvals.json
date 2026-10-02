@@ -123,6 +123,17 @@
       "eyebrowExpires": "Up next · expires in {in}",
       "open": "Open it",
       "none": "Nothing else is waiting."
+    },
+    "failure": {
+      "theStore": "the store",
+      "connection": "The store connection needs reconnecting — {provider} refused GOTCHA's access.",
+      "reconnect": "Reconnect the store, then retry.",
+      "already_done": "It had already been done, so nothing changed.",
+      "after_shipping": "It can't be done once the order has shipped.",
+      "not_permitted": "A permission or a rule stopped it.",
+      "provider_unavailable": "{provider} didn't answer. This usually passes — try again.",
+      "exceeds_limit": "It's over a limit — the amount or count is too high.",
+      "unknown": "{provider} didn't say why in words we can show."
     }
   },
   "stats": {
