@@ -19,7 +19,8 @@ import {
 import { customerAuditSchema, type CustomerAudit } from '@/api/contracts/customer-actions';
 import { noteListSchema, type Note } from '@/api/contracts/customer-notes';
 import { currentUserSchema } from '@/api/contracts/identity';
-import { authEndpoints } from '@/api/endpoints/registry';
+import { APPROVAL_STATUSES, approvalsSchema, type Approval } from '@/api/contracts/approvals';
+import { approvalEndpoints, authEndpoints } from '@/api/endpoints/registry';
 import { ApiError } from '@/api/client/api-error';
 import { customerEndpoints } from '@/api/endpoints/registry';
 import { withDetailFixtures } from './capture-fixtures';
@@ -86,6 +87,22 @@ export interface CustomerDetail {
    * which means nobody has written anything and is a perfectly good screen.
    */
   readonly notes: readonly Note[] | null;
+  /**
+   * GOTCHA's actions on this person — 02's violet rows in "Everything".
+   *
+   * ★ THE TIMELINE CARRIES NONE OF THEM. `identity/:id/timeline` returned
+   * only messages for a customer with 28 approval requests in their
+   * conversations; the supervisor found them in the database and none on
+   * the screen. They are read from the approvals list, one read per status,
+   * and kept when their conversation is one of this person's or their
+   * `contactId` is — `contactId` is optional at the write site, so the
+   * conversation is the join that holds.
+   *
+   * ⚠ The list route caps each status at 100, tenant-wide: on a busy tenant
+   * an older action can fall outside the window. `null` when every read
+   * failed; a partial failure keeps what came back.
+   */
+  readonly approvals: readonly Approval[] | null;
   /**
    * The viewer's `User.id`, for deciding who may edit a note.
    *
@@ -207,6 +224,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
         // and `failed` would report a read we never made.
         actions: { state: 'not_asked' },
         notes: null,
+        approvals: null,
         viewerUserId: null,
         // The timeline is the failure, and the page renders as one. Nothing
         // else was attempted, so nothing else can be reported as failing.
@@ -245,7 +263,31 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       return null;
     };
 
-  const [brief, memory, crm, orders, notes, viewerUserId] = await Promise.all([
+  const conversationIds = new Set(timeline.events.map((event) => event.conversationId));
+  const ownedHere = (approval: Approval) =>
+    (approval.conversationId !== null && conversationIds.has(approval.conversationId)) ||
+    approval.contactId === contactId ||
+    (timeline.contact?.id !== undefined && approval.contactId === timeline.contact.id);
+  const approvalsRead = Promise.all(
+    APPROVAL_STATUSES.map((status) =>
+      api
+        .get({ endpoint: approvalEndpoints.list(status), payload: approvalsSchema })
+        .catch((cause: unknown) => {
+          logger.warn('customer.approvals_failed', { cause, status });
+          return null;
+        }),
+    ),
+  ).then((lists): readonly Approval[] | null => {
+    if (lists.every((list) => list === null)) {
+      readsFailed.push('approvals');
+      return null;
+    }
+    // By id: a row whose status flips between two reads would arrive twice.
+    const byId = new Map(lists.flatMap((list) => list ?? []).map((row) => [row.id, row]));
+    return [...byId.values()].filter(ownedHere);
+  });
+
+  const [brief, memory, crm, orders, notes, viewerUserId, approvals] = await Promise.all([
     /*
      * ★ BY CONTACT, NOT BY CONVERSATION — Backend added the entry point
      * after this screen reported the door problem.
@@ -332,6 +374,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
       .then((me) => me.user.id)
       .catch(failing<string>('viewer', 'customer.viewer_failed')),
+    approvalsRead,
   ]);
 
   /*
@@ -409,6 +452,7 @@ export async function loadCustomer(contactId: string): Promise<CustomerDetail> {
       noConversations: conversationId === null,
       actions,
       notes,
+      approvals,
       viewerUserId,
       readsFailed,
     },

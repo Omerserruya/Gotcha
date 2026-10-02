@@ -27,6 +27,8 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 vi.mock('server-only', () => ({}));
 
+import { approvalSchema } from '@/api/contracts/approvals';
+
 import { FIXTURE_DETAIL } from './capture-fixtures';
 import {
   CustomerHeader,
@@ -103,6 +105,45 @@ describe('★★ the timeline: one stream, conversations, orders, actions and no
       li.getAttribute('data-tone'),
     );
     expect(new Set(tones)).toEqual(new Set(['conversation']));
+  });
+
+  it('★★ GOTCHA’s actions are rows: the approvals it asked for, in violet, with their outcome', async () => {
+    /*
+      Measured on dev: 28 approvals on one customer and not one on the
+      screen — the timeline route returns messages only. The loader reads
+      them from the approvals list; this is the screen's half.
+    */
+    const first = FIXTURE_DETAIL.timeline!.events.find((e) => e.type === 'message')!;
+    const approval = approvalSchema.parse({
+      id: 'ap1',
+      conversationId: first.conversationId,
+      tool: 'shopify.process_refund',
+      summary: 'Process refund of 50 for order #1011',
+      status: 'REJECTED',
+      decidedByName: 'Dana',
+      expiresAt: '2026-09-01T10:00:00.000Z',
+      createdAt: '2099-01-01T10:00:00.000Z',
+    });
+    render(await CustomerTimelineList({ detail: detail({ approvals: [approval] }) }));
+    const row = screen.getByTestId('event-p-ap1');
+    expect(row).toHaveAttribute('data-tone', 'action');
+    expect(row).toHaveTextContent('Process refund of 50 for order #1011');
+    expect(row).toHaveTextContent('Rejected by Dana');
+    expect(screen.getByTestId('customer-timeline').querySelector('li')).toBe(row);
+  });
+
+  it('⚠ an expired one says nobody decided, and names no one', async () => {
+    const approval = approvalSchema.parse({
+      id: 'ap2',
+      tool: 'integration_cancel_order',
+      summary: 'Cancel order #1012',
+      status: 'EXPIRED',
+      decidedByName: null,
+      expiresAt: '2026-09-01T10:00:00.000Z',
+      createdAt: '2026-09-01T09:00:00.000Z',
+    });
+    render(await CustomerTimelineList({ detail: detail({ approvals: [approval] }) }));
+    expect(screen.getByTestId('event-p-ap2')).toHaveTextContent('Expired before anyone decided');
   });
 
   it('an empty record says so in one line', async () => {

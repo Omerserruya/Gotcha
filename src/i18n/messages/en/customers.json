@@ -225,6 +225,37 @@
     "reach": "Reach them",
     "reachNone": "No handle recorded.",
     "noteCard": "Note · {author}, {when}",
-    "noNote": "No notes yet."
+    "noNote": "No notes yet.",
+    "crumb": "Customers",
+    "conv": {
+      "heading": "{count, plural, one {One conversation} other {# conversations}}, newest first",
+      "summarise": "Summarise all of it",
+      "openIt": "Open it",
+      "imported": "Imported",
+      "noWords": "No words recorded in this conversation."
+    },
+    "pattern": {
+      "heading": "In their own pattern",
+      "conversations": "conversations",
+      "channels": "channels",
+      "neededPerson": "needed a person",
+      "writes": "How they write",
+      "writesNone": "Nothing yet.",
+      "asks": "What they ask about",
+      "asksNone": "Nothing yet."
+    },
+    "promise": {
+      "heading": "An open promise",
+      "none": "No open promises."
+    },
+    "approval": {
+      "PENDING": "Waiting for your approval",
+      "APPROVED": "Approved",
+      "REJECTED": "Rejected",
+      "EXPIRED": "Expired before anyone decided",
+      "CANCELLED": "Cancelled",
+      "APPROVEDBy": "Approved by {name}",
+      "REJECTEDBy": "Rejected by {name}"
+    }
   }
 }

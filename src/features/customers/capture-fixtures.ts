@@ -638,6 +638,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
     },
   ],
   viewerUserId: 'fixture-viewer-1',
+  approvals: [],
   // The fixture stands for a page where every read succeeded. A real page
   // that did not gets its failures carried through — see `keepFailures`.
   readsFailed: [],
@@ -869,6 +870,7 @@ function keepFailures(detail: CustomerDetail): CustomerDetail {
     ...(failed.has('orders') ? { orders: null } : {}),
     ...(failed.has('actions') ? { actions: detail.actions } : {}),
     ...(failed.has('notes') ? { notes: null } : {}),
+    ...(failed.has('approvals') ? { approvals: null } : {}),
     ...(failed.has('viewer') ? { viewerUserId: null } : {}),
     readsFailed: detail.readsFailed,
   };

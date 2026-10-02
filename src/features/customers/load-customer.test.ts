@@ -55,6 +55,23 @@ vi.mock('@/api/client/server-api', () => ({
 /** Real response bodies, keyed by path. */
 let BODIES: Record<string, unknown> = {};
 
+const approvalRow = (id: string, conversationId: string | null, contactId: string | null) => ({
+  id,
+  conversationId,
+  contactId,
+  tool: 'shopify.process_refund',
+  summary: 'Process refund of 50 for order #1011',
+  status: 'APPROVED',
+  expiresAt: '2026-09-18T10:00:00.000Z',
+  createdAt: '2026-09-18T09:00:00.000Z',
+});
+/** Theirs by conversation, theirs by contact, and somebody else's. */
+const APPROVALS = [
+  approvalRow('mine-by-conv', 'conv-1', null),
+  approvalRow('mine-by-contact', null, 'c1'),
+  approvalRow('theirs', 'conv-other', 'c-other'),
+];
+
 const TIMELINE = {
   data: {
     // Required since 6e9e84a9: present on every response, including empty
@@ -115,6 +132,7 @@ beforeEach(() => {
   capture.calls = [];
   BODIES = {
     '/api/identity/c1/timeline': TIMELINE,
+    '/api/approvals': { data: APPROVALS },
     '/api/audit-logs/customer/c1': AUDIT,
     // The timeline carries an externalId, so the memory read IS attempted
     // and must be stubbed — otherwise it fails and this file reports a
@@ -174,6 +192,37 @@ describe('★★ the audit envelope, where `data` is a sibling and not the paylo
 
     expect(detail.actions.state).toBe('failed');
     expect(detail.readsFailed).toContain('actions');
+  });
+
+  it('★★ GOTCHA’s actions: the approvals in their conversations or on their contact, once each', async () => {
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+    // One body answers all five status reads here, so this is also the dedupe.
+    expect(detail.approvals?.map((a) => a.id).sort()).toEqual(['mine-by-contact', 'mine-by-conv']);
+  });
+
+  it('★ a merged-away id: both the id we were opened by and the survivor count as theirs', async () => {
+    BODIES['/api/identity/c1/timeline'] = {
+      data: { ...TIMELINE.data, contact: { ...TIMELINE.data.contact, id: 'c-survivor' } },
+    };
+    BODIES['/api/approvals'] = {
+      data: [
+        approvalRow('by-route-id', null, 'c1'),
+        approvalRow('by-survivor', null, 'c-survivor'),
+        approvalRow('theirs', null, 'c-other'),
+      ],
+    };
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+    expect(detail.approvals?.map((a) => a.id).sort()).toEqual(['by-route-id', 'by-survivor']);
+  });
+
+  it('⚠ approvals: null and named only when every status read failed', async () => {
+    delete BODIES['/api/approvals'];
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+    expect(detail.approvals).toBeNull();
+    expect(detail.readsFailed).toContain('approvals');
   });
 
   it('★ reports nothing as failed when every read succeeds', async () => {

@@ -161,6 +161,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     // A real person's page whose audit log we could not read.
     actions: { state: 'failed' },
     notes: null,
+    approvals: null,
     viewerUserId: null,
     readsFailed: ['actions'],
   };
@@ -210,6 +211,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       // The timeline failed, so 04e was never asked for.
       actions: { state: 'not_asked' },
       notes: null,
+      approvals: null,
       viewerUserId: null,
       readsFailed: [],
     };
@@ -245,6 +247,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       // The timeline failed, so 04e was never asked for.
       actions: { state: 'not_asked' },
       notes: null,
+      approvals: null,
       viewerUserId: null,
       readsFailed: [],
     };

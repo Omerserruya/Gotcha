@@ -225,6 +225,37 @@
     "reach": "איך להשיג",
     "reachNone": "לא נרשם מזהה.",
     "noteCard": "הערה · {author}, {when}",
-    "noNote": "עדיין אין הערות."
+    "noNote": "עדיין אין הערות.",
+    "crumb": "לקוחות",
+    "conv": {
+      "heading": "{count, plural, one {שיחה אחת} other {# שיחות}}, החדשה ראשונה",
+      "summarise": "לסכם הכול",
+      "openIt": "לפתוח",
+      "imported": "יובא",
+      "noWords": "לא נרשמו מילים בשיחה הזו."
+    },
+    "pattern": {
+      "heading": "בדפוס שלהם",
+      "conversations": "שיחות",
+      "channels": "ערוצים",
+      "neededPerson": "נזקקו לאדם",
+      "writes": "איך הם כותבים",
+      "writesNone": "עדיין כלום.",
+      "asks": "על מה הם שואלים",
+      "asksNone": "עדיין כלום."
+    },
+    "promise": {
+      "heading": "הבטחה פתוחה",
+      "none": "אין הבטחות פתוחות."
+    },
+    "approval": {
+      "PENDING": "ממתין לאישורך",
+      "APPROVED": "אושר",
+      "REJECTED": "נדחה",
+      "EXPIRED": "פג לפני שהוחלט",
+      "CANCELLED": "בוטל",
+      "APPROVEDBy": "אושר על ידי {name}",
+      "REJECTEDBy": "נדחה על ידי {name}"
+    }
   }
 }

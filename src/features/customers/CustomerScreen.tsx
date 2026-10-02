@@ -8,6 +8,7 @@ import { Link } from '@/i18n/navigation';
 
 import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
+import { displayHandle } from './phone';
 
 /**
  * 04b — a person with a history, not a record.
@@ -245,6 +246,30 @@ export async function CustomerTimelineList({
         });
       }
     }
+    /*
+      GOTCHA's actions — the approvals it asked for in their conversations.
+      The timeline route returns none of these; see `CustomerDetail.approvals`.
+    */
+    for (const approval of detail.approvals ?? []) {
+      rows.push({
+        key: `p-${approval.id}`,
+        at: approval.createdAt,
+        tone: 'action',
+        title: approval.summary,
+        line: [
+          approval.decidedByName &&
+          (approval.status === 'APPROVED' || approval.status === 'REJECTED')
+            ? t(`card.approval.${approval.status}By`, { name: approval.decidedByName })
+            : t(`card.approval.${approval.status}`),
+          channelName(
+            events.find((e) => e.conversationId === approval.conversationId)?.channel ?? null,
+            channels,
+          ),
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      });
+    }
     for (const order of ordersIn(detail.orders)) {
       if (!order.createdAt) continue;
       const total =
@@ -378,7 +403,7 @@ export async function CustomerSide({ detail }: { readonly detail: CustomerDetail
             {handles.map((handle) => (
               <div key={`${handle.channel}-${handle.externalId}`}>
                 <dt>{channelName(handle.channel, channels) ?? handle.channel}</dt>
-                <dd>{handle.externalId}</dd>
+                <dd>{displayHandle(handle.channel, handle.externalId)}</dd>
               </div>
             ))}
           </dl>
