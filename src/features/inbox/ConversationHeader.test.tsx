@@ -195,6 +195,10 @@ describe('★★ Wave 3 geometry, read from the stylesheet', () => {
     expect(bar).toMatch(/line-height:\s*normal/);
   });
 
+  it('⚠ the name row is reserved at the chip’s 18 — it streams in later, and must not move anything', () => {
+    expect(rule('openNameRow')).toMatch(/min-block-size:\s*18px/);
+  });
+
   it('★ the verbs sit at the row’s end, and only Resolve is filled', () => {
     expect(rule('verbs')).toMatch(/margin-inline-start:\s*auto/);
     expect(rule('verbButton')).toMatch(/border:\s*1px solid var\(--border-default\)/);

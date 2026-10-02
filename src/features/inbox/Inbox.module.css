@@ -1056,6 +1056,12 @@
     display: flex;
     align-items: center;
     gap: 9px;
+    /*
+     * ⚠ RESERVED AT THE CHIP'S HEIGHT. The orders chip streams in after the
+     *   header paints, and it is 18 tall where the name alone is ~16 — so the
+     *   row grew as it arrived and moved everything under it. 02's row is 18.
+     */
+    min-block-size: 18px;
   }
 
   .openName {
