@@ -78,6 +78,7 @@
     padding: 6px 18px var(--space-8);
     font-size: 9px;
     font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
     letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
     color: var(--text-subtle);
@@ -793,13 +794,20 @@
     color: var(--copilot-text-strong);
   }
 
-  /* The foot: the "Careful" card over the ask box, `padding:14px 18px`, gap 10. */
+  /*
+   * The foot fills the rest (`padding:14px 18px`, gap 10): "Careful" at its
+   * top, straight after "Do this now", and the ask box at its bottom.
+   */
   .copilotAsk {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: var(--space-10);
-    margin-block-start: auto;
     padding: var(--space-14) 18px;
+  }
+
+  .copilotAsk > .copilotInput {
+    margin-block-start: auto;
   }
 
   /* "stop", at the header's end: 11px `#8E8A83`. */

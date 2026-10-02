@@ -229,6 +229,7 @@
     margin: 0;
     font-size: 9px;
     font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
     letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
     color: var(--text-subtle);
@@ -416,6 +417,7 @@
     background-color: var(--table-head-surface);
     font-size: 9px;
     font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
     letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
     color: var(--text-subtle);
@@ -847,6 +849,7 @@
     margin: 0;
     font-size: 9px;
     font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
     letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
     color: var(--menu-dark-icon);
@@ -977,6 +980,8 @@
   .resCellValue {
     font-size: 25px;
     font-weight: var(--font-weight-semibold);
+    /* 02: `-0.02em` on every 25px/600 figure, without exception. */
+    letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }
 

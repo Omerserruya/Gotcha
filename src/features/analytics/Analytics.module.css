@@ -118,6 +118,7 @@
     margin: 0 0 var(--space-12);
     font-size: 9px;
     font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
     letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
     color: var(--menu-dark-icon);
@@ -205,6 +206,8 @@
   .kpiValue {
     font-size: 25px;
     font-weight: var(--font-weight-semibold);
+    /* 02: `-0.02em` on every 25px/600 figure, without exception. */
+    letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }
 
@@ -457,6 +460,8 @@
     margin: var(--space-4) 0 0;
     font-size: 25px;
     font-weight: var(--font-weight-semibold);
+    /* 02: `-0.02em` on every 25px/600 figure, without exception. */
+    letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }
 
@@ -522,14 +527,6 @@
     background-color: var(--panel-field);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
-  }
-
-  /* The list takes the card's height, so the foot sits at the card's bottom. */
-  .gDid > .gDidList,
-  .gDid > .gNone {
-    flex: 1;
-    min-block-size: 0;
-    overflow-y: auto;
   }
 
   .gDidList {
@@ -660,6 +657,7 @@
     background-color: var(--table-head-surface);
     font-size: 9px;
     font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
     letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
     color: var(--text-subtle);
@@ -669,6 +667,11 @@
     flex: 1;
     min-block-size: 0;
     overflow-y: auto;
+  }
+
+  /* An empty table says so in the shape of a row: 02's `padding:13px 18px`. */
+  .tRows > .gNone {
+    padding: 13px 18px;
   }
 
   .tList {
@@ -961,6 +964,7 @@
     background-color: var(--table-head-surface);
     font-size: 9px;
     font-weight: var(--font-weight-medium);
+    font-family: var(--font-mono);
     letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
     color: var(--text-subtle);
