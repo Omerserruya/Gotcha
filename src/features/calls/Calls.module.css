@@ -770,7 +770,7 @@
     padding: var(--space-12);
     border: 1px solid var(--copilot-say-edge);
     border-radius: 12px;
-    background-color: var(--frame-subtle);
+    background-color: var(--copilot-card);
   }
 
   .sayLead {
@@ -830,7 +830,7 @@
   .carefulCard {
     padding: var(--space-12) 13px;
     border-radius: 11px;
-    background-color: var(--frame-subtle);
+    background-color: var(--copilot-card);
   }
 
   .carefulTitle {
@@ -850,7 +850,7 @@
     padding: 11px 13px;
     border: 0;
     border-radius: 11px;
-    background-color: var(--frame-subtle);
+    background-color: var(--copilot-card);
     font: inherit;
     font-size: 12.5px;
     color: var(--frame-text);

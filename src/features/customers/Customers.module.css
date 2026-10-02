@@ -1579,6 +1579,11 @@
     gap: 22px;
   }
 
+  /* 04c–04f's side strips label at 11px; 04's own "worth" strip keeps 11.5. */
+  .pattern dt {
+    font-size: 11px;
+  }
+
   /* 02's "An open promise": radius 14, `padding:14px 16px`, at the foot. */
   .promiseCard {
     margin-block-start: auto;

@@ -837,6 +837,11 @@
     border-block-end: 1px solid var(--border-subtle);
   }
 
+  /* "this week" in this head is 11.5px; 06b's chart legend stays 11. */
+  .sAskedHead > .gCardMeta {
+    font-size: 11.5px;
+  }
+
   .sAskedBody {
     flex: 1;
     min-block-size: 0;

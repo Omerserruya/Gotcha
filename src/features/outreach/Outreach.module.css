@@ -259,7 +259,13 @@
     color: var(--text-primary);
   }
 
-  .fieldStrong {
+  /*
+   * The count under "Who": 11.5px, green. As `.fieldStrong` alone it lost to
+   * `.field dd` (0,1,1 over 0,1,0) and drew at 13px in black — the colour
+   * was written and never applied.
+   */
+  .field dd.fieldStrong {
+    font-size: 11.5px;
     color: var(--signal-done-text);
   }
 
