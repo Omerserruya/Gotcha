@@ -100,5 +100,34 @@
     "seconds": "{n} שנ׳",
     "minutes": "{n} דק׳",
     "hours": "{n} שע׳"
+  },
+  "pending": {
+    "title": "{count, plural, one {דבר אחד מחכה להחלטה שלך} other {# דברים מחכים להחלטה שלך}}",
+    "description": "GOTCHA עשה את העבודה.",
+    "soonest": "GOTCHA עשה את העבודה. המועד הקרוב הוא בעוד {in}."
+  },
+  "time": {
+    "minutes": "{n} דק׳",
+    "hours": "{n} שע׳",
+    "days": "{n} ימ׳",
+    "left": "נותרו {in}"
+  },
+  "detail2": {
+    "eyebrow": "התבקש על ידי {who} · {time}",
+    "eyebrowAutomation": "התבקש על ידי אוטומציה · {time}"
+  },
+  "card": {
+    "why": "למה GOTCHA ממליץ על זה",
+    "leave": "אם תשאיר את זה",
+    "leaveBody": "אם אף אחד לא יחליט עד {when}, הבקשה תפוג והשיחה תעבור לאדם."
+  },
+  "action2": {
+    "next": "{count, plural, =0 {אין דבר אחרי זה} one {עוד אחת אחרי זו · ↓ לבאה} other {עוד # אחרי זו · ↓ לבאה}}",
+    "rejectPrompt": "דוחה? ספר ל-GOTCHA למה.",
+    "reasons": {
+      "policy": "מחוץ למדיניות",
+      "myself": "אטפל בזה בעצמי",
+      "wrongOrder": "הזמנה שגויה"
+    }
   }
 }

@@ -263,6 +263,34 @@ export function ApprovalsScreen({
     );
   }
 
+  const showDays = days.length > 1 || days[0]?.key !== dayKey(now.toISOString());
+
+  /** "2m", "1h", "3d" — 02's row times and deadlines. */
+  const short = (ms: number) => {
+    const minutes = Math.max(0, Math.round(ms / 60_000));
+    if (minutes < 60) return t('time.minutes', { n: minutes });
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return t('time.hours', { n: hours });
+    return t('time.days', { n: Math.round(hours / 24) });
+  };
+  /** A deadline within the hour is said as one, in red — 02's "38m left". */
+  const SOON_MS = 60 * 60 * 1000;
+
+  const index = selected ? pending.findIndex((a) => a.id === selected.id) : -1;
+  const after = index < 0 ? 0 : pending.length - index - 1;
+  /** `09:39`, or null for a date we cannot read — never a thrown render. */
+  const clock = (iso: string): string | null => {
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) return null;
+    return new Intl.DateTimeFormat(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(at);
+  };
+  const createdClock = selected ? clock(selected.createdAt) : null;
+  const expiresClock = selected ? clock(selected.expiresAt) : null;
+
   return (
     <div className={styles.screen} data-testid="approvals-screen">
       {/*
@@ -274,15 +302,19 @@ export function ApprovalsScreen({
         {announcement}
       </p>
 
-      {moment ? <MomentAfter outcome={moment} onRetry={onRetry} busy={busy} /> : null}
-
       <div className={styles.layout}>
+        {/*
+          ════════════════════════════════════════════════════════════════════
+          ★★ 02's QUEUE — `[300]` from the header to the panel's bottom
+          ════════════════════════════════════════════════════════════════════
+          Rows at `14px 20px`, `#EDE9E1` between them and down the column's
+          right edge; the one on screen is white with a 3px `#121212` edge.
+          Each: what is asked (13.5px), how long it has waited — or how long
+          is left, in red, when the deadline is near — and its risk as a pill.
+        */}
         <div className={styles.queueColumn}>
-          {/*
-            The size of the queue as a fact, at the top, rather than something a
-            reader infers from how far the scroll bar has left to go.
-          */}
-          <p className={styles.queueCount} data-testid="approval-queue-count">
+          {/* The size as a fact: in the title for the eye, here for the ear. */}
+          <p className="srOnly" data-testid="approval-queue-count">
             {t('queue.waiting', { count: pending.length })}
           </p>
 
@@ -295,17 +327,22 @@ export function ApprovalsScreen({
             {days.map((day) => (
               <li key={day.key} className={styles.queueDay}>
                 {/*
-                  A heading and a nested list, so the day is announced as the
-                  group it is. A bare separator row inside the flat list would be
-                  read out as an item somebody can decide.
+                  No heading when the whole queue is TODAY's — 02's case, and a
+                  lone "Today" says nothing. Any other day, or a date we cannot
+                  read, is still said: those are what the headings are for.
                 */}
-                <h3 className={styles.queueDayLabel} data-testid={`queue-day-${day.key}`}>
-                  {day.label}
-                </h3>
+                {showDays ? (
+                  <h3 className={styles.queueDayLabel} data-testid={`queue-day-${day.key}`}>
+                    {day.label}
+                  </h3>
+                ) : null}
                 <ul className={styles.queueDayItems} aria-label={day.label}>
                   {day.items.map((approval) => {
                     const lapsed = decisionStance(approval, now) === 'lapsed';
                     const current = approval.id === selected?.id;
+                    const left = Date.parse(approval.expiresAt) - now.getTime();
+                    const soon = !lapsed && Number.isFinite(left) && left < SOON_MS;
+                    const tag = approval.riskTags[0];
                     return (
                       <li key={approval.id} className={styles.queueItem}>
                         <button
@@ -321,10 +358,29 @@ export function ApprovalsScreen({
                             setReason('');
                           }}
                         >
-                          <span className={styles.queueSummary}>{approval.summary}</span>
-                          <span className={styles.queueMeta}>
-                            {lapsed ? t('queue.lapsed') : t('queue.awaiting')}
+                          <span className={styles.queueTop}>
+                            <span className={styles.queueSummary}>{approval.summary}</span>
+                            <span
+                              className={styles.queueWhen}
+                              data-soon={soon || lapsed ? '' : undefined}
+                            >
+                              {lapsed
+                                ? t('queue.lapsed')
+                                : soon
+                                  ? t('time.left', { in: short(left) })
+                                  : short(now.getTime() - Date.parse(approval.createdAt))}
+                            </span>
                           </span>
+                          {requesterNames[approval.id] ? (
+                            <span className={styles.queueMeta}>
+                              {t('detail.requestedBy', { who: requesterNames[approval.id]! })}
+                            </span>
+                          ) : null}
+                          {tag ? (
+                            <span className={styles.queueTag} data-tag={tag}>
+                              {isKnownRiskTag(tag) ? t(`risk.${tag}` as 'risk.IRREVERSIBLE') : tag}
+                            </span>
+                          ) : null}
                         </button>
                       </li>
                     );
@@ -337,47 +393,76 @@ export function ApprovalsScreen({
 
         {selected ? (
           <section className={styles.detail} data-testid="approval-detail" aria-live="off">
+            {moment ? <MomentAfter outcome={moment} onRetry={onRetry} busy={busy} /> : null}
+
+            {/*
+              02's head: an eyebrow (who asked, when) and the request at 34px.
+              02's right-hand "Reversible · Yes — within 24h" is not drawn:
+              there is no undo in this platform, and that sentence would be a
+              promise read before an irreversible act. IRREVERSIBLE stays what
+              it is — a risk label, in the pills under the title.
+            */}
             <header className={styles.detailHeader}>
-              <p className={styles.requestedBy} data-testid="requested-by">
-                {requesterNames[selected.id]
-                  ? t('detail.requestedBy', { who: requesterNames[selected.id]! })
-                  : t('detail.requestedByAutomation')}
-              </p>
-              <h2 className={styles.detailSummary}>{selected.summary}</h2>
-              {/*
-                No "Reversible · within 24h" here, and no reversal window
-                anywhere on this screen. There is no undo in this platform, and
-                that sentence is read BEFORE the irreversible act — it would
-                make someone approve a refund they would otherwise question.
-                `IRREVERSIBLE` is shown for what it is: a risk label.
-              */}
-              {selected.riskTags.length > 0 ? (
-                <ul className={styles.riskTags} data-testid="risk-tags">
-                  {selected.riskTags.map((tag) => (
-                    <li key={tag} className={styles.riskTag} data-testid={`risk-${tag}`}>
-                      {/*
-                        An unrecognised tag renders as itself rather than
-                        vanishing. Hiding a risk label because we have no
-                        translation for it is the wrong way round here.
-                      */}
-                      {isKnownRiskTag(tag) ? t(`risk.${tag}` as 'risk.IRREVERSIBLE') : tag}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+              <div className={styles.detailHeading}>
+                <p className={styles.requestedBy} data-testid="requested-by">
+                  {requesterNames[selected.id]
+                    ? createdClock
+                      ? t('detail2.eyebrow', {
+                          who: requesterNames[selected.id]!,
+                          time: createdClock,
+                        })
+                      : t('detail.requestedBy', { who: requesterNames[selected.id]! })
+                    : createdClock
+                      ? t('detail2.eyebrowAutomation', { time: createdClock })
+                      : t('detail.requestedByAutomation')}
+                </p>
+                <h2 className={styles.detailSummary}>{selected.summary}</h2>
+                {selected.riskTags.length > 0 ? (
+                  <ul className={styles.riskTags} data-testid="risk-tags">
+                    {selected.riskTags.map((tag) => (
+                      <li key={tag} className={styles.riskTag} data-testid={`risk-${tag}`}>
+                        {/*
+                          An unrecognised tag renders as itself rather than
+                          vanishing. Hiding a risk label because we have no
+                          translation for it is the wrong way round here.
+                        */}
+                        {isKnownRiskTag(tag) ? t(`risk.${tag}` as 'risk.IRREVERSIBLE') : tag}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             </header>
 
-            {selected.reason ? (
-              <p className={styles.reason} data-testid="approval-reason">
-                {t('detail.reason', { reason: selected.reason })}
-              </p>
-            ) : null}
-
-            {selected.policyRuleName ? (
-              <p className={styles.policyRule} data-testid="policy-rule">
-                {t('detail.policyRule', { rule: selected.policyRuleName })}
-              </p>
-            ) : null}
+            {/*
+              02's cards, the two this platform can fill: why GOTCHA asks, and
+              what happens if nobody decides. "The customer" and "What happens
+              if you approve" need a customer summary and a consequence chain
+              that nothing records; they are not drawn.
+            */}
+            <div className={styles.detailCards}>
+              {selected.reason || selected.policyRuleName ? (
+                <section className={styles.detailCard}>
+                  <h3 className={styles.detailCardTitle}>{t('card.why')}</h3>
+                  {selected.reason ? (
+                    <p className={styles.reason} data-testid="approval-reason">
+                      {selected.reason}
+                    </p>
+                  ) : null}
+                  {selected.policyRuleName ? (
+                    <p className={styles.policyRule} data-testid="policy-rule">
+                      {t('detail.policyRule', { rule: selected.policyRuleName })}
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
+              {decidable && expiresClock ? (
+                <section className={styles.detailCard} data-testid="if-you-leave-it">
+                  <h3 className={styles.detailCardTitle}>{t('card.leave')}</h3>
+                  <p className={styles.reason}>{t('card.leaveBody', { when: expiresClock })}</p>
+                </section>
+              ) : null}
+            </div>
 
             {isOutcomeUnknown(selected) ? (
               <p className={styles.unknownOutcome} data-testid="outcome-unknown">
@@ -387,29 +472,17 @@ export function ApprovalsScreen({
 
             {decidable ? (
               <div className={styles.decision}>
-                <button
-                  ref={approveRef}
-                  type="button"
-                  className={styles.approve}
-                  data-testid="approve"
-                  disabled={busy}
-                  onClick={onApprove}
-                >
-                  {t('action.approve')}
-                </button>
-
-                <div className={styles.rejectGroup}>
-                  <label className={styles.reasonLabel} htmlFor="reject-reason">
-                    {t('action.rejectReasonLabel')}
-                  </label>
-                  <input
-                    ref={reasonRef}
-                    id="reject-reason"
-                    className={styles.reasonInput}
-                    data-testid="reject-reason"
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                  />
+                <div className={styles.decisionRow}>
+                  <button
+                    ref={approveRef}
+                    type="button"
+                    className={styles.approve}
+                    data-testid="approve"
+                    disabled={busy}
+                    onClick={onApprove}
+                  >
+                    {t('action.approve')}
+                  </button>
                   <button
                     type="button"
                     className={styles.reject}
@@ -419,6 +492,41 @@ export function ApprovalsScreen({
                   >
                     {t('action.reject')}
                   </button>
+                  <span className={styles.nextHint} data-testid="next-hint">
+                    {t('action2.next', { count: after })}
+                  </span>
+                </div>
+
+                {/*
+                  02's reject bar: the question, and one-tap reasons. A tap
+                  FILLS the reason — it does not reject; Reject does. The route
+                  answers 400 without a reason, and a reason somebody chose by
+                  accident is worse than one they typed.
+                */}
+                <div className={styles.rejectBar}>
+                  <label className={styles.reasonLabel} htmlFor="reject-reason">
+                    {t('action2.rejectPrompt')}
+                  </label>
+                  <input
+                    ref={reasonRef}
+                    id="reject-reason"
+                    className={styles.reasonInput}
+                    data-testid="reject-reason"
+                    value={reason}
+                    placeholder={t('action.rejectReasonLabel')}
+                    onChange={(event) => setReason(event.target.value)}
+                  />
+                  {(['policy', 'myself', 'wrongOrder'] as const).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={styles.reasonChip}
+                      data-testid={`reason-${key}`}
+                      onClick={() => setReason(t(`action2.reasons.${key}`))}
+                    >
+                      {t(`action2.reasons.${key}`)}
+                    </button>
+                  ))}
                 </div>
               </div>
             ) : (

@@ -7,10 +7,22 @@
    * question can be answered in seconds without scrolling.
    */
 
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * Screen 03, measured — a 300px queue beside one decision
+   * ════════════════════════════════════════════════════════════════════════
+   * The page body is flush (`PageContainer flush`): the queue runs from the
+   * header to the panel's bottom, with `#EDE9E1` down its right edge, and the
+   * decision takes the rest at `padding:32px 40px`. `line-height: normal`
+   * throughout, as everywhere 02 is measured.
+   */
   .screen {
+    flex: 1;
+    min-block-size: 0;
+    min-inline-size: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-16);
+    line-height: normal;
   }
 
   /*
@@ -30,45 +42,50 @@
   }
 
   .layout {
-    display: grid;
-    grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
-    gap: var(--space-20);
-    align-items: start;
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
   }
 
   /* One decision at a time means one column at a time on a phone. */
   @media (width < 60rem) {
     .layout {
-      grid-template-columns: minmax(0, 1fr);
+      flex-direction: column;
     }
   }
 
   /* ── The queue ───────────────────────────────────────────────────────── */
+  .queueColumn {
+    flex: none;
+    inline-size: 300px;
+    min-block-size: 0;
+    overflow-y: auto;
+    border-inline-end: 1px solid var(--border-subtle);
+  }
+
   .queue {
     list-style: none;
     margin: 0;
     padding: 0;
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    overflow: hidden;
   }
 
+  /* 02: `1px #EDE9E1` between rows. */
   .queueItem + .queueItem {
-    border-block-start: var(--border-width-thin) solid var(--row-divider);
+    border-block-start: 1px solid var(--border-subtle);
   }
 
+  /*
+   * 02: `padding:14px 20px`, `gap:5px`. The one on screen is white with a 3px
+   * `#121212` edge — and 02 lets its text move 3px for it, so ours does too.
+   */
   .queueButton {
     inline-size: 100%;
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
+    gap: 5px;
+    padding: var(--space-14) var(--space-20);
     background: none;
-    border: none;
-    /* Logical, so the current-row marker is on the correct edge in Hebrew. */
-    border-inline-start: var(--border-width-thick) solid transparent;
+    border: 0;
     text-align: start;
     font: inherit;
     color: inherit;
@@ -76,59 +93,113 @@
   }
 
   .queueButton[aria-current='true'] {
-    background-color: var(--panel-base);
-    border-inline-start-color: var(--border-strong);
+    background-color: var(--panel-field);
+    /* Logical, so the marker is on the correct edge in Hebrew. */
+    border-inline-start: 3px solid var(--action-base);
   }
 
+  .queueButton:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  .queueTop {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  /* 13.5px — 500 in the list, 600 on the one on screen. */
   .queueSummary {
-    font-size: var(--font-size-meta);
+    min-inline-size: 0;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .queueMeta {
-    font-size: var(--font-size-caption);
+  .queueButton[aria-current='true'] .queueSummary {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /* How long it has waited — or how long is left, in red, when it is close. */
+  .queueWhen {
+    flex: none;
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
     color: var(--text-subtle);
   }
 
-  /*
-   * Past its deadline. The route refuses the decision with a 409, so this row
-   * reads as something that happened rather than something to act on.
-   */
-  .queueButton[data-lapsed='yes'] .queueMeta {
-    color: var(--intent-blocked-text);
+  .queueWhen[data-soon] {
+    color: var(--intent-urgent-text);
+  }
+
+  .queueMeta {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  /* 02's pill: `padding:3px 8px`, radius 6, 10.5px, coloured by meaning. */
+  .queueTag {
+    align-self: flex-start;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    font-size: 10.5px;
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* "Moves money" in 02's violet — a reach, not a danger. */
+  .queueTag[data-tag='FINANCIAL'] {
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
   }
 
   /* ── The decision ────────────────────────────────────────────────────── */
   .detail {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-14);
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-20);
-    padding-inline: var(--space-24);
+    padding: var(--space-32) var(--space-40);
   }
 
+  /* 02: the heading on the left, "Reversible" on the right. */
   .detailHeader {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-24);
+    margin-block-end: var(--space-12);
   }
 
+  .detailHeading {
+    min-inline-size: 0;
+  }
+
+  /* 02: 10px/500, `#8C887F`, capitals. */
   .requestedBy {
     margin: 0;
-    font-size: var(--font-size-caption);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
     letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
     color: var(--text-subtle);
   }
 
+  /* 02: 34px/600, 12px under the eyebrow. */
   .detailSummary {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-title);
-    font-weight: 600;
+    margin: var(--space-12) 0 0;
+    font-size: 34px;
+    font-weight: var(--font-weight-semibold);
     letter-spacing: -0.02em;
+    color: var(--text-primary);
   }
 
   /*
@@ -141,24 +212,47 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-6);
-    margin: 0;
+    margin: var(--space-10) 0 0;
     padding: 0;
   }
 
   .riskTag {
-    font-size: var(--font-size-caption);
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    font-size: 10.5px;
     color: var(--intent-urgent-text);
     background-color: var(--intent-urgent-surface);
-    border-radius: var(--radius-badge);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-8);
+  }
+
+  /* 02's cards: two across at `gap:14px`, white, radius 14, `16px 18px`. */
+  .detailCards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-14);
+  }
+
+  .detailCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-16) 18px;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .detailCardTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
   .reason,
   .policyRule {
     margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
+    font-size: 12.5px;
+    line-height: 1.5;
     color: var(--text-body);
   }
 
@@ -171,34 +265,50 @@
   .unknownOutcome,
   .lapsed {
     margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
+    font-size: 12.5px;
+    line-height: 1.5;
     color: var(--intent-blocked-text);
     background-color: var(--intent-blocked-surface);
     border-radius: var(--radius-card);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
+    padding: var(--space-12) var(--space-16);
   }
 
+  /* 02's bar, at the bottom of the decision. */
   .decision {
+    margin-block-start: auto;
+    padding-block-start: 22px;
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
+    flex-direction: column;
     gap: var(--space-12);
-    margin-block-start: var(--space-8);
   }
 
+  .decisionRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  /* 02: `#121212`, radius 10, `padding:11px 22px`, 13.5px. */
   .approve {
+    padding: 11px 22px;
+    border: 0;
+    border-radius: var(--space-10);
+    background-color: var(--action-base);
+    color: var(--action-text);
     font: inherit;
-    font-size: var(--font-size-meta);
-    font-weight: 500;
-    color: var(--panel-base);
-    background-color: var(--text-primary);
-    border: none;
-    border-radius: var(--radius-control);
-    padding-block: var(--space-10);
-    padding-inline: var(--space-20);
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+
+  /* 02's Reject is quiet: no border, `#8C887F`. */
+  .reject {
+    padding: 11px var(--space-16);
+    border: 0;
+    border-radius: var(--space-10);
+    background: none;
+    color: var(--text-subtle);
+    font: inherit;
+    font-size: 13.5px;
     cursor: pointer;
   }
 
@@ -209,49 +319,85 @@
     cursor: default;
   }
 
-  /*
-   * A rejection carries a reason by contract — the route answers 400 without
-   * one — so the field is part of the control, not a step behind it.
-   */
-  .rejectGroup {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-8);
+  .approve:focus-visible,
+  .reject:focus-visible,
+  .reasonChip:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
   }
 
-  .reasonLabel {
+  .nextHint {
+    margin-inline-start: auto;
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
 
-  .reasonInput {
-    font: inherit;
-    font-size: var(--font-size-meta);
-    color: var(--text-primary);
-    background-color: var(--panel-base);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-control);
-    padding-block: var(--space-8);
-    padding-inline: var(--space-12);
-    min-inline-size: var(--size-invite-field);
+  /*
+   * 02's reject bar: white, radius 12, `padding:12px 16px`, the question and
+   * one-tap reasons. A rejection carries a reason by contract — the route
+   * answers 400 without one — so the field is part of the bar.
+   */
+  .rejectBar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-12) var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-12);
   }
 
-  .reject,
-  .retry {
-    font: inherit;
-    font-size: var(--font-size-meta);
+  .reasonLabel {
+    font-size: var(--font-size-label);
     color: var(--text-body);
-    background: none;
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-control);
-    padding-block: var(--space-10);
-    padding-inline: var(--space-16);
+  }
+
+  .reasonInput {
+    flex: 1;
+    min-inline-size: 8rem;
+    padding: var(--space-6) var(--space-10);
+    border: 1px solid var(--border-default);
+    border-radius: 7px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  /* 02: `#F3F0EA`, radius 7, `padding:6px 11px`, 11.5px. */
+  .reasonChip {
+    padding: var(--space-6) 11px;
+    border: 0;
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    color: var(--intent-neutral-text);
+    font: inherit;
+    font-size: var(--font-size-caption);
     cursor: pointer;
   }
 
-  /* Retry runs the action FORWARD. It is not, and never reads as, an undo. */
   .retry {
     align-self: flex-start;
+    padding: var(--space-10) var(--space-16);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-10);
+    background: none;
+    color: var(--text-body);
+    font: inherit;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+
+  /* 02's key legend in the header: a bordered chip, 11.5px. */
+  .keys {
+    margin: 0;
+    padding: var(--space-4) var(--space-8);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    line-height: normal;
   }
 
   /* ── 03b · the moment after ──────────────────────────────────────────── */
@@ -335,6 +481,8 @@
    * `line-height: normal`, as everywhere 02 is measured.
    */
   .decidedCard {
+    /* 02's body starts 36 below the header on Approvals: the body's 24 + 12. */
+    margin-block-start: var(--space-12);
     display: flex;
     flex-direction: column;
     background-color: var(--panel-field);
@@ -436,7 +584,8 @@
   }
 
   .decidedFooter {
-    margin: auto 0 0;
+    flex: none;
+    margin: 0;
     padding: var(--space-12) 18px;
     background-color: var(--panel-footer);
     font-size: var(--font-size-caption);
@@ -461,40 +610,26 @@
 }
 
 @layer features {
-  .queueColumn {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-    min-inline-size: 0;
-  }
-
   /*
-   * The size of the queue as a fact. A reader who cannot see how much is waiting
-   * judges it from the scroll bar, which is not a number.
-   */
-  .queueCount {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  /*
-   * One day, as a group. `.queue` keeps its own dividers between items, so the
-   * day wrapper adds none of its own.
+   * One day, as a group — drawn only when the queue spans days. `.queue`
+   * keeps its own dividers between items, so the day adds none.
    */
   .queueDay {
     display: flex;
     flex-direction: column;
   }
 
+  .queueDay + .queueDay {
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
   .queueDayLabel {
     margin: 0;
-    padding-block: var(--space-8);
-    padding-inline: var(--space-12);
-    font-size: var(--font-size-caption);
-    font-weight: 500;
+    padding: var(--space-8) var(--space-20);
+    font-size: 10.5px;
+    font-weight: var(--font-weight-medium);
     color: var(--text-subtle);
-    background-color: var(--panel-field);
+    background-color: var(--panel-base);
     position: sticky;
     inset-block-start: 0;
   }
@@ -503,5 +638,9 @@
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+
+  .queueButton[data-lapsed='yes'] .queueWhen {
+    color: var(--intent-blocked-text);
   }
 }

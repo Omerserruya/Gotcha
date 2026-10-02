@@ -74,3 +74,39 @@ describe('⚠⚠ the four screens 02 draws this way use it', () => {
     for (const use of uses) expect(use).toContain('layout="screen"');
   });
 });
+
+describe('★★ `fill` — a window you scroll inside, not a document that runs off the screen', () => {
+  const css = readFileSync('src/shell/PageContainer.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const pattern = readFileSync('src/design-system/styles/fill.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const rule = (source: string, selector: string) =>
+    new RegExp(`(?:^|\\n)\\s*\\.${selector}\\s*\\{([^}]*)\\}`).exec(source)?.[1] ?? '';
+
+  it('the screen is the panel’s height, and the body takes the rest of it', () => {
+    expect(rule(css, 'screenFill')).toMatch(/block-size:\s*100%/);
+    expect(rule(css, 'screenBodyFill')).toMatch(/flex:\s*1/);
+    expect(rule(css, 'screenBodyFill')).toMatch(/min-block-size:\s*0/);
+  });
+
+  it('⚠⚠ the card can SHRINK, and its list is what scrolls', () => {
+    // Without `min-block-size: 0` a flex child refuses to shrink below its
+    // content, and pushes the page instead — the 1175px card on a 900 screen.
+    expect(rule(pattern, 'fillCard')).toMatch(/min-block-size:\s*0/);
+    expect(rule(pattern, 'fillScroll')).toMatch(/overflow-y:\s*auto/);
+    expect(rule(pattern, 'fillScroll')).toMatch(/min-block-size:\s*0/);
+  });
+
+  it('★ the body element gets it', () => {
+    const { container } = render(
+      <PageContainer layout="screen" fill title="t">
+        x
+      </PageContainer>,
+    );
+    expect(container.innerHTML).toMatch(/screenBodyFill/);
+  });
+});

@@ -4,6 +4,8 @@ import { decisionStance, isOutcomeUnknown, type Approval } from '@/api/contracts
 
 import type { decisionStats } from './load-approvals';
 
+import fill from '@/design-system/styles/fill.module.css';
+
 import styles from './Approvals.module.css';
 
 /**
@@ -79,7 +81,7 @@ export async function NothingWaiting({
    * nothing derives.
    */
   return (
-    <section className={styles.decidedCard} data-testid="nothing-waiting">
+    <section className={`${fill.fillCard} ${styles.decidedCard}`} data-testid="nothing-waiting">
       <header className={styles.decidedCardHeader}>
         <h2 className={styles.decidedHeading}>{t('decided.heading')}</h2>
         {decided && decided.length > 0 ? (
@@ -100,7 +102,7 @@ export async function NothingWaiting({
           {t('decided.none')}
         </p>
       ) : (
-        <ol className={styles.decidedList} data-testid="decided-list">
+        <ol className={`${fill.fillScroll} ${styles.decidedList}`} data-testid="decided-list">
           {decided.map((approval) => {
             const stance = decisionStance(approval);
             const failed = stance === 'approved' && approval.executionState === 'FAILED';

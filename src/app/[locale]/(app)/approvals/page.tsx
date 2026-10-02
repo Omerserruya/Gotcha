@@ -4,6 +4,7 @@ import type { Approval } from '@/api/contracts/approvals';
 import { ApprovalsScreen } from '@/features/approvals/ApprovalsScreen';
 import { DecisionStats, NothingWaiting } from '@/features/approvals/NothingWaiting';
 import { decisionStats, loadApprovals, requesterName } from '@/features/approvals/load-approvals';
+import styles from '@/features/approvals/Approvals.module.css';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -86,6 +87,8 @@ export default async function Page() {
       */
       <PageContainer
         layout="screen"
+        /* A window: the header stays, the decisions scroll inside their card. */
+        fill
         title={t('rest.title')}
         description={t('rest.lead')}
         actions={<DecisionStats stats={decisionStats(decided, decidedMayBeIncomplete)} />}
@@ -99,16 +102,49 @@ export default async function Page() {
     );
   }
 
-  return (
-    <PageContainer layout="screen" title={t('title')} description={t('description')}>
-      {/*
-        The legend lists exactly the keys the screen honours — no `E`, because
-        editing is not built, and `A` only focuses Approve. A legend that
-        advertises a key that does nothing is the same defect as offering an
-        event that nothing raises.
-      */}
-      <p data-testid="approvals-keys">{t('keys')}</p>
+  /*
+   * ★ 03's subline names the soonest deadline — `expiresAt` is real on every
+   *   row. Measured from the moment the queue was read, as the screen is.
+   */
+  const soonest = pending
+    .map((approval) => Date.parse(approval.expiresAt) - readAt)
+    .filter((left) => Number.isFinite(left) && left > 0)
+    .sort((x, y) => x - y)[0];
+  const inWords = (ms: number) => {
+    const minutes = Math.max(1, Math.round(ms / 60_000));
+    if (minutes < 60) return t('time.minutes', { n: minutes });
+    const hours = Math.round(minutes / 60);
+    return hours < 48
+      ? t('time.hours', { n: hours })
+      : t('time.days', { n: Math.round(hours / 24) });
+  };
 
+  return (
+    <PageContainer
+      layout="screen"
+      flush
+      /* 03: the title is how many need you, not the page's name. */
+      title={t('pending.title', { count: pending.length })}
+      description={
+        soonest === undefined
+          ? t('pending.description')
+          : t('pending.soonest', { in: inWords(soonest) })
+      }
+      actions={
+        <>
+          <DecisionStats stats={decisionStats(decided, decidedMayBeIncomplete)} />
+          {/*
+            The legend lists exactly the keys the screen honours — no `E`,
+            because editing is not built, and `A` only focuses Approve. A
+            legend that advertises a key that does nothing is the same defect
+            as offering an event that nothing raises.
+          */}
+          <p className={styles.keys} data-testid="approvals-keys">
+            {t('keys')}
+          </p>
+        </>
+      }
+    >
       <ApprovalsScreen
         pending={pending}
         requesterNames={nameFor(pending)}

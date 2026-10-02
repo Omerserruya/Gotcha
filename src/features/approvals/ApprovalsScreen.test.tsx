@@ -350,14 +350,22 @@ describe('★★ 28 rows in one column, given structure rather than pages', () =
     expect(older.textContent).not.toMatch(/Today|Yesterday/);
   });
 
-  it('★★ puts several requests from one day under one heading', async () => {
+  it('★ a queue that is all today’s needs no heading — 02 draws none', async () => {
     renderScreen([
       approval({ id: 'a1', createdAt: '2026-09-19T09:00:00.000Z' }),
       approval({ id: 'a2', createdAt: '2026-09-19T08:00:00.000Z' }),
       approval({ id: 'a3', createdAt: '2026-09-19T07:00:00.000Z' }),
     ]);
-    expect(screen.getAllByText('Today')).toHaveLength(1);
+    expect(screen.queryByText('Today')).toBeNull();
     expect(screen.getAllByTestId(/^queue-a\d+$/)).toHaveLength(3);
+  });
+
+  it('★★ but a queue all from ONE earlier day still says which day', async () => {
+    renderScreen([
+      approval({ id: 'a1', createdAt: '2026-09-18T09:00:00.000Z' }),
+      approval({ id: 'a2', createdAt: '2026-09-18T08:00:00.000Z' }),
+    ]);
+    expect(screen.getAllByText('Yesterday')).toHaveLength(1);
   });
 
   it('★★ says a date was not recorded rather than calling it today', async () => {
@@ -402,5 +410,41 @@ describe('★★ 28 rows in one column, given structure rather than pages', () =
     ]);
     await user.keyboard('{ArrowDown}');
     expect(screen.getByTestId('queue-a2')).toHaveFocus();
+  });
+});
+
+describe('★★ 03, measured — what the new layout says', () => {
+  it('★ a row shows how long it has waited', () => {
+    renderScreen([approval()]);
+    expect(screen.getByTestId('queue-a1')).toHaveTextContent('1h');
+  });
+
+  it('★★ and how long is LEFT, when the deadline is within the hour — 02’s "38m left"', () => {
+    renderScreen([approval({ expiresAt: '2026-09-19T10:38:00.000Z' })]);
+    expect(screen.getByTestId('queue-a1')).toHaveTextContent('38m left');
+  });
+
+  it('★ "If you leave it" names the real deadline', () => {
+    renderScreen([approval({ expiresAt: '2026-09-19T11:00:00.000Z' })]);
+    expect(screen.getByTestId('if-you-leave-it')).toHaveTextContent(
+      /If nobody decides by \d{2}:\d{2}/,
+    );
+  });
+
+  it('★ says how many come after this one', () => {
+    renderScreen([approval({ id: 'a1' }), approval({ id: 'a2' }), approval({ id: 'a3' })]);
+    expect(screen.getByTestId('next-hint')).toHaveTextContent('2 more after this · ↓ for the next');
+  });
+
+  it('⚠⚠ a one-tap reason FILLS the reason — it does not reject', async () => {
+    renderScreen([approval()]);
+    await userEvent.click(screen.getByTestId('reason-policy'));
+    expect(screen.getByTestId('reject-reason')).toHaveValue('Outside policy');
+    expect(reject).not.toHaveBeenCalled();
+  });
+
+  it('⚠ an unreadable date never throws the render — the eyebrow simply has no time', () => {
+    renderScreen([approval({ createdAt: 'not-a-date' })]);
+    expect(screen.getByTestId('requested-by')).toHaveTextContent('Requested by an automation');
   });
 });

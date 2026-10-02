@@ -53,8 +53,58 @@ describe('★★ 03c — nothing waiting', () => {
     expect(props?.layout).toBe('screen');
   });
 
+  it('★★ and it is a window: the header stays, the decisions scroll inside their card', async () => {
+    const props = propsOf<{ fill?: boolean }>(await emptyQueue(), PageContainer);
+    expect(props?.fill).toBe(true);
+  });
+
   it('★ and 02’s figures are in the header', async () => {
     const props = propsOf<{ actions: ReactNode }>(await emptyQueue(), PageContainer);
     expect(propsOf(props?.actions, DecisionStats)).not.toBeNull();
+  });
+});
+
+describe('★★ 03 — things need your decision', () => {
+  const withPending = async () => {
+    const at = Date.parse('2026-09-19T10:00:00.000Z');
+    loadApprovals.mockResolvedValue({
+      pending: [
+        {
+          id: 'a',
+          summary: 'x',
+          tool: 't',
+          expiresAt: '2026-09-19T10:38:00.000Z',
+          createdAt: '2026-09-19T09:00:00.000Z',
+          riskTags: [],
+          requestedBy: 'bot',
+        },
+        {
+          id: 'b',
+          summary: 'y',
+          tool: 't',
+          expiresAt: '2026-09-19T12:00:00.000Z',
+          createdAt: '2026-09-19T09:00:00.000Z',
+          riskTags: [],
+          requestedBy: 'bot',
+        },
+      ],
+      decided: [],
+      decidedMayBeIncomplete: false,
+      aiEmployees: [],
+      readAt: at,
+    });
+    const { default: Page } = await import('./page');
+    return Page();
+  };
+
+  it('★★ the title is how many need you, and the subline the soonest deadline', async () => {
+    const props = propsOf<{ title: string; description: string; flush?: boolean }>(
+      await withPending(),
+      PageContainer,
+    );
+    expect(props?.title).toBe('pending.title');
+    expect(props?.description).toBe('pending.soonest');
+    // The queue runs to the panel's edges.
+    expect(props?.flush).toBe(true);
   });
 });

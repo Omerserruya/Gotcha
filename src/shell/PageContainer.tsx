@@ -18,6 +18,8 @@ export function PageContainer({
   bleed,
   wide,
   layout = 'document',
+  fill = false,
+  flush = false,
   children,
 }: {
   /** Already translated. */
@@ -59,11 +61,32 @@ export function PageContainer({
    * wrong for a screen of cards.
    */
   layout?: 'document' | 'screen';
+  /**
+   * `screen` only. ★★ THE BODY IS A WINDOW, NOT A DOCUMENT.
+   *
+   * Omer's rule from the inbox — "every container is a window you scroll
+   * inside, not outside" — for the other screens. With `fill`, the body takes
+   * exactly the rest of the panel's height, so the header stays put and the
+   * page's own card scrolls INSIDE itself. Measured on 03c: our card was 1175
+   * tall on a 900 viewport and the whole panel scrolled, header and all.
+   *
+   * The convention for what goes inside (`fill.module.css`): the card that
+   * should take the remaining height is `fillCard` (`flex: 1; min-block-size:
+   * 0`), and its list is `fillScroll` — the scroller.
+   */
+  fill?: boolean;
+  /**
+   * `screen` only: `fill`, and no padding either — for columns that run to
+   * the panel's edges, as 03's queue does (`[300x775]` from the header down).
+   */
+  flush?: boolean;
   children?: ReactNode;
 }) {
   if (layout === 'screen') {
     return (
-      <div className={styles.screen}>
+      <div
+        className={[styles.screen, (fill || flush) && styles.screenFill].filter(Boolean).join(' ')}
+      >
         {title ? (
           <header className={styles.screenHeader}>
             <div className={styles.screenHeading}>
@@ -73,7 +96,15 @@ export function PageContainer({
             {actions ? <div className={styles.screenAside}>{actions}</div> : null}
           </header>
         ) : null}
-        <div className={styles.screenBody}>{children}</div>
+        <div
+          className={
+            flush
+              ? styles.screenBodyFlush
+              : [styles.screenBody, fill && styles.screenBodyFill].filter(Boolean).join(' ')
+          }
+        >
+          {children}
+        </div>
       </div>
     );
   }
