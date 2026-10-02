@@ -82,9 +82,70 @@ export const campaignSchema = z.object({
    * stopped campaign can say why instead of just being stopped.
    */
   lastError: z.string().nullable().default(null),
+  /**
+   * Who it was meant for — `Broadcast.audience`, a Json column, turned into
+   * its DESCRIPTION here and never kept raw: the raw value carries contact
+   * ids and CRM snapshots (names, phones, emails) that no card needs. Read
+   * as `unknown` so a shape nobody foresaw is "a saved audience", never a
+   * rejected campaign.
+   */
+  audience: z
+    .unknown()
+    .optional()
+    .transform((raw) => describeAudience(raw)),
 });
 
 export type Campaign = z.infer<typeof campaignSchema>;
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ 02's "WHO" LINE, SAID ONLY WHERE IT CAN BE SAID PRECISELY
+ * ════════════════════════════════════════════════════════════════════════════
+ * The vocabulary, from the write sites: every write goes through the
+ * broadcasts route's `parseAudience` (the AI's `create_broadcast` posts to
+ * the same route; a resend copies the value verbatim), which keeps four forms
+ * — `manual`, `filter`, `saved`, `composite` — or `null`, when recipients
+ * were added to the campaign directly (the builder's import mode).
+ *
+ * ★ NO RULE IS PUT INTO WORDS. Filter fields are CRM property names,
+ * arbitrary per tenant, and the one local field worth naming does not do what
+ * its name says: `Contact.tags` is a Json column and the resolver filters it
+ * as a scalar (`equals` compares the whole value; `contains` and `in` are not
+ * Json filters). "Everyone tagged VIP" would describe a selection the
+ * platform does not make. Any rule makes the audience "a saved audience".
+ *
+ * Measured on dev: one broadcast in the table, its audience a hand-written
+ * `{"note":"ui test"}` with no `type` — the unrecognised form.
+ */
+export type AudienceWords =
+  | { readonly kind: 'direct' }
+  | { readonly kind: 'saved' }
+  | { readonly kind: 'everyone'; readonly channel: string | null }
+  /** Hand-picked only: local contacts and CRM chips. */
+  | { readonly kind: 'picked'; readonly count: number };
+
+function hasRules(rules: unknown): boolean {
+  if (!rules || typeof rules !== 'object') return false;
+  const { all, any } = rules as { all?: unknown; any?: unknown };
+  return [all, any].some((group) => Array.isArray(group) && group.length > 0);
+}
+
+export function describeAudience(audience: unknown): AudienceWords {
+  if (audience === null || audience === undefined) return { kind: 'direct' };
+  const a = audience as Record<string, unknown>;
+  const count = (list: unknown) => (Array.isArray(list) ? list.length : 0);
+
+  if (a.type === 'composite' && a.everyone === true) {
+    // Every contact (in the channel): picks and rules beside it add nobody.
+    return { kind: 'everyone', channel: typeof a.channel === 'string' ? a.channel : null };
+  }
+  if ((a.type === 'manual' || a.type === 'composite') && !hasRules(a.rules)) {
+    const picked = count(a.contactIds) + count(a.crmContacts);
+    if (picked > 0) return { kind: 'picked', count: picked };
+  }
+  // `saved`, `filter`, anything with a rule, and any form the writers do not produce.
+  return { kind: 'saved' };
+}
 
 export const campaignsSchema = z.array(campaignSchema);
 

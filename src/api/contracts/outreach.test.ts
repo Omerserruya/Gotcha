@@ -32,13 +32,15 @@ const campaign = (over: Partial<Campaign> = {}): Campaign => ({
   repliedCount: 0,
   failedCount: 12,
   lastError: null,
+  audience: { kind: 'direct' },
   ...over,
 });
 
 describe('the contract strips what no card needs', () => {
-  it('drops audience, variables and the routing internals', () => {
-    // `audience` is arbitrary JSON describing WHO is being messaged, and
-    // nothing on the card reads it.
+  it('keeps only the audience’s description; drops variables and the routing internals', () => {
+    // `audience` is arbitrary JSON describing WHO is being messaged — contact
+    // ids, CRM snapshots with phones and emails. The card reads its
+    // description, so that is all the contract keeps.
     const parsed = campaignSchema.parse({
       ...campaign(),
       audience: { rules: [{ field: 'email', value: 'someone@example.com' }] },
@@ -49,8 +51,11 @@ describe('the contract strips what no card needs', () => {
       tenantId: 't1',
     });
 
-    for (const key of ['audience', 'variables', 'channelAccountId', 'flowId', 'createdBy'])
+    for (const key of ['variables', 'channelAccountId', 'flowId', 'createdBy'])
       expect(parsed, `${key} must not survive the contract`).not.toHaveProperty(key);
+    // `audience` survives only as its description — never the raw JSON.
+    expect(parsed.audience).toEqual({ kind: 'saved' });
+    expect(JSON.stringify(parsed)).not.toContain('someone@example.com');
   });
 
   it('keeps failedCount and lastError, which the design never asked for', () => {

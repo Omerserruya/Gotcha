@@ -3,6 +3,7 @@ import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import { campaignSchema } from '@/api/contracts/outreach';
+import channels from '@/i18n/messages/en/channels.json';
 import messages from '@/i18n/messages/en/outreach.json';
 
 import { CampaignCard } from './CampaignCard';
@@ -20,7 +21,7 @@ import { CampaignCard } from './CampaignCard';
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'outreach') =>
-    createTranslator({ locale: 'en', messages: { outreach: messages }, namespace }),
+    createTranslator({ locale: 'en', messages: { outreach: messages, channels }, namespace }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
@@ -151,5 +152,78 @@ describe('★ 05b — a campaign that has gone out links to what it did', () => 
     const link = container.querySelector('[data-testid="results-b1"]');
     if (linked) expect(link).toHaveAttribute('href', '/outreach/campaigns/b1');
     else expect(link).toBeNull();
+  });
+});
+
+describe('★★ 02\'s "Who": who they are, then how many', () => {
+  const who = async (audience: unknown) => {
+    await show({ audience });
+    return screen.getByTestId('campaign-who');
+  };
+
+  it("★ two lines in 02's shape: the audience, then the green count", async () => {
+    const dd = await who({ type: 'composite', everyone: true, channel: 'WHATSAPP' });
+    const [line, count] = Array.from(dd.children);
+    expect(line).toHaveTextContent('All your customers on WhatsApp');
+    expect(count).toHaveTextContent('400 people');
+  });
+
+  it('everyone, with no channel scope', async () => {
+    expect(await who({ type: 'composite', everyone: true })).toHaveTextContent(
+      /^All your customers400 people$/,
+    );
+  });
+
+  it('hand-picked: local contacts and CRM chips, counted together', async () => {
+    expect(
+      await who({ type: 'composite', contactIds: ['a', 'b'], crmContacts: [{ id: 'z' }] }),
+    ).toHaveTextContent('3 people you picked');
+  });
+
+  it('manual, the older form, says the same', async () => {
+    expect(await who({ type: 'manual', contactIds: ['a'] })).toHaveTextContent(
+      '1 person you picked',
+    );
+  });
+
+  it('no audience: the people were added to it directly', async () => {
+    expect(await who(null)).toHaveTextContent('People added to it directly');
+  });
+
+  it('★★ a rule is never put into words — "a saved audience"', async () => {
+    // `tags` is Json and the resolver filters it as a scalar: "tagged VIP"
+    // would describe a selection the platform does not make.
+    const tagged = {
+      type: 'composite',
+      contactIds: ['a'],
+      rules: { all: [{ field: 'tags', op: 'contains', value: 'VIP' }] },
+    };
+    expect(await who(tagged)).toHaveTextContent(/^A saved audience/);
+  });
+
+  it('filter and saved forms: "a saved audience"', async () => {
+    const { unmount } = await show({
+      audience: {
+        type: 'filter',
+        rules: { any: [{ field: 'city', op: 'equals', value: 'Haifa' }] },
+      },
+    });
+    expect(screen.getByTestId('campaign-who')).toHaveTextContent(/^A saved audience/);
+    unmount();
+    expect(await who({ type: 'saved', audienceId: 'aud_1' })).toHaveTextContent(
+      /^A saved audience/,
+    );
+  });
+
+  it('★★ an unknown form — dev\'s own `{"note":"ui test"}` — is "a saved audience", never a rejected campaign', async () => {
+    expect(await who({ note: 'ui test' })).toHaveTextContent(/^A saved audience400 people$/);
+  });
+
+  it('★ an unknown form is never read as "everyone" — only a composite can say that', async () => {
+    expect(await who({ everyone: true })).toHaveTextContent(/^A saved audience/);
+  });
+
+  it('a value that is not even an object is "a saved audience" too', async () => {
+    expect(await who('a string')).toHaveTextContent(/^A saved audience/);
   });
 });

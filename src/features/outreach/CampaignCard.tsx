@@ -55,6 +55,17 @@ export async function CampaignCard({
   const format = await getFormatter();
 
   const channel = channelName(campaign.channel, channelNames);
+  const audience = campaign.audience;
+  const audienceLine =
+    audience.kind === 'everyone'
+      ? audience.channel && channelName(audience.channel, channelNames)
+        ? t('detail.audience.everyoneOn', {
+            channel: channelName(audience.channel, channelNames)!,
+          })
+        : t('detail.audience.everyone')
+      : audience.kind === 'picked'
+        ? t('detail.audience.picked', { count: audience.count })
+        : t(`detail.audience.${audience.kind}`);
   const now = new Date();
   const at = (iso: string | null) => campaignWhen(iso, now, format);
   /*
@@ -91,8 +102,12 @@ export async function CampaignCard({
       <dl className={styles.fields}>
         <div className={styles.field}>
           <dt>{t('detail.who')}</dt>
-          <dd className={styles.fieldStrong}>
-            {t('list.people', { count: campaign.totalRecipients })}
+          {/* 02's two lines: who they are (13px), then how many (11.5, green). */}
+          <dd data-testid="campaign-who">
+            <span className={styles.fieldLine}>{audienceLine}</span>
+            <span className={styles.fieldStrong}>
+              {t('list.people', { count: campaign.totalRecipients })}
+            </span>
           </dd>
         </div>
         {channel ? (

@@ -66,7 +66,14 @@
     "when": "מתי",
     "delivery": "מסירה",
     "deliveredShort": "נמסרו ונפתחו עדיין לא נספרים.",
-    "repliedShort": "עדיין אי אפשר לקשר תשובות לקמפיין."
+    "repliedShort": "עדיין אי אפשר לקשר תשובות לקמפיין.",
+    "audience": {
+      "direct": "אנשים שנוספו אליו ישירות",
+      "saved": "קהל שמור",
+      "everyone": "כל הלקוחות שלך",
+      "everyoneOn": "כל הלקוחות שלך ב-{channel}",
+      "picked": "{count, plural, one {אדם אחד שבחרת} other {# אנשים שבחרת}}"
+    }
   },
   "results": {
     "finished": "הסתיים {when}",

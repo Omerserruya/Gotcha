@@ -260,11 +260,17 @@
   }
 
   /*
-   * The count under "Who": 11.5px, green. As `.fieldStrong` alone it lost to
-   * `.field dd` (0,1,1 over 0,1,0) and drew at 13px in black — the colour
-   * was written and never applied.
+   * "Who": the audience at 13px, then the count at 11.5px in green. As
+   * `.fieldStrong` alone the count lost to `.field dd` (0,1,1 over 0,1,0) and
+   * drew at 13px in black — the colour was written and never applied.
    */
-  .field dd.fieldStrong {
+  .field dd .fieldLine {
+    display: block;
+  }
+
+  .field dd .fieldStrong {
+    display: block;
+    margin-block-start: var(--space-4);
     font-size: 11.5px;
     color: var(--signal-done-text);
   }
