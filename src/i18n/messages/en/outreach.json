@@ -39,5 +39,31 @@
     "not_stoppable": "It already finished, so there's nothing left to stop.",
     "forbidden": "You can't stop this one.",
     "failed": "That didn't go through."
+  },
+  "screenTitle": "Reaching out",
+  "statusLine": "{running, plural, =0 {Nothing is sending} one {One campaign is sending} other {# campaigns are sending}}{scheduled, plural, =0 {} one {, and one is scheduled} other {, and # are scheduled}}.",
+  "list": {
+    "heading": "In flight",
+    "people": "{count, plural, one {# person} other {# people}}",
+    "sentOf": "{sent} of {total} sent",
+    "didntArrive": "{count} didn’t arrive",
+    "scheduledFor": "Scheduled for {when}",
+    "finishedOn": "Finished {when}",
+    "startedOn": "Sending since {when}"
+  },
+  "month": {
+    "heading": "This month",
+    "reached": "Reached",
+    "campaigns": "Campaigns",
+    "didntArrive": "Didn’t arrive"
+  },
+  "detail": {
+    "eyebrow": "Campaign · {name}",
+    "who": "Who",
+    "where": "Where",
+    "when": "When",
+    "delivery": "Delivery",
+    "deliveredShort": "Delivered and opened aren’t counted yet.",
+    "repliedShort": "Replies can’t be traced back to a campaign yet."
   }
 }

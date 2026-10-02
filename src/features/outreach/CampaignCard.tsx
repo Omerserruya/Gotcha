@@ -51,22 +51,100 @@ export async function CampaignCard({
   const channelNames = await getTranslations('channels');
   const format = await getFormatter();
 
+  const channel = channelName(campaign.channel, channelNames);
+  const at = (iso: string | null) =>
+    iso ? format.dateTime(new Date(iso), { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  const when =
+    campaign.status === 'SCHEDULED' && campaign.scheduledAt
+      ? t('list.scheduledFor', { when: at(campaign.scheduledAt)! })
+      : campaign.completedAt
+        ? t('list.finishedOn', { when: at(campaign.completedAt)! })
+        : campaign.startedAt
+          ? t('list.startedOn', { when: at(campaign.startedAt)! })
+          : null;
+
+  /*
+    ════════════════════════════════════════════════════════════════════════
+    ★★ 05's RIGHT-HAND COLUMN — the selected campaign as its fields
+    ════════════════════════════════════════════════════════════════════════
+    Measured: an eyebrow at 9px/500 in capitals, then Who · Where · When ·
+    Delivery, each an 11.5px label over 13px text, `#EDE9E1` above every
+    field but the first. 02's "What they get" and "Replies" need the message
+    and a reply owner, which the list does not carry; they are not drawn.
+  */
   return (
     <article
-      className={styles.card}
+      className={styles.detail}
       data-testid={`campaign-${campaign.id}`}
       data-status={campaign.status}
     >
-      <header className={styles.cardHead}>
-        <h3 className={styles.cardName}>{campaign.name}</h3>
-        <p className={styles.cardMeta}>
-          {t(`status.${campaign.status}` as 'status.SENDING')}
-          {/* The sixth renderer: this appended the raw enum after the status. */}
-          {channelName(campaign.channel, channelNames)
-            ? ` · ${channelName(campaign.channel, channelNames)}`
-            : null}
-        </p>
-      </header>
+      <p className={styles.detailEyebrow}>{t('detail.eyebrow', { name: campaign.name })}</p>
+
+      <dl className={styles.fields}>
+        <div className={styles.field}>
+          <dt>{t('detail.who')}</dt>
+          <dd className={styles.fieldStrong}>
+            {t('list.people', { count: campaign.totalRecipients })}
+          </dd>
+        </div>
+        {channel ? (
+          <div className={styles.field}>
+            <dt>{t('detail.where')}</dt>
+            <dd>{channel}</dd>
+          </div>
+        ) : null}
+        <div className={styles.field}>
+          <dt>{t('detail.when')}</dt>
+          <dd>
+            {t(`status.${campaign.status}` as 'status.SENDING')}
+            {when ? ` · ${when}` : null}
+          </dd>
+        </div>
+        <div className={styles.field}>
+          <dt>{t('detail.delivery')}</dt>
+          <dd>
+            <span className={styles.counters}>
+              <span data-testid={`sent-${campaign.id}`}>
+                {t('counter.sent')} {format.number(campaign.sentCount)}
+              </span>
+              {/*
+                Always shown, including when zero — "nothing failed" is a fact
+                worth stating on a screen about messages reaching people.
+              */}
+              <span data-testid={`failed-${campaign.id}`}>
+                {t('counter.failed')} {format.number(campaign.failedCount)}
+              </span>
+            </span>
+            {/*
+              ★★ THREE COUNTERS WERE HERE AND ALL THREE WERE ALWAYS ZERO.
+              `deliveredCount`, `readCount` and `repliedCount` are initialised
+              to zero and nothing in the monorepo increments them. Two
+              different facts, one line each, with the reason as the tooltip:
+              delivered and opened are COMING (the receipts exist, they are not
+              counted against a campaign); replied is ABSENT (no inbound path
+              carries a broadcast id).
+            */}
+            {detailed ? (
+              <>
+                <span
+                  className={styles.counterAbsent}
+                  data-testid={`pending-${campaign.id}`}
+                  title={t('counter.deliveredPending')}
+                >
+                  {t('detail.deliveredShort')}
+                </span>
+                <span
+                  className={styles.counterAbsent}
+                  data-testid={`no-replies-${campaign.id}`}
+                  title={t('counter.repliedAbsent')}
+                >
+                  {t('detail.repliedShort')}
+                </span>
+              </>
+            ) : null}
+          </dd>
+        </div>
+      </dl>
 
       {/*
         Why it stopped, where the platform knows. The model's own comment
@@ -78,78 +156,6 @@ export async function CampaignCard({
           {t('card.halted', { reason: campaign.lastError })}
         </p>
       ) : null}
-
-      <dl className={styles.counters}>
-        <div className={styles.counter} data-testid={`sent-${campaign.id}`}>
-          <dt>{t('counter.sent')}</dt>
-          <dd>{format.number(campaign.sentCount)}</dd>
-        </div>
-
-        {/*
-          ══════════════════════════════════════════════════════════════════
-          ★★ THREE COUNTERS WERE HERE AND ALL THREE WERE ALWAYS ZERO
-          ══════════════════════════════════════════════════════════════════
-          `deliveredCount`, `readCount` and `repliedCount` are initialised to
-          zero and **nothing in the monorepo ever increments them.** The only
-          write is `broadcast.worker.ts:209`, and it touches `sentCount` and
-          `failedCount` only.
-
-          So a merchant whose campaign was delivered and read saw
-          **"0 delivered · 0 opened · 0 replied"** — three measurements
-          presented as findings, none of them taken. The calm wrong value at
-          its purest: not a crash, not a blank, three plausible numbers.
-
-          It shipped through a capture because this tenant has no broadcasts,
-          so the card has never rendered with a campaign behind it. The
-          screen was accepted on an empty state.
-
-          ── AND THE DATA EXISTS, WHICH IS WHY THIS IS TWO SENTENCES ──
-          `Message.broadcastId` is indexed and `Message.status` IS updated
-          from delivery receipts — this tenant has READ 139 · DELIVERED 8.
-          So delivered and opened are a `groupBy` away and are coming; that
-          read is Backend's, not something to compose here.
-
-          `replied` is not. No inbound path carries a broadcast id and
-          `repliedAt` is never written, so it is absent rather than pending.
-          Two different facts, two different sentences — the 14d rule.
-        */}
-        {detailed ? (
-          <>
-            <p className={styles.counterAbsent} data-testid={`pending-${campaign.id}`}>
-              {t('counter.deliveredPending')}
-            </p>
-            <p className={styles.counterAbsent} data-testid={`no-replies-${campaign.id}`}>
-              {t('counter.repliedAbsent')}
-            </p>
-          </>
-        ) : null}
-
-        {/*
-          Always shown, including when zero — "nothing failed" is a fact worth
-          stating on a screen about messages reaching people, and hiding it at
-          zero would make its appearance a surprise rather than a reading.
-        */}
-        <div className={styles.counter} data-testid={`failed-${campaign.id}`}>
-          <dt>{t('counter.failed')}</dt>
-          <dd>{format.number(campaign.failedCount)}</dd>
-        </div>
-      </dl>
-
-      {/*
-        ★ "Opened and said nothing" was here, computed from
-        `readCount - repliedCount` — two counters nothing ever increments.
-
-        It never rendered a wrong number, because the guard was `silent > 0`
-        and the subtraction was always 0 - 0. So it was unreachable rather
-        than lying, which is why it survived a capture and a review: **a
-        branch that cannot be entered looks exactly like a branch that is
-        simply rare.**
-
-        The line was genuinely good and it comes back when the aggregate
-        does. It is removed rather than left dormant because its screen, 05b,
-        is cancelled and a dormant branch is indistinguishable from a planned
-        one.
-      */}
 
       {isStoppable(campaign) ? <StopCampaign id={campaign.id} name={campaign.name} /> : null}
     </article>

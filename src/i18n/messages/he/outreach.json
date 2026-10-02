@@ -39,5 +39,31 @@
     "not_stoppable": "זה כבר הסתיים, ולכן אין מה להפסיק.",
     "forbidden": "אינך יכול להפסיק את זה.",
     "failed": "זה לא עבר."
+  },
+  "screenTitle": "פונים החוצה",
+  "statusLine": "{running, plural, =0 {שום דבר לא נשלח כרגע} one {קמפיין אחד בשליחה} other {# קמפיינים בשליחה}}{scheduled, plural, =0 {} one {, ואחד מתוזמן} other {, ו־# מתוזמנים}}.",
+  "list": {
+    "heading": "בדרך",
+    "people": "{count, plural, one {אדם אחד} other {# אנשים}}",
+    "sentOf": "נשלחו {sent} מתוך {total}",
+    "didntArrive": "{count} לא הגיעו",
+    "scheduledFor": "מתוזמן ל־{when}",
+    "finishedOn": "הסתיים {when}",
+    "startedOn": "בשליחה מאז {when}"
+  },
+  "month": {
+    "heading": "החודש",
+    "reached": "הגיעו ל־",
+    "campaigns": "קמפיינים",
+    "didntArrive": "לא הגיעו"
+  },
+  "detail": {
+    "eyebrow": "קמפיין · {name}",
+    "who": "למי",
+    "where": "איפה",
+    "when": "מתי",
+    "delivery": "מסירה",
+    "deliveredShort": "נמסרו ונפתחו עדיין לא נספרים.",
+    "repliedShort": "עדיין אי אפשר לקשר תשובות לקמפיין."
   }
 }

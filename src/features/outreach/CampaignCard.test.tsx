@@ -66,9 +66,11 @@ describe('★★ a measurement nobody took is never shown as zero', () => {
      * false.
      */
     await show();
+    // One line on the screen, the reason as its tooltip — 02 shows states.
     const pending = screen.getByTestId('pending-c1');
-    expect(pending).toHaveTextContent(/aren't shown yet/i);
-    expect(pending).toHaveTextContent(/receipts do arrive/i);
+    expect(pending).toHaveTextContent(/aren’t counted yet/i);
+    expect(pending.getAttribute('title')).toMatch(/aren't shown yet/i);
+    expect(pending.getAttribute('title')).toMatch(/receipts do arrive/i);
   });
 
   it('★★ and says replied is ABSENT, which is a different fact', async () => {
@@ -79,10 +81,12 @@ describe('★★ a measurement nobody took is never shown as zero', () => {
      */
     await show();
     const absent = screen.getByTestId('no-replies-c1');
-    expect(absent).toHaveTextContent(/can't yet tell you who replied/i);
-    expect(absent).toHaveTextContent(/nothing to count/i);
+    expect(absent).toHaveTextContent(/can’t be traced back/i);
+    expect(absent.getAttribute('title')).toMatch(/can't yet tell you who replied/i);
+    expect(absent.getAttribute('title')).toMatch(/nothing to count/i);
     // Never the pending sentence: these are different futures.
-    expect(absent).not.toHaveTextContent(/aren't shown yet/i);
+    expect(absent.getAttribute('title')).not.toMatch(/aren't shown yet/i);
+    expect(absent).not.toHaveTextContent(/counted yet/i);
   });
 
   it('keeps the two numbers that ARE written', async () => {

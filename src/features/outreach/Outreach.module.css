@@ -8,116 +8,283 @@
    * has nowhere sensible to put.
    */
 
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 05, measured — a main column and a 340px side, to the panel's edges
+   * ════════════════════════════════════════════════════════════════════════
+   * Main at `padding:26px 40px`, `gap:22px`; the side at `26px 30px` with
+   * `#EDE9E1` down its left. Each scrolls inside itself (`PageContainer
+   * flush`), so the header stays.
+   */
   .screen {
+    flex: 1;
+    min-block-size: 0;
     display: flex;
-    flex-direction: column;
-    gap: var(--space-24);
+    line-height: normal;
   }
 
-  .section {
+  .main {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 26px var(--space-40);
+  }
+
+  .side {
+    flex: none;
+    inline-size: 340px;
+    overflow-y: auto;
+    padding: 26px 30px;
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  @media (width < 64rem) {
+    .screen {
+      flex-direction: column;
+    }
+
+    .side {
+      inline-size: auto;
+      border-inline-start: 0;
+      border-block-start: 1px solid var(--border-subtle);
+    }
+  }
+
+  .listSection {
     display: flex;
     flex-direction: column;
     gap: var(--space-12);
   }
 
-  .sectionHeading {
+  .listHeading {
     margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 500;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(var(--size-reading-half), 1fr));
-    gap: var(--space-12);
-  }
-
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-10);
+  /* White, `1px #E6E2DA`, radius 14, clipped. */
+  .listCard {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
+    border: 1px solid var(--border-default);
     border-radius: var(--radius-card);
-    padding-block: var(--space-16);
-    padding-inline: var(--space-18);
+    overflow: hidden;
   }
 
-  /* A campaign stopped by a problem is not the same as one that finished. */
-  .card[data-status='FAILED'] {
-    border-color: var(--intent-blocked-edge, var(--border-emphasis));
+  .listItem + .listItem {
+    border-block-start: 1px solid var(--panel-well);
   }
 
-  .cardHead {
+  /* `padding:15px 18px`, `gap:16px`, a 3px edge in the status's colour. */
+  .listRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    padding: 15px 18px;
+    border-inline-start: 3px solid transparent;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .listRow[data-status='SENDING'] {
+    border-inline-start-color: var(--channel-3);
+  }
+
+  .listRow[data-status='SCHEDULED'] {
+    border-inline-start-color: var(--channel-4);
+  }
+
+  .listRow[data-status='FAILED'] {
+    border-inline-start-color: var(--intent-urgent-text);
+  }
+
+  .listRow:hover,
+  .listRow[aria-current='true'] {
+    background-color: var(--panel-sunken);
+  }
+
+  .listRow:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  .listText {
+    flex: 1;
+    min-inline-size: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: 3px;
   }
 
-  .cardName {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 600;
+  .listName {
+    font-size: 13.5px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .cardMeta {
+  .listLine {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 02: a 170px bar, 6 tall on `#EDE9E1`, filled `#121212`, a caption under. */
+  .listProgress {
+    flex: none;
+    inline-size: 170px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .bar {
+    display: block;
+    block-size: 6px;
+    border-radius: 3px;
+    background-color: var(--border-subtle);
+    overflow: hidden;
+  }
+
+  .barFill {
+    display: block;
+    block-size: 100%;
+    background-color: var(--action-base);
+  }
+
+  .listCaption {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* 02's pill: `padding:4px 9px`, radius 6, 11.5px. */
+  .statusPill {
+    flex: none;
+    padding: var(--space-4) 9px;
+    border-radius: 6px;
+    font-size: var(--font-size-caption);
+    background-color: var(--panel-well);
+    color: var(--intent-neutral-text);
+  }
+
+  .statusPill[data-status='SENDING'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .statusPill[data-status='FAILED'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* 02's "This month": one card, cells at `14px 18px`, `#EDE9E1` between. */
+  .monthStrip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     margin: 0;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .monthCell {
+    padding: var(--space-14) 18px;
+  }
+
+  .monthCell + .monthCell {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .monthCell dt {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .monthCell dd {
+    margin: 3px 0 0;
+    font-size: 24px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  /* ── The side: the selected campaign as its fields ───────────────────── */
+  .detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .detailEyebrow {
+    margin: 0;
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    margin: 0;
+  }
+
+  /* 02: `#EDE9E1` above every field but the first, 14px over its label. */
+  .field + .field {
+    padding-block-start: var(--space-14);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .field dt {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .field dd {
+    margin: 5px 0 0;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .fieldStrong {
+    color: var(--signal-done-text);
+  }
+
+  .counters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4) var(--space-12);
+  }
+
+  /*
+   * Absent measurements, as sentences — deliberately NOT styled as counters:
+   * a greyed-out number in a row of real ones reads as a low value.
+   */
+  .counterAbsent {
+    display: block;
+    margin-block-start: var(--space-6);
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
 
   .cardError {
     margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
-    color: var(--intent-blocked-text);
+    font-size: 12.5px;
+    color: var(--intent-urgent-text);
   }
 
-  /* ── The five numbers ────────────────────────────────────────────────── */
-  .counters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-16);
-    margin: 0;
-  }
-
-  .counter {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .counter dt {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  .counter dd {
-    margin: 0;
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-6);
-    font-size: var(--font-size-body-lg);
-  }
-
-  .share {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  /*
-   * `readCount − repliedCount`. A segment you can act on, out of two numbers
-   * that exist — where the design had a revenue figure with no source.
-   */
-  .silent {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-caption);
-    color: var(--text-body);
-  }
-
-  /* ── Stopping, which is not pausing ──────────────────────────────────── */
   .stop {
     align-self: flex-start;
     font: inherit;
@@ -325,17 +492,5 @@
     max-inline-size: var(--size-reading);
     font-size: var(--font-size-meta);
     color: var(--text-body);
-  }
-
-  /*
-    Absent measurements. Deliberately NOT styled as counters — a greyed-out
-    number in a row of real ones reads as a low value, which is the thing
-    these sentences exist to stop.
-  */
-  .counterAbsent {
-    grid-column: 1 / -1;
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
   }
 }
