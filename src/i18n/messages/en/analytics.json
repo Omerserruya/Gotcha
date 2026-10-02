@@ -174,5 +174,48 @@
       "asks": "{n} {count, plural, one {ask} other {asks}}",
       "foot": "{term} was searched for {n} {count, plural, one {time} other {times}} this week and isn't in your catalogue."
     }
+  },
+  "topics": {
+    "title": "What people are asking about",
+    "subline": "Last 7 days, against the week before",
+    "hero": {
+      "eyebrow": "What changed",
+      "rise": "{topic} questions are up <figure>{pct}%</figure> on the week before.",
+      "steady": "No topic moved much on the week before.",
+      "update": "Send a proactive update",
+      "conversations": "See the conversations"
+    },
+    "unanswered": {
+      "title": "A question GOTCHA couldn't answer",
+      "body": "“{question}” was asked {n} {count, plural, one {time} other {times}} this week, and Knowledge doesn't cover it.",
+      "none": "Nothing went unanswered this week.",
+      "answer": "Answer it once",
+      "rename": "Rename"
+    },
+    "table": {
+      "topic": "Topic",
+      "asked": "Asked",
+      "change": "Change",
+      "alone": "GOTCHA alone",
+      "ends": "How it ends",
+      "new": "new",
+      "pct": "{pct, number, ::sign-always}%",
+      "unavailable": "We couldn't read this week's topics just now.",
+      "none": "No topics this week.",
+      "ungrouped": "Questions aren't grouped into topics yet this week.",
+      "foot": "GOTCHA groups questions itself. How each topic ends, and how much it handled alone, aren't counted yet."
+    },
+    "byDay": {
+      "title": "{topic}, by day",
+      "titleNone": "A topic, by day",
+      "none": "Topics aren't counted per day yet."
+    },
+    "sound": {
+      "title": "How people sound",
+      "fine": "Fine",
+      "impatient": "Impatient",
+      "angry": "Angry",
+      "none": "Tone isn't counted yet."
+    }
   }
 }

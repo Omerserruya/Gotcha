@@ -11,6 +11,7 @@ import {
   loadGotcha,
   loadSales,
   loadTeam,
+  loadTopics,
 } from './load-analytics';
 
 beforeEach(() => {
@@ -144,5 +145,22 @@ describe('★ 06d’s read', () => {
     expect(req.raw).toBe(true);
     get.mockRejectedValue(new Error('down'));
     expect((await loadSales()).demand).toBeNull();
+  });
+});
+
+describe('★ 06e’s reads', () => {
+  it('topics for this week AND the week before — that is what makes "Change" real', async () => {
+    get.mockImplementation(async (r: { endpoint: { path: string } }) =>
+      r.endpoint.path.endsWith('unanswered-questions') ? { data: [] } : [],
+    );
+    await loadTopics(new Date('2026-10-02T12:00:00.000Z'));
+    const windows = get.mock.calls
+      .map((c) => c[0] as { endpoint: { path: string }; query: { from: string; to: string } })
+      .filter((r) => r.endpoint.path === '/api/analytics/top-questions')
+      .map((r) => [r.query.from, r.query.to]);
+    expect(windows).toEqual([
+      ['2026-09-25T12:00:00.000Z', '2026-10-02T12:00:00.000Z'],
+      ['2026-09-18T12:00:00.000Z', '2026-09-25T12:00:00.000Z'],
+    ]);
   });
 });

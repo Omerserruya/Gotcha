@@ -581,6 +581,12 @@ export const askedAboutSchema = z.object({
   /** The model's own label. Rendered verbatim; we did not write it. */
   question: z.string().nullable().default(null),
   count: z.number().default(0),
+  /**
+   * The grouped intent — or `null` when the route fell back to the most
+   * repeated raw message bodies (`getTopQuestions`, no intents in range).
+   * Those rows are customers' own words, not topics; 06e tells them apart.
+   */
+  intent: z.string().nullable().default(null),
 });
 export type AskedAbout = z.infer<typeof askedAboutSchema>;
 

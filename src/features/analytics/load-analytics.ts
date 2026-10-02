@@ -249,3 +249,43 @@ export async function loadSales(): Promise<{ readonly demand: ProductDemand | nu
     });
   return { demand };
 }
+
+/** What 06e reads: this week's topics and the week before's, and the questions it could not answer. */
+export interface TopicsData {
+  readonly week: readonly AskedAbout[] | null;
+  readonly before: readonly AskedAbout[] | null;
+  readonly unanswered: UnansweredQuestions | null;
+}
+
+export async function loadTopics(now: Date = new Date()): Promise<TopicsData> {
+  const api = serverApi();
+  const week = lastSevenDays(now);
+  const before = lastSevenDays(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+  const failing =
+    <T>(event: string) =>
+    (cause: unknown): T | null => {
+      logger.warn(event, { cause });
+      return null;
+    };
+  const topics = (range: { from: string; to: string }) =>
+    api
+      .get({
+        endpoint: analyticsEndpoints.topQuestions(),
+        payload: askedAboutListSchema,
+        query: { ...range, limit: 20 },
+      })
+      .catch(failing<AskedAbout[]>('analytics.top_questions_failed'));
+  const [thisWeek, weekBefore, unanswered] = await Promise.all([
+    topics(week),
+    topics(before),
+    api
+      .get({
+        endpoint: analyticsEndpoints.unansweredQuestions(),
+        payload: unansweredQuestionsSchema,
+        query: { ...week, limit: 1 },
+        raw: true,
+      })
+      .catch(failing<UnansweredQuestions>('analytics.unanswered_failed')),
+  ]);
+  return { week: thisWeek, before: weekBefore, unanswered };
+}

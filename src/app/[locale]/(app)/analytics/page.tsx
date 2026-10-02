@@ -2,7 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import styles from '@/features/analytics/Analytics.module.css';
 import { AskedAbout } from '@/features/analytics/AskedAbout';
-import { parseAnalyticsTab } from '@/features/analytics/AnalyticsTabs';
+import { AnalyticsTabs, parseAnalyticsTab } from '@/features/analytics/AnalyticsTabs';
 import {
   AloneChart,
   GotchaHero,
@@ -16,7 +16,15 @@ import {
   loadGotcha,
   loadSales,
   loadTeam,
+  loadTopics,
 } from '@/features/analytics/load-analytics';
+import {
+  HowTheySound,
+  TopicByDay,
+  TopicsHero,
+  TopicTable,
+  UnansweredCard,
+} from '@/features/analytics/TopicsTab';
 import {
   AskedNotGot,
   MoneySources,
@@ -58,9 +66,8 @@ import { pageMetadata } from '@/shell/page-metadata';
  *             so rename and merge have nowhere to persist.
  *   Team      here, as a panel.
  *
- * What remains is two panels, so there is no tab row: two tabs where one holds
- * a single panel is ceremony, and one of them would have been named for a
- * section that does not exist.
+ * (Superseded 2026-10-02: 06b–06e exist now, each its own tab, and the tab
+ * row is drawn — a tab that leads somewhere is not ceremony.)
  *
  * ── AND NO HEADLINE NUMBERS ──
  * `MetricStrip` is live on screen 01. A second rendering of the same figures
@@ -78,12 +85,22 @@ export default async function Page({
 } = {}) {
   const t = await getTranslations('analytics');
   const tab = parseAnalyticsTab((await searchParams)?.tab);
+  /*
+    02's tabs — drawn now that each leads somewhere, which was the only
+    reason they were not. The same row on every tab.
+  */
+  const tabs = <AnalyticsTabs current={tab} />;
 
   /* 06b — what GOTCHA did, and where it stopped. Its own reads. */
   if (tab === 'gotcha') {
     const data = await loadGotcha();
     return (
-      <PageContainer layout="screen" title={t('gotcha.title')} description={t('gotcha.subline')}>
+      <PageContainer
+        layout="screen"
+        actions={tabs}
+        title={t('gotcha.title')}
+        description={t('gotcha.subline')}
+      >
         <div className={styles.gScreen} data-testid="analytics-gotcha">
           <div className={styles.gTop}>
             <GotchaHero data={data} />
@@ -103,7 +120,12 @@ export default async function Page({
   if (tab === 'team') {
     const data = await loadTeam();
     return (
-      <PageContainer layout="screen" title={t('teamTab.title')} description={t('teamTab.subline')}>
+      <PageContainer
+        layout="screen"
+        actions={tabs}
+        title={t('teamTab.title')}
+        description={t('teamTab.subline')}
+      >
         <div className={styles.gScreen} data-testid="analytics-team">
           <div className={styles.gTop}>
             <TeamHero agents={data.agents} />
@@ -120,7 +142,12 @@ export default async function Page({
   if (tab === 'sales') {
     const { demand } = await loadSales();
     return (
-      <PageContainer layout="screen" title={t('sales.title')} description={t('sales.subline')}>
+      <PageContainer
+        layout="screen"
+        actions={tabs}
+        title={t('sales.title')}
+        description={t('sales.subline')}
+      >
         <div className={styles.gScreen} data-testid="analytics-sales">
           <div className={styles.gTop}>
             <SalesHero />
@@ -136,16 +163,46 @@ export default async function Page({
     );
   }
 
+  /* 06e — what people ask about, this week against the week before. */
+  if (tab === 'topics') {
+    const data = await loadTopics();
+    return (
+      <PageContainer
+        layout="screen"
+        actions={tabs}
+        title={t('topics.title')}
+        description={t('topics.subline')}
+      >
+        <div className={styles.gScreen} data-testid="analytics-topics">
+          <div className={styles.gTop}>
+            <TopicsHero data={data} />
+            <UnansweredCard data={data} />
+          </div>
+          <div className={styles.gBottom}>
+            <TopicTable data={data} />
+            <div className={styles.eColumn}>
+              <TopicByDay data={data} days={lastSevenDayDates(new Date())} />
+              <HowTheySound />
+            </div>
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
   const { agents, topics, overview, timeSaved, insights } = await loadAnalytics();
 
   return (
     /*
       06, measured: the title is a question answered — "How the operation is
-      doing" — over the period it covers. 02's tabs (Overview · GOTCHA · Team ·
-      Sales · Topics) are not drawn: the other four screens do not exist, and
-      a tab that opens nothing is worse than its absence.
+      doing" — over the period it covers, with 02's tabs on its right.
     */
-    <PageContainer layout="screen" title={t('screenTitle')} description={t('screenSubline')}>
+    <PageContainer
+      layout="screen"
+      actions={tabs}
+      title={t('screenTitle')}
+      description={t('screenSubline')}
+    >
       <div className={styles.screen} data-testid="analytics-screen">
         <WhatChanged insights={insights} />
         <KpiStrip overview={overview} timeSaved={timeSaved} />

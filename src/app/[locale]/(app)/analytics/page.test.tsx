@@ -31,11 +31,13 @@ const loadAnalytics = vi.hoisted(() => vi.fn());
 const loadGotcha = vi.hoisted(() => vi.fn());
 const loadTeam = vi.hoisted(() => vi.fn());
 const loadSales = vi.hoisted(() => vi.fn());
+const loadTopics = vi.hoisted(() => vi.fn());
 vi.mock('@/features/analytics/load-analytics', () => ({
   loadAnalytics,
   loadGotcha,
   loadTeam,
   loadSales,
+  loadTopics,
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
@@ -123,11 +125,19 @@ describe('★★ the section that is not here says so', () => {
     expect(testids).not.toContain('analytics-no-gotcha-section');
   });
 
-  it('★ and there is no tab row, because two panels are not sections', async () => {
-    // Two tabs where one holds a single panel is ceremony, and one of them
-    // would have been named for a section with no data behind it.
-    const { testids } = inspect(await page());
-    expect(testids.filter((id) => /tab/i.test(id))).toEqual([]);
+  it('★ the tab row is drawn — 06b–06e exist, so each tab leads somewhere', async () => {
+    // Superseded 2026-10-02: the row was withheld only while four tabs had
+    // nowhere to lead. Drawn in the header, the same on every tab.
+    const { AnalyticsTabs } = await import('@/features/analytics/AnalyticsTabs');
+    const tree = await page();
+    let tabs: { current: string } | null = null;
+    walk(tree, [], (element) => {
+      const actions = (element.props as { actions?: ReactNode }).actions;
+      if (isValidElement(actions) && actions.type === AnalyticsTabs) {
+        tabs = actions.props as { current: string };
+      }
+    });
+    expect(tabs).toEqual({ current: 'overview' });
   });
 });
 
@@ -206,5 +216,29 @@ describe('★★ 06d — ?tab=sales', () => {
       expect(types).toContain(part);
     }
     expect(loadAnalytics).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ 06e — ?tab=topics', () => {
+  it('mounts its parts, with the same tab row marking Topics', async () => {
+    const { HowTheySound, TopicByDay, TopicsHero, TopicTable, UnansweredCard } =
+      await import('@/features/analytics/TopicsTab');
+    const { AnalyticsTabs } = await import('@/features/analytics/AnalyticsTabs');
+    loadTopics.mockResolvedValue({ week: null, before: null, unanswered: null });
+    const { default: Page } = await import('./page');
+    const tree = await Page({ searchParams: Promise.resolve({ tab: 'topics' }) });
+    const types: unknown[] = [];
+    let current: string | null = null;
+    walk(tree, [], (element) => {
+      types.push(element.type);
+      const actions = (element.props as { actions?: ReactNode }).actions;
+      if (isValidElement(actions) && actions.type === AnalyticsTabs) {
+        current = (actions.props as { current: string }).current;
+      }
+    });
+    for (const part of [TopicsHero, UnansweredCard, TopicTable, TopicByDay, HowTheySound]) {
+      expect(types).toContain(part);
+    }
+    expect(current).toBe('topics');
   });
 });

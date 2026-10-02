@@ -21,6 +21,7 @@ import { GotchaHero, GotchaStrip } from './GotchaTab';
 import { KpiStrip } from './OperationSummary';
 import { SalesHero, SalesStrip } from './SalesTab';
 import { TeamHero, TeamStrip } from './TeamTab';
+import { TopicsHero } from './TopicsTab';
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -81,6 +82,10 @@ const TABS: readonly [string, () => Promise<ReactElement>][] = [
   ],
   ['06d dark card', async () => SalesHero()],
   ['06d strip', async () => SalesStrip()],
+  [
+    '06e dark card',
+    async () => TopicsHero({ data: { week: [], before: [], unanswered: { data: [] } } }),
+  ],
 ];
 
 /**

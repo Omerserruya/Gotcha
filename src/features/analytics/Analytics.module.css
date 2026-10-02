@@ -886,4 +886,138 @@
       inline-size: auto;
     }
   }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 06e, measured — what people are asking about
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .gCardActions {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-start: var(--space-12);
+  }
+
+  .gCardPrimary,
+  .gCardSecondary {
+    padding: 6px var(--space-12);
+    border-radius: var(--space-8);
+    font-size: 11.5px;
+    text-decoration: none;
+  }
+
+  .gCardPrimary {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .gCardPrimary:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .gCardSecondary {
+    border: 1px solid var(--border-default);
+    color: var(--intent-neutral-text);
+  }
+
+  .gCardSecondary[aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* The topic table: 306 · 100 · 110 · 130 · 110. */
+  .eHead,
+  .eRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 100px 110px 130px 110px;
+    align-items: center;
+  }
+
+  .eHead {
+    padding: 11px 18px;
+    background-color: var(--table-head-surface);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .eRow {
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .eTopic {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .eCount {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .eChange {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .eChange[data-tone='up'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .eChange[data-tone='new'] {
+    color: var(--signal-done-text);
+  }
+
+  .eMuted {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* The 330 column: "by day" and "How people sound", 14 apart. */
+  .eColumn {
+    flex: none;
+    inline-size: 330px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .eSide,
+  .eSideTall {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .eSideTall {
+    flex: 1;
+  }
+
+  .eBars {
+    display: flex;
+    gap: var(--space-8);
+    block-size: 96px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (width < 64rem) {
+    .eColumn {
+      inline-size: auto;
+    }
+  }
 }
