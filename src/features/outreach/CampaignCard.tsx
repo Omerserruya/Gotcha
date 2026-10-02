@@ -5,6 +5,7 @@ import { channelName } from '@/api/contracts/inbox';
 
 import styles from './Outreach.module.css';
 import { StopCampaign } from './StopCampaign';
+import { campaignWhen } from './when';
 
 /**
  * One campaign, on screen 05 and again as the result card on 05b.
@@ -52,16 +53,21 @@ export async function CampaignCard({
   const format = await getFormatter();
 
   const channel = channelName(campaign.channel, channelNames);
-  const at = (iso: string | null) =>
-    iso ? format.dateTime(new Date(iso), { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  const now = new Date();
+  const at = (iso: string | null) => campaignWhen(iso, now, format);
+  /*
+   * ONE sentence for when — "Sending since Wednesday 14:18" — not the status
+   * and then the sentence, which said "Sending" twice. The bare status only
+   * where there is no moment to state.
+   */
   const when =
-    campaign.status === 'SCHEDULED' && campaign.scheduledAt
+    campaign.status === 'SCHEDULED' && at(campaign.scheduledAt)
       ? t('list.scheduledFor', { when: at(campaign.scheduledAt)! })
-      : campaign.completedAt
+      : at(campaign.completedAt)
         ? t('list.finishedOn', { when: at(campaign.completedAt)! })
-        : campaign.startedAt
+        : at(campaign.startedAt)
           ? t('list.startedOn', { when: at(campaign.startedAt)! })
-          : null;
+          : t(`status.${campaign.status}` as 'status.SENDING');
 
   /*
     ════════════════════════════════════════════════════════════════════════
@@ -95,10 +101,7 @@ export async function CampaignCard({
         ) : null}
         <div className={styles.field}>
           <dt>{t('detail.when')}</dt>
-          <dd>
-            {t(`status.${campaign.status}` as 'status.SENDING')}
-            {when ? ` · ${when}` : null}
-          </dd>
+          <dd data-testid={`when-${campaign.id}`}>{when}</dd>
         </div>
         <div className={styles.field}>
           <dt>{t('detail.delivery')}</dt>

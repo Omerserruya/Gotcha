@@ -5,6 +5,7 @@ import type { Campaign } from '@/api/contracts/outreach';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Outreach.module.css';
+import { campaignWhen } from './when';
 
 /**
  * 05's "In flight" — one card, one row per campaign.
@@ -36,8 +37,7 @@ export async function InFlightList({
   const t = await getTranslations('outreach');
   const channels = await getTranslations('channels');
   const format = await getFormatter();
-  const when = (iso: string | null) =>
-    iso ? format.dateTime(new Date(iso), { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  const now = new Date();
 
   return (
     <section className={styles.listSection} data-testid="section-in-flight">
@@ -49,7 +49,18 @@ export async function InFlightList({
             campaign.totalRecipients > 0
               ? Math.min(1, campaign.sentCount / campaign.totalRecipients)
               : null;
-          const line = [channel, t('list.people', { count: campaign.totalRecipients })]
+          /*
+            02: "Email · 3,180 customers · Thursday 10:00" — a scheduled
+            campaign's date belongs to its subline, and the middle column says
+            only "Scheduled".
+          */
+          const line = [
+            channel,
+            t('list.people', { count: campaign.totalRecipients }),
+            campaign.status === 'SCHEDULED'
+              ? campaignWhen(campaign.scheduledAt, now, format)
+              : null,
+          ]
             .filter(Boolean)
             .join(' · ');
           return (
@@ -68,9 +79,7 @@ export async function InFlightList({
 
                 <span className={styles.listProgress}>
                   {campaign.status === 'SCHEDULED' ? (
-                    <span className={styles.listCaption}>
-                      {t('list.scheduledFor', { when: when(campaign.scheduledAt) ?? '' })}
-                    </span>
+                    <span className={styles.listCaption}>{t('status.SCHEDULED')}</span>
                   ) : (
                     <>
                       {share === null ? null : (
@@ -82,12 +91,13 @@ export async function InFlightList({
                         </span>
                       )}
                       <span className={styles.listCaption} data-testid={`progress-${campaign.id}`}>
-                        {t('list.sentOf', {
+                        {/* One line in 170px, as 02's caption is: "794 / 1,240 sent · 12 failed". */}
+                        {t('list.sentShort', {
                           sent: format.number(campaign.sentCount),
                           total: format.number(campaign.totalRecipients),
                         })}
                         {campaign.failedCount > 0
-                          ? ` · ${t('list.didntArrive', { count: format.number(campaign.failedCount) })}`
+                          ? ` · ${t('list.failedShort', { count: format.number(campaign.failedCount) })}`
                           : null}
                       </span>
                     </>

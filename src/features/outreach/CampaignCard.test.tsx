@@ -105,3 +105,23 @@ describe('★★ a measurement nobody took is never shown as zero', () => {
     expect(screen.getByTestId('sent-c1')).toBeInTheDocument();
   });
 });
+
+describe('★ "When" says it once', () => {
+  it('⚠ "Sending since …", not "Sending · Sending since …"', async () => {
+    render(
+      await CampaignCard({
+        campaign: campaignSchema.parse({
+          id: 'c9',
+          name: 'n',
+          status: 'SENDING',
+          createdAt: '2026-10-02T09:00:00.000Z',
+          startedAt: '2026-10-02T09:00:00.000Z',
+        }),
+        detailed: true,
+      }),
+    );
+    const when = screen.getByTestId('when-c9');
+    expect(when.textContent?.match(/Sending/g)).toHaveLength(1);
+    expect(when).toHaveTextContent(/Sending since/);
+  });
+});

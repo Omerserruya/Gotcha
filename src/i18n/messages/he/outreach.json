@@ -49,7 +49,9 @@
     "didntArrive": "{count} לא הגיעו",
     "scheduledFor": "מתוזמן ל־{when}",
     "finishedOn": "הסתיים {when}",
-    "startedOn": "בשליחה מאז {when}"
+    "startedOn": "בשליחה מאז {when}",
+    "sentShort": "נשלחו {sent} / {total}",
+    "failedShort": "{count} נכשלו"
   },
   "month": {
     "heading": "החודש",

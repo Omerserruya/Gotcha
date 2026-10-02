@@ -7,6 +7,7 @@ import {
   decisionStance,
   isDecidable,
   humanizeTag,
+  visibleRiskTags,
   isKnownRiskTag,
   isOutcomeUnknown,
   isRetryable,
@@ -372,7 +373,7 @@ export function ApprovalsScreen({
                     const current = approval.id === selected?.id;
                     const left = Date.parse(approval.expiresAt) - now.getTime();
                     const soon = !lapsed && Number.isFinite(left) && left < SOON_MS;
-                    const tag = approval.riskTags[0];
+                    const tag = visibleRiskTags(approval.riskTags)[0];
                     return (
                       <li key={approval.id} className={styles.queueItem}>
                         <button
@@ -462,9 +463,9 @@ export function ApprovalsScreen({
                       : t('detail.requestedByAutomation')}
                 </p>
                 <h2 className={styles.detailSummary}>{selected.summary}</h2>
-                {selected.riskTags.length > 0 ? (
+                {visibleRiskTags(selected.riskTags).length > 0 ? (
                   <ul className={styles.riskTags} data-testid="risk-tags">
-                    {selected.riskTags.map((tag) => (
+                    {visibleRiskTags(selected.riskTags).map((tag) => (
                       <li key={tag} className={styles.riskTag} data-testid={`risk-${tag}`}>
                         {/*
                           An unrecognised tag renders as itself rather than

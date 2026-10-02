@@ -518,3 +518,12 @@ describe('⚠⚠ every risk tag the platform writes has words', () => {
     }
   });
 });
+
+describe('★ REQUIRES_APPROVAL is not a pill here — every item on this screen requires it', () => {
+  it('is left out, and any other tag beside it still shows', () => {
+    renderScreen([approval({ riskTags: ['REQUIRES_APPROVAL', 'IRREVERSIBLE'] })]);
+    expect(screen.queryByTestId('risk-REQUIRES_APPROVAL')).toBeNull();
+    expect(screen.getByTestId('risk-IRREVERSIBLE')).toBeInTheDocument();
+    expect(screen.getByTestId('queue-a1')).not.toHaveTextContent(/needs a decision/i);
+  });
+});

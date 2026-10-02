@@ -57,13 +57,14 @@ describe('★★ 05’s "In flight" — the parts the platform writes', () => {
   it('⚠⚠ progress is SENT of recipients — never opened, read or replied, which nothing counts', async () => {
     render(await InFlightList({ campaigns: [campaign()], selectedId: null }));
     const progress = screen.getByTestId('progress-c1');
-    expect(progress).toHaveTextContent('794 of 1,240 sent');
+    // One line in 170px — 02's caption never wraps its row.
+    expect(progress).toHaveTextContent('794 / 1,240 sent');
     expect(progress.textContent).not.toMatch(/open|read|repl|bought/i);
   });
 
   it('★ what did not arrive is said, when something did not', async () => {
     render(await InFlightList({ campaigns: [campaign({ failedCount: 12 })], selectedId: null }));
-    expect(screen.getByTestId('progress-c1')).toHaveTextContent('12 didn’t arrive');
+    expect(screen.getByTestId('progress-c1')).toHaveTextContent('794 / 1,240 sent · 12 failed');
   });
 
   it('★ a scheduled campaign shows when, not a bar at zero', async () => {
@@ -75,7 +76,13 @@ describe('★★ 05’s "In flight" — the parts the platform writes', () => {
         selectedId: null,
       }),
     );
-    expect(screen.getByTestId('row-c1')).toHaveTextContent(/Scheduled for Oct 9, 2026/);
+    // 02: the date in the subline — 24-hour, no current year — and only
+    // "Scheduled" in the middle column.
+    const row = screen.getByTestId('row-c1');
+    expect(row).toHaveTextContent(
+      /WhatsApp · 1,240 people · (\w+day 10:00|9 Oct,? 10:00|Oct 9,? 10:00)/,
+    );
+    expect(row.textContent).not.toMatch(/2026|AM|PM/);
     expect(screen.queryByTestId('progress-c1')).toBeNull();
   });
 });

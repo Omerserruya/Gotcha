@@ -49,7 +49,9 @@
     "didntArrive": "{count} didn’t arrive",
     "scheduledFor": "Scheduled for {when}",
     "finishedOn": "Finished {when}",
-    "startedOn": "Sending since {when}"
+    "startedOn": "Sending since {when}",
+    "sentShort": "{sent} / {total} sent",
+    "failedShort": "{count} failed"
   },
   "month": {
     "heading": "This month",

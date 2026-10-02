@@ -116,6 +116,20 @@ export const KNOWN_RISK_TAGS = [
 ] as const;
 export type KnownRiskTag = (typeof KNOWN_RISK_TAGS)[number];
 
+/**
+ * The tags worth a pill on the APPROVALS screen.
+ *
+ * ★ THE ONE EXCEPTION TO "NEVER HIDE A TAG", AND WHY IT IS ONE. That rule
+ *   protects information: a warning must not vanish for want of a label.
+ *   `REQUIRES_APPROVAL` (agent-tools writes it; 9 rows on dev carry it) is
+ *   true of every item on this screen by definition, so as a pill it says
+ *   nothing — it is the reason the row is here, not a risk of acting on it.
+ *   Every other tag still shows, labelled or turned into words.
+ */
+export function visibleRiskTags(tags: readonly string[]): readonly string[] {
+  return tags.filter((tag) => tag !== 'REQUIRES_APPROVAL');
+}
+
 /** A code-shaped tag as words: `MOVES_MONEY` → "Moves money". */
 export function humanizeTag(tag: string): string {
   const words = tag
