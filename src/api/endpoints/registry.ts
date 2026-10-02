@@ -145,6 +145,8 @@ export const analyticsEndpoints = {
    * to persist and the next request regroups from the raw column.
    */
   topQuestions: () => endpoint('/api/analytics/top-questions'),
+  /** One UTC day's messages by UTC hour (Redis, kept 7 days). `{ data }`; `?date=YYYY-MM-DD`. */
+  hourly: () => endpoint('/api/analytics/hourly'),
   /** AI vs human messages, resolution, and the approval governance figures. `{ data }`. */
   aiPerformance: () => endpoint('/api/analytics/ai-performance'),
   /** Questions GOTCHA could not answer. `{ period, data }` — `data` a sibling, so `raw`. */

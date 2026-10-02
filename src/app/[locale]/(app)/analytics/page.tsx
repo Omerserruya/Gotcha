@@ -11,7 +11,8 @@ import {
   WhatItDid,
   WhereStopped,
 } from '@/features/analytics/GotchaTab';
-import { loadAnalytics, loadGotcha } from '@/features/analytics/load-analytics';
+import { loadAnalytics, loadGotcha, loadTeam } from '@/features/analytics/load-analytics';
+import { HandoverCard, TeamHero, TeamStrip, TeamTable } from '@/features/analytics/TeamTab';
 import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
 import { TeamLoad } from '@/features/analytics/TeamLoad';
 import { PageContainer } from '@/shell/PageContainer';
@@ -81,6 +82,23 @@ export default async function Page({
             <AloneChart days={lastSevenDayDates(new Date())} />
             <WhatItDid tools={data.tools} />
           </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  /* 06c — the team, without a leaderboard. */
+  if (tab === 'team') {
+    const data = await loadTeam();
+    return (
+      <PageContainer layout="screen" title={t('teamTab.title')} description={t('teamTab.subline')}>
+        <div className={styles.gScreen} data-testid="analytics-team">
+          <div className={styles.gTop}>
+            <TeamHero agents={data.agents} />
+            <HandoverCard />
+          </div>
+          <TeamStrip data={data} />
+          <TeamTable agents={data.agents} aiEmployees={data.aiEmployees} />
         </div>
       </PageContainer>
     );

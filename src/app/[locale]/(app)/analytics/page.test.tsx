@@ -29,7 +29,8 @@ import { TeamLoad } from '@/features/analytics/TeamLoad';
 
 const loadAnalytics = vi.hoisted(() => vi.fn());
 const loadGotcha = vi.hoisted(() => vi.fn());
-vi.mock('@/features/analytics/load-analytics', () => ({ loadAnalytics, loadGotcha }));
+const loadTeam = vi.hoisted(() => vi.fn());
+vi.mock('@/features/analytics/load-analytics', () => ({ loadAnalytics, loadGotcha, loadTeam }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
   getFormatter: async () => ({}),
@@ -164,6 +165,23 @@ describe('★★ 06b — ?tab=gotcha has its own reads and its own parts', () =>
       expect(types).toContain(part);
     }
     expect(types).not.toContain(TeamLoad);
+    expect(loadAnalytics).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ 06c — ?tab=team', () => {
+  it('mounts the dark card, the handover, the strip and the one table — with its own reads', async () => {
+    const { HandoverCard, TeamHero, TeamStrip, TeamTable } =
+      await import('@/features/analytics/TeamTab');
+    loadTeam.mockResolvedValue({ agents: null, aiEmployees: null, overview: null, hourly: null });
+    loadAnalytics.mockClear();
+    const { default: Page } = await import('./page');
+    const tree = await Page({ searchParams: Promise.resolve({ tab: 'team' }) });
+    const types: unknown[] = [];
+    walk(tree, [], (element) => types.push(element.type));
+    for (const part of [TeamHero, HandoverCard, TeamStrip, TeamTable]) {
+      expect(types).toContain(part);
+    }
     expect(loadAnalytics).not.toHaveBeenCalled();
   });
 });

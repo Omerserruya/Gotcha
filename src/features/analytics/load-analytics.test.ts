@@ -4,7 +4,13 @@ const get = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 vi.mock('server-only', () => ({}));
 
-import { lastSevenDays, loadAnalytics, loadGotcha } from './load-analytics';
+import {
+  lastSevenDays,
+  lastSevenUtcDates,
+  loadAnalytics,
+  loadGotcha,
+  loadTeam,
+} from './load-analytics';
 
 beforeEach(() => {
   get.mockReset().mockResolvedValue([]);
@@ -85,5 +91,45 @@ describe('★ 06b’s reads', () => {
     expect(data.tools).toBeNull();
     expect(data.unanswered).toEqual({ data: [] });
     expect(data.ai).not.toBeNull();
+  });
+});
+
+describe('★ 06c’s reads', () => {
+  it('seven UTC dates, oldest first, as /hourly keys them', () => {
+    expect(lastSevenUtcDates(new Date('2026-10-02T01:00:00.000Z'))).toEqual([
+      '2026-09-26',
+      '2026-09-27',
+      '2026-09-28',
+      '2026-09-29',
+      '2026-09-30',
+      '2026-10-01',
+      '2026-10-02',
+    ]);
+  });
+
+  it('★ /hourly once per day; a day that failed is dropped, the rest kept', async () => {
+    get.mockImplementation(async (r: { endpoint: { path: string }; query?: { date?: string } }) => {
+      if (r.endpoint.path === '/api/analytics/hourly') {
+        if (r.query?.date === lastSevenUtcDates()[0]) throw new Error('down');
+        return [{ hour: '09:00', inbound: 1, outbound: 0 }];
+      }
+      if (r.endpoint.path === '/api/analytics/overview') return {};
+      return [];
+    });
+    const data = await loadTeam();
+    const hourlyCalls = get.mock.calls.filter(
+      (c) => c[0].endpoint.path === '/api/analytics/hourly',
+    );
+    expect(hourlyCalls).toHaveLength(7);
+    expect(data.hourly).toHaveLength(6);
+  });
+
+  it('⚠ every day failing is null, not an empty week', async () => {
+    get.mockImplementation(async (r: { endpoint: { path: string } }) => {
+      if (r.endpoint.path === '/api/analytics/hourly') throw new Error('down');
+      if (r.endpoint.path === '/api/analytics/overview') return {};
+      return [];
+    });
+    expect((await loadTeam()).hourly).toBeNull();
   });
 });

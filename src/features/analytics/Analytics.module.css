@@ -586,4 +586,140 @@
       grid-template-columns: repeat(2, 1fr);
     }
   }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * 06c, measured — the team, one table
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  .gHeroAmber {
+    color: var(--copilot-highlight);
+  }
+
+  .gCardBody {
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--intent-neutral-text);
+  }
+
+  .tTable {
+    flex: 1;
+    min-block-size: 260px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  /* Columns: the person, then 130 · 130 · 130 · 130 · 150 (02's widths, plus "Taken today"). */
+  .tHead,
+  .tRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 110px 110px 110px 110px 150px;
+    align-items: center;
+  }
+
+  .tHead {
+    padding: 11px 18px;
+    background-color: var(--table-head-surface);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .tRows {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .tList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tRow {
+    padding: var(--space-14) 18px;
+    border-block-end: 1px solid var(--row-divider);
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .tRow[data-ai] {
+    background-color: var(--panel-quiet);
+  }
+
+  .tWho {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-inline-size: 0;
+  }
+
+  .tDisc {
+    flex: none;
+    inline-size: 30px;
+    block-size: 30px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    color: var(--intent-neutral-text);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 30px;
+    text-align: center;
+  }
+
+  .tDisc[data-ai] {
+    border-radius: 9px;
+    background-color: var(--ai-avatar-surface);
+    color: var(--ai-avatar-text);
+    font-size: 9px;
+  }
+
+  .tNameStack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .tName {
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .tRole {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  /* The week's load: seven 8px bars, 3 apart — a 3px baseline while nothing measures it. */
+  .tLoad {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    block-size: 26px;
+  }
+
+  .tLoadDay {
+    inline-size: 8px;
+    block-size: 3px;
+    border-radius: 2px;
+    background-color: var(--border-emphasis);
+  }
+
+  .tFoot {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
 }

@@ -94,5 +94,38 @@
       "unavailable": "We couldn't read what it ran just now.",
       "foot": "{failed} failed; {refused} were stopped by a rule, which is the rule working."
     }
+  },
+  "teamTab": {
+    "title": "How your team is doing",
+    "subline": "Last 7 days",
+    "hero": {
+      "eyebrow": "Worth a word",
+      "uneven": "{heavy} is carrying <figure>{ratio, plural, =2 {twice} other {# times}}</figure> the queue {light} is.",
+      "even": "Open conversations are spread evenly right now.",
+      "measured": "Counted as conversations open now — a queue, not a measure of anyone.",
+      "rebalance": "Rebalance the queue",
+      "week": "Look at their week"
+    },
+    "handover": {
+      "title": "The handover works",
+      "none": "Nothing measures yet how fast a passed-over conversation is picked up, or how often it comes back."
+    },
+    "strip": {
+      "people": "Answered first by people",
+      "firstReply": "First reply",
+      "resolved": "Resolved",
+      "handedBack": "Handed back to GOTCHA",
+      "busiest": "Busiest hour"
+    },
+    "table": {
+      "person": "Person",
+      "open": "Open now",
+      "today": "Taken today",
+      "firstReply": "First reply",
+      "resolved": "Resolved",
+      "load": "Load through the week",
+      "aiEmployee": "AI employee",
+      "foot": "Open now and taken today are today's numbers. Replies and outcomes aren't measured per person yet, so nobody here is ranked."
+    }
   }
 }

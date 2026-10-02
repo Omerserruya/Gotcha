@@ -632,3 +632,43 @@ export const unansweredQuestionsSchema = z.looseObject({
     .default([]),
 });
 export type UnansweredQuestions = z.infer<typeof unansweredQuestionsSchema>;
+
+/**
+ * `GET /api/analytics/hourly?date=YYYY-MM-DD` — one day's messages by hour.
+ * ⚠ The hours are UTC: the worker keys them `timestamp.slice(0, 13)` of an
+ * ISO string. Convert before saying "11:00" to anyone.
+ */
+export const hourlySchema = z.array(
+  z.looseObject({
+    hour: z.string(),
+    inbound: z.number().default(0),
+    outbound: z.number().default(0),
+  }),
+);
+export type Hourly = z.infer<typeof hourlySchema>;
+
+/**
+ * The busiest hour across days of `/hourly`, by inbound messages, as an
+ * instant (UTC) — `null` when nothing came in. The caller formats it in the
+ * reader's time zone.
+ */
+export function busiestHour(
+  days: readonly { readonly date: string; readonly hours: Hourly }[],
+): Date | null {
+  const byLocal = new Map<string, { at: Date; inbound: number }>();
+  let best: { at: Date; inbound: number } | null = null;
+  for (const day of days) {
+    for (const slot of day.hours) {
+      if (slot.inbound <= 0) continue;
+      const at = new Date(`${day.date}T${slot.hour}:00Z`);
+      if (Number.isNaN(at.getTime())) continue;
+      // Summed by hour of day, across the days — the same hour on each.
+      const key = String(at.getUTCHours());
+      const entry = byLocal.get(key) ?? { at, inbound: 0 };
+      entry.inbound += slot.inbound;
+      byLocal.set(key, entry);
+      if (!best || entry.inbound > best.inbound) best = entry;
+    }
+  }
+  return best?.at ?? null;
+}

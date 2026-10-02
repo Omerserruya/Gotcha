@@ -1,6 +1,9 @@
 import { serverApi } from '@/api/client/server-api';
 import { toolUsageListSchema, type ToolUsage } from '@/api/contracts/capabilities';
+import { aiEmployeesSchema, isBuilderDraft, type AiEmployee } from '@/api/contracts/people';
 import {
+  hourlySchema,
+  type Hourly,
   aiPerformanceSchema,
   unansweredQuestionsSchema,
   UNANSWERED_PAGE,
@@ -17,7 +20,7 @@ import {
   type Insight,
   type TimeSaved,
 } from '@/api/contracts/analytics';
-import { analyticsEndpoints } from '@/api/endpoints/registry';
+import { aiEmployeeEndpoints, analyticsEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
@@ -161,4 +164,56 @@ export async function loadGotcha(): Promise<GotchaData> {
       .catch(failing<UnansweredQuestions>('analytics.unanswered_failed')),
   ]);
   return { overview, timeSaved, tools, ai, unanswered };
+}
+
+/** What 06c reads. Each `null` when its read failed; `hourly` keeps the days that answered. */
+export interface TeamData {
+  readonly agents: readonly AgentLoad[] | null;
+  readonly aiEmployees: readonly AiEmployee[] | null;
+  readonly overview: AnalyticsOverview | null;
+  readonly hourly: readonly { readonly date: string; readonly hours: Hourly }[] | null;
+}
+
+/** The last seven UTC dates, as `/hourly` keys them. */
+export function lastSevenUtcDates(now: Date = new Date()): readonly string[] {
+  return Array.from({ length: 7 }, (_, index) =>
+    new Date(now.getTime() - (6 - index) * 86_400_000).toISOString().slice(0, 10),
+  );
+}
+
+export async function loadTeam(): Promise<TeamData> {
+  const api = serverApi();
+  const week = lastSevenDays();
+  const failing =
+    <T>(event: string) =>
+    (cause: unknown): T | null => {
+      logger.warn(event, { cause });
+      return null;
+    };
+  const [agents, aiEmployees, overview, days] = await Promise.all([
+    api
+      .get({ endpoint: analyticsEndpoints.agents(), payload: agentLoadListSchema })
+      .catch(failing<AgentLoad[]>('analytics.agents_failed')),
+    api
+      .get({ endpoint: aiEmployeeEndpoints.list(), payload: aiEmployeesSchema })
+      .then((list) => list.filter((ai) => !isBuilderDraft(ai)))
+      .catch(failing<AiEmployee[]>('analytics.ai_employees_failed')),
+    api
+      .get({
+        endpoint: analyticsEndpoints.overview(),
+        payload: analyticsOverviewSchema,
+        query: week,
+      })
+      .catch(failing<AnalyticsOverview>('analytics.overview_failed')),
+    Promise.all(
+      lastSevenUtcDates().map((date) =>
+        api
+          .get({ endpoint: analyticsEndpoints.hourly(), payload: hourlySchema, query: { date } })
+          .then((hours) => ({ date, hours }))
+          .catch(failing<{ date: string; hours: Hourly }>('analytics.hourly_failed')),
+      ),
+    ),
+  ]);
+  const answered = days.filter((day): day is { date: string; hours: Hourly } => day !== null);
+  return { agents, aiEmployees, overview, hourly: answered.length > 0 ? answered : null };
 }
