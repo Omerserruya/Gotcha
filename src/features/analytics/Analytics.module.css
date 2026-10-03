@@ -138,9 +138,15 @@
   }
 
   /* With no statement beside it, the list takes the row. */
-  .also[data-alone] {
-    flex: 1;
-    inline-size: auto;
+  /* Nothing changed: the same card, its line quieter. */
+  .changed[data-empty] .changedStatement {
+    color: var(--copilot-text-muted);
+  }
+
+  .alsoNone {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
   }
 
   .also {

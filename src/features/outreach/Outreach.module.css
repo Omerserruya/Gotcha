@@ -750,9 +750,9 @@
     color: var(--alert-text);
   }
 
-  /* "Worth knowing": the column's last card, taking what height is left. */
+  /* "Worth knowing": the column's last card, its own height — 02's is 211. */
   .tplWorth {
-    flex: 1 0 auto;
+    flex: none;
     padding: var(--space-16) 18px;
     background-color: var(--panel-field);
     border: 1px solid var(--border-default);

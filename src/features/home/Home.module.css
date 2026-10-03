@@ -21,17 +21,11 @@
   }
 
   /*
-   * `padding: 34px 40px 0` in the source.
-   *
-   * Trimmed to 26px. The design is drawn on a 900px canvas with almost no
-   * vertical slack, so a browser window even slightly shorter scrolls - and
-   * the strip's opening breath is the cheapest place to find the difference,
-   * because nothing below it moves relative to anything else. Taken evenly
-   * with the same amount off the foot of the columns, so the screen stays
-   * centred rather than riding high.
+   * 34 again, as 02. The 26 trim bought back what body line-height cost the
+   * blocks below; with those at `normal`, 02's own numbers fit the frame.
    */
   .statusStrip {
-    padding-block: var(--space-26) 0;
+    padding-block: 34px 0;
     padding-inline: var(--space-40);
     display: flex;
     align-items: flex-start;
@@ -45,9 +39,11 @@
     gap: var(--space-8);
     background-color: var(--intent-neutral-surface);
     border-radius: var(--radius-item);
-    padding-block: var(--space-6);
+    /* 02: `padding: 7px 12px`, line-height normal — 28 tall. */
+    padding-block: 7px;
     padding-inline: var(--space-12);
     font-size: var(--font-size-label);
+    line-height: normal;
     color: var(--intent-neutral-text);
     /* A link drawn as a pill. */
     text-decoration: none;
@@ -156,9 +152,20 @@
     margin-block-start: var(--space-4);
   }
 
-  /* The figure's own role sets a display line-height; 02's is normal. */
-  .metricValue > * {
+  /*
+   * The Text roles inside set their own line-heights (the date 24, the
+   * subline 24, a label 17); 02's are all normal. Measured on dev: the head,
+   * the box and every strip cell land within 1px of 02.
+   */
+  .greeting > *,
+  .metric *,
+  .channels * {
     line-height: normal;
+  }
+
+  /* A label on its own line, so its line box is its own 12px. */
+  .metric > :first-child {
+    display: block;
   }
 
   .share {
@@ -222,9 +229,8 @@
     /* Bounded, so each column's card scrolls inside rather than growing. */
     grid-template-rows: minmax(0, 1fr);
     gap: var(--space-14);
-    /* `padding: 20px 40px 30px` in the source; the foot trimmed to 24 — see
-       the note on .statusStrip, the same amount off each end. */
-    padding-block: var(--space-20) var(--space-24);
+    /* `padding: 20px 40px 30px`, as 02. */
+    padding-block: var(--space-20) 30px;
     padding-inline: var(--space-40);
   }
 
@@ -241,9 +247,8 @@
     /* Bounded, so each column's card scrolls inside rather than growing. */
     grid-template-rows: minmax(0, 1fr);
     gap: var(--space-14);
-    /* `padding: 20px 40px 30px` in the source; the foot trimmed to 24 — see
-       the note on .statusStrip, the same amount off each end. */
-    padding-block: var(--space-20) var(--space-24);
+    /* `padding: 20px 40px 30px`, as 02. */
+    padding-block: var(--space-20) 30px;
     padding-inline: var(--space-40);
   }
 

@@ -107,8 +107,19 @@ describe('★ 01c — First steps is one card that fits the frame', () => {
 });
 
 describe('★ 01 — composition against 02: no line-height leaking into the head and strip', () => {
-  it.each(['greeting', 'strip', 'metricValue > \\*'])('.%s is line-height normal', (selector) => {
+  it.each(['greeting', 'strip', 'statusPill'])('.%s is line-height normal', (selector) => {
     expect(rule(selector)).toMatch(/line-height:\s*normal/);
+  });
+
+  it('and so is everything inside the head and the strip cells', () => {
+    expect(rule('greeting > \\*,\\s*\\.metric \\*,\\s*\\.channels \\*')).toMatch(
+      /line-height:\s*normal/,
+    );
+  });
+
+  it('02’s own spacing: the strip at 34, the pill 7px', () => {
+    expect(rule('statusStrip')).toMatch(/padding-block:\s*34px 0/);
+    expect(rule('statusPill')).toMatch(/padding-block:\s*7px/);
   });
 });
 
@@ -124,5 +135,27 @@ describe('★ 12b / 12c — measured proportions', () => {
   });
   it('12c: the side column 240', () => {
     expect(r('newRole')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) 240px/);
+  });
+});
+
+describe('★ 05c — "Worth knowing" hugs its content', () => {
+  const css = readFileSync('src/features/outreach/Outreach.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  it('is not stretched to the column’s foot', () => {
+    const body = /(?:^|\n)\s*\.tplWorth\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(body).toMatch(/flex:\s*none/);
+  });
+});
+
+describe('★ 06 — "Also worth a look" keeps its 300 beside the dark card', () => {
+  const css = readFileSync('src/features/analytics/Analytics.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  it('no rule widens it when alone', () => {
+    expect(css).not.toMatch(/\.also\[data-alone\]/);
+    expect(/(?:^|\n)\s*\.also\s*\{([^}]*)\}/.exec(css)?.[1]).toMatch(/inline-size:\s*300px/);
   });
 });

@@ -27,7 +27,8 @@
     "eyebrow": "What changed",
     "also": "Also worth a look",
     "none": "Nothing stands out this week.",
-    "unavailable": "We couldn't read what changed just now."
+    "unavailable": "We couldn't read what changed just now.",
+    "nothing": "Nothing changed enough to mention this week."
   },
   "kpi": {
     "conversations": "Conversations",

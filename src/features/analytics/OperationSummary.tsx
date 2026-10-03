@@ -52,31 +52,36 @@ export async function WhatChanged({ insights }: { readonly insights: readonly In
   return (
     <div className={styles.changedRow}>
       {/*
-        ★★ ONLY A CHANGE IN THE CARD THAT SAYS "WHAT CHANGED". No card is
-        better than one telling a different story from the figures under it.
+        ★★ Always drawn, in 02's shape (824 beside the 300) — Omer's rule:
+        missing data is shown in its shape. It holds only a CHANGE; with none,
+        a neutral line, no figure and no arrow.
       */}
-      {changes[0] ? (
-        <section className={styles.changed} data-testid="what-changed">
-          <p className={styles.changedEyebrow}>{t('changed.eyebrow')}</p>
-          <p className={styles.changedStatement}>{sentence(changes[0])}</p>
-        </section>
-      ) : null}
+      <section
+        className={styles.changed}
+        data-testid="what-changed"
+        data-empty={changes[0] ? undefined : ''}
+      >
+        <p className={styles.changedEyebrow}>{t('changed.eyebrow')}</p>
+        <p className={styles.changedStatement}>
+          {insights === null
+            ? t('changed.unavailable')
+            : changes[0]
+              ? sentence(changes[0])
+              : t('changed.nothing')}
+        </p>
+      </section>
       {/*
         Standing facts, each in its own window — every sentence names its
         period ("in the last 30 days"), which is why they may sit on a page
         about the last seven.
       */}
-      {insights === null ? (
-        <p className={styles.note} data-testid="insights-unavailable">
-          {t('changed.unavailable')}
-        </p>
-      ) : standing.length > 0 ? (
-        <section
-          className={styles.also}
-          data-alone={changes[0] ? undefined : ''}
-          data-testid="also-worth"
-        >
-          <h2 className={styles.cardTitle}>{t('changed.also')}</h2>
+      <section className={styles.also} data-testid="also-worth">
+        <h2 className={styles.cardTitle}>{t('changed.also')}</h2>
+        {insights === null ? (
+          <p className={styles.alsoNone} data-testid="insights-unavailable">
+            —
+          </p>
+        ) : standing.length > 0 ? (
           <ul className={styles.alsoList}>
             {standing.slice(0, 3).map((insight) => (
               <li key={insight.id} className={styles.alsoItem}>
@@ -84,8 +89,10 @@ export async function WhatChanged({ insights }: { readonly insights: readonly In
               </li>
             ))}
           </ul>
-        </section>
-      ) : null}
+        ) : (
+          <p className={styles.alsoNone}>{t('changed.none')}</p>
+        )}
+      </section>
     </div>
   );
 }

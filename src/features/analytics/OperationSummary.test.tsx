@@ -29,7 +29,7 @@ const insight = (id: string, impact: string, over: Record<string, unknown> = {})
   });
 
 describe('★★ "What changed" holds only a CHANGE — and today the platform emits none', () => {
-  it('⚠⚠ a standing fact is not drawn as a change — no dark card at all', async () => {
+  it('⚠⚠ a standing fact is not drawn as a change — the dark card says nothing changed', async () => {
     // "68 conversations came through WhatsApp in the last 30 days" sat over a
     // strip reading 0 for the week. It is a level, not a change.
     render(
@@ -42,7 +42,25 @@ describe('★★ "What changed" holds only a CHANGE — and today the platform e
         ],
       }),
     );
-    expect(screen.queryByTestId('what-changed')).toBeNull();
+    // Drawn in its shape (Omer: every design element is drawn), never with the fact.
+    const card = screen.getByTestId('what-changed');
+    expect(card).toHaveTextContent('Nothing changed enough to mention this week.');
+    expect(card).not.toHaveTextContent('68');
+    expect(card).toHaveAttribute('data-empty', '');
+    // The fact sits where it belongs.
+    expect(screen.getByTestId('also-worth')).toHaveTextContent('68');
+  });
+
+  it('nothing at all: both cards drawn, each saying so', async () => {
+    render(await WhatChanged({ insights: [] }));
+    expect(screen.getByTestId('what-changed')).toHaveTextContent('Nothing changed enough');
+    expect(screen.getByTestId('also-worth')).toHaveTextContent('Nothing stands out this week.');
+  });
+
+  it('a failed read: the dark card says so, the side card "—"', async () => {
+    render(await WhatChanged({ insights: null }));
+    expect(screen.getByTestId('what-changed')).toHaveTextContent("We couldn't read what changed");
+    expect(screen.getByTestId('insights-unavailable')).toHaveTextContent('—');
   });
 
   it('★ standing facts are "Also worth a look", strongest first, each naming its own period', async () => {
@@ -64,14 +82,6 @@ describe('★★ "What changed" holds only a CHANGE — and today the platform e
       await WhatChanged({ insights: ['a', 'b', 'c', 'd', 'e'].map((id) => insight(id, 'medium')) }),
     );
     expect(screen.getByTestId('also-worth').querySelectorAll('li')).toHaveLength(3);
-  });
-
-  it('⚠ nothing to say draws nothing, and a failed read says it failed', async () => {
-    const { container, unmount } = render(await WhatChanged({ insights: [] }));
-    expect(container.textContent).toBe('');
-    unmount();
-    render(await WhatChanged({ insights: null }));
-    expect(screen.getByTestId('insights-unavailable')).toHaveTextContent(/couldn't read/);
   });
 });
 
