@@ -16,12 +16,15 @@ export async function BillingOverlay({
   kind,
   title,
   line,
+  footer,
   children,
 }: {
   readonly kind: 'drawer' | 'dialog';
   readonly title: string;
   /** 02's muted line under the title. */
   readonly line?: string;
+  /** 02's footer: the panel's actions, pinned to its bottom. */
+  readonly footer?: ReactNode;
   readonly children: ReactNode;
 }) {
   const t = await getTranslations('billing.overview.overlay');
@@ -52,6 +55,7 @@ export async function BillingOverlay({
           </Link>
         </header>
         <div className={styles.overlayBody}>{children}</div>
+        {footer ? <footer className={styles.overlayFoot}>{footer}</footer> : null}
       </aside>
     </div>
   );

@@ -56,7 +56,12 @@
     "alertPurchase": "Every automatic purchase",
     "alertLimit": "When the monthly limit is hit",
     "alertNone": "Nothing sends this alert yet.",
-    "subline": "Which one is set, and what happens when credits run out. Changing it from here comes next."
+    "subline": "Which one is set, and what happens when credits run out. Changing it from here comes next.",
+    "unsetShort": "Nothing set yet — by default, the AI stops answering when credits run out.",
+    "mostYouCould": "Most you could spend this month:",
+    "alertWarning": "Before credits run low",
+    "save": "Save",
+    "cancel": "Cancel"
   },
   "profile": {
     "noCard": "There's no payment method on file, so there's nothing for GOTCHA to charge.",
@@ -85,7 +90,13 @@
     "language": "Invoice language",
     "noField": "GOTCHA has no field for this yet.",
     "sendTo": "Send invoices and receipts to",
-    "subline": "Who the tax invoice is made out to, where it goes, and what pays it. Changing it from here comes next."
+    "subline": "Who the tax invoice is made out to, where it goes, and what pays it. Changing it from here comes next.",
+    "noCardRow": "No card on file",
+    "addCard": "Add card",
+    "save": "Save details",
+    "cancel": "Cancel",
+    "heldBy": "Card details are held by the payment provider.",
+    "expires": "Expires {date}"
   },
   "pricing": {
     "title": "Change plan",
@@ -263,6 +274,13 @@
     "invoicesPage": {
       "title": "Invoices",
       "description": "Every charge, and its receipt when there is one."
+    },
+    "buyShape": {
+      "unread": "We could not load credit packages just now.",
+      "payWith": "Pay with",
+      "card": "Card",
+      "noCard": "No card on file",
+      "pay": "Pay"
     }
   },
   "choice": {

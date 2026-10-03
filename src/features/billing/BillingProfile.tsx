@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import {
+  cardExpiry,
   hasSomethingToCharge,
   profileReading,
   type BillingProfile as Profile,
@@ -76,12 +77,35 @@ export async function BillingProfileSection({
               brand: card.brand ?? t('profile.unknownBrand'),
               last4: card.last4 ?? '????',
             })}
+            {cardExpiry(card) ? (
+              <span className={styles.detailsCardSub} data-testid="payment-method-expiry">
+                {t('profile.expires', { date: cardExpiry(card)! })}
+              </span>
+            ) : null}
           </span>
           <span className={styles.detailsAction} aria-disabled="true" title={t('profile.notYet')}>
             {t('profile.replace')}
           </span>
         </div>
-      ) : null}
+      ) : (
+        /*
+          02's card row in every state: "No card on file" when the read said
+          so, "—" when it could not say. The sentence below says the rest.
+        */
+        <div
+          className={styles.detailsCard}
+          data-testid="payment-method-none"
+          title={methods === null ? t('profile.methodsUnknown') : undefined}
+        >
+          <span className={styles.detailsBrand} aria-hidden="true" />
+          <span className={styles.detailsCardText}>
+            {methods === null ? '—' : t('profile.noCardRow')}
+          </span>
+          <span className={styles.detailsAction} aria-disabled="true" title={t('profile.notYet')}>
+            {t('profile.addCard')}
+          </span>
+        </div>
+      )}
 
       {/*
         ════════════════════════════════════════════════════════════════════
@@ -148,32 +172,39 @@ export async function BillingProfileSection({
         <p className={styles.profileNone} data-testid="profile-blank">
           {t('profile.emptied')}
         </p>
-      ) : (
-        <>
-          <div className={styles.detailsFields} data-testid="profile-fields">
-            <Field label={t('profile.legalName')} value={profile?.billingName ?? null} />
-            <Field label={t('profile.vatId')} value={profile?.vatId ?? null} />
-            <Field label={t('profile.address')} value={profile?.billingAddress ?? null} />
-            <Field label={t('profile.country')} value={profile?.billingCountry ?? null} />
-            {/* 02's two more fields have no column: "—", and why. */}
-            <Field label={t('profile.po')} value={null} none={t('profile.noField')} />
-            <Field label={t('profile.language')} value={null} none={t('profile.noField')} />
-          </div>
-          <h3 className={styles.lowHeading}>{t('profile.sendTo')}</h3>
-          <p className={styles.detailsChips} data-testid="profile-send-to">
-            {profile?.billingEmail ? (
-              <span className={styles.detailsChip}>{profile.billingEmail}</span>
-            ) : (
-              <span className={styles.lowNone}>—</span>
-            )}
-          </p>
-        </>
-      )}
+      ) : null}
+      {/*
+        02's boxes in every state — the values when there are any, "—" when
+        there are none. What the state IS is the one line above.
+      */}
+      <>
+        <div className={styles.detailsFields} data-testid="profile-fields">
+          <Field label={t('profile.legalName')} value={profile?.billingName ?? null} />
+          <Field label={t('profile.vatId')} value={profile?.vatId ?? null} />
+          <Field label={t('profile.address')} value={profile?.billingAddress ?? null} />
+          <Field label={t('profile.country')} value={profile?.billingCountry ?? null} />
+          {/* 02's two more fields have no column: "—", and why. */}
+          <Field label={t('profile.po')} value={null} none={t('profile.noField')} />
+          <Field label={t('profile.language')} value={null} none={t('profile.noField')} />
+        </div>
+        <h3 className={styles.lowHeading}>{t('profile.sendTo')}</h3>
+        <p
+          className={styles.detailsChips}
+          data-testid="profile-send-to"
+          title={t('profile.absentFields')}
+        >
+          {profile?.billingEmail ? (
+            <span className={styles.detailsChip}>{profile.billingEmail}</span>
+          ) : (
+            <span className={styles.lowNone}>—</span>
+          )}
+        </p>
+      </>
 
       {/*
         Named rather than drawn, the same as the grant expiry on 12e.
       */}
-      <p className={styles.profileAbsent} data-testid="profile-absent-fields">
+      <p className="srOnly" data-testid="profile-absent-fields">
         {t('profile.absentFields')}
       </p>
     </div>

@@ -63,8 +63,16 @@ describe('★ 17c — alerts: what is stored, and "—" for what nothing sends',
     expect(screen.queryByTestId('auto-payg-rate')).toBeNull();
   });
 
-  it('nothing configured says what the default does', async () => {
+  it('nothing configured: the three cards, "Stop at my plan" marked, one line why', async () => {
     render(await AutoPurchase({ policy: null, currency: 'USD' }));
-    expect(screen.getByTestId('auto-purchase-unset')).toHaveTextContent(/stops answering/);
+    expect(screen.getByTestId('auto-purchase-unset')).toHaveTextContent(
+      /by default.*stops answering/,
+    );
+    expect(screen.getByTestId('auto-option-stop')).toHaveAttribute('data-current', 'yes');
+    expect(screen.getByTestId('auto-option-pack')).toHaveAttribute('data-current', 'no');
+    // No schema default is dressed up as a setting.
+    expect(screen.getByTestId('auto-cap')).toHaveTextContent('Most you could spend this month: —');
+    expect(screen.queryByTestId('auto-warning')).toBeNull();
+    expect(screen.getByTestId('auto-purchase')).not.toHaveTextContent(/80%/);
   });
 });

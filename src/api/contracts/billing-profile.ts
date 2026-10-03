@@ -69,6 +69,9 @@ export const paymentMethodSchema = z.object({
   id: z.string().min(1),
   brand: z.string().nullable().default(null),
   last4: z.string().nullable().default(null),
+  /** 17e's "Expires 08/28". Sent by the route; the contract used to strip it. */
+  expMonth: z.number().int().min(1).max(12).nullable().catch(null).default(null),
+  expYear: z.number().int().nullable().catch(null).default(null),
   isDefault: z.boolean().default(false),
 });
 
@@ -130,4 +133,10 @@ export function profileReading(profile: BillingProfile | null): ProfileReading {
   if (profile.state === 'no_billable_entity') return 'no_account';
   if (profile.state === 'no_billing_profile') return 'never_entered';
   return isBlank(profile) ? 'emptied' : 'filled';
+}
+
+/** "08/28" — or null when either half is missing. */
+export function cardExpiry(method: PaymentMethod): string | null {
+  if (method.expMonth == null || method.expYear == null) return null;
+  return `${String(method.expMonth).padStart(2, '0')}/${String(method.expYear % 100).padStart(2, '0')}`;
 }

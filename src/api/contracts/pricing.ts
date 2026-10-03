@@ -150,83 +150,107 @@ export function packagePrice(pkg: {
   return Number.isFinite(amount) ? { amount, currency: pkg.currency } : null;
 }
 
-export const creditPackageSchema = z.object({
-  key: z.string(),
-  name: z.string(),
-  /** The platform's own Hebrew. One string, one owner — as with the disclaimer. */
-  nameHe: z.string().nullable().default(null),
-  credits: z.number().default(0),
-  /**
-   * ════════════════════════════════════════════════════════════════════════
-   * ★★ FLAT SIBLINGS, NOT A NESTED OBJECT — AND THAT IS WHY NO PACK HAD A PRICE
-   * ════════════════════════════════════════════════════════════════════════
-   * This read `price: displayPriceSchema` — an object with `amount` and
-   * `currency`. The route sends
-   *
-   *     { key, name, nameHe, credits: p.units, price: String(p.price),
-   *       currency: p.currency, … }
-   *
-   * so `price` is a **string** and `currency` is its **sibling**. The object
-   * schema could not parse a string, the `.default({ amount: null, currency:
-   * null })` fired, and a browser walk found **no price on any pack and no
-   * currency symbol on the totals** — one cause, reported as two defects.
-   *
-   * `money()` was behaving correctly throughout: *"no currency means no claim
-   * about one"*. It was told there was none.
-   *
-   * ── AND I CHECKED THE WRONG ROUTE FIRST ──
-   * `/billing/credits/packages` sends the model raw, where the field is
-   * `units`. This app calls `/billing/pricing/packages`, which maps
-   * `credits: p.units` — so `credits` was right all along and "fixing" it
-   * would have broken a working line.
-   */
-  price: z.union([z.string(), z.number()]).nullable().default(null),
-  currency: z.string().nullable().default(null),
-  discountLabel: z.string().nullable().default(null),
-  /**
-   * `NEVER` · `DAYS_AFTER_PURCHASE` · `PERIOD_END`.
-   *
-   * Carried because it is the one place per-credit expiry reaches a customer.
-   * The credit-summary route strips `expiresAt` from the lots, so after the
-   * purchase nothing can tell them when these credits die — see
-   * `credits.ts`. Before the purchase, this is it.
-   */
-  expiryPolicy: z.enum(['NEVER', 'DAYS_AFTER_PURCHASE', 'PERIOD_END']).default('NEVER'),
-  expiryDays: z.number().nullable().default(null),
-  /**
-   * ★ WHAT WILL ACTUALLY BE CHARGED — AND IT IS NOT THE PRICE ON THE TILE.
-   *
-   * Catalogue prices are NET. The route's own comment says the tax travels
-   * with them so "the confirm dialog can state the amount that will actually
-   * be charged rather than the one on the tile", and it has been on the wire
-   * all along — our schema is `object`, so it was stripped at the boundary
-   * and screen 17 could only ever show the net figure.
-   *
-   * Showing a merchant ₪100 and charging ₪118 is the single worst thing a
-   * buy screen can do, and it is the reassuring direction.
-   *
-   * `exempt` is not the same as 0%: one is a status, the other an amount.
-   */
-  taxed: z
-    .object({
-      net: z.string(),
-      tax: z.string(),
-      gross: z.string(),
-      percent: z.number().default(0),
-      label: z.string().nullable().default(null),
-      countryCode: z.string().nullable().default(null),
-      exempt: z.boolean().default(false),
-    })
-    .nullable()
-    .default(null),
-  /**
-   * A per-package cap the SERVER enforces — `quantity_exceeds_maximum` with
-   * the max in `detail`. Also carried all along and also stripped, so the
-   * quantity control had no way to know its own limit and would have let
-   * somebody pick a number the purchase then refused.
-   */
-  maxPurchaseQuantity: z.number().nullable().default(null),
-});
+/**
+ * `price` arrives in two shapes. Bare (`"290.00"` + `currency`) is the older
+ * one; `GET /billing/pricing/packages` now sends the shared `DisplayPrice` —
+ * `{ base, display, isEstimatedConversion, chargedCurrency, fx }` — and no
+ * `currency` beside it. A contract that knew only the first rejected every
+ * package, and 17d said "could not load" over four sellable packs.
+ *
+ * Both are read; the DISPLAY amount is the one drawn, with its currency.
+ */
+function flattenPrice(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const pkg = raw as Record<string, unknown>;
+  const price = pkg.price as { display?: { amount?: unknown; currency?: unknown } } | null;
+  if (typeof price !== 'object' || price === null || !price.display) return raw;
+  return {
+    ...pkg,
+    price: price.display.amount ?? null,
+    currency: pkg.currency ?? price.display.currency ?? null,
+  };
+}
+
+export const creditPackageSchema = z.preprocess(
+  flattenPrice,
+  z.object({
+    key: z.string(),
+    name: z.string(),
+    /** The platform's own Hebrew. One string, one owner — as with the disclaimer. */
+    nameHe: z.string().nullable().default(null),
+    credits: z.number().default(0),
+    /**
+     * ════════════════════════════════════════════════════════════════════════
+     * ★★ FLAT SIBLINGS, NOT A NESTED OBJECT — AND THAT IS WHY NO PACK HAD A PRICE
+     * ════════════════════════════════════════════════════════════════════════
+     * This read `price: displayPriceSchema` — an object with `amount` and
+     * `currency`. The route sends
+     *
+     *     { key, name, nameHe, credits: p.units, price: String(p.price),
+     *       currency: p.currency, … }
+     *
+     * so `price` is a **string** and `currency` is its **sibling**. The object
+     * schema could not parse a string, the `.default({ amount: null, currency:
+     * null })` fired, and a browser walk found **no price on any pack and no
+     * currency symbol on the totals** — one cause, reported as two defects.
+     *
+     * `money()` was behaving correctly throughout: *"no currency means no claim
+     * about one"*. It was told there was none.
+     *
+     * ── AND I CHECKED THE WRONG ROUTE FIRST ──
+     * `/billing/credits/packages` sends the model raw, where the field is
+     * `units`. This app calls `/billing/pricing/packages`, which maps
+     * `credits: p.units` — so `credits` was right all along and "fixing" it
+     * would have broken a working line.
+     */
+    price: z.union([z.string(), z.number()]).nullable().default(null),
+    currency: z.string().nullable().default(null),
+    discountLabel: z.string().nullable().default(null),
+    /**
+     * `NEVER` · `DAYS_AFTER_PURCHASE` · `PERIOD_END`.
+     *
+     * Carried because it is the one place per-credit expiry reaches a customer.
+     * The credit-summary route strips `expiresAt` from the lots, so after the
+     * purchase nothing can tell them when these credits die — see
+     * `credits.ts`. Before the purchase, this is it.
+     */
+    expiryPolicy: z.enum(['NEVER', 'DAYS_AFTER_PURCHASE', 'PERIOD_END']).default('NEVER'),
+    expiryDays: z.number().nullable().default(null),
+    /**
+     * ★ WHAT WILL ACTUALLY BE CHARGED — AND IT IS NOT THE PRICE ON THE TILE.
+     *
+     * Catalogue prices are NET. The route's own comment says the tax travels
+     * with them so "the confirm dialog can state the amount that will actually
+     * be charged rather than the one on the tile", and it has been on the wire
+     * all along — our schema is `object`, so it was stripped at the boundary
+     * and screen 17 could only ever show the net figure.
+     *
+     * Showing a merchant ₪100 and charging ₪118 is the single worst thing a
+     * buy screen can do, and it is the reassuring direction.
+     *
+     * `exempt` is not the same as 0%: one is a status, the other an amount.
+     */
+    taxed: z
+      .object({
+        net: z.string(),
+        tax: z.string(),
+        gross: z.string(),
+        percent: z.number().default(0),
+        label: z.string().nullable().default(null),
+        countryCode: z.string().nullable().default(null),
+        exempt: z.boolean().default(false),
+      })
+      .nullable()
+      .default(null),
+    /**
+     * A per-package cap the SERVER enforces — `quantity_exceeds_maximum` with
+     * the max in `detail`. Also carried all along and also stripped, so the
+     * quantity control had no way to know its own limit and would have let
+     * somebody pick a number the purchase then refused.
+     */
+    maxPurchaseQuantity: z.number().nullable().default(null),
+  }),
+);
 
 /* ── Buying ──────────────────────────────────────────────────────────────── */
 

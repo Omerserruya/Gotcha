@@ -97,7 +97,16 @@ describe('both facts, stated together, when both were read', () => {
     render(
       await BillingProfileSection({
         profile: NO_PROFILE,
-        methods: [{ id: 'pm1', brand: 'Visa', last4: '4242', isDefault: true }],
+        methods: [
+          {
+            id: 'pm1',
+            brand: 'Visa',
+            last4: '4242',
+            isDefault: true,
+            expMonth: null,
+            expYear: null,
+          },
+        ],
         failedInvoiceCount: 4,
       }),
     );
@@ -118,7 +127,9 @@ describe('★ 17e — 02’s fields, as stored', () => {
           billingCountry: 'IL',
           billingEmail: 'finance@example.com',
         }),
-        methods: [{ id: 'pm', brand: 'Visa', last4: '4417', isDefault: true }],
+        methods: [
+          { id: 'pm', brand: 'Visa', last4: '4417', isDefault: true, expMonth: 8, expYear: 2028 },
+        ],
         failedInvoiceCount: 0,
       }),
     );
@@ -130,5 +141,39 @@ describe('★ 17e — 02’s fields, as stored', () => {
     expect(po).toHaveAttribute('title', 'GOTCHA has no field for this yet.');
     expect(screen.getByTestId('profile-send-to')).toHaveTextContent('finance@example.com');
     expect(screen.getByTestId('payment-method')).toHaveTextContent('Visa ending 4417');
+    expect(screen.getByTestId('payment-method-expiry')).toHaveTextContent('Expires 08/28');
+  });
+});
+
+describe('★ 17e — every state draws 02’s drawer', () => {
+  it('never entered: all six boxes, "No card on file" as a row, the chip area', async () => {
+    render(
+      await BillingProfileSection({
+        profile: NO_PROFILE,
+        methods: NO_METHODS,
+        failedInvoiceCount: 4,
+      }),
+    );
+    expect(screen.getByTestId('payment-method-none')).toHaveTextContent('No card on file');
+    expect(screen.getByTestId('nothing-to-charge')).toHaveTextContent(/4 charges/);
+    const fields = screen.getByTestId('profile-fields');
+    for (const label of [
+      'Legal name',
+      'Company no. / VAT ID',
+      'Address',
+      'Country',
+      'Purchase order / reference',
+      'Invoice language',
+    ]) {
+      expect(fields).toHaveTextContent(label);
+    }
+    expect(screen.getByTestId('profile-send-to')).toHaveTextContent('—');
+  });
+
+  it('an unread card list is "—" in the row, never "No card on file"', async () => {
+    render(
+      await BillingProfileSection({ profile: NO_PROFILE, methods: null, failedInvoiceCount: 0 }),
+    );
+    expect(screen.getByTestId('payment-method-none')).toHaveTextContent(/^—Add card$/);
   });
 });

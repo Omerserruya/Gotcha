@@ -9,6 +9,11 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'billing') =>
     createTranslator({ locale: 'en', messages: { billing: messages }, namespace }),
 }));
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children }: { href: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
 vi.mock('@/shell/SettingsSection', () => ({
   SettingsSection: ({ children, fill }: { children: ReactNode; fill?: boolean }) => (
     <div data-testid="settings-section" data-fill={fill ? 'yes' : 'no'}>
@@ -39,6 +44,7 @@ vi.mock('@/features/billing/Overview', () => ({
   RunningLow: stub('low'),
   BillingCard: stub('billing'),
   CycleValue: stub('value'),
+  BuyUnavailable: stub('buy-unavailable'),
 }));
 vi.mock('@/features/billing/Credits', () => ({ CreditsSection: stub('credits') }));
 vi.mock('@/features/billing/BuyCredits', () => ({ BuyCredits: stub('buy') }));
@@ -90,8 +96,9 @@ describe('★ 17 — the left column runs to the frame’s bottom', () => {
 });
 
 describe('★ 17d — nothing to buy says why, rather than a blank dialog', () => {
-  it('no packages read: the reasons section is in the dialog', async () => {
+  it('a failed packages read draws the dialog’s shape, not the shelf’s reasons', async () => {
     await open('buy');
-    expect(screen.getByTestId('packages-why')).toBeInTheDocument();
+    expect(screen.getByTestId('buy-unavailable')).toBeInTheDocument();
+    expect(screen.queryByTestId('packages-why')).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import {
   isBlank,
   paymentMethodListSchema,
   profileReading,
+  cardExpiry,
 } from './billing-profile';
 
 describe('no profile is not an empty profile', () => {
@@ -50,7 +51,9 @@ describe('whether there is anything to charge', () => {
 
   it('is true once one exists', () => {
     expect(
-      hasSomethingToCharge([{ id: 'pm1', brand: 'visa', last4: '4242', isDefault: true }]),
+      hasSomethingToCharge([
+        { id: 'pm1', brand: 'visa', last4: '4242', isDefault: true, expMonth: null, expYear: null },
+      ]),
     ).toBe(true);
   });
 });
@@ -100,5 +103,23 @@ describe('four things blank billing fields can mean', () => {
 
   it('treats a null payload as never-entered rather than guessing', () => {
     expect(profileReading(null)).toBe('never_entered');
+  });
+});
+
+describe('★ 17e — the card’s expiry, as the route sends it', () => {
+  it('keeps expMonth / expYear and writes them as 02 does', () => {
+    const [card] = paymentMethodListSchema.parse({
+      paymentMethods: [
+        { id: 'pm', brand: 'Visa', last4: '4417', expMonth: 8, expYear: 2028, isDefault: true },
+      ],
+    });
+    expect(cardExpiry(card!)).toBe('08/28');
+  });
+
+  it('says nothing when half of it is missing', () => {
+    const [card] = paymentMethodListSchema.parse({
+      paymentMethods: [{ id: 'pm', brand: 'Visa', last4: '4417', expMonth: 8 }],
+    });
+    expect(cardExpiry(card!)).toBeNull();
   });
 });

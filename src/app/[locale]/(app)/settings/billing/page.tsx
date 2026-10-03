@@ -11,11 +11,13 @@ import { loadBilling } from '@/features/billing/load-billing';
 import { CreditPackagesSection } from '@/features/billing/Pricing';
 import {
   BillingCard,
+  BuyUnavailable,
   CreditsWent,
   CycleValue,
   PlanHero,
   RunningLow,
 } from '@/features/billing/Overview';
+import { Link } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
@@ -93,7 +95,9 @@ export default async function Page({
             Nothing to buy says why — the plan cannot, the shelf is empty, or
             we could not find out — rather than leaving the dialog blank.
           */}
-          {!packages || packages.packages.length === 0 ? (
+          {packages === null ? (
+            <BuyUnavailable methods={paymentMethods} />
+          ) : packages.packages.length === 0 ? (
             <CreditPackagesSection packages={packages} />
           ) : null}
         </BillingOverlay>
@@ -102,6 +106,21 @@ export default async function Page({
           kind="drawer"
           title={t('overview.overlay.low')}
           line={t('autoPurchase.subline')}
+          footer={
+            <>
+              <span
+                className={styles.overlayFootPrimary}
+                aria-disabled="true"
+                title={t('profile.notYet')}
+                data-testid="low-save"
+              >
+                {t('autoPurchase.save')}
+              </span>
+              <Link href="/settings/billing" className={styles.overlayFootCancel}>
+                {t('autoPurchase.cancel')}
+              </Link>
+            </>
+          }
         >
           <AutoPurchase
             policy={autoPurchase?.policy ?? null}
@@ -114,6 +133,22 @@ export default async function Page({
           kind="drawer"
           title={t('overview.overlay.details')}
           line={t('profile.subline')}
+          footer={
+            <>
+              <span
+                className={styles.overlayFootPrimary}
+                aria-disabled="true"
+                title={t('profile.notYet')}
+                data-testid="details-save"
+              >
+                {t('profile.save')}
+              </span>
+              <Link href="/settings/billing" className={styles.overlayFootCancel}>
+                {t('profile.cancel')}
+              </Link>
+              <span className={styles.overlayFootNote}>{t('profile.heldBy')}</span>
+            </>
+          }
         >
           <BillingProfileSection
             profile={profile}

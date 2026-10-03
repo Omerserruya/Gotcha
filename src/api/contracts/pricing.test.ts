@@ -8,6 +8,7 @@ import {
   isStillPending,
   mayRetry,
   noneOnSale,
+  packagePrice,
   packagesResponseSchema,
   pendingChangeSchema,
   planCannotBuyPackages,
@@ -195,5 +196,49 @@ describe('★★ the safe default for "is this unknown" is `true`', () => {
 
     expect(revokeResultSchema.parse({}).ok).toBe(false);
     expect(revokeResultSchema.parse({ ok: true }).ok).toBe(true);
+  });
+});
+
+describe('★ 17d — a package priced as the route sends it now (DisplayPrice)', () => {
+  /** As `GET /billing/pricing/packages` builds it: `price: await toDisplayPrice(...)`. */
+  const wire = (key: string, amount: string) => ({
+    key,
+    name: `${key} credits`,
+    nameHe: null,
+    credits: 1000,
+    price: {
+      base: { amount, currency: 'USD', formatted: `$${amount}` },
+      display: { amount, currency: 'USD', formatted: `$${amount}` },
+      isEstimatedConversion: false,
+      chargedCurrency: 'USD',
+      fx: null,
+    },
+    taxed: null,
+    discountLabel: null,
+    maxPurchaseQuantity: null,
+    expiryPolicy: 'NEVER',
+    expiryDays: null,
+  });
+
+  it('reads every package, with the display amount and its currency', () => {
+    const parsed = packagesResponseSchema.parse({
+      packages: [wire('a', '29.00'), wire('b', '79.00')],
+      eligible: true,
+    });
+    expect(parsed.packages.map((p) => [p.price, p.currency])).toEqual([
+      ['29.00', 'USD'],
+      ['79.00', 'USD'],
+    ]);
+    expect(packagePrice(parsed.packages[0]!)).toEqual({ amount: 29, currency: 'USD' });
+  });
+
+  it('still reads the bare shape', () => {
+    const pkg = creditPackageSchema.parse({
+      key: 'k',
+      name: 'n',
+      price: '290.00',
+      currency: 'ILS',
+    });
+    expect(packagePrice(pkg)).toEqual({ amount: 290, currency: 'ILS' });
   });
 });

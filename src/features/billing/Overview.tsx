@@ -382,3 +382,42 @@ export async function CycleValue() {
     </p>
   );
 }
+
+/**
+ * 17d when the packages could not be read: 02's dialog in its shape — three
+ * empty tiles, "Pay with" and a Pay button that cannot be pressed — with the
+ * failed read said once. Never an empty dialog, never "none on sale".
+ */
+export async function BuyUnavailable({
+  methods,
+}: {
+  readonly methods: readonly PaymentMethod[] | null;
+}) {
+  const t = await getTranslations('billing.overview.buyShape');
+  const card = methods && methods.length > 0 ? methods[0]! : null;
+  return (
+    <div className={styles.buyShape} data-testid="buy-unavailable">
+      <p className={styles.lowUnset}>{t('unread')}</p>
+      <ul className={styles.buyShapeTiles} aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <li key={i} className={styles.buyShapeTile}>
+            —
+          </li>
+        ))}
+      </ul>
+      <p className={styles.buyShapePay}>
+        <span className={styles.buyShapeLabel}>{t('payWith')}</span>
+        <span className={styles.buyShapeCard}>
+          {methods === null
+            ? '—'
+            : card
+              ? `${card.brand ?? t('card')} · ${card.last4 ?? '—'}`
+              : t('noCard')}
+        </span>
+      </p>
+      <span className={styles.overlayFootPrimary} aria-disabled="true" data-testid="buy-shape-pay">
+        {t('pay')}
+      </span>
+    </div>
+  );
+}

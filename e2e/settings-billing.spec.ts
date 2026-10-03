@@ -709,16 +709,13 @@ for (const size of SIZES) {
       const block = page.getByTestId('auto-purchase');
 
       /*
-       * Exactly one. "Nothing is configured" and "here is the configuration"
-       * are different facts, and rendering neither is the empty-key failure
-       * this whole test exists to catch.
+       * 02 draws the drawer in every state, so the block is always there and
+       * `data-set` says which of the two facts it holds. Rendering neither
+       * is the empty-key failure this whole test exists to catch.
        */
-      const unsetCount = await unset.count();
-      const blockCount = await block.count();
-      expect(
-        unsetCount + blockCount,
-        missingIds('the auto-purchase block (neither the unset sentence nor the policy)'),
-      ).toBe(1);
+      await expect(block, missingIds('the auto-purchase block')).toBeVisible();
+      const unsetCount = (await block.getAttribute('data-set')) === 'no' ? 1 : 0;
+      expect(await unset.count(), 'the unset line and data-set disagree').toBe(unsetCount);
 
       if (unsetCount === 1) {
         /*

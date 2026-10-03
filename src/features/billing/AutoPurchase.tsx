@@ -60,16 +60,14 @@ export async function AutoPurchase({
   const t = await getTranslations('billing');
   const format = await getFormatter();
 
-  if (policy === null) {
-    return (
-      <p className={styles.unavailable} data-testid="auto-purchase-unset">
-        {t('autoPurchase.unset')}
-      </p>
-    );
-  }
-
-  const used = capUsed(policy);
-  const option = optionOf(policy);
+  /*
+    02 draws the three answers in every state. Nothing set is "Stop at my
+    plan" marked — the platform's default when no policy row exists — with
+    one line saying so; every figure a policy would carry is "—" rather than
+    a schema default dressed up as a setting.
+  */
+  const used = policy ? capUsed(policy) : null;
+  const option = policy ? optionOf(policy) : 'stop';
 
   const card = (key: Option, children: ReactNode) => (
     <div
@@ -86,26 +84,44 @@ export async function AutoPurchase({
   );
 
   return (
-    <div className={styles.lowDrawer} data-testid="auto-purchase">
+    <div className={styles.lowDrawer} data-testid="auto-purchase" data-set={policy ? 'yes' : 'no'}>
+      {policy === null ? (
+        <p
+          className={styles.lowUnset}
+          title={t('autoPurchase.unset')}
+          data-testid="auto-purchase-unset"
+        >
+          {t('autoPurchase.unsetShort')}
+        </p>
+      ) : null}
+
       {card(
         'pack',
         <>
-          <p className={styles.lowOptionText} data-testid="auto-state">
-            {policy.enabled
-              ? t('autoPurchase.on', { threshold: policy.thresholdPct })
-              : t('autoPurchase.off')}
-          </p>
-          {/* The cap, with what has gone against it. */}
-          <p className={styles.lowOptionText} data-testid="auto-cap">
-            {policy.maxMonthlySpend === null
-              ? t('autoPurchase.noCap')
-              : t('autoPurchase.cap', {
-                  cap: policy.maxMonthlySpend,
-                  spent: policy.monthSpentAmount,
-                  currency,
-                  used: used === null ? '' : format.number(used, { style: 'percent' }),
-                })}
-          </p>
+          {policy ? (
+            <p className={styles.lowOptionText} data-testid="auto-state">
+              {policy.enabled
+                ? t('autoPurchase.on', { threshold: policy.thresholdPct })
+                : t('autoPurchase.off')}
+            </p>
+          ) : null}
+          {/* The cap, with what has gone against it — "—" when nothing is set. */}
+          {policy ? (
+            <p className={styles.lowOptionText} data-testid="auto-cap">
+              {policy.maxMonthlySpend === null
+                ? t('autoPurchase.noCap')
+                : t('autoPurchase.cap', {
+                    cap: policy.maxMonthlySpend,
+                    spent: policy.monthSpentAmount,
+                    currency,
+                    used: used === null ? '' : format.number(used, { style: 'percent' }),
+                  })}
+            </p>
+          ) : (
+            <p className={styles.lowOptionText} data-testid="auto-cap">
+              {t('autoPurchase.mostYouCould')} —
+            </p>
+          )}
         </>,
       )}
       {card(
@@ -120,13 +136,13 @@ export async function AutoPurchase({
             A behaviour the platform honours and the settings API refuses —
             shown, not hidden: the warning below is ABOUT pay-as-you-go.
           */}
-          {!isSettable(policy.limitBehavior) ? (
+          {policy && !isSettable(policy.limitBehavior) ? (
             <p className={styles.lowOptionText} data-testid="auto-unsettable">
               {t('autoPurchase.unsettable')}
             </p>
           ) : null}
           {/* THE COMBINATION THAT LOOKS SAFE AND IS NOT. */}
-          {policy.maxMonthlySpend !== null && spendsPastZero(policy.limitBehavior) ? (
+          {policy && policy.maxMonthlySpend !== null && spendsPastZero(policy.limitBehavior) ? (
             <p className={styles.autoContradiction} data-testid="auto-cap-not-a-cap">
               {t('autoPurchase.capIsNotACap')}
             </p>
@@ -138,7 +154,9 @@ export async function AutoPurchase({
       <h3 className={styles.lowHeading}>{t('autoPurchase.ifReached')}</h3>
       {/* What happens when it runs out, described by tomorrow, not the enum. */}
       <p className={styles.lowOptionText} data-testid="auto-behavior">
-        {t(`autoPurchase.behavior.${policy.limitBehavior}` as 'autoPurchase.behavior.STOP_AI')}
+        {t(
+          `autoPurchase.behavior.${policy?.limitBehavior ?? 'STOP_AI'}` as 'autoPurchase.behavior.STOP_AI',
+        )}
       </p>
 
       <h3 className={styles.lowHeading}>{t('autoPurchase.alerts')}</h3>
@@ -147,18 +165,25 @@ export async function AutoPurchase({
         and the purchase happens at 10%. 02's other two alerts have no field.
       */}
       <ul className={styles.lowAlerts}>
-        <li className={styles.lowAlert}>
-          <span
-            className={styles.lowPill}
-            data-on={policy.enabled ? 'yes' : 'no'}
-            aria-hidden="true"
-          />
-          <span data-testid={policy.enabled ? 'auto-warning' : undefined}>
-            {policy.enabled
-              ? t('autoPurchase.warnsFirst', { warn: policy.warningThresholdPct })
-              : t('autoPurchase.warnAt', { warn: policy.warningThresholdPct })}
-          </span>
-        </li>
+        {policy ? (
+          <li className={styles.lowAlert}>
+            <span
+              className={styles.lowPill}
+              data-on={policy.enabled ? 'yes' : 'no'}
+              aria-hidden="true"
+            />
+            <span data-testid={policy.enabled ? 'auto-warning' : undefined}>
+              {policy.enabled
+                ? t('autoPurchase.warnsFirst', { warn: policy.warningThresholdPct })
+                : t('autoPurchase.warnAt', { warn: policy.warningThresholdPct })}
+            </span>
+          </li>
+        ) : (
+          <li className={styles.lowAlert} title={t('autoPurchase.alertNone')}>
+            <span className={styles.lowNone}>—</span>
+            <span>{t('autoPurchase.alertWarning')}</span>
+          </li>
+        )}
         <li className={styles.lowAlert} title={t('autoPurchase.alertNone')}>
           <span className={styles.lowNone}>—</span>
           <span>{t('autoPurchase.alertPurchase')}</span>
