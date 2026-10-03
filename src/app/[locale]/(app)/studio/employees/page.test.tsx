@@ -3,13 +3,16 @@ import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { employeeSchema } from '@/api/contracts/employees';
-import { EmployeeList } from '@/features/employees/EmployeeList';
+import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 
 const loadEmployees = vi.hoisted(() => vi.fn());
 vi.mock('@/features/employees/load-employees', () => ({ loadEmployees }));
+vi.mock('@/features/capabilities/load-capabilities', () => ({
+  loadCapabilities: async () => ({ capabilities: [], usage: null, integrations: [] }),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
 }));
@@ -58,8 +61,7 @@ describe('★★ 07 is 02’s screen — header, then the list beside the select
   it('★ the selected employee is the one asked for; the detail holds only it', async () => {
     const tree = await page([employee('a'), employee('b')], { employee: 'b' });
     expect(find<{ selectedId: string }>(tree, EmployeeRail)?.selectedId).toBe('b');
-    const detail = find<{ employees: { id: string }[] }>(tree, EmployeeList);
-    expect(detail?.employees.map((e) => e.id)).toEqual(['b']);
+    expect(find<{ employee: { id: string } }>(tree, EmployeeDetail)?.employee.id).toBe('b');
   });
 
   it('an unknown id falls back to the first — never an empty detail', async () => {

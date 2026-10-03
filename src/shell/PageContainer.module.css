@@ -73,6 +73,10 @@
     border-block-end: 1px solid var(--border-subtle);
   }
 
+  .screenHeader[data-pad-end='22'] {
+    padding-block-end: 22px;
+  }
+
   .screenHeading {
     min-inline-size: 0;
   }

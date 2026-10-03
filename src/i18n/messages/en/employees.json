@@ -74,5 +74,67 @@
   },
   "summary": "{working, plural, =0 {None working} one {One working} other {# working}}{paused, plural, =0 {} one {, one paused} other {, # paused}}.",
   "hire": "Hire an employee",
-  "hireNotYet": "Hiring from here comes next."
+  "hireNotYet": "Hiring from here comes next.",
+  "detail": {
+    "edit": "Edit",
+    "editNotYet": "Editing from here comes next.",
+    "strip": {
+      "handled": "Handled in all",
+      "alone": "Resolved alone",
+      "passed": "Passed to a person",
+      "rating": "Customer rating"
+    },
+    "answersOn": {
+      "title": "Answers on",
+      "meta": "set in Settings · Channels"
+    },
+    "how": {
+      "title": "How it answers",
+      "sample": "A reply from today",
+      "sampleNone": "No reply is picked out yet."
+    },
+    "tone": {
+      "professional": "Professional",
+      "friendly": "Friendly",
+      "casual": "Casual",
+      "formal": "Formal"
+    },
+    "language": {
+      "english": "English",
+      "hebrew": "Hebrew",
+      "arabic": "Arabic"
+    },
+    "handles": {
+      "title": "What it handles",
+      "none": "Its conversations aren't grouped by topic yet"
+    },
+    "mayDo": {
+      "title": "What it may do on its own",
+      "on_its_own": "Allowed",
+      "ask_first": "Ask first",
+      "never": "Never",
+      "everyone": "The same for every AI employee — set in Integrations.",
+      "none": "Nothing it can do yet.",
+      "unavailable": "We couldn't read what it may do just now."
+    },
+    "knows": {
+      "title": "What it knows",
+      "on": "Reads it",
+      "off": "Switched off"
+    },
+    "tools": {
+      "title": "Connected tools",
+      "meta": "Business core",
+      "none": "Nothing connected yet.",
+      "unavailable": "We couldn't read the connected systems just now."
+    },
+    "handover": {
+      "title": "When it hands over to you",
+      "none": "No handover rules are set."
+    },
+    "worth": {
+      "title": "Worth changing",
+      "none": "Nothing to suggest yet."
+    }
+  }
 }

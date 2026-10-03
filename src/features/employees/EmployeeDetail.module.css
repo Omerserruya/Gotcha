@@ -1,0 +1,304 @@
+@layer features {
+  /*
+   * Screen 07's detail, measured. 02 sets no line-height on any of it.
+   */
+  .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-24);
+    line-height: normal;
+  }
+
+  .heading {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-inline-size: 0;
+    max-inline-size: 520px;
+  }
+
+  /* 30/600 at 02's −0.03em. */
+  .name {
+    margin: 0;
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-hero);
+    color: var(--text-primary);
+  }
+
+  .line {
+    margin: 0;
+    font-size: var(--font-size-item);
+    line-height: 1.45;
+    color: var(--text-body);
+  }
+
+  .unset {
+    color: var(--text-subtle);
+  }
+
+  .actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  /* 02's Pause/Edit: outline, radius 9, `padding:8px 14px`, 12px. */
+  .button {
+    padding: var(--space-8) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-item);
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+  }
+
+  .button[aria-disabled='true'] {
+    cursor: default;
+  }
+
+  /* The strip: four cells in one white card, `padding:14px 18px`. */
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .cell {
+    padding: var(--space-14) 18px;
+  }
+
+  .cell + .cell {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .cell dt {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .cell dd {
+    margin: var(--space-4) 0 0;
+    font-size: 24px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  /* Three columns of cards, 12 apart. */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-12);
+    align-items: start;
+    line-height: normal;
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    min-inline-size: 0;
+  }
+
+  /* A card: white, radius 14, `padding:14px 16px`. */
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-14) var(--space-16);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .cardHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .cardMeta {
+    font-size: var(--font-size-micro);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-subtle);
+  }
+
+  .cardFoot {
+    margin: 0;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .rowText {
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .rowQuiet {
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+    color: var(--text-body);
+  }
+
+  .rowSplit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .rowLabel {
+    min-inline-size: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
+
+  .rowLabelQuiet {
+    min-inline-size: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .none {
+    margin: 0;
+    font-size: var(--font-size-label);
+    line-height: 1.45;
+    color: var(--text-subtle);
+  }
+
+  /* Chips: `#F3F0EA`, radius 7, `padding:5px 10px`, 11.5px. */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+  }
+
+  .chip {
+    padding: 5px var(--space-10);
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  /* 02's last chip: dashed, faint — here, the whole of what is known. */
+  .chipEmpty {
+    padding: 5px var(--space-10);
+    border: 1px dashed var(--border-strong);
+    border-radius: 7px;
+    font-size: var(--font-size-caption);
+    color: var(--text-faint);
+  }
+
+  /* "A reply from today": `#F6F4EF`, radius 10, `padding:10px 12px`. */
+  .sample {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding: var(--space-10) var(--space-12);
+    border-radius: 10px;
+    background-color: var(--reply-sample-surface);
+  }
+
+  .sampleEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-timestamp);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  /* Allowed / Ask first / Never: radius 6, `padding:3px 9px`, 11px. */
+  .stance {
+    flex: none;
+    padding: 3px var(--space-9);
+    border-radius: 6px;
+    font-size: var(--font-size-micro);
+  }
+
+  .stance[data-stance='on_its_own'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .stance[data-stance='ask_first'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .stance[data-stance='never'] {
+    background-color: var(--panel-well);
+    color: var(--text-subtle);
+  }
+
+  .knows {
+    flex: none;
+    font-size: var(--font-size-caption);
+  }
+
+  .knows[data-state='on'] {
+    color: var(--signal-done-text);
+  }
+
+  .knows[data-state='off'] {
+    color: var(--intent-blocked-text);
+  }
+
+  /* "Worth changing": the violet card. */
+  .worth {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-14) var(--space-16);
+    border: 1px solid var(--ai-card-edge);
+    border-radius: var(--radius-card);
+    background-color: var(--ai-card-surface);
+  }
+
+  .worthHead {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--ai-card-title);
+  }
+
+  .worthBody {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--ai-card-text);
+  }
+
+  @media (width < 64rem) {
+    .grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}

@@ -23,6 +23,11 @@ const employee = (over: Partial<Employee> = {}): Employee => ({
   openConversations: 3,
   handledConversations: 40,
   resolvedAlone: 31,
+  tone: '',
+  languages: {},
+  escalationRules: [],
+  identity: null,
+  goal: null,
   ...over,
 });
 
@@ -83,7 +88,14 @@ describe('an employee carries no field that could become a false claim', () => {
      * holds zero rows while five conversations carry the flag. A cause column
      * would be a confident zero for every employee.
      */
-    const surface = Object.keys(employeeSchema.parse(employee()));
+    /*
+     * `escalationRules` is exempt by name: it is the employee's CONFIGURED
+     * handover triggers ("asks for a person"), not a count of handovers — a
+     * setting someone wrote, which makes no claim about what happened.
+     */
+    const surface = Object.keys(employeeSchema.parse(employee())).filter(
+      (k) => k !== 'escalationRules',
+    );
     expect(surface.filter((k) => /escalat|rating|score|csat|coverage/i.test(k))).toEqual([]);
   });
 

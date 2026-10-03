@@ -544,6 +544,8 @@
     --alert-control-edge: #e3c3b6;
     /* 03b's confirmation edge: the calm green, drawn as a card's border. */
     --calm-edge: #c9d8b4;
+    /* 07's "A reply from today": a sample of its words, a step off white. */
+    --reply-sample-surface: #f6f4ef;
     /* 02's violet offer card ("That's the twelfth like it"). */
     --ai-card-surface: #f6f3fe;
     --ai-card-edge: #ddd5f7;

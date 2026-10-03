@@ -110,3 +110,15 @@ describe('★★ `fill` — a window you scroll inside, not a document that runs
     expect(container.innerHTML).toMatch(/screenBodyFill/);
   });
 });
+
+describe('★ Studio’s header is 22 at the bottom; 02–06 keep their 20', () => {
+  it('the option reaches the header, and its absence leaves the default', async () => {
+    const { container, unmount } = render(
+      <PageContainer layout="screen" title="Automations" headerPadEnd={22} />,
+    );
+    expect(container.querySelector('header')).toHaveAttribute('data-pad-end', '22');
+    unmount();
+    const plain = render(<PageContainer layout="screen" title="Analytics" />);
+    expect(plain.container.querySelector('header')).not.toHaveAttribute('data-pad-end');
+  });
+});

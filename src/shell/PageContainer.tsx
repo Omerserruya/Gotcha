@@ -21,6 +21,7 @@ export function PageContainer({
   fill = false,
   flush = false,
   narrowDescription = false,
+  headerPadEnd = 20,
   children,
 }: {
   /** Already translated. */
@@ -83,6 +84,11 @@ export function PageContainer({
   flush?: boolean;
   /** `screen` only: the line under the title wraps at 720, as 10's does. */
   narrowDescription?: boolean;
+  /**
+   * `screen` only: the header's bottom padding. 02–06 use both 20 and 22;
+   * Studio (07–10) is 22 on all four frames.
+   */
+  headerPadEnd?: 20 | 22;
   children?: ReactNode;
 }) {
   if (layout === 'screen') {
@@ -91,7 +97,10 @@ export function PageContainer({
         className={[styles.screen, (fill || flush) && styles.screenFill].filter(Boolean).join(' ')}
       >
         {title ? (
-          <header className={styles.screenHeader}>
+          <header
+            className={styles.screenHeader}
+            data-pad-end={headerPadEnd === 22 ? '22' : undefined}
+          >
             <div className={styles.screenHeading}>
               <h1 className={styles.screenTitle}>{title}</h1>
               {description ? (

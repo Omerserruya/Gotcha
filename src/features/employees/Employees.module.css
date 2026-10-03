@@ -21,98 +21,6 @@
     cursor: default;
   }
 
-  .list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(var(--size-reading-half), 1fr));
-    gap: var(--space-12);
-  }
-
-  .employee {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-10);
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-16);
-    padding-inline: var(--space-18);
-  }
-
-  /* A paused employee is not answering anyone. It should not look ordinary. */
-  .employee[data-status='PAUSED'] {
-    border-color: var(--intent-blocked-edge, var(--border-emphasis));
-  }
-
-  .head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-8);
-  }
-
-  .name {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 600;
-  }
-
-  .status,
-  .dept {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  .employee[data-status='PAUSED'] .status {
-    color: var(--intent-blocked-text);
-    font-weight: 500;
-  }
-
-  .channels {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  .counts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-16);
-    margin: 0;
-  }
-
-  .count {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .count dt {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  .count dd {
-    margin: 0;
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-6);
-    font-size: var(--font-size-body-lg);
-  }
-
-  /* Nothing routed here yet — not zero percent, which says something else. */
-  .notYet {
-    font-size: var(--font-size-meta);
-    color: var(--text-subtle);
-  }
-
-  .of {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
   /* ── Pausing ─────────────────────────────────────────────────────────── */
   .controls {
     display: flex;
@@ -214,15 +122,6 @@
     cursor: default;
   }
 
-  /* ── Deleting ────────────────────────────────────────────────────────── */
-  .rowActions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: var(--space-8);
-    margin-block-start: auto;
-  }
-
   .delete {
     font: inherit;
     font-size: var(--font-size-caption);
@@ -284,49 +183,5 @@
     font-size: var(--font-size-meta);
     line-height: var(--line-height-snug);
     color: var(--text-body);
-  }
-}
-
-@layer features {
-  /*
-   * What an employee IS, above what it has done. Every row renders even when its
-   * value is empty: an omitted row reads as a concept the product does not have.
-   */
-  .profile {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    margin: 0;
-  }
-
-  .profileRow {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-8);
-    font-size: var(--font-size-caption);
-  }
-
-  .profileRow dt {
-    min-inline-size: var(--size-label-column);
-    color: var(--text-subtle);
-  }
-
-  .profileRow dd {
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-8);
-    min-inline-size: 0;
-  }
-
-  /* Nobody filled this in — distinct from a value, and not an error either. */
-  .unset {
-    color: var(--text-subtle);
-    font-style: italic;
-  }
-
-  /* Attached and unreadable. Said out loud rather than styled onto one name. */
-  .warn {
-    color: var(--intent-urgent-text);
   }
 }

@@ -42,6 +42,7 @@ export default async function Page() {
   return (
     <PageContainer
       layout="screen"
+      headerPadEnd={22}
       fill
       title={t('title')}
       description={t('description')}

@@ -31,6 +31,11 @@ const employee = (over: Partial<Employee> = {}): Employee => ({
   openConversations: 14,
   handledConversations: 82,
   resolvedAlone: 60,
+  tone: '',
+  languages: {},
+  escalationRules: [],
+  identity: null,
+  goal: null,
   ...over,
 });
 

@@ -52,6 +52,7 @@ export default async function Page({
   return (
     <PageContainer
       layout="screen"
+      headerPadEnd={22}
       flush
       title={t('title')}
       description={t('description')}

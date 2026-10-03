@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
-import { EmployeeList } from '@/features/employees/EmployeeList';
+import { loadCapabilities } from '@/features/capabilities/load-capabilities';
+import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
 import styles from '@/features/employees/Employees.module.css';
 import { loadEmployees } from '@/features/employees/load-employees';
@@ -47,7 +48,11 @@ export default async function Page({
   readonly searchParams?: Promise<{ readonly employee?: string }>;
 } = {}) {
   const t = await getTranslations('employees');
-  const employees = await loadEmployees();
+  // The detail's permissions and connected tools are the business's, read once.
+  const [employees, { capabilities, integrations }] = await Promise.all([
+    loadEmployees(),
+    loadCapabilities(),
+  ]);
   const wanted = (await searchParams)?.employee;
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
 
@@ -66,6 +71,7 @@ export default async function Page({
   return (
     <PageContainer
       layout="screen"
+      headerPadEnd={22}
       flush
       title={t('title')}
       description={summary}
@@ -98,8 +104,11 @@ export default async function Page({
               <p className={styles.emptyBody}>{t('noneBody')}</p>
             </div>
           ) : (
-            // S1: the selected employee's card; S2 draws 02's detail grid.
-            <EmployeeList employees={[selected]} />
+            <EmployeeDetail
+              employee={selected}
+              capabilities={capabilities}
+              integrations={integrations}
+            />
           )
         }
       />

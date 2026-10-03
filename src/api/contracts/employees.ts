@@ -71,9 +71,59 @@ export const employeeSchema = z.object({
   handledConversations: z.number().default(0),
   /** Finished, and finished without a person taking over. */
   resolvedAlone: z.number().default(0),
+
+  /*
+   * ── 07's DETAIL: what the list route already sends (it spreads the row) ──
+   * Each is `.catch`-ed: a field only the detail draws must never reject the
+   * whole list. `systemPrompt` and the model settings are NOT named — no
+   * card shows them, and a prompt has no business in a browser payload.
+   */
+  /** `professional`, `friendly`, `casual`, `formal`. */
+  tone: z.string().catch('').default(''),
+  /** `{ english: true, hebrew: false, arabic: false }`. */
+  languages: z.record(z.string(), z.boolean()).catch({}).default({}),
+  /** `[{ label, type, value, enabled }]` — the label is written by a person. */
+  escalationRules: z
+    .array(
+      z.object({
+        label: z.string().catch('').default(''),
+        enabled: z.boolean().catch(true).default(true),
+      }),
+    )
+    .catch([])
+    .default([]),
+  /** `{ role, responsibility, … }` — the responsibility is 07's subline. */
+  identity: z
+    .object({ responsibility: z.string().nullable().catch(null).default(null) })
+    .nullable()
+    .catch(null)
+    .default(null),
+  goal: z.string().nullable().catch(null).default(null),
 });
 
 export type Employee = z.infer<typeof employeeSchema>;
+
+/** The tones the builder writes. Anything else is humanised. */
+export const EMPLOYEE_TONES = ['professional', 'friendly', 'casual', 'formal'] as const;
+
+/** Languages it answers in, in the builder's order: `english`, `hebrew`, `arabic`. */
+export function employeeLanguages(employee: Employee): readonly string[] {
+  return Object.entries(employee.languages)
+    .filter(([, on]) => on)
+    .map(([language]) => language);
+}
+
+/** The handover rules that are switched on and say something. */
+export function handoverRules(employee: Employee): readonly string[] {
+  return employee.escalationRules
+    .filter((rule) => rule.enabled && rule.label.trim() !== '')
+    .map((rule) => rule.label.trim());
+}
+
+/** 07's line under the name: what it is responsible for, or its goal. */
+export function responsibilityOf(employee: Employee): string | null {
+  return employee.identity?.responsibility?.trim() || employee.goal?.trim() || null;
+}
 
 export const employeeListSchema = z.array(employeeSchema);
 
