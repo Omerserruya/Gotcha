@@ -189,7 +189,10 @@ describe('★★ four panels, and none of them inside another', () => {
   it('★★ still true with nothing open, where the markup branches', async () => {
     // The branch that swaps the conversation column for a sentence is where a
     // panel would most easily end up in the wrong place.
-    const { panels, nested } = found(await page({ rows: [], open: null, messages: null }));
+    // Not the clear queue (02b draws no wall): another view, nothing open.
+    const { panels, nested } = found(
+      await page({ rows: [], open: null, messages: null }, { view: 'resolved' }),
+    );
 
     expect(nested).toEqual([]);
     // The queue and the context panels are still mounted; the stream is not,
@@ -224,7 +227,7 @@ describe('★★ 04d’s commerce panel, not a second one', () => {
     // The endpoint has nowhere to route, and controls that cannot work are
     // better absent than broken.
     const props = propsOf<{ conversationId: string | null }>(
-      await page({ rows: [], open: null, messages: null }),
+      await page({ rows: [], open: null, messages: null }, { view: 'resolved' }),
       CustomerOrders,
     );
     expect(props?.conversationId).toBeNull();
@@ -619,6 +622,12 @@ describe('★★ 02b — the queue is clear, and only then', () => {
       ClearQueueList,
     );
     expect(JSON.stringify(Object.keys(props(tree, ClearQueuePane) ?? {}))).toContain('clear');
+  });
+
+  it('★ no wall on a clear queue: no identity, no orders, nothing for them to read', async () => {
+    const { panels } = found(await page({ rows: [], open: null, messages: null }));
+    expect(panels).not.toContain(IdentityPanel);
+    expect(panels).not.toContain(CustomerOrders);
   });
 
   it.each([

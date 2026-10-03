@@ -1753,11 +1753,11 @@
   }
 
   /* ── 02b, measured: the queue is clear ──────────────────────────────── */
+  /* The whole height of the scroll, so the foot sits at its bottom. */
   .clear {
     display: flex;
-    flex: 1;
     flex-direction: column;
-    min-block-size: 0;
+    min-block-size: 100%;
   }
 
   .clearHead {

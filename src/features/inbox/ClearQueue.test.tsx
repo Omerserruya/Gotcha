@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
@@ -123,5 +125,21 @@ describe('★★ 02b — the pane: nothing to read, and the day', () => {
     render(await ClearQueuePane({ clear: { overview: null, inFlight: null } }));
     expect(screen.getByTestId('see-answered')).toHaveAttribute('href', '/inbox?view=ai');
     expect(screen.getByTestId('write-customer')).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('★ 02b — the list foot sits at the bottom of the column', () => {
+  const css = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const rule = (selector: string) =>
+    new RegExp(`(?:^|\\n)\\s*\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  it('the block fills the scroll; the foot takes the rest above it', () => {
+    expect(rule('clear')).toMatch(/min-block-size:\s*100%/);
+    expect(rule('clearFoot')).toMatch(/margin:\s*auto 0 0/);
+  });
+  it('the strip runs the pane’s width', () => {
+    expect(rule('clearPane')).toMatch(/flex:\s*1/);
   });
 });

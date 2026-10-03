@@ -314,45 +314,51 @@ export default async function Page({
                 </>
               )}
             </div>
-            <aside className={styles.contextColumn} aria-label={t('context.label')}>
-              {/*
+            {/*
+              02b: on a clear queue there is no conversation and no wall — the
+              pane is the whole panel, and the wall's reads are not made.
+            */}
+            {clear ? null : (
+              <aside className={styles.contextColumn} aria-label={t('context.label')}>
+                {/*
                 ⚠ THE COPILOT’S SCROLLING BODY. 02: `[372x693] flex:1 1 0%
                   ovf:hidden`, between a fixed 45px header and a pinned 71px
                   input. Neither of those exists yet; the body is in place so
                   that adding them does not mean restructuring this again.
               */}
-              <div className={styles.copilotBody}>
-                {data.open && data.detail ? (
-                  <Suspense key={data.open.id} fallback={<ContextSkeleton />}>
-                    <ConversationContext
-                      detail={data.detail}
-                      conversation={{
-                        id: data.open.id,
-                        contactName: data.open.customerName,
-                        channel: data.open.channel,
-                        /*
-                         * ★ THE HANDLE, WHICH THE PANEL WAS SAYING IT DID NOT HAVE.
-                         * It rendered *"No channel handle is recorded for this
-                         * person"* beside a row showing a channel, because nothing
-                         * passed one.
-                         */
-                        customerExternalId: data.open.customerExternalId,
-                      }}
-                    />
-                  </Suspense>
-                ) : (
-                  /*
+                <div className={styles.copilotBody}>
+                  {data.open && data.detail ? (
+                    <Suspense key={data.open.id} fallback={<ContextSkeleton />}>
+                      <ConversationContext
+                        detail={data.detail}
+                        conversation={{
+                          id: data.open.id,
+                          contactName: data.open.customerName,
+                          channel: data.open.channel,
+                          /*
+                           * ★ THE HANDLE, WHICH THE PANEL WAS SAYING IT DID NOT HAVE.
+                           * It rendered *"No channel handle is recorded for this
+                           * person"* beside a row showing a channel, because nothing
+                           * passed one.
+                           */
+                          customerExternalId: data.open.customerExternalId,
+                        }}
+                      />
+                    </Suspense>
+                  ) : (
+                    /*
                     Nothing open: both panels draw their own absence, as before.
                     `conversationId` null leaves the order controls absent rather
                     than broken — the endpoint has nowhere to route.
                   */
-                  <>
-                    <IdentityPanel timeline={null} conversation={null} />
-                    <CustomerOrders orders={null} conversationId={null} />
-                  </>
-                )}
-              </div>
-            </aside>
+                    <>
+                      <IdentityPanel timeline={null} conversation={null} />
+                      <CustomerOrders orders={null} conversationId={null} />
+                    </>
+                  )}
+                </div>
+              </aside>
+            )}
           </div>
 
           {/*
