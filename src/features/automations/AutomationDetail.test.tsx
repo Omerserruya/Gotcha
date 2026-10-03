@@ -243,3 +243,26 @@ describe('★★ WHEN / THEN — from what the flow actually holds', () => {
     expect(document.body.textContent).toMatch(/finished alone/);
   });
 });
+
+describe('★ 09 corrections (measurement of fa773e6)', () => {
+  it('★★ a single channel is named when the flow is OFF too — the enum value', async () => {
+    await renderList([automation({ channel: 'WHATSAPP', isActive: false })]);
+    expect(screen.getByTestId('where-f1')).toHaveTextContent('Runs on WhatsApp · Off');
+  });
+
+  it('the figure on top, its label under it', async () => {
+    await renderList([automation({ runCount: 46 })]);
+    const figure = screen.getByTestId('runs-f1');
+    expect(figure.parentElement!.firstElementChild).toBe(figure);
+  });
+
+  it('★ the stops card is neutral while nothing records a stop', async () => {
+    await renderList([automation()]);
+    expect(screen.getByTestId('stops')).toHaveAttribute('data-state', 'empty');
+  });
+
+  it('the description is the list row’s, not repeated in the detail', async () => {
+    await renderList([automation({ description: 'Finds the order and checks if it shipped' })]);
+    expect(document.body.textContent).not.toMatch(/Finds the order/);
+  });
+});

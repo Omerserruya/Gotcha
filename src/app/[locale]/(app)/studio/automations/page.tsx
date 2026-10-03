@@ -55,7 +55,20 @@ export default async function Page({
       headerPadEnd={22}
       flush
       title={t('title')}
-      description={t('description')}
+      description={
+        /*
+          02's line is a summary from data ("Five running. They handled
+          1,204 things this week…"). From what is read: how many are on and
+          off, and how often they ran — in all, never "this week".
+        */
+        automations && automations.length > 0
+          ? t('summary', {
+              running: automations.filter((a) => a.isActive).length,
+              off: automations.filter((a) => !a.isActive).length,
+              runs: automations.reduce((sum, a) => sum + a.runCount, 0),
+            })
+          : t('description')
+      }
       actions={
         // 21 (New automation) is not built yet: drawn, and it says so.
         <span

@@ -50,5 +50,6 @@
     "stopsTitle": "Why it stopped",
     "stopsNone": "Nothing records why a run stopped yet.",
     "times": "{count, plural, one {time in all} other {times in all}}"
-  }
+  },
+  "summary": "{running, plural, =0 {None running} one {One running} other {# running}}{off, plural, =0 {} one {, one off} other {, # off}}. {runs, plural, =0 {None has run yet.} one {They've run once in all.} other {They've run # times in all.}}"
 }

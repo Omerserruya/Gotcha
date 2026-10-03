@@ -64,13 +64,6 @@
     cursor: default;
   }
 
-  .description {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    line-height: 1.45;
-    color: var(--text-muted);
-  }
-
   /* WHEN / THEN: one white card, `padding:20px 22px`. */
   .flow {
     display: flex;
@@ -161,9 +154,10 @@
     margin: 0;
   }
 
+  /* The number on top, its label under it — 02's order. */
   .wentFigures > div {
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
     gap: 2px;
     max-inline-size: 200px;
   }
@@ -193,6 +187,20 @@
     border: 1px solid var(--alert-edge);
     border-radius: var(--radius-card);
     background-color: var(--alert-surface);
+  }
+
+  /* Nothing stopped (or nothing records it): the shape, without the alarm. */
+  .stops[data-state='empty'] {
+    border-color: var(--border-default);
+    background-color: var(--panel-field);
+  }
+
+  .stops[data-state='empty'] .stopsTitle {
+    color: var(--text-primary);
+  }
+
+  .stops[data-state='empty'] .stopsBody {
+    color: var(--text-muted);
   }
 
   .stopsTitle {

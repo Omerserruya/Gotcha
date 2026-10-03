@@ -65,12 +65,6 @@ export async function AutomationDetail({ automation }: { readonly automation: Au
         </div>
       </header>
 
-      {automation.description ? (
-        <p className={styles.description}>
-          <UserText>{automation.description}</UserText>
-        </p>
-      ) : null}
-
       <section className={styles.flow} data-testid="flow">
         <div className={styles.flowRow}>
           <span className={styles.flowLabel}>{t('detail.when')}</span>
@@ -135,7 +129,11 @@ export async function AutomationDetail({ automation }: { readonly automation: Au
           </dl>
         </section>
 
-        <section className={styles.stops} data-testid="stops">
+        {/*
+          Neutral, like 08's empty conflict card: alert colour only for a
+          real stop, and nothing records one yet.
+        */}
+        <section className={styles.stops} data-state="empty" data-testid="stops">
           <h3 className={styles.stopsTitle}>{t('detail.stopsTitle')}</h3>
           <p className={styles.stopsBody}>{t('detail.stopsNone')}</p>
         </section>
