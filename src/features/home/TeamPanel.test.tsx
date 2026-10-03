@@ -112,3 +112,17 @@ describe('★★ the away time follows the page, not the process', () => {
     expect(screen.queryByText(/חוזר ב-/)).toBeNull();
   });
 });
+
+describe('★ 01 — the panel is always drawn: no team and no read are states', () => {
+  it.each([
+    [[], /agent role/],
+    [null, /couldn't read/],
+  ] as const)('%j → its title and "—", and no count of nobody', async (value, reason) => {
+    current = 'en';
+    render(await TeamPanel({ team: value as never, presence: new Map() }));
+    expect(screen.getByTestId('team-panel')).toHaveTextContent('Your team right now');
+    expect(screen.getByTestId('team-none')).toHaveTextContent('—');
+    expect(screen.getByTestId('team-none')).toHaveAttribute('title', expect.stringMatching(reason));
+    expect(screen.getByTestId('team-panel')).not.toHaveTextContent(/online/i);
+  });
+});

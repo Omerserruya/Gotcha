@@ -8,10 +8,16 @@
    * measure, which pushed the two columns into one and lost the arrangement
    * entirely.
    */
+  /*
+   * 01, measured: everything sits inside the frame — head, the command box,
+   * the strip, and three columns whose cards scroll inside themselves. So
+   * the page is the frame's height, not at least it.
+   */
   .page {
     display: flex;
     flex-direction: column;
-    min-block-size: 100%;
+    block-size: 100%;
+    min-block-size: 0;
   }
 
   /*
@@ -184,7 +190,10 @@
     /* As the rail: present when needed, not a bright bar down the panel. */
     scrollbar-width: thin;
     scrollbar-color: var(--border-heavy) transparent;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 447fr) minmax(0, 331fr) minmax(0, 331fr);
+    /* Bounded, so each column's card scrolls inside rather than growing. */
+    grid-template-rows: minmax(0, 1fr);
     gap: var(--space-14);
     /* `padding: 20px 40px 30px` in the source; the foot trimmed to 24 — see
        the note on .statusStrip, the same amount off each end. */
@@ -205,20 +214,32 @@
     background: transparent;
   }
 
-  /* The queue is the wider of the two: it is what the screen is for. */
-  .queueColumn {
-    flex: 1.35;
+  /* The queue is the widest: it is what the screen is for. */
+  .queueColumn,
+  .activityColumn,
+  .asideColumn {
     min-inline-size: 0;
+    min-block-size: 0;
     display: flex;
     flex-direction: column;
   }
 
   .asideColumn {
-    flex: 1;
-    min-inline-size: 0;
-    display: flex;
-    flex-direction: column;
     gap: var(--space-14);
+    overflow-y: auto;
+  }
+
+  /* The dark card takes the column's height, as 02's does. */
+  .activityColumn > * {
+    flex: 1;
+    min-block-size: 0;
+  }
+
+  /* The list scrolls inside its card; the card never pushes the page. */
+  .queueColumn > .queueCard {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
   }
 
   .sectionHeader {
@@ -295,20 +316,31 @@
   .queueRowText {
     flex: 1;
     min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
   }
 
+  /* One line: the name, cut if it must be, and the channel beside it. */
   .queueRowIdentity {
     display: flex;
     gap: var(--space-8);
     align-items: baseline;
+    min-inline-size: 0;
   }
 
   .queueRowName {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: var(--font-size-item);
     font-weight: var(--font-weight-medium);
   }
 
   .queueRowChannel {
+    flex: none;
+    white-space: nowrap;
+    text-transform: uppercase;
     font-family: var(--font-mono);
     font-size: var(--font-size-tag);
     font-weight: var(--font-weight-medium);

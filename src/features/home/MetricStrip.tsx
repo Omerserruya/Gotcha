@@ -63,6 +63,12 @@ export async function MetricStrip({
    * reads "all of them" instead of a percentage — 100% is a number you have to
    * parse, "all of them" is the thing you wanted to know.
    */
+  /*
+    No conversations today: "Handled by GOTCHA 0" and "By your team 0" are
+    shares of nothing, so they are "—". The count itself, and the approvals
+    waiting, are true zeros.
+  */
+  const nothingToday = overview.totalConversations === 0;
   const everythingHandled =
     isQuiet && overview.totalConversations > 0 && overview.humanHandledCount === 0;
 
@@ -75,7 +81,7 @@ export async function MetricStrip({
 
       <Metric
         label={t('handledByGotcha')}
-        value={format.number(overview.aiHandledCount)}
+        value={nothingToday ? '—' : format.number(overview.aiHandledCount)}
         share={
           everythingHandled
             ? t('allOfThem')
@@ -87,7 +93,7 @@ export async function MetricStrip({
 
       <Metric
         label={isQuiet ? t('needingYou') : t('byYourTeam')}
-        value={format.number(overview.humanHandledCount)}
+        value={nothingToday ? '—' : format.number(overview.humanHandledCount)}
       />
 
       <Metric

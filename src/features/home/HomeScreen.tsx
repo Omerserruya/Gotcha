@@ -168,7 +168,8 @@ export async function HomeScreen() {
             )}
           </section>
 
-          <aside className={styles.asideColumn}>
+          {/* 01, measured: three columns — 447 · 331 (dark) · 331. */}
+          <div className={styles.activityColumn}>
             <ActivityCard
               events={activity}
               timeSaved={timeSaved}
@@ -176,10 +177,13 @@ export async function HomeScreen() {
               allowance={allowance}
               now={now}
             />
+          </div>
 
+          <aside className={styles.asideColumn}>
             <WorthKnowing insights={insights} />
 
-            {team && team.length > 0 ? <TeamPanel team={team} presence={presence} /> : null}
+            {/* Always drawn: an empty team and a failed read are both states. */}
+            <TeamPanel team={team} presence={presence} />
           </aside>
         </div>
       )}

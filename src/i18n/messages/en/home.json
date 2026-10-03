@@ -253,7 +253,9 @@
     "load": "{open} open · replies in {reply}",
     "awayUntil": "Away until {time}",
     "imbalance": "{name} is carrying most of the queue —",
-    "rebalance": "open Inbox"
+    "rebalance": "open Inbox",
+    "none": "Nobody has the agent role yet — the team list counts agents only.",
+    "unavailable": "We couldn't read your team just now."
   },
   "status": {
     "nothingNeedsYou": "Nothing needs you",

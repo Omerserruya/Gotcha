@@ -29,16 +29,41 @@ export async function TeamPanel({
   team,
   presence,
 }: {
-  team: Team;
+  /** `null`: the read failed. */
+  team: Team | null;
   presence: ReadonlyMap<string, AgentPresence>;
 }) {
   const t = await getTranslations('home.team');
   const format = await getFormatter();
+  /*
+    `/api/analytics/agents` lists users with the AGENT role only, so a
+    workspace run by its admins has nobody here: drawn, "—", and why.
+  */
+  if (team === null || team.length === 0) {
+    return (
+      <section className={styles.queueCard} data-testid="team-panel">
+        <div className={styles.teamBody}>
+          <div className={styles.sectionHeader}>
+            <Text role="label" as="h2">
+              {t('title')}
+            </Text>
+          </div>
+          <p
+            className={styles.emptyNote}
+            title={team === null ? t('unavailable') : t('none')}
+            data-testid="team-none"
+          >
+            —
+          </p>
+        </div>
+      </section>
+    );
+  }
   const imbalance = findImbalance(team);
   const online = team.filter((member) => presence.get(member.agentId)?.status === 'ONLINE').length;
 
   return (
-    <section className={styles.queueCard}>
+    <section className={styles.queueCard} data-testid="team-panel">
       <div className={styles.teamBody}>
         <div className={styles.sectionHeader}>
           <Text role="label" as="h2">
