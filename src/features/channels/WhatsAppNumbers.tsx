@@ -86,9 +86,12 @@ export async function WhatsAppNumbers({
 
   if (numbers.data.length === 0 && numbers.unprofiled.length === 0) {
     return (
-      <p className={styles.empty} data-testid="whatsapp-empty">
-        {t('empty')}
-      </p>
+      <>
+        <p className={styles.empty} data-testid="whatsapp-empty">
+          {t('empty')}
+        </p>
+        <AddNumber t={t} />
+      </>
     );
   }
 
@@ -164,6 +167,9 @@ export async function WhatsAppNumbers({
             <UnprofiledCard number={u} t={t} mode={responseModes[u.channelAccountId] ?? null} />
           </li>
         ))}
+        <li>
+          <AddNumber t={t} />
+        </li>
       </ul>
     </>
   );
@@ -377,5 +383,25 @@ function NumberRows({ t, mode }: { readonly t: T; readonly mode: string | null }
         </dd>
       </div>
     </dl>
+  );
+}
+
+/**
+ * 02's dashed "Add another number" at the foot of the list — where 13c
+ * starts. Drawn, not live: connecting a number begins with Meta's Embedded
+ * Signup, whose launcher is not built here, and ends in `connect` against a
+ * real business account, which nothing in this repo fires on its own (see
+ * `ConnectNumbers`).
+ */
+function AddNumber({ t }: { readonly t: T }) {
+  return (
+    <span
+      className={styles.addNumber}
+      aria-disabled="true"
+      title={t('addNumberNotYet')}
+      data-testid="whatsapp-add-number"
+    >
+      {t('addNumber')}
+    </span>
   );
 }

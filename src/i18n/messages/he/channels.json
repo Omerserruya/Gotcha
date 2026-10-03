@@ -213,7 +213,9 @@
         "AI_AUTO_REPLY": "עונה לבד",
         "HUMAN_WITH_COPILOT": "מנסח, אדם שולח"
       }
-    }
+    },
+    "addNumber": "+ הוספת מספר נוסף",
+    "addNumberNotYet": "חיבור מספר עובר דרך ההרשמה של Meta, שעדיין לא מחוברת מכאן."
   },
   "rowSettings": "הגדרות",
   "rowSettingsNotYet": "הגדרות לערוץ הזה יגיעו בהמשך — של WhatsApp כבר מוכנות.",

@@ -813,3 +813,17 @@
     padding: 22px var(--space-26);
   }
 }
+
+@layer features {
+  /* 02's dashed "Add another number", at the foot of 13b's list. */
+  .addNumber {
+    display: flex;
+    justify-content: center;
+    padding-block: var(--space-12);
+    border: var(--border-width-thin) dashed var(--border-strong);
+    border-radius: var(--radius-step);
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
+}

@@ -213,7 +213,9 @@
         "AI_AUTO_REPLY": "Answers on its own",
         "HUMAN_WITH_COPILOT": "Drafts, a person sends"
       }
-    }
+    },
+    "addNumber": "+ Add another number",
+    "addNumberNotYet": "Connecting a number goes through Meta's signup, which isn't wired from here yet."
   },
   "rowSettings": "Settings",
   "rowSettingsNotYet": "Settings for this channel come next — WhatsApp's are ready.",

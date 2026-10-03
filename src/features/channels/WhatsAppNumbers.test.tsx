@@ -403,3 +403,17 @@ describe('★ 13b — what is configured on a number, in 02’s rows', () => {
     expect(screen.getByTestId('whatsapp-unprofiled')).toHaveTextContent(/Answered by—/);
   });
 });
+
+describe('★ 13c starts from 13b: "Add another number", drawn not live', () => {
+  it('at the foot of the list, and under the empty state', async () => {
+    const { unmount } = await renderNumbers({ data: [number()] });
+    const add = screen.getByTestId('whatsapp-add-number');
+    expect(add).toHaveTextContent('+ Add another number');
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add.closest('a,button')).toBeNull();
+    unmount();
+    await renderNumbers({ data: [] });
+    expect(screen.getByTestId('whatsapp-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('whatsapp-add-number')).toBeInTheDocument();
+  });
+});
