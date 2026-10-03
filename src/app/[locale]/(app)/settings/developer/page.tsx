@@ -18,6 +18,7 @@ export default async function Page() {
     <SettingsSection
       title={t('settings.developer')}
       description={t('settingsDescription.developer')}
+      fill
       actions={
         // 02's "Read the docs ↗". No developer documentation is published, so
         // it is drawn and says so rather than linking nowhere.

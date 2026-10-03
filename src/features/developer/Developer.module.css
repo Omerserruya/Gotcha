@@ -94,4 +94,12 @@
       grid-template-columns: minmax(0, 1fr);
     }
   }
+
+  /* 18 in 02's frame: the bottom row runs to its bottom, "—" at the top. */
+  @media (width > 900px) {
+    .row {
+      flex: 1;
+      min-block-size: 0;
+    }
+  }
 }
