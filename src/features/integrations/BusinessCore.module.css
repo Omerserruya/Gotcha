@@ -187,14 +187,14 @@
   /* ── 14e · what is written back, and what is not a setting ───────────── */
 
   /* ACROSS BOTH: what runs over both — the write-back facts. */
+  /* No gap: the two rows across both sit as the groups' rows above do. */
   .writeback {
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
     padding-block-end: var(--space-12);
   }
 
-  .writeback > :not(.groupHead) {
+  .writeback > :not(.groupHead, .parts) {
     margin-inline: var(--space-16);
   }
 

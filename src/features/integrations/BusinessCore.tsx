@@ -464,6 +464,11 @@ function Part({
           <ElectPart part={part} />
         ) : part.elected ? (
           <span className={styles.system}>{part.elected.name}</span>
+        ) : failing ? (
+          // Broken, not absent: 02 names the system that is not responding.
+          <span className={styles.system} data-testid={`core-system-${part.role}`}>
+            {failing.name}
+          </span>
         ) : (
           <span className={styles.systemNone}>—</span>
         )}

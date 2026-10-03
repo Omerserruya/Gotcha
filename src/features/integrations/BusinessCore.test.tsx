@@ -432,3 +432,12 @@ describe('★ 14 — a part is 02’s row: what it is, who plays it, its state',
     );
   });
 });
+
+describe('★ 14 corrections (measurement of 204d715)', () => {
+  it('a broken system is named in its tile; "—" only where there is no system', async () => {
+    await render14();
+    expect(screen.getByTestId('core-system-ecommerce')).toHaveTextContent(/^Shopify$/);
+    expect(screen.getByTestId('core-chip-ecommerce')).toHaveTextContent('Needs fixing');
+    expect(within(screen.getByTestId('core-part-payments')).getByText('—')).toBeInTheDocument();
+  });
+});
