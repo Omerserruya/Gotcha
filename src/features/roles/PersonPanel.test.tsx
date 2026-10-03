@@ -22,6 +22,23 @@ import { PersonPanel } from './PersonPanel';
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'roles') =>
     createTranslator({ locale: 'en', messages: { roles: messages }, namespace }),
+  getLocale: async () => 'en',
+}));
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    scroll: _scroll,
+    ...rest
+  }: {
+    href: { pathname: string; query?: Record<string, string> };
+    children: React.ReactNode;
+    scroll?: boolean;
+  }) => (
+    <a href={`${href.pathname}?${new URLSearchParams(href.query)}`} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 const person = (over: Partial<Person> = {}): Person => ({
@@ -95,7 +112,8 @@ describe('exceptions to a role', () => {
         },
       ],
     });
-    expect(screen.getByTestId('grants-added')).toHaveTextContent(/given on top of their role/i);
+    // Said once, by 02's section head, rather than on every row.
+    expect(screen.getByTestId('overrides')).toHaveTextContent(/Only for Tomer Adler, on top of/);
     expect(screen.getByTestId('grants-added')).toHaveTextContent(/covers weekends/i);
   });
 
@@ -154,11 +172,13 @@ describe('what this panel does not claim', () => {
     expect(screen.getByTestId('overrides-no-expiry')).toHaveTextContent(/no end date/i);
   });
 
-  it('renders no workload cap or auto-assign', async () => {
+  it('draws 02’s workload line as "—": nothing stores a cap or auto-assign', async () => {
     // Searched the whole schema and every service — the only `maxConcurrent`
-    // is a voice-gateway socket limit from an env var.
+    // is a voice-gateway socket limit from an env var. So no number, ever.
     await renderPanel();
-    expect(document.body.textContent).not.toMatch(/workload|capacity|auto.?assign|at once/i);
+    const line = screen.getByTestId('person-workload');
+    expect(line).toHaveTextContent('Most conversations at once—Gets new ones automatically—');
+    expect(line).toHaveAttribute('title', expect.stringMatching(/no field/i));
   });
 
   it('says where passwords and sessions live instead of offering them', async () => {
@@ -169,7 +189,13 @@ describe('what this panel does not claim', () => {
     await renderPanel();
     const elsewhere = screen.getByTestId('account-elsewhere');
     expect(elsewhere).toHaveTextContent(/identity provider, not in GOTCHA/i);
-    expect(screen.queryByRole('button', { name: /reset password|revoke session/i })).toBeNull();
+    // 02's three account actions are drawn, and none is a control.
+    expect(screen.getByText('Reset password')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('Sign out of all devices')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('Deactivate')).toHaveAttribute('aria-disabled', 'true');
+    expect(
+      screen.queryByRole('button', { name: /reset password|sign out|deactivate/i }),
+    ).toBeNull();
   });
 });
 
@@ -254,5 +280,40 @@ describe('★★ the remove path, drawn and never pressed', () => {
   it('★ and none at all when there are no overrides', async () => {
     await renderPanel({ grants: [] });
     expect(screen.queryByTestId(/^remove-/)).toBeNull();
+  });
+});
+
+describe('★ 12d — 02’s drawer', () => {
+  const member = {
+    id: 'u1',
+    isActive: true,
+    roleId: 'r1',
+    roleName: 'Agent',
+    departments: [{ departmentId: 'd1', departmentName: 'Support team' }],
+    openConversations: 4,
+  };
+
+  it('the head’s chips, Details with "—" where there is no field, the role card', async () => {
+    render(
+      await PersonPanel({
+        person: person(),
+        permissions: CATALOG,
+        member,
+        roleDescription: 'Answers conversations in their teams',
+      }),
+    );
+    expect(screen.getByTestId('person-open')).toHaveTextContent('4 open');
+    expect(screen.getByText('Job title').nextElementSibling).toHaveTextContent('—');
+    expect(screen.getByTestId('person-role')).toHaveTextContent(
+      'AgentAnswers conversations in their teams · ',
+    );
+  });
+
+  it('"+ Add permission" opens 12e over the drawer', async () => {
+    await renderPanel();
+    expect(screen.getByTestId('person-add-permission')).toHaveAttribute(
+      'href',
+      '/settings/people?person=u1&grant=1',
+    );
   });
 });

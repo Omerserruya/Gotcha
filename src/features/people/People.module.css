@@ -457,3 +457,17 @@
     }
   }
 }
+
+@layer features {
+  /* 12d: the name opens the person's drawer; it reads as the name it was. */
+  .nameLink {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .nameLink:hover {
+    text-decoration: underline;
+  }
+}

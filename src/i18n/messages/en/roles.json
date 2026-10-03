@@ -76,7 +76,29 @@
   },
   "person": {
     "title": "One person",
-    "description": "What this person can do, and every exception somebody made to their role."
+    "description": "What this person can do, and every exception somebody made to their role.",
+    "notLive": "Changing this from here comes next.",
+    "noField": "GOTCHA has no field for this yet.",
+    "open": "{count} open",
+    "details": "Details",
+    "fullName": "Full name",
+    "jobTitle": "Job title",
+    "mobile": "Mobile",
+    "language": "Interface language",
+    "role": "Role",
+    "change": "Change",
+    "teams": "Teams",
+    "addTeam": "+ Add to team",
+    "onTop": "Only for {name}, on top of {role}",
+    "addPermission": "+ Add permission",
+    "addedOn": "added {date}",
+    "noEnd": "No end date",
+    "atOnce": "Most conversations at once",
+    "autoAssign": "Gets new ones automatically",
+    "resetPassword": "Reset password",
+    "signOutAll": "Sign out of all devices",
+    "deactivate": "Deactivate",
+    "close": "Close"
   },
   "table": {
     "role": "Role",
@@ -96,5 +118,22 @@
     "aiBody": "What they may do is set in Studio · Integrations, the same for every employee.",
     "aiLink": "Open Studio"
   },
-  "foot": "Built-in roles can't be changed or deleted. Duplicate one to make a role you can."
+  "foot": "Built-in roles can't be changed or deleted. Duplicate one to make a role you can.",
+  "grant": {
+    "title": "Add a permission for {name}",
+    "search": "Search permissions",
+    "already": "Already given",
+    "inRole": "In {role}",
+    "ends": "Ends",
+    "noEnd": "No end date",
+    "days7": "7 days",
+    "days30": "30 days",
+    "pickDate": "Pick a date",
+    "noEndOnly": "An extra permission has no end date yet.",
+    "why": "Why",
+    "whyPlaceholder": "Optional",
+    "add": "Add permission",
+    "cancel": "Cancel",
+    "done": "Added. It applies to {name} from now on."
+  }
 }

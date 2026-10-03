@@ -3,6 +3,8 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { AiEmployee, Member } from '@/api/contracts/people';
 import type { AgentPresence } from '@/api/contracts/presence';
 
+import { Link } from '@/i18n/navigation';
+
 import styles from './People.module.css';
 import { buildRoster, type RosterRow } from './roster';
 
@@ -141,9 +143,21 @@ export async function PeopleTable({
                   {row.kind === 'ai' ? 'AI' : row.initials}
                 </span>
                 <span className={styles.identity}>
-                  <span className={styles.name} data-testid={`person-name-${row.id}`}>
-                    {row.name}
-                  </span>
+                  {/* 12d: a person's name opens their drawer over People. */}
+                  {row.kind === 'person' ? (
+                    <Link
+                      href={{ pathname: '/settings/people', query: { person: row.id } }}
+                      className={styles.nameLink}
+                      data-testid={`person-name-${row.id}`}
+                      scroll={false}
+                    >
+                      {row.name}
+                    </Link>
+                  ) : (
+                    <span className={styles.name} data-testid={`person-name-${row.id}`}>
+                      {row.name}
+                    </span>
+                  )}
                   {sub ? (
                     <span className={styles.sub} data-testid={`person-sub-${row.id}`}>
                       {sub}

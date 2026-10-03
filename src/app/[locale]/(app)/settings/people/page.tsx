@@ -3,12 +3,17 @@ import { getTranslations } from 'next-intl/server';
 import { InviteForm } from '@/features/people/InviteForm';
 import { PeopleTabs } from '@/features/people/PeopleTabs';
 import styles from '@/features/people/People.module.css';
+import { GrantPicker } from '@/features/roles/GrantPicker';
+import { loadCatalog } from '@/features/roles/load-catalog';
+import { loadPerson } from '@/features/roles/load-person';
 import { loadRoles } from '@/features/roles/load-roles';
+import { PersonPanel } from '@/features/roles/PersonPanel';
 import { Link } from '@/i18n/navigation';
 import { loadPeople } from '@/features/people/load-people';
 import { PeopleTable } from '@/features/people/PeopleTable';
 import { TeamCards } from '@/features/people/TeamCards';
 import { pageMetadata } from '@/shell/page-metadata';
+import { Drawer } from '@/shell/Drawer';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
@@ -26,14 +31,25 @@ import { SettingsSection } from '@/shell/SettingsSection';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly tab?: string; readonly invite?: string }>;
+  readonly searchParams?: Promise<{
+    readonly tab?: string;
+    readonly invite?: string;
+    /** 12d: whose drawer is open. */
+    readonly person?: string;
+    /** 12e: the add-permission panel over it. */
+    readonly grant?: string;
+  }>;
 } = {}) {
   const t = await getTranslations('people');
   const params = (await searchParams) ?? {};
-  const [{ members, aiEmployees, teams, presence }, roles] = await Promise.all([
+  const [{ members, aiEmployees, teams, presence }, roles, person, catalog] = await Promise.all([
     loadPeople(),
     loadRoles(),
+    params.person ? loadPerson(params.person) : Promise.resolve(null),
+    params.person ? loadCatalog() : Promise.resolve(null),
   ]);
+  const member = person ? (members?.find((m) => m.id === person.id) ?? null) : null;
+  const role = member?.roleId ? (roles?.find((r) => r.id === member.roleId) ?? null) : null;
   const tab = params.tab === 'teams' ? 'teams' : 'people';
 
   /*
@@ -94,6 +110,35 @@ export default async function Page({
           )}
         </>
       )}
+
+      {/*
+        12d over People, and 12e over 12d. A person who cannot be read opens
+        nothing — the roster stays, rather than a drawer of dashes about
+        somebody unknown.
+      */}
+      {person ? (
+        <Drawer
+          title={person.name ?? person.email}
+          line={person.email}
+          closeHref="/settings/people"
+          width={600}
+          testId="drawer-person"
+        >
+          <PersonPanel
+            person={person}
+            permissions={catalog?.permissions ?? []}
+            member={member}
+            roleDescription={role?.description ?? null}
+          />
+          {params.grant === '1' ? (
+            <GrantPicker
+              person={person}
+              permissions={catalog?.permissions ?? []}
+              roleName={member?.roleName ?? role?.name ?? null}
+            />
+          ) : null}
+        </Drawer>
+      ) : null}
     </SettingsSection>
   );
 }

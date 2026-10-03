@@ -281,3 +281,15 @@ export function wildcardsIn(features: readonly string[]): readonly string[] {
 export function gridCanRepresent(features: readonly string[]): boolean {
   return wildcardsIn(features).length === 0;
 }
+
+/**
+ * Does this effective list already grant `key`? An exact key, `*`, or a
+ * pattern that covers it (`conversation:messages:*` covers
+ * `conversation:messages:read`) — the catalogue's own wildcard semantic.
+ */
+export function holds(effective: readonly string[], key: string): boolean {
+  return effective.some(
+    (f) =>
+      f === key || f === WILDCARD_FEATURE || (f.endsWith(':*') && key.startsWith(f.slice(0, -1))),
+  );
+}

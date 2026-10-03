@@ -587,3 +587,262 @@
     }
   }
 }
+
+@layer features {
+  /* ── 12d · one person, in 02's drawer ─────────────────────────────────── */
+  .personChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    margin: 0;
+  }
+
+  .personChip {
+    padding-block: 3px;
+    padding-inline: var(--space-8);
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-micro);
+    color: var(--text-secondary);
+  }
+
+  .personRole {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+  }
+
+  .personRoleText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+
+  .personRoleName {
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .personRoleSub {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .personQuiet {
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    cursor: default;
+  }
+
+  .personQuiet[aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  .personDanger {
+    margin-inline-start: auto;
+    font-size: var(--font-size-label);
+    color: var(--intent-urgent-text);
+    cursor: not-allowed;
+  }
+
+  .personTeams {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .personNone {
+    color: var(--text-faint);
+  }
+
+  .personSectionHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+  }
+
+  .personAdd {
+    margin-inline-start: auto;
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .grantText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+
+  .personWorkload {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .personAccount {
+    display: flex;
+    align-items: center;
+    gap: var(--space-16);
+    margin: 0;
+    padding-block-start: var(--space-12);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  /* ── 12e · the picker, over the drawer ────────────────────────────────── */
+  .grantPicker {
+    position: absolute;
+    inset-block-start: 80px;
+    inset-inline: var(--space-26);
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    max-block-size: calc(100% - 120px);
+    overflow-y: auto;
+    padding: var(--space-18);
+    /* No shadow in this system: depth is surface and edge. */
+    border: var(--border-width-thin) solid var(--border-strong);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .grantTitle {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .grantAreas {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .grantArea {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .grantAreaName {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .grantOptions {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .grantOption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block: var(--space-8);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .grantOption[data-covered='yes'] {
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
+
+  .grantOptionName {
+    flex: 1;
+  }
+
+  .grantOptionNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .grantRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .grantSegmented {
+    display: inline-flex;
+    gap: var(--space-2);
+    padding: 3px;
+    border-radius: var(--radius-item);
+    background-color: var(--panel-footer);
+  }
+
+  .grantSegment {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-10);
+    border-radius: 7px;
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .grantSegment[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .grantSegment[aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  .grantActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .grantAdd {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .grantAdd:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .grantProblem {
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  .grantDone {
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+}
