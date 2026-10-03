@@ -1,8 +1,10 @@
+import { MessageCircle } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 
 import { numberCount } from '@/api/contracts/whatsapp-numbers';
 
 import { ChannelList } from '@/features/channels/ChannelList';
+import channelStyles from '@/features/channels/Channels.module.css';
 import { ImportPanel, LearningRow, ReportPanel } from '@/features/channels/LearnPanels';
 import { loadChannels } from '@/features/channels/load-channels';
 import { loadHistoryImport, loadWhatsAppNumbers } from '@/features/channels/load-whatsapp';
@@ -47,7 +49,19 @@ export default async function Page({
   ]);
   const learn = whatsapp?.[1].status ?? null;
   const first = whatsapp?.[0]?.data[0] ?? null;
-  const name = first?.name ?? first?.phoneNumber ?? tw('panelTitle');
+  // Dev's one number is unprofiled: its name is on that list, not on `data`.
+  const unprofiled = whatsapp?.[0]?.unprofiled[0] ?? null;
+  const name = first?.name ?? unprofiled?.name ?? first?.phoneNumber ?? tw('panelTitle');
+  const mode = (channels ?? []).find((c) => c.channel === 'WHATSAPP')?.responseMode ?? null;
+  /* 02's line: "{number} · answered by …", each half only when known. */
+  const learnLine =
+    [first?.phoneNumber ?? null, mode ? t(`mode.${mode}`) : null].filter(Boolean).join(' · ') ||
+    undefined;
+  const tile = (
+    <span className={channelStyles.learnTile} aria-hidden="true">
+      <MessageCircle size={20} strokeWidth={1.75} />
+    </span>
+  );
   /*
     13e / 13f replace 13b while one is open — the same drawer shell, their
     own head. A view with no import to show falls back to 13b.
@@ -79,7 +93,8 @@ export default async function Page({
       {view === 'progress' && learn ? (
         <Drawer
           title={tw('learn.setting', { name })}
-          line={first?.phoneNumber ?? undefined}
+          line={learnLine}
+          lead={tile}
           closeHref="/settings/channels?panel=whatsapp"
           width={600}
           testId="drawer-import"
@@ -90,6 +105,7 @@ export default async function Page({
         <Drawer
           title={tw('learn.learned', { name })}
           line={tw('learn.nothingUsed')}
+          lead={tile}
           closeHref="/settings/channels?panel=whatsapp"
           width={860}
           testId="drawer-report"

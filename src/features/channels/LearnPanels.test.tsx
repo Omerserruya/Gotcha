@@ -192,7 +192,7 @@ describe('★ 13f — the report, no paragraphs', () => {
 
   it('the bulk counts only what the server would take — and NOTHING with no floor', async () => {
     const { unmount } = render(await report());
-    expect(screen.getByTestId('report-bulk')).toHaveTextContent('Add 1 ready answers');
+    expect(screen.getByTestId('report-bulk')).toHaveTextContent('Add 1 ready answer');
     unmount();
     // Called directly: the helper's default would fill an `undefined` floor.
     render(
@@ -219,5 +219,21 @@ describe('★ 13f — the report, no paragraphs', () => {
   it('the only sentence is the head’s; the body has no paragraph of prose', async () => {
     render(await report());
     expect(screen.getByTestId('report-panel')).not.toHaveTextContent(/evidence, not policy/);
+  });
+});
+
+describe('★ 13f corrections (measurement of 9b474ed)', () => {
+  it('no count of nothing: a candidate without chats shows only its confidence', async () => {
+    render(
+      await ReportPanel({
+        status: status({ stage: 'ready' }),
+        candidates: [candidate({ id: 'z', occurrenceCount: 0, confidence: 0.92 })],
+        bulkMinConfidence: 0.8,
+        tab: undefined,
+      }),
+    );
+    // The chip and the meta both say 92%; neither is a count of nothing.
+    expect(within(screen.getByTestId('candidate-z')).getAllByText('92%')).toHaveLength(2);
+    expect(screen.getByTestId('candidate-z')).not.toHaveTextContent(/chats?/);
   });
 });

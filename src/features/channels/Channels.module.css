@@ -850,10 +850,20 @@
   /* ── 13e ──────────────────────────────────────────────────────────────── */
   .stepper {
     display: flex;
-    gap: var(--space-24);
+    align-items: center;
+    gap: var(--space-12);
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+
+  /* Each step is joined to the next by a line. */
+  .stepperStep + .stepperStep::before {
+    content: '';
+    inline-size: 32px;
+    block-size: 1px;
+    margin-inline-end: var(--space-4);
+    background-color: var(--border-strong);
   }
 
   .stepperStep {
@@ -876,10 +886,10 @@
     inline-size: 20px;
     block-size: 20px;
     border-radius: var(--radius-round);
-    background-color: var(--signal-done-surface);
+    background-color: var(--signal-done-text);
     font-size: 10px;
     font-weight: 600;
-    color: var(--signal-done-text);
+    color: var(--panel-field);
   }
 
   .stepperStep[data-state='current'] .stepperMark {
@@ -911,8 +921,19 @@
   }
 
   .timelineStep {
+    position: relative;
     display: flex;
     gap: var(--space-14);
+  }
+
+  /* The vertical line linking each dot to the next. */
+  .timelineStep:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    inset-block: 18px calc(-1 * var(--space-14));
+    inset-inline-start: 4px;
+    inline-size: 2px;
+    background-color: var(--border-default);
   }
 
   .timelineDot {
@@ -1041,20 +1062,25 @@
   }
 
   /* ── 13f ──────────────────────────────────────────────────────────────── */
+  /* 02: ONE white bordered strip of four cells, the figure over its label. */
   .reportStrip {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-10);
     margin: 0;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
   }
 
   .reportStat {
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
     gap: var(--space-4);
-    padding: var(--space-14);
-    border-radius: var(--radius-step);
-    background-color: var(--panel-footer);
+    padding: var(--space-14) var(--space-16);
+  }
+
+  .reportStat + .reportStat {
+    border-inline-start: var(--border-width-thin) solid var(--border-default);
   }
 
   .reportFigure {
@@ -1216,5 +1242,20 @@
   .reportReadyQ {
     font-weight: 500;
     color: var(--text-primary);
+  }
+}
+
+@layer features {
+  /* 13e / 13f's head tile: the WhatsApp mark at 40. */
+  .learnTile {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 40px;
+    block-size: 40px;
+    border-radius: var(--radius-control);
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
   }
 }

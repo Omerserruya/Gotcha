@@ -410,9 +410,16 @@ export async function ReportPanel({
                     >
                       {chip.text}
                     </span>
+                    {/* A count of nothing is not drawn: no "0 chats". */}
                     <span className={styles.reportItemMeta}>
-                      {t('learn.chats', { count: c.occurrenceCount })}
-                      {c.conflict ? '' : ` · ${pct.format(c.confidence)}`}
+                      {[
+                        c.occurrenceCount > 0
+                          ? t('learn.chats', { count: c.occurrenceCount })
+                          : null,
+                        c.conflict ? null : pct.format(c.confidence),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </span>
                   </p>
                   <p className={styles.reportQuestion}>{c.question}</p>
