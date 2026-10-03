@@ -106,7 +106,7 @@
     "whatWhere": "What goes where",
     "acrossTitle": "Across both · what goes where",
     "acrossLine": "One customer, asked for in order, and what GOTCHA writes where.",
-    "needsFixing": "{name} needs fixing before its actions can be set.",
+    "needsFixing": "Hidden while {name} needs fixing.",
     "notSetUp": "Not turned on for this workspace yet — that happens in Integrations.",
     "notSetUpShort": "Not set up",
     "checked": "checked {date}",

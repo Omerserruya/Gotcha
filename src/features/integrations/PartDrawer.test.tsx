@@ -175,12 +175,12 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
       }),
     );
     expect(screen.getByTestId('part-actions-blocked')).toHaveTextContent(
-      'Shopify needs fixing before its actions can be set.',
+      'Hidden while Shopify needs fixing.',
     );
     expect(screen.getByTestId('part-actions')).toHaveTextContent('Refund an order');
     expect(screen.getByTestId('part-action-off-process_refund')).toHaveAttribute(
       'title',
-      'Shopify needs fixing before its actions can be set.',
+      'Hidden while Shopify needs fixing.',
     );
     expect(screen.getByTestId('part-playing-sub')).toHaveTextContent(
       'urban-supply-gotcha-demo.myshopify.com · checked Oct 1',

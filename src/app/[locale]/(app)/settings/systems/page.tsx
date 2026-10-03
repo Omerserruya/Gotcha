@@ -1,7 +1,6 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import { connectedButFailing } from '@/api/contracts/business-core';
-import { displayHost } from '@/api/contracts/workspace';
 
 import { pageMetadata } from '@/shell/page-metadata';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
@@ -9,7 +8,6 @@ import { AcrossDrawer } from '@/features/integrations/AcrossDrawer';
 import { BusinessCore } from '@/features/integrations/BusinessCore';
 import { PartDrawer } from '@/features/integrations/PartDrawer';
 import { loadLanguages } from '@/features/workspace/load-languages';
-import { loadWorkspace } from '@/features/workspace/load-workspace';
 import { loadBusinessCore } from '@/features/integrations/load-business-core';
 import { Drawer } from '@/shell/Drawer';
 import { SettingsSection } from '@/shell/SettingsSection';
@@ -35,22 +33,13 @@ export default async function Page({
   const core = await loadBusinessCore();
   const part = params.part ? (core?.roles.find((r) => r.role === params.part) ?? null) : null;
   // 10's actions and the system's record, only when a part's drawer needs them.
-  const [capabilityData, workspace] = part
-    ? await Promise.all([loadCapabilities(), loadWorkspace().then((w) => w.workspace)])
-    : [null, null];
+  const capabilityData = part ? await loadCapabilities() : null;
   const capabilities = capabilityData?.capabilities ?? null;
   const playingSlug =
     part?.elected?.slug ?? part?.candidates.find((c) => connectedButFailing(c))?.slug ?? null;
   const integration = capabilityData?.integrations?.find((i) => i.slug === playingSlug) ?? null;
-  /*
-    The store's host is the workspace website's ONLY when that website is
-    this Shopify store — a `*.myshopify.com` address — not a guess.
-  */
-  const host = workspace?.websiteDomain ? displayHost(workspace.websiteDomain) : null;
-  const storeHost =
-    part?.role === 'ecommerce' && playingSlug === 'shopify' && host?.endsWith('.myshopify.com')
-      ? host
-      : null;
+  // The store's own host, from its connection (`config.shopDomain`).
+  const storeHost = integration?.tenantConnection?.shopDomain ?? null;
   // 14e names the workspace language GOTCHA writes its own words in.
   const systemLocale = params.panel === 'across' ? (await loadLanguages()).systemLocale : null;
   const acrossLanguage = systemLocale

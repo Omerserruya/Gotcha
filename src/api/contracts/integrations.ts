@@ -121,17 +121,32 @@ export type Capability = z.infer<typeof capabilitySchema>;
  * contract is with the backend; absent must render as absent until it lands,
  * never as "fine".
  */
-export const connectionSchema = z.object({
-  id: z.string().min(1),
-  status: z.enum(INTEGRATION_STATES).catch('PENDING'),
-  createdAt: z.string().nullable().optional(),
-  /** When the connection was last TESTED. Not a sync. */
-  lastTestedAt: z.string().nullable().optional(),
-  /** `null` = never tested, which is not the same as tested and fine. */
-  lastTestResult: z.boolean().nullable().optional(),
-  /** The platform's own words, truncated to 200 chars by the backend. */
-  lastError: z.string().nullable().optional(),
-});
+export const connectionSchema = z
+  .object({
+    id: z.string().min(1),
+    status: z.enum(INTEGRATION_STATES).catch('PENDING'),
+    createdAt: z.string().nullable().optional(),
+    /** When the connection was last TESTED. Not a sync. */
+    lastTestedAt: z.string().nullable().optional(),
+    /** `null` = never tested, which is not the same as tested and fine. */
+    lastTestResult: z.boolean().nullable().optional(),
+    /** The platform's own words, truncated to 200 chars by the backend. */
+    lastError: z.string().nullable().optional(),
+    /**
+     * The connection's config. ONE field is read from it — Shopify's
+     * `shopDomain`, 14d's "avivco.myshopify.com" — and the transform drops the
+     * rest: config can hold more than a page needs, and nothing else of it
+     * leaves this contract.
+     */
+    config: z.unknown().optional(),
+  })
+  .transform(({ config, ...rest }) => {
+    const shop =
+      typeof config === 'object' && config !== null
+        ? (config as { shopDomain?: unknown }).shopDomain
+        : undefined;
+    return { ...rest, shopDomain: typeof shop === 'string' && shop.trim() ? shop.trim() : null };
+  });
 
 /**
  * `GET /api/integrations` — enveloped in `data`.

@@ -109,16 +109,17 @@ describe('★ 14d corrections — the line and the host', () => {
     );
   });
 
-  it('the store host only when the website IS the Shopify store', async () => {
-    workspaceDomain.value = 'https://urban-supply-gotcha-demo.myshopify.com';
-    const { unmount } = await open({ part: 'ecommerce' });
-    expect(screen.getByTestId('part')).toHaveAttribute(
-      'data-host',
-      'urban-supply-gotcha-demo.myshopify.com',
-    );
-    unmount();
-    workspaceDomain.value = 'https://www.avivco.il';
+  it('the store host is the connection’s own shopDomain', async () => {
+    loadCapabilities.mockResolvedValueOnce({
+      capabilities: [],
+      integrations: [
+        {
+          slug: 'shopify',
+          tenantConnection: { shopDomain: 'avivco.myshopify.com' },
+        },
+      ],
+    } as never);
     await open({ part: 'ecommerce' });
-    expect(screen.getByTestId('part')).toHaveAttribute('data-host', '');
+    expect(screen.getByTestId('part')).toHaveAttribute('data-host', 'avivco.myshopify.com');
   });
 });
