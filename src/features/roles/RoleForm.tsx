@@ -1,47 +1,33 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
-import { groupByDomain, type PermissionDef } from '@/api/contracts/permission-catalog';
-import { gridCanRepresent, wildcardsIn, type Role } from '@/api/contracts/roles';
-import { Button } from '@/design-system/primitives/button/Button';
-import { Input } from '@/design-system/primitives/input/Input';
+import type { PermissionDef } from '@/api/contracts/permission-catalog';
+import { gridCanRepresent, holds, wildcardsIn, type Role } from '@/api/contracts/roles';
+import drawer from '@/design-system/styles/drawer.module.css';
+import { Link } from '@/i18n/navigation';
 
 import { createRole } from './actions';
+import { gridRows, levelOf, levelsOf, rowChanged, withLevel, type GridRow } from './role-grid';
 import styles from './Roles.module.css';
 
 /**
- * Create a role — screen 12c.
+ * 12c, measured: "New role" — name and "Start from" on one row, what it is
+ * for, then the permissions as 02's table (AREA · PERMISSION · LEVEL ·
+ * SCOPE / LIMIT), "Compared with {source}" and "Give this role to" beside
+ * it, and Create role.
  *
- * *"You start from an existing role and only touch what's different."*
+ * The table is the catalogue on the approved mapping (`role-grid.ts`): a
+ * LEVEL where the actions are a ladder, the ACTIONS where they are separate
+ * jobs. Scope is the role ASSIGNMENT's, not a permission's, so the column
+ * says so on rows that take one; a money limit has no field anywhere — "—".
  *
- * That is not a server concept. `POST /permissions/roles` takes
- * `{ name, description, features }` and knows nothing about a source, so
- * starting from a role means seeding the selection from its features and
- * sending the result — one call rather than a copy followed by an edit.
- *
- * And because it is a copy rather than a link, the screen says so: later
- * edits to the source will not reach the new role. A merchant who reads
- * "start from Agent" can reasonably expect the opposite.
- *
- * ════════════════════════════════════════════════════════════════════════════
- * TWO THINGS THE DESIGN DRAWS THAT THE CATALOGUE CANNOT HOLD
- * ════════════════════════════════════════════════════════════════════════════
- * **None / View / Edit / Manage.** `TenantRoleFeature` is `(roleId, feature)`
- * — a permission is held or it is not. There are no four levels to render,
- * and a control offering them would write three of its four states to the
- * same value.
- *
- * **Money limits on the row.** There is no amount column anywhere on a role,
- * a feature or a grant. A role that may issue refunds may issue any refund,
- * and the design's "refunds up to ₪1,000" cannot be stored, enforced or
- * displayed.
- *
- * Both are named on the screen rather than omitted, because a missing control
- * is indistinguishable from one somebody failed to find — and the second is
- * the kind of absence an owner would otherwise discover from an invoice.
+ * ★ A role that grants by PATTERN (Owner's `*`, Department Manager's
+ * `conversation:messages:*`) is a standing instruction a grid cannot hold:
+ * ticking what it matches today freezes it. Started from one, the table is
+ * read-only and Create is unavailable, with the reason.
  */
 export function RoleForm({
   permissions,
@@ -58,7 +44,7 @@ export function RoleForm({
   const [sourceId, setSourceId] = useState(initialSourceId);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  // Seeded as `startFrom` would seed it — including its refusal of a wildcard role.
+  // Seeded as `startFrom` would seed it — including its refusal of a pattern role.
   const [selected, setSelected] = useState<readonly string[]>(() => {
     const role = roles.find((r) => r.id === initialSourceId);
     return role && gridCanRepresent(role.features) ? [...role.features] : [];
@@ -67,31 +53,17 @@ export function RoleForm({
   const [isPending, startTransition] = useTransition();
 
   const source = roles.find((r) => r.id === sourceId) ?? null;
+  const patterned = source !== null && !gridCanRepresent(source.features);
+  const rows = useMemo(() => gridRows(permissions), [permissions]);
+  const held = new Set(selected);
+  const base = new Set(source && !patterned ? source.features : []);
+  const changed = source && !patterned ? rows.filter((r) => rowChanged(r, held, base)) : [];
 
   function startFrom(id: string) {
     setSourceId(id);
     const role = roles.find((r) => r.id === id);
-
-    /*
-      ★ REFUSE TO SEED FROM A ROLE THAT GRANTS BY PATTERN.
-
-      A wildcard is a standing instruction — "everything under this,
-      including permissions added later" — so ticking the boxes it matches
-      today produces a role that is identical on the day it is saved and
-      diverges from then on, silently, every time anyone adds a permission.
-
-      Nothing is seeded and nothing is offered to save. The panel below says
-      why, because a merchant who sees no boxes tick will otherwise assume a
-      bug.
-    */
-    if (role && !gridCanRepresent(role.features)) {
-      setSelected([]);
-      return;
-    }
-
-    // A copy of the features as they are NOW. Nothing links the two after
-    // this, which is what the hint below says out loud.
-    setSelected(role ? [...role.features] : []);
+    // A copy of the features as they are NOW; a pattern role seeds nothing.
+    setSelected(role && gridCanRepresent(role.features) ? [...role.features] : []);
   }
 
   function toggle(key: string) {
@@ -116,113 +88,248 @@ export function RoleForm({
     });
   }
 
+  const rowName = (row: GridRow) =>
+    t.has(`form.row.${row.id}`)
+      ? t(`form.row.${row.id}` as 'form.row.crm:contacts')
+      : humaniseCode(row.id.replace(':', ' '));
+  const actionName = (action: string) =>
+    t.has(`form.action.${action}`)
+      ? t(`form.action.${action}` as 'form.action.read')
+      : humaniseCode(action);
+  const areaName = (domain: string) =>
+    t.has(`form.area.${domain}`)
+      ? t(`form.area.${domain}` as 'form.area.ai')
+      : humaniseCode(domain);
+
+  /** What a row holds, said for the comparison card. */
+  const summary = (row: GridRow, set: ReadonlySet<string>) =>
+    row.ladder
+      ? (() => {
+          const level = levelOf(row, set);
+          return level ? t(`form.level.${level}`) : t('form.level.mixed');
+        })()
+      : row.permissions
+          .filter((p) => set.has(p.key))
+          .map((p) => actionName(p.action))
+          .join(', ') || t('form.level.none');
+
   return (
-    <section className={styles.roleForm} data-testid="role-form">
-      <h2 className={styles.formHeading}>{t('form.heading')}</h2>
-
-      <label className={styles.formField}>
-        <span className={styles.formLabel}>{t('form.startFrom')}</span>
-        <select
-          className={styles.formSelect}
-          data-testid="role-source"
-          value={sourceId}
-          onChange={(e) => startFrom(e.target.value)}
-        >
-          <option value="">{t('form.startFromNone')}</option>
-          {roles.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {/*
-        Said because "start from" reads as a link, and it is a copy. Somebody
-        who later widens the Agent role would reasonably expect this one to
-        follow, and it will not.
-      */}
-      {/*
-        The refusal, in the role's own terms. Department Manager holds
-        `conversation:messages:*` and `customer:commerce:*` beside fourteen
-        explicit keys — so a grid would render fourteen correct ticks and drop
-        two entries, looking RIGHT while being destructive. Owner at least
-        looks odd; this one would not.
-      */}
-      {source && !gridCanRepresent(source.features) ? (
-        <div className={styles.formWildcard} data-testid="role-source-wildcard">
-          <p className={styles.formWildcardLead}>{t('form.wildcardHeading')}</p>
-          <p className={styles.formHint}>
-            {t('form.wildcardBody', { patterns: wildcardsIn(source.features).join(', ') })}
-          </p>
-          <p className={styles.formHint} data-testid="role-source-refused">
-            {t('form.wildcardCannotSeed')}
-          </p>
+    <section className={styles.newRole} data-testid="role-form">
+      <div className={styles.newRoleMain}>
+        <div className={styles.newRoleTop}>
+          <label className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('form.name')}</span>
+            <input
+              className={drawer.box}
+              value={name}
+              maxLength={80}
+              data-testid="role-name"
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          <label className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('form.startFrom')}</span>
+            <select
+              className={drawer.box}
+              data-testid="role-source"
+              value={sourceId}
+              title={
+                source && !patterned ? t('form.startFromHint', { name: source.name }) : undefined
+              }
+              onChange={(e) => startFrom(e.target.value)}
+            >
+              <option value="">{t('form.startFromNone')}</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-      ) : source ? (
-        <p className={styles.formHint} data-testid="role-source-hint">
-          {t('form.startFromHint', { name: source.name })}
+        <label className={drawer.field}>
+          <span className={drawer.fieldLabel}>{t('form.description')}</span>
+          <input
+            className={drawer.box}
+            value={description}
+            maxLength={300}
+            data-testid="role-description"
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </label>
+
+        {source && !patterned ? (
+          <p className="srOnly" data-testid="role-source-hint">
+            {t('form.startFromHint', { name: source.name })}
+          </p>
+        ) : null}
+
+        {/*
+          The refusal, in the role's own terms: Department Manager would
+          render fourteen correct rows and drop two patterns, looking RIGHT
+          while being destructive.
+        */}
+        {patterned ? (
+          <div className={styles.formWildcard} data-testid="role-source-wildcard">
+            <p className={styles.formWildcardLead}>{t('form.wildcardHeading')}</p>
+            <p className={styles.formHint}>
+              {t('form.wildcardBody', { patterns: wildcardsIn(source.features).join(', ') })}
+            </p>
+            <p className={styles.formHint} data-testid="role-source-refused">
+              {t('form.wildcardCannotSeed')}
+            </p>
+          </div>
+        ) : null}
+
+        <div className={styles.grid} role="table" aria-label={t('form.tableLabel')}>
+          <div className={styles.gridHead} role="row">
+            <span role="columnheader">{t('form.col.area')}</span>
+            <span role="columnheader">{t('form.col.permission')}</span>
+            <span role="columnheader">{t('form.col.level')}</span>
+            <span role="columnheader">{t('form.col.scope')}</span>
+          </div>
+          {rows.map((row, i) => {
+            const firstOfArea = i === 0 || rows[i - 1]!.domain !== row.domain;
+            const level = levelOf(row, held);
+            const isChanged = changed.includes(row);
+            return (
+              <div
+                key={row.id}
+                className={styles.gridRow}
+                role="row"
+                data-testid={`role-row-${row.id}`}
+                data-changed={isChanged ? 'yes' : 'no'}
+              >
+                <span className={styles.gridArea} role="cell">
+                  {firstOfArea ? areaName(row.domain) : ''}
+                </span>
+                <span className={styles.gridName} role="cell">
+                  {isChanged ? (
+                    <span className={styles.gridDot} aria-label={t('form.changedMark')}>
+                      ●
+                    </span>
+                  ) : null}
+                  {rowName(row)}
+                </span>
+                <span className={styles.gridLevel} role="cell">
+                  {patterned ? (
+                    <span className={styles.gridPattern}>
+                      {row.permissions.some((p) => holds(source.features, p.key))
+                        ? t('form.byPattern')
+                        : '—'}
+                    </span>
+                  ) : row.ladder ? (
+                    <span className={styles.segmented} role="radiogroup" aria-label={rowName(row)}>
+                      {levelsOf(row).map((l) => (
+                        <button
+                          key={l}
+                          type="button"
+                          role="radio"
+                          aria-checked={level === l}
+                          className={styles.segment}
+                          data-current={level === l ? 'yes' : 'no'}
+                          data-testid={`role-level-${row.id}-${l}`}
+                          onClick={() => setSelected(withLevel(row, l, selected))}
+                        >
+                          {t(`form.level.${l}`)}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className={styles.gridActions}>
+                      {row.permissions.map((p) => (
+                        <button
+                          key={p.key}
+                          type="button"
+                          aria-pressed={held.has(p.key)}
+                          className={styles.gridAction}
+                          data-testid={`role-action-${p.key}`}
+                          title={p.displayName}
+                          onClick={() => toggle(p.key)}
+                        >
+                          {actionName(p.action)}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                </span>
+                {/* Scope is the assignment's; a money limit has no field. */}
+                <span
+                  className={styles.gridScope}
+                  role="cell"
+                  title={row.scoped ? t('form.scopeHint') : t('form.noLimits')}
+                >
+                  {row.scoped ? t('form.scopeAssigned') : '—'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {changed.length > 0 && source ? (
+          <p className={styles.gridLegend} data-testid="role-legend">
+            ● {t('form.changedFrom', { name: source.name })}
+          </p>
+        ) : null}
+
+        <p className="srOnly" data-testid="role-selected">
+          {t('form.selected', { count: selected.length })}
         </p>
-      ) : null}
+      </div>
 
-      <Input label={t('form.name')} value={name} onChange={(e) => setName(e.target.value)} />
-      <Input
-        label={t('form.description')}
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-      />
+      <aside className={styles.newRoleSide}>
+        {source && !patterned ? (
+          <section className={styles.sideCard} data-testid="role-compared">
+            <h3 className={styles.sideTitle}>{t('form.comparedWith', { name: source.name })}</h3>
+            {changed.length > 0 ? (
+              <ul className={styles.sideList}>
+                {changed.map((row) => (
+                  <li key={row.id}>
+                    <span className={styles.sideName}>{rowName(row)}</span>
+                    <span className={styles.sideDiff}>
+                      {summary(row, base)} → {summary(row, held)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <p className={styles.sideNote}>
+              {changed.length > 0
+                ? t('form.elseSame', { name: source.name })
+                : t('form.allSame', { name: source.name })}
+            </p>
+          </section>
+        ) : null}
 
-      {/*
-        One checkbox per permission, grouped by area as the design asks —
-        and one checkbox, not four levels. See the header.
-      */}
-      {groupByDomain(permissions).map((domain) => (
-        <fieldset key={domain.domain} className={styles.formDomain} data-testid="role-domain">
-          {/*
-            The THIRD renderer of `domain`, behind an interaction and so not on
-            any screenshot. Found by grepping the field rather than the screen.
-          */}
-          <legend className={styles.formLegend}>{humaniseCode(domain.domain)}</legend>
-          {domain.permissions.map((permission) => (
-            <label key={permission.key} className={styles.formPermission}>
-              <input
-                type="checkbox"
-                data-testid={`role-permission-${permission.key}`}
-                checked={selected.includes(permission.key)}
-                onChange={() => toggle(permission.key)}
-              />
-              <span>{permission.displayName}</span>
-            </label>
-          ))}
-        </fieldset>
-      ))}
+        {/* Assigning a role is another route; drawn, not live. */}
+        <section className={styles.sideCard} data-testid="role-give">
+          <h3 className={styles.sideTitle}>{t('form.giveTo')}</h3>
+          <span className={styles.sideAdd} aria-disabled="true" title={t('form.giveNotYet')}>
+            {t('form.addPerson')}
+          </span>
+        </section>
 
-      <p className={styles.formHint} data-testid="role-selected">
-        {t('form.selected', { count: selected.length })}
-      </p>
-
-      {/* Named rather than drawn. Both are storage, not layout. */}
-      <p className={styles.formAbsent} data-testid="role-no-levels">
-        {t('form.noLevels')}
-      </p>
-      <p className={styles.formAbsent} data-testid="role-no-limits">
-        {t('form.noLimits')}
-      </p>
-
-      <Button
-        variant="primary"
-        disabled={isPending || !name.trim()}
-        data-testid="role-save"
-        onClick={submit}
-      >
-        {isPending ? t('form.saving') : t('form.save')}
-      </Button>
-
-      {error ? (
-        <p className={styles.formError} data-testid="role-error">
-          {error}
-        </p>
-      ) : null}
+        <div className={styles.sideActions}>
+          <button
+            type="button"
+            className={styles.createButton}
+            disabled={isPending || !name.trim() || patterned}
+            title={patterned ? t('form.wildcardCannotSeed') : undefined}
+            data-testid="role-save"
+            onClick={submit}
+          >
+            {isPending ? t('form.saving') : t('form.save')}
+          </button>
+          <Link href="/settings/people/roles" className={drawer.drawerCancel}>
+            {t('form.cancel')}
+          </Link>
+        </div>
+        {error ? (
+          <p className={styles.formError} data-testid="role-error">
+            {error}
+          </p>
+        ) : null}
+      </aside>
     </section>
   );
 }

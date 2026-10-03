@@ -94,10 +94,7 @@ export async function RoleList({ roles }: { readonly roles: readonly Role[] }) {
                 </span>
               ) : (
                 <Link
-                  href={{
-                    pathname: '/settings/people/roles',
-                    query: { create: '1', from: role.id },
-                  }}
+                  href={{ pathname: '/settings/people/roles/new', query: { from: role.id } }}
                   className={styles.actionLink}
                 >
                   {t('duplicate')}

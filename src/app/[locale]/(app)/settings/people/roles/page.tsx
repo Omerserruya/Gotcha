@@ -1,14 +1,12 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
-import { loadCatalog } from '@/features/roles/load-catalog';
 import { loadRoles } from '@/features/roles/load-roles';
-import { RoleForm } from '@/features/roles/RoleForm';
 import { RoleList } from '@/features/roles/RoleList';
 import styles from '@/features/roles/Roles.module.css';
 import { loadPeople } from '@/features/people/load-people';
 import peopleStyles from '@/features/people/People.module.css';
 import { PeopleTabs } from '@/features/people/PeopleTabs';
-import { Link } from '@/i18n/navigation';
+import { Link, redirect } from '@/i18n/navigation';
 import { SettingsSection } from '@/shell/SettingsSection';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -40,11 +38,17 @@ export default async function Page({
   const t = await getTranslations('roles');
   const tp = await getTranslations('people');
   const params = (await searchParams) ?? {};
-  const [roles, catalog, { members, aiEmployees, teams }] = await Promise.all([
-    loadRoles(),
-    loadCatalog(),
-    loadPeople(),
-  ]);
+  // 12c is its own page now; old addresses land on it.
+  if (params.create === '1') {
+    redirect({
+      href: {
+        pathname: '/settings/people/roles/new',
+        query: params.from ? { from: params.from } : {},
+      },
+      locale: await getLocale(),
+    });
+  }
+  const [roles, { members, aiEmployees, teams }] = await Promise.all([loadRoles(), loadPeople()]);
 
   // The same header as 12 — 12b is People & teams with Roles open.
   const summary =
@@ -58,7 +62,7 @@ export default async function Page({
       description={summary}
       actions={
         <Link
-          href={{ pathname: '/settings/people/roles', query: { create: '1' } }}
+          href="/settings/people/roles/new"
           className={peopleStyles.headerAction}
           data-testid="role-create-open"
         >
@@ -79,19 +83,6 @@ export default async function Page({
         <p data-testid="roles-unavailable">{t('unavailable')}</p>
       ) : (
         <>
-          {/*
-            Screen 12c, opened from the header ("Create role") or a row's
-            "Duplicate" (`?from=`). Omitted when the catalogue could not be
-            read: a picker with no permissions creates a role granting nothing.
-          */}
-          {params.create === '1' && catalog ? (
-            <RoleForm
-              permissions={catalog.permissions}
-              roles={roles}
-              initialSourceId={roles.some((r) => r.id === params.from) ? params.from : ''}
-            />
-          ) : null}
-
           <RoleList roles={roles} />
 
           <div className={styles.cards}>

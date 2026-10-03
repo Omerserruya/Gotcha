@@ -16,10 +16,10 @@ vi.mock('@/i18n/navigation', () => ({
     children,
     ...rest
   }: {
-    href: { query: Record<string, string> };
+    href: { pathname: string; query: Record<string, string> };
     children: ReactNode;
   }) => (
-    <a href={`?${new URLSearchParams(href.query)}`} {...rest}>
+    <a href={`${href.pathname}?${new URLSearchParams(href.query)}`} {...rest}>
       {children}
     </a>
   ),
@@ -41,7 +41,7 @@ describe('★ 12b — the roles as one table', () => {
     expect(screen.getByTestId('allows-admin')).toHaveTextContent('Everything.');
     expect(screen.getByTestId('action-admin').querySelector('a')).toHaveAttribute(
       'href',
-      '?create=1&from=admin',
+      '/settings/people/roles/new?from=admin',
     );
   });
 
