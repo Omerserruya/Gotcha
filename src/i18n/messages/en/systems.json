@@ -1,33 +1,5 @@
 {
-  "title": "Business systems",
-  "description": "The platforms GOTCHA works with on your behalf.",
-  "unavailable": "Your business systems could not be loaded just now.",
-  "empty": "No business systems connected yet.",
-  "banner": {
-    "since": "{system} stopped responding. Last checked {date}, and the check failed.",
-    "failing": "{system} is not responding.",
-    "repairable": "Replace its credentials to get it working again.",
-    "notRepairableHere": "Reconnecting {system} means authorising it again with the provider, which isn't available from here yet. Nothing is wrong with your setup."
-  },
-  "state": {
-    "working": "Working",
-    "failing": "Not working"
-  },
-  "stance": {
-    "allow": "{count, plural, =0 {Nothing allowed} one {# thing it can do} other {# things it can do}}",
-    "ask": "{count, plural, one {# needs approval} other {# need approval}}",
-    "never": "{count, plural, one {# turned off} other {# turned off}}",
-    "askOne": "Asks first",
-    "neverOne": "Never",
-    "unknown": "We couldn't check what this system is allowed to do.",
-    "allowOne": "On its own"
-  },
-  "notRunning": "While this system is down, none of these run.",
-  "tools": {
-    "heading": "What each one may do — all {count}",
-    "askMeansQueue": "“Asks first” is not a label on a setting. The action stops, a request appears in your Approvals queue, and the conversation waits there until a person decides.",
-    "cannotDisconnected": "These can't be changed while {system} isn't working. The setting and the connection are written together, so the system has to be reachable first — fixing it is described above.",
-    "cannotHere": "These can't be changed from this screen yet.",
-    "perEmployee": "This is the whole workspace. Narrowing it for one AI employee is done in Studio."
-  }
+  "title": "Business core",
+  "description": "Where the truth about your customers, orders and leads lives.",
+  "unavailable": "Your business systems could not be loaded just now."
 }

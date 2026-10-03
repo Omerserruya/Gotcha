@@ -14,12 +14,6 @@
     gap: var(--space-16);
   }
 
-  .heading {
-    margin: 0 0 var(--space-4);
-    font-size: var(--font-size-body-lg);
-    font-weight: 500;
-  }
-
   .notesHeading {
     margin: 0 0 var(--space-6);
     font-size: var(--font-size-caption);
@@ -48,12 +42,6 @@
     margin: 0;
     font-size: var(--font-size-label);
     font-weight: var(--font-weight-regular);
-    color: var(--text-subtle);
-  }
-
-  .useCaseNote {
-    margin: 0;
-    font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
 
@@ -172,27 +160,6 @@
     margin: 0;
     font-size: var(--font-size-meta);
     font-weight: 500;
-  }
-
-  .partState {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
-    color: var(--text-body);
-  }
-
-  /* Connected and broken. Amber, because the work is done and something is wrong. */
-  .partFailing {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
-    color: var(--intent-blocked-text);
-    background-color: var(--intent-blocked-surface);
-    border-radius: var(--radius-badge);
-    padding-block: var(--space-6);
-    padding-inline: var(--space-10);
   }
 
   .notes {
@@ -314,14 +281,36 @@
     color: var(--intent-blocked-text);
   }
 
-  /*
-    An inferred value. Deliberately NOT styled like `.partState` — it must
-    not read as a settled answer, because it is not one.
-  */
-  .partInferred {
-    margin: 0;
-    font-size: var(--font-size-meta);
+  .partPurpose {
+    margin-inline-start: var(--space-6);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-regular);
     color: var(--text-subtle);
-    font-style: italic;
+  }
+
+  /* The system playing a part: a 240 tile, bordered, radius 10. */
+  .system,
+  .systemNone {
+    display: block;
+    padding: var(--space-8) var(--space-10);
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .systemNone {
+    border-style: dashed;
+    color: var(--text-faint);
+  }
+
+  .foot {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .footLink {
+    color: var(--text-primary);
   }
 }

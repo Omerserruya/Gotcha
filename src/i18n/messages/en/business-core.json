@@ -76,5 +76,19 @@
     "connected_but_failing": "Needs fixing",
     "nothing_connected": "Not connected",
     "impossible": "Not available"
-  }
+  },
+  "purpose": {
+    "ecommerce": "the catalogue and orders",
+    "payments": "charges and refunds",
+    "shipping": "where a parcel is",
+    "returns": "exchanges and returns",
+    "crm": "who this is"
+  },
+  "both": {
+    "identity": "Who is this customer",
+    "identityPurpose": "the first system GOTCHA asks",
+    "writeback": "After every conversation",
+    "writebackPurpose": "what gets written back"
+  },
+  "foot": "Connections themselves are added and managed in <link>Studio · Integrations</link>. Here you only decide which one plays which part."
 }

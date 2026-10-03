@@ -1,7 +1,5 @@
 import { getTranslations } from 'next-intl/server';
 
-import { loadSystems } from '@/features/systems/load-systems';
-import { SystemsList } from '@/features/systems/SystemsList';
 import { pageMetadata } from '@/shell/page-metadata';
 import { BusinessCore } from '@/features/integrations/BusinessCore';
 import { loadBusinessCore } from '@/features/integrations/load-business-core';
@@ -18,34 +16,16 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('systems');
-  const [{ integrations, permissions, policyLoaded }, core] = await Promise.all([
-    loadSystems(),
-    loadBusinessCore(),
-  ]);
+  const core = await loadBusinessCore();
 
+  /*
+    14, measured: which system plays which part. The connections themselves
+    are 10's (Studio · Integrations); the inventory that stood below the parts
+    duplicated it and is gone — the footer says where connecting lives.
+  */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      {/*
-        Screens 14b/14c, ABOVE the connected-systems list.
-
-        The parts are what a merchant came to configure; the list below is the
-        inventory they configure them FROM. Reading the inventory first means
-        holding it in your head until the parts explain what it is for.
-
-        It renders whatever the list does — a failed `loadSystems` does not
-        hide the parts, because they answer a different question.
-      */}
       <BusinessCore core={core} />
-
-      {integrations ? (
-        <SystemsList
-          integrations={integrations}
-          permissions={permissions}
-          policyLoaded={policyLoaded}
-        />
-      ) : (
-        <p>{t('unavailable')}</p>
-      )}
     </SettingsSection>
   );
 }

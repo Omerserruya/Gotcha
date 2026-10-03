@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { numberCount } from '@/api/contracts/whatsapp-numbers';
+
 import { ChannelList } from '@/features/channels/ChannelList';
 import { ImportProgress } from '@/features/channels/ImportProgress';
 import { KnowledgeReview } from '@/features/channels/KnowledgeReview';
@@ -55,7 +57,7 @@ export default async function Page({
       {whatsapp ? (
         <WhatsAppPanel
           line={
-            whatsapp[0] ? tw('panelLine', { count: whatsapp[0].data.length }) : tw('description')
+            whatsapp[0] ? tw('panelLine', { count: numberCount(whatsapp[0]) }) : tw('description')
           }
         >
           <WhatsAppNumbers

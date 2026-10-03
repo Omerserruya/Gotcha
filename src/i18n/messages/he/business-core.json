@@ -76,5 +76,19 @@
     "connected_but_failing": "צריך תיקון",
     "nothing_connected": "לא מחובר",
     "impossible": "לא זמין"
-  }
+  },
+  "purpose": {
+    "ecommerce": "הקטלוג וההזמנות",
+    "payments": "חיובים והחזרים",
+    "shipping": "איפה החבילה",
+    "returns": "החלפות והחזרות",
+    "crm": "מי זה"
+  },
+  "both": {
+    "identity": "מי הלקוח הזה",
+    "identityPurpose": "המערכת הראשונה ש-GOTCHA שואלת",
+    "writeback": "אחרי כל שיחה",
+    "writebackPurpose": "מה נכתב בחזרה"
+  },
+  "foot": "את החיבורים עצמם מוסיפים ומנהלים ב<link>סטודיו · אינטגרציות</link>. כאן רק מחליטים מי ממלא איזה תפקיד."
 }

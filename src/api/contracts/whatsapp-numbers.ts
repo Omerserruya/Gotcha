@@ -302,3 +302,13 @@ export function templatesPaused(health: HealthReport): TemplateBlock | null {
 export function repliesStillFlow(health: HealthReport): boolean {
   return health.receiving;
 }
+
+/**
+ * How many numbers the account has — BOTH lists. A number set up before
+ * per-number health is UNPROFILED, and is still a number: counting only the
+ * profiled ones put "no numbers yet" over a connected number's card (13b).
+ * The head and the card must read the same object through this.
+ */
+export function numberCount(numbers: NumbersResponse): number {
+  return numbers.data.length + numbers.unprofiled.length;
+}

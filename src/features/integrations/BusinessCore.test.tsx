@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { createTranslator, NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { businessCoreSchema } from '@/api/contracts/business-core';
@@ -7,6 +8,13 @@ import messages from '@/i18n/messages/en/business-core.json';
 
 import { BusinessCore } from './BusinessCore';
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'business-core') =>
     createTranslator({ locale: 'en', messages: { 'business-core': messages }, namespace }),
@@ -181,7 +189,11 @@ describe('the use case decides which parts are asked about', () => {
 
   it('explains why the question is asked at all', async () => {
     await render14();
-    expect(screen.getByText(/never asked about shipping or returns/i)).toBeInTheDocument();
+    // S2: on the control it explains, not a sentence beside it.
+    expect(screen.getByTestId('core-use-case').querySelector('ul')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/never asked about shipping or returns/i),
+    );
   });
 });
 
@@ -401,5 +413,22 @@ describe('★ 14e — absent is not unset', () => {
     // And the half that is NOT translated, said explicitly.
     expect(language).toHaveTextContent(/customer's own data/i);
     expect(language).toHaveTextContent(/exactly as they are/i);
+  });
+});
+
+describe('★ 14 — a part is 02’s row: what it is, who plays it, its state', () => {
+  it('★ the state sentence rides on the chip, and the row shows the purpose, not prose', async () => {
+    await render14();
+    const chip = screen.getByTestId('core-chip-ecommerce');
+    expect(chip.getAttribute('title')).toBeTruthy();
+    expect(screen.getByTestId('core-part-ecommerce')).toHaveTextContent('the catalogue and orders');
+  });
+
+  it('★ the footer says where connecting lives — Studio · Integrations', async () => {
+    await render14();
+    expect(screen.getByRole('link', { name: 'Studio · Integrations' })).toHaveAttribute(
+      'href',
+      '/studio/capabilities',
+    );
   });
 });

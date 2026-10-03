@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { Link } from '@/i18n/navigation';
+
 import {
   connectedButFailing,
   electable,
@@ -59,6 +61,7 @@ const PART_GROUPS = [
 
 export async function BusinessCore({ core }: { readonly core: Core | null }) {
   const t = await getTranslations('business-core');
+  const crm = core?.roles.find((part) => part.role === 'crm') ?? null;
 
   if (core === null) {
     return (
@@ -77,7 +80,8 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
       */}
       <section className={styles.useCaseRow} data-testid="core-use-case">
         <h2 className={styles.useCaseLabel}>{t('useCase.heading')}</h2>
-        <ul className={styles.useCases}>
+        {/* What the choice does rides on the control; unset says so below it. */}
+        <ul className={styles.useCases} title={t('useCase.hint')}>
           {USE_CASES.map((useCase) => (
             <li
               key={useCase}
@@ -89,8 +93,6 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             </li>
           ))}
         </ul>
-        {/* 02's note beside the control: what the choice does. */}
-        <p className={styles.useCaseNote}>{t('useCase.hint')}</p>
         {core.useCase === null ? (
           <p className={styles.hint} data-testid="core-use-case-unset">
             {t('useCase.unset')}
@@ -102,6 +104,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
         02's 14: the parts as ONE table, grouped by what they serve — the
         online store, leads and sales, and what runs across both (write-back).
       */}
+      {/* Who plays "customer records" — also who is asked first and written to. */}
       <section className={styles.table} data-testid="core-table">
         {PART_GROUPS.map((group) => {
           const parts = core.roles.filter((part) =>
@@ -154,11 +157,59 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             <span className={styles.groupNote}>{t('writeback.heading')}</span>
           </p>
 
-          <p className={styles.writebackLead} data-testid="core-writeback-source">
-            {t('writeback.sourceOfTruth')}
-          </p>
-
           {/*
+            02's two rows across both — who this customer is (the first system
+            asked) and what is written back — in the parts' own shape. The
+            facts below them are whole, for a screen reader; to the eye they
+            ride on the row they explain (`title`).
+          */}
+          <ul className={styles.parts}>
+            <li>
+              <article className={styles.part} data-testid="core-both-identity">
+                <div className={styles.partMain}>
+                  <p className={styles.partName}>
+                    {t('both.identity')}
+                    <span className={styles.partPurpose}>{t('both.identityPurpose')}</span>
+                  </p>
+                </div>
+                <div className={styles.partControl}>
+                  {crm?.elected ? (
+                    <span className={styles.system} title={t('writeback.crmDefault')}>
+                      {crm.elected.name}
+                    </span>
+                  ) : (
+                    <span className={styles.systemNone}>—</span>
+                  )}
+                </div>
+              </article>
+            </li>
+            <li>
+              <article className={styles.part} data-testid="core-both-writeback">
+                <div className={styles.partMain}>
+                  <p className={styles.partName}>
+                    {t('both.writeback')}
+                    <span className={styles.partPurpose}>{t('both.writebackPurpose')}</span>
+                  </p>
+                </div>
+                <div className={styles.partControl}>
+                  {crm?.elected ? (
+                    <span className={styles.system} title={t('writeback.sourceOfTruth')}>
+                      {crm.elected.name}
+                    </span>
+                  ) : (
+                    <span className={styles.systemNone}>—</span>
+                  )}
+                </div>
+              </article>
+            </li>
+          </ul>
+
+          <div className="srOnly">
+            <p className={styles.writebackLead} data-testid="core-writeback-source">
+              {t('writeback.sourceOfTruth')}
+            </p>
+
+            {/*
             ══════════════════════════════════════════════════════════════════
             ★ THE MOST VALUABLE SENTENCE ON THIS PAGE
             ══════════════════════════════════════════════════════════════════
@@ -185,11 +236,11 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             Not in the list below, because those are things that cannot be
             configured. This one IS configured — by absence.
           */}
-          <p className={styles.writebackLead} data-testid="core-writeback-crm-default">
-            {t('writeback.crmDefault')}
-          </p>
+            <p className={styles.writebackLead} data-testid="core-writeback-crm-default">
+              {t('writeback.crmDefault')}
+            </p>
 
-          {/*
+            {/*
             ★ AND IT STAYS THE SOURCE OF TRUTH WHILE IT IS BROKEN.
 
             `crm-adapter-resolver.ts:158,178` both match
@@ -209,19 +260,19 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             the last clause says the cost too — the system being written to is
             the one that is down.
           */}
-          <p className={styles.writebackLead} data-testid="core-writeback-still-source">
-            {t('writeback.stillSourceWhileFailing')}
-          </p>
+            <p className={styles.writebackLead} data-testid="core-writeback-still-source">
+              {t('writeback.stillSourceWhileFailing')}
+            </p>
 
-          <ul className={styles.writebackList}>
-            {/*
+            <ul className={styles.writebackList}>
+              {/*
               Per-rule write-back configuration. What is written is decided by
               the kind of action, identically for every rule.
             */}
-            <li className={styles.writebackItem} data-testid="core-writeback-per-rule">
-              {t('writeback.perRule')}
-            </li>
-            {/*
+              <li className={styles.writebackItem} data-testid="core-writeback-per-rule">
+                {t('writeback.perRule')}
+              </li>
+              {/*
               One board per workspace, not one per purpose.
 
               ★ NOT WRITTEN AS A MONDAY RULE. Omer has no Monday connected, and
@@ -230,12 +281,12 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
               why the two-board question in the design could not be answered.
               Monday is named as an EXAMPLE, and named as absent.
             */}
-            <li className={styles.writebackItem} data-testid="core-writeback-one-board">
-              {t('writeback.oneBoard')}
-            </li>
-          </ul>
+              <li className={styles.writebackItem} data-testid="core-writeback-one-board">
+                {t('writeback.oneBoard')}
+              </li>
+            </ul>
 
-          {/*
+            {/*
             ══════════════════════════════════════════════════════════════════
             ★ IDENTITY IS NOT "FIRST MATCH WINS", AND THE MIDDLE CASE IS A WRITE
             ══════════════════════════════════════════════════════════════════
@@ -257,19 +308,19 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             that happen to somebody, and a merged sentence would hide that the
             middle one edits their data.
           */}
-          <ul className={styles.writebackList} data-testid="core-writeback-identity">
-            <li className={styles.writebackItem} data-testid="core-identity-none">
-              {t('writeback.identityNoMatch')}
-            </li>
-            <li className={styles.writebackItem} data-testid="core-identity-one">
-              {t('writeback.identityOneMatch')}
-            </li>
-            <li className={styles.writebackItem} data-testid="core-identity-many">
-              {t('writeback.identityManyMatches')}
-            </li>
-          </ul>
+            <ul className={styles.writebackList} data-testid="core-writeback-identity">
+              <li className={styles.writebackItem} data-testid="core-identity-none">
+                {t('writeback.identityNoMatch')}
+              </li>
+              <li className={styles.writebackItem} data-testid="core-identity-one">
+                {t('writeback.identityOneMatch')}
+              </li>
+              <li className={styles.writebackItem} data-testid="core-identity-many">
+                {t('writeback.identityManyMatches')}
+              </li>
+            </ul>
 
-          {/*
+            {/*
             ★ WHICH LANGUAGE, AND THE ANSWER IS TWO ANSWERS.
 
             Held back for a day because "everything written back is in the
@@ -291,9 +342,10 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             part: it tells a merchant which half they control by changing the
             workspace language and which half they do not.
           */}
-          <p className={styles.writebackLead} data-testid="core-writeback-language">
-            {t('writeback.language')}
-          </p>
+            <p className={styles.writebackLead} data-testid="core-writeback-language">
+              {t('writeback.language')}
+            </p>
+          </div>
         </section>
       </section>
 
@@ -308,7 +360,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
         removed because it stopped being true, which is what the assertion
         on it existed to force.
       */}
-      <p className={styles.hint} data-testid="core-choosing">
+      <p className="srOnly" data-testid="core-choosing">
         {t('choosing.crmWorks')}
       </p>
 
@@ -317,7 +369,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
         each client does not rediscover them. Rendered verbatim.
       */}
       {core.catalogueNotes.length > 0 ? (
-        <section data-testid="core-notes">
+        <section className="srOnly" data-testid="core-notes">
           <h3 className={styles.notesHeading}>{t('notesHeading')}</h3>
           <ul className={styles.notes}>
             {core.catalogueNotes.map((note) => (
@@ -328,6 +380,16 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
           </ul>
         </section>
       ) : null}
+      {/* 02's footer: where connecting lives, and what this screen decides. */}
+      <p className={styles.foot}>
+        {t.rich('foot', {
+          link: (chunks) => (
+            <Link href="/studio/capabilities" className={styles.footLink}>
+              {chunks}
+            </Link>
+          ),
+        })}
+      </p>
     </section>
   );
 }
@@ -343,92 +405,75 @@ function Part({
   const failing = part.candidates.find((c) => connectedButFailing(c));
   const elsewhere = electedElsewhere(part);
 
+  /*
+    The three-state sentence — what the state IS and where its repair lives —
+    is kept whole. 02's row has no room for prose (states, not explanations),
+    so it rides on the chip (`title`) and stays in the row for a screen reader.
+  */
+  const [explain, testid] =
+    state === 'impossible'
+      ? [t('state.impossible'), 'core-part-impossible']
+      : state === 'connected_but_failing' && failing
+        ? [t('state.connected_but_failing', { name: failing.name }), 'core-part-failing']
+        : state === 'nothing_connected'
+          ? [
+              t('state.nothing_connected', {
+                systems: part.candidates.map((c) => c.name).join(', '),
+              }),
+              'core-part-nothing',
+            ]
+          : isInferred(part)
+            ? [t('state.inferred', { name: part.elected!.name }), 'core-part-inferred']
+            : state === 'chosen'
+              ? [t('state.chosen', { name: part.elected!.name }), 'core-part-chosen']
+              : [t('state.connected_none_chosen'), 'core-part-unchosen'];
+  const where = elsewhere
+    ? elsewhere === 'crm'
+      ? t('crm.elsewhere')
+      : t('returns.elsewhere')
+    : null;
+
   return (
     <article className={styles.part} data-testid={`core-part-${part.role}`} data-state={state}>
       <div className={styles.partMain}>
-        <p className={styles.partName}>{t(`part.${part.role}`)}</p>
-
-        {state === 'impossible' ? (
-          /*
-          "Nothing exists to choose" — not the tenant's doing, and the
-          sentence says so. An empty dropdown here would read as something
-          they had failed to set up.
-        */
-          <p className={styles.partState} data-testid="core-part-impossible">
-            {t('state.impossible')}
-          </p>
-        ) : state === 'connected_but_failing' && failing ? (
-          <p className={styles.partFailing} data-testid="core-part-failing">
-            {t('state.connected_but_failing', { name: failing.name })}
-          </p>
-        ) : state === 'nothing_connected' ? (
-          <p className={styles.partState} data-testid="core-part-nothing">
-            {t('state.nothing_connected', {
-              systems: part.candidates.map((c) => c.name).join(', '),
-            })}
-          </p>
-        ) : isInferred(part) ? (
-          /*
-          ★ WHAT IT FALLS BACK TO — NOT WHAT ANYBODY CHOSE.
-
-          `returns` resolves to Shopify because the capability resolver found
-          it could serve returns. No merchant said so, and the prompt the
-          model receives says as much in parentheses: "shopify (inferred, not
-          chosen by the business)".
-
-          Drawn as a selection, this would invent consent — the screen would
-          show a decision nobody made, and whoever opened it next would
-          believe a colleague had made it. So it says which it is, and says
-          where a real choice would be made.
-        */
-          <p className={styles.partInferred} data-testid="core-part-inferred">
-            {t('state.inferred', { name: part.elected!.name })}
-          </p>
-        ) : state === 'chosen' ? (
-          <p className={styles.partState} data-testid="core-part-chosen">
-            {t('state.chosen', { name: part.elected!.name })}
-          </p>
-        ) : (
-          <p className={styles.partState} data-testid="core-part-unchosen">
-            {t('state.connected_none_chosen')}
-          </p>
-        )}
-
-        {/*
-        14c — the control, and ONLY where the server would accept it.
-
-        `electable()` is false for the CRM (elected on its own screen), for a
-        part nothing can serve, and for a part with nothing CONNECTED behind
-        it. Each of those already has a sentence above saying which case it
-        is and where the repair lives; a dropdown beside any of them would be
-        a control the write rejects.
-      */}
-      </div>
-
-      <div className={styles.partControl}>
-        {electable(part) ? <ElectPart part={part} /> : null}
-
-        {/*
-        The CRM is chosen elsewhere and the screen has to say where. Left
-        unexplained, the one part a merchant cannot configure here looks
-        identical to the four they can.
-      */}
-        {elsewhere ? (
+        <p className={styles.partName}>
+          {t(`part.${part.role}`)}
+          <span className={styles.partPurpose}>{t(`purpose.${part.role}`)}</span>
+        </p>
+        <p className="srOnly" data-testid={testid}>
+          {explain}
+        </p>
+        {where ? (
           <p
-            className={styles.hint}
+            className="srOnly"
             data-testid={
               elsewhere === 'crm' ? 'core-part-crm-elsewhere' : 'core-part-returns-elsewhere'
             }
           >
-            {elsewhere === 'crm' ? t('crm.elsewhere') : t('returns.elsewhere')}
+            {where}
           </p>
         ) : null}
       </div>
 
-      {/* 02's state chip, from the same three-state reading as the sentence. */}
+      {/*
+        The system playing the part: the choice ONLY where the server would
+        accept it (14c); otherwise who plays it, or "—" when nobody does.
+      */}
+      <div className={styles.partControl}>
+        {electable(part) ? (
+          <ElectPart part={part} />
+        ) : part.elected ? (
+          <span className={styles.system}>{part.elected.name}</span>
+        ) : (
+          <span className={styles.systemNone}>—</span>
+        )}
+      </div>
+
+      {/* 02's state chip, from the same reading as the sentence it carries. */}
       <span
         className={styles.chip}
         data-tone={CHIP_TONE[state]}
+        title={where ? `${explain} ${where}` : explain}
         data-testid={`core-chip-${part.role}`}
       >
         {t(`chip.${isInferred(part) && state === 'chosen' ? 'inferred' : state}`)}
