@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
-import { AutomationList } from '@/features/automations/AutomationList';
+import { AutomationDetail } from '@/features/automations/AutomationDetail';
 import { AutomationRail } from '@/features/automations/AutomationRail';
 import styles from '@/features/automations/Automations.module.css';
 import { loadAutomations } from '@/features/automations/load-automations';
@@ -86,13 +86,7 @@ export default async function Page({
               <p className={styles.emptyBody}>{t('noneBody')}</p>
             </div>
           ) : (
-            <>
-              <p className={styles.noHistory} data-testid="no-history">
-                {t('noHistory')}
-              </p>
-              {/* S1: the selected automation's card; S2 draws WHEN/THEN. */}
-              <AutomationList automations={[selected]} />
-            </>
+            <AutomationDetail automation={selected} />
           )
         }
       />

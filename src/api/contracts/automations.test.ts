@@ -19,6 +19,8 @@ const automation = (over: Partial<Automation> = {}): Automation => ({
   trigger: null,
   runCount: 46,
   updatedAt: null,
+  nodes: [],
+  edges: [],
   ...over,
 });
 

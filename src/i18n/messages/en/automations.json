@@ -4,7 +4,6 @@
   "unavailable": "We couldn't read your automations just now.",
   "none": "No automations yet.",
   "noneBody": "Every message waits for a person or an AI employee to pick it up. An automation is what handles the repetitive ones on its own.",
-  "noHistory": "GOTCHA counts how many times each automation has run, but not which times — there is no record of individual runs, so this screen can't show what happened on any one of them.",
   "state": {
     "on": "On",
     "off": "Off"
@@ -23,5 +22,33 @@
     "never": "Never run"
   },
   "create": "New automation",
-  "createNotYet": "Building an automation from here comes next."
+  "createNotYet": "Building an automation from here comes next.",
+  "step": {
+    "send_message_text": "Send a message",
+    "send_message_image": "Send an image",
+    "send_message_file": "Send a file",
+    "collect_input": "Ask the customer for something",
+    "ai_generate": "Write a reply with AI",
+    "http_request": "Call another system",
+    "set_variable": "Remember a value",
+    "route_target": "Pass it on"
+  },
+  "detail": {
+    "pause": "Pause",
+    "resume": "Switch on",
+    "duplicate": "Duplicate",
+    "notYet": "Changing an automation from here comes next.",
+    "when": "When",
+    "then": "Then",
+    "whenNone": "What starts it isn't written down.",
+    "thenNone": "It has no steps yet.",
+    "branches": "{count, plural, other {Then it branches # ways.}}",
+    "went": "How it has gone",
+    "alone": "finished alone",
+    "waited": "waited for you",
+    "stopped": "stopped",
+    "stopsTitle": "Why it stopped",
+    "stopsNone": "Nothing records why a run stopped yet.",
+    "times": "{count, plural, one {time in all} other {times in all}}"
+  }
 }

@@ -51,9 +51,63 @@ export const automationSchema = z.object({
    */
   runCount: z.number().default(0),
   updatedAt: z.string().nullable().default(null),
+  /*
+   * The flow graph (09's THEN). Only each node's TYPE and the edges are
+   * named — node `data` carries message bodies and HTTP targets that no
+   * card shows. `.catch`-ed: a graph this contract did not foresee must not
+   * reject the list.
+   */
+  nodes: z
+    .array(z.object({ id: z.string(), type: z.string().catch('') }))
+    .catch([])
+    .default([]),
+  edges: z
+    .array(z.object({ source: z.string(), target: z.string() }))
+    .catch([])
+    .default([]),
 });
 
 export type Automation = z.infer<typeof automationSchema>;
+
+/** The node types the flow runner executes, read from its own switch. */
+export const STEP_TYPES = [
+  'send_message_text',
+  'send_message_image',
+  'send_message_file',
+  'collect_input',
+  'ai_generate',
+  'http_request',
+  'set_variable',
+  'route_target',
+] as const;
+
+/**
+ * 09's THEN: the flow's steps in the order it runs them — from the node no
+ * edge leads into, along each node's one way out. Where a node has more than
+ * one way out the flow BRANCHES, and the walk stops there and says so rather
+ * than guessing which way is "the" case. A cycle stops the walk too.
+ */
+export function flowSteps(automation: Automation): {
+  readonly steps: readonly string[];
+  readonly branches: number;
+} {
+  const { nodes, edges } = automation;
+  if (nodes.length === 0) return { steps: [], branches: 0 };
+  const into = new Set(edges.map((edge) => edge.target));
+  let current = nodes.find((node) => !into.has(node.id)) ?? nodes[0]!;
+  const seen = new Set<string>();
+  const steps: string[] = [];
+  for (;;) {
+    if (seen.has(current.id)) return { steps, branches: 0 };
+    seen.add(current.id);
+    steps.push(current.type);
+    const out = edges.filter((edge) => edge.source === current.id);
+    if (out.length !== 1) return { steps, branches: out.length > 1 ? out.length : 0 };
+    const next = nodes.find((node) => node.id === out[0]!.target);
+    if (!next) return { steps, branches: 0 };
+    current = next;
+  }
+}
 
 /** The route answers a bare array — no envelope. */
 export const automationListSchema = z.array(automationSchema);

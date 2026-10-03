@@ -6,7 +6,7 @@ import type { Automation } from '@/api/contracts/automations';
 import messages from '@/i18n/messages/en/automations.json';
 import channels from '@/i18n/messages/en/channels.json';
 
-import { AutomationList } from './AutomationList';
+import { AutomationDetail } from './AutomationDetail';
 
 /**
  * The populated branch of screen 09, which this tenant cannot render.
@@ -23,17 +23,10 @@ import { AutomationList } from './AutomationList';
  * refused: creating a real automation means wiring a rule that acts on live
  * conversations without anyone watching.
  *
- * ── WHAT IS STILL NOT COVERED, AND WHY ──
- * **That the `no-history` caveat renders ABOVE the list.** Both live in
- * `page.tsx`, and the page renders `<AutomationList>` — itself an async
- * server component — as a child, which this environment cannot resolve:
- * awaiting the page yields a tree with an unresolved async node and the
- * render produces nothing.
- *
- * Getting there would mean a server renderer or restructuring the page so
- * the caveat is passed into the list, which is changing the design to suit
- * the test. **It is one line of JSX and it is stated here instead of being
- * silently uncovered.**
+ * ── WHAT CHANGED (S2, 2026-10-03) ──
+ * The list became 09's detail: ONE automation, the selected one, and the
+ * `no-history` caveat is gone — "—" in the outcome figures and the stops
+ * card carry that absence in 02's shape. The list's rules hold for the one.
  */
 
 /*
@@ -58,17 +51,21 @@ const automation = (over: Partial<Automation> = {}): Automation => ({
   trigger: null,
   runCount: 46,
   updatedAt: null,
+  nodes: [],
+  edges: [],
   ...over,
 });
 
+// 09 shows ONE automation, the selected one; the list's rules hold for it.
 async function renderList(automations: readonly Automation[]) {
-  return render(await AutomationList({ automations }));
+  return render(await AutomationDetail({ automation: automations[0]! }));
 }
 
 describe('the count is for all time, and says so', () => {
   it('renders a run count as a total', async () => {
     await renderList([automation({ runCount: 46 })]);
-    expect(screen.getByTestId('runs-f1')).toHaveTextContent(/has run 46 times in total/i);
+    expect(screen.getByTestId('runs-f1')).toHaveTextContent('46');
+    expect(screen.getByTestId('runs-f1').nextSibling).toHaveTextContent('times in all');
   });
 
   it('never says "this week" beside a number that has no clock', async () => {
@@ -87,9 +84,9 @@ describe('the count is for all time, and says so', () => {
 describe('never-run is a sentence, not a zero', () => {
   it('explains why an active automation has never fired', async () => {
     await renderList([automation({ runCount: 0, isActive: true })]);
-    const runs = screen.getByTestId('runs-f1');
-    expect(runs).toHaveTextContent(/has never run/i);
-    expect(runs).toHaveTextContent(/nothing has matched its trigger/i);
+    const label = screen.getByTestId('runs-f1').nextSibling;
+    expect(label).toHaveTextContent(/has never run/i);
+    expect(label).toHaveTextContent(/nothing has matched its trigger/i);
   });
 
   it('is visibly different from a count of zero', async () => {
@@ -156,6 +153,93 @@ describe('nothing in a populated row could become a false claim', () => {
     // "Paused by you on 12 Aug" needs both; `isActive` is a bare boolean.
     await renderList([automation({ isActive: false })]);
     expect(screen.getByTestId('state-f1')).toHaveTextContent(/^off$/i);
+    // Not even on the control: the button says what pressing it would do.
     expect(document.body.textContent).not.toMatch(/paused by|paused on/i);
+  });
+});
+
+describe('★★ WHEN / THEN — from what the flow actually holds', () => {
+  const graph = (nodes: [string, string][], edges: [string, string][]) => ({
+    nodes: nodes.map(([id, type]) => ({ id, type })),
+    edges: edges.map(([source, target]) => ({ source, target })),
+  });
+
+  it('WHEN is the trigger as written; none is said, not invented', async () => {
+    const { unmount } = await renderList([automation({ trigger: 'Someone asks to cancel' })]);
+    expect(screen.getByTestId('flow-when')).toHaveTextContent('Someone asks to cancel');
+    unmount();
+    await renderList([automation({ trigger: '  ' })]);
+    expect(screen.getByTestId('flow-when')).toHaveTextContent("isn't written down");
+  });
+
+  it('★ THEN walks the graph from its start, in run order — not array order', async () => {
+    await renderList([
+      automation(
+        graph(
+          [
+            ['b', 'ai_generate'],
+            ['a', 'collect_input'],
+            ['c', 'send_message_text'],
+          ],
+          [
+            ['a', 'b'],
+            ['b', 'c'],
+          ],
+        ),
+      ),
+    ]);
+    const steps = [...screen.getByTestId('flow-then').querySelectorAll('p')].map(
+      (p) => p.textContent,
+    );
+    expect(steps).toEqual([
+      'Ask the customer for something',
+      'Write a reply with AI',
+      'Send a message',
+    ]);
+  });
+
+  it('★★ where it branches it SAYS so and stops — no guessed "case"', async () => {
+    await renderList([
+      automation(
+        graph(
+          [
+            ['a', 'collect_input'],
+            ['b', 'send_message_text'],
+            ['c', 'route_target'],
+          ],
+          [
+            ['a', 'b'],
+            ['a', 'c'],
+          ],
+        ),
+      ),
+    ]);
+    expect(screen.getByTestId('flow-then')).toHaveTextContent('Ask the customer for something');
+    expect(screen.getByTestId('flow-then')).not.toHaveTextContent('Send a message');
+    expect(screen.getByTestId('flow-branches')).toHaveTextContent('branches 2 ways');
+  });
+
+  it('an unknown node type is humanised; a cycle ends the walk', async () => {
+    await renderList([
+      automation(
+        graph(
+          [
+            ['a', 'wait_for_reply'],
+            ['b', 'send_message_text'],
+          ],
+          [
+            ['a', 'b'],
+            ['b', 'a'],
+          ],
+        ),
+      ),
+    ]);
+    expect(screen.getByTestId('flow-then')).toHaveTextContent('Wait for reply');
+  });
+
+  it('★ outcomes nothing records are "—", and the stops card says why', async () => {
+    await renderList([automation()]);
+    expect(screen.getByTestId('stops')).toHaveTextContent('Nothing records why a run stopped');
+    expect(document.body.textContent).toMatch(/finished alone/);
   });
 });
