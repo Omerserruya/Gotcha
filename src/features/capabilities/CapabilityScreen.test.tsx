@@ -263,3 +263,45 @@ describe('★★ how often it has run, and what that does not prove', () => {
     expect(screen.queryByTestId('used-close_conversation')).toBeNull();
   });
 });
+
+describe('★★ 02’s row: what it is, how it ran, one control — and nothing beside it', () => {
+  it('★ without a run to count, the state says what happens instead', async () => {
+    await renderScreen([
+      capability({ toolName: 'asks', requiresApproval: true }),
+      capability({ toolName: 'off', enabled: false }),
+    ]);
+    expect(screen.getByTestId('ran-asks')).toHaveTextContent('Comes to Approvals');
+    expect(screen.getByTestId('ran-off')).toHaveTextContent('Switched off');
+  });
+
+  it('★ a counted run wins over the state line', async () => {
+    await renderScreen(
+      [capability({ toolName: 'asks', requiresApproval: true })],
+      [
+        {
+          toolName: 'asks',
+          executionCount: 4,
+          erroredCount: 0,
+          unclassifiedFailureCount: 0,
+          refusedCount: 0,
+        } as ToolUsage,
+      ],
+    );
+    expect(screen.getByTestId('used-asks')).toBeInTheDocument();
+    expect(screen.queryByTestId('ran-asks')).toBeNull();
+  });
+
+  it('★★ why "Do it" is greyed is said ONCE at the foot, never on each row', async () => {
+    await renderScreen([
+      capability({ toolName: 'a', riskGroup: 'financial' }),
+      capability({ toolName: 'b', riskGroup: 'financial' }),
+    ]);
+    expect(screen.getAllByTestId('ceiling-note')).toHaveLength(1);
+    expect(screen.queryByText(/changes orders or money, so it can be asked/i)).toBeNull();
+  });
+
+  it('no foot line when every action may be automated', async () => {
+    await renderScreen([capability({ riskGroup: 'read_only' })]);
+    expect(screen.queryByTestId('ceiling-note')).toBeNull();
+  });
+});

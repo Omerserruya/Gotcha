@@ -3,6 +3,8 @@
 import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 
+import { Search } from 'lucide-react';
+
 import { Link } from '@/i18n/navigation';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
@@ -97,17 +99,19 @@ export function IntegrationFinder({
 
   return (
     <>
+      {/* 02's search: a magnifier and how many there are. No ⌘K: no shortcut exists. */}
       <div className={styles.railSearch}>
         <label className="srOnly" htmlFor="integration-search">
           {t('rail.searchLabel')}
         </label>
+        <Search className={styles.railSearchIcon} aria-hidden="true" size={14} />
         <input
           id="integration-search"
           type="search"
           className={styles.railSearchInput}
           data-testid="integration-search"
           value={query}
-          placeholder={t('rail.searchPlaceholder')}
+          placeholder={t('rail.searchCount', { count: connected.length + available.length })}
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
@@ -125,10 +129,14 @@ export function IntegrationFinder({
 
       <section className={styles.railSection} data-testid="rail-connected">
         {/* The count is what is SHOWN while filtering, and says which. */}
+        {/* 02: the label, and its count at the row's end. */}
         <h2 className={styles.railHeading}>
-          {matches.filtering
-            ? t('rail.connectedOf', { count: matches.connected.length, total: connected.length })
-            : t('rail.connected', { count: connected.length })}
+          <span>{t('rail.connectedLabel')}</span>
+          <span>
+            {matches.filtering
+              ? t('rail.countOf', { count: matches.connected.length, total: connected.length })
+              : connected.length}
+          </span>
         </h2>
         <ul className={styles.railList}>
           {builtInCount > 0 && !matches.filtering ? (
@@ -196,9 +204,12 @@ export function IntegrationFinder({
 
       <section className={styles.railSection} data-testid="rail-available">
         <h2 className={styles.railHeadingRule}>
-          {matches.filtering
-            ? t('rail.availableOf', { count: matches.available.length, total: available.length })
-            : t('rail.available', { count: available.length })}
+          <span>{t('rail.availableLabel')}</span>
+          <span>
+            {matches.filtering
+              ? t('rail.countOf', { count: matches.available.length, total: available.length })
+              : available.length}
+          </span>
         </h2>
 
         {/*

@@ -56,8 +56,6 @@
   "failedTimes": "{count, plural, one {נכשל פעם אחת} other {נכשל # פעמים}}",
   "refusedTimes": "{count, plural, one {נעצר פעם אחת על ידי כלל} other {נעצר # פעמים על ידי כלל}}",
   "rail": {
-    "connected": "{count, plural, =0 {לא מחובר כלום} one {מחובר · 1} other {מחובר · #}}",
-    "available": "{count, plural, =0 {אין עוד מה לחבר כרגע} one {זמין · 1} other {זמין · #}}",
     "noneConnected": "עדיין לא מחובר שום דבר.",
     "uncategorised": "כל השאר",
     "unavailable": "לא הצלחנו לקרוא כרגע מה מחובר.",
@@ -70,22 +68,23 @@
     },
     "stateUnknown": "מצב לא ידוע",
     "searchLabel": "חיפוש מערכת",
-    "searchPlaceholder": "שם, מה היא עושה, או הקטגוריה שלה",
     "searchNone": "שום דבר כאן לא תואם ל־„{term}”.",
-    "connectedOf": "מחוברות · {count} מתוך {total}",
-    "availableOf": "זמינות · {count} מתוך {total}",
     "label": "מערכות",
     "builtIn": "מובנה ב-GOTCHA",
     "actions": "{count, plural, one {פעולה אחת} other {# פעולות}}",
     "categories": "קטגוריות",
     "all": "הכול",
     "connect": "חיבור",
-    "connectNotHere": "חיבור מכאן יגיע בהמשך — היום מחברים מערכות בליבת העסק."
+    "connectNotHere": "חיבור מכאן יגיע בהמשך — היום מחברים מערכות בליבת העסק.",
+    "connectedLabel": "מחוברות",
+    "availableLabel": "זמינות",
+    "countOf": "{count} מתוך {total}",
+    "searchCount": "חיפוש ב-{count} אינטגרציות"
   },
   "choice": {
     "label": "מה GOTCHA רשאית לעשות עם זה",
     "do_it": "שתעשה",
-    "ask_me": "שתשאל אותי קודם",
+    "ask_me": "לשאול אותי",
     "never": "אף פעם",
     "noAutomation": {
       "changes_orders_or_money": "זה משנה הזמנות או כספים, ולכן אפשר לבקש אישור או לסרב — לא לאוטומט.",
@@ -97,7 +96,8 @@
       "not_connected": "חברו קודם את האינטגרציה — אין עדיין מה להפעיל.",
       "forbidden": "אין לכם הרשאה לשנות מה GOTCHA רשאית לעשות.",
       "failed": "זה לא נשמר. נסו שוב."
-    }
+    },
+    "ceilingNote": "פעולות שמשנות הזמנות או כסף, או שלא הצלחנו לסווג, אפשר כאן לבקש אישור או לחסום — לא להפוך לאוטומטיות."
   },
   "system": {
     "used": "{count, plural, one {שימוש אחד} other {{n} שימושים}} ב-30 הימים האחרונים",
@@ -105,5 +105,9 @@
     "narrow": "צמצום לעובד אחד",
     "narrowNotYet": "כל עובדי ה-AI חולקים את ההגדרות האלה; עדיין אי אפשר לצמצם לאחד."
   },
-  "suggestNone": "עדיין אין מה להציע לשנות."
+  "suggestNone": "עדיין אין מה להציע לשנות.",
+  "ran": {
+    "toApprovals": "מגיע לאישורים",
+    "off": "כבוי"
+  }
 }

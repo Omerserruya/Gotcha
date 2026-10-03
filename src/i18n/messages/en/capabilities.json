@@ -56,8 +56,6 @@
   "failedTimes": "{count, plural, =1 {failed once} other {failed # times}}",
   "refusedTimes": "{count, plural, =1 {stopped once by a rule} other {stopped # times by a rule}}",
   "rail": {
-    "connected": "{count, plural, =0 {Nothing connected} =1 {Connected · 1} other {Connected · #}}",
-    "available": "{count, plural, =0 {Nothing else available yet} =1 {Available · 1} other {Available · #}}",
     "noneConnected": "Nothing is connected yet.",
     "uncategorised": "Everything else",
     "unavailable": "We couldn't read what's connected just now.",
@@ -70,22 +68,23 @@
     },
     "stateUnknown": "Status unknown",
     "searchLabel": "Find a system",
-    "searchPlaceholder": "Name, what it does, or its category",
     "searchNone": "Nothing here matches “{term}”.",
-    "connectedOf": "Connected · {count} of {total}",
-    "availableOf": "Available · {count} of {total}",
     "label": "Systems",
     "builtIn": "Built into GOTCHA",
     "actions": "{count, plural, one {# action} other {# actions}}",
     "categories": "Categories",
     "all": "All",
     "connect": "Connect",
-    "connectNotHere": "Connecting from here comes next — Business core connects systems today."
+    "connectNotHere": "Connecting from here comes next — Business core connects systems today.",
+    "connectedLabel": "Connected",
+    "availableLabel": "Available",
+    "countOf": "{count} of {total}",
+    "searchCount": "Search {count} integrations"
   },
   "choice": {
     "label": "What GOTCHA may do with this",
     "do_it": "Do it",
-    "ask_me": "Ask me first",
+    "ask_me": "Ask me",
     "never": "Never",
     "noAutomation": {
       "changes_orders_or_money": "This one changes orders or money, so it can be asked or refused — not automated.",
@@ -97,7 +96,8 @@
       "not_connected": "Connect the integration first — there's nothing to switch on yet.",
       "forbidden": "You don't have permission to change what GOTCHA may do.",
       "failed": "That didn't save. Try again."
-    }
+    },
+    "ceilingNote": "Actions that change orders or money, or that we can't classify, can be asked or refused here — not automated."
   },
   "system": {
     "used": "Used {n} {count, plural, one {time} other {times}} in the last 30 days",
@@ -105,5 +105,9 @@
     "narrow": "Narrow it for one employee",
     "narrowNotYet": "Every AI employee shares these settings; one cannot be narrowed yet."
   },
-  "suggestNone": "Nothing to suggest changing yet."
+  "suggestNone": "Nothing to suggest changing yet.",
+  "ran": {
+    "toApprovals": "Comes to Approvals",
+    "off": "Switched off"
+  }
 }

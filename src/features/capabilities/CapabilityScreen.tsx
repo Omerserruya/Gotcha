@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import {
+  automationCeiling,
   capabilityStance,
   groupByCategory,
   hasOwnWords,
@@ -128,7 +129,18 @@ export async function CapabilityScreen({
                   */}
                   {(() => {
                     const ran = usageFor(capability.toolName, usage);
-                    if (!ran || ran.executionCount === 0) return null;
+                    /*
+                      02's line under every action. Without a run to count,
+                      the state says what happens instead — never a number
+                      nobody measured, never a zero over a failed read.
+                    */
+                    if (!ran || ran.executionCount === 0) {
+                      return stance === 'on_its_own' ? null : (
+                        <span className={styles.used} data-testid={`ran-${capability.toolName}`}>
+                          {t(stance === 'ask_first' ? 'ran.toApprovals' : 'ran.off')}
+                        </span>
+                      );
+                    }
                     const clean = neverFailed(ran);
                     return (
                       <span className={styles.used} data-testid={`used-${capability.toolName}`}>
@@ -178,6 +190,16 @@ export async function CapabilityScreen({
         02's violet card proposes a change ("You've approved 11 refunds… raise
         to ₪200"). Nothing proposes one yet: drawn in its shape.
       */}
+      {/*
+        Why "Do it" is greyed on some rows — said ONCE, here, and on the
+        segment itself; never beside each of seventeen rows.
+      */}
+      {capabilities.some((capability) => automationCeiling(capability) !== null) ? (
+        <p className={styles.ceiling} data-testid="ceiling-note">
+          {t('choice.ceilingNote')}
+        </p>
+      ) : null}
+
       <section className={styles.suggest} data-testid="capability-suggest">
         <p className={styles.suggestBody}>{t('suggestNone')}</p>
       </section>

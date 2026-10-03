@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import {
+  ADMIN_CHOICES,
   automationCeiling,
   choicesFor,
   currentChoice,
@@ -51,47 +52,42 @@ export function PermissionChoice({ capability }: { readonly capability: Capabili
     });
   }
 
+  /*
+    ★★ ALWAYS ALL THREE, AND THE STORED ONE ALWAYS SHOWN (02's control).
+    A choice the ceiling withholds is DISABLED, not absent, and says why on
+    itself — the sentence lives on the segment, not beside every row. And a
+    stored state the ceiling would now forbid (a refund set to run on its
+    own, before the ceiling or by curl) is still drawn as the current one:
+    an admin cannot turn off what the screen will not show them.
+  */
+  const reasonFor = (choice: AdminChoice): string | undefined => {
+    if (choices.includes(choice) || ceiling === null) return undefined;
+    const why = t(`choice.noAutomation.${ceiling}` as 'choice.noAutomation.unclassified');
+    return current === choice ? `${why} ${t('choice.storedAutomatic')}` : why;
+  };
+
   return (
     <div className={styles.choice} data-testid={`choice-${capability.toolName}`}>
       <div className={styles.choiceRow} role="group" aria-label={t('choice.label')}>
-        {choices.map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            className={styles.choiceButton}
-            data-testid={`choice-${capability.toolName}-${choice}`}
-            data-current={choice === current ? 'yes' : 'no'}
-            aria-pressed={choice === current}
-            disabled={isPending}
-            onClick={() => choose(choice)}
-          >
-            {t(`choice.${choice}` as 'choice.do_it')}
-          </button>
-        ))}
+        {ADMIN_CHOICES.map((choice) => {
+          const reason = reasonFor(choice);
+          return (
+            <button
+              key={choice}
+              type="button"
+              className={styles.choiceButton}
+              data-testid={`choice-${capability.toolName}-${choice}`}
+              data-current={choice === current ? 'yes' : 'no'}
+              aria-pressed={choice === current}
+              disabled={isPending || reason !== undefined}
+              title={reason}
+              onClick={() => choose(choice)}
+            >
+              {t(`choice.${choice}` as 'choice.do_it')}
+            </button>
+          );
+        })}
       </div>
-
-      {/*
-        ★ THE WITHHELD OPTION, NAMED. A reader coming from the design looks
-        for three buttons and finds two; an absence that explains itself only
-        has to explain itself once.
-      */}
-      {ceiling !== null ? (
-        <p className={styles.choiceNote} data-testid={`no-automation-${capability.toolName}`}>
-          {t(`choice.noAutomation.${ceiling}` as 'choice.noAutomation.unclassified')}
-        </p>
-      ) : null}
-
-      {/*
-        ★★ AND THE STATE THE CEILING WOULD NOW FORBID, IF IT IS THE STORED ONE.
-        Shown as what it is, with the fact that it cannot be re-chosen — so
-        an admin who wants it off can act, and one who wants it back knows to
-        ask rather than hunting for a control that is not there.
-      */}
-      {ceiling !== null && current === 'do_it' ? (
-        <p className={styles.choiceWarn} data-testid={`stored-automatic-${capability.toolName}`}>
-          {t('choice.storedAutomatic')}
-        </p>
-      ) : null}
 
       {result && !result.ok ? (
         <p className={styles.choiceWarn} data-testid={`choice-problem-${capability.toolName}`}>

@@ -206,6 +206,12 @@
     color: var(--intent-urgent-text);
   }
 
+  .ceiling {
+    margin: 0;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
   /* 02's violet card: `padding:15px 18px`, radius 14. */
   .suggest {
     padding: 15px 18px;
@@ -266,13 +272,23 @@
   }
 
   .railSearch {
+    position: relative;
     margin-block-end: var(--space-14);
+  }
+
+  .railSearchIcon {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 12px;
+    transform: translateY(-50%);
+    color: var(--text-subtle);
+    pointer-events: none;
   }
 
   .railSearchInput {
     inline-size: 100%;
     min-inline-size: 0;
-    padding: var(--space-8) 11px;
+    padding: var(--space-8) 11px var(--space-8) 34px;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-item);
     background-color: var(--panel-field);
@@ -289,6 +305,8 @@
 
   .railHeading,
   .railHeadingRule {
+    display: flex;
+    justify-content: space-between;
     margin: 0;
     padding: 0 var(--space-10) var(--space-8);
     font-family: var(--font-mono);

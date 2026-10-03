@@ -62,7 +62,7 @@ describe('★★ the list is whatever the table holds', () => {
      * nobody accepted.
      */
     await show([entry({ slug: 'a', name: 'A' }), entry({ slug: 'b', name: 'B' })]);
-    expect(screen.getByTestId('rail-available')).toHaveTextContent(/Available · 2/);
+    expect(screen.getByTestId('rail-available')).toHaveTextContent(/^Available2/);
     expect(screen.getByTestId('rail-available')).not.toHaveTextContent(/58/);
   });
 
@@ -190,10 +190,9 @@ describe('★★ finding one of seventeen', () => {
 
   it('★★ filters by what it does and by its category, which the label promises', async () => {
     /*
-     * The placeholder names three fields — name, description, category — rather
-     * than saying "Search", which promises everything. A label that promises
-     * more than the filter matches is how a reader concludes an integration is
-     * absent from the catalogue.
+     * The search matches name, description and category. 02's placeholder
+     * ("Search 17 integrations") says WHAT is searched and how many — the
+     * integrations — not which of their fields; this test holds the fields.
      */
     await show(CATALOGUE);
     await type('deals');
@@ -236,9 +235,9 @@ describe('★★ finding one of seventeen', () => {
      * two different things on one screen. Filtered, it says "1 of 3".
      */
     await show(CATALOGUE);
-    expect(screen.getByTestId('rail-available')).toHaveTextContent('Available · 3');
+    expect(screen.getByTestId('rail-available')).toHaveTextContent(/^Available3/);
     await type('shop');
-    expect(screen.getByTestId('rail-available')).toHaveTextContent('Available · 1 of 3');
+    expect(screen.getByTestId('rail-available')).toHaveTextContent(/^Available1 of 3/);
   });
 
   it('★★ a category whose every entry is filtered out disappears with them', async () => {
@@ -261,7 +260,7 @@ describe('★★ finding one of seventeen', () => {
     await userEvent.clear(screen.getByTestId('integration-search'));
     expect(screen.getAllByTestId(/^available-/)).toHaveLength(3);
     expect(screen.queryByTestId('integration-search-none')).toBeNull();
-    expect(screen.getByTestId('rail-available')).toHaveTextContent('Available · 3');
+    expect(screen.getByTestId('rail-available')).toHaveTextContent(/^Available3/);
   });
 
   it('★★ offers no filter at all when the catalogue could not be read', async () => {
