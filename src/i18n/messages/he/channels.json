@@ -97,9 +97,8 @@
       "body": "אי אפשר לפתור את אלה מתוך GOTCHA. אלה הגדרות בחשבון Meta Business שלכם."
     },
     "unprofiled": {
-      "title": "מחובר, ללא מידע על תקינות",
       "body": "המספר הזה מחובר ופועל. הוא הוגדר לפני ש‑GOTCHA יכלה לבדוק מספרים בנפרד, ולכן אין מה לדווח על תקינותו ואין תיקונים להציע. חיבור מחדש יאפשר את שניהם.",
-      "status": "סטטוס חיבור: {status}"
+      "noHealth": "אין נתוני תקינות"
     },
     "lastChecked": "נבדק לאחרונה ב־{date}.",
     "neverChecked": "תקינות המספר הזה טרם נבדקה.",
@@ -189,19 +188,38 @@
       "noLanguageShortcut": "בעיצוב יש קיצור דרך להוספת שפת מענה חסרה מכאן. אין לאן להוסיף — GOTCHA שומרת שפה אחת ועונה לכל לקוח בשפה שלו בכל מקרה."
     },
     "close": "סגירה",
-    "panelLine": "{count, plural, =0 {עדיין אין מספרים} one {מספר אחד} other {# מספרים}}",
+    "panelLine": "חשבון WhatsApp Business · {count, plural, =0 {עדיין אין מספרים} one {מספר אחד} other {# מספרים}}",
     "tab": {
       "numbers": "מספרים",
       "templates": "תבניות",
       "contacts": "אנשי קשר פרטיים",
       "activity": "פעילות"
     },
-    "tabNotYet": "הלשונית הזו תגיע בהמשך — מספרים כבר מוכנה."
+    "tabNotYet": "הלשונית הזו תגיע בהמשך — מספרים כבר מוכנה.",
+    "panelTitle": "WhatsApp",
+    "footNotYet": "עדיין לא מכאן.",
+    "foot": {
+      "refresh": "רענון מ-Meta",
+      "activity": "יומן פעילות",
+      "disconnect": "ניתוק המספר הזה"
+    },
+    "rows": {
+      "answeredBy": "מי עונה",
+      "aiMode": "מצב AI",
+      "greeting": "ברכה ראשונה",
+      "hours": "שעות",
+      "hoursWorkspace": "שעות סביבת העבודה",
+      "mode": {
+        "AI_AUTO_REPLY": "עונה לבד",
+        "HUMAN_WITH_COPILOT": "מנסח, אדם שולח"
+      }
+    }
   },
   "rowSettings": "הגדרות",
   "rowSettingsNotYet": "הגדרות לערוץ הזה יגיעו בהמשך — של WhatsApp כבר מוכנות.",
   "banner": {
     "title": "{channel} צריך תשומת לב",
     "more": "{count, plural, one {ועוד ערוץ אחד} other {ועוד # ערוצים}}"
-  }
+  },
+  "chipTrouble": "צריך תשומת לב"
 }

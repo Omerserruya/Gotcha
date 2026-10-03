@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { numbersResponseSchema } from '@/api/contracts/whatsapp-numbers';
@@ -20,6 +21,13 @@ import { WhatsAppNumbers } from './WhatsAppNumbers';
  * the absences are asserted HERE, where the thing could have appeared.
  */
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
     createTranslator({ locale: 'en', messages: { channels: messages }, namespace }),
@@ -332,10 +340,12 @@ describe('the card this tenant actually has', () => {
       ],
     });
     const card = screen.getByTestId('whatsapp-unprofiled');
-    expect(card).toHaveTextContent(/no health information/i);
-    expect(screen.getByTestId('whatsapp-unprofiled-body')).toHaveTextContent(
-      /connected and working/i,
-    );
+    // S2: 02's card — the state as a grey chip, its explanation on the chip.
+    const chip = screen.getByText('No health data');
+    expect(card).toContainElement(chip);
+    expect(chip).toHaveAttribute('title', expect.stringMatching(/connected and working/i));
+    // The raw value is never printed.
+    expect(card).not.toHaveTextContent('CONNECTED');
     // No health verdict, because there is no health.
     expect(screen.queryByTestId('whatsapp-delivery-detail')).toBeNull();
     // And no repairs: every repair verb addresses a record that does not exist.
@@ -368,5 +378,28 @@ describe('a failed read is not an empty workspace', () => {
     expect(screen.getByTestId('whatsapp-empty')).toHaveTextContent(
       /no whatsapp numbers are connected/i,
     );
+  });
+});
+
+describe('★ 13b — what is configured on a number, in 02’s rows', () => {
+  it('AI mode comes from the channel; the rest are "—" in their shape', async () => {
+    render(
+      await WhatsAppNumbers({
+        numbers: {
+          data: [],
+          unprofiled: [
+            {
+              channelAccountId: 'ca1',
+              phoneNumberId: 'p1',
+              name: 'Demo WhatsApp',
+              connectionStatus: 'CONNECTED',
+            },
+          ],
+        } as never,
+        responseModes: { ca1: 'AI_AUTO_REPLY' },
+      }),
+    );
+    expect(screen.getByTestId('number-ai-mode')).toHaveTextContent('Answers on its own');
+    expect(screen.getByTestId('whatsapp-unprofiled')).toHaveTextContent(/Answered by—/);
   });
 });

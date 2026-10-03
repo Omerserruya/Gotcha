@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { MessageCircle, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 
@@ -37,9 +37,11 @@ export async function WhatsAppPanel({
       <aside className={styles.panel} aria-label={t('title')}>
         <header className={styles.panelHead}>
           <div className={styles.panelTitleRow}>
-            <span className={styles.panelTile} aria-hidden="true" />
+            <span className={styles.panelTile} aria-hidden="true">
+              <MessageCircle size={20} strokeWidth={1.75} />
+            </span>
             <span className={styles.panelTitles}>
-              <h2 className={styles.panelTitle}>{t('title')}</h2>
+              <h2 className={styles.panelTitle}>{t('panelTitle')}</h2>
               <span className={styles.panelLine}>{line}</span>
             </span>
             <Link
@@ -71,6 +73,21 @@ export async function WhatsAppPanel({
           </nav>
         </header>
         <div className={styles.panelBody}>{children}</div>
+        {/*
+          02's foot: Refresh from Meta · Activity log, and Disconnect in red.
+          None is wired from here yet — drawn, each saying so.
+        */}
+        <footer className={styles.panelFoot}>
+          <span className={styles.panelFootLink} aria-disabled="true" title={t('footNotYet')}>
+            {t('foot.refresh')}
+          </span>
+          <span className={styles.panelFootLink} aria-disabled="true" title={t('footNotYet')}>
+            {t('foot.activity')}
+          </span>
+          <span className={styles.panelFootDanger} aria-disabled="true" title={t('footNotYet')}>
+            {t('foot.disconnect')}
+          </span>
+        </footer>
       </aside>
     </div>
   );

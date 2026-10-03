@@ -58,7 +58,14 @@ export default async function Page({
             whatsapp[0] ? tw('panelLine', { count: whatsapp[0].data.length }) : tw('description')
           }
         >
-          <WhatsAppNumbers numbers={whatsapp[0]} />
+          <WhatsAppNumbers
+            numbers={whatsapp[0]}
+            responseModes={Object.fromEntries(
+              (channels ?? [])
+                .filter((channel) => channel.channel === 'WHATSAPP')
+                .map((channel) => [channel.id, channel.responseMode]),
+            )}
+          />
           {/* Only when there is an import to report on — see ImportProgress. */}
           {whatsapp[1].status !== null ? <ImportProgress status={whatsapp[1].status} /> : null}
           {/*

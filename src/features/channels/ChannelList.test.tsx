@@ -102,3 +102,42 @@ describe('★ 13 — the warning above the list, and who answers on the line', (
     expect(screen.getByTestId('channel-detail-e1')).toHaveTextContent('AI answers automatically');
   });
 });
+
+describe('★ 13 corrections (measurement of 9b8dd9f)', () => {
+  it('★★ a troubled row says "Needs attention", never "Connected" — the words on its title', async () => {
+    render(
+      await ChannelList({
+        channels: [
+          channelSchema.parse({
+            id: 's1',
+            channel: 'WEBCHAT',
+            connectionStatus: 'CONNECTED',
+            lastError: 'Shopify Chat app was uninstalled from the store.',
+          }),
+        ],
+        voice: [],
+        voiceOffered: false,
+        windowDays: 30,
+      }),
+    );
+    const chip = screen.getByTestId('channel-status-s1');
+    expect(chip).toHaveTextContent('Needs attention');
+    expect(chip).toHaveAttribute('title', 'Shopify Chat app was uninstalled from the store.');
+    // The row stays a row: the banner tells it, not a second red line.
+    expect(screen.getByTestId('channel-s1')).not.toHaveTextContent(/uninstalled/);
+  });
+
+  it('every row has its tile, so the names line up', async () => {
+    const { container } = render(
+      await ChannelList({
+        channels: [
+          channelSchema.parse({ id: 'e1', channel: 'EMAIL', connectionStatus: 'CONNECTED' }),
+        ],
+        voice: [],
+        voiceOffered: false,
+        windowDays: 30,
+      }),
+    );
+    expect(container.querySelector('[data-kind="connected"] [data-tone="email"]')).not.toBeNull();
+  });
+});

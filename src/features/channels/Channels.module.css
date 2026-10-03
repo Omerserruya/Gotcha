@@ -62,11 +62,6 @@
     border-block-start: var(--border-width-thin) solid var(--row-divider);
   }
 
-  /* A channel that has stopped working. Sorted first, and marked. */
-  .rowTroubled {
-    background-color: var(--intent-urgent-surface);
-  }
-
   .identity {
     flex: 1;
     min-inline-size: 0;
@@ -83,12 +78,6 @@
   .detail {
     font-size: var(--font-size-label);
     color: var(--text-muted);
-  }
-
-  /* The platform's own error text. */
-  .error {
-    font-size: var(--font-size-micro);
-    color: var(--intent-urgent-text);
   }
 
   /* The state as 02's chip: radius 6, `padding:4px 9px`, 11.5px. */
@@ -267,26 +256,23 @@
     color: var(--intent-urgent-text);
   }
 
+  /* "Connect": 02's primary — dark and filled. */
   .connectOpen {
     flex: none;
-    font-size: var(--font-size-label);
-    color: var(--text-primary);
-    background: none;
-    border: var(--border-width-thin) solid var(--border-strong);
-    border-radius: var(--radius-item);
+    font-size: var(--font-size-caption);
+    color: var(--action-text);
+    background-color: var(--action-base);
+    border: 0;
+    border-radius: var(--space-8);
     padding-block: var(--space-6);
     padding-inline: var(--space-12);
     cursor: pointer;
   }
 
-  .connectOpen:hover {
-    border-color: var(--border-heavy);
-  }
-
   /* The connectable row becomes a grid so its panel can span the full width. */
   .rowOpen {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
   }
 
@@ -352,8 +338,59 @@
   }
 
   .numberPhone {
-    font-size: var(--font-size-body-lg);
-    font-weight: 500;
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .numberHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .numberChips {
+    display: flex;
+    gap: var(--space-6);
+  }
+
+  .chipQuiet {
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-well);
+    font-size: var(--font-size-micro);
+    color: var(--text-body);
+  }
+
+  /* What is configured on a number: label (130) and value, a rule between. */
+  .numberRows {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+  }
+
+  .numberRows > div {
+    display: flex;
+    gap: var(--space-12);
+    padding-block: var(--space-10);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .numberRows dt {
+    flex: none;
+    inline-size: 130px;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .numberRows dd {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .numberLink {
+    color: inherit;
   }
 
   .numberName {
@@ -682,10 +719,14 @@
 
   .panelTile {
     flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     inline-size: 40px;
     block-size: 40px;
     border-radius: 11px;
     background-color: var(--channel-whatsapp-surface);
+    color: var(--channel-whatsapp-mark);
   }
 
   .panelTitles {
@@ -740,6 +781,26 @@
 
   .panelTab[aria-disabled='true'] {
     cursor: default;
+  }
+
+  /* 02's foot: two quiet links on the start, Disconnect in red at the end. */
+  .panelFoot {
+    display: flex;
+    gap: var(--space-16);
+    padding: var(--space-14) var(--space-26);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .panelFootLink,
+  .panelFootDanger {
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+    cursor: default;
+  }
+
+  .panelFootDanger {
+    margin-inline-start: auto;
+    color: var(--intent-urgent-text);
   }
 
   .panelBody {

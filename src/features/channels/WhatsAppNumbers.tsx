@@ -1,5 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
+import { Link } from '@/i18n/navigation';
+
 import {
   advisoryChecks,
   blockingChecks,
@@ -59,7 +61,14 @@ type T = Awaited<ReturnType<typeof getTranslations<'channels.whatsapp'>>>;
  * And no control is drawn for the third, because *"offering one and having it
  * fail is worse than saying plainly that this one is theirs to fix."*
  */
-export async function WhatsAppNumbers({ numbers }: { readonly numbers: NumbersResponse | null }) {
+export async function WhatsAppNumbers({
+  numbers,
+  responseModes = {},
+}: {
+  readonly numbers: NumbersResponse | null;
+  /** Who answers each channel account (13b's "AI mode"), from the channel list. */
+  readonly responseModes?: Readonly<Record<string, string>>;
+}) {
   const t = await getTranslations('channels.whatsapp');
   const locale = await getLocale();
 
@@ -152,7 +161,7 @@ export async function WhatsAppNumbers({ numbers }: { readonly numbers: NumbersRe
         ))}
         {numbers.unprofiled.map((u) => (
           <li key={u.channelAccountId}>
-            <UnprofiledCard number={u} t={t} />
+            <UnprofiledCard number={u} t={t} mode={responseModes[u.channelAccountId] ?? null} />
           </li>
         ))}
       </ul>
@@ -268,6 +277,7 @@ function NumberCard({
             })
           : t('neverChecked')}
       </p>
+      <NumberRows t={t} mode={null} />
     </article>
   );
 }
@@ -308,26 +318,64 @@ function CheckList({ checks, t }: { readonly checks: readonly HealthCheck[]; rea
  *
  * **On this tenant this is the only card that renders.**
  */
-function UnprofiledCard({ number, t }: { readonly number: UnprofiledNumber; readonly t: T }) {
+function UnprofiledCard({
+  number,
+  t,
+  mode,
+}: {
+  readonly number: UnprofiledNumber;
+  readonly t: T;
+  readonly mode: string | null;
+}) {
+  /*
+    02's number card, in its shape: the number over its state; then what is
+    configured on it. A number set up before per-number health existed has
+    no health data — said as a grey chip, not a paragraph — and its raw
+    `connectionStatus` is never printed.
+  */
   return (
     <article className={styles.number} data-testid="whatsapp-unprofiled">
-      <p className={styles.numberLine}>
+      <div className={styles.numberHead}>
         <span className={styles.numberPhone}>{number.name ?? number.phoneNumberId}</span>
-      </p>
-      <p className={styles.delivery}>{t('unprofiled.title')}</p>
-      <p className={styles.deliveryDetail} data-testid="whatsapp-unprofiled-body">
-        {/*
-          Translated rather than rendered from the route's `note`, which ships
-          in English only. The billing disclaimer is rendered verbatim because
-          it ships translated AND is a commercial claim; this is an operational
-          explanation with no Hebrew available, and English on the one card a
-          Hebrew tenant can see is the worse of the two errors.
-        */}
-        {t('unprofiled.body')}
-      </p>
-      <p className={styles.lastChecked}>
-        {t('unprofiled.status', { status: number.connectionStatus })}
-      </p>
+        <span className={styles.numberChips}>
+          <span className={styles.chipQuiet} title={t('unprofiled.body')}>
+            {t('unprofiled.noHealth')}
+          </span>
+        </span>
+      </div>
+      <NumberRows t={t} mode={mode} />
     </article>
+  );
+}
+
+/** What is configured on a number — 02's four rows; "—" where nothing stores it. */
+function NumberRows({ t, mode }: { readonly t: T; readonly mode: string | null }) {
+  return (
+    <dl className={styles.numberRows}>
+      <div>
+        <dt>{t('rows.answeredBy')}</dt>
+        {/* A channel account has no AI employee or team of its own. */}
+        <dd>—</dd>
+      </div>
+      <div>
+        <dt>{t('rows.aiMode')}</dt>
+        <dd data-testid="number-ai-mode">
+          {mode === 'AI_AUTO_REPLY' || mode === 'HUMAN_WITH_COPILOT' ? t(`rows.mode.${mode}`) : '—'}
+        </dd>
+      </div>
+      <div>
+        <dt>{t('rows.greeting')}</dt>
+        <dd>—</dd>
+      </div>
+      <div>
+        <dt>{t('rows.hours')}</dt>
+        <dd>
+          {/* The workspace's hours apply; they are set on Workspace. */}
+          <Link href="/settings/workspace" className={styles.numberLink}>
+            {t('rows.hoursWorkspace')}
+          </Link>
+        </dd>
+      </div>
+    </dl>
   );
 }

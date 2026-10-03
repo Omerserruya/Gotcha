@@ -4,10 +4,10 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { Channel, VoiceChannel } from '@/api/contracts/channels';
 
 import styles from './Channels.module.css';
+import { ChannelTile } from './ChannelTile';
 import { ConnectableRow } from './ConnectableRow';
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
 import { channelName } from '@/api/contracts/inbox';
-import { channelMark } from '@/features/inbox/channel-marks';
 import { Link } from '@/i18n/navigation';
 
 /**
@@ -113,7 +113,7 @@ export async function ChannelList({
           return (
             <li
               key={row.id}
-              className={[styles.row, troubled ? styles.rowTroubled : ''].join(' ').trim()}
+              className={styles.row}
               data-testid={`channel-${row.id}`}
               data-kind="connected"
               data-troubled={troubled ? 'yes' : 'no'}
@@ -132,17 +132,6 @@ export async function ChannelList({
                 <span className={styles.detail} data-testid={`channel-detail-${row.id}`}>
                   {detail(row)}
                 </span>
-                {/*
-                The platform's own words, not ours. A paraphrase would be a
-                second, vaguer copy of a message the platform already wrote —
-                and "Shopify Chat app was uninstalled from the store" tells
-                someone exactly what to go and do.
-              */}
-                {row.error ? (
-                  <span className={styles.error} data-testid={`channel-error-${row.id}`}>
-                    {row.error}
-                  </span>
-                ) : null}
               </div>
 
               <span
@@ -150,8 +139,12 @@ export async function ChannelList({
                   .join(' ')
                   .trim()}
                 data-testid={`channel-status-${row.id}`}
+                // The platform's own words, on the state they explain; the banner
+                // above tells the first of them out loud.
+                title={row.error ?? undefined}
               >
-                {t(`status.${row.status}` as 'status.CONNECTED')}
+                {/* A broken connection is not "Connected", in any colour. */}
+                {troubled ? t('chipTrouble') : t(`status.${row.status}` as 'status.CONNECTED')}
               </span>
 
               {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
@@ -179,15 +172,5 @@ export async function ChannelList({
         })}
       </ul>
     </>
-  );
-}
-
-/** 02's 34px tile: the channel's mark on its own surface. */
-function ChannelTile({ channel }: { readonly channel: string }) {
-  const { Icon, tone } = channelMark(channel);
-  return (
-    <span className={styles.tile} data-tone={tone} aria-hidden="true">
-      <Icon size={17} strokeWidth={1.75} />
-    </span>
   );
 }

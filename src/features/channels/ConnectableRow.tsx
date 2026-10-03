@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { ChannelType } from '@/api/contracts/channels';
 
 import styles from './Channels.module.css';
+import { ChannelTile } from './ChannelTile';
 import { ConnectPanel } from './ConnectPanel';
 import { channelName } from '@/api/contracts/inbox';
 
@@ -31,6 +32,7 @@ export function ConnectableRow({ channel }: { readonly channel: ChannelType }) {
       data-testid={`channel-connectable-${channel}`}
       data-kind="connectable"
     >
+      <ChannelTile channel={channel} />
       <div className={styles.identity}>
         {/* No fallback here either: an unlisted channel rendered `name.X`. */}
         <span className={styles.name}>{channelName(channel, t) ?? t('name.other')}</span>
