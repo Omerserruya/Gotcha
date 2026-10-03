@@ -40,7 +40,7 @@ export async function loadWhatsAppNumbers(): Promise<NumbersResponse | null> {
  * — **an import exists and the platform reported it cannot be done.** An empty
  * `imports: []` is nobody ever starting one.
  *
- * So `status` is `null` for "there is no import", and `ImportProgress` is not
+ * So `status` is `null` for "there is no import", and 13e (`ImportPanel`) is not
  * rendered at all in that case. Synthesising an `unavailable` status would put
  * *"we can't import your history"* on the screen of a workspace that never
  * asked — a confident refusal invented out of an empty list.
@@ -66,7 +66,8 @@ export interface HistoryImportData {
   readonly bulkMinConfidence: number | undefined;
 }
 
-export async function loadHistoryImport(): Promise<HistoryImportData> {
+/** `importId`: 13e/13f's `?import=`; the newest when absent or unknown. */
+export async function loadHistoryImport(importId?: string): Promise<HistoryImportData> {
   const api = serverApi();
 
   const imports = await api
@@ -83,7 +84,7 @@ export async function loadHistoryImport(): Promise<HistoryImportData> {
    * change what the screen can say, because neither gives it an import to
    * report on.
    */
-  const status = imports?.[0] ?? null;
+  const status = imports?.find((i) => i.id === importId) ?? imports?.[0] ?? null;
   if (status === null) return { status: null, candidates: null, bulkMinConfidence: undefined };
 
   const page = await api

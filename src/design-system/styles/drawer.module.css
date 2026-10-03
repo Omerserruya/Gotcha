@@ -34,6 +34,10 @@
     inline-size: min(820px, 100%);
   }
 
+  .panel[data-width='860'] {
+    inline-size: min(860px, 100%);
+  }
+
   .head {
     display: flex;
     gap: var(--space-12);

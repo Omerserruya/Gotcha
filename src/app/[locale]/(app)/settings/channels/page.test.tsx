@@ -3,6 +3,7 @@ import { isValidElement } from 'react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ImportPanel, ReportPanel } from '@/features/channels/LearnPanels';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import channels from '@/i18n/messages/en/channels.json';
@@ -29,9 +30,17 @@ const DEV_NUMBERS = {
 vi.mock('@/features/channels/load-channels', () => ({
   loadChannels: async () => ({ channels: [], voice: [], voiceOffered: false, windowDays: 30 }),
 }));
+const { history } = vi.hoisted(() => ({
+  history: {
+    value: { status: null, candidates: null, bulkMinConfidence: undefined } as Record<
+      string,
+      unknown
+    >,
+  },
+}));
 vi.mock('@/features/channels/load-whatsapp', () => ({
   loadWhatsAppNumbers: async () => DEV_NUMBERS,
-  loadHistoryImport: async () => ({ status: null, candidates: null, bulkMinConfidence: undefined }),
+  loadHistoryImport: async () => history.value,
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
@@ -65,5 +74,42 @@ describe('★★ 13b — the head counts what the card shows', () => {
     const panel = find<{ line: string }>(tree, WhatsAppPanel);
     expect(panel?.line).toBe('WhatsApp Business account · one number');
     expect(find<{ numbers: unknown }>(tree, WhatsAppNumbers)?.numbers).toBe(DEV_NUMBERS);
+  });
+});
+
+describe('★ 13e / 13f are their own panels, replacing 13b while open', () => {
+  const STATUS = { id: 'i1', stage: 'analyzing', percent: 100, analysisPercent: 40 };
+
+  it('?view=progress opens 13e and not 13b', async () => {
+    history.value = { status: STATUS, candidates: [], bulkMinConfidence: 0.8 };
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ panel: 'whatsapp', import: 'i1', view: 'progress' }),
+    });
+    expect(find(tree, ImportPanel)).not.toBeNull();
+    expect(find(tree, WhatsAppPanel)).toBeNull();
+  });
+
+  it('?view=report opens 13f with the candidates', async () => {
+    history.value = {
+      status: { ...STATUS, stage: 'ready' },
+      candidates: [],
+      bulkMinConfidence: 0.8,
+    };
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ panel: 'whatsapp', import: 'i1', view: 'report' }),
+    });
+    expect(find(tree, ReportPanel)).not.toBeNull();
+  });
+
+  it('a view with no import falls back to 13b', async () => {
+    history.value = { status: null, candidates: null, bulkMinConfidence: undefined };
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ panel: 'whatsapp', view: 'progress' }),
+    });
+    expect(find(tree, ImportPanel)).toBeNull();
+    expect(find(tree, WhatsAppPanel)).not.toBeNull();
   });
 });

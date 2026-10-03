@@ -215,7 +215,64 @@
       }
     },
     "addNumber": "+ הוספת מספר נוסף",
-    "addNumberNotYet": "חיבור מספר עובר דרך ההרשמה של Meta, שעדיין לא מחוברת מכאן."
+    "addNumberNotYet": "חיבור מספר עובר דרך ההרשמה של Meta, שעדיין לא מחוברת מכאן.",
+    "learn": {
+      "rowImporting": "לומד · מייבא {percent}%",
+      "rowLearning": "לומד · {percent}%",
+      "rowReady": "הדוח מוכן · {count, plural, one {תשובה אחת} other {# תשובות}}",
+      "steps": "הגדרה",
+      "step": {
+        "where": "איפה הוא",
+        "meta": "Meta",
+        "number": "מספר",
+        "learn": "למידה"
+      },
+      "connected": "מחובר — הודעות חדשות כבר מגיעות לתיבה.",
+      "connectedStep": "המספר חובר",
+      "imported": "ההיסטוריה יובאה",
+      "conversations": "{count} שיחות",
+      "learning": "לומד איך אתם כותבים",
+      "learningSub": "שפה, טון והביטויים שלכם",
+      "answers": "מוצא שאלות ותשובות",
+      "answersSub": "מתוך התשובות שלכם, לא בניחוש",
+      "customers": "זוכר לקוחות",
+      "soFar": "עד עכשיו",
+      "mostAsked": "הכי נשאל",
+      "close": "לסגור ולהמשיך",
+      "review": "לדוח",
+      "reviewWhenReady": "הדוח נפתח כש־GOTCHA מסיים לקרוא.",
+      "rerun": "להריץ את הניתוח שוב",
+      "rerunNotYet": "הרצה חוזרת מכאן תגיע בהמשך.",
+      "setting": "מגדירים את {name}",
+      "learned": "מה GOTCHA למד מ־{name}",
+      "nothingUsed": "שום דבר לא בשימוש עד שתאשרו.",
+      "stat": {
+        "conversations": "שיחות",
+        "customers": "לקוחות",
+        "period": "תקופה",
+        "answers": "תשובות שנמצאו"
+      },
+      "card": {
+        "languages": "שפות",
+        "sound": "איך אתם נשמעים",
+        "customers": "לקוחות"
+      },
+      "noImportData": "הייבוא הזה עדיין לא מדווח על זה.",
+      "customersRead": "{count} לקוחות נקראו",
+      "chip": {
+        "conflict": "סתירה",
+        "live": "דורש בדיקה חיה",
+        "low": "ביטחון נמוך"
+      },
+      "chats": "{count, plural, one {שיחה אחת} other {# שיחות}}",
+      "use": "להשתמש ב„{answer}”",
+      "edit": "עריכה",
+      "skip": "דילוג",
+      "notLive": "ההחלטה מכאן תגיע בהמשך — שום דבר לא בשימוש עד אז.",
+      "readyCard": "{count, plural, one {עוד אחת מוכנה} other {עוד # מוכנות}} — ביטחון גבוה, בלי סתירות",
+      "addReady": "להוסיף {count} תשובות מוכנות",
+      "later": "לסיים אחר כך"
+    }
   },
   "rowSettings": "הגדרות",
   "rowSettingsNotYet": "הגדרות לערוץ הזה יגיעו בהמשך — של WhatsApp כבר מוכנות.",

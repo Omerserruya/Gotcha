@@ -215,7 +215,64 @@
       }
     },
     "addNumber": "+ Add another number",
-    "addNumberNotYet": "Connecting a number goes through Meta's signup, which isn't wired from here yet."
+    "addNumberNotYet": "Connecting a number goes through Meta's signup, which isn't wired from here yet.",
+    "learn": {
+      "rowImporting": "Learning in progress · importing {percent}%",
+      "rowLearning": "Learning in progress · {percent}%",
+      "rowReady": "Report ready · {count, plural, one {# answer} other {# answers}}",
+      "steps": "Setting up",
+      "step": {
+        "where": "Where it lives",
+        "meta": "Meta",
+        "number": "Number",
+        "learn": "Learn"
+      },
+      "connected": "Connected — new messages already arrive in your inbox.",
+      "connectedStep": "Number connected",
+      "imported": "History imported",
+      "conversations": "{count} conversations",
+      "learning": "Learning how you write",
+      "learningSub": "Language, tone and the phrases you use",
+      "answers": "Finding questions and answers",
+      "answersSub": "Taken from your replies, not guessed",
+      "customers": "Remembering customers",
+      "soFar": "So far",
+      "mostAsked": "Most asked about",
+      "close": "Close and keep going",
+      "review": "Review report",
+      "reviewWhenReady": "The report opens when GOTCHA has finished reading.",
+      "rerun": "Run the analysis again",
+      "rerunNotYet": "Running it again from here comes next.",
+      "setting": "Setting up {name}",
+      "learned": "What GOTCHA learned from {name}",
+      "nothingUsed": "Nothing is used until you approve it.",
+      "stat": {
+        "conversations": "conversations",
+        "customers": "customers",
+        "period": "period",
+        "answers": "answers found"
+      },
+      "card": {
+        "languages": "Languages",
+        "sound": "How you sound",
+        "customers": "Customers"
+      },
+      "noImportData": "This import doesn't report it yet.",
+      "customersRead": "{count} customers read",
+      "chip": {
+        "conflict": "Conflict",
+        "live": "Needs a live check",
+        "low": "Low confidence"
+      },
+      "chats": "{count, plural, one {# chat} other {# chats}}",
+      "use": "Use “{answer}”",
+      "edit": "Edit",
+      "skip": "Skip",
+      "notLive": "Deciding from here comes next — nothing is used until it does.",
+      "readyCard": "{count, plural, one {# more is ready} other {# more are ready}} — high confidence, no conflicts",
+      "addReady": "Add {count} ready answers",
+      "later": "Finish later"
+    }
   },
   "rowSettings": "Settings",
   "rowSettingsNotYet": "Settings for this channel come next — WhatsApp's are ready.",

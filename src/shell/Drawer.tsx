@@ -27,7 +27,7 @@ export async function Drawer({
   readonly line?: string;
   readonly closeHref: string;
   /** 02's widths: 560 (11b, 11c), 600 (12d, 14c), 620 (11d), 820 (14e). */
-  readonly width?: 560 | 600 | 620 | 820;
+  readonly width?: 560 | 600 | 620 | 820 | 860;
   readonly testId?: string;
   /** Before the title — 12d's 44px disc. */
   readonly lead?: ReactNode;
