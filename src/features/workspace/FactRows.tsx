@@ -1,62 +1,33 @@
 'use client';
 
-import type { ReactNode } from 'react';
-
 import { useLocale, useTranslations } from 'next-intl';
-import { Fragment, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 
-import {
-  DAY_KEYS,
-  fieldOrigin,
-  type DayKey,
-  type Workspace,
-  displayHost,
-} from '@/api/contracts/workspace';
+import { fieldOrigin, type DayKey, type Workspace, displayHost } from '@/api/contracts/workspace';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
+import { UserText } from '@/design-system/primitives/text/UserText';
+import { Link } from '@/i18n/navigation';
 
 import { saveWorkspaceFacts, type WriteResult } from './actions';
-import { hoursPatch, summariseWeek, weekOf, type DayHours } from './hours';
+import { summariseWeek, weekOf } from './hours';
 import styles from './Workspace.module.css';
-import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
- * The six facts an AI employee quotes to a customer.
+ * The facts an AI employee quotes to a customer, as 11's table.
  *
- * One row at a time is editable. Not a page-wide form: each fact is
- * independently true, saving one should not require the other five to be
- * valid, and a single Save at the foot would make a typo in the address block
- * a correction to the opening hours.
- *
- * Every save sends `If-Match`, so two people editing this page cannot silently
- * overwrite each other. A stale write is answered in the row, with a reload
- * offered and never forced — the other person's version is not automatically
- * the right one, and discarding what was just typed to show it would be.
+ * 02 edits them in three drawers and one place: name, website, what you sell
+ * and address in 11b (`?panel=business`), opening hours in 11c
+ * (`?panel=hours`), language in 11d (`?panel=language`). Only a single value
+ * edits in its row — 11e, "Enter saves, Esc cancels" — and that is currency
+ * & time zone.
  */
 
 type FactKey =
   'name' | 'website' | 'description' | 'address' | 'hours' | 'language' | 'currencyTimezone';
 
-/**
- * Which provenance field each row stands for, where one row is one field.
- *
- * `hours` is deliberately absent: business hours live in `TenantSetting` and
- * are not in `PROVENANCED_FIELDS`, so nothing records whether the scan or a
- * person wrote them. **The design puts a "From website" badge on Opening
- * hours and we cannot back it** — the badge would be asserting a source
- * nobody stored.
- *
- * `currencyTimezone` is absent for a different reason: it is two fields, one
- * provenanced (`currency`) and one not (timezone lives in the hours setting).
- * A single badge over the pair would be claiming a source for both.
- */
-/**
- * Every IANA zone this runtime knows, for the searchable picker.
- *
- * Computed once. `Intl.supportedValuesOf` is not in every runtime, so an
- * empty list is the fallback — the input stays free text and a missing
- * datalist costs autocomplete rather than the ability to save.
- */
+type Panel = 'business' | 'hours' | 'language';
+
 const TIMEZONES: readonly string[] = (() => {
   try {
     return Intl.supportedValuesOf?.('timeZone') ?? [];
@@ -65,6 +36,11 @@ const TIMEZONES: readonly string[] = (() => {
   }
 })();
 
+/**
+ * The provenance field behind each row. Hours and currency & time zone have
+ * none: hours is a setting the scan never writes, and one badge over two
+ * fields would claim a source for both.
+ */
 const PROVENANCE_FIELD: Partial<Record<FactKey, string>> = {
   name: 'organizationName',
   description: 'businessDescription',
@@ -72,254 +48,75 @@ const PROVENANCE_FIELD: Partial<Record<FactKey, string>> = {
   language: 'primaryLanguage',
 };
 
-export function FactRows({
-  workspace,
-  languagePanel = null,
-}: {
-  workspace: Workspace;
-  /** 11d: shown inside the Language row's edit. */
-  languagePanel?: ReactNode;
-}) {
+export function FactRows({ workspace }: { readonly workspace: Workspace }) {
   const t = useTranslations('workspace');
   const locale = useLocale();
-  const [editing, setEditing] = useState<FactKey | null>(null);
-  /*
-   * A row's own message. `quiet` marks the one kind that is good news.
-   *
-   * It renders in TWO places, because a save that fails leaves the row open
-   * and a save that succeeds closes it — and both carry the same test id with
-   * a `data-note-kind` beside it. Without the kind, a test can assert that a
-   * message appeared but not WHICH, and "saved" and "someone else saved first"
-   * are the two outcomes it most needs to tell apart.
-   */
-  const [note, setNote] = useState<{ key: FactKey; text: string; quiet?: boolean } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [currency, setCurrency] = useState('');
+  const [timezone, setTimezone] = useState('');
+  const [note, setNote] = useState<{ text: string; quiet?: boolean } | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function commit(key: FactKey, patch: Record<string, unknown>) {
-    setNote(null);
-    startTransition(async () => {
-      const result = await saveWorkspaceFacts(patch, workspace.updatedAt ?? null);
-      if (result.ok) {
-        setEditing(null);
-        setNote({ key, text: t('saved'), quiet: true });
-        return;
-      }
-      setNote({ key, text: messageFor(result, t) });
-    });
-  }
-
-  /** The badge for a row, where the row stands for exactly one tracked field. */
   const origin = (key: FactKey) => {
     const field = PROVENANCE_FIELD[key];
     return field ? fieldOrigin(workspace, field) : 'unknown';
   };
 
-  const row = (
-    key: FactKey,
-    value: string | null,
-    form: React.ReactNode | null,
-    /** Extra line under the value — a caveat the row needs, not a second value. */
-    caveat?: string,
-  ) => {
-    // `form === null` means the field cannot be written through this screen.
-    const readOnly = form === null;
-    const isOpen = editing === key && !readOnly;
-    const message = note?.key === key ? note : null;
-
-    return (
-      <div
-        key={key}
-        className={isOpen ? styles.rowEditing : styles.row}
-        data-testid={`fact-${key}`}
-      >
-        {isOpen ? (
-          <div
-            className={styles.rowEditor}
-            /*
-              ★ 11e — "Enter saves, Esc cancels."
-              ══════════════════════════════════════════════════════════════
-              There was no keyboard handling at all: every row had to be
-              finished with the mouse. Bound on the container rather than on
-              each input, so it works for the multi-field rows too.
-
-              Enter is scoped to SINGLE-VALUE rows, which is what the design
-              says — in the seven-day hours grid, Enter while a time input has
-              focus would save a half-entered week, and the grid is the one
-              place where the next field is more likely to be what was meant.
-
-              Esc cancels everywhere. It has no destructive reading.
-            */
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.stopPropagation();
-                setEditing(null);
-                setNote(null);
-                return;
-              }
-              if (event.key === 'Enter' && key !== 'hours' && !event.shiftKey) {
-                event.preventDefault();
-                submit(key);
-              }
-            }}
-          >
-            <div className={styles.label}>{t(`fact.${key}`)}</div>
-            {form}
-            <div className={styles.editActions}>
-              <Button
-                variant="primary"
-                size="sm"
-                data-testid={`fact-save-${key}`}
-                onClick={() => submit(key)}
-                disabled={isPending}
-              >
-                {isPending ? t('saving') : t('save')}
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditing(null);
-                  setNote(null);
-                }}
-              >
-                {t('cancel')}
-              </Button>
-              {message ? (
-                <span
-                  className={[styles.rowNote, message.quiet ? styles.rowNoteQuiet : '']
-                    .join(' ')
-                    .trim()}
-                  data-testid={`fact-note-${key}`}
-                  data-note-kind={message.quiet ? 'success' : 'problem'}
-                >
-                  {message.text}
-                </span>
-              ) : null}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className={styles.label}>{t(`fact.${key}`)}</div>
-            <div
-              className={[styles.value, value ? '' : styles.unset].join(' ').trim()}
-              data-testid={`fact-value-${key}`}
-            >
-              {/*
-                ★★ ISOLATED: a Hebrew value with embedded Latin reordered on
-                the English screen — the sentence started in Hebrew, jumped to
-                English, and the closing bracket landed on the wrong side. The
-                data was right and the rendering was not.
-              */}
-              {value === null ? t('unset') : <UserText>{value}</UserText>}
-              {/*
-                The badge INLINE, where the design puts it. The separate
-                provenance panel below stays — it accounts for all seven
-                tracked fields, including ones that have no row here — but the
-                badge is what makes "Scanning again only updates fields marked
-                From website" legible at the point it applies.
-
-                Rendered only for `scan`. `human` and `unknown` say nothing
-                here: the row already shows the value, and "you typed this" on
-                every untouched row would be noise. The panel carries the full
-                three-way account.
-              */}
-              {origin(key) === 'scan' ? (
-                <span className={styles.fromWebsite} data-testid={`fact-origin-${key}`}>
-                  {t('provenance.origin.scan')}
-                </span>
-              ) : null}
-            </div>
-            {caveat ? (
-              <p className={styles.rowCaveat} data-testid={`fact-caveat-${key}`}>
-                {caveat}
-              </p>
-            ) : null}
-            {message?.quiet ? (
-              <span
-                className={styles.rowNoteQuiet}
-                data-testid={`fact-note-${key}`}
-                data-note-kind="success"
-              >
-                {message.text}
-              </span>
-            ) : null}
-            {readOnly ? null : (
-              <button
-                type="button"
-                className={styles.edit}
-                data-testid={`fact-edit-${key}`}
-                onClick={() => {
-                  setEditing(key);
-                  setNote(null);
-                  seed(key);
-                }}
-              >
-                {t('edit')}
-              </button>
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
-
-  // ── Drafts, one per shape ───────────────────────────────────────────
-  const [text, setText] = useState('');
-  const [currency, setCurrency] = useState('');
-  const [language, setLanguage] = useState('');
-  const [week, setWeek] = useState<Record<DayKey, DayHours>>(() => weekOf(workspace));
-  const [aiOutside, setAiOutside] = useState<'active' | 'silent'>('active');
-  const [outsideMsg, setOutsideMsg] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  function seed(key: FactKey) {
-    if (key === 'name') setText(workspace.name ?? '');
-    if (key === 'description') setText(workspace.description ?? '');
-    if (key === 'address') setText(workspace.address ?? '');
-    if (key === 'language') setLanguage(workspace.languages[0] ?? '');
-    if (key === 'currencyTimezone') {
-      setCurrency(workspace.currency ?? '');
-      setText(workspace.timezone ?? '');
-    }
-    if (key === 'hours') {
-      setWeek(weekOf(workspace));
-      setAiOutside(workspace.hours?.aiOutsideHours ?? 'active');
-      setOutsideMsg(workspace.hours?.outsideHoursHandoffMessage ?? '');
-      setCopied(false);
-    }
-  }
-
-  function submit(key: FactKey) {
-    if (key === 'name') return commit(key, { name: text.trim() });
-    if (key === 'description') return commit(key, { description: text.trim() });
-    // Empty clears it: the server accepts null for an address, and a workspace
-    // that removed its address is a different fact from one that never had one.
-    if (key === 'address') return commit(key, { address: text.trim() || null });
-    if (key === 'language') {
-      // A single entry, deliberately. PATCH now REFUSES a longer list with a
-      // 422 rather than keeping the first and answering 200 — so two would be
-      // rejected rather than forgotten, and there is still nowhere to put it.
-      return commit(key, { languages: language.trim() ? [language.trim().toLowerCase()] : [] });
-    }
-    if (key === 'currencyTimezone') {
-      return commit(key, {
-        currency: currency.trim() ? currency.trim().toUpperCase() : null,
-        timezone: text.trim(),
-      });
-    }
-    return commit(key, {
-      hours: hoursPatch(week, workspace.hours ?? null, {
-        aiOutsideHours: aiOutside,
-        outsideHoursHandoffMessage: outsideMsg.trim(),
-      }),
+  function saveCurrencyTimezone() {
+    setNote(null);
+    startTransition(async () => {
+      const result = await saveWorkspaceFacts(
+        {
+          currency: currency.trim() ? currency.trim().toUpperCase() : null,
+          timezone: timezone.trim(),
+        },
+        workspace.updatedAt ?? null,
+      );
+      if (result.ok) {
+        setEditing(false);
+        setNote({ text: t('saved'), quiet: true });
+        return;
+      }
+      setNote({ text: messageFor(result, t) });
     });
   }
 
-  /*
-   * Three states, not two. `hours` null means nobody has ever saved a week;
-   * an object with `enabled: false` means someone saved one and switched it
-   * off, which is a decision rather than an omission - and it means GOTCHA
-   * answers at any hour. Rendering both as "Not set" would hide that.
-   */
+  /** A row whose Edit opens a drawer. */
+  const row = (key: FactKey, value: string | null, panel: Panel, caveat?: string) => (
+    <div key={key} className={styles.row} data-testid={`fact-${key}`}>
+      <div className={styles.label}>{t(`fact.${key}`)}</div>
+      <div
+        className={[styles.value, value ? '' : styles.unset].join(' ').trim()}
+        data-testid={`fact-value-${key}`}
+      >
+        {/*
+          ★★ ISOLATED: a Hebrew value with embedded Latin reordered on the
+          English screen. The data was right and the rendering was not.
+        */}
+        {value === null ? t('unset') : <UserText>{value}</UserText>}
+        {/* The badge only where it is true: `scan`, never `human` or unknown. */}
+        {origin(key) === 'scan' ? (
+          <span className={styles.fromWebsite} data-testid={`fact-origin-${key}`}>
+            {t('provenance.origin.scan')}
+          </span>
+        ) : null}
+      </div>
+      {caveat ? (
+        <p className={styles.rowCaveat} data-testid={`fact-caveat-${key}`}>
+          {caveat}
+        </p>
+      ) : null}
+      <Link
+        href={{ pathname: '/settings/workspace', query: { panel } }}
+        className={styles.edit}
+        data-testid={`fact-edit-${key}`}
+        scroll={false}
+      >
+        {t('edit')}
+      </Link>
+    </div>
+  );
+
   const summary = summariseWeek(weekOf(workspace));
   const hoursNeverSaved = workspace.hours == null;
   const hoursSwitchedOff = workspace.hours != null && workspace.hours.enabled === false;
@@ -347,24 +144,10 @@ export function FactRows({
               : []),
           ].join(' · ');
 
-  /*
-   * The row is named after two facts, so it shows two.
-   *
-   * It used to render the bare code `he` and omit the currency entirely, which
-   * left a reader unable to tell an unset currency from a row that had
-   * forgotten it. Each half now says what it is, or says it is unset, the way
-   * Address does — and the language renders as a NAME. Every other value on
-   * this screen is human text; a wire format is not a fact anyone quotes.
-   *
-   * `Intl.DisplayNames` localises it, so a Hebrew reader sees עברית rather
-   * than the English word for their own language.
-   */
   const languageName = (code: string): string => {
     try {
       return new Intl.DisplayNames([locale], { type: 'language' }).of(code) ?? code;
     } catch {
-      // An unrecognised code is shown as itself rather than hidden: a value
-      // the product cannot name is still a value the owner set.
       return code;
     }
   };
@@ -373,336 +156,161 @@ export function FactRows({
 
   return (
     <div className={styles.facts}>
-      {row(
-        'name',
-        workspace.name ?? null,
-        <div className={styles.value}>
-          <Input
-            label={t('fact.name')}
-            labelHidden
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            maxLength={200}
-          />
-        </div>,
-      )}
+      {row('name', workspace.name ?? null, 'business')}
 
       {/*
-        ★ THE WEBSITE ROW, WITHOUT THE PAGE COUNT THE DESIGN SHOWS.
-        ══════════════════════════════════════════════════════════════════
-        The design's value is "avivco.il · 42 pages read, 3 days ago".
-
-        Neither number reaches this screen. `POST /workspace/scan` returns
-        `reach` — `pagesRead` AND `distinctTextPages` — but `GET /workspace`
-        does not, and nothing persists it, so on load there is no count and
-        no date to show. Rendering the domain alone is the whole of what is
-        known here.
-
-        That is the safe direction to be missing it in. `pagesRead` on this
-        tenant is 17 against `distinctTextPages` of 1 — a password-protected
-        store answering every path with the same login page — so "42 pages
-        read" is exactly the sentence the crawler's own comment forbids.
-
-        Read-only: `PATCH /workspace` has a closed allow-list and
-        `websiteDomain` is not on it. A control here would 422.
+        ★ THE WEBSITE ROW, WITHOUT THE PAGE COUNT THE DESIGN SHOWS. Neither
+        number reaches this screen — `GET /workspace` does not carry the
+        scan's `reach` — and "42 pages read" is the sentence the crawler's
+        own comment forbids for a store answering every path with one login
+        page. The domain is the whole of what is known here. Its Edit opens
+        11b, where the website is drawn and not live: `websiteDomain` is not
+        on `PATCH /workspace`'s allow-list.
       */}
       {row(
         'website',
-        // The host alone, as 02 writes it — never the scheme or `www.`.
         workspace.websiteDomain ? displayHost(workspace.websiteDomain) : null,
-        null,
-        workspace.websiteDomain ? t('website.readOnly') : t('website.notSet'),
+        'business',
+        workspace.websiteDomain ? undefined : t('website.notSet'),
       )}
 
-      {row(
-        'description',
-        workspace.description ?? null,
-        <div className={styles.value}>
-          <Input
-            label={t('fact.description')}
-            labelHidden
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            maxLength={2000}
-          />
-        </div>,
-      )}
+      {row('description', workspace.description ?? null, 'business')}
+      {row('address', workspace.address ?? null, 'business')}
+      {row('hours', hoursValue, 'hours')}
 
-      {row(
-        'address',
-        workspace.address ?? null,
-        <div className={styles.value}>
-          <Input
-            label={t('fact.address')}
-            labelHidden
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            maxLength={300}
-          />
-        </div>,
-      )}
+      {/*
+        The business's MAIN language — `primaryLanguage`, what knowledge from
+        the website is written in. Not the language replies go out in (each
+        customer's own, by rule) and not the system language (the tenant's
+        locale). 11d separates all three.
+      */}
+      {row('language', storedLanguage ? languageName(storedLanguage) : null, 'language')}
 
-      {row(
-        'hours',
-        hoursValue,
-        <div className={styles.value}>
-          {/*
-            One grid, one pair of headings, one origin per column.
-
-            Built as seven separate rows it repeated its own headings down the
-            page and the columns drifted rightward, so which pair of times
-            belonged to which day — the only thing this form has to say —
-            stopped being readable.
-
-            The inputs carry `aria-label` rather than visible labels: the
-            column headings name them for a sighted reader, and a label
-            repeated in every cell is what caused the drift.
-          */}
-          <div className={styles.hoursGrid}>
-            <span className={styles.hoursSpacer} />
-            <span className={styles.hoursHeading}>{t('hours.open')}</span>
-            <span className={styles.hoursHeading}>{t('hours.close')}</span>
-
-            {DAY_KEYS.map((day) => (
-              <Fragment key={day}>
-                <label className={styles.hoursDay}>
-                  <input
-                    type="checkbox"
-                    checked={week[day].enabled}
-                    onChange={(e) =>
-                      setWeek({ ...week, [day]: { ...week[day], enabled: e.target.checked } })
-                    }
-                  />
-                  {t(`day.${day}`)}
-                </label>
-                <input
-                  className={styles.hoursInput}
-                  type="time"
-                  aria-label={`${t(`day.${day}`)} — ${t('hours.open')}`}
-                  value={week[day].open ?? ''}
-                  disabled={!week[day].enabled}
-                  onChange={(e) =>
-                    setWeek({ ...week, [day]: { ...week[day], open: e.target.value } })
-                  }
+      {/*
+        11e: the one row that edits in place — two values a person sets once
+        and reads as one line. Enter saves, Esc cancels.
+      */}
+      {editing ? (
+        <div
+          className={styles.rowEditing}
+          data-testid="fact-currencyTimezone"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.stopPropagation();
+              setEditing(false);
+              setNote(null);
+              return;
+            }
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              saveCurrencyTimezone();
+            }
+          }}
+        >
+          <div className={styles.rowEditor}>
+            <div className={styles.label}>{t('fact.currencyTimezone')}</div>
+            <div className={styles.value}>
+              <div className={styles.editFields}>
+                <Input
+                  label={t('currency')}
+                  value={currency}
+                  maxLength={3}
+                  onChange={(e) => setCurrency(e.target.value)}
                 />
-                <input
-                  className={styles.hoursInput}
-                  type="time"
-                  aria-label={`${t(`day.${day}`)} — ${t('hours.close')}`}
-                  value={week[day].close ?? ''}
-                  disabled={!week[day].enabled}
-                  onChange={(e) =>
-                    setWeek({ ...week, [day]: { ...week[day], close: e.target.value } })
-                  }
+                {/*
+                  ★ Searchable by city: the IANA zone name CONTAINS the city.
+                  Still free text underneath — a zone this browser does not
+                  list must not lock a tenant out of saving their own value.
+                */}
+                <Input
+                  label={t('fact.currencyTimezone')}
+                  value={timezone}
+                  list="timezone-options"
+                  onChange={(e) => setTimezone(e.target.value)}
                 />
-              </Fragment>
-            ))}
+                <datalist id="timezone-options" data-testid="timezone-options">
+                  {TIMEZONES.map((zone) => (
+                    <option key={zone} value={zone} />
+                  ))}
+                </datalist>
+              </div>
+            </div>
+            <div className={styles.editActions}>
+              <Button
+                variant="primary"
+                size="sm"
+                data-testid="fact-save-currencyTimezone"
+                onClick={saveCurrencyTimezone}
+                disabled={isPending}
+              >
+                {isPending ? t('saving') : t('save')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditing(false);
+                  setNote(null);
+                }}
+              >
+                {t('cancel')}
+              </Button>
+              {note ? (
+                <span
+                  className={[styles.rowNote, note.quiet ? styles.rowNoteQuiet : '']
+                    .join(' ')
+                    .trim()}
+                  data-testid="fact-note-currencyTimezone"
+                  data-note-kind={note.quiet ? 'success' : 'problem'}
+                >
+                  {note.text}
+                </span>
+              ) : null}
+            </div>
           </div>
-
-          {/*
-            Sunday to Thursday is the Israeli working week, and typing the
-            same two times five times is where a week gets entered wrong.
-            Purely local — it fills the inputs and changes nothing until Save.
-          */}
+        </div>
+      ) : (
+        <div className={styles.row} data-testid="fact-currencyTimezone">
+          <div className={styles.label}>{t('fact.currencyTimezone')}</div>
+          <div
+            className={[styles.value, workspace.currency || workspace.timezone ? '' : styles.unset]
+              .join(' ')
+              .trim()}
+            data-testid="fact-value-currencyTimezone"
+          >
+            {workspace.currency || workspace.timezone
+              ? [workspace.currency ?? t('currencyUnset'), workspace.timezone]
+                  .filter(Boolean)
+                  .join(' · ')
+              : t('unset')}
+          </div>
+          {note?.quiet ? (
+            <span
+              className={styles.rowNoteQuiet}
+              data-testid="fact-note-currencyTimezone"
+              data-note-kind="success"
+            >
+              {note.text}
+            </span>
+          ) : null}
           <button
             type="button"
-            className={styles.hoursCopy}
-            data-testid="hours-copy-sunday"
+            className={styles.edit}
+            data-testid="fact-edit-currencyTimezone"
             onClick={() => {
-              const sun = week.sunday;
-              setWeek({
-                ...week,
-                monday: { ...sun },
-                tuesday: { ...sun },
-                wednesday: { ...sun },
-                thursday: { ...sun },
-              });
-              setCopied(true);
+              setEditing(true);
+              setNote(null);
+              setCurrency(workspace.currency ?? '');
+              setTimezone(workspace.timezone ?? '');
             }}
           >
-            {t('hours.copySunday')}
+            {t('edit')}
           </button>
-          {copied ? (
-            <p className={styles.hoursNote} data-testid="hours-copied">
-              {t('hours.copied')}
-            </p>
-          ) : null}
-
-          {/*
-            ★ TWO THINGS THE DESIGN DRAWS THAT CANNOT BE STORED.
-            ════════════════════════════════════════════════════════════════
-            `+ Split` per day, and a holiday calendar with per-date overrides.
-            `dayScheduleSchema` is `{ enabled, open?, close? }` — one range,
-            one week, and no dates at all.
-
-            Named rather than omitted, the same as the grant expiry on 12e: a
-            missing control is indistinguishable from a control somebody
-            failed to find, and a merchant who closes for lunch needs to know
-            GOTCHA cannot be told that rather than hunting for the setting.
-          */}
-          <p className={styles.hoursAbsent} data-testid="hours-one-range">
-            {t('hours.oneRange')}
-          </p>
-          <p className={styles.hoursAbsent} data-testid="hours-no-holidays">
-            {t('hours.noHolidays')}
-          </p>
-
-          {/*
-            ★ OUTSIDE THESE HOURS — AND THE DESIGN POINTS AT THE WRONG SCREEN.
-            ════════════════════════════════════════════════════════════════
-            The design says "What customers are told outside these hours is
-            set in Studio". There is no second field to go and set: every
-            reference in the platform is to ONE key — `businessHours` in
-            `TenantSetting`. `agents.ts:538` is that key's validator, its PUT
-            and GET are that key's, `workspace.ts:93` serves it, and
-            `ai-bot.service.ts:868` reads
-            `biz.cfg?.outsideHoursHandoffMessage` off `parseBusinessHours` of
-            it. A merchant following the pointer to Studio would change
-            nothing, because there is nothing there to change.
-
-            (I first reported this as two rival fields with one reader. It is
-            one field. The Shopify shape was fresh and I matched on it.)
-
-            ── ★ AND WHY BOTH FIELDS MUST ALWAYS TRAVEL ──
-            The validator defaults them:
-
-              aiOutsideHours:             .optional().default("active")
-              outsideHoursHandoffMessage: .optional().default("")
-
-            and the PUT writes the parsed body wholesale. A Zod `.default()`
-            does not mean "leave it alone" — an OMITTED field is materialised
-            at its default and then WRITTEN. So a client that leaves these out
-            does not preserve them, it overwrites them: the message is cleared
-            and `aiOutsideHours` resets to `active`.
-
-            Which means **a merchant who deliberately silenced the AI overnight
-            has it answering customers at 2am** because some other caller saved
-            a schedule without mentioning it.
-
-            The protection lives entirely here, in the caller. That is a
-            backend defect and it is with Backend; what this screen owes is to
-            keep sending both, which `hoursPatch` does whether or not the form
-            is editing them.
-          */}
-          <p className={styles.hoursSectionHeading}>{t('hours.outsideHeading')}</p>
-          <div className={styles.editFields}>
-            <label className={styles.hoursChoice}>
-              <span className={styles.hoursChoiceLabel}>{t('hours.aiOutsideLabel')}</span>
-              <select
-                className={styles.hoursSelect}
-                data-testid="hours-ai-outside"
-                value={aiOutside}
-                onChange={(e) => setAiOutside(e.target.value === 'silent' ? 'silent' : 'active')}
-              >
-                <option value="active">{t('hours.aiOutside.active')}</option>
-                <option value="silent">{t('hours.aiOutside.silent')}</option>
-              </select>
-            </label>
-            <Input
-              label={t('hours.messageLabel')}
-              value={outsideMsg}
-              maxLength={500}
-              placeholder={t('hours.messagePlaceholder')}
-              hint={t('hours.messageHint')}
-              onChange={(e) => setOutsideMsg(e.target.value)}
-            />
-          </div>
-        </div>,
-      )}
-
-      {/*
-        Language on its own row, because 11d is a dedicated panel and a row
-        that shares a label with Currency has nothing to open it from.
-
-        Two sentences, because they are two settings the design is right to
-        separate: what customers are answered in, and what GOTCHA itself runs
-        in. Only the second is stored here — the first is decided per
-        conversation from the customer's own message, on a prompt rule marked
-        non-negotiable, and this column is never read for it.
-      */}
-      {row(
-        'language',
-        storedLanguage
-          ? `${t('language.replies')} · ${t('language.system', { locale: languageName(storedLanguage) })}`
-          : null,
-        <div className={styles.value}>
-          {/*
-            `fact.language`, not `language`. 11d added `language.system` and
-            `language.replies`, which turned the string `language` into an
-            object — so this label rendered an IntlError from then on, visible
-            only while the row was open, which no test did.
-
-            A key silently becoming a namespace is invisible to tsc, to the
-            locale-parity check (both files gained the same shape), and to any
-            test that never opens the control.
-          */}
-          <Input
-            label={t('fact.language')}
-            value={language}
-            maxLength={8}
-            hint={t('languageNote')}
-            onChange={(e) => setLanguage(e.target.value)}
-          />
-          {/*
-            11d's account of the languages — which arrive, what GOTCHA writes
-            in, what this person sees — opened with the row, not printed under
-            the page. A server panel, handed in.
-          */}
-          {languagePanel}
-        </div>,
-      )}
-
-      {/*
-        Currency and time zone together, as the design has them — two facts a
-        person sets once and reads as one line. They are stored apart
-        (`BusinessProfile.currency` and the hours setting), which is why the
-        row carries no provenance badge: one badge over two fields would be
-        claiming a source for both.
-      */}
-      {row(
-        'currencyTimezone',
-        workspace.currency || workspace.timezone
-          ? [workspace.currency ?? t('currencyUnset'), workspace.timezone]
-              .filter(Boolean)
-              .join(' · ')
-          : null,
-        <div className={styles.value}>
-          <div className={styles.editFields}>
-            <Input
-              label={t('currency')}
-              value={currency}
-              maxLength={3}
-              onChange={(e) => setCurrency(e.target.value)}
-            />
-            {/*
-              ★ "Pickers are searchable (time zone by city)."
-              A datalist over the IANA zones: 418 of them, native, keyboard
-              accessible, and searchable by city because the zone name
-              CONTAINS the city — typing "Jer" finds Asia/Jerusalem.
-
-              Still a free text input underneath, deliberately. The server
-              stores a string and a tenant on a zone this browser's ICU does
-              not list must not be locked out of saving their own value.
-            */}
-            <Input
-              label={t('fact.currencyTimezone')}
-              value={text}
-              list="timezone-options"
-              onChange={(e) => setText(e.target.value)}
-            />
-            <datalist id="timezone-options" data-testid="timezone-options">
-              {TIMEZONES.map((zone) => (
-                <option key={zone} value={zone} />
-              ))}
-            </datalist>
-          </div>
-        </div>,
+        </div>
       )}
     </div>
   );
 }
 
-/** One message per failure, because they need different actions from the reader. */
 function messageFor(
   result: Extract<WriteResult<unknown>, { ok: false }>,
   t: ReturnType<typeof useTranslations<'workspace'>>,
@@ -710,8 +318,6 @@ function messageFor(
   if (result.reason === 'stale') return t('stale');
   if (result.reason === 'no_profile') return t('noProfile');
   if (result.reason === 'invalid') {
-    // The server's own wording, which names the field and the limit. Ours
-    // would be a second, vaguer copy of a message it already wrote.
     return Object.values(result.fields)[0] ?? t('failed');
   }
   return t('failed');

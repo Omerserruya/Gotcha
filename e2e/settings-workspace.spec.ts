@@ -219,8 +219,9 @@ for (const size of SIZES) {
       if (onlyOneProject()) return;
 
       await openWorkspace(page, 'en');
+      // 11b: the row's Edit opens the business drawer (`?panel=business`).
       await page.getByTestId('fact-edit-name').click();
-      await expect(page.getByTestId('fact-save-name')).toBeVisible();
+      await expect(page.getByTestId('drawer-save-business')).toBeVisible();
       await shoot(page, `${size.name}-02-edit-name-en`);
     });
 
@@ -232,7 +233,9 @@ for (const size of SIZES) {
 
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-hours').click();
-      await expect(page.getByTestId('fact-save-hours')).toBeVisible();
+      await expect(page.getByTestId('drawer-save-hours')).toBeVisible();
+      // All seven days, submitted whole.
+      await expect(page.locator('[data-testid^="hours-day-"]')).toHaveCount(7);
 
       /*
        * 11c · what the design draws here and the storage cannot hold.
@@ -242,8 +245,12 @@ for (const size of SIZES) {
        * calendar are named rather than omitted: a missing control is
        * indistinguishable from one somebody failed to find.
        */
-      await expect(page.getByTestId('hours-one-range')).toHaveText(/split shift/i);
-      await expect(page.getByTestId('hours-no-holidays')).toHaveText(/no holiday calendar/i);
+      // Drawn and not live, with why on their titles (02: states, not prose).
+      await expect(page.getByTestId('hours-one-range')).toHaveAttribute('title', /split shift/i);
+      await expect(page.getByTestId('hours-no-holidays')).toHaveAttribute(
+        'title',
+        /no holiday calendar/i,
+      );
 
       // And the outside-hours pair, which the design sends to Studio and
       // which `ai-bot.service.ts` actually reads from THIS setting.
@@ -286,23 +293,14 @@ for (const size of SIZES) {
 
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-language').click();
-      await expect(page.getByTestId('fact-save-language')).toBeVisible();
+      await expect(page.getByTestId('drawer-save-language')).toBeVisible();
 
-      /*
-       * The accessible name. An empty label leaves the input without one, so
-       * this query fails outright rather than matching nothing.
-       */
-      await expect(page.getByLabel('Language', { exact: true })).toBeVisible();
-
-      // And the hint, which is long and specific enough that only the real
-      // message satisfies it.
-      const row = page.getByTestId('fact-language');
-      await expect(row).toHaveText(/One language is stored/i);
-      await expect(row).toHaveText(/knowledge documents are tagged/i);
-
-      // Second line, free: catches the dev-mode fallback if this is ever run
-      // against a dev server. NOT the thing standing guard.
-      await expect(row).not.toHaveText(/⟪|⟫/);
+      // POSITIVE, so the production build's empty fallback fails it: the
+      // main language is a NAME, and both of 02's cards carry their titles.
+      await expect(page.getByTestId('language-main')).toBeVisible();
+      await expect(page.getByTestId('language-customers')).toContainText('Speaking to customers');
+      await expect(page.getByTestId('language-system')).toContainText('system language');
+      await expect(page.getByTestId('language-drawer')).not.toHaveText(/⟪|⟫/);
 
       await shoot(page, `${size.name}-04-edit-language-en`);
     });
@@ -387,6 +385,7 @@ for (const size of SIZES) {
 
       await openWorkspace(page, 'en');
       await page.getByTestId('fact-edit-name').click();
+      await expect(page.getByTestId('drawer-save-business')).toBeVisible();
 
       /*
        * Someone else saves first. Through the app's own BFF, so this carries
@@ -500,12 +499,12 @@ for (const size of SIZES) {
         'the out-of-band write must succeed for this test to mean anything',
       ).toBe(true);
 
-      await page.getByTestId('fact-save-name').click();
+      await page.getByTestId('drawer-save-business').click();
 
       // Not merely "a message appeared". A successful save also produces a
       // note, so asserting on presence alone would pass if the conflict were
       // never detected — which is the whole thing this shot exists to prove.
-      const note = page.getByTestId('fact-note-name');
+      const note = page.getByTestId('business-problem');
       await expect(note).toBeVisible({ timeout: 15_000 });
       await expect(note).toHaveAttribute('data-note-kind', 'problem');
       await shoot(page, `${size.name}-09-stale-write-en`);
@@ -684,27 +683,19 @@ for (const size of SIZES) {
 
       await openWorkspace(page, 'en');
 
-      const panel = page.getByTestId('languages');
+      await page.goto('/en/settings/workspace?panel=language');
+      const panel = page.getByTestId('language-drawer');
       await expect(panel).toBeVisible();
 
-      await expect(page.getByTestId('languages-replies')).toHaveText(
-        /in the language they wrote in/i,
-      );
-
-      // The mix, or an honest account of why there is none. Both are correct
-      // outcomes; silence is not.
-      const mix = page.getByTestId('languages-mix');
-      const none = page.getByTestId('languages-none');
-      const unavailable = page.getByTestId('languages-unavailable');
-      await expect(mix.or(none).or(unavailable).first()).toBeVisible();
-
-      // What GOTCHA writes in is a different setting from what this person
-      // reads, and both are stated.
-      await expect(page.getByTestId('languages-system')).toBeVisible();
-      await expect(page.getByTestId('languages-mine')).toBeVisible();
-
-      // And the setting that does not exist is named rather than omitted.
-      await expect(page.getByTestId('languages-not-storable')).toHaveText(/not a setting yet/i);
+      // Replies follow the customer: a rule, drawn on and not live.
+      await expect(panel).toContainText("Reply in the customer's language");
+      // The mix as "also answers in", or "—" when it could not be read.
+      await expect(page.getByTestId('language-also')).not.toHaveText('');
+      // What GOTCHA writes in, and what this person reads, both stated.
+      await expect(page.getByTestId('language-system')).toBeVisible();
+      await expect(page.getByTestId('language-mine')).toBeVisible();
+      // And the setting that does not exist is drawn, not live.
+      await expect(page.getByTestId('language-other')).toHaveAttribute('aria-disabled', 'true');
 
       await shoot(page, `${size.name}-15-languages`);
     });

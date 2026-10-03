@@ -42,7 +42,13 @@
     },
     "messageLabel": "What customers are told",
     "messagePlaceholder": "We're closed now — someone will reply when we open.",
-    "messageHint": "Left empty, GOTCHA says when you next open, worked out from the week above."
+    "messageHint": "Left empty, GOTCHA says when you next open, worked out from the week above.",
+    "closedDay": "Closed",
+    "split": "+ Split",
+    "holidays": "Holidays and special days",
+    "holidaysAuto": "Add Israeli holidays automatically",
+    "addDay": "+ Add a special day",
+    "save": "Save hours"
   },
   "day": {
     "sunday": "Sunday",
@@ -164,5 +170,46 @@
     },
     "failed": "The scan could not run. Nothing was changed.",
     "legend": "From your website"
+  },
+  "business": {
+    "industry": "Industry",
+    "country": "Country",
+    "note": "Note for visitors",
+    "notHere": "Set from your website and onboarding; it can't be changed here yet.",
+    "noNote": "GOTCHA has no field for a note to visitors yet.",
+    "legend": "updates when you scan again. Anything you type yourself stays as it is.",
+    "save": "Save changes",
+    "title": "Business & website",
+    "line": "Changes reach every channel within a minute."
+  },
+  "hoursDrawer": {
+    "title": "Opening hours",
+    "line": "When a person can pick up."
+  },
+  "languageDrawer": {
+    "title": "Language",
+    "line": "Two separate settings: the languages you speak to customers, and the language GOTCHA uses with your team.",
+    "customers": "Speaking to customers",
+    "main": "Main language",
+    "mainHint": "Your business's main language — what GOTCHA writes knowledge from your website in.",
+    "also": "Also answers in",
+    "alsoHint": "These are the languages customers actually wrote in. Adding one by hand comes next.",
+    "add": "+ Add",
+    "replies": "Reply in the customer's language",
+    "repliesHint": "Always on: replies follow each customer's own language. It's a rule, not a setting.",
+    "other": "Any other language",
+    "otherMain": "Reply in {language}",
+    "otherTheirs": "Reply in theirs anyway",
+    "otherPerson": "Hand to a person",
+    "otherHint": "Nothing stores this choice yet.",
+    "hintShare": "{share}% of the last {days} days' conversations were in {language}.",
+    "hintCount": "{count} of the last {days} days' {total} conversations were in {language}.",
+    "system": "Inside GOTCHA — system language",
+    "systemLabel": "System language",
+    "systemHint": "Set for the whole workspace; it can't be changed here yet.",
+    "translate": "Translate customer messages into {language} for your team",
+    "translateHint": "Nothing stores this choice yet.",
+    "mine": "Your own interface language is {language} — that one is in your profile.",
+    "mineUnknown": "Your own interface language is in your profile."
   }
 }

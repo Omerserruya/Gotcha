@@ -700,3 +700,226 @@
     display: contents;
   }
 }
+
+@layer features {
+  /* The drawers' Save: 02's dark button. */
+  .saveButton {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .saveButton:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+
+  /* ── 11c · the week: day 92 · switch · opens – closes · + Split ──────── */
+  .weekRows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .weekRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding-block: var(--space-6);
+  }
+
+  .weekDay {
+    flex: none;
+    inline-size: 92px;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .weekRow[data-open='no'] .weekDay {
+    color: var(--text-subtle);
+  }
+
+  .weekSwitch {
+    display: flex;
+    cursor: pointer;
+  }
+
+  /* 02's switch, as drawn: ink with its knob at the end when on. */
+  .weekPill {
+    position: relative;
+    flex: none;
+    inline-size: 32px;
+    block-size: 18px;
+    border-radius: 9px;
+    background-color: var(--border-strong);
+  }
+
+  .weekPill::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: var(--radius-round);
+    background-color: var(--panel-field);
+  }
+
+  .weekSwitch:has(input:checked) .weekPill,
+  .weekPill[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .weekSwitch:has(input:checked) .weekPill::after,
+  .weekPill[data-on='yes']::after {
+    inset-inline-start: 16px;
+  }
+
+  .weekSwitch:has(input:focus-visible) .weekPill {
+    outline: var(--focus-ring-width) solid var(--action-base);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .weekRange {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .weekTime {
+    inline-size: 76px;
+    padding: 7px var(--space-8);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .weekDash {
+    font-size: 16px;
+    color: var(--text-faint);
+  }
+
+  .weekClosed {
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .weekSplit {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-faint);
+    cursor: not-allowed;
+  }
+
+  .weekAbsent {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+  }
+
+  /* ── 11d · two cards ──────────────────────────────────────────────────── */
+  .langCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .langChips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-6);
+    min-block-size: 38px;
+  }
+
+  .langChip {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-10);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-footer);
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+  }
+
+  .langNone {
+    color: var(--text-faint);
+  }
+
+  .langAdd {
+    padding-block: 5px;
+    padding-inline: var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
+
+  .langSwitchRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .langOther {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .langOtherLabel {
+    inline-size: 130px;
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
+
+  .langSegmented {
+    display: inline-flex;
+    gap: var(--space-2);
+    padding: 3px;
+    border-radius: var(--radius-item);
+    background-color: var(--panel-footer);
+    cursor: not-allowed;
+  }
+
+  .langSegment {
+    padding-block: var(--space-6);
+    padding-inline: var(--space-11);
+    border-radius: 7px;
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .langHint {
+    margin: 0;
+    padding-block: var(--space-10);
+    padding-inline: 13px;
+    border-radius: 10px;
+    background-color: var(--panel-footer);
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
+}

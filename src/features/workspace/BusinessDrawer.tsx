@@ -1,0 +1,170 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+import { useState, useTransition } from 'react';
+
+import { displayHost, fieldOrigin, type Workspace } from '@/api/contracts/workspace';
+import { Link } from '@/i18n/navigation';
+import drawer from '@/design-system/styles/drawer.module.css';
+
+import { saveWorkspaceFacts } from './actions';
+import styles from './Workspace.module.css';
+
+/**
+ * 11b, measured: the business's facts as one form in a drawer — opened from
+ * the Website, What you sell and Address rows.
+ *
+ * `PATCH /workspace` takes name, description and address here. The website,
+ * industry and country come from the scan and onboarding and are not on its
+ * allow-list, and nothing stores a note for visitors: those are drawn, not
+ * live, and say so on their titles.
+ */
+export function BusinessDrawer({ workspace }: { readonly workspace: Workspace }) {
+  const t = useTranslations('workspace');
+  const [name, setName] = useState(workspace.name ?? '');
+  const [description, setDescription] = useState(workspace.description ?? '');
+  const [address, setAddress] = useState(workspace.address ?? '');
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const fromWebsite = (field: string) =>
+    fieldOrigin(workspace, field) === 'scan' ? (
+      <span className={styles.fromWebsite}>{t('provenance.origin.scan')}</span>
+    ) : null;
+
+  function save() {
+    setProblem(null);
+    setSaved(false);
+    startTransition(async () => {
+      const result = await saveWorkspaceFacts(
+        { name: name.trim(), description: description.trim(), address: address.trim() || null },
+        workspace.updatedAt ?? null,
+      );
+      if (result.ok) setSaved(true);
+      else
+        setProblem(
+          result.reason === 'stale'
+            ? t('stale')
+            : result.reason === 'invalid'
+              ? (Object.values(result.fields)[0] ?? t('failed'))
+              : t('failed'),
+        );
+    });
+  }
+
+  return (
+    <>
+      <div className={drawer.drawerBody} data-testid="business-drawer">
+        <div className={drawer.field}>
+          <span className={drawer.fieldLabel}>{t('fact.website')}</span>
+          <span
+            className={drawer.box}
+            aria-disabled="true"
+            title={t('website.readOnly')}
+            data-testid="business-website"
+          >
+            {workspace.websiteDomain ? displayHost(workspace.websiteDomain) : '—'}
+          </span>
+        </div>
+
+        <label className={drawer.field}>
+          <span className={drawer.fieldLabel}>
+            {t('fact.name')}
+            {fromWebsite('organizationName')}
+          </span>
+          <input
+            className={drawer.box}
+            value={name}
+            maxLength={200}
+            data-testid="business-name"
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+
+        <label className={drawer.field}>
+          <span className={drawer.fieldLabel}>
+            {t('fact.description')}
+            {fromWebsite('businessDescription')}
+          </span>
+          <textarea
+            className={drawer.box}
+            value={description}
+            maxLength={2000}
+            data-testid="business-description"
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </label>
+
+        <div className={drawer.pair}>
+          <div className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('business.industry')}</span>
+            <span className={drawer.box} aria-disabled="true" title={t('business.notHere')}>
+              {workspace.industry || '—'}
+            </span>
+          </div>
+          <div className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('business.country')}</span>
+            <span className={drawer.box} aria-disabled="true" title={t('business.notHere')}>
+              {workspace.country || '—'}
+            </span>
+          </div>
+        </div>
+
+        <label className={drawer.field}>
+          <span className={drawer.fieldLabel}>
+            {t('fact.address')}
+            {fromWebsite('address')}
+          </span>
+          <input
+            className={drawer.box}
+            value={address}
+            maxLength={300}
+            data-testid="business-address"
+            onChange={(e) => setAddress(e.target.value)}
+          />
+        </label>
+
+        <div className={drawer.field}>
+          <span className={drawer.fieldLabel}>{t('business.note')}</span>
+          <span
+            className={drawer.box}
+            aria-disabled="true"
+            title={t('business.noNote')}
+            data-testid="business-note"
+          >
+            —
+          </span>
+        </div>
+
+        <p className={drawer.hint}>
+          <span className={styles.fromWebsite}>{t('provenance.origin.scan')}</span>{' '}
+          {t('business.legend')}
+        </p>
+      </div>
+      <footer className={drawer.drawerFoot}>
+        <button
+          type="button"
+          className={styles.saveButton}
+          data-testid="drawer-save-business"
+          disabled={isPending}
+          onClick={save}
+        >
+          {isPending ? t('saving') : t('business.save')}
+        </button>
+        <Link href="/settings/workspace" className={drawer.drawerCancel}>
+          {t('cancel')}
+        </Link>
+        {problem ? (
+          <span className={styles.rowNote} data-testid="business-problem" data-note-kind="problem">
+            {problem}
+          </span>
+        ) : saved ? (
+          <span className={styles.rowNoteQuiet} data-testid="business-saved">
+            {t('saved')}
+          </span>
+        ) : null}
+      </footer>
+    </>
+  );
+}
