@@ -1,8 +1,10 @@
 import { getTranslations } from 'next-intl/server';
 
+import type { Capability } from '@/api/contracts/capabilities';
 import { splitCatalogue, type Integration } from '@/api/contracts/integrations';
 
 import { IntegrationFinder } from './IntegrationFinder';
+import { actionCounts } from './select-system';
 import styles from './Capabilities.module.css';
 
 /**
@@ -37,9 +39,15 @@ import styles from './Capabilities.module.css';
  */
 export async function IntegrationRail({
   integrations,
+  capabilities = [],
+  selected = null,
 }: {
   /** `null` when the read failed. Never an empty catalogue. */
   readonly integrations: readonly Integration[] | null;
+  /** To count each connected system's actions, and the built-in ones. */
+  readonly capabilities?: readonly Capability[] | null;
+  /** `builtin`, a slug, or null. */
+  readonly selected?: string | null;
 }) {
   const t = await getTranslations('capabilities');
 
@@ -55,7 +63,13 @@ export async function IntegrationRail({
 
   return (
     <aside className={styles.rail} data-testid="integration-rail">
-      <IntegrationFinder connected={connected} available={available} />
+      <IntegrationFinder
+        connected={connected}
+        available={available}
+        actionCounts={actionCounts(capabilities ?? [])}
+        builtInCount={(capabilities ?? []).filter((c) => !c.integration).length}
+        selected={selected}
+      />
     </aside>
   );
 }

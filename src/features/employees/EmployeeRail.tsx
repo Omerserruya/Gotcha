@@ -62,9 +62,13 @@ export async function EmployeeRail({
           </Link>
         );
       })}
-      {/* A fact about GOTCHA rather than any one employee, at the list's foot. */}
-      <p className={styles.listFoot} data-testid="cannot-fire">
-        {t('cannotFire')}
+      {/*
+        02's foot, as far as it is true: knowledge is attached PER EMPLOYEE
+        (each has its own sources), so a change reaches every employee that
+        reads that source — not "everyone".
+      */}
+      <p className={styles.listFoot} data-testid="list-foot">
+        {t('rail.foot')}
       </p>
     </>
   );

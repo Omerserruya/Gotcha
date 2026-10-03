@@ -2,6 +2,8 @@ import { getTranslations } from 'next-intl/server';
 
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
+import { selectSystem } from '@/features/capabilities/select-system';
+import { SystemHead } from '@/features/capabilities/SystemHead';
 import styles from '@/features/capabilities/Capabilities.module.css';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
 import { StudioSplit } from '@/features/studio/StudioSplit';
@@ -34,9 +36,18 @@ import { pageMetadata } from '@/shell/page-metadata';
  * **No numeric limits.** The design promises *"permission state and numeric
  * limits"*; no row carries one.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly system?: string }>;
+} = {}) {
   const t = await getTranslations('capabilities');
   const { capabilities, usage, integrations } = await loadCapabilities();
+  const { integration, actions, selected } = selectSystem(
+    (await searchParams)?.system,
+    capabilities ?? [],
+    integrations ?? [],
+  );
 
   /*
     10, measured: 02's header — the title over a line that wraps at 720, no
@@ -59,7 +70,13 @@ export default async function Page() {
         label={t('rail.label')}
         listWidth="narrow"
         detailPad="wide"
-        list={<IntegrationRail integrations={integrations} />}
+        list={
+          <IntegrationRail
+            integrations={integrations}
+            capabilities={capabilities}
+            selected={selected}
+          />
+        }
         detail={
           capabilities === null ? (
             <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
@@ -69,7 +86,10 @@ export default async function Page() {
               <p className={styles.emptyBody}>{t('noneBody')}</p>
             </div>
           ) : (
-            <CapabilityScreen capabilities={capabilities} usage={usage} />
+            <>
+              <SystemHead integration={integration} capabilities={actions} usage={usage} />
+              <CapabilityScreen capabilities={actions} usage={usage} />
+            </>
           )
         }
       />

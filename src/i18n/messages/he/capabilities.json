@@ -74,7 +74,13 @@
     "searchNone": "שום דבר כאן לא תואם ל־„{term}”.",
     "connectedOf": "מחוברות · {count} מתוך {total}",
     "availableOf": "זמינות · {count} מתוך {total}",
-    "label": "מערכות"
+    "label": "מערכות",
+    "builtIn": "מובנה ב-GOTCHA",
+    "actions": "{count, plural, one {פעולה אחת} other {# פעולות}}",
+    "categories": "קטגוריות",
+    "all": "הכול",
+    "connect": "חיבור",
+    "connectNotHere": "חיבור מכאן יגיע בהמשך — היום מחברים מערכות בליבת העסק."
   },
   "choice": {
     "label": "מה GOTCHA רשאית לעשות עם זה",
@@ -92,5 +98,12 @@
       "forbidden": "אין לכם הרשאה לשנות מה GOTCHA רשאית לעשות.",
       "failed": "זה לא נשמר. נסו שוב."
     }
-  }
+  },
+  "system": {
+    "used": "{count, plural, one {שימוש אחד} other {{n} שימושים}} ב-30 הימים האחרונים",
+    "actions": "{count, plural, one {פעולה אחת} other {# פעולות}}",
+    "narrow": "צמצום לעובד אחד",
+    "narrowNotYet": "כל עובדי ה-AI חולקים את ההגדרות האלה; עדיין אי אפשר לצמצם לאחד."
+  },
+  "suggestNone": "עדיין אין מה להציע לשנות."
 }

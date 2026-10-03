@@ -1,7 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
 import {
-  actsAlone,
   capabilityStance,
   groupByCategory,
   hasOwnWords,
@@ -43,7 +42,6 @@ export async function CapabilityScreen({
 }) {
   const t = await getTranslations('capabilities');
 
-  const alone = actsAlone(capabilities);
   const groups = groupByCategory(capabilities);
 
   const allDefault = isUniform(capabilities, (c) => c.isDefault) && capabilities[0]?.isDefault;
@@ -57,28 +55,6 @@ export async function CapabilityScreen({
 
   return (
     <div className={styles.screen} data-testid="capability-screen">
-      {/*
-        The headline a reader needs first: how many act without asking. The
-        design's three settings are real — "never" is disabled, "ask me
-        first" is requiresApproval, "on its own" is neither.
-      */}
-      <p className={styles.summary} data-testid="acts-alone">
-        {t('summary', { alone: alone.length, total: capabilities.length })}
-      </p>
-
-      {/*
-        Four facts that are the same on every row. Stated once rather than
-        painted as seventeen separate settings.
-      */}
-      <ul className={styles.uniform} data-testid="uniform-facts">
-        {allDefault ? <li data-testid="all-default">{t('uniform.allDefault')}</li> : null}
-        {noEditing ? <li data-testid="no-editing">{t('uniform.noEditing')}</li> : null}
-        {sameExpiry !== null ? (
-          <li data-testid="expiry">{t('uniform.expiry', { minutes: sameExpiry })}</li>
-        ) : null}
-        {noApprover ? <li data-testid="no-approver">{t('uniform.noApprover')}</li> : null}
-      </ul>
-
       {groups.map((group) => (
         <section
           key={group.category}
@@ -198,6 +174,26 @@ export async function CapabilityScreen({
           </ul>
         </section>
       ))}
+      {/*
+        02's violet card proposes a change ("You've approved 11 refunds… raise
+        to ₪200"). Nothing proposes one yet: drawn in its shape.
+      */}
+      <section className={styles.suggest} data-testid="capability-suggest">
+        <p className={styles.suggestBody}>{t('suggestNone')}</p>
+      </section>
+
+      {/*
+        Four facts that are the same on every row. Stated once rather than
+        painted as seventeen separate settings.
+      */}
+      <ul className={styles.uniform} data-testid="uniform-facts">
+        {allDefault ? <li data-testid="all-default">{t('uniform.allDefault')}</li> : null}
+        {noEditing ? <li data-testid="no-editing">{t('uniform.noEditing')}</li> : null}
+        {sameExpiry !== null ? (
+          <li data-testid="expiry">{t('uniform.expiry', { minutes: sameExpiry })}</li>
+        ) : null}
+        {noApprover ? <li data-testid="no-approver">{t('uniform.noApprover')}</li> : null}
+      </ul>
     </div>
   );
 }

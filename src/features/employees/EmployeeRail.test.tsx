@@ -57,3 +57,12 @@ describe('★ 07’s list: a row per employee', () => {
     expect(screen.getByTestId('rail-b')).toHaveAttribute('href', '?employee=b');
   });
 });
+
+describe('★ the list’s foot is 02’s sentence, as far as it is true', () => {
+  it('says knowledge reaches every employee that READS it — not "everyone"', async () => {
+    render(await EmployeeRail({ employees: [employee({})], selectedId: 'a' }));
+    const foot = screen.getByTestId('list-foot');
+    expect(foot).toHaveTextContent('every employee that reads it learns it');
+    expect(foot).not.toHaveTextContent(/everyone/i);
+  });
+});

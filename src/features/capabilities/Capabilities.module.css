@@ -1,108 +1,239 @@
 @layer features {
   /*
-   * Screen 10 · Studio · What GOTCHA is allowed to do.
+   * Screen 10 · Studio · What GOTCHA is allowed to do — measured.
    *
    * Grouped by CATEGORY, which is stored, and never by `riskGroup`, which is
    * a regex over the tool's name with a catch-all fallback — grouping by it
    * would render "matched no pattern" as "create/update risk".
+   *
+   * 02 sets no line-height anywhere on this screen.
    */
 
   .screen {
     display: flex;
     flex-direction: column;
-    gap: var(--space-20);
+    gap: var(--space-16);
+    line-height: normal;
   }
 
-  /*
-   * How many act without asking. The first thing a reader wants, and the
-   * only number on this screen that is a real count of a real decision.
-   */
-  .summary {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-body-lg);
-    line-height: var(--line-height-snug);
-  }
-
-  /*
-   * The four facts that are identical on every row. Said once, as a list of
-   * statements — seventeen identical toggles would read as seventeen
-   * decisions somebody made rather than one default nobody has changed.
-   */
-  .uniform {
-    list-style: none;
-    margin: 0;
-    padding-block: var(--space-14);
-    padding-inline: var(--space-16);
+  /* ── The selected system's header: a 38px tile, 16/600, state on the right ── */
+  .systemHead {
     display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    line-height: normal;
+  }
+
+  .systemTile {
+    flex: none;
+    inline-size: 38px;
+    block-size: 38px;
+    border-radius: 10px;
+    background-color: var(--border-subtle);
+  }
+
+  .systemTitle {
+    display: flex;
+    flex: 1;
     flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .systemName {
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .systemLine {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  .systemActions {
+    display: flex;
+    flex: none;
     gap: var(--space-8);
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
+  }
+
+  /* "Connected · …": the calm green, radius 9, `padding:8px 12px`. */
+  .systemState {
+    padding: var(--space-8) var(--space-12);
+    border-radius: var(--radius-item);
+    background-color: var(--signal-done-surface);
+    font-size: var(--font-size-label);
+    color: var(--signal-done-text);
+  }
+
+  .systemState:not([data-state='CONNECTED']) {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .systemNarrow {
+    padding: var(--space-8) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-item);
+    font-size: var(--font-size-label);
     color: var(--text-body);
-    background-color: var(--panel-inset);
-    border-radius: var(--radius-card);
+    cursor: default;
   }
 
+  /* ── A group: one white card, its mono head on `#F5F2EC` ── */
   .group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
   }
 
   .groupHeading {
     margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 500;
+    padding: 11px 18px;
+    background-color: var(--table-head-surface);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
   }
 
   .capabilities {
-    list-style: none;
     margin: 0;
     padding: 0;
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    overflow: hidden;
+    list-style: none;
   }
 
+  /* A row: what it is over how it ran, the control on the right. */
   .capability {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-8);
-    padding-block: var(--space-10);
-    padding-inline: var(--space-16);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-16);
+    row-gap: var(--space-4);
+    align-items: center;
+    padding: 13px 18px;
   }
 
   .capability + .capability {
-    border-block-start: var(--border-width-thin) solid var(--row-divider);
+    border-block-start: 1px solid var(--row-divider);
   }
 
   .what {
-    font-size: var(--font-size-meta);
-    max-inline-size: var(--size-reading);
+    grid-column: 1;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
   }
 
-  .stance {
-    flex: none;
+  /* How often it has run. Quiet — evidence beside a setting, not a headline. */
+  .used {
+    grid-column: 1;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .choice,
+  .blocked {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  /*
+   * ★ THE FOURTH STATE. Not styled as an error — nothing is broken and the
+   * admin did nothing wrong. It is a repair somebody else has to perform,
+   * and it reads as an instruction rather than as an alarm.
+   */
+  .blocked {
+    max-inline-size: 260px;
+    font-size: var(--font-size-caption);
+    text-align: end;
+    color: var(--text-muted);
+  }
+
+  /* A disconnected provider is the one a merchant can act on themselves. */
+  .blocked[data-reason='integration_disconnected'] {
+    color: var(--intent-urgent-text);
+  }
+
+  /*
+   * Do it / Ask me / Never — 02's segmented control: `#F3F0EA`, radius 8,
+   * `padding:3px`, gap 3; the stored one dark. Dark, not green: `never` is
+   * as correct a state as `do it`, and a colour would congratulate whichever
+   * one an admin happened to have.
+   */
+  .choice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-4);
+  }
+
+  .choiceRow {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    border-radius: var(--space-8);
+    background-color: var(--panel-inset);
+  }
+
+  .choiceButton {
+    padding: 5px 11px;
+    border-radius: 6px;
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
 
-  /*
-   * An action GOTCHA takes on its own is the one worth noticing on a screen
-   * about what it is allowed to do.
-   */
-  .capability[data-stance='on_its_own'] .stance {
-    color: var(--intent-opportunity-text);
-    font-weight: 500;
+  .choiceButton[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
   }
 
-  .capability[data-stance='never'] .stance {
-    color: var(--intent-blocked-text);
+  .choiceNote {
+    margin: 0;
+    max-inline-size: 260px;
+    font-size: var(--font-size-micro);
+    text-align: end;
+    color: var(--text-muted);
+  }
+
+  /* A stored state the ceiling would now forbid, and a failed write. */
+  .choiceWarn {
+    margin: 0;
+    max-inline-size: 260px;
+    font-size: var(--font-size-micro);
+    text-align: end;
+    color: var(--intent-urgent-text);
+  }
+
+  /* 02's violet card: `padding:15px 18px`, radius 14. */
+  .suggest {
+    padding: 15px 18px;
+    border: 1px solid var(--ai-card-edge);
+    border-radius: var(--radius-card);
+    background-color: var(--ai-card-surface);
+  }
+
+  .suggestBody {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--ai-card-text);
+  }
+
+  /*
+   * The facts identical on every row, said once — seventeen identical
+   * toggles would read as seventeen decisions. Not in 02: kept, quiet, at
+   * the foot.
+   */
+  .uniform {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
   }
 
   /* ── Nothing available ───────────────────────────────────────────────── */
@@ -115,7 +246,7 @@
   .emptyLead {
     margin: 0;
     font-size: var(--font-size-body-lg);
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
   }
 
   .emptyBody {
@@ -126,153 +257,170 @@
     color: var(--text-body);
   }
 
-  /*
-   * ★ THE FOURTH STATE. Not styled as an error — nothing is broken and the
-   * admin did nothing wrong. It is a repair somebody else has to perform,
-   * and it reads as an instruction rather than as an alarm.
-   */
-  .blocked {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-  }
-
-  /* A disconnected provider is the one a merchant can act on themselves. */
-  .blocked[data-reason='integration_disconnected'] {
-    color: var(--intent-urgent-text);
-  }
-
-  /* How often it has run. Quiet — evidence beside a setting, not a headline. */
-  .used {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-  }
-
-  /* ── The catalogue rail: connected on top, available below. ── */
-
+  /* ── The rail (290): a search, CONNECTED, AVAILABLE ── */
   .rail {
     display: flex;
     flex-direction: column;
-    gap: var(--space-16);
+    gap: var(--space-4);
+    line-height: normal;
   }
 
-  .railHeading {
-    margin: 0 0 var(--space-8);
-    font-size: var(--font-size-caption);
+  .railSearch {
+    margin-block-end: var(--space-14);
+  }
+
+  .railSearchInput {
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding: var(--space-8) 11px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-item);
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .railSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .railHeading,
+  .railHeadingRule {
+    margin: 0;
+    padding: 0 var(--space-10) var(--space-8);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
+    color: var(--text-subtle);
   }
 
-  .railGroupHeading {
-    margin: var(--space-12) 0 var(--space-4);
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
+  /* AVAILABLE starts a new block: a rule above, `padding:14px 10px 8px`. */
+  .railHeadingRule {
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-14);
+    border-block-start: 1px solid var(--border-subtle);
   }
 
   .railList {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: 2px;
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
-  .railItem {
+  /* A connected row: radius 9, `padding:9px 11px`, gap 10; selected white. */
+  .railRow,
+  .railRowStatic {
     display: flex;
-    justify-content: space-between;
-    gap: var(--space-8);
+    align-items: center;
+    gap: var(--space-10);
+    padding: var(--space-9) 11px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-item);
+    color: inherit;
+    text-decoration: none;
   }
 
-  /* The platform s own word for the connection state, not our reading of it. */
+  .railRowStatic {
+    padding-block: var(--space-8);
+  }
+
+  .railRow[aria-current='page'] {
+    border-color: var(--border-default);
+    background-color: var(--panel-field);
+  }
+
+  .railTile {
+    flex: none;
+    inline-size: 22px;
+    block-size: 22px;
+    border-radius: 6px;
+    background-color: var(--border-subtle);
+  }
+
+  .railName {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-body);
+  }
+
+  .railRow[aria-current='page'] .railName {
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .railNameStack {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 1px;
+    min-inline-size: 0;
+  }
+
+  .railSub {
+    overflow: hidden;
+    font-size: var(--font-size-counter);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-subtle);
+  }
+
+  .railCount,
   .railState {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
   }
 
   .railState[data-state='ERROR'] {
     color: var(--intent-urgent-text);
   }
 
+  /* "Connect": outline, radius 7, `padding:4px 9px`, 11px. */
+  .railConnect {
+    flex: none;
+    padding: var(--space-4) var(--space-9);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    font-size: var(--font-size-micro);
+    color: var(--text-primary);
+    cursor: default;
+  }
+
+  .railChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    padding: 0 var(--space-4) var(--space-8);
+  }
+
+  .railChip {
+    padding: var(--space-4) var(--space-9);
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-micro);
+    color: var(--text-body);
+  }
+
+  .railChip[aria-pressed='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
   .railNote {
     margin: 0;
+    padding: 0 var(--space-10);
     font-size: var(--font-size-caption);
     color: var(--text-muted);
-  }
-
-  /*
-   * The three-state control. Nothing here styles "Do it" as the preferred
-   * answer: on most tools it is not even offered, and on the rest it is a
-   * decision rather than a default.
-   */
-
-  .choice {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .choiceRow {
-    display: flex;
-    gap: var(--space-4);
-  }
-
-  .choiceButton {
-    font-size: var(--font-size-caption);
-  }
-
-  /*
-   * The stored choice. Neutral rather than approving: `never` is as correct a
-   * state as `do_it`, and a green "selected" would congratulate an admin for
-   * whichever one they happened to have.
-   *
-   * Was `--intent-selected-surface` / `--intent-selected-edge`, neither of
-   * which exists — so the fill was dropped entirely and the edge fell back to
-   * `currentColor`. The edge is unchanged in effect; the fill is new, and it
-   * is what makes the current choice legible at a glance rather than by
-   * comparing border darkness.
-   */
-  .choiceButton[data-current='yes'] {
-    background: var(--intent-neutral-surface);
-    border-color: var(--action-base);
-  }
-
-  .choiceNote {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-  }
-
-  /* A stored state the ceiling would now forbid, and a failed write. */
-  .choiceWarn {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--intent-urgent-text);
-  }
-}
-
-@layer features {
-  .railSearch {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .railSearchLabel {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  .railSearchInput {
-    inline-size: 100%;
-    min-inline-size: 0;
-    padding-block: var(--space-8);
-    padding-inline: var(--space-12);
-    font: inherit;
-    font-size: var(--font-size-meta);
-    color: var(--text-primary);
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-control);
   }
 }

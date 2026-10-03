@@ -1,13 +1,29 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createTranslator, NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { capabilitySchema } from '@/api/contracts/capabilities';
 import { integrationSchema, type Integration } from '@/api/contracts/integrations';
 import messages from '@/i18n/messages/en/capabilities.json';
 
 import { IntegrationRail } from './IntegrationRail';
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: { query: { system: string } };
+    children: ReactNode;
+  }) => (
+    <a href={`?system=${href.query.system}`} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'capabilities') =>
     createTranslator({ locale: 'en', messages: { capabilities: messages }, namespace }),
@@ -107,10 +123,29 @@ describe('★★ the list is whatever the table holds', () => {
     expect(screen.getByTestId('rail-available')).toHaveTextContent(/Shipping/);
   });
 
-  it('★ an entry with no category keeps its own group rather than being assigned one', async () => {
+  it('★ an entry with no category is not assigned one — no chip, no label', async () => {
     // Inventing a category is how a filter starts lying about what it holds.
-    await show([entry({ slug: 'z', name: 'Z', category: null })]);
-    expect(screen.getByTestId('rail-available')).toHaveTextContent(/Everything else/i);
+    await show([
+      entry({ slug: 'a', name: 'A', category: 'ECOMMERCE' }),
+      entry({ slug: 'b', name: 'B', category: 'CRM' }),
+      entry({ slug: 'z', name: 'Z', category: null, description: null }),
+    ]);
+    const chips = screen.getAllByRole('button').map((b) => b.textContent);
+    expect(chips).toEqual(['All', 'Ecommerce', 'CRM']);
+    expect(screen.getByTestId('available-z')).toHaveTextContent(/^Z/);
+    expect(screen.getByTestId('available-z')).not.toHaveTextContent(/Everything else/i);
+  });
+
+  it('★ a category chip shows that category only; pressing it again shows all', async () => {
+    await show([
+      entry({ slug: 'a', name: 'A', category: 'ECOMMERCE' }),
+      entry({ slug: 'b', name: 'B', category: 'CRM' }),
+    ]);
+    await userEvent.click(screen.getByTestId('category-CRM'));
+    expect(screen.queryByTestId('available-a')).toBeNull();
+    expect(screen.getByTestId('available-b')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('category-CRM'));
+    expect(screen.getByTestId('available-a')).toBeInTheDocument();
   });
 
   it('★ a failed read is not an empty catalogue', async () => {
@@ -210,8 +245,8 @@ describe('★★ finding one of seventeen', () => {
     // An empty category heading claims the category has nothing in it.
     await show(CATALOGUE);
     await type('shop');
-    expect(screen.getByText('Ecommerce')).toBeInTheDocument();
-    expect(screen.queryByText('Project management')).toBeNull();
+    expect(screen.getByTestId('available-shopify')).toBeInTheDocument();
+    expect(screen.queryByTestId('category-PROJECT_MANAGEMENT')).toBeNull();
   });
 
   it('★ ignores case and surrounding spaces', async () => {
@@ -238,5 +273,54 @@ describe('★★ finding one of seventeen', () => {
     await show(null);
     expect(screen.getByTestId('rail-unavailable')).toBeInTheDocument();
     expect(screen.queryByTestId('integration-search')).toBeNull();
+  });
+});
+
+describe('★★ 10’s rail selects a system', () => {
+  it('a connected row says how many actions it brings, and links to it', async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+        {await IntegrationRail({
+          integrations: [
+            entry({
+              slug: 'shopify',
+              name: 'Shopify',
+              tenantConnection: { id: 'c1', status: 'CONNECTED' },
+            }),
+          ],
+          capabilities: [
+            capabilitySchema.parse({ toolName: 'shopify.a', integration: 'shopify' }),
+            capabilitySchema.parse({ toolName: 'shopify.b', integration: 'shopify' }),
+            capabilitySchema.parse({ toolName: 'send_message', integration: null }),
+          ],
+          selected: 'shopify',
+        })}
+      </NextIntlClientProvider>,
+    );
+    const row = screen.getByTestId('connected-shopify');
+    expect(row).toHaveTextContent('2 actions');
+    expect(row).toHaveAttribute('href', '?system=shopify');
+    expect(row).toHaveAttribute('aria-current', 'page');
+    // The built-in actions are a row of their own.
+    expect(screen.getByTestId('connected-builtin')).toHaveTextContent('1 action');
+    expect(screen.getByTestId('connected-builtin')).not.toHaveAttribute('aria-current');
+  });
+
+  it('★ a broken connection shows its state, not a count', async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+        {await IntegrationRail({
+          integrations: [
+            entry({
+              slug: 'returnly',
+              name: 'Returnly',
+              tenantConnection: { id: 'c2', status: 'ERROR' },
+            }),
+          ],
+        })}
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('connected-returnly')).toHaveTextContent('Needs attention');
+    expect(screen.getByTestId('connected-returnly')).not.toHaveTextContent(/action/);
   });
 });

@@ -74,7 +74,13 @@
     "searchNone": "Nothing here matches “{term}”.",
     "connectedOf": "Connected · {count} of {total}",
     "availableOf": "Available · {count} of {total}",
-    "label": "Systems"
+    "label": "Systems",
+    "builtIn": "Built into GOTCHA",
+    "actions": "{count, plural, one {# action} other {# actions}}",
+    "categories": "Categories",
+    "all": "All",
+    "connect": "Connect",
+    "connectNotHere": "Connecting from here comes next — Business core connects systems today."
   },
   "choice": {
     "label": "What GOTCHA may do with this",
@@ -92,5 +98,12 @@
       "forbidden": "You don't have permission to change what GOTCHA may do.",
       "failed": "That didn't save. Try again."
     }
-  }
+  },
+  "system": {
+    "used": "Used {n} {count, plural, one {time} other {times}} in the last 30 days",
+    "actions": "{count, plural, one {# action} other {# actions}}",
+    "narrow": "Narrow it for one employee",
+    "narrowNotYet": "Every AI employee shares these settings; one cannot be narrowed yet."
+  },
+  "suggestNone": "Nothing to suggest changing yet."
 }

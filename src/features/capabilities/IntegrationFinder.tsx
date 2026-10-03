@@ -3,6 +3,8 @@
 import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 
+import { Link } from '@/i18n/navigation';
+
 import { humaniseCode } from '@/api/contracts/capabilities';
 import { byCategory, isIntegrationState, type Integration } from '@/api/contracts/integrations';
 
@@ -39,16 +41,34 @@ import styles from './Capabilities.module.css';
  *
  * A single "Connect" button over those two would work for neither. It is a
  * missing primary action of the kind already ruled on, not a gap to paper over.
+ * So 02's "Connect" is drawn on each row, not live, with that reason.
+ *
+ * ── 10, MEASURED ──
+ * The search (`8px 11px`, white, radius 9); CONNECTED, a row per system that
+ * selects it (`?system=`) and says how many actions it brings, or its state
+ * when it is not plain connected; AVAILABLE with a count, category chips
+ * (`4px 9px`, radius 7) and a row per system. The built-in actions belong to
+ * no provider, so they are a row of their own at the top.
  */
 export function IntegrationFinder({
   connected,
   available,
+  actionCounts,
+  builtInCount,
+  selected,
 }: {
   readonly connected: readonly Integration[];
   readonly available: readonly Integration[];
+  /** Actions per connected system's slug. */
+  readonly actionCounts: Readonly<Record<string, number>>;
+  /** Actions that belong to no provider. 0 hides the row. */
+  readonly builtInCount: number;
+  /** `builtin`, a slug, or null. */
+  readonly selected: string | null;
 }) {
   const t = useTranslations('capabilities');
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
 
   const term = query.trim().toLowerCase();
   const matches = useMemo(() => {
@@ -66,11 +86,19 @@ export function IntegrationFinder({
   }, [connected, available, term]);
 
   const found = matches.connected.length + matches.available.length;
+  // From what the search left: a chip for a category with nothing in it would
+  // claim the category is empty.
+  const categories = byCategory(matches.available)
+    .map((group) => group.category)
+    .filter((c): c is string => c !== null);
+  const shown = category
+    ? matches.available.filter((entry) => entry.category?.trim() === category)
+    : matches.available;
 
   return (
     <>
       <div className={styles.railSearch}>
-        <label className={styles.railSearchLabel} htmlFor="integration-search">
+        <label className="srOnly" htmlFor="integration-search">
           {t('rail.searchLabel')}
         </label>
         <input
@@ -86,10 +114,8 @@ export function IntegrationFinder({
 
       {/*
         ★★ A FILTER THAT HIDES EVERYTHING MUST SAY SO IN THE READER'S OWN WORDS.
-        Two empty sections under two headings reading "Connected · 0" and
-        "Available · 0" is indistinguishable from a tenant with no integrations
-        and from a failed read. The term is quoted back, because the commonest
-        cause is a typo the reader cannot see in their own input.
+        The term is quoted back: the commonest cause is a typo the reader
+        cannot see in their own input.
       */}
       {matches.filtering && found === 0 ? (
         <p className={styles.railNote} data-testid="integration-search-none">
@@ -97,101 +123,140 @@ export function IntegrationFinder({
         </p>
       ) : null}
 
-      <section data-testid="rail-connected">
-        {/*
-          The heading counts what is SHOWN while filtering and what exists
-          otherwise, and says which it is doing. A count that silently changes
-          meaning is how "Connected · 1" comes to mean two different things on
-          one screen.
-        */}
+      <section className={styles.railSection} data-testid="rail-connected">
+        {/* The count is what is SHOWN while filtering, and says which. */}
         <h2 className={styles.railHeading}>
           {matches.filtering
             ? t('rail.connectedOf', { count: matches.connected.length, total: connected.length })
             : t('rail.connected', { count: connected.length })}
         </h2>
-        {connected.length === 0 ? (
+        <ul className={styles.railList}>
+          {builtInCount > 0 && !matches.filtering ? (
+            <li>
+              <Link
+                href={{ pathname: '/studio/capabilities', query: { system: 'builtin' } }}
+                className={styles.railRow}
+                aria-current={selected === 'builtin' ? 'page' : undefined}
+                data-testid="connected-builtin"
+              >
+                <span className={styles.railTile} aria-hidden="true" />
+                <span className={styles.railName}>{t('rail.builtIn')}</span>
+                <span className={styles.railCount}>
+                  {t('rail.actions', { count: builtInCount })}
+                </span>
+              </Link>
+            </li>
+          ) : null}
+          {matches.connected.map((entry) => {
+            const state = entry.tenantConnection?.status;
+            return (
+              <li key={entry.slug}>
+                <Link
+                  href={{ pathname: '/studio/capabilities', query: { system: entry.slug } }}
+                  className={styles.railRow}
+                  aria-current={selected === entry.slug ? 'page' : undefined}
+                  data-testid={`connected-${entry.slug}`}
+                >
+                  <span className={styles.railTile} aria-hidden="true" />
+                  <span className={styles.railName}>{entry.name}</span>
+                  {/*
+                    ★ A BROKEN CONNECTION STAYS IN "CONNECTED", WITH ITS STATE —
+                    its NAME, never the enum. Plain connected says what it
+                    brings instead: how many actions.
+                  */}
+                  {state && state !== 'CONNECTED' ? (
+                    <span
+                      className={styles.railState}
+                      data-state={state}
+                      data-testid={`connected-state-${entry.slug}`}
+                    >
+                      {isIntegrationState(state)
+                        ? t(`rail.state.${state}` as 'rail.state.CONNECTED')
+                        : t('rail.stateUnknown')}
+                    </span>
+                  ) : (
+                    <span
+                      className={styles.railCount}
+                      data-testid={`connected-state-${entry.slug}`}
+                    >
+                      {t('rail.actions', { count: actionCounts[entry.slug] ?? 0 })}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        {connected.length === 0 && builtInCount === 0 ? (
           <p className={styles.railNote} data-testid="rail-none-connected">
             {t('rail.noneConnected')}
           </p>
-        ) : (
-          <ul className={styles.railList}>
-            {matches.connected.map((entry) => (
-              <li
-                key={entry.slug}
-                className={styles.railItem}
-                data-testid={`connected-${entry.slug}`}
-              >
-                <span>{entry.name}</span>
-                {/*
-                  ★ A BROKEN CONNECTION STAYS IN "CONNECTED", WITH ITS STATE.
-                  Moving it to "available" would offer a Connect button for
-                  something already connected.
-
-                  The state's NAME, not its enum — this rendered `CONNECTED` /
-                  `ERROR` verbatim on an operational screen. `INTEGRATION_STATES`
-                  is closed, so anything outside it says "status unknown" rather
-                  than printing a code a reader cannot act on. And no date beside
-                  it: the only timestamp available is a credential check, not a
-                  sync.
-                */}
-                {entry.tenantConnection?.status ? (
-                  <span
-                    className={styles.railState}
-                    data-state={entry.tenantConnection.status}
-                    data-testid={`connected-state-${entry.slug}`}
-                  >
-                    {isIntegrationState(entry.tenantConnection.status)
-                      ? t(`rail.state.${entry.tenantConnection.status}` as 'rail.state.CONNECTED')
-                      : t('rail.stateUnknown')}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
+        ) : null}
       </section>
 
-      <section data-testid="rail-available">
-        <h2 className={styles.railHeading}>
+      <section className={styles.railSection} data-testid="rail-available">
+        <h2 className={styles.railHeadingRule}>
           {matches.filtering
             ? t('rail.availableOf', { count: matches.available.length, total: available.length })
             : t('rail.available', { count: available.length })}
         </h2>
 
         {/*
-          Grouped by the catalogue's own `category`, in `sortOrder` — the order
-          somebody chose, not alphabetical. An entry with no category keeps its
-          own group rather than being assigned one, because inventing a category
-          is how a filter starts lying about what it contains.
-
-          A group whose every entry is filtered out disappears with them: an
-          empty category heading is a claim that the category has nothing in it.
+          The catalogue's own categories, in its order, as chips. A free-text
+          column with no catalogue behind it, so each is made readable rather
+          than translated.
         */}
-        {byCategory(matches.available).map((group) => (
-          <div key={group.category ?? 'uncategorised'} className={styles.railGroup}>
-            {/*
-              ★★ THE CATEGORY, WHICH ARRIVED AS `PROJECT_MANAGEMENT`. A
-              free-text column with no catalogue behind it, so there is no label
-              to look up — it is made readable rather than translated, and that
-              is stated because a reader will wonder why this one is not in the
-              message file.
-            */}
-            <h3 className={styles.railGroupHeading}>
-              {group.category ? humaniseCode(group.category) : t('rail.uncategorised')}
-            </h3>
-            <ul className={styles.railList}>
-              {group.entries.map((entry) => (
-                <li
-                  key={entry.slug}
-                  className={styles.railItem}
-                  data-testid={`available-${entry.slug}`}
-                >
-                  {entry.name}
-                </li>
-              ))}
-            </ul>
+        {categories.length > 1 ? (
+          <div className={styles.railChips} role="group" aria-label={t('rail.categories')}>
+            <button
+              type="button"
+              className={styles.railChip}
+              aria-pressed={category === null}
+              onClick={() => setCategory(null)}
+            >
+              {t('rail.all')}
+            </button>
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={styles.railChip}
+                aria-pressed={category === c}
+                data-testid={`category-${c}`}
+                onClick={() => setCategory(category === c ? null : c)}
+              >
+                {humaniseCode(c)}
+              </button>
+            ))}
           </div>
-        ))}
+        ) : null}
+
+        <ul className={styles.railList}>
+          {shown.map((entry) => (
+            <li
+              key={entry.slug}
+              className={styles.railRowStatic}
+              data-testid={`available-${entry.slug}`}
+            >
+              <span className={styles.railTile} aria-hidden="true" />
+              <span className={styles.railNameStack}>
+                <span className={styles.railName}>{entry.name}</span>
+                <span className={styles.railSub}>
+                  {[entry.category ? humaniseCode(entry.category) : null, entry.description]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </span>
+              <span
+                className={styles.railConnect}
+                aria-disabled="true"
+                title={t('rail.connectNotHere')}
+              >
+                {t('rail.connect')}
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
     </>
   );
