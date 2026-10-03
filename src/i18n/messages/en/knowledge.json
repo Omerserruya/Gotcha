@@ -63,7 +63,6 @@
     "pending": "{count, plural, =1 {One document is still being read, so it isn't answering anything yet} other {# documents are still being read, so they aren't answering anything yet}}"
   },
   "add": "Add knowledge",
-  "addNotYet": "Adding knowledge from here comes next.",
   "strip": {
     "confident": "Answers confidently",
     "thin": "Thin — guesses sometimes",
@@ -95,5 +94,54 @@
     "answers": "your answers during setup",
     "mixed": "sources that mix several",
     "other": "other sources"
+  },
+  "addSheet": {
+    "close": "Close",
+    "title": "Add knowledge",
+    "line": "Every AI employee learns it at the same time",
+    "eyebrow": {
+      "upload": "Upload",
+      "website": "Website",
+      "drive": "Drive sync",
+      "conversations": "Conversations"
+    },
+    "way": {
+      "document": {
+        "name": "A document",
+        "text": "PDF, Word or text · up to 10 MB"
+      },
+      "page": {
+        "name": "A page on your site",
+        "text": "Paste its address"
+      },
+      "drive": {
+        "name": "A Drive folder",
+        "text": "Google Drive or Confluence"
+      },
+      "text": {
+        "name": "Just type it",
+        "text": "One fact, one answer"
+      },
+      "conversation": {
+        "name": "From a conversation",
+        "text": "Pin a good answer"
+      }
+    },
+    "drop": "Drop a file here",
+    "urlPlaceholder": "https://",
+    "read": "Read it",
+    "connector": {
+      "google_drive": "Google Drive",
+      "confluence": "Confluence"
+    },
+    "connect": "Connect",
+    "titlePlaceholder": "What it is about",
+    "bodyPlaceholder": "The fact, or the answer, as a customer should hear it",
+    "pinNone": "Nothing pins one answer yet. Past conversations are learned through the history import in Settings · Channels.",
+    "learned": "What it learned",
+    "learnedNone": "Nothing previews what a source teaches before it is added.",
+    "teach": "Teach all of it",
+    "notYet": "Adding knowledge writes a source and runs extraction — waiting for approval.",
+    "cancel": "Cancel"
   }
 }

@@ -1,8 +1,10 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
+import { AddKnowledge, isAddWay } from '@/features/knowledge/add/AddKnowledge';
 import { KnowledgeScreen, knowledgeSummary } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import styles from '@/features/knowledge/Knowledge.module.css';
+import { Link } from '@/i18n/navigation';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -29,7 +31,16 @@ import { pageMetadata } from '@/shell/page-metadata';
  * *"asked 23 times"*, because one person asking twenty times and twenty
  * people asking once need different fixes.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{
+    /** 08b: the Add knowledge dialog, and the way in it opens on. */
+    readonly add?: string;
+    readonly way?: string;
+  }>;
+} = {}) {
+  const params = (await searchParams) ?? {};
   const t = await getTranslations('knowledge');
   const { sources, unanswered, conflicts, conflictsScannedAt, everImported } =
     await loadKnowledge();
@@ -69,15 +80,15 @@ export default async function Page() {
       title={t('title')}
       description={line}
       actions={
-        // 08b (Add knowledge) is not built yet: drawn, and it says so.
-        <span
+        // 08b: the Add knowledge dialog over this screen.
+        <Link
+          href={{ pathname: '/studio/knowledge', query: { add: '1' } }}
           className={styles.add}
-          aria-disabled="true"
-          title={t('addNotYet')}
           data-testid="add-knowledge"
+          scroll={false}
         >
           {t('add')}
-        </span>
+        </Link>
       }
     >
       {/*
@@ -95,6 +106,9 @@ export default async function Page() {
           everImported={everImported}
         />
       )}
+      {params.add === '1' ? (
+        <AddKnowledge initialWay={isAddWay(params.way) ? params.way : undefined} />
+      ) : null}
     </PageContainer>
   );
 }
