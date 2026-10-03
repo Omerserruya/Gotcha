@@ -119,6 +119,30 @@ describe('★ 11c — the week, and what it cannot hold', () => {
     expect(saveWorkspaceFacts.mock.calls[0]![0].hours).toMatchObject({ enabled: false });
   });
 
+  it('★ nothing stored is not "Closed": empty rows, switches off, under "Use these hours" off', () => {
+    inIntl(<HoursDrawer workspace={ws({ hours: { enabled: false } })} />);
+    expect(screen.getByTestId('hours-use')).not.toBeChecked();
+    expect(screen.getByTestId('hours-day-monday')).not.toHaveTextContent(/closed/i);
+    expect(screen.getByTestId('hours-unset-monday')).toHaveTextContent('— – —');
+  });
+
+  it('a day stored as closed IS "Closed"', () => {
+    inIntl(
+      <HoursDrawer
+        workspace={ws({
+          hours: {
+            enabled: true,
+            schedule: {
+              sunday: { enabled: true, open: '09:00', close: '18:00' },
+              saturday: { enabled: false },
+            },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId('hours-day-saturday')).toHaveTextContent('Closed');
+  });
+
   it('copying Sunday saves nothing', async () => {
     inIntl(<HoursDrawer workspace={ws()} />);
     await userEvent.click(screen.getByTestId('hours-copy-sunday'));

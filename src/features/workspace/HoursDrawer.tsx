@@ -38,7 +38,15 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
     "Use these hours" off — never as seven closed days, which says something
     else: that the business is closed every day.
   */
-  const [use, setUse] = useState(workspace.hours ? workspace.hours.enabled !== false : true);
+  /*
+    Which days were ever stored. With none — dev's `{ enabled: false }` — no
+    day is "Closed": nothing was set, so the rows are empty and the week sits
+    under "Use these hours" off.
+  */
+  const stored = new Set(Object.keys(workspace.hours?.schedule ?? {}));
+  const [use, setUse] = useState(
+    stored.size > 0 ? workspace.hours?.enabled !== false : workspace.hours == null,
+  );
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -122,8 +130,12 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
                     onChange={(e) => setDay(day, { close: e.target.value })}
                   />
                 </span>
-              ) : (
+              ) : stored.has(day) ? (
                 <span className={styles.weekClosed}>{t('hours.closedDay')}</span>
+              ) : (
+                <span className={styles.weekClosed} data-testid={`hours-unset-${day}`}>
+                  — – —
+                </span>
               )}
               <span
                 className={styles.weekSplit}
