@@ -59,7 +59,7 @@ const show = (sessions: ReturnType<typeof session>[], available = true) =>
   );
 
 describe('★★ a long list does not bury its own bulk action', () => {
-  it('★★ shows five devices and says how many it is holding back', async () => {
+  it('★★ shows three devices and says how many it is holding back', async () => {
     /*
      * The dev tenant has 38 sessions, one per capture mint. Thirty-eight rows
      * put "sign out all other devices" past the bottom of the viewport.
@@ -70,8 +70,8 @@ describe('★★ a long list does not bury its own bulk action', () => {
      * of my devices".
      */
     show(many(37));
-    expect(screen.getAllByTestId(/^session-/).filter((el) => el.tagName === 'LI')).toHaveLength(5);
-    expect(screen.getByTestId('sessions-hidden-note')).toHaveTextContent('33 more devices');
+    expect(screen.getAllByTestId(/^session-/).filter((el) => el.tagName === 'LI')).toHaveLength(3);
+    expect(screen.getByTestId('sessions-hidden-note')).toHaveTextContent('35 more devices');
     expect(screen.getByTestId('sessions-show-all')).toHaveTextContent('Show all 38 devices');
   });
 
@@ -92,7 +92,7 @@ describe('★★ a long list does not bury its own bulk action', () => {
     expect(screen.getAllByTestId(/^session-/).filter((el) => el.tagName === 'LI')).toHaveLength(38);
     expect(screen.queryByTestId('sessions-hidden-note')).toBeNull();
     await userEvent.click(screen.getByTestId('sessions-show-fewer'));
-    expect(screen.getAllByTestId(/^session-/).filter((el) => el.tagName === 'LI')).toHaveLength(5);
+    expect(screen.getAllByTestId(/^session-/).filter((el) => el.tagName === 'LI')).toHaveLength(3);
   });
 
   it('★ offers no expander when the whole list already fits', async () => {
@@ -176,7 +176,7 @@ describe('★★ signing out everywhere asks first, and says what survives', () 
   });
 });
 
-describe('★★ the list states its totals, because counting its rows gives five', () => {
+describe('★★ the list states its totals, because counting its rows gives three', () => {
   it('★★ carries the real total and the real other-count while collapsed', async () => {
     /*
      * ════════════════════════════════════════════════════════════════════════
@@ -198,7 +198,7 @@ describe('★★ the list states its totals, because counting its rows gives fiv
     expect(list).toHaveAttribute('data-others', '37');
     // And the DOM really does disagree, which is why the attributes exist.
     expect(screen.getAllByTestId(/^session-\w/).filter((el) => el.tagName === 'LI')).toHaveLength(
-      5,
+      3,
     );
   });
 

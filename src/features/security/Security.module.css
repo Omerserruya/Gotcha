@@ -113,24 +113,6 @@
     gap: var(--space-8);
   }
 
-  /* ── Switches ───────────────────────────────────────────────────────── */
-  .switchRow {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-9);
-    font-size: var(--font-size-meta);
-  }
-
-  .switchLabel {
-    display: block;
-  }
-
-  .switchNote {
-    display: block;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
   /*
    * "We could not find out" — NOT "there is nothing".
    *
@@ -293,7 +275,7 @@
 
   .cardTitle {
     margin: 0;
-    font-size: var(--font-size-body-sm);
+    font-size: var(--font-size-meta);
     font-weight: 600;
     color: var(--text-primary);
   }
@@ -337,7 +319,7 @@
   }
 
   .policyName {
-    font-size: var(--font-size-meta);
+    font-size: var(--font-size-body-sm);
     font-weight: 500;
     color: var(--text-primary);
   }
@@ -366,6 +348,62 @@
     flex: 1;
   }
 
+  /* 02's chips: one row, 11.5 on the inset, the current one dark. */
+  .auditChips {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    min-inline-size: 0;
+  }
+
+  .auditChip {
+    flex: none;
+    padding-block: 5px;
+    padding-inline: var(--space-11);
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    list-style: none;
+  }
+
+  .auditChip[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .auditChip[data-outcome='err'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .auditMore {
+    position: relative;
+  }
+
+  .auditMore > summary {
+    cursor: pointer;
+  }
+
+  .auditMore > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .auditMoreList {
+    position: absolute;
+    inset-block-start: calc(100% + var(--space-6));
+    inset-inline-end: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-6);
+    padding: var(--space-10);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-item);
+  }
+
   .export {
     flex: none;
     font-size: var(--font-size-caption);
@@ -373,7 +411,7 @@
     cursor: not-allowed;
   }
 
-  .auditCard > :not(.auditHead) {
+  .auditCard > :not(.auditHead, .auditRows) {
     padding-inline: var(--space-18);
   }
 
@@ -391,13 +429,6 @@
     padding-block-end: var(--space-12);
   }
 
-  .mfa > .switchRow {
-    padding-block: var(--space-4);
-    padding-inline: var(--space-18);
-    font-size: var(--font-size-caption);
-    color: var(--text-secondary);
-  }
-
   .mfa > .problem {
     padding-inline: var(--space-18);
   }
@@ -405,5 +436,148 @@
   .mfa + .policyRow,
   .unavailable + .policyRow {
     border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+}
+
+@layer features {
+  .cardHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-12);
+    padding-block: var(--space-13);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .cardHead > .cardTitle {
+    flex: 1;
+  }
+
+  .cardCount {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 16's device rows: 12.5 over 11, 12 × 18, a hairline between. */
+  .card .block {
+    gap: 0;
+    padding: 0;
+  }
+
+  .card .row {
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+  }
+
+  .card .name {
+    font-size: var(--font-size-meta);
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  .card .detail {
+    font-size: var(--font-size-micro);
+  }
+
+  .card .blockActions,
+  .card .confirmBlock {
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .textAction {
+    flex: none;
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .textAction:disabled {
+    cursor: wait;
+  }
+
+  /* ── 16's audit rows: time · what happened · its kind ─────────────── */
+  .auditRows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .auditCard > .auditRows {
+    padding-inline: 0;
+  }
+
+  .auditRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-14);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+  }
+
+  .auditRow + .auditRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .auditTime {
+    flex: none;
+    inline-size: 96px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    font-weight: 500;
+    color: var(--text-subtle);
+  }
+
+  .auditText {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .auditKind {
+    flex: none;
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+}
+
+@layer features {
+  /* 16: the two-step level, at the row's end; the stored one is dark. */
+  .segmented {
+    flex: none;
+    display: inline-flex;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-inset);
+  }
+
+  .segment {
+    border: none;
+    border-radius: var(--radius-badge);
+    background: none;
+    padding-block: var(--space-4);
+    padding-inline: var(--space-9);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .segment[data-current='yes'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+    cursor: default;
+  }
+
+  .segment:disabled {
+    cursor: wait;
   }
 }

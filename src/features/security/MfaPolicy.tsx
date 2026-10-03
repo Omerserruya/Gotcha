@@ -8,18 +8,21 @@ import type { TenantSecurity } from '@/api/contracts/security';
 import { setMfaPolicy, type SecurityWriteResult } from './actions';
 import styles from './Security.module.css';
 
+const LEVELS = ['none', 'admins', 'everyone'] as const;
+type Level = (typeof LEVELS)[number];
+
+const POLICY: Record<Level, TenantSecurity> = {
+  none: { mfaRequiredForAdmins: false, mfaRequiredForAllUsers: false },
+  admins: { mfaRequiredForAdmins: true, mfaRequiredForAllUsers: false },
+  everyone: { mfaRequiredForAdmins: true, mfaRequiredForAllUsers: true },
+};
+
 /**
- * Who must use two-factor authentication.
- *
- * Two switches and one policy. Requiring it of everyone necessarily includes
- * admins, so turning the wider one on turns the narrower one on with it and
- * says so — leaving them independent would allow "everyone except admins",
- * which is a combination nobody would choose on purpose and which the wording
- * of the two controls does not suggest is possible.
+ * Who must use two-factor authentication — one policy, three levels.
  *
  * The design also asks for SSO and a Google domain. No field for either exists
  * on this route, and it may be an identity-provider setting rather than one of
- * ours, so the screen draws no control for it.
+ * ours, so the screen draws no control for it (the page shows "—").
  */
 export function MfaPolicy({ policy }: { readonly policy: TenantSecurity }) {
   const t = useTranslations('security');
@@ -40,7 +43,7 @@ export function MfaPolicy({ policy }: { readonly policy: TenantSecurity }) {
     });
   }
 
-  const state = value.mfaRequiredForAllUsers
+  const state: Level = value.mfaRequiredForAllUsers
     ? 'everyone'
     : value.mfaRequiredForAdmins
       ? 'admins'
@@ -48,8 +51,13 @@ export function MfaPolicy({ policy }: { readonly policy: TenantSecurity }) {
 
   /*
     16: 02's first policy row — "Two-step sign-in" over what is required —
-    and its two live switches beneath it. 02 shows an "On" chip and "4 of 4
-    set up"; nothing reads who has enrolled, so the line says only the rule.
+    with its state at the row's end. 02 draws an "On" chip; the rule is live
+    here, so the end is a segmented control with the stored level dark. 02's
+    "4 of 4 set up" is not drawn: nothing reads who has enrolled.
+
+    Three levels, because the two stored flags allow exactly three sensible
+    states: everyone includes admins, and "everyone except admins" is a
+    combination nobody would choose on purpose.
   */
   return (
     <div className={styles.mfa} data-testid="mfa-policy">
@@ -60,45 +68,23 @@ export function MfaPolicy({ policy }: { readonly policy: TenantSecurity }) {
             {t(`mfa.state.${state}`)}
           </span>
         </span>
-      </div>
-      <label className={styles.switchRow}>
-        <input
-          type="checkbox"
-          checked={value.mfaRequiredForAdmins}
-          disabled={isPending || value.mfaRequiredForAllUsers}
-          data-testid="mfa-admins"
-          onChange={(e) => apply({ ...value, mfaRequiredForAdmins: e.target.checked })}
-        />
-        <span>
-          <span className={styles.switchLabel}>{t('mfa.admins')}</span>
-          {/*
-            Disabled rather than hidden while "everyone" is on, with the reason
-            stated. A control that silently stops responding is worse than one
-            that explains why it cannot move.
-          */}
-          {value.mfaRequiredForAllUsers ? (
-            <span className={styles.switchNote}>{t('mfa.impliedByEveryone')}</span>
-          ) : null}
+        <span className={styles.segmented} role="group" aria-label={t('mfa.title')}>
+          {LEVELS.map((level) => (
+            <button
+              key={level}
+              type="button"
+              className={styles.segment}
+              aria-pressed={level === state}
+              data-current={level === state ? 'yes' : 'no'}
+              disabled={isPending}
+              data-testid={`mfa-level-${level}`}
+              onClick={() => (level === state ? undefined : apply(POLICY[level]))}
+            >
+              {t(`mfa.level.${level}`)}
+            </button>
+          ))}
         </span>
-      </label>
-
-      <label className={styles.switchRow}>
-        <input
-          type="checkbox"
-          checked={value.mfaRequiredForAllUsers}
-          disabled={isPending}
-          data-testid="mfa-everyone"
-          onChange={(e) =>
-            apply(
-              e.target.checked
-                ? { mfaRequiredForAdmins: true, mfaRequiredForAllUsers: true }
-                : { ...value, mfaRequiredForAllUsers: false },
-            )
-          }
-        />
-        <span className={styles.switchLabel}>{t('mfa.everyone')}</span>
-      </label>
-
+      </div>
       {result && !result.ok ? (
         <p className={styles.problem} data-testid="mfa-problem">
           {result.reason === 'forbidden' ? t('forbidden') : t('mfa.failed')}

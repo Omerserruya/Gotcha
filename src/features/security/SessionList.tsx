@@ -12,12 +12,13 @@ import styles from './Security.module.css';
 /**
  * How many devices the list shows before it is expanded.
  *
- * Five, because the list's job is "do I recognise these?" and a person answers
+ * Three, as 02's card holds, so the card keeps its height beside the policy
+ * card. Few, because the list's job is "do I recognise these?" and a person answers
  * that about a handful. It is not a page size — there is no second page and no
  * server-side paging; the whole list is already in props, and pretending
  * otherwise would put a control on screen that cannot be honoured.
  */
-const VISIBLE = 5;
+const VISIBLE = 3;
 
 /**
  * Where this account is signed in.
@@ -125,9 +126,6 @@ export function SessionList({
             <div className={styles.identity}>
               <span className={styles.name}>
                 {session.userAgent?.trim() || t('sessions.unknownDevice')}
-                {session.current ? (
-                  <span className={styles.thisDevice}>{t('sessions.thisDevice')}</span>
-                ) : null}
               </span>
               {/*
                 Place and time, which is what makes a session recognisable or
@@ -136,7 +134,9 @@ export function SessionList({
                 and never replaced by a placeholder.
               */}
               <span className={styles.detail} data-testid={`session-detail-${session.id}`}>
+                {/* 02: "This device · …" leads the line, not a chip on the name. */}
                 {[
+                  session.current ? t('sessions.thisDevice') : null,
                   [session.city, session.country].filter(Boolean).join(', ') || null,
                   session.ip,
                   session.lastUsed
@@ -157,8 +157,10 @@ export function SessionList({
               cannot report whether it worked.
             */}
             {session.current ? null : (
-              <Button
-                size="sm"
+              // 02: "Sign out" is the row's quiet end, a word rather than a button.
+              <button
+                type="button"
+                className={styles.textAction}
                 data-testid={`session-revoke-${session.id}`}
                 disabled={isPending}
                 onClick={() =>
@@ -166,7 +168,7 @@ export function SessionList({
                 }
               >
                 {t('sessions.revoke')}
-              </Button>
+              </button>
             )}
           </li>
         ))}

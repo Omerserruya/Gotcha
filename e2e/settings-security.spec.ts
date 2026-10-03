@@ -264,8 +264,10 @@ for (const size of SIZES) {
 
       const facets = page.getByTestId('audit-facets');
       await expect(facets).toBeVisible();
-      // Real action names, which are dotted machine strings, not our words.
-      await expect(facets).toHaveText(/ai\.responded|adapter\.|message\.sent/);
+      // "All" first, then the log's own actions in the rows' words — never
+      // the dotted machine strings — with the count on the title.
+      await expect(facets).toContainText('All');
+      await expect(facets).not.toHaveText(/adapter\.|\w\.\w/);
 
       await shoot(page, `${size.name}-3b-action-facet`);
     });
@@ -277,7 +279,7 @@ for (const size of SIZES) {
      * disabled with its reason shown. A control that stops responding without
      * saying why reads as broken.
      */
-    test('4 · the MFA switches explain the one they disable', async ({ page }) => {
+    test('4 · the two-step level is drawn, all three of it', async ({ page }) => {
       if (onlyOneProject()) return;
 
       await openSecurity(page, 'en');
@@ -293,8 +295,9 @@ for (const size of SIZES) {
       // "we couldn't read this" state.
       await expect(page.getByTestId('mfa-unavailable')).toHaveCount(0);
       await expect(page.getByTestId('mfa-policy')).toBeVisible();
-      await expect(page.getByTestId('mfa-admins')).toBeVisible();
-      await expect(page.getByTestId('mfa-everyone')).toBeVisible();
+      for (const level of ['none', 'admins', 'everyone']) {
+        await expect(page.getByTestId(`mfa-level-${level}`)).toBeVisible();
+      }
 
       await shoot(page, `${size.name}-4-mfa`);
     });

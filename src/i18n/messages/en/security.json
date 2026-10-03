@@ -23,7 +23,8 @@
     "hiddenNote": "{count, plural, one {# more device} other {# more devices}} not shown",
     "revokeOthersConfirm": "This will sign out {count, plural, one {# other device} other {# other devices}}. You will stay signed in here.",
     "revokeOthersGo": "Sign out {count, plural, one {# device} other {# devices}}",
-    "cancel": "Keep them signed in"
+    "cancel": "Keep them signed in",
+    "count": "{count, plural, one {# device} other {# devices}}"
   },
   "logins": {
     "unavailable": "We couldn't reach the identity provider, so we can't show recent sign-ins.",
@@ -32,9 +33,6 @@
     "failed": "Failed sign-in"
   },
   "mfa": {
-    "admins": "Require two-factor for admins",
-    "everyone": "Require two-factor for everyone",
-    "impliedByEveryone": "Already required, because everyone must use it.",
     "failed": "That didn't save. Try again.",
     "unavailable": "We couldn't read your two-factor settings, so they aren't shown. This doesn't mean two-factor is off.",
     "title": "Two-step sign-in",
@@ -42,20 +40,30 @@
       "everyone": "Required for everyone",
       "admins": "Required for admins",
       "none": "Not required"
+    },
+    "level": {
+      "none": "Not required",
+      "admins": "Admins",
+      "everyone": "Everyone"
     }
   },
   "audit": {
     "unavailable": "We can't read the activity log yet, so this list is not available. It isn't empty — we just can't show it.",
     "empty": "Nothing recorded yet.",
     "actor": {
-      "ai": "GOTCHA",
-      "user": "A person",
-      "system": "The system"
+      "ai": "By GOTCHA",
+      "user": "By a person",
+      "system": "System"
     },
     "didNotWork": "didn't work",
     "moreActions": "More kinds of activity exist than shown here.",
     "export": "Export",
-    "exportNotYet": "Exporting the log from here comes next."
+    "exportNotYet": "Exporting the log from here comes next.",
+    "failure": "Failure",
+    "yesterday": "Yesterday",
+    "all": "All",
+    "more": "More",
+    "times": "{count, plural, one {# time} other {# times}}"
   },
   "policy": {
     "google": "Sign in with Google",

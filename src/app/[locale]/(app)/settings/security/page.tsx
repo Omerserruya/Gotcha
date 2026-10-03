@@ -72,19 +72,20 @@ export default async function Page() {
         </section>
 
         <section className={styles.card} data-testid="section-sessions">
-          <h2 className={styles.cardTitle}>{t('heading.sessions')}</h2>
+          {/* 02's head: the title, and how many devices — when they could be read. */}
+          <header className={styles.cardHead}>
+            <h2 className={styles.cardTitle}>{t('heading.sessions')}</h2>
+            {sessionsAvailable ? (
+              <span className={styles.cardCount} data-testid="sessions-count">
+                {t('sessions.count', { count: sessions.length })}
+              </span>
+            ) : null}
+          </header>
           <SessionList sessions={sessions} available={sessionsAvailable} />
         </section>
       </div>
 
       <section className={styles.auditCard} data-testid="section-audit">
-        <header className={styles.auditHead}>
-          <h2 className={styles.cardTitle}>{t('heading.audit')}</h2>
-          {/* Nothing exports the log from here yet. */}
-          <span className={styles.export} aria-disabled="true" title={t('audit.exportNotYet')}>
-            {t('audit.export')}
-          </span>
-        </header>
         <AuditSection
           entries={audit}
           available={auditAvailable}

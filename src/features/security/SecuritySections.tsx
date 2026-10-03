@@ -111,134 +111,171 @@ export async function AuditSection({
 
   if (!available) {
     return (
-      <p className={styles.unavailable} data-testid="audit-unavailable">
-        {t('audit.unavailable')}
-      </p>
+      <>
+        <AuditHead facets={[]} truncated={false} t={t} />
+        <p className={styles.unavailable} data-testid="audit-unavailable">
+          {t('audit.unavailable')}
+        </p>
+      </>
     );
   }
 
   if (entries.length === 0) {
     return (
-      <p className={styles.empty} data-testid="audit-empty">
-        {t('audit.empty')}
-      </p>
+      <>
+        <AuditHead facets={facets} truncated={facetsTruncated} t={t} />
+        <p className={styles.empty} data-testid="audit-empty">
+          {t('audit.empty')}
+        </p>
+      </>
     );
   }
 
-  const when = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' });
+  const now = new Date();
+  const clock = new Intl.DateTimeFormat(locale, { timeStyle: 'short' });
+  const day = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
 
   return (
     <>
+      <AuditHead facets={facets} truncated={facetsTruncated} t={t} />
+
       {/*
-        The real action vocabulary, with counts.
-
-        Not a set of categories we invented. The log conflates actions that had
-        an effect with lookups the AI made while composing one answer, and the
-        schema does not distinguish them — so any split we chose would be a
-        guess that drifts as tools are added. Showing what is actually in the
-        log lets a reader navigate it on their own terms, and a new tool simply
-        appears here with its count.
+        02's row: the time (mono), what happened, and its kind at the end —
+        "Failure" in red when it did not work, otherwise who did it.
       */}
-      {facets.length > 0 ? (
-        <div className={styles.facets} data-testid="audit-facets">
-          {facets.slice(0, 8).map((facet) => {
-            const { name, outcome } = describeAuditAction(facet.action);
-            return (
+      <ul className={styles.auditRows} data-testid="audit-list">
+        {entries.map((entry) => {
+          const verdict = auditVerdict(entry.succeeded, entry.action);
+          const at = new Date(entry.createdAt);
+          return (
+            <li
+              key={entry.id}
+              className={styles.auditRow}
+              data-testid={`audit-${entry.id}`}
+              data-actor={entry.actorType}
+              data-succeeded={verdict === true ? 'yes' : verdict === false ? 'no' : 'unrecorded'}
+            >
+              <time className={styles.auditTime} dateTime={entry.createdAt}>
+                {sameDay(at, now)
+                  ? clock.format(at)
+                  : sameDay(at, new Date(now.getTime() - DAY))
+                    ? t('audit.yesterday')
+                    : day.format(at)}
+              </time>
+              {/*
+                ★★ `succeeded` is `null` on every `adapter.*` row — nothing
+                recorded one — while the action name said `err` in so many
+                words. `auditVerdict` reads both and prefers the column; a row
+                with neither still says nothing rather than guessing (null is
+                "not recorded", not "failed").
+              */}
+              <span className={styles.auditText}>{describeAuditAction(entry.action).name}</span>
               <span
-                key={facet.action}
-                className={styles.facet}
-                data-outcome={outcome ?? 'unrecorded'}
+                className={[styles.auditKind, verdict === false ? styles.failed : '']
+                  .join(' ')
+                  .trim()}
+                data-testid={`audit-kind-${entry.id}`}
               >
-                {/*
-                  ★★ THIS PRINTED `adapter.err.shopify.get_customer_by_phone`
-                  under a heading reading "Everything that happened", on a page
-                  an account owner opens.
-
-                  The prefix is consumed rather than spelled out: nobody needs to
-                  read the word "adapter", they need the tool and whether it
-                  worked. And `err` buried mid-string is how 742 failures read as
-                  noise, so it is a state on the row instead of part of its name.
-                */}
-                <span
-                  className={[styles.facetName, outcome === 'err' ? styles.failed : '']
-                    .join(' ')
-                    .trim()}
-                >
-                  {name}
-                </span>
-                {outcome === 'err' ? (
-                  <span className={styles.facetOutcome}>{t('audit.didNotWork')}</span>
-                ) : null}
-                <span className={styles.facetCount}>{facet.count}</span>
+                {verdict === false
+                  ? t('audit.failure')
+                  : ACTORS.includes(entry.actorType as Actor)
+                    ? t(`audit.actor.${entry.actorType as Actor}`)
+                    : // An actor the vocabulary does not know: no word, never a key.
+                      null}
               </span>
-            );
-          })}
-          {facetsTruncated ? (
-            <span className={styles.facetNote} data-testid="audit-facets-truncated">
-              {t('audit.moreActions')}
-            </span>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/** `actorType` is a free string on the wire; these are the ones with words. */
+const ACTORS = ['ai', 'user', 'system'] as const;
+type Actor = (typeof ACTORS)[number];
+
+/** Today's rows carry the clock (02's "09:41"); older ones, the date. */
+function sameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/** How many facets ride in the head before the rest go under "More". */
+const HEAD_FACETS = 4;
+
+/**
+ * 16's head: "Everything that happened", the facets as 02's chips, Export.
+ *
+ * The facets are the log's real action vocabulary, not categories we chose —
+ * the log conflates actions that had an effect with lookups the AI made while
+ * composing one answer, and the schema does not distinguish them, so any
+ * split we invented would be a guess that drifts as tools are added. They
+ * read in the same words as the rows; the count rides on the title. "All" is
+ * dark because the list below is all of it — nothing filters it yet, so the
+ * chips are states, not buttons.
+ */
+function AuditHead({
+  facets,
+  truncated,
+  t,
+}: {
+  readonly facets: readonly AuditFacet[];
+  readonly truncated: boolean;
+  readonly t: Awaited<ReturnType<typeof getTranslations<'security'>>>;
+}) {
+  const chip = (facet: AuditFacet) => {
+    const { name, outcome } = describeAuditAction(facet.action);
+    return (
+      <span
+        key={facet.action}
+        className={styles.auditChip}
+        data-outcome={outcome ?? 'unrecorded'}
+        title={
+          outcome === 'err'
+            ? `${t('audit.didNotWork')} · ${t('audit.times', { count: facet.count })}`
+            : t('audit.times', { count: facet.count })
+        }
+      >
+        {name}
+      </span>
+    );
+  };
+  const rest = facets.slice(HEAD_FACETS);
+
+  return (
+    <header className={styles.auditHead}>
+      <h2 className={styles.cardTitle}>{t('heading.audit')}</h2>
+      {facets.length > 0 ? (
+        <div className={styles.auditChips} data-testid="audit-facets">
+          <span className={styles.auditChip} data-current="yes">
+            {t('audit.all')}
+          </span>
+          {facets.slice(0, HEAD_FACETS).map(chip)}
+          {rest.length > 0 || truncated ? (
+            <details className={styles.auditMore} data-testid="audit-facets-more">
+              <summary className={styles.auditChip}>{t('audit.more')}</summary>
+              <div className={styles.auditMoreList}>
+                {rest.map(chip)}
+                {truncated ? (
+                  <span className={styles.facetNote} data-testid="audit-facets-truncated">
+                    {t('audit.moreActions')}
+                  </span>
+                ) : null}
+              </div>
+            </details>
           ) : null}
         </div>
       ) : null}
-
-      <ul className={styles.rows} data-testid="audit-list">
-        {entries.map((entry) => (
-          <li
-            key={entry.id}
-            className={styles.row}
-            data-testid={`audit-${entry.id}`}
-            data-actor={entry.actorType}
-            data-succeeded={
-              auditVerdict(entry.succeeded, entry.action) === true
-                ? 'yes'
-                : auditVerdict(entry.succeeded, entry.action) === false
-                  ? 'no'
-                  : 'unrecorded'
-            }
-          >
-            <div className={styles.identity}>
-              {/*
-                ★★ AND THE ROWS WERE THROWING A VERDICT AWAY. `succeeded` is
-                `null` on every `adapter.*` row — nothing recorded one — while the
-                action name said `err` in so many words. So 742 known failures
-                were filed as "we did not record whether this worked".
-
-                `auditVerdict` reads both and prefers the column, because an
-                explicit field beats a substring. The three states survive: a row
-                with neither source still says nothing rather than guessing.
-              */}
-              <span
-                className={[
-                  styles.name,
-                  auditVerdict(entry.succeeded, entry.action) === false ? styles.failed : '',
-                ]
-                  .join(' ')
-                  .trim()}
-              >
-                {describeAuditAction(entry.action).name}
-              </span>
-              <span className={styles.detail}>
-                {[
-                  t(`audit.actor.${entry.actorType}` as 'audit.actor.ai'),
-                  /*
-                   * THREE states, not two. `null` means the emitter recorded no
-                   * verdict — not that the action failed. Collapsing them would
-                   * mark every un-instrumented action as a failure, which is the
-                   * reassuring-direction error inverted: alarming a reader about
-                   * things that did not go wrong.
-                   */
-                  auditVerdict(entry.succeeded, entry.action) === false
-                    ? t('audit.didNotWork')
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
-            </div>
-            <span className={styles.when}>{when.format(new Date(entry.createdAt))}</span>
-          </li>
-        ))}
-      </ul>
-    </>
+      {/* Nothing exports the log from here yet. */}
+      <span className={styles.export} aria-disabled="true" title={t('audit.exportNotYet')}>
+        {t('audit.export')}
+      </span>
+    </header>
   );
 }

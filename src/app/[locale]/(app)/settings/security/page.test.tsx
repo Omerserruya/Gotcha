@@ -23,7 +23,7 @@ vi.mock('@/features/security/SecuritySections', () => ({
 }));
 vi.mock('@/features/security/load-security', () => ({
   loadSecurity: async () => ({
-    sessions: [],
+    sessions: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
     sessionsAvailable: true,
     logins: [],
     loginsAvailable: true,
@@ -57,11 +57,11 @@ describe('★ 16 — 02’s cards, in 02’s order', () => {
     expect(session).toHaveAttribute('title', expect.stringMatching(/not an inactivity timeout/));
     expect(mfa).not.toHaveTextContent(/days/);
   });
+});
 
-  it('Export is drawn and is not live', async () => {
+describe('★ 16 — the devices card’s head counts them', () => {
+  it('"3 devices", from the list it heads', async () => {
     render(await Page());
-    const exp = within(screen.getByTestId('section-audit')).getByText('Export');
-    expect(exp).toHaveAttribute('aria-disabled', 'true');
-    expect(exp.closest('a,button')).toBeNull();
+    expect(screen.getByTestId('sessions-count')).toHaveTextContent(/^3 devices$/);
   });
 });
