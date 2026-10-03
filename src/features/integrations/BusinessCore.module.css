@@ -120,6 +120,7 @@
   /* The state chip: radius 6, `padding:3px 8px`, 11px. */
   .chip {
     flex: none;
+    justify-self: end;
     padding: 3px var(--space-8);
     border-radius: 6px;
     font-size: var(--font-size-micro);
@@ -148,8 +149,13 @@
   }
 
   /* A part, as a row: `padding:6px 16px`, gap 16 — what it is, who serves it, its state. */
+  /*
+    Three fixed columns — name, the 240 tile, the chip — so every row's tile
+    starts at one x, whatever the chip says and whether there is one.
+  */
   .part {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px 110px;
     align-items: center;
     gap: var(--space-16);
     padding: var(--space-8) var(--space-16);
