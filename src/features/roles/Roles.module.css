@@ -704,22 +704,47 @@
   }
 
   /* ── 12e · the picker, over the drawer ────────────────────────────────── */
+  /*
+   * 02: a floating dialog (~470, r16) over the 12d drawer, which stays in
+   * view behind it. The list scrolls; head and foot stay put. No shadow in
+   * this system — depth is the stronger edge.
+   */
   .grantPicker {
     position: absolute;
-    inset-block-start: 80px;
-    inset-inline: var(--space-26);
+    inset-block-start: 96px;
+    inset-inline-start: 50%;
     z-index: 1;
     display: flex;
     flex-direction: column;
-    gap: var(--space-12);
-    max-block-size: calc(100% - 120px);
-    overflow-y: auto;
-    padding: var(--space-18);
-    /* No shadow in this system: depth is surface and edge. */
+    inline-size: min(470px, calc(100% - var(--space-32)));
+    max-block-size: min(560px, calc(100% - 120px));
+    translate: -50% 0;
     border: var(--border-width-thin) solid var(--border-strong);
-    border-radius: var(--radius-card);
+    border-radius: 16px;
     background-color: var(--panel-field);
+    overflow: hidden;
     line-height: normal;
+  }
+
+  .grantHead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-18) var(--space-18) var(--space-10);
+  }
+
+  .grantAllCovered {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .grantFoot {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-12) var(--space-18) var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
   }
 
   .grantTitle {
@@ -731,8 +756,12 @@
 
   .grantAreas {
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: var(--space-10);
+    min-block-size: 0;
+    overflow-y: auto;
+    padding-inline: var(--space-18);
   }
 
   .grantArea {
@@ -844,5 +873,25 @@
   .grantDone {
     font-size: var(--font-size-caption);
     color: var(--signal-done-text);
+  }
+}
+
+@layer features {
+  .extraSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .personSave {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }

@@ -104,3 +104,40 @@ describe('★ 12e — what is already covered is shown and cannot be picked', ()
     expect(screen.getByTestId('grant-add')).toBeDisabled();
   });
 });
+
+describe('★ 12e corrections (measurement of 9121d4f)', () => {
+  it('an all-covered list explains itself: "Owner already allows everything."', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ roles }}>
+        <GrantPicker
+          person={{ ...TOMER, permissions: ['*'] }}
+          permissions={CATALOG}
+          roleName="Owner"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('grant-all-covered')).toHaveTextContent(
+      'Owner already allows everything.',
+    );
+  });
+
+  it('several at once: one call each, in order, with the one reason', async () => {
+    const calls: string[] = [];
+    addPermission.mockImplementation((async (_u: string, key: string) => {
+      calls.push(key);
+      return { ok: true };
+    }) as never);
+    picker();
+    await userEvent.click(
+      screen.getByTestId('grant-option-conversation:assign:any').querySelector('input')!,
+    );
+    await userEvent.click(
+      screen.getByTestId('grant-option-customer:export:run').querySelector('input')!,
+    );
+    await userEvent.type(screen.getByTestId('grant-reason'), 'Friday shifts');
+    await userEvent.click(screen.getByTestId('grant-add'));
+    expect(await screen.findByTestId('grant-done')).toBeInTheDocument();
+    expect(calls).toEqual(['conversation:assign:any', 'customer:export:run']);
+    expect(addPermission).toHaveBeenCalledWith('u1', 'customer:export:run', 'Friday shifts');
+  });
+});

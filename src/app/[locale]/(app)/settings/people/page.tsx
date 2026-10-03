@@ -123,6 +123,11 @@ export default async function Page({
           closeHref="/settings/people"
           width={600}
           testId="drawer-person"
+          lead={
+            <span className={styles.drawerDisc} aria-hidden="true" data-testid="person-disc">
+              {initialsOf(person.name ?? person.email)}
+            </span>
+          }
         >
           <PersonPanel
             person={person}
@@ -141,6 +146,17 @@ export default async function Page({
       ) : null}
     </SettingsSection>
   );
+}
+
+/** The roster's own initials: first letters of the first two words. */
+function initialsOf(name: string): string {
+  const words = name
+    .trim()
+    .split(/[\s@._-]+/)
+    .filter(Boolean);
+  return (
+    words.length > 1 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? '?').slice(0, 2)
+  ).toUpperCase();
 }
 
 export const generateMetadata = pageMetadata('settings.people');

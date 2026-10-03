@@ -317,3 +317,15 @@ describe('★ 12d — 02’s drawer', () => {
     );
   });
 });
+
+describe('★ 12d corrections (measurement of 9121d4f)', () => {
+  it('"Extra permissions" is a section, and the footer’s Save is drawn not live', async () => {
+    await renderPanel();
+    expect(screen.getByTestId('overrides')).toHaveTextContent(/^Extra permissions/);
+    expect(screen.getByTestId('person-save')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('person-save')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/save themselves/i),
+    );
+  });
+});

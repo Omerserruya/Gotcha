@@ -471,3 +471,20 @@
     text-decoration: underline;
   }
 }
+
+@layer features {
+  /* 12d's head: the 44px disc beside the name, the roster's initials. */
+  .drawerDisc {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 44px;
+    block-size: 44px;
+    border-radius: var(--radius-round);
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-body-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+}

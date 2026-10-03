@@ -53,206 +53,226 @@ export async function PersonPanel({
   const noField = t('person.noField');
 
   return (
-    <div className={drawer.drawerBody} data-testid="person-panel">
-      <p className={styles.personChips}>
-        {typeof member?.openConversations === 'number' ? (
-          <span className={styles.personChip} data-testid="person-open">
-            {t('person.open', { count: member.openConversations })}
-          </span>
-        ) : null}
-        {teams.map((team) => (
-          <span key={team.departmentId} className={styles.personChip}>
-            {team.departmentName ?? '—'}
-          </span>
-        ))}
-      </p>
-
-      <h3 className={drawer.sectionTitle}>{t('person.details')}</h3>
-      <div className={drawer.pair}>
-        <div className={drawer.field}>
-          <span className={drawer.fieldLabel}>{t('person.fullName')}</span>
-          <span className={drawer.box} aria-disabled="true" title={notLive}>
-            {person.name ?? '—'}
-          </span>
-        </div>
-        <div className={drawer.field}>
-          <span className={drawer.fieldLabel}>{t('person.jobTitle')}</span>
-          <span className={drawer.box} aria-disabled="true" title={noField}>
-            —
-          </span>
-        </div>
-        <div className={drawer.field}>
-          <span className={drawer.fieldLabel}>{t('person.mobile')}</span>
-          <span className={drawer.box} aria-disabled="true" title={noField}>
-            —
-          </span>
-        </div>
-        <div className={drawer.field}>
-          <span className={drawer.fieldLabel}>{t('person.language')}</span>
-          <span className={drawer.box} aria-disabled="true" title={noField}>
-            —
-          </span>
-        </div>
-      </div>
-
-      <h3 className={drawer.sectionTitle}>{t('person.role')}</h3>
-      <div className={styles.personRole} data-testid="person-role">
-        <span className={styles.personRoleText}>
-          <span className={styles.personRoleName}>{roleName || '—'}</span>
-          {/*
-            Scope comes from the role ASSIGNMENT, not from any permission — a
-            permission only declares whether the dimension applies to it.
-          */}
-          <span className={styles.personRoleSub} data-testid="person-scope">
-            {[
-              roleDescription,
-              person.scope ? t(`scope.${person.scope}` as 'scope.team') : t('scope.none'),
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-        </span>
-        <span className={styles.personQuiet} aria-disabled="true" title={notLive}>
-          {t('person.change')}
-        </span>
-      </div>
-
-      <div className={styles.personTeams}>
-        <span className={drawer.fieldLabel}>{t('person.teams')}</span>
-        {teams.length > 0 ? (
-          teams.map((team) => (
+    <>
+      <div className={drawer.drawerBody} data-testid="person-panel">
+        <p className={styles.personChips}>
+          {typeof member?.openConversations === 'number' ? (
+            <span className={styles.personChip} data-testid="person-open">
+              {t('person.open', { count: member.openConversations })}
+            </span>
+          ) : null}
+          {teams.map((team) => (
             <span key={team.departmentId} className={styles.personChip}>
               {team.departmentName ?? '—'}
             </span>
-          ))
-        ) : (
-          <span className={styles.personNone}>—</span>
-        )}
-        <span className={styles.personQuiet} aria-disabled="true" title={notLive}>
-          {t('person.addTeam')}
-        </span>
-      </div>
+          ))}
+        </p>
 
-      <section className={styles.overrides} data-testid="overrides">
-        <header className={styles.personSectionHead}>
-          <h3 className={drawer.sectionTitle}>{t('overrides.heading')}</h3>
-          <span className={styles.personQuiet}>
-            {t('person.onTop', { name: who, role: roleName || '—' })}
+        <h3 className={drawer.sectionTitle}>{t('person.details')}</h3>
+        <div className={drawer.pair}>
+          <div className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('person.fullName')}</span>
+            <span className={drawer.box} aria-disabled="true" title={notLive}>
+              {person.name ?? '—'}
+            </span>
+          </div>
+          <div className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('person.jobTitle')}</span>
+            <span className={drawer.box} aria-disabled="true" title={noField}>
+              —
+            </span>
+          </div>
+          <div className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('person.mobile')}</span>
+            <span className={drawer.box} aria-disabled="true" title={noField}>
+              —
+            </span>
+          </div>
+          <div className={drawer.field}>
+            <span className={drawer.fieldLabel}>{t('person.language')}</span>
+            <span className={drawer.box} aria-disabled="true" title={noField}>
+              —
+            </span>
+          </div>
+        </div>
+
+        <h3 className={drawer.sectionTitle}>{t('person.role')}</h3>
+        <div className={styles.personRole} data-testid="person-role">
+          <span className={styles.personRoleText}>
+            <span className={styles.personRoleName}>{roleName || '—'}</span>
+            {/*
+            Scope comes from the role ASSIGNMENT, not from any permission — a
+            permission only declares whether the dimension applies to it.
+          */}
+            <span className={styles.personRoleSub} data-testid="person-scope">
+              {[
+                roleDescription,
+                person.scope ? t(`scope.${person.scope}` as 'scope.team') : t('scope.none'),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
           </span>
-          <Link
-            href={{ pathname: '/settings/people', query: { person: person.id, grant: '1' } }}
-            className={styles.personAdd}
-            data-testid="person-add-permission"
-            scroll={false}
-          >
-            {t('person.addPermission')}
-          </Link>
-        </header>
+          <span className={styles.personQuiet} aria-disabled="true" title={notLive}>
+            {t('person.change')}
+          </span>
+        </div>
 
-        {person.grants.length === 0 ? (
-          <p className={styles.overridesNone} data-testid="overrides-none">
-            {t('overrides.none')}
-          </p>
-        ) : (
-          <>
-            {added.length > 0 ? (
-              <ul className={styles.grantList} data-testid="grants-added">
-                {added.map((grant) => (
-                  <li key={grant.feature} className={styles.grant} data-kind="added">
-                    <span className={styles.grantText}>
-                      <span className={styles.grantFeature}>
-                        {nameOf(grant.feature) ?? grant.feature}
-                      </span>
-                      <span className={styles.grantWhy}>
-                        {[
-                          areaOf(grant.feature),
-                          grant.updatedAt
-                            ? t('person.addedOn', { date: day.format(new Date(grant.updatedAt)) })
-                            : null,
-                          grant.reason ? t('overrides.because', { reason: grant.reason }) : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                      {nameOf(grant.feature) === null ? (
-                        <span
-                          className={styles.grantWhy}
-                          data-testid={`uncatalogued-${grant.feature}`}
-                        >
-                          {t('overrides.notInCatalogue')}
+        <div className={styles.personTeams}>
+          <span className={drawer.fieldLabel}>{t('person.teams')}</span>
+          {teams.length > 0 ? (
+            teams.map((team) => (
+              <span key={team.departmentId} className={styles.personChip}>
+                {team.departmentName ?? '—'}
+              </span>
+            ))
+          ) : (
+            <span className={styles.personNone}>—</span>
+          )}
+          <span className={styles.personQuiet} aria-disabled="true" title={notLive}>
+            {t('person.addTeam')}
+          </span>
+        </div>
+
+        {/* 02: a section, not a boxed card — title, who it is for, + Add. */}
+        <section className={styles.extraSection} data-testid="overrides">
+          <header className={styles.personSectionHead}>
+            <h3 className={drawer.sectionTitle}>{t('person.extra')}</h3>
+            <span className={styles.personQuiet}>
+              {t('person.onTop', { name: who, role: roleName || '—' })}
+            </span>
+            <Link
+              href={{ pathname: '/settings/people', query: { person: person.id, grant: '1' } }}
+              className={styles.personAdd}
+              data-testid="person-add-permission"
+              scroll={false}
+            >
+              {t('person.addPermission')}
+            </Link>
+          </header>
+
+          {person.grants.length === 0 ? (
+            <p className={styles.overridesNone} data-testid="overrides-none">
+              {t('overrides.none')}
+            </p>
+          ) : (
+            <>
+              {added.length > 0 ? (
+                <ul className={styles.grantList} data-testid="grants-added">
+                  {added.map((grant) => (
+                    <li key={grant.feature} className={styles.grant} data-kind="added">
+                      <span className={styles.grantText}>
+                        <span className={styles.grantFeature}>
+                          {nameOf(grant.feature) ?? grant.feature}
                         </span>
-                      ) : null}
-                    </span>
-                    {/* An override has no end date, so it does not pretend to. */}
-                    <span className={styles.personQuiet}>{t('person.noEnd')}</span>
-                    {/*
+                        <span className={styles.grantWhy}>
+                          {[
+                            areaOf(grant.feature),
+                            grant.updatedAt
+                              ? t('person.addedOn', { date: day.format(new Date(grant.updatedAt)) })
+                              : null,
+                            grant.reason ? t('overrides.because', { reason: grant.reason }) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                        {nameOf(grant.feature) === null ? (
+                          <span
+                            className={styles.grantWhy}
+                            data-testid={`uncatalogued-${grant.feature}`}
+                          >
+                            {t('overrides.notInCatalogue')}
+                          </span>
+                        ) : null}
+                      </span>
+                      {/* An override has no end date, so it does not pretend to. */}
+                      <span className={styles.personQuiet}>{t('person.noEnd')}</span>
+                      {/*
                       ⚠ A WRITE against a real person. No test and no capture
                       presses it. Only on an ADDED grant.
                     */}
-                    <RemovePermission
-                      userId={person.id}
-                      personName={who}
-                      feature={grant.feature}
-                      featureName={nameOf(grant.feature) ?? grant.feature}
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+                      <RemovePermission
+                        userId={person.id}
+                        personName={who}
+                        feature={grant.feature}
+                        featureName={nameOf(grant.feature) ?? grant.feature}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
-            {/* The half the design never describes, and that nothing else shows. */}
-            {removed.length > 0 ? (
-              <ul className={styles.grantList} data-testid="grants-removed">
-                {removed.map((grant) => (
-                  <li key={grant.feature} className={styles.grant} data-kind="removed">
-                    <span className={styles.grantText}>
-                      <span className={styles.grantFeature}>
-                        {nameOf(grant.feature) ?? grant.feature}
+              {/* The half the design never describes, and that nothing else shows. */}
+              {removed.length > 0 ? (
+                <ul className={styles.grantList} data-testid="grants-removed">
+                  {removed.map((grant) => (
+                    <li key={grant.feature} className={styles.grant} data-kind="removed">
+                      <span className={styles.grantText}>
+                        <span className={styles.grantFeature}>
+                          {nameOf(grant.feature) ?? grant.feature}
+                        </span>
+                        <span className={styles.grantWhy}>
+                          {[
+                            t('overrides.removed'),
+                            grant.reason ? t('overrides.because', { reason: grant.reason }) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
                       </span>
-                      <span className={styles.grantWhy}>
-                        {[
-                          t('overrides.removed'),
-                          grant.reason ? t('overrides.because', { reason: grant.reason }) : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </>
-        )}
-        <p className="srOnly" data-testid="overrides-no-expiry">
-          {t('overrides.noExpiry')}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          )}
+          <p className="srOnly" data-testid="overrides-no-expiry">
+            {t('overrides.noExpiry')}
+          </p>
+        </section>
+
+        {/* 02's workload line. Nothing stores a cap or auto-assignment. */}
+        <p className={styles.personWorkload} title={noField} data-testid="person-workload">
+          <span>{t('person.atOnce')}</span>
+          <span className={styles.personNone}>—</span>
+          <span>{t('person.autoAssign')}</span>
+          <span className={styles.personNone}>—</span>
         </p>
-      </section>
 
-      {/* 02's workload line. Nothing stores a cap or auto-assignment. */}
-      <p className={styles.personWorkload} title={noField} data-testid="person-workload">
-        <span>{t('person.atOnce')}</span>
-        <span className={styles.personNone}>—</span>
-        <span>{t('person.autoAssign')}</span>
-        <span className={styles.personNone}>—</span>
-      </p>
-
-      {/*
+        {/*
         Drawn, not live. Password and sessions are the identity provider's;
         deactivating is ours (`User.isActive`) and not wired from here.
       */}
-      <p className={styles.personAccount} data-testid="account-elsewhere">
-        <span className={styles.personQuiet} aria-disabled="true" title={t('elsewhere')}>
-          {t('person.resetPassword')}
+        <p className={styles.personAccount} data-testid="account-elsewhere">
+          <span className={styles.personQuiet} aria-disabled="true" title={t('elsewhere')}>
+            {t('person.resetPassword')}
+          </span>
+          <span className={styles.personQuiet} aria-disabled="true" title={t('elsewhere')}>
+            {t('person.signOutAll')}
+          </span>
+          <span className={styles.personDanger} aria-disabled="true" title={notLive}>
+            {t('person.deactivate')}
+          </span>
+          <span className="srOnly">{t('elsewhere')}</span>
+        </p>
+      </div>
+      {/*
+      02's footer. Nothing in this drawer is a field you save — the two
+      writes (add, remove) save themselves — so Save is drawn and not live.
+    */}
+      <footer className={drawer.drawerFoot}>
+        <span
+          className={styles.personSave}
+          aria-disabled="true"
+          title={t('person.nothingToSave')}
+          data-testid="person-save"
+        >
+          {t('person.save')}
         </span>
-        <span className={styles.personQuiet} aria-disabled="true" title={t('elsewhere')}>
-          {t('person.signOutAll')}
-        </span>
-        <span className={styles.personDanger} aria-disabled="true" title={notLive}>
-          {t('person.deactivate')}
-        </span>
-        <span className="srOnly">{t('elsewhere')}</span>
-      </p>
-    </div>
+        <Link href="/settings/people" className={drawer.drawerCancel}>
+          {t('person.cancel')}
+        </Link>
+      </footer>
+    </>
   );
 }

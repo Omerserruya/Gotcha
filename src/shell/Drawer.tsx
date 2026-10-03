@@ -20,6 +20,7 @@ export async function Drawer({
   closeHref,
   width = 560,
   testId,
+  lead,
   children,
 }: {
   readonly title: string;
@@ -28,6 +29,8 @@ export async function Drawer({
   /** 02's widths: 560 (11b, 11c), 600 (12d, 14c), 620 (11d), 820 (14e). */
   readonly width?: 560 | 600 | 620 | 820;
   readonly testId?: string;
+  /** Before the title — 12d's 44px disc. */
+  readonly lead?: ReactNode;
   readonly children: ReactNode;
 }) {
   const t = await getTranslations('common.actions');
@@ -36,6 +39,7 @@ export async function Drawer({
       <Link href={closeHref} className={styles.scrim} aria-label={t('close')} tabIndex={-1} />
       <aside className={styles.panel} data-width={width} aria-label={title}>
         <header className={styles.head}>
+          {lead}
           <div className={styles.titles}>
             <h2 className={styles.title}>{title}</h2>
             {line ? <p className={styles.line}>{line}</p> : null}

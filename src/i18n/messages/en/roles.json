@@ -98,7 +98,11 @@
     "resetPassword": "Reset password",
     "signOutAll": "Sign out of all devices",
     "deactivate": "Deactivate",
-    "close": "Close"
+    "close": "Close",
+    "extra": "Extra permissions",
+    "save": "Save changes",
+    "cancel": "Cancel",
+    "nothingToSave": "Nothing here is saved from this drawer yet — adding and removing a permission save themselves."
   },
   "table": {
     "role": "Role",
@@ -134,6 +138,7 @@
     "whyPlaceholder": "Optional",
     "add": "Add permission",
     "cancel": "Cancel",
-    "done": "Added. It applies to {name} from now on."
+    "done": "Added. It applies to {name} from now on.",
+    "allCovered": "{role} already allows everything."
   }
 }

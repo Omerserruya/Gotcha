@@ -12,7 +12,7 @@ import { addPermission } from './actions';
 import styles from './Roles.module.css';
 
 /**
- * 12e, measured: "Add a permission for {name}" — a search over the
+ * 12e, measured: a floating dialog over 12d — "Add a permission for {name}" — a search over the
  * catalogue by area, what is already covered shown and not pickable (given
  * to them already, or in their role), an end, a reason, and Add.
  *
@@ -35,7 +35,8 @@ export function GrantPicker({
   const tr = useTranslations('roles');
   const who = person.name ?? person.email;
   const [query, setQuery] = useState('');
-  const [chosen, setChosen] = useState<string | null>(null);
+  /* 02 draws checkboxes: several at once, one call each, in order. */
+  const [chosen, setChosen] = useState<readonly string[]>([]);
   const [reason, setReason] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -60,14 +61,21 @@ export function GrantPicker({
       : holds(person.permissions, p.key)
         ? t('inRole', { role: roleName || '—' })
         : null;
+  const pickable = named.filter((p) => status(p) === null);
 
   function add() {
-    if (!chosen) return;
+    if (chosen.length === 0) return;
     setProblem(null);
     startTransition(async () => {
-      const result = await addPermission(person.id, chosen, reason.trim());
-      if (result.ok) setDone(true);
-      else setProblem(tr(`error.${result.reason}` as 'error.failed'));
+      for (const key of chosen) {
+        const result = await addPermission(person.id, key, reason.trim());
+        if (!result.ok) {
+          // Stop at the first refusal: the ones before it are given.
+          setProblem(tr(`error.${result.reason}` as 'error.failed'));
+          return;
+        }
+      }
+      setDone(true);
     });
   }
 
@@ -78,16 +86,25 @@ export function GrantPicker({
       role="dialog"
       aria-label={t('title', { name: who })}
     >
-      <h3 className={styles.grantTitle}>{t('title', { name: who })}</h3>
-      <input
-        className={drawer.box}
-        type="search"
-        placeholder={t('search')}
-        aria-label={t('search')}
-        value={query}
-        data-testid="grant-search"
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <div className={styles.grantHead}>
+        <h3 className={styles.grantTitle}>{t('title', { name: who })}</h3>
+        <input
+          className={drawer.box}
+          type="search"
+          placeholder={t('search')}
+          aria-label={t('search')}
+          value={query}
+          data-testid="grant-search"
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {/* An all-disabled list explains itself. */}
+        {named.length > 0 && pickable.length === 0 ? (
+          <p className={styles.grantAllCovered} data-testid="grant-all-covered">
+            {t('allCovered', { role: roleName || '—' })}
+          </p>
+        ) : null}
+      </div>
+
       <div className={styles.grantAreas}>
         {shown.map((group) => (
           <section key={group.domain} className={styles.grantArea}>
@@ -103,12 +120,17 @@ export function GrantPicker({
                       data-testid={`grant-option-${p.key}`}
                     >
                       <input
-                        type="radio"
-                        name="grant"
+                        type="checkbox"
                         value={p.key}
                         disabled={covered !== null}
-                        checked={chosen === p.key}
-                        onChange={() => setChosen(p.key)}
+                        checked={chosen.includes(p.key)}
+                        onChange={(e) =>
+                          setChosen(
+                            e.target.checked
+                              ? [...chosen, p.key]
+                              : chosen.filter((k) => k !== p.key),
+                          )
+                        }
                       />
                       <span className={styles.grantOptionName}>{p.displayName}</span>
                       {covered ? <span className={styles.grantOptionNote}>{covered}</span> : null}
@@ -121,61 +143,63 @@ export function GrantPicker({
         ))}
       </div>
 
-      <div className={styles.grantRow}>
-        <span className={drawer.fieldLabel}>{t('ends')}</span>
-        <span className={styles.grantSegmented} title={t('noEndOnly')}>
-          <span className={styles.grantSegment} data-current="yes">
-            {t('noEnd')}
+      {/* 02's sticky footer: Ends, Why and Add are always in view. */}
+      <div className={styles.grantFoot}>
+        <div className={styles.grantRow}>
+          <span className={drawer.fieldLabel}>{t('ends')}</span>
+          <span className={styles.grantSegmented} title={t('noEndOnly')}>
+            <span className={styles.grantSegment} data-current="yes">
+              {t('noEnd')}
+            </span>
+            <span className={styles.grantSegment} aria-disabled="true">
+              {t('days7')}
+            </span>
+            <span className={styles.grantSegment} aria-disabled="true">
+              {t('days30')}
+            </span>
+            <span className={styles.grantSegment} aria-disabled="true">
+              {t('pickDate')}
+            </span>
           </span>
-          <span className={styles.grantSegment} aria-disabled="true">
-            {t('days7')}
-          </span>
-          <span className={styles.grantSegment} aria-disabled="true">
-            {t('days30')}
-          </span>
-          <span className={styles.grantSegment} aria-disabled="true">
-            {t('pickDate')}
-          </span>
-        </span>
-      </div>
-      <label className={styles.grantRow}>
-        <span className={drawer.fieldLabel}>{t('why')}</span>
-        <input
-          className={drawer.box}
-          value={reason}
-          maxLength={300}
-          placeholder={t('whyPlaceholder')}
-          data-testid="grant-reason"
-          onChange={(e) => setReason(e.target.value)}
-        />
-      </label>
-
-      <div className={styles.grantActions}>
-        <button
-          type="button"
-          className={styles.grantAdd}
-          data-testid="grant-add"
-          disabled={!chosen || isPending || done}
-          onClick={add}
-        >
-          {t('add')}
-        </button>
-        <Link
-          href={{ pathname: '/settings/people', query: { person: person.id } }}
-          className={drawer.drawerCancel}
-          scroll={false}
-        >
-          {t('cancel')}
-        </Link>
-        {problem ? (
-          <span className={styles.grantProblem} data-testid="grant-problem">
-            {problem}
-          </span>
-        ) : done ? (
-          <span className={styles.grantDone} data-testid="grant-done">
-            {t('done', { name: who })}
-          </span>
-        ) : null}
+        </div>
+        <label className={styles.grantRow}>
+          <span className={drawer.fieldLabel}>{t('why')}</span>
+          <input
+            className={drawer.box}
+            value={reason}
+            maxLength={300}
+            placeholder={t('whyPlaceholder')}
+            data-testid="grant-reason"
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </label>
+        <div className={styles.grantActions}>
+          <button
+            type="button"
+            className={styles.grantAdd}
+            data-testid="grant-add"
+            disabled={chosen.length === 0 || isPending || done}
+            onClick={add}
+          >
+            {t('add')}
+          </button>
+          <Link
+            href={{ pathname: '/settings/people', query: { person: person.id } }}
+            className={drawer.drawerCancel}
+            scroll={false}
+          >
+            {t('cancel')}
+          </Link>
+          {problem ? (
+            <span className={styles.grantProblem} data-testid="grant-problem">
+              {problem}
+            </span>
+          ) : done ? (
+            <span className={styles.grantDone} data-testid="grant-done">
+              {t('done', { name: who })}
+            </span>
+          ) : null}
+        </div>
       </div>
     </div>
   );

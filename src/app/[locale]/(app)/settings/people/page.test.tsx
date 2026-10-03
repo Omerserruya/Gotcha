@@ -16,8 +16,19 @@ vi.mock('@/shell/SettingsSection', () => ({
   SettingsSection: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock('@/shell/Drawer', () => ({
-  Drawer: ({ testId, title, children }: { testId: string; title: string; children: ReactNode }) => (
+  Drawer: ({
+    testId,
+    title,
+    lead,
+    children,
+  }: {
+    testId: string;
+    title: string;
+    lead?: ReactNode;
+    children: ReactNode;
+  }) => (
     <aside data-testid={testId} aria-label={title}>
+      {lead}
       {children}
     </aside>
   ),
@@ -68,6 +79,7 @@ describe('★ 12d over People, 12e over 12d', () => {
     await open({ person: 'u1' });
     expect(screen.getByTestId('drawer-person')).toHaveAttribute('aria-label', 'Tomer Adler');
     expect(screen.getByTestId('person-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('person-disc')).toHaveTextContent(/^TA$/);
     expect(screen.queryByTestId('grant-picker')).toBeNull();
     expect(screen.getByTestId('table')).toBeInTheDocument();
   });
