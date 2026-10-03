@@ -34,27 +34,39 @@ const sheet = () =>
   );
 
 describe('★★ 21 — a rule assembled locally from the runner’s own steps; nothing sent', () => {
-  it('THEN offers exactly the node types the runner executes, in its words', () => {
+  it('THEN: a dashed row opening a menu of exactly the node types the runner executes', async () => {
     sheet();
-    const options = [...screen.getByTestId('new-add').querySelectorAll('option')].slice(1);
-    expect(options.map((o) => o.value)).toEqual([...STEP_TYPES]);
-    expect(options.map((o) => o.textContent)).toContain('Write a reply with AI');
+    const add = screen.getByTestId('new-add');
+    expect(add.tagName).toBe('BUTTON');
+    expect(add).toHaveTextContent(/^Add a step — /);
+    expect(screen.queryByRole('menu')).toBeNull();
+    await userEvent.click(add);
+    expect(add).toHaveAttribute('aria-expanded', 'true');
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((i) => i.getAttribute('data-testid'))).toEqual(
+      STEP_TYPES.map((type) => `new-add-${type}`),
+    );
+    expect(items.map((i) => i.textContent)).toContain('Write a reply with AI');
   });
 
   it('adds steps in order, and removes the one asked', async () => {
     sheet();
-    await userEvent.selectOptions(screen.getByTestId('new-add'), 'route_target');
-    await userEvent.selectOptions(screen.getByTestId('new-add'), 'send_message_text');
+    const pick = async (type: string) => {
+      await userEvent.click(screen.getByTestId('new-add'));
+      await userEvent.click(screen.getByTestId(`new-add-${type}`));
+    };
+    await pick('route_target');
+    await pick('send_message_text');
     expect(screen.getByTestId('new-step-0')).toHaveTextContent('Pass it on');
     expect(screen.getByTestId('new-step-1')).toHaveTextContent('Send a message');
-    await userEvent.selectOptions(screen.getByTestId('new-add'), 'collect_input');
+    await pick('collect_input');
     // The MIDDLE one: removing the first cannot tell "this one" from "the first".
     await userEvent.click(screen.getByTestId('new-remove-1'));
     expect(screen.getByTestId('new-step-0')).toHaveTextContent('Pass it on');
     expect(screen.getByTestId('new-step-1')).toHaveTextContent('Ask the customer for something');
     expect(screen.queryByTestId('new-step-2')).toBeNull();
-    // The picker goes back to its prompt, ready for the next one.
-    expect(screen.getByTestId('new-add')).toHaveValue('');
+    // Picking closes the menu.
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('the sentence and the WHEN are typed locally', async () => {

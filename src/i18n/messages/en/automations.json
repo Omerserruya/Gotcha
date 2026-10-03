@@ -72,6 +72,7 @@
     "save": "Save automation",
     "saveNotYet": "Saving writes an automation — waiting for approval.",
     "test": "Test on a past conversation",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "addLong": "Add a step — send a message, ask the customer, write a reply, call another system, pass it on…"
   }
 }

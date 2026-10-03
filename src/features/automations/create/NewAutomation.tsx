@@ -38,6 +38,7 @@ export function NewAutomation() {
   const [sentence, setSentence] = useState('');
   const [when, setWhen] = useState('');
   const [steps, setSteps] = useState<readonly StepType[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className={hire.layer} data-testid="new-automation">
@@ -120,26 +121,37 @@ export function NewAutomation() {
                     </button>
                   </li>
                 ))}
-                <li>
-                  <select
+                <li className={styles.adder}>
+                  <button
+                    type="button"
                     className={styles.add}
-                    value=""
-                    aria-label={t('add')}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
                     data-testid="new-add"
-                    onChange={(e) => {
-                      const type = e.target.value as StepType;
-                      if ((STEP_TYPES as readonly string[]).includes(type)) {
-                        setSteps([...steps, type]);
-                      }
-                    }}
+                    onClick={() => setMenuOpen(!menuOpen)}
                   >
-                    <option value="">{t('add')}</option>
-                    {STEP_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {ts(type)}
-                      </option>
-                    ))}
-                  </select>
+                    {t('addLong')}
+                  </button>
+                  {menuOpen ? (
+                    <ul className={styles.menu} role="menu" aria-label={t('add')}>
+                      {STEP_TYPES.map((type) => (
+                        <li key={type} role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={styles.menuItem}
+                            data-testid={`new-add-${type}`}
+                            onClick={() => {
+                              setSteps([...steps, type]);
+                              setMenuOpen(false);
+                            }}
+                          >
+                            {ts(type)}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </li>
               </ol>
             </div>
