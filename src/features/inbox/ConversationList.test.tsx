@@ -1143,3 +1143,28 @@ describe('★ the list hands the menu what it needs', () => {
     expect(area.querySelector('[data-conversation-id="c1"]')).not.toBeNull();
   });
 });
+
+describe('★ 02b — on a clear queue the bar at the column’s foot carries what the queue is', () => {
+  it('one foot, the sentence, in the bar — never an empty band', async () => {
+    render(
+      await ConversationList({
+        rows: [],
+        cap: 50,
+        now: NOW,
+        hasMore: false,
+        clear: <div>clear</div>,
+      }),
+    );
+    expect(screen.getByTestId('queue-cap')).toHaveTextContent(
+      'New conversations land here unless an automation is running them.',
+    );
+    expect(screen.getAllByText(/New conversations land here/)).toHaveLength(1);
+  });
+
+  it('a busy queue keeps its count', async () => {
+    render(
+      await ConversationList({ rows: [row()], cap: 10, now: NOW, hasMore: false, clear: null }),
+    );
+    expect(screen.getByTestId('queue-cap')).toHaveTextContent(/that's all of them/i);
+  });
+});

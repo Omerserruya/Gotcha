@@ -208,7 +208,7 @@
     "write": "Write to a customer",
     "writeNotYet": "Starting a conversation from the inbox isn't built yet.",
     "stat": {
-      "answered": "Answered by GOTCHA today",
+      "answered": "Answered today",
       "reply": "Average reply time",
       "passed": "Passed to a person",
       "seconds": "{count}s",

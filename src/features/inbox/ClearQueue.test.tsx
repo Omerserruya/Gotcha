@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-
 import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
@@ -76,9 +74,8 @@ describe('★★ 02b — the list column: empty, but not blank', () => {
     expect(screen.getByTestId('going-live')).toHaveTextContent('—');
   });
 
-  it('★ the foot says what the queue is — not "the moment GOTCHA needs a person"', async () => {
+  it('nothing in flight says so', async () => {
     render(await ClearQueueList({ clear: { overview: null, inFlight: inFlight(0) } }));
-    expect(screen.getByText(/unless an automation is running them/)).toBeInTheDocument();
     expect(screen.getByTestId('going-live')).toHaveTextContent('not in a conversation right now');
   });
 });
@@ -103,7 +100,7 @@ describe('★★ 02b — the pane: nothing to read, and the day', () => {
   it('the strip: today’s counts, the reply time, and "—" where nothing records why', async () => {
     render(await ClearQueuePane({ clear: { overview: overview(), inFlight: null } }));
     const strip = screen.getByTestId('clear-strip');
-    expect(strip).toHaveTextContent('Answered by GOTCHA today85');
+    expect(strip).toHaveTextContent('Answered today85');
     expect(strip).toHaveTextContent('Average reply time19s');
     expect(strip).toHaveTextContent('Passed to a person1');
     expect(screen.getByTitle(/Nothing records why/)).toHaveTextContent('—');
@@ -118,28 +115,12 @@ describe('★★ 02b — the pane: nothing to read, and the day', () => {
         },
       }),
     );
-    expect(screen.getByTestId('clear-strip')).toHaveTextContent('Answered by GOTCHA today—');
+    expect(screen.getByTestId('clear-strip')).toHaveTextContent('Answered today—');
   });
 
   it('see what GOTCHA answered → the AI view; write to a customer is drawn', async () => {
     render(await ClearQueuePane({ clear: { overview: null, inFlight: null } }));
     expect(screen.getByTestId('see-answered')).toHaveAttribute('href', '/inbox?view=ai');
     expect(screen.getByTestId('write-customer')).toHaveAttribute('aria-disabled', 'true');
-  });
-});
-
-describe('★ 02b — the list foot sits at the bottom of the column', () => {
-  const css = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').replace(
-    /\/\*[\s\S]*?\*\//g,
-    '',
-  );
-  const rule = (selector: string) =>
-    new RegExp(`(?:^|\\n)\\s*\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-  it('the block fills the scroll; the foot takes the rest above it', () => {
-    expect(rule('clear')).toMatch(/min-block-size:\s*100%/);
-    expect(rule('clearFoot')).toMatch(/margin:\s*auto 0 0/);
-  });
-  it('the strip runs the pane’s width', () => {
-    expect(rule('clearPane')).toMatch(/flex:\s*1/);
   });
 });

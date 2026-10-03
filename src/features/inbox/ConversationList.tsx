@@ -620,8 +620,13 @@ export async function ConversationList({
           own slot. One structural question answered without deleting the
           sentence it was about.
       */}
+      {/* 02b: on a clear queue the bar carries what the queue is, not a count of nothing. */}
       <p className={styles.queueFooter} data-testid="queue-cap">
-        {hasMore ? t('queue.cap', { count: cap }) : t('queue.capAll', { count: rows.length })}
+        {clear && rows !== null && rows.length === 0
+          ? t('clear.foot')
+          : hasMore
+            ? t('queue.cap', { count: cap })
+            : t('queue.capAll', { count: rows.length })}
       </p>
     </div>
   );

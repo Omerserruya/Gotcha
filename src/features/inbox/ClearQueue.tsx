@@ -60,7 +60,6 @@ export async function ClearQueueList({ clear }: { readonly clear: ClearQueue }) 
           </li>
         </ul>
       </div>
-      <p className={styles.clearFoot}>{t('foot')}</p>
     </div>
   );
 }
