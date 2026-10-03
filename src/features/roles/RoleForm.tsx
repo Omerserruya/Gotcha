@@ -46,16 +46,23 @@ import styles from './Roles.module.css';
 export function RoleForm({
   permissions,
   roles,
+  initialSourceId = '',
 }: {
   readonly permissions: readonly PermissionDef[];
   /** Existing roles to start from. */
   readonly roles: readonly Role[];
+  /** 12b's "Duplicate": the role this one starts from (`?from=`). */
+  readonly initialSourceId?: string;
 }) {
   const t = useTranslations('roles');
-  const [sourceId, setSourceId] = useState('');
+  const [sourceId, setSourceId] = useState(initialSourceId);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selected, setSelected] = useState<readonly string[]>([]);
+  // Seeded as `startFrom` would seed it — including its refusal of a wildcard role.
+  const [selected, setSelected] = useState<readonly string[]>(() => {
+    const role = roles.find((r) => r.id === initialSourceId);
+    return role && gridCanRepresent(role.features) ? [...role.features] : [];
+  });
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 

@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 
 import type { Department } from '@/api/contracts/people';
 import { Button } from '@/design-system/primitives/button/Button';
+import { Link } from '@/i18n/navigation';
 import { Input } from '@/design-system/primitives/input/Input';
 
 import { inviteMember, type PeopleWriteResult } from './actions';
@@ -29,9 +30,18 @@ import styles from './People.module.css';
  * real human being as "omerts58". That is not a default worth picking
  * silently.
  */
-export function InviteForm({ teams }: { readonly teams: readonly Department[] }) {
+export function InviteForm({
+  teams,
+  open,
+}: {
+  readonly teams: readonly Department[];
+  /**
+   * 12: the header's "Invite someone" opens this row (`?invite=1`) and its
+   * Cancel closes it — the URL holds the state, so header and row share it.
+   */
+  readonly open: boolean;
+}) {
   const t = useTranslations('people');
-  const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [teamIds, setTeamIds] = useState<readonly string[]>([]);
@@ -39,13 +49,6 @@ export function InviteForm({ teams }: { readonly teams: readonly Department[] })
     null,
   );
   const [isPending, startTransition] = useTransition();
-
-  function reset() {
-    setEmail('');
-    setName('');
-    setTeamIds([]);
-    setResult(null);
-  }
 
   function submit() {
     setResult(null);
@@ -63,23 +66,7 @@ export function InviteForm({ teams }: { readonly teams: readonly Department[] })
     });
   }
 
-  if (!open) {
-    return (
-      <div className={styles.inviteBar}>
-        <Button
-          variant="primary"
-          size="sm"
-          data-testid="invite-open"
-          onClick={() => {
-            reset();
-            setOpen(true);
-          }}
-        >
-          {t('invite.open')}
-        </Button>
-      </div>
-    );
-  }
+  if (!open) return null;
 
   const fieldErrors = result && !result.ok && result.reason === 'invalid' ? result.fields : {};
 
@@ -145,15 +132,10 @@ export function InviteForm({ teams }: { readonly teams: readonly Department[] })
         >
           {isPending ? t('invite.sending') : t('invite.send')}
         </Button>
-        <Button
-          size="sm"
-          onClick={() => {
-            setOpen(false);
-            reset();
-          }}
-        >
+        {/* Closing is leaving `?invite=1` — the state lives in the URL. */}
+        <Link href="/settings/people" className={styles.inviteCancel} data-testid="invite-cancel">
           {t('cancel')}
-        </Button>
+        </Link>
       </div>
 
       {result ? <InviteOutcome result={result} /> : null}

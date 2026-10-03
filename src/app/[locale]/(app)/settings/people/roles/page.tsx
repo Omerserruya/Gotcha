@@ -5,7 +5,11 @@ import { loadRoles } from '@/features/roles/load-roles';
 import { RoleForm } from '@/features/roles/RoleForm';
 import { RoleList } from '@/features/roles/RoleList';
 import styles from '@/features/roles/Roles.module.css';
-import { PageContainer } from '@/shell/PageContainer';
+import { loadPeople } from '@/features/people/load-people';
+import peopleStyles from '@/features/people/People.module.css';
+import { PeopleTabs } from '@/features/people/PeopleTabs';
+import { Link } from '@/i18n/navigation';
+import { SettingsSection } from '@/shell/SettingsSection';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
@@ -28,56 +32,93 @@ import { pageMetadata } from '@/shell/page-metadata';
  * Generating a sentence from a permission list would read as a promise about
  * behaviour rather than a summary of settings.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly create?: string; readonly from?: string }>;
+} = {}) {
   const t = await getTranslations('roles');
-  const [roles, catalog] = await Promise.all([loadRoles(), loadCatalog()]);
+  const tp = await getTranslations('people');
+  const params = (await searchParams) ?? {};
+  const [roles, catalog, { members, aiEmployees, teams }] = await Promise.all([
+    loadRoles(),
+    loadCatalog(),
+    loadPeople(),
+  ]);
 
-  if (roles === null) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <p data-testid="roles-unavailable">{t('unavailable')}</p>
-      </PageContainer>
-    );
-  }
-
-  const custom = roles.filter((role) => !role.isSystem);
+  // The same header as 12 — 12b is People & teams with Roles open.
+  const summary =
+    members && aiEmployees && teams
+      ? tp('summary', { people: members.length, ai: aiEmployees.length, teams: teams.length })
+      : tp('description');
 
   return (
-    <PageContainer title={t('title')} description={t('description')}>
-      <div className={styles.screen} data-testid="roles-screen">
-        {/*
-          Stated once, above the list, because the design a reader arrives
-          from puts a money limit in three role descriptions.
-        */}
-        <p className={styles.noLimits} data-testid="no-limits">
-          {t('noLimits')}
-        </p>
+    <SettingsSection
+      title={tp('title')}
+      description={summary}
+      actions={
+        <Link
+          href={{ pathname: '/settings/people/roles', query: { create: '1' } }}
+          className={peopleStyles.headerAction}
+          data-testid="role-create-open"
+        >
+          {t('create')}
+        </Link>
+      }
+    >
+      <PeopleTabs
+        current="roles"
+        counts={{
+          people: members ? members.length : null,
+          roles: roles ? roles.length : null,
+          teams: teams ? teams.length : null,
+        }}
+      />
 
-        <RoleList roles={roles} />
+      {roles === null ? (
+        <p data-testid="roles-unavailable">{t('unavailable')}</p>
+      ) : (
+        <>
+          {/*
+            Screen 12c, opened from the header ("Create role") or a row's
+            "Duplicate" (`?from=`). Omitted when the catalogue could not be
+            read: a picker with no permissions creates a role granting nothing.
+          */}
+          {params.create === '1' && catalog ? (
+            <RoleForm
+              permissions={catalog.permissions}
+              roles={roles}
+              initialSourceId={roles.some((r) => r.id === params.from) ? params.from : ''}
+            />
+          ) : null}
 
-        {/*
-          Zero custom roles is the state here, and it is worth naming: it
-          means every permission anyone has comes from a role nobody chose.
-        */}
-        {/*
-          Screen 12c, BELOW the list. "Start from an existing role" needs the
-          existing roles to have been read first — a form above them would ask
-          somebody to choose a starting point they have not seen.
+          <RoleList roles={roles} />
 
-          Omitted entirely when the catalogue could not be read: a permission
-          picker with no permissions is a form that silently creates a role
-          granting nothing.
-        */}
-        {catalog ? <RoleForm permissions={catalog.permissions} roles={roles} /> : null}
-
-        {custom.length === 0 ? (
-          <div className={styles.empty} data-testid="no-custom-roles">
-            <p className={styles.emptyLead}>{t('noCustom')}</p>
-            <p className={styles.emptyBody}>{t('noCustomBody')}</p>
+          <div className={styles.cards}>
+            <section className={styles.card} data-testid="card-extra">
+              <span className={styles.cardText}>
+                <span className={styles.cardTitle}>{t('cards.extraTitle')}</span>
+                <span className={styles.cardBody}>{t('cards.extraBody')}</span>
+              </span>
+              <Link href="/settings/people" className={styles.cardLink}>
+                {t('cards.extraLink')}
+              </Link>
+            </section>
+            <section className={styles.card} data-testid="card-ai">
+              <span className={styles.cardText}>
+                <span className={styles.cardTitle}>{t('cards.aiTitle')}</span>
+                <span className={styles.cardBody}>{t('cards.aiBody')}</span>
+              </span>
+              <Link href="/studio/capabilities" className={styles.cardLink}>
+                {t('cards.aiLink')}
+              </Link>
+            </section>
           </div>
-        ) : null}
-      </div>
-    </PageContainer>
+
+          <p className={styles.foot}>{t('foot')}</p>
+        </>
+      )}
+    </SettingsSection>
   );
 }
 

@@ -1,6 +1,9 @@
 import { getTranslations } from 'next-intl/server';
 
+import { Lock } from 'lucide-react';
+
 import { allowsEverything, isEditable, type Role } from '@/api/contracts/roles';
+import { Link } from '@/i18n/navigation';
 
 import styles from './Roles.module.css';
 
@@ -24,62 +27,86 @@ import styles from './Roles.module.css';
 export async function RoleList({ roles }: { readonly roles: readonly Role[] }) {
   const t = await getTranslations('roles');
 
+  /*
+    12b, measured: one white card — a mono head (ROLE · WHAT IT ALLOWS ·
+    PEOPLE), then a row per role: its name over "Built in" (a lock) or
+    "Custom"; what it allows; who holds it; and its action at the end.
+  */
   return (
-    <ul className={styles.roles} data-testid="role-list">
-      {roles.map((role) => (
-        <li
-          key={role.id}
-          className={styles.role}
-          data-testid={`role-${role.id}`}
-          data-builtin={role.isSystem ? 'yes' : 'no'}
-        >
-          <div className={styles.head}>
-            <span className={styles.name}>{role.name}</span>
-            {role.isSystem ? (
-              <span className={styles.builtin} data-testid={`builtin-${role.id}`}>
-                {t('builtin')}
-              </span>
-            ) : null}
-          </div>
+    <section className={styles.table} data-testid="role-list">
+      <div className={styles.tableHead} aria-hidden="true">
+        <span className={styles.colRole}>{t('table.role')}</span>
+        <span className={styles.colAllows}>{t('table.allows')}</span>
+        <span className={styles.colPeople}>{t('table.people')}</span>
+        <span className={styles.colAction} />
+      </div>
+      <ul className={styles.rows}>
+        {roles.map((role) => (
+          <li
+            key={role.id}
+            className={styles.row}
+            data-testid={`role-${role.id}`}
+            data-builtin={role.isSystem ? 'yes' : 'no'}
+          >
+            <span className={styles.colRole}>
+              <span className={styles.name}>{role.name}</span>
+              {role.isSystem ? (
+                <span className={styles.kind} data-testid={`builtin-${role.id}`}>
+                  <Lock size={11} aria-hidden="true" />
+                  {t('builtin')}
+                </span>
+              ) : (
+                // No creator is recorded, so "Custom", never "Custom · by Maya".
+                <span className={styles.kind}>{t('custom')}</span>
+              )}
+            </span>
 
-          {/*
-            The platform's own words for a built-in role. A custom role has no
-            description unless whoever made it wrote one, and inventing one
-            from its permission list would read as a promise about behaviour.
-          */}
-          {role.description ? <p className={styles.description}>{role.description}</p> : null}
+            {/*
+              The platform's own words for a built-in role; a custom one shows
+              what it allows, counted — never invented from its permissions.
+              A wildcard role says what it means: Owner holds one row, `*`, and
+              counting it read "Allows one thing" under "everything".
+            */}
+            <span className={styles.colAllows} data-testid={`allows-${role.id}`}>
+              {role.description ??
+                (allowsEverything(role)
+                  ? t('allowsEverything')
+                  : t('allows', { count: role.features.length }))}
+            </span>
 
-          {/*
-            How much it allows, counted — never "up to ₪1,000", which has no
-            column behind it.
-          */}
-          {/*
-            A wildcard role says what it means; only a role without one gets a
-            number. Owner holds exactly one feature row — `*` — so counting it
-            rendered "Allows one thing" beneath "Full access to everything",
-            and a reader comparing Owner's 1 to Admin's 58 concludes Owner is
-            the narrower role. The row was counted without being read.
-          */}
-          <p className={styles.allows} data-testid={`allows-${role.id}`}>
-            {allowsEverything(role)
-              ? t('allowsEverything')
-              : t('allows', { count: role.features.length })}
-          </p>
+            <span className={styles.colPeople} data-testid={`members-${role.id}`}>
+              {role.memberCount > 0 ? (
+                t('members', { count: role.memberCount })
+              ) : (
+                <span className={styles.nobody}>{t('noMembers')}</span>
+              )}
+            </span>
 
-          <p className={styles.members} data-testid={`members-${role.id}`}>
-            {role.memberCount > 0 ? t('members', { count: role.memberCount }) : t('noMembers')}
-          </p>
-
-          {/*
-            A built-in role can be copied but never edited — the route refuses
-            it, so offering an edit control would be a button the server
-            rejects.
-          */}
-          <p className={styles.action} data-testid={`action-${role.id}`}>
-            {isEditable(role) ? t('action.editable') : t('action.copyOnly')}
-          </p>
-        </li>
-      ))}
-    </ul>
+            {/*
+              A built-in role can be copied but never edited — the route refuses
+              it. A custom one could be edited, but nothing edits a role from
+              here yet: drawn, and it says so.
+            */}
+            <span className={styles.colAction} data-testid={`action-${role.id}`}>
+              {isEditable(role) ? (
+                <span className={styles.actionQuiet} aria-disabled="true" title={t('editNotYet')}>
+                  {t('edit')}
+                </span>
+              ) : (
+                <Link
+                  href={{
+                    pathname: '/settings/people/roles',
+                    query: { create: '1', from: role.id },
+                  }}
+                  className={styles.actionLink}
+                >
+                  {t('duplicate')}
+                </Link>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

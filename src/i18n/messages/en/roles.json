@@ -6,13 +6,6 @@
   "allows": "{count, plural, =0 {Allows nothing yet} =1 {Allows one thing} other {Allows # things}}",
   "members": "{count, plural, =1 {One person} other {# people}}",
   "noMembers": "No one yet",
-  "action": {
-    "editable": "You can change this one",
-    "copyOnly": "Fixed — you can copy it and change the copy"
-  },
-  "noLimits": "Roles don't carry money limits. A role either allows refunds or it doesn't — GOTCHA has no setting for \"up to ₪1,000\", so nothing here caps an amount.",
-  "noCustom": "No roles of your own yet.",
-  "noCustomBody": "You can copy any built-in role and change the copy — that's how a role of your own starts.",
   "allowsEverything": "Allows everything",
   "scope": {
     "own": "Sees only their own conversations",
@@ -84,5 +77,24 @@
   "person": {
     "title": "One person",
     "description": "What this person can do, and every exception somebody made to their role."
-  }
+  },
+  "table": {
+    "role": "Role",
+    "allows": "What it allows",
+    "people": "People"
+  },
+  "custom": "Custom",
+  "edit": "Edit",
+  "editNotYet": "Editing a role from here comes next.",
+  "duplicate": "Duplicate",
+  "create": "Create role",
+  "cards": {
+    "extraTitle": "Extra permissions for one person",
+    "extraBody": "Give one person a permission on top of their role, without changing the role.",
+    "extraLink": "Open People",
+    "aiTitle": "AI employees",
+    "aiBody": "What they may do is set in Studio · Integrations, the same for every employee.",
+    "aiLink": "Open Studio"
+  },
+  "foot": "Built-in roles can't be changed or deleted. Duplicate one to make a role you can."
 }

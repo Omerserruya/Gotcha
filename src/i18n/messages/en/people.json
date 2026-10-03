@@ -73,5 +73,11 @@
     "seatLimit": "Your plan has no seats left. Deactivating a member frees one.",
     "forbidden": "You don't have permission to do that.",
     "failed": "That didn't send. Try again."
+  },
+  "tabs": {
+    "label": "People and teams",
+    "people": "People",
+    "roles": "Roles",
+    "teams": "Teams"
   }
 }

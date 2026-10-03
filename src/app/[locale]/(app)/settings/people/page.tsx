@@ -1,6 +1,10 @@
 import { getTranslations } from 'next-intl/server';
 
 import { InviteForm } from '@/features/people/InviteForm';
+import { PeopleTabs } from '@/features/people/PeopleTabs';
+import styles from '@/features/people/People.module.css';
+import { loadRoles } from '@/features/roles/load-roles';
+import { Link } from '@/i18n/navigation';
 import { loadPeople } from '@/features/people/load-people';
 import { PeopleTable } from '@/features/people/PeopleTable';
 import { TeamCards } from '@/features/people/TeamCards';
@@ -19,9 +23,18 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * there are. It is the first thing the design says and the first thing an
  * admin checks.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly tab?: string; readonly invite?: string }>;
+} = {}) {
   const t = await getTranslations('people');
-  const { members, aiEmployees, teams, presence } = await loadPeople();
+  const params = (await searchParams) ?? {};
+  const [{ members, aiEmployees, teams, presence }, roles] = await Promise.all([
+    loadPeople(),
+    loadRoles(),
+  ]);
+  const tab = params.tab === 'teams' ? 'teams' : 'people';
 
   /*
    * The count line is only honest when every part of it loaded. A read that
@@ -37,20 +50,50 @@ export default async function Page() {
         })
       : undefined;
 
+  /*
+    12, measured: the header with "Invite someone" on the right (it opens the
+    inline invite row, `?invite=1`), then People · Roles · Teams, then the
+    view the tab names.
+  */
   return (
-    <SettingsSection title={t('title')} description={summary ?? t('description')}>
-      {/*
-        Above the roster, because it is what an admin came here to do on a
-        tenant this empty — and it needs the teams, so a failed teams read
-        means inviting without one rather than not inviting at all.
-      */}
-      <InviteForm teams={teams ?? []} />
-      {members && aiEmployees ? (
-        <PeopleTable members={members} aiEmployees={aiEmployees} presence={presence} />
+    <SettingsSection
+      title={t('title')}
+      description={summary ?? t('description')}
+      actions={
+        <Link
+          href={{ pathname: '/settings/people', query: { invite: '1' } }}
+          className={styles.headerAction}
+          data-testid="invite-open"
+        >
+          {t('invite.open')}
+        </Link>
+      }
+    >
+      <PeopleTabs
+        current={tab}
+        counts={{
+          people: members ? members.length : null,
+          roles: roles ? roles.length : null,
+          teams: teams ? teams.length : null,
+        }}
+      />
+      {tab === 'teams' ? (
+        teams ? (
+          <TeamCards teams={teams} />
+        ) : (
+          <p>{t('teamsUnavailable')}</p>
+        )
       ) : (
-        <p>{members ? t('aiUnavailable') : t('membersUnavailable')}</p>
+        <>
+          {/* It needs the teams: a failed teams read means inviting without one. */}
+          <InviteForm teams={teams ?? []} open={params.invite === '1'} />
+          {members && aiEmployees ? (
+            <PeopleTable members={members} aiEmployees={aiEmployees} presence={presence} />
+          ) : (
+            <p>{members ? t('aiUnavailable') : t('membersUnavailable')}</p>
+          )}
+        </>
       )}
-      {teams ? <TeamCards teams={teams} /> : <p>{t('teamsUnavailable')}</p>}
     </SettingsSection>
   );
 }

@@ -67,6 +67,12 @@
   }
 
   /* ── Columns ────────────────────────────────────────────────────────── */
+  /* The head reuses the columns' widths, not their type: 9px mono, all four. */
+  .head > span {
+    font-size: inherit;
+    color: inherit;
+  }
+
   .colPerson {
     flex: 1;
     min-inline-size: 0;
@@ -231,13 +237,10 @@
   }
 
   /* ── Invite ─────────────────────────────────────────────────────────── */
-  .inviteBar {
-    display: flex;
-  }
-
+  /* 02's inline invite row: white, a violet edge, `padding:16px 18px`. */
   .invite {
     background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
+    border: var(--border-width-thin) solid var(--signal-ai);
     border-radius: var(--radius-card);
     padding-block: var(--space-16);
     padding-inline: var(--space-18);
@@ -289,8 +292,62 @@
   .inviteActions {
     display: flex;
     align-items: center;
-    gap: var(--space-8);
+    gap: var(--space-12);
     flex-wrap: wrap;
+  }
+
+  .inviteCancel {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .inviteCancel:hover {
+    color: var(--text-primary);
+  }
+
+  /* 02's header action: dark, radius 9, `padding:9px 16px`, 12.5px. */
+  .headerAction {
+    padding: var(--space-9) var(--space-16);
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    font-size: var(--font-size-meta);
+    color: var(--action-text);
+    text-decoration: none;
+    line-height: normal;
+  }
+
+  /* People · Roles · Teams: `padding:9px 12px`, gap 6, a rule under the row;
+     the open one has a 2px dark edge. */
+  .tabs {
+    display: flex;
+    gap: var(--space-6);
+    border-block-end: 1px solid var(--border-default);
+    line-height: normal;
+  }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-block-end: -1px;
+    padding: var(--space-9) var(--space-12);
+    border-block-end: 2px solid transparent;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  .tab[aria-current='page'] {
+    border-block-end-color: var(--action-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .tabCount {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-counter);
+    color: var(--text-subtle);
   }
 
   .inviteNote {
