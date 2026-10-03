@@ -632,20 +632,52 @@
     font-size: var(--font-size-meta);
   }
 
+  /* 17d, measured: the packs as tiles side by side, 14 padding, radius 13. */
   .buyPacks {
     margin: 0;
     padding: 0;
     list-style: none;
     display: grid;
-    gap: var(--space-8);
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-10);
   }
 
   .buyPack {
+    position: relative;
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-8);
+    flex-direction: column;
+    gap: var(--space-6);
+    block-size: 100%;
+    padding: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 13px;
     font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+
+  /* The radio stays for the keyboard and a screen reader; the tile shows it. */
+  .buyPack > input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .buyPack:has(input:checked) {
+    border: 2px solid var(--action-base);
+  }
+
+  .buyPack:has(input:focus-visible) {
+    outline: var(--focus-ring-width) solid var(--action-base);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .buyPackName {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
   }
 
   .buyPackCredits {
