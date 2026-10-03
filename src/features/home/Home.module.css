@@ -264,9 +264,15 @@
   }
 
   /* The list scrolls inside its card; the card never pushes the page. */
-  .queueColumn > .queueCard,
-  .queueColumn > .workCard {
+  .queueColumn > .queueCard {
     flex: 0 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  /* 01b: the work card fills the column, its foot pinned to the bottom. */
+  .queueColumn > .workCard {
+    flex: 1 1 auto;
     min-block-size: 0;
     overflow-y: auto;
   }

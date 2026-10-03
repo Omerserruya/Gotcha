@@ -24,9 +24,13 @@ describe('★ 01 sits inside the frame, in three columns', () => {
   });
 
   it('the queue scrolls inside its card', () => {
-    expect(rule('queueColumn > \\.queueCard,\\s*\\.queueColumn > \\.workCard')).toMatch(
-      /overflow-y:\s*auto/,
-    );
+    expect(rule('queueColumn > \\.queueCard')).toMatch(/overflow-y:\s*auto/);
+    expect(rule('queueColumn > \\.workCard')).toMatch(/overflow-y:\s*auto/);
+  });
+
+  it('01b: the work card fills its column, the foot at the bottom', () => {
+    expect(rule('queueColumn > \\.workCard')).toMatch(/flex:\s*1 1 auto/);
+    expect(rule('workFooter')).toMatch(/margin-block-start:\s*auto/);
   });
 
   it('a row is one line: the name cut, the channel beside it', () => {
