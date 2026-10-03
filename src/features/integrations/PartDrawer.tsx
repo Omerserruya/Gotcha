@@ -161,7 +161,9 @@ export async function PartDrawer({
             const availability = capability ? resolveAvailability(capability) : null;
             return (
               <li key={tool.slug} className={styles.drawerAction}>
-                <span className={styles.drawerActionName}>{tool.name}</span>
+                <span className={styles.drawerActionName}>
+                  {sentenceCase(tool.name, integration?.name ?? null)}
+                </span>
                 {capability && availability && isTheAdminsChoice(availability) ? (
                   <PermissionChoice capability={capability} />
                 ) : (
@@ -251,4 +253,20 @@ export async function PartDrawer({
       </footer>
     </div>
   );
+}
+
+/**
+ * The catalogue names its actions in two cases ("Cancel Order", "Add order
+ * note"); the product writes sentence case. Acronyms (VIP, ETA) and the
+ * system's own name stay as they are.
+ */
+export function sentenceCase(name: string, keep: string | null): string {
+  return name
+    .split(' ')
+    .map((word, i) => {
+      if (/^[A-Z0-9]{2,}$/.test(word) || (keep !== null && word === keep)) return word;
+      const lower = word.toLowerCase();
+      return i === 0 ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
+    })
+    .join(' ');
 }

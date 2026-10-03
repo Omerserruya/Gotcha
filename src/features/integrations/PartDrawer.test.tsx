@@ -49,7 +49,7 @@ vi.mock('./ElectPart', () => ({ ElectPart: () => <div data-testid="elect" /> }))
 
 import { AcrossDrawer } from './AcrossDrawer';
 import { BusinessCore } from './BusinessCore';
-import { PartDrawer } from './PartDrawer';
+import { PartDrawer, sentenceCase } from './PartDrawer';
 
 const core = businessCoreSchema.parse({
   roles: [
@@ -211,5 +211,17 @@ describe('★ 14e corrections — no paragraphs', () => {
     );
     expect(screen.getByTestId('across-writeback')).toHaveTextContent(/AI summary, in Hebrew$/);
     expect(screen.getByTestId('across-drawer').querySelectorAll('p')).toHaveLength(0);
+  });
+});
+
+describe('★ action names in the product’s sentence case', () => {
+  it.each([
+    ['Cancel Order', 'Cancel order'],
+    ['Add Customer To Segment', 'Add customer to segment'],
+    ['Add VIP Tag', 'Add VIP tag'],
+    ['Change order shipping address', 'Change order shipping address'],
+    ['Sync Shopify Orders', 'Sync Shopify orders'],
+  ])('%s → %s', (raw, expected) => {
+    expect(sentenceCase(raw, 'Shopify')).toBe(expected);
   });
 });
