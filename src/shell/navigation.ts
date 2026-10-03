@@ -186,6 +186,12 @@ const ANALYTICS_SECTIONS: readonly NavigationChild[] = [];
  * because they are how the business teaches GOTCHA to work - not platform
  * configuration.
  */
+/*
+ * Exactly 02's eight. WhatsApp numbers (13b) and the plan (17b) are not
+ * sections: 13b is a panel over Channels, reached from its WhatsApp row, and
+ * 17b a sub-page of Usage & billing with its way back above the title. Each
+ * highlights its parent, which its path starts with.
+ */
 export const SETTINGS_SECTIONS: readonly NavigationChild[] = [
   { id: 'workspace', labelKey: 'settings.workspace', href: '/settings/workspace' },
   { id: 'people', labelKey: 'settings.people', href: '/settings/people' },
@@ -201,23 +207,9 @@ export const SETTINGS_SECTIONS: readonly NavigationChild[] = [
     href: '/settings/systems',
     permission: PERMISSIONS.businessSystems.connections.read,
   },
-  /*
-   * Screen 13. Its own destination because WhatsApp numbers have a lifecycle
-   * the other channels do not — health, repairs and an audit trail per number
-   * — and folding them into the channel list would flatten all of that into
-   * one connected/disconnected badge.
-   */
-  { id: 'whatsapp', labelKey: 'settings.whatsapp', href: '/settings/channels/whatsapp' },
   { id: 'notifications', labelKey: 'settings.notifications', href: '/settings/notifications' },
   { id: 'security', labelKey: 'settings.security', href: '/settings/security' },
   { id: 'billing', labelKey: 'settings.billing', href: '/settings/billing' },
-  /*
-   * Screen 17b, its own destination rather than a section of Usage & billing.
-   * The two answer different questions — that one says how long you are good
-   * for, this one says what you are on and what changing it would do — and a
-   * scheduled change belongs beside the plan, not beside the runway.
-   */
-  { id: 'billing-plan', labelKey: 'settings.billingPlan', href: '/settings/billing/plan' },
   { id: 'developer', labelKey: 'settings.developer', href: '/settings/developer' },
 ];
 

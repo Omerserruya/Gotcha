@@ -47,10 +47,16 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('channels.whatsapp');
+  const nav = await getTranslations('navigation');
   const [numbers, history] = await Promise.all([loadWhatsAppNumbers(), loadHistoryImport()]);
 
   return (
-    <SettingsSection title={t('title')} description={t('description')}>
+    <SettingsSection
+      title={t('title')}
+      description={t('description')}
+      // Until 13b is a panel over Channels (S2), its way back is drawn as 17b's is.
+      back={{ href: '/settings/channels', label: nav('settings.channels') }}
+    >
       <WhatsAppNumbers numbers={numbers} />
 
       {/*

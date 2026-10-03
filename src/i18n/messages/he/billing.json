@@ -13,7 +13,8 @@
     "unavailable": "לא הצלחנו לקרוא את התוכנית שלכם כרגע.",
     "renewsOn": "מתחדשת ב‑{date}",
     "endsOn": "מסתיימת ב‑{date}",
-    "changesAtRenewal": "תשתנה ל‑{plan} בחידוש."
+    "changesAtRenewal": "תשתנה ל‑{plan} בחידוש.",
+    "change": "החלפת חבילה"
   },
   "runway": {
     "unavailable": "לא הצלחנו לקרוא את נתוני השימוש כרגע.",

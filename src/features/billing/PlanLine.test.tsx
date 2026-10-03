@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Plan, Subscription } from '@/api/contracts/billing';
@@ -24,6 +25,13 @@ import { PlanLine } from './BillingSections';
  * exist here to be got wrong. It was found reading the same table for 17b.
  */
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'billing') =>
     createTranslator({ locale: 'en', messages: { billing: messages }, namespace }),
@@ -87,5 +95,17 @@ describe('the plan line names the plan rather than its key', () => {
     expect(screen.getByTestId('plan-name')).toHaveTextContent('AI Voice');
     // $1,499.00 USD is what this tenant is charged. Not the design's mockup.
     expect(screen.getByTestId('plan')).toHaveTextContent(/\$1,499/);
+  });
+});
+
+describe('★ 17b is reached from the plan, not from the nav', () => {
+  it('"Change plan" goes to the plan sub-page', async () => {
+    render(
+      await PlanLine({
+        subscription: { planKey: 'starter' } as unknown as Subscription,
+        plans: [],
+      }),
+    );
+    expect(screen.getByTestId('plan-change')).toHaveAttribute('href', '/settings/billing/plan');
   });
 });

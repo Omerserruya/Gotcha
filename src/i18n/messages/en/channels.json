@@ -188,5 +188,6 @@
       "rerunSafe": "Looking again updates the counts on these suggestions. It does not ask you about anything you have already rejected.",
       "noLanguageShortcut": "The design offers to add a missing reply language from here. There is nowhere to add one — GOTCHA stores a single language and answers each customer in their own regardless."
     }
-  }
+  },
+  "rowSettings": "Settings"
 }

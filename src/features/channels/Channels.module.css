@@ -79,6 +79,18 @@
     color: var(--text-body);
   }
 
+  /* 02's row button: white, bordered, `padding:7px 13px`, 12px. */
+  .settingsLink {
+    flex: none;
+    padding: 7px 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-item);
+    background-color: var(--panel-field);
+    font-size: var(--font-size-label);
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
   /* ── Connect ────────────────────────────────────────────────────────── */
   .connect {
     grid-column: 1 / -1;

@@ -22,7 +22,9 @@
     scrollbar-color: var(--border-heavy) transparent;
   }
 
+  /* 02 sets no line-height: the heading is 21 tall and each row 32 (34 selected). */
   .heading {
+    line-height: normal;
     font-size: var(--font-size-heading);
     font-weight: var(--font-weight-semibold);
     letter-spacing: var(--letter-spacing-heading);
@@ -39,17 +41,17 @@
     padding-inline: var(--space-11);
     border-radius: var(--radius-item);
     text-decoration: none;
-    /* A transparent border so the selected row does not shift its neighbours. */
-    border: var(--border-width-thin) solid transparent;
+    line-height: normal;
   }
 
   .link:hover {
     background-color: var(--panel-inset);
   }
 
+  /* 02 draws the border on the selected row only, which is 2px taller for it. */
   .link[aria-current='page'] {
     background-color: var(--panel-field);
-    border-color: var(--border-default);
+    border: var(--border-width-thin) solid var(--border-default);
     color: var(--text-primary);
     font-weight: var(--font-weight-medium);
   }

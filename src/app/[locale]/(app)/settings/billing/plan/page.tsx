@@ -26,6 +26,7 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('billing.pricing');
+  const nav = await getTranslations('navigation');
   const { subscription, currency, tax, disclaimer, packages, paymentMethods } = await loadPricing();
 
   const plans = await serverApi()
@@ -38,7 +39,12 @@ export default async function Page() {
     });
 
   return (
-    <SettingsSection title={t('title')} description={t('description')}>
+    <SettingsSection
+      title={t('title')}
+      description={t('description')}
+      // 17b: a sub-page of Usage & billing, "← Usage & billing" above the title.
+      back={{ href: '/settings/billing', label: nav('settings.billing') }}
+    >
       <section className={styles.section} data-testid="section-plan">
         <h2 className={styles.sectionHeading}>{t('heading.current')}</h2>
         <PlanLine subscription={subscription} plans={plans} />

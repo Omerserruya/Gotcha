@@ -74,5 +74,7 @@
     "campaigns": "קמפיינים",
     "templates": "תבניות",
     "calls": "שיחות"
-  }
+  },
+  "settingsDocs": "לקריאת התיעוד ↗",
+  "settingsDocsNone": "עדיין לא פורסם תיעוד למפתחים."
 }

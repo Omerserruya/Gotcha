@@ -6,6 +6,7 @@ import styles from './Channels.module.css';
 import { ConnectableRow } from './ConnectableRow';
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
 import { channelName } from '@/api/contracts/inbox';
+import { Link } from '@/i18n/navigation';
 
 /**
  * *"Each channel shows its identity and its real volume, so the list doubles
@@ -125,6 +126,16 @@ export async function ChannelList({
             <span className={styles.mode} data-testid={`channel-mode-${row.id}`}>
               {row.responseMode ? t(`mode.${row.responseMode}` as 'mode.AI_AUTO_REPLY') : ''}
             </span>
+            {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
+            {row.channel === 'WHATSAPP' ? (
+              <Link
+                href="/settings/channels/whatsapp"
+                className={styles.settingsLink}
+                data-testid={`channel-settings-${row.id}`}
+              >
+                {t('rowSettings')}
+              </Link>
+            ) : null}
           </li>
         );
       })}

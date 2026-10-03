@@ -13,7 +13,8 @@
     "unavailable": "We couldn't read your plan just now.",
     "renewsOn": "renews {date}",
     "endsOn": "ends {date}",
-    "changesAtRenewal": "Changes to {plan} at renewal."
+    "changesAtRenewal": "Changes to {plan} at renewal.",
+    "change": "Change plan"
   },
   "runway": {
     "unavailable": "We couldn't read your usage just now.",

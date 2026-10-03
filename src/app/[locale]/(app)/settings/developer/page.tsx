@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { pageMetadata } from '@/shell/page-metadata';
+import styles from '@/shell/SettingsSection.module.css';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
@@ -16,6 +17,18 @@ export default async function Page() {
     <SettingsSection
       title={t('settings.developer')}
       description={t('settingsDescription.developer')}
+      actions={
+        // 02's "Read the docs ↗". No developer documentation is published, so
+        // it is drawn and says so rather than linking nowhere.
+        <span
+          className={styles.actionQuiet}
+          aria-disabled="true"
+          title={t('settingsDocsNone')}
+          data-testid="developer-docs"
+        >
+          {t('settingsDocs')}
+        </span>
+      }
     />
   );
 }

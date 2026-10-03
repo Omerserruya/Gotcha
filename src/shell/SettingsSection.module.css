@@ -5,30 +5,76 @@
    * Separate from PageContainer, which brings its own padding and measure -
    * here the layout already owns both, and doubling them would inset the
    * section twice.
+   *
+   * Measured on 11-18: the header is a row across the section (888), the
+   * title 26/600 at 02's screen-title tracking over a 13px `#6B6660` line,
+   * 6px apart, and the action on the right on the row's bottom edge. 02 sets
+   * no line-height, so neither does this block.
    */
   .header {
     display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-24);
+    line-height: normal;
+  }
+
+  .heading {
+    display: flex;
     flex-direction: column;
-    gap: var(--space-7);
-    max-inline-size: var(--size-reading);
+    gap: var(--space-6);
+    min-inline-size: 0;
+  }
+
+  .back {
+    margin-block-end: var(--space-4);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .back:hover {
+    color: var(--text-primary);
   }
 
   .title {
-    font-size: var(--font-size-heading);
+    margin: 0;
+    font-size: var(--font-size-screen-title);
     font-weight: var(--font-weight-semibold);
-    letter-spacing: var(--letter-spacing-heading);
+    letter-spacing: var(--letter-spacing-display);
   }
 
   .description {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-muted);
+  }
+
+  .actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  /* A secondary header action: white, bordered, `padding:9px 14px`, 12.5px. */
+  .actionQuiet {
+    padding: var(--space-9) var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-item);
+    background-color: var(--panel-field);
     font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
     color: var(--text-body);
   }
 
+  .actionQuiet[aria-disabled='true'] {
+    cursor: default;
+  }
+
+  /* The section's column: 02's 16 between everything under the header. */
   .body {
     display: flex;
     flex-direction: column;
-    gap: var(--space-24);
-    padding-block-end: var(--space-40);
+    gap: var(--space-16);
   }
 }

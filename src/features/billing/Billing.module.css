@@ -39,6 +39,12 @@
     font-weight: 600;
   }
 
+  .planChange {
+    align-self: flex-start;
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+  }
+
   .planPrice,
   .planRenews {
     color: var(--text-subtle);

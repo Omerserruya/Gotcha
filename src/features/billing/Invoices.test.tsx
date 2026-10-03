@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { invoiceSchema, type Invoice } from '@/api/contracts/invoices';
@@ -30,6 +31,13 @@ import { Invoices } from './BillingSections';
  * this file exists rather than three more assertions next to the others.
  */
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'billing') =>
     createTranslator({ locale: 'en', messages: { billing: messages }, namespace }),

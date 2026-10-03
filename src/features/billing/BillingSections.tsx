@@ -16,6 +16,7 @@ import {
 } from '@/api/contracts/invoices';
 
 import { isStillPending } from '@/api/contracts/pricing';
+import { Link } from '@/i18n/navigation';
 
 import styles from './Billing.module.css';
 
@@ -113,6 +114,10 @@ export async function PlanLine({
           })}
         </p>
       ) : null}
+      {/* 02's "Change plan" (17b), beside what you are on. */}
+      <Link href="/settings/billing/plan" className={styles.planChange} data-testid="plan-change">
+        {t('plan.change')}
+      </Link>
     </div>
   );
 }
