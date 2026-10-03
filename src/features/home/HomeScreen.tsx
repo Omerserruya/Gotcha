@@ -10,7 +10,7 @@ import { homeFace } from './first-steps';
 import { QueueList } from './QueueList';
 import { QuietWork } from './QuietWork';
 import styles from './Home.module.css';
-import { loadHomeData } from './load-home-data';
+import { loadHomeData, QUIET_DAY_LIMIT } from './load-home-data';
 import { MetricStrip } from './MetricStrip';
 import { StatusStrip } from './StatusStrip';
 import { TeamPanel } from './TeamPanel';
@@ -114,7 +114,14 @@ export async function HomeScreen() {
       <CommandSurface
         tone={isQuiet ? 'quiet' : 'busy'}
         openQuestions={
-          quietDay ? quietDay.data.filter((item) => item.source === 'knowledge_gap').length : null
+          /*
+            Counted only from a COMPLETE list: the read is capped at
+            QUIET_DAY_LIMIT, and a full page may hold more questions than it
+            shows — "Answer the 4 open questions" would then be false.
+          */
+          quietDay && quietDay.data.length < QUIET_DAY_LIMIT
+            ? quietDay.data.filter((item) => item.source === 'knowledge_gap').length
+            : null
         }
       />
 

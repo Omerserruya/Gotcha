@@ -3,7 +3,7 @@ import { isValidElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const loadHomeData = vi.hoisted(() => vi.fn());
-vi.mock('./load-home-data', () => ({ loadHomeData }));
+vi.mock('./load-home-data', () => ({ loadHomeData, QUIET_DAY_LIMIT: 4 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
   getFormatter: async () => ({ dateTime: () => 'date' }),
@@ -123,6 +123,23 @@ describe('★★ 01b — a quiet day', () => {
       (e) => e.type === CommandSurface,
     );
     expect(box?.props).toMatchObject({ tone: 'quiet', openQuestions: 2 });
+  });
+
+  it('★ a full page may hold more: no count rather than an undercount', async () => {
+    const item = (id: string) => ({
+      id,
+      source: 'knowledge_gap',
+      kind: 'x',
+      rank: 1,
+      effect: 'removes_work',
+      basis: {},
+      values: {},
+    });
+    const tree = await screen({
+      quietDay: { sources: {}, data: [item('a'), item('b'), item('c'), item('d')] },
+    });
+    const [box] = all<{ openQuestions: number | null }>(tree, (e) => e.type === CommandSurface);
+    expect(box?.props.openQuestions).toBeNull();
   });
 
   it('no quiet-day read: no count', async () => {

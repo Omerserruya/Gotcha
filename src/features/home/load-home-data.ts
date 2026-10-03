@@ -58,6 +58,9 @@ import { logger } from '@/observability/logger';
  * The two calls run in parallel — they are unrelated, and sequencing them
  * would double the wait for no benefit.
  */
+/** 01b's card shows four rows; a read that returns this many may have more. */
+export const QUIET_DAY_LIMIT = 4;
+
 export interface HomeData {
   readonly overview: AnalyticsOverview | null;
   readonly channels: ChannelPerformance | null;
@@ -262,7 +265,7 @@ export async function loadHomeData(): Promise<HomeData> {
       .get({
         endpoint: analyticsEndpoints.quietDay(),
         // The design's card shows four rows.
-        query: { limit: 4 },
+        query: { limit: QUIET_DAY_LIMIT },
         payload: quietDaySchema,
         // `data` is a sibling of `sources` and `weekKey`, not the payload.
         raw: true,
