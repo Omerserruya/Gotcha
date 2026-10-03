@@ -22,6 +22,7 @@ export function SettingsSection({
   description,
   actions,
   back,
+  fill = false,
   children,
 }: {
   /** Already translated. */
@@ -32,6 +33,12 @@ export function SettingsSection({
   actions?: ReactNode;
   /** A sub-page's way back: where, and its already-translated label. */
   back?: { readonly href: string; readonly label: string };
+  /**
+   * 02's window you scroll inside: the body takes the rest of the frame's
+   * height, so a card in it can run to the frame's bottom (`fillCard`) with
+   * its list scrolling (`fillScroll`) — 16's audit.
+   */
+  fill?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -48,7 +55,14 @@ export function SettingsSection({
         </div>
         {actions ? <div className={styles.actions}>{actions}</div> : null}
       </div>
-      {children ? <div className={styles.body}>{children}</div> : null}
+      {children ? (
+        <div
+          className={[styles.body, fill && styles.bodyFill].filter(Boolean).join(' ')}
+          data-fill={fill ? 'yes' : undefined}
+        >
+          {children}
+        </div>
+      ) : null}
     </>
   );
 }

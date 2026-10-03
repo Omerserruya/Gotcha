@@ -9,7 +9,11 @@ vi.mock('next-intl/server', () => ({
     createTranslator({ locale: 'en', messages: { security }, namespace }),
 }));
 vi.mock('@/shell/SettingsSection', () => ({
-  SettingsSection: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SettingsSection: ({ children, fill }: { children: React.ReactNode; fill?: boolean }) => (
+    <div data-testid="settings-section" data-fill={fill ? 'yes' : 'no'}>
+      {children}
+    </div>
+  ),
 }));
 vi.mock('@/features/security/MfaPolicy', () => ({
   MfaPolicy: () => <div data-testid="mfa-policy" />,
@@ -63,5 +67,12 @@ describe('★ 16 — the devices card’s head counts them', () => {
   it('"3 devices", from the list it heads', async () => {
     render(await Page());
     expect(screen.getByTestId('sessions-count')).toHaveTextContent(/^3 devices$/);
+  });
+});
+
+describe('★ 16 — the audit runs to the frame’s bottom', () => {
+  it('the section fills, so the audit card can', async () => {
+    render(await Page());
+    expect(screen.getByTestId('settings-section')).toHaveAttribute('data-fill', 'yes');
   });
 });

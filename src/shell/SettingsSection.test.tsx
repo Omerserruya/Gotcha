@@ -61,4 +61,19 @@ describe('★★ S0 — the Settings frame, as 11–18 draw it', () => {
     expect(back).toHaveAttribute('href', '/settings/billing');
     expect(back).toHaveTextContent('← Usage & billing');
   });
+
+  it('fill makes the body the rest of the frame; without it, the body flows', () => {
+    const { container, rerender } = render(
+      <SettingsSection title="Security" fill>
+        <p>body</p>
+      </SettingsSection>,
+    );
+    expect(container.querySelector('[data-fill="yes"]')).not.toBeNull();
+    rerender(
+      <SettingsSection title="Security">
+        <p>body</p>
+      </SettingsSection>,
+    );
+    expect(container.querySelector('[data-fill]')).toBeNull();
+  });
 });

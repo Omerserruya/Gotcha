@@ -84,6 +84,15 @@
       "provisioningFailed": "הגדרת החיוב לא עבדה",
       "provisioningCompleted": "החיוב הוגדר",
       "other": "{actor} · {action}"
+    },
+    "chip": {
+      "connector": "{verb, select, get {חיפוש} search {חיפוש} update {עדכון} process {עיבוד} summarize {סיכום} create {יצירה} cancel {ביטול} list {הצגה} other {הרצה}} {object}",
+      "replies": "תשובות AI",
+      "messages": "הודעות שנשלחו",
+      "turns": "תורות AI",
+      "approvals": "בקשות אישור",
+      "handovers": "העברות לצוות",
+      "billingSetup": "הגדרת חיוב"
     }
   },
   "policy": {

@@ -232,7 +232,7 @@ function AuditHead({
       {facet.name}
     </span>
   );
-  const merged = mergeFacets(facets);
+  const merged = mergeFacets(facets, (action) => auditChipLabel(action, t));
   const rest = merged.slice(HEAD_FACETS);
 
   return (
@@ -274,10 +274,14 @@ interface MergedFacet {
 }
 
 /** Facets by the words a reader sees, in the order the log ranks them. */
-export function mergeFacets(facets: readonly AuditFacet[]): MergedFacet[] {
+export function mergeFacets(
+  facets: readonly AuditFacet[],
+  label: (action: string) => string,
+): MergedFacet[] {
   const byName = new Map<string, { count: number; failed: number }>();
   for (const facet of facets) {
-    const { name, outcome } = describeAuditAction(facet.action);
+    const name = label(facet.action);
+    const { outcome } = describeAuditAction(facet.action);
     const seen = byName.get(name) ?? { count: 0, failed: 0 };
     seen.count += facet.count;
     if (outcome === 'err') seen.failed += facet.count;
@@ -330,4 +334,40 @@ export function auditSentence(
   const known = KNOWN[entry.action as keyof typeof KNOWN];
   if (known) return t(`audit.sentence.${known}`, { actor });
   return t('audit.sentence.other', { actor, action: describeAuditAction(entry.action).name });
+}
+
+/** Chip words for the known actions — the rows' sentences, short. */
+const CHIPS: Partial<Record<keyof typeof KNOWN, string>> = {
+  'ai.responded': 'replies',
+  'message.sent': 'messages',
+  'ai.bot_turn': 'turns',
+  'ai.paused_for_approval': 'approvals',
+  'ai.tool_call.escalate_to_human': 'handovers',
+  'billing.provisioning_attempted': 'billingSetup',
+  'billing.provisioning_request_created': 'billingSetup',
+  'billing.provisioning_failed': 'billingSetup',
+  'billing.provisioning_completed': 'billingSetup',
+};
+
+/**
+ * A facet's chip: the row's sentence without its actor, short enough that
+ * four sit in the head uncut — "Looked up by phone", "Searched products",
+ * "AI replies". A leading "customer" is the connector's subject on every
+ * lookup and is dropped when something follows it.
+ */
+export function auditChipLabel(
+  action: string,
+  t: Awaited<ReturnType<typeof getTranslations<'security'>>>,
+): string {
+  const adapter = /^adapter\.(?:ok|err)\.[a-z0-9]+\.([a-z0-9_]+)$/.exec(action);
+  if (adapter) {
+    const [verb, ...rest] = adapter[1]!.split('_');
+    const words = rest[0] === 'customer' && rest.length > 1 ? rest.slice(1) : rest;
+    return VERBS.includes(verb!)
+      ? t('audit.chip.connector', { verb: verb!, object: words.join(' ') })
+      : describeAuditAction(action).name;
+  }
+  const known = CHIPS[action as keyof typeof KNOWN];
+  if (known) return t(`audit.chip.${known}`);
+  return describeAuditAction(action).name;
 }

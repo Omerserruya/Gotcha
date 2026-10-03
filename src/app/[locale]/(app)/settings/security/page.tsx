@@ -40,7 +40,7 @@ export default async function Page() {
     who got in, which the audit does not carry.
   */
   return (
-    <SettingsSection title={t('title')} description={t('description')}>
+    <SettingsSection title={t('title')} description={t('description')} fill>
       <div className={styles.topRow}>
         {/*
           The switches are absent when the policy could not be read — an
@@ -94,7 +94,7 @@ export default async function Page() {
         />
       </section>
 
-      <section className={styles.card} data-testid="section-logins">
+      <section className={styles.loginsCard} data-testid="section-logins">
         <h2 className={styles.cardTitle}>{t('heading.logins')}</h2>
         <LoginHistory events={logins} available={loginsAvailable} />
       </section>

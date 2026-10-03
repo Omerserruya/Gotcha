@@ -591,3 +591,56 @@
     cursor: wait;
   }
 }
+
+@layer features {
+  /*
+   * 16 in 02's frame: the audit card runs to the frame's bottom and its rows
+   * scroll inside. Recent sign-ins (not in 02) stay last, kept short with
+   * their own scroll, so they never push the audit off the frame.
+   */
+  @media (width > 900px) {
+    .auditCard {
+      flex: 1;
+      min-block-size: 240px;
+    }
+
+    .auditCard > .auditRows {
+      flex: 1;
+      min-block-size: 0;
+      overflow-y: auto;
+    }
+
+    .loginsCard {
+      flex: none;
+      max-block-size: 180px;
+    }
+
+    .loginsCard > :not(.cardTitle) {
+      overflow-y: auto;
+    }
+  }
+
+  .loginsCard {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    line-height: normal;
+  }
+
+  .loginsCard > .cardTitle {
+    padding-block: var(--space-13);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .loginsCard > .rows,
+  .loginsCard > .unavailable,
+  .loginsCard > .empty {
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+}

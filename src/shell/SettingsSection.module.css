@@ -76,4 +76,12 @@
     flex-direction: column;
     gap: var(--space-16);
   }
+
+  /* Wide enough for 02's frame: the body is the rest of its height. */
+  @media (width > 900px) {
+    .bodyFill {
+      flex: 1;
+      min-block-size: 0;
+    }
+  }
 }

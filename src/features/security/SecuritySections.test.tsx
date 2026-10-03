@@ -107,7 +107,7 @@ describe('★ 16 corrections (measurement of 9aeb1a7)', () => {
         facetsTruncated: false,
       }),
     );
-    const chips = screen.getAllByText('Shopify get customer by phone');
+    const chips = screen.getAllByText('Looked up by phone');
     expect(chips).toHaveLength(1);
     expect(chips[0]).toHaveAttribute('title', '2,492 times · 1,411 didn’t work'.replace('’', "'"));
   });
@@ -130,5 +130,26 @@ describe('★ 16 corrections (measurement of 9aeb1a7)', () => {
   ])('%s by %s → "%s"', async (action, actorType, sentence) => {
     await show([entry('s', { action, actorType })]);
     expect(within(screen.getByTestId('audit-s')).getByText(sentence)).toBeInTheDocument();
+  });
+});
+
+describe('★ 16 — chips in the rows’ words, short (measurement of f6f4564)', () => {
+  it.each([
+    ['adapter.ok.shopify.get_customer_by_phone', 'Looked up by phone'],
+    ['adapter.ok.shopify.search_products', 'Searched products'],
+    ['adapter.ok.shopify.get_customer', 'Looked up customer'],
+    ['adapter.ok.shopify.get_customer_orders', 'Looked up orders'],
+    ['ai.responded', 'AI replies'],
+    ['billing.provisioning_failed', 'Billing setup'],
+  ])('%s → "%s"', async (action, label) => {
+    render(
+      await AuditSection({
+        entries: [entry('a', {})],
+        available: true,
+        facets: [{ action, count: 3 }],
+        facetsTruncated: false,
+      }),
+    );
+    expect(within(screen.getByTestId('audit-facets')).getByText(label)).toBeInTheDocument();
   });
 });

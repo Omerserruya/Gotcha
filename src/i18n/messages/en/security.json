@@ -84,6 +84,15 @@
       "provisioningFailed": "Setting up billing didn't work",
       "provisioningCompleted": "Billing was set up",
       "other": "{actor} · {action}"
+    },
+    "chip": {
+      "connector": "{verb, select, get {Looked up} search {Searched} update {Updated} process {Processed} summarize {Summarised} create {Created} cancel {Cancelled} list {Listed} other {Ran}} {object}",
+      "replies": "AI replies",
+      "messages": "Messages sent",
+      "turns": "AI turns",
+      "approvals": "Asked for approval",
+      "handovers": "Handed to your team",
+      "billingSetup": "Billing setup"
     }
   },
   "policy": {
