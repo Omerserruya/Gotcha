@@ -358,29 +358,6 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
 
   return (
     <div className={styles.facts}>
-      {/*
-        The design's header, above the rows it is about.
-        ══════════════════════════════════════════════════════════════════
-        It is the sentence that makes the inline badges mean something: a
-        reader who meets "From website" without it has no reason to think the
-        marking does anything.
-
-        The domain is named when we have one — "filled in from avivco.il" is
-        a verifiable claim and "filled in from your website" is not.
-
-        NO "Scan again" BUTTON YET. `POST /workspace/scan` exists and returns
-        `applied`, `offer` and `reach`, so a rescan is not one action but a
-        conversation: some fields change by themselves, others come back as
-        proposals the owner must accept, and the site may turn out to be
-        unreadable. A button that fired the scan and dropped `offer` on the
-        floor would silently discard the half the endpoint exists to produce.
-      */}
-      <p className={styles.factsIntro} data-testid="facts-intro">
-        {workspace.websiteDomain
-          ? t('intro.withSite', { domain: workspace.websiteDomain })
-          : t('intro.noSite')}
-      </p>
-
       {row(
         'name',
         workspace.name ?? null,

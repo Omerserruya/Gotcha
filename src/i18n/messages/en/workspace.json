@@ -101,36 +101,18 @@
   "languageUnset": "No language set",
   "repliesInCustomerLanguage": "replies in the customer's language",
   "provenance": {
-    "heading": "Where these details came from",
     "origin": {
       "scan": "From your website",
       "human": "You entered this",
       "unknown": "Source not recorded"
-    },
-    "unusable": "We looked and could not read this from your site.",
-    "notSet": "Not set.",
-    "nothingAttributed": {
-      "lead": "Nothing is marked yet, and a scan cannot mark it.",
-      "body": "These details were set up before GOTCHA recorded where each one came from, so a scan will ask you about every change rather than applying any. Accepting a suggestion records the value as yours, so it will ask again next time — a field can only be refreshed silently once a scan has written it, and none has."
-    },
-    "someAttributed": "A scan refreshes the fields marked “From your website” on its own. Anything you entered stays as you left it, and you are asked before it changes.",
-    "field": {
-      "organizationName": "Business name",
-      "businessDescription": "What you sell",
-      "industry": "Industry",
-      "country": "Country",
-      "primaryLanguage": "Reply language",
-      "address": "Address",
-      "currency": "Currency"
-    },
-    "oneLanguage": "The AI replies in each customer's own language — that is a fixed rule, and this setting does not change it. GOTCHA stores one language here, and it is used to tag your knowledge documents."
+    }
   },
   "website": {
     "notSet": "Not set. GOTCHA learned what it knows from your website, so without one there is nothing to scan.",
     "readOnly": "Changed when you reconnect your store, not here."
   },
   "intro": {
-    "withSite": "Most of this was filled in from {domain} when you signed up. Scanning again only updates fields marked “From website”.",
+    "withSite": "Most of this was filled in from {domain} when you signed up. Scanning again only updates fields marked “From your website”.",
     "noSite": "Most of this was filled in when you signed up."
   },
   "languages": {
@@ -177,6 +159,7 @@
       "scan_in_progress": "A scan is already running. Try again in a moment.",
       "no_profile": "This workspace has no business profile yet, so there is nothing to update."
     },
-    "failed": "The scan could not run. Nothing was changed."
+    "failed": "The scan could not run. Nothing was changed.",
+    "legend": "From your website"
   }
 }

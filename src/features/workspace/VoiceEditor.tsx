@@ -107,8 +107,8 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
         : t('sourceNone');
 
   return (
-    <section>
-      <p className={styles.sectionTitle}>{t('title')}</p>
+    <section className={styles.card} data-card="voice" data-testid="voice-card">
+      <p className={styles.cardTitle}>{t('title')}</p>
 
       <div className={styles.voiceGrid}>
         <div>

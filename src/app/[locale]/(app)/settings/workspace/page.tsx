@@ -1,13 +1,13 @@
 import { getTranslations } from 'next-intl/server';
 
 import { FactRows } from '@/features/workspace/FactRows';
-import { FieldProvenance } from '@/features/workspace/FieldProvenance';
 import { Languages } from '@/features/workspace/Languages';
 import { ScanPanel } from '@/features/workspace/ScanPanel';
 import { loadLanguages } from '@/features/workspace/load-languages';
 import { loadWorkspace } from '@/features/workspace/load-workspace';
 import { ProhibitedClaims } from '@/features/workspace/ProhibitedClaims';
 import { VoiceEditor } from '@/features/workspace/VoiceEditor';
+import styles from '@/features/workspace/Workspace.module.css';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
@@ -29,35 +29,31 @@ export default async function Page() {
     loadLanguages(),
   ]);
 
+  /*
+    11, measured: the scan banner (its sentence, the "From website" legend,
+    "Scan again"), the facts as one table with the marking ON the rows, then
+    "How GOTCHA should sound" beside "Never say". The separate "where these
+    details came from" section is gone: its facts live on the chips and on
+    the scan control.
+  */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      {workspace ? <FactRows workspace={workspace} /> : <p>{t('unavailable')}</p>}
-      {/*
-        Screen 11b. Below the facts, because it is ABOUT them — a reader who
-        meets the provenance badges before the values they describe has to
-        hold both in their head to make sense of either.
-      */}
-      {workspace ? <FieldProvenance workspace={workspace} /> : null}
-      {/*
-        Screen 11b, UNDER the badges it acts on. A "Scan again" button above
-        the account of what is marked would ask somebody to press it before
-        they know what it will and will not touch.
-
-        Beside FieldProvenance rather than inside it: this is a client
-        component and that one is a server component, and nesting made the
-        server component untestable — the same async-children lesson as
-        screen 13's cards, in the other direction.
-      */}
       {workspace ? <ScanPanel domain={workspace.websiteDomain ?? null} /> : null}
-      {/* Screen 11d. Below the facts, because it explains the Language row. */}
+      {workspace ? <FactRows workspace={workspace} /> : <p>{t('unavailable')}</p>}
+      <div className={styles.cards}>
+        {voice ? <VoiceEditor voice={voice} /> : <p>{t('voice.unavailable')}</p>}
+        {claims ? <ProhibitedClaims claims={claims.claims} /> : <p>{t('claims.unavailable')}</p>}
+      </div>
+      {/*
+        Screen 11d's content (which languages are arriving), not 11's — kept
+        here until 11d is measured and it moves to the Language row's edit.
+      */}
       <Languages
         share={languages.share}
         systemLocale={languages.systemLocale}
         myLocale={languages.myLocale}
         storedLanguage={workspace?.languages[0] ?? null}
       />
-      {voice ? <VoiceEditor voice={voice} /> : <p>{t('voice.unavailable')}</p>}
-      {claims ? <ProhibitedClaims claims={claims.claims} /> : <p>{t('claims.unavailable')}</p>}
     </SettingsSection>
   );
 }

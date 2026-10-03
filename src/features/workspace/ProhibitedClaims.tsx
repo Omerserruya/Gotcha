@@ -77,8 +77,8 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
   }
 
   return (
-    <section>
-      <p className={styles.sectionTitle}>{t('title')}</p>
+    <section className={styles.card} data-card="claims" data-testid="claims-card">
+      <p className={styles.cardTitle}>{t('title')}</p>
 
       <div className={styles.claims} data-testid="claims-list">
         {list.length === 0 ? <p className={styles.claim}>{t('empty')}</p> : null}

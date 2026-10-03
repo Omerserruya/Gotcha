@@ -4,6 +4,8 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { siteWasReadable, type ScanResult } from '@/api/contracts/workspace';
+import { Globe } from 'lucide-react';
+
 import { Button } from '@/design-system/primitives/button/Button';
 
 import { acceptScanFields, runWorkspaceScan } from './actions';
@@ -37,6 +39,12 @@ import styles from './Workspace.module.css';
  */
 export function ScanPanel({ domain }: { readonly domain: string | null }) {
   const t = useTranslations('workspace.scan');
+  const tWorkspace = useTranslations('workspace');
+  /*
+    02's banner sentence. The domain is named when we have one — "filled in
+    from avivco.il" is a verifiable claim and "from your website" is not.
+  */
+  const intro = domain ? tWorkspace('intro.withSite', { domain }) : tWorkspace('intro.noSite');
   const [result, setResult] = useState<ScanResult | null>(null);
   const [failed, setFailed] = useState(false);
   const [taken, setTaken] = useState<{ accepted: number; skipped: number } | null>(null);
@@ -75,19 +83,30 @@ export function ScanPanel({ domain }: { readonly domain: string | null }) {
   return (
     <section className={styles.scan} data-testid="scan">
       {/*
+        02's banner: a pill row — the sentence, the "From website" legend the
+        rows use, and "Scan again" on the right. What a rescan will and will
+        not do is said on the control itself, before it is pressed.
+      */}
+      <div className={styles.scanBanner} data-testid="facts-intro">
+        <Globe className={styles.scanIcon} size={15} aria-hidden="true" />
+        <span className={styles.scanIntro}>{intro}</span>
+        <span className={styles.fromWebsite}>{t('legend')}</span>
+        <button
+          type="button"
+          className={styles.scanAgain}
+          onClick={scan}
+          disabled={isPending}
+          title={domain ? t('beforeYouStart', { domain }) : undefined}
+          data-testid="scan-run"
+        >
+          {isPending ? t('running') : t('button')}
+        </button>
+      </div>
+      {/*
         Said BEFORE the button. A rescan on this estate applies nothing and
         proposes everything, and somebody who expects it to "update my details
         from my site" should know that is not what will happen.
       */}
-      {domain ? (
-        <p className={styles.provenanceLead} data-testid="scan-before">
-          {t('beforeYouStart', { domain })}
-        </p>
-      ) : null}
-
-      <Button onClick={scan} disabled={isPending} data-testid="scan-run">
-        {isPending ? t('running') : t('button')}
-      </Button>
 
       {failed ? (
         <p className={styles.scanRefusal} data-testid="scan-failed">

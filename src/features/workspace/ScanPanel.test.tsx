@@ -48,17 +48,40 @@ const offer = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('★ what the scan will do is said before the button', () => {
-  it('names the domain and what will and will not be touched', () => {
+  /*
+   * S2 (2026-10-03): what a rescan will and will not touch is said ON the
+   * control (02's banner has no paragraph), before it is pressed.
+   */
+  it('names the domain and what will and will not be touched — on Scan again', () => {
     renderPanel();
-    const before = screen.getByTestId('scan-before');
-    expect(before).toHaveTextContent(/urban-supply\.example/);
-    expect(before).toHaveTextContent(/come back as suggestions/i);
-    expect(before).toHaveTextContent(/only fields the website already owns/i);
+    const run = screen.getByTestId('scan-run');
+    expect(run).toHaveAttribute('title', expect.stringMatching(/urban-supply\.example/));
+    expect(run).toHaveAttribute('title', expect.stringMatching(/come back as suggestions/i));
+    expect(run).toHaveAttribute(
+      'title',
+      expect.stringMatching(/only fields the website already owns/i),
+    );
   });
 
   it('says nothing about a domain it does not have', () => {
     renderPanel(null);
-    expect(screen.queryByTestId('scan-before')).toBeNull();
+    expect(screen.getByTestId('scan-run')).not.toHaveAttribute('title');
+  });
+
+  it('the banner names the domain rather than saying "your website"', () => {
+    renderPanel();
+    const intro = screen.getByTestId('facts-intro');
+    expect(intro).toHaveTextContent(/urban-supply\.example/);
+    expect(intro).toHaveTextContent(/only updates fields marked/i);
+    // The legend is the chip's own words, so the sentence can point at it.
+    expect(intro).toHaveTextContent('From your website');
+  });
+
+  it('drops the domain clause when there is no website', () => {
+    renderPanel(null);
+    const intro = screen.getByTestId('facts-intro');
+    expect(intro).toHaveTextContent(/filled in when you signed up/i);
+    expect(intro).not.toHaveTextContent(/from\s+·/i);
   });
 });
 

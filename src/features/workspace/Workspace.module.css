@@ -17,8 +17,9 @@
     display: flex;
     align-items: center;
     gap: var(--space-20);
-    padding-block: var(--space-15);
+    padding-block: var(--space-14);
     padding-inline: var(--space-18);
+    line-height: normal;
   }
 
   .row + .row,
@@ -152,7 +153,7 @@
   /* ── Voice ──────────────────────────────────────────────────────────── */
   .voiceGrid {
     display: grid;
-    grid-template-columns: 1fr minmax(0, 300px);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-16);
     align-items: start;
   }
@@ -290,20 +291,19 @@
   }
 
   /* ── Never say ──────────────────────────────────────────────────────── */
+  /* Inside its card: rows, not a second card. */
   .claims {
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .claim {
     display: flex;
     align-items: center;
-    gap: var(--space-12);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-18);
+    gap: var(--space-9);
+    padding-block: var(--space-4);
     font-size: var(--font-size-meta);
+    color: var(--text-body);
   }
 
   .claim + .claim,
@@ -352,14 +352,6 @@
     color: var(--intent-urgent-text);
   }
 
-  /* ── Screen 11b · Where these details came from ──────────────────────── */
-
-  .provenance {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-12);
-  }
-
   .provenanceHeading {
     margin: 0;
     font-size: var(--font-size-meta);
@@ -374,77 +366,6 @@
     font-size: var(--font-size-meta);
     line-height: var(--line-height-snug);
     color: var(--text-body);
-  }
-
-  .provenanceLeadStrong {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-
-  /*
-   * Set apart because every badge below it is about to say the same thing.
-   * Empty badges with no explanation read as a broken feature; this says the
-   * mechanic is real and has nothing to work with yet.
-   */
-  .provenanceNotice {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    background-color: var(--panel-inset);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
-  }
-
-  .provenanceFields {
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .provenanceRow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-8);
-    padding-block: var(--space-8);
-  }
-
-  .provenanceRow + .provenanceRow {
-    border-block-start: var(--border-width-thin) solid var(--row-divider);
-  }
-
-  .provenanceLabel {
-    min-inline-size: var(--size-invite-field);
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  .provenanceValue {
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-8);
-    font-size: var(--font-size-meta);
-    color: var(--text-primary);
-  }
-
-  /* "We looked and could not read this" is not the same as a blank. */
-  .provenanceUnset {
-    color: var(--text-subtle);
-  }
-
-  .provenanceOrigin {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-    background-color: var(--panel-inset);
-    border-radius: var(--radius-badge);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-8);
   }
 
   /* The inline "From website" badge, where the design puts it. */
@@ -568,8 +489,93 @@
   .scan {
     display: flex;
     flex-direction: column;
-    align-items: start;
     gap: var(--space-10);
+  }
+
+  /* 02's banner: `#F5F2EC`, radius 12, `padding:12px 16px`, gap 12. */
+  .scanBanner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-12) var(--space-16);
+    border-radius: 12px;
+    background-color: var(--table-head-surface);
+    line-height: normal;
+  }
+
+  .scanIcon {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .scanIntro {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  /* "Scan again": a quiet link, underlined, at the row's end. */
+  .scanAgain {
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-block-end: 1px solid var(--border-strong);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .scanAgain:disabled {
+    cursor: default;
+    color: var(--text-subtle);
+  }
+
+  /* The two cards under the facts: the voice (the rest) and Never say (340). */
+  .cards {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-14);
+    line-height: normal;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    min-inline-size: 0;
+    padding: 18px var(--space-20);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .card[data-card='voice'] {
+    flex: 1;
+  }
+
+  .card[data-card='claims'] {
+    flex: none;
+    inline-size: 340px;
+  }
+
+  .cardTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  @media (width < 64rem) {
+    .cards {
+      flex-direction: column;
+    }
+
+    .card[data-card='claims'] {
+      inline-size: auto;
+    }
   }
 
   .scanRefusal {

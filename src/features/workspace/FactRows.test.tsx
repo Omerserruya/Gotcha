@@ -172,22 +172,6 @@ describe('★ the From website badge is inline, and only where it is true', () =
   });
 });
 
-describe('the header the badges depend on', () => {
-  it('names the domain rather than saying "your website"', () => {
-    renderRows();
-    const intro = screen.getByTestId('facts-intro');
-    expect(intro).toHaveTextContent(/urban-supply-gotcha-demo\.myshopify\.com/);
-    expect(intro).toHaveTextContent(/only updates fields marked/i);
-  });
-
-  it('drops the domain clause when there is no website', () => {
-    renderRows({ websiteDomain: null });
-    const intro = screen.getByTestId('facts-intro');
-    expect(intro).toHaveTextContent(/filled in when you signed up/i);
-    expect(intro).not.toHaveTextContent(/from\s+·/i);
-  });
-});
-
 describe('★ 11c · the week, and what cannot be stored beside it', () => {
   const openHours = async () => {
     renderRows();
