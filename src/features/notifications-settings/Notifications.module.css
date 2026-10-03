@@ -187,4 +187,173 @@
     padding-block: var(--space-12);
     padding-inline: var(--space-16);
   }
+
+  /* ── 15: "Tell me when" × In app · Email · WhatsApp ─────────────────── */
+  .matrix {
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .matrixHead,
+  .matrixRow {
+    display: flex;
+    align-items: center;
+    padding-inline: 18px;
+  }
+
+  .matrixHead {
+    padding-block: 11px;
+    background-color: var(--table-head-surface);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .matrixRows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .matrixRow {
+    padding-block: 14px;
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .matrixEvent {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .matrixName {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .matrixSub {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .matrixCell {
+    display: flex;
+    flex: none;
+    justify-content: flex-start;
+    inline-size: 90px;
+  }
+
+  .matrixCell:last-child {
+    inline-size: 110px;
+  }
+
+  .matrixNone {
+    font-size: var(--font-size-meta);
+    color: var(--text-faint);
+  }
+
+  /* A switch, drawn: on is dark, off is the well. */
+  .switch {
+    position: relative;
+    inline-size: 30px;
+    block-size: 18px;
+    border-radius: 9px;
+    background-color: var(--border-strong);
+  }
+
+  .switch::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: 50%;
+    background-color: var(--panel-field);
+  }
+
+  .switch[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .switch[data-on='yes']::after {
+    inset-inline-start: 14px;
+  }
+
+  .matrixFoot {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    background-color: var(--table-head-surface);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* The three cards under it; the last is 02's violet. */
+  .prefCards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-14);
+    line-height: normal;
+  }
+
+  .prefCard,
+  .prefCardAi {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: 18px var(--space-20);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .prefCardAi {
+    border-color: var(--ai-card-edge);
+    background-color: var(--ai-card-surface);
+  }
+
+  .prefTitle,
+  .prefTitleAi {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .prefTitleAi {
+    color: var(--ai-card-title);
+  }
+
+  .prefValue {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-secondary);
+  }
+
+  .prefNote,
+  .prefNoteAi {
+    margin: 0;
+    font-size: var(--font-size-label);
+    line-height: 1.45;
+    color: var(--text-subtle);
+  }
+
+  .prefNoteAi {
+    font-size: var(--font-size-meta);
+    color: var(--ai-card-text);
+  }
+
+  @media (width < 64rem) {
+    .prefCards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
 }

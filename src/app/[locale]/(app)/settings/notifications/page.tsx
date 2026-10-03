@@ -1,6 +1,8 @@
 import { getTranslations } from 'next-intl/server';
 
+import { loadPreferences } from '@/features/notifications-settings/load-preferences';
 import { loadRules } from '@/features/notifications-settings/load-rules';
+import { PreferenceMatrix } from '@/features/notifications-settings/PreferenceMatrix';
 import { RuleTable } from '@/features/notifications-settings/RuleTable';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
@@ -23,10 +25,21 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('notifications-settings');
-  const { rules, departments, members } = await loadRules();
+  const [{ rules, departments, members }, { preferences, volume, whatsappDestination }] =
+    await Promise.all([loadRules(), loadPreferences()]);
 
+  /*
+    15, measured: "Tell me when" × In app · Email · WhatsApp, then quiet
+    hours, where WhatsApp alerts go, and how many arrive. The workspace's
+    rules — who is told at all — stay below: the matrix only filters them.
+  */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
+      <PreferenceMatrix
+        preferences={preferences}
+        volume={volume}
+        whatsappDestination={whatsappDestination}
+      />
       <RuleTable rules={rules} departments={departments} members={members} />
     </SettingsSection>
   );

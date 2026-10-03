@@ -97,5 +97,44 @@
     "undeliverable": "{count, plural, =1 {{channels} can be saved but is never delivered.} other {{channels} can be saved but are never delivered.}}",
     "deliversNothing": "Every channel on this rule is one GOTCHA never delivers, so it tells nobody.",
     "unresolvedRecipients": "{count, plural, =1 {One named person no longer has an account here.} other {# named people no longer have accounts here.}}"
+  },
+  "matrix": {
+    "when": "Tell me when",
+    "channel": {
+      "inApp": "In app",
+      "email": "Email",
+      "whatsapp": "WhatsApp"
+    },
+    "row": {
+      "approval": "Something needs my approval",
+      "actionFailed": "An action failed",
+      "systemDown": "A connected system stops responding",
+      "employeeDown": "An AI employee stops working",
+      "complaints": "Complaints spike unusually",
+      "campaign": "A campaign finishes",
+      "assigned": "A conversation is assigned to me"
+    },
+    "nothingSends": "Nothing sends this yet",
+    "on": "on",
+    "off": "off",
+    "switchNotYet": "Changing this from here comes next.",
+    "foot": "Your channels filter what reaches you. Who is told at all is the workspace's rules, below.",
+    "quiet": {
+      "title": "Quiet hours",
+      "window": "{from} – {to}",
+      "none": "None set",
+      "note": "One window, every day — no exceptions or days of the week."
+    },
+    "whatsapp": {
+      "title": "Where WhatsApp alerts go",
+      "none": "No number set",
+      "note": "Your own number: only you get these."
+    },
+    "volume": {
+      "about": "You get about {n} a day",
+      "atLeast": "You get at least {n} a day",
+      "unknown": "How many you get isn't known",
+      "note": "Counted over the last {days} days."
+    }
   }
 }
