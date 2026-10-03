@@ -83,6 +83,46 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
   const whole = credits.plan.includedCredits + purchased;
   const bar = trustworthy && !waiting && whole > 0;
 
+  /*
+    16's ruling — states, not explanations. Every sentence this card used to
+    print under its tiles still exists, on the title of the thing it explains:
+    the grant on "Not granted yet", metering and attribution on the estimate,
+    the withheld usage on "Until renewal". The card keeps 02's height.
+  */
+  const grant = waiting
+    ? `${t('awaitingGrant.lead')} ${t('awaitingGrant.body', {
+        included: number.format(credits.plan.includedCredits),
+        date: credits.period.startsAt ? longDay.format(new Date(credits.period.startsAt)) : '—',
+      })}`
+    : null;
+  /*
+    `no_consumption_recorded` arrives with conversations in the sample: a
+    statement about METERING, not activity — "no activity" would be false
+    beside the number that disproves it.
+  */
+  const metering = ranWithoutMetering(credits)
+    ? t('observed.noMetering', {
+        conversations: number.format(observed.sample.conversations),
+        days: OBSERVED_WINDOW_DAYS,
+      })
+    : observed.reason === 'not_enough_conversations'
+      ? t('observed.tooFewConversations', {
+          conversations: number.format(observed.sample.conversations),
+          days: OBSERVED_WINDOW_DAYS,
+        })
+      : null;
+  const attribution =
+    observed.chats != null &&
+    observed.basis === 'TENANT_ACTUAL' &&
+    !waiting &&
+    observed.sample.conversationAttributedPct < 100
+      ? t('estimate.partiallyAttributed', { pct: observed.sample.conversationAttributedPct })
+      : null;
+  const estimateNote = [metering, attribution].filter(Boolean).join(' ') || undefined;
+  const runoutNote = [t('runout.none'), trustworthy ? null : t('consumption.withheld')]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div
       className={styles.credits}
@@ -120,7 +160,20 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
           separately", never a "top-up kept until used": the summary route
           strips `expiresAt`, so permanence is a promise nothing here checks.
         */}
-        {credits.plan.includedCredits > 0 || purchased > 0 ? (
+        {/*
+          A contracted allowance with nothing granted is not a spent one —
+          "7,000 included" beside "0" reads as a loss. So "0" says it is not
+          granted yet, and the contract and its date ride on the title.
+        */}
+        {grant ? (
+          <span
+            className={styles.creditsPending}
+            title={grant}
+            data-testid="credits-awaiting-grant"
+          >
+            {t('awaitingGrant.short')}
+          </span>
+        ) : credits.plan.includedCredits > 0 || purchased > 0 ? (
           <span className={styles.creditsComposition} data-testid="credits-composition">
             {credits.plan.includedCredits > 0 && purchased > 0
               ? t('composition', {
@@ -178,25 +231,6 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
       ) : null}
 
       {/*
-        A contracted allowance with nothing granted is not a spent one — "7,000
-        included" beside "0" reads as a loss unless somebody says which is the
-        contract and which is the holding.
-      */}
-      {waiting ? (
-        <div className={styles.creditsNotice} data-testid="credits-awaiting-grant">
-          <p className={styles.creditsNoticeLead}>{t('awaitingGrant.lead')}</p>
-          <p className={styles.creditsNote}>
-            {t('awaitingGrant.body', {
-              included: number.format(credits.plan.includedCredits),
-              date: credits.period.startsAt
-                ? longDay.format(new Date(credits.period.startsAt))
-                : '—',
-            })}
-          </p>
-        </div>
-      ) : null}
-
-      {/*
         02's two translations of the number. TWO ESTIMATES, NEVER SUBSTITUTED:
         `observedRemaining` is this tenant's measured burn, `estimatedRemaining`
         the plan's published ratio, and the tile names which it is. Neither is
@@ -206,12 +240,22 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
       */}
       <div className={styles.creditsTiles}>
         {waiting ? (
-          <div className={styles.creditsTile} data-testid="credits-estimate-withheld">
+          <div
+            className={styles.creditsTile}
+            data-tile="estimate"
+            title={estimateNote}
+            data-testid="credits-estimate-withheld"
+          >
             <p className={styles.creditsTileValue}>—</p>
             <p className={styles.creditsTileSub}>{t('estimate.awaitingGrant')}</p>
           </div>
         ) : observed.chats != null && observed.basis === 'TENANT_ACTUAL' ? (
-          <div className={styles.creditsTile} data-testid="credits-estimate-observed">
+          <div
+            className={styles.creditsTile}
+            data-tile="estimate"
+            title={estimateNote}
+            data-testid="credits-estimate-observed"
+          >
             <p className={styles.creditsTileValue}>
               {t('estimate.conversations', { chats: number.format(observed.chats) })}
             </p>
@@ -228,7 +272,12 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
             </p>
           </div>
         ) : credits.estimatedRemaining.chats != null ? (
-          <div className={styles.creditsTile} data-testid="credits-estimate-plan">
+          <div
+            className={styles.creditsTile}
+            data-tile="estimate"
+            title={estimateNote}
+            data-testid="credits-estimate-plan"
+          >
             <p className={styles.creditsTileValue}>
               {t('estimate.conversations', {
                 chats: number.format(credits.estimatedRemaining.chats),
@@ -239,7 +288,12 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
             </p>
           </div>
         ) : (
-          <div className={styles.creditsTile} data-testid="credits-estimate-none">
+          <div
+            className={styles.creditsTile}
+            data-tile="estimate"
+            title={estimateNote}
+            data-testid="credits-estimate-none"
+          >
             <p className={styles.creditsTileValue}>—</p>
           </div>
         )}
@@ -247,51 +301,11 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
           "Lasts until renewal" needs a projected run-out against the renewal
           date, and nothing computes one for credits: "—", and why on its title.
         */}
-        <div className={styles.creditsTile} data-testid="credits-runout" title={t('runout.none')}>
+        <div className={styles.creditsTile} data-testid="credits-runout" title={runoutNote}>
           <p className={styles.creditsTileValue}>—</p>
           <p className={styles.creditsTileSub}>{t('runout.label')}</p>
         </div>
       </div>
-
-      {observed.chats != null &&
-      observed.basis === 'TENANT_ACTUAL' &&
-      !waiting &&
-      observed.sample.conversationAttributedPct < 100 ? (
-        <p className={styles.creditsBasis} data-testid="credits-attribution">
-          {t('estimate.partiallyAttributed', { pct: observed.sample.conversationAttributedPct })}
-        </p>
-      ) : null}
-
-      {/*
-        Said plainly rather than omitted: a missing usage figure on a billing
-        screen looks like a loading failure; this says it is a refusal and why.
-      */}
-      {!trustworthy ? (
-        <p className={styles.creditsBasis} data-testid="credits-consumption-withheld">
-          {t('consumption.withheld')}
-        </p>
-      ) : null}
-
-      {/*
-        `no_consumption_recorded` arrives with conversations in the sample: a
-        statement about METERING, not activity — "no activity" would be false
-        beside the number that disproves it.
-      */}
-      {ranWithoutMetering(credits) ? (
-        <p className={styles.creditsBasis} data-testid="credits-no-metering">
-          {t('observed.noMetering', {
-            conversations: number.format(observed.sample.conversations),
-            days: OBSERVED_WINDOW_DAYS,
-          })}
-        </p>
-      ) : observed.reason === 'not_enough_conversations' ? (
-        <p className={styles.creditsBasis} data-testid="credits-too-few">
-          {t('observed.tooFewConversations', {
-            conversations: number.format(observed.sample.conversations),
-            days: OBSERVED_WINDOW_DAYS,
-          })}
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -75,8 +75,9 @@ test.beforeEach(async ({ context }) => {
   ]);
 });
 
-async function openBilling(page: Page, locale: 'en' | 'he') {
-  await page.goto(`/${locale}/settings/billing`);
+/** `panel` opens 17c/17d/17e over 17: `low`, `buy` or `details`. */
+async function openBilling(page: Page, locale: 'en' | 'he', panel?: 'low' | 'buy' | 'details') {
+  await page.goto(`/${locale}/settings/billing${panel ? `?panel=${panel}` : ''}`);
 
   if (page.url().includes('/sign-in') || page.url().includes('/api/auth/login')) {
     throw new Error(
@@ -361,7 +362,7 @@ for (const size of SIZES) {
     test('profile · nothing to charge, said beside the failures', async ({ page }) => {
       if (onlyOneProject()) return;
 
-      await openBilling(page, 'en');
+      await openBilling(page, 'en', 'details');
 
       /*
        * ── WHY THIS IS NOT A BARE `toBeVisible` ANY MORE ──
@@ -461,8 +462,9 @@ for (const size of SIZES) {
       await expect(credits).toBeVisible();
       await expect(credits).toHaveAttribute('data-consumption', 'withheld');
 
-      const withheld = await creditsElement(page, 'credits-consumption-withheld');
-      await expect(withheld).toHaveText(/expired credits as if they had been spent/i);
+      // Said on the title of the tile that would have used the figure.
+      const runout = await creditsElement(page, 'credits-runout');
+      await expect(runout).toHaveAttribute('title', /expired credits as if they had been spent/i);
 
       // The number that must never appear. This is the whole finding.
       await expect(credits).not.toHaveText(/100\s?%/);
@@ -477,7 +479,7 @@ for (const size of SIZES) {
        * permanence the route's stripped `expiresAt` cannot support.
        */
       await expect(credits).not.toHaveText(/kept until used/i);
-      await expect(page.getByRole('heading', { name: /credits left/i })).toBeVisible();
+      await expect(credits).toContainText(/credits left/i);
 
       await shoot(page, `${size.name}-credits-withheld`);
     });
@@ -500,11 +502,13 @@ for (const size of SIZES) {
 
       await openBilling(page, 'en');
 
+      // One line under the 0; the contract, its date and the denial on its title.
       const notice = await creditsElement(page, 'credits-awaiting-grant');
-      await expect(notice).toHaveText(/have been issued/i);
-      await expect(notice).toHaveText(/7,000/);
+      await expect(notice).toHaveText(/not granted yet/i);
+      await expect(notice).toHaveAttribute('title', /have been issued/i);
+      await expect(notice).toHaveAttribute('title', /7,000/);
       // The sentence that stops a zero being read as overspending.
-      await expect(notice).toHaveText(/not credits you have spent/i);
+      await expect(notice).toHaveAttribute('title', /not credits you have spent/i);
 
       /*
        * ── THE FOUR LINES THAT WERE IN EVERY SHOT AND IN NO ASSERTION ──
@@ -520,8 +524,7 @@ for (const size of SIZES) {
 
       // The headline number on the block. Nothing checked it said anything.
       const balance = page.getByTestId('credits-balance');
-      await expect(balance).toHaveText(/\d/);
-      await expect(balance).toHaveText(/credits available/i);
+      await expect(balance).toHaveText(/^\d[\d,]*$/);
 
       /*
        * ★ NO FORECAST FROM A BALANCE THE SCREEN HAS JUST DISOWNED.
@@ -558,11 +561,7 @@ for (const size of SIZES) {
        * between "we could not read this" and "there is nothing here", and it
        * is the branch this tenant actually renders.
        */
-      const breakdown = page.getByTestId('breakdown-unavailable');
-      if ((await breakdown.count()) > 0) {
-        await expect(breakdown).toHaveText(/\S/);
-        await expect(breakdown).toHaveText(/can.t show the breakdown/i);
-      }
+      await expect(page.getByTestId('breakdown-ai-count')).toHaveText(/\S/);
 
       await shoot(page, `${size.name}-credits-awaiting-grant`);
     });
@@ -583,10 +582,11 @@ for (const size of SIZES) {
 
       await openBilling(page, 'en');
 
-      const note = await creditsElement(page, 'credits-no-metering');
-      await expect(note).toHaveText(/\d+ conversations/);
-      await expect(note).toHaveText(/no credits were recorded/i);
-      await expect(note).toHaveText(/not about how much you have used/i);
+      // On the estimate tile's title: the tile is "—" because of it.
+      const note = page.locator('[data-tile="estimate"]');
+      await expect(note).toHaveAttribute('title', /\d+ conversations/);
+      await expect(note).toHaveAttribute('title', /no credits were recorded/i);
+      await expect(note).toHaveAttribute('title', /not about how much you have used/i);
 
       await shoot(page, `${size.name}-credits-no-metering`);
     });
@@ -610,7 +610,7 @@ for (const size of SIZES) {
     }) => {
       if (onlyOneProject()) return;
 
-      await openBilling(page, 'en');
+      await openBilling(page, 'en', 'buy');
 
       const buy = page.getByTestId('buy-credits');
       await expect(buy, missingIds('the 17d buy-credits block')).toBeVisible();
@@ -703,7 +703,7 @@ for (const size of SIZES) {
     test('auto-purchase · the block that was photographed but never read', async ({ page }) => {
       if (onlyOneProject()) return;
 
-      await openBilling(page, 'en');
+      await openBilling(page, 'en', 'low');
 
       const unset = page.getByTestId('auto-purchase-unset');
       const block = page.getByTestId('auto-purchase');

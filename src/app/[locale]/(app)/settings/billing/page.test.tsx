@@ -10,7 +10,11 @@ vi.mock('next-intl/server', () => ({
     createTranslator({ locale: 'en', messages: { billing: messages }, namespace }),
 }));
 vi.mock('@/shell/SettingsSection', () => ({
-  SettingsSection: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SettingsSection: ({ children, fill }: { children: ReactNode; fill?: boolean }) => (
+    <div data-testid="settings-section" data-fill={fill ? 'yes' : 'no'}>
+      {children}
+    </div>
+  ),
 }));
 vi.mock('@/features/billing/load-billing', () => ({
   loadBilling: async () => ({
@@ -73,5 +77,12 @@ describe('★ 17 — 02’s screen, and 17c/d/e over it', () => {
     expect(screen.getByTestId('overlay')).toHaveAttribute('data-kind', kind);
     expect(screen.getByTestId(inside)).toBeInTheDocument();
     expect(screen.getByTestId('hero')).toBeInTheDocument();
+  });
+});
+
+describe('★ 17 — the left column runs to the frame’s bottom', () => {
+  it('the section fills', async () => {
+    await open();
+    expect(screen.getByTestId('settings-section')).toHaveAttribute('data-fill', 'yes');
   });
 });

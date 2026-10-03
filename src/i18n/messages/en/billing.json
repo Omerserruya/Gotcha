@@ -116,7 +116,8 @@
     },
     "awaitingGrant": {
       "lead": "No credits have been issued for this billing period yet.",
-      "body": "Your plan is contracted for {included} credits a period. The period that began on {date} has not had its credits granted, so the balance is zero — this is not credits you have spent."
+      "body": "Your plan is contracted for {included} credits a period. The period that began on {date} has not had its credits granted, so the balance is zero — this is not credits you have spent.",
+      "short": "Not granted yet for this period"
     },
     "consumption": {
       "withheld": "We are not showing a usage figure for this period. The number the system reports counts expired credits as if they had been spent, so it would overstate what you actually used."

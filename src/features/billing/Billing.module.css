@@ -493,6 +493,15 @@
     color: var(--text-primary);
   }
 
+  .creditsPending {
+    padding-block: 3px;
+    padding-inline: var(--space-8);
+    border-radius: var(--radius-badge);
+    background-color: var(--panel-inset);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
   .creditsComposition {
     font-size: var(--font-size-body-sm);
     color: var(--text-subtle);
@@ -1123,6 +1132,37 @@
 
     .overview {
       grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+@layer features {
+  /*
+   * 17 in 02's frame: the two columns take the rest of its height, and
+   * "Where credits went" runs to the bottom with its rows scrolling inside.
+   */
+  @media (width > 900px) {
+    .overview {
+      flex: 1;
+      min-block-size: 0;
+      align-items: stretch;
+    }
+
+    .overviewMain {
+      min-block-size: 0;
+    }
+
+    .went {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-block-size: 0;
+    }
+
+    .wentRows {
+      flex: 1;
+      min-block-size: 0;
+      overflow-y: auto;
     }
   }
 }

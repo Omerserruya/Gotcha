@@ -57,7 +57,7 @@ export default async function Page({
   } = await loadBilling();
 
   return (
-    <SettingsSection title={t('title')} description={t('description')}>
+    <SettingsSection title={t('title')} description={t('description')} fill>
       <PlanHero subscription={subscription} plans={plans} credits={credits} />
 
       <div className={styles.overview}>

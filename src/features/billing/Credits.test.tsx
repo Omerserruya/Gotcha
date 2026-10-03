@@ -66,12 +66,14 @@ describe('the usage figure is withheld, and the screen says so', () => {
     await render17c();
     expect(screen.getByTestId('credits')).toHaveAttribute('data-consumption', 'withheld');
 
-    const said = screen.getByTestId('credits-consumption-withheld');
     /*
-     * Said, not silently omitted. A missing usage figure on a billing screen
-     * looks like a loading failure; this names it as a refusal and why.
+     * Said, not silently omitted — on the title of "Until renewal", the tile
+     * that would have used the figure (16's ruling: states, not paragraphs).
      */
-    expect(said).toHaveTextContent(/expired credits as if they had been spent/i);
+    expect(screen.getByTestId('credits-runout')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/expired credits as if they had been spent/i),
+    );
   });
 
   it('never renders the 100% the route reports', async () => {
@@ -88,18 +90,26 @@ describe('the usage figure is withheld, and the screen says so', () => {
       },
     });
     expect(shown.getByTestId('credits')).toHaveAttribute('data-consumption', 'shown');
-    expect(shown.queryByTestId('credits-consumption-withheld')).toBeNull();
+    expect(shown.getByTestId('credits-runout')).not.toHaveAttribute(
+      'title',
+      expect.stringMatching(/expired credits/i),
+    );
   });
 });
 
 describe('a contracted allowance with nothing granted is not a spent one', () => {
   it('says the credits have not been issued, and names the contract', async () => {
     await render17c();
+    // One line under the 0 — and the contract, the date and the denial on it.
     const notice = screen.getByTestId('credits-awaiting-grant');
-    expect(notice).toHaveTextContent(/have been issued/i);
-    expect(notice).toHaveTextContent(/7,000/);
+    expect(notice).toHaveTextContent(/^Not granted yet for this period$/);
+    const title = notice.getAttribute('title') ?? '';
+    expect(title).toMatch(/have been issued/i);
+    expect(title).toMatch(/7,000/);
     // And explicitly denies the reading a bare zero invites.
-    expect(notice).toHaveTextContent(/not credits you have spent/i);
+    expect(title).toMatch(/not credits you have spent/i);
+    // In place of the make-up, not beside it.
+    expect(screen.queryByTestId('credits-composition')).toBeNull();
   });
 
   it('says nothing of the sort for a tenant holding credits', async () => {
@@ -164,7 +174,10 @@ describe('an estimate always says what it rests on', () => {
     );
     expect(measured.getByTestId('credits-estimate-basis')).toHaveTextContent(/your own usage/i);
     // And names how much of the burn the per-conversation figure describes.
-    expect(measured.getByTestId('credits-attribution')).toHaveTextContent(/76%/);
+    expect(measured.getByTestId('credits-estimate-observed')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/76%/),
+    );
   });
 
   it('labels the plan’s published rate as NOT the tenant’s usage', async () => {
@@ -209,23 +222,25 @@ describe('an estimate always says what it rests on', () => {
 describe('“no consumption recorded” is about metering, not activity', () => {
   it('states the conversations that the reason code omits', async () => {
     await render17c();
-    const note = screen.getByTestId('credits-no-metering');
-    expect(note).toHaveTextContent(/88 conversations/);
-    expect(note).toHaveTextContent(/no credits were recorded/i);
+    // On the estimate tile's title: the tile is "—" because of it.
+    const note = document.querySelector('[data-tile="estimate"]')?.getAttribute('title') ?? '';
+    expect(note).toMatch(/88 conversations/);
+    expect(note).toMatch(/no credits were recorded/i);
     // The sentence that stops it being read as "you have not used GOTCHA".
-    expect(note).toHaveTextContent(/not about how much you have used/i);
+    expect(note).toMatch(/not about how much you have used/i);
   });
 
   it('uses a different sentence when the sample is merely too small', async () => {
-    const few = await render17c({
+    await render17c({
       observedRemaining: {
         ...MEASURED.observedRemaining,
         reason: 'not_enough_conversations',
         sample: { conversations: 12, creditsConsumed: 48, conversationAttributedPct: 80 },
       },
     });
-    expect(few.queryByTestId('credits-no-metering')).toBeNull();
-    expect(few.getByTestId('credits-too-few')).toHaveTextContent(/too few to measure/i);
+    const note = document.querySelector('[data-tile="estimate"]')?.getAttribute('title') ?? '';
+    expect(note).not.toMatch(/no credits were recorded/i);
+    expect(note).toMatch(/too few to measure/i);
   });
 });
 
