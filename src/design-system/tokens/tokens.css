@@ -544,6 +544,13 @@
     --alert-control-edge: #e3c3b6;
     /* 03b's confirmation edge: the calm green, drawn as a card's border. */
     --calm-edge: #c9d8b4;
+    /* 13b's scrim: the frame dimmed under a panel — #121212 at 30%. */
+    --panel-scrim: rgb(18 18 18 / 30%);
+    /* 13's warning above the channels: amber, darker words. */
+    --warning-banner-surface: #fbf3df;
+    --warning-banner-edge: #ebd9a6;
+    --warning-banner-title: #3a2e0b;
+    --warning-banner-text: #5e4b12;
     /* 07's "A reply from today": a sample of its words, a step off white. */
     --reply-sample-surface: #f6f4ef;
     /* 02's violet offer card ("That's the twelfth like it"). */

@@ -10,7 +10,9 @@
    * without the markup changing. `grid-area` names say where each one goes and
    * the two templates below say what that means.
    */
+  /* Positioned: a section's panel (13b) lays its scrim over the whole frame. */
   .split {
+    position: relative;
     display: grid;
     grid-template-columns: var(--size-settings-nav) 1fr;
     grid-template-rows: 1fr auto;

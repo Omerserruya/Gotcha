@@ -16,12 +16,46 @@
     overflow: hidden;
   }
 
+  /* A row: `padding:15px 18px`, gap 16 — tile, name over line, state, Settings. */
   .row {
     display: flex;
     align-items: center;
-    gap: var(--space-14);
-    padding-block: var(--space-14);
+    gap: var(--space-16);
+    padding-block: 15px;
     padding-inline: var(--space-18);
+    line-height: normal;
+  }
+
+  .tile {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 34px;
+    block-size: 34px;
+    border-radius: var(--radius-item);
+    background-color: var(--channel-web-surface);
+    color: var(--channel-web-mark);
+  }
+
+  .tile[data-tone='whatsapp'] {
+    background-color: var(--channel-whatsapp-surface);
+    color: var(--channel-whatsapp-mark);
+  }
+
+  .tile[data-tone='instagram'] {
+    background-color: var(--channel-instagram-surface);
+    color: var(--channel-instagram-mark);
+  }
+
+  .tile[data-tone='email'] {
+    background-color: var(--channel-email-surface);
+    color: var(--channel-email-mark);
+  }
+
+  .tile[data-tone='messenger'] {
+    background-color: var(--channel-messenger-surface);
+    color: var(--channel-messenger-mark);
   }
 
   .row + .row {
@@ -42,13 +76,13 @@
   }
 
   .name {
-    font-size: var(--font-size-body-sm);
-    font-weight: 500;
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-semibold);
   }
 
   .detail {
-    font-size: var(--font-size-micro);
-    color: var(--text-subtle);
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
   }
 
   /* The platform's own error text. */
@@ -57,38 +91,80 @@
     color: var(--intent-urgent-text);
   }
 
+  /* The state as 02's chip: radius 6, `padding:4px 9px`, 11.5px. */
   .status {
     flex: none;
-    font-size: var(--font-size-label);
+    padding: var(--space-4) var(--space-9);
+    border-radius: 6px;
+    font-size: var(--font-size-caption);
   }
 
   .statusGood {
-    color: var(--intent-opportunity-text);
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
   }
 
   .statusTroubled {
-    color: var(--intent-urgent-text);
-    font-weight: 500;
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
   }
 
-  /* Who answers this channel. */
-  .mode {
-    inline-size: var(--size-people-column);
+  /* 02's warning: amber, radius 14, `padding:14px 18px`, gap 14. */
+  .banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding: var(--space-14) var(--space-18);
+    border: 1px solid var(--warning-banner-edge);
+    border-radius: var(--radius-card);
+    background-color: var(--warning-banner-surface);
+    line-height: normal;
+  }
+
+  .bannerIcon {
     flex: none;
-    font-size: var(--font-size-label);
-    color: var(--text-body);
+    color: var(--warning-banner-text);
   }
 
-  /* 02's row button: white, bordered, `padding:7px 13px`, 12px. */
+  .bannerText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+    min-inline-size: 0;
+  }
+
+  .bannerTitle {
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-semibold);
+    color: var(--warning-banner-title);
+  }
+
+  .bannerBody {
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--warning-banner-text);
+  }
+
+  .bannerMore {
+    flex: none;
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
+  /* 02's row button: bordered, radius 8, `padding:6px 12px`, 11.5px. */
   .settingsLink {
     flex: none;
-    padding: 7px 13px;
+    padding: var(--space-6) var(--space-12);
     border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-item);
-    background-color: var(--panel-field);
-    font-size: var(--font-size-label);
+    border-radius: var(--space-8);
+    font-size: var(--font-size-caption);
     color: var(--text-body);
     text-decoration: none;
+  }
+
+  .settingsLink[aria-disabled='true'] {
+    cursor: default;
   }
 
   /* ── Connect ────────────────────────────────────────────────────────── */
@@ -564,5 +640,115 @@
   .reviewActions {
     display: flex;
     gap: var(--space-8);
+  }
+
+  /* ── 13b: WhatsApp as a panel over Channels ─────────────────────────── */
+  .panelLayer {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-panel);
+  }
+
+  .panelScrim {
+    position: absolute;
+    inset: 0;
+    background-color: var(--panel-scrim);
+  }
+
+  /* The drawer: white, 640, at the frame's end. */
+  .panel {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    display: flex;
+    flex-direction: column;
+    inline-size: min(640px, 100%);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .panelHead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: 22px var(--space-26) 0;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .panelTitleRow {
+    display: flex;
+    gap: var(--space-12);
+  }
+
+  .panelTile {
+    flex: none;
+    inline-size: 40px;
+    block-size: 40px;
+    border-radius: 11px;
+    background-color: var(--channel-whatsapp-surface);
+  }
+
+  .panelTitles {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .panelTitle {
+    margin: 0;
+    font-size: 18px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .panelLine {
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+  }
+
+  .panelClose {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .panelClose:hover {
+    color: var(--text-primary);
+  }
+
+  /* Numbers · Templates · Private contacts · Activity: `padding:9px 10px`. */
+  .panelTabs {
+    display: flex;
+    gap: var(--space-6);
+  }
+
+  .panelTab {
+    margin-block-end: -1px;
+    padding: var(--space-9) var(--space-10);
+    border-block-end: 2px solid transparent;
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+  }
+
+  .panelTab[aria-current='page'] {
+    border-block-end-color: var(--action-base);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .panelTab[aria-disabled='true'] {
+    cursor: default;
+  }
+
+  .panelBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: 22px var(--space-26);
   }
 }

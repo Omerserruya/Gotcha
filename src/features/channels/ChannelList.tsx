@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import type { Channel, VoiceChannel } from '@/api/contracts/channels';
@@ -6,6 +7,7 @@ import styles from './Channels.module.css';
 import { ConnectableRow } from './ConnectableRow';
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
 import { channelName } from '@/api/contracts/inbox';
+import { channelMark } from '@/features/inbox/channel-marks';
 import { Link } from '@/i18n/navigation';
 
 /**
@@ -64,81 +66,128 @@ export async function ChannelList({
         t('inWindow', { count: number.format(row.windowConversations), days: windowDays }),
       );
     }
+    // Who answers it — the one routing a channel stores — at the line's end,
+    // where 02 has no column for it.
+    if (row.responseMode) parts.push(t(`mode.${row.responseMode}` as 'mode.AI_AUTO_REPLY'));
     return parts.join(' · ');
   };
+  const troubledRows = rows.filter(
+    (row): row is ConnectedRow => row.kind === 'connected' && isTroubled(row),
+  );
 
   return (
-    <ul className={styles.list} data-testid="channel-list">
-      {rows.map((row) => {
-        if (row.kind === 'connectable') {
-          // The one interactive row, and the only client component here.
-          return <ConnectableRow key={`connectable:${row.channel}`} channel={row.channel} />;
-        }
+    <>
+      {/*
+        02's warning above the list: the channel that needs attention, in the
+        platform's own words — one banner, the first that is troubled; the
+        rest still say so on their rows.
+      */}
+      {troubledRows[0] ? (
+        <section className={styles.banner} data-testid="channel-banner">
+          <AlertTriangle className={styles.bannerIcon} size={18} aria-hidden="true" />
+          <span className={styles.bannerText}>
+            <span className={styles.bannerTitle}>
+              {t('banner.title', {
+                channel: channelName(troubledRows[0].channel, t) ?? t('name.other'),
+              })}
+            </span>
+            <span className={styles.bannerBody}>
+              {troubledRows[0].error ?? t(`status.${troubledRows[0].status}` as 'status.CONNECTED')}
+            </span>
+          </span>
+          {troubledRows.length > 1 ? (
+            <span className={styles.bannerMore}>
+              {t('banner.more', { count: troubledRows.length - 1 })}
+            </span>
+          ) : null}
+        </section>
+      ) : null}
+      <ul className={styles.list} data-testid="channel-list">
+        {rows.map((row) => {
+          if (row.kind === 'connectable') {
+            // The one interactive row, and the only client component here.
+            return <ConnectableRow key={`connectable:${row.channel}`} channel={row.channel} />;
+          }
 
-        const troubled = isTroubled(row);
-        return (
-          <li
-            key={row.id}
-            className={[styles.row, troubled ? styles.rowTroubled : ''].join(' ').trim()}
-            data-testid={`channel-${row.id}`}
-            data-kind="connected"
-            data-troubled={troubled ? 'yes' : 'no'}
-          >
-            <div className={styles.identity}>
-              {/*
+          const troubled = isTroubled(row);
+          return (
+            <li
+              key={row.id}
+              className={[styles.row, troubled ? styles.rowTroubled : ''].join(' ').trim()}
+              data-testid={`channel-${row.id}`}
+              data-kind="connected"
+              data-troubled={troubled ? 'yes' : 'no'}
+            >
+              <ChannelTile channel={row.channel} />
+              <div className={styles.identity}>
+                {/*
                 ★★ THIS HAD NO FALLBACK AT ALL. A channel absent from
                 `channels.json` rendered `name.TELEGRAM` — the KEY, not even the
                 enum — because next-intl returns the key it could not resolve.
                 The other nine sites at least degraded to the platform's word.
               */}
-              <span className={styles.name}>{channelName(row.channel, t) ?? t('name.other')}</span>
-              <span className={styles.detail} data-testid={`channel-detail-${row.id}`}>
-                {detail(row)}
-              </span>
-              {/*
+                <span className={styles.name}>
+                  {channelName(row.channel, t) ?? t('name.other')}
+                </span>
+                <span className={styles.detail} data-testid={`channel-detail-${row.id}`}>
+                  {detail(row)}
+                </span>
+                {/*
                 The platform's own words, not ours. A paraphrase would be a
                 second, vaguer copy of a message the platform already wrote —
                 and "Shopify Chat app was uninstalled from the store" tells
                 someone exactly what to go and do.
               */}
-              {row.error ? (
-                <span className={styles.error} data-testid={`channel-error-${row.id}`}>
-                  {row.error}
-                </span>
-              ) : null}
-            </div>
+                {row.error ? (
+                  <span className={styles.error} data-testid={`channel-error-${row.id}`}>
+                    {row.error}
+                  </span>
+                ) : null}
+              </div>
 
-            <span
-              className={[styles.status, troubled ? styles.statusTroubled : styles.statusGood]
-                .join(' ')
-                .trim()}
-              data-testid={`channel-status-${row.id}`}
-            >
-              {t(`status.${row.status}` as 'status.CONNECTED')}
-            </span>
-
-            {/*
-              Who answers this channel. The only routing a channel can store:
-              `ChannelAccount` has no AI employee and no team, so the design's
-              "Customer Support AI / Sales AI / Support team" is not a control
-              that was dropped — it is one the data cannot express.
-            */}
-            <span className={styles.mode} data-testid={`channel-mode-${row.id}`}>
-              {row.responseMode ? t(`mode.${row.responseMode}` as 'mode.AI_AUTO_REPLY') : ''}
-            </span>
-            {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
-            {row.channel === 'WHATSAPP' ? (
-              <Link
-                href="/settings/channels/whatsapp"
-                className={styles.settingsLink}
-                data-testid={`channel-settings-${row.id}`}
+              <span
+                className={[styles.status, troubled ? styles.statusTroubled : styles.statusGood]
+                  .join(' ')
+                  .trim()}
+                data-testid={`channel-status-${row.id}`}
               >
-                {t('rowSettings')}
-              </Link>
-            ) : null}
-          </li>
-        );
-      })}
-    </ul>
+                {t(`status.${row.status}` as 'status.CONNECTED')}
+              </span>
+
+              {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
+              {row.channel === 'WHATSAPP' ? (
+                <Link
+                  href={{ pathname: '/settings/channels', query: { panel: 'whatsapp' } }}
+                  className={styles.settingsLink}
+                  data-testid={`channel-settings-${row.id}`}
+                >
+                  {t('rowSettings')}
+                </Link>
+              ) : (
+                // Only WhatsApp has a settings panel (13b) yet: drawn, and it says so.
+                <span
+                  className={styles.settingsLink}
+                  aria-disabled="true"
+                  title={t('rowSettingsNotYet')}
+                  data-testid={`channel-settings-${row.id}`}
+                >
+                  {t('rowSettings')}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/** 02's 34px tile: the channel's mark on its own surface. */
+function ChannelTile({ channel }: { readonly channel: string }) {
+  const { Icon, tone } = channelMark(channel);
+  return (
+    <span className={styles.tile} data-tone={tone} aria-hidden="true">
+      <Icon size={17} strokeWidth={1.75} />
+    </span>
   );
 }

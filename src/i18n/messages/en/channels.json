@@ -187,7 +187,21 @@
       "rerun": "Look again",
       "rerunSafe": "Looking again updates the counts on these suggestions. It does not ask you about anything you have already rejected.",
       "noLanguageShortcut": "The design offers to add a missing reply language from here. There is nowhere to add one — GOTCHA stores a single language and answers each customer in their own regardless."
-    }
+    },
+    "close": "Close",
+    "panelLine": "{count, plural, =0 {No numbers yet} one {One number} other {# numbers}}",
+    "tab": {
+      "numbers": "Numbers",
+      "templates": "Templates",
+      "contacts": "Private contacts",
+      "activity": "Activity"
+    },
+    "tabNotYet": "This tab comes next — Numbers is ready."
   },
-  "rowSettings": "Settings"
+  "rowSettings": "Settings",
+  "rowSettingsNotYet": "Settings for this channel come next — WhatsApp's are ready.",
+  "banner": {
+    "title": "{channel} needs attention",
+    "more": "{count, plural, one {and one more channel} other {and # more channels}}"
+  }
 }
