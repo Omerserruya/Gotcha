@@ -34,3 +34,15 @@ describe('★ 01 sits inside the frame, in three columns', () => {
     expect(rule('queueRowText')).toMatch(/flex-direction:\s*column/);
   });
 });
+
+describe('★ 01d — a lone "Mark read" aligns with the text', () => {
+  const panel = readFileSync('src/features/notifications/Notifications.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  it('pulls back by its own padding when it is first on the row', () => {
+    expect(/\.quiet:first-child\s*\{([^}]*)\}/.exec(panel)?.[1]).toMatch(
+      /margin-inline-start:\s*calc\(-1 \* var\(--space-6\)\)/,
+    );
+  });
+});

@@ -206,6 +206,11 @@
     color: var(--text-subtle);
   }
 
+  /* Alone on its row, "Mark read" lines up with the text above it. */
+  .quiet:first-child {
+    margin-inline-start: calc(-1 * var(--space-6));
+  }
+
   .time {
     flex: none;
     font-family: var(--font-mono);
