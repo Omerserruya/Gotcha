@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -91,5 +91,44 @@ describe('★ 16 — the audit card’s head is 02’s', () => {
     const y = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     await show([entry('y', { createdAt: y })]);
     expect(screen.getByTestId('audit-y').querySelector('time')).toHaveTextContent(/^Yesterday$/);
+  });
+});
+
+describe('★ 16 corrections (measurement of 9aeb1a7)', () => {
+  it('a tool’s worked and failed halves are ONE chip; the failures ride on its title', async () => {
+    render(
+      await AuditSection({
+        entries: [entry('a', {})],
+        available: true,
+        facets: [
+          { action: 'adapter.err.shopify.get_customer_by_phone', count: 1411 },
+          { action: 'adapter.ok.shopify.get_customer_by_phone', count: 1081 },
+        ],
+        facetsTruncated: false,
+      }),
+    );
+    const chips = screen.getAllByText('Shopify get customer by phone');
+    expect(chips).toHaveLength(1);
+    expect(chips[0]).toHaveAttribute('title', '2,492 times · 1,411 didn’t work'.replace('’', "'"));
+  });
+
+  it.each([
+    [
+      'adapter.err.shopify.get_customer_by_phone',
+      'ai',
+      'GOTCHA looked up customer by phone in Shopify',
+    ],
+    ['adapter.ok.shopify.process_refund', 'ai', 'GOTCHA processed refund in Shopify'],
+    ['adapter.ok.shopify.get_shop', 'ai', 'GOTCHA looked up shop in Shopify'],
+    ['ai.paused_for_approval', 'ai', 'GOTCHA paused and asked for approval'],
+    [
+      'billing.provisioning_request_created',
+      'user',
+      'Someone on your team asked for billing to be set up',
+    ],
+    ['some.new_thing', 'webhook', 'Something · Some new thing'],
+  ])('%s by %s → "%s"', async (action, actorType, sentence) => {
+    await show([entry('s', { action, actorType })]);
+    expect(within(screen.getByTestId('audit-s')).getByText(sentence)).toBeInTheDocument();
   });
 });

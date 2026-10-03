@@ -8,6 +8,7 @@ import { Button } from '@/design-system/primitives/button/Button';
 
 import { revokeSession, revokeOtherSessions, type SecurityWriteResult } from './actions';
 import styles from './Security.module.css';
+import { shortWhen } from './when';
 
 /**
  * How many devices the list shows before it is expanded.
@@ -60,7 +61,7 @@ export function SessionList({
     );
   }
 
-  const when = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' });
+  const now = new Date();
   const others = sessions.filter((s) => !s.current).length;
 
   /*
@@ -133,16 +134,20 @@ export function SessionList({
                 is simply absent when it has none — never guessed from the IP,
                 and never replaced by a placeholder.
               */}
-              <span className={styles.detail} data-testid={`session-detail-${session.id}`}>
-                {/* 02: "This device · …" leads the line, not a chip on the name. */}
+              {/*
+                02: one line — "This device · …", the city, and when, in the
+                audit's own clock. The address rides on the title.
+              */}
+              <span
+                className={styles.detail}
+                data-testid={`session-detail-${session.id}`}
+                title={session.ip ?? undefined}
+              >
                 {[
                   session.current ? t('sessions.thisDevice') : null,
-                  [session.city, session.country].filter(Boolean).join(', ') || null,
-                  session.ip,
+                  session.city || session.country || null,
                   session.lastUsed
-                    ? t('sessions.lastUsed', {
-                        when: when.format(new Date(session.lastUsed)),
-                      })
+                    ? shortWhen(new Date(session.lastUsed), now, locale, t('audit.yesterday'))
                     : null,
                 ]
                   .filter(Boolean)

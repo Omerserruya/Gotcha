@@ -63,7 +63,28 @@
     "yesterday": "אתמול",
     "all": "הכול",
     "more": "עוד",
-    "times": "{count, plural, one {פעם אחת} other {# פעמים}}"
+    "times": "{count, plural, one {פעם אחת} other {# פעמים}}",
+    "who": {
+      "ai": "GOTCHA",
+      "user": "מישהו בצוות",
+      "system": "המערכת",
+      "unknown": "משהו"
+    },
+    "timesFailed": "{count, plural, one {פעם אחת} other {# פעמים}} · {failed, plural, one {אחת לא עבדה} other {# לא עבדו}}",
+    "sentence": {
+      "connector": "{actor} {verb, select, get {חיפש/ה} search {חיפש/ה} update {עדכן/ה} process {עיבד/ה} summarize {סיכם/ה} create {יצר/ה} cancel {ביטל/ה} list {הציג/ה} other {הריץ/ה}} {object} ב־{system}",
+      "connectorOther": "{actor} הריץ/ה „{operation}” ב־{system}",
+      "responded": "{actor} ענה/תה ללקוח",
+      "messageSent": "{actor} שלח/ה הודעה",
+      "botTurn": "{actor} ענה/תה בשיחה",
+      "pausedForApproval": "{actor} עצר/ה וביקש/ה אישור",
+      "escalated": "{actor} העביר/ה שיחה לצוות",
+      "provisioningAttempted": "{actor} ניסה/תה להגדיר חיוב",
+      "provisioningRequested": "{actor} ביקש/ה להגדיר חיוב",
+      "provisioningFailed": "הגדרת החיוב לא עבדה",
+      "provisioningCompleted": "החיוב הוגדר",
+      "other": "{actor} · {action}"
+    }
   },
   "policy": {
     "google": "כניסה עם Google",

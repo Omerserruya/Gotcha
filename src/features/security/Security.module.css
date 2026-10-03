@@ -258,7 +258,8 @@
     display: grid;
     grid-template-columns: minmax(0, 474fr) minmax(0, 400fr);
     gap: var(--space-14);
-    align-items: start;
+    /* 02: both cards one height, their rows at the top. */
+    align-items: stretch;
     line-height: normal;
   }
 
@@ -344,20 +345,28 @@
     border-block-end: var(--border-width-thin) solid var(--row-divider);
   }
 
+  /* The title never wraps; the chips take what is left. */
   .auditHead > .cardTitle {
-    flex: 1;
+    flex: none;
+    white-space: nowrap;
   }
 
   /* 02's chips: one row, 11.5 on the inset, the current one dark. */
   .auditChips {
     display: flex;
+    flex: 1;
+    justify-content: flex-end;
     align-items: center;
     gap: var(--space-6);
     min-inline-size: 0;
   }
 
+  /* A facet chip gives way before the title does; "All" and More never. */
   .auditChip {
-    flex: none;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding-block: 5px;
     padding-inline: var(--space-11);
     border-radius: 7px;
@@ -368,13 +377,14 @@
     list-style: none;
   }
 
+  .auditChip[data-current='yes'],
+  .auditMore {
+    flex: none;
+  }
+
   .auditChip[data-current='yes'] {
     background-color: var(--action-base);
     color: var(--action-text);
-  }
-
-  .auditChip[data-outcome='err'] {
-    color: var(--intent-urgent-text);
   }
 
   .auditMore {

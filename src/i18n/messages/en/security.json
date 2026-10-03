@@ -63,7 +63,28 @@
     "yesterday": "Yesterday",
     "all": "All",
     "more": "More",
-    "times": "{count, plural, one {# time} other {# times}}"
+    "times": "{count, plural, one {# time} other {# times}}",
+    "who": {
+      "ai": "GOTCHA",
+      "user": "Someone on your team",
+      "system": "The system",
+      "unknown": "Something"
+    },
+    "timesFailed": "{count, plural, one {# time} other {# times}} · {failed, plural, one {# didn't work} other {# didn't work}}",
+    "sentence": {
+      "connector": "{actor} {verb, select, get {looked up} search {searched} update {updated} process {processed} summarize {summarised} create {created} cancel {cancelled} list {listed} other {ran}} {object} in {system}",
+      "connectorOther": "{actor} ran “{operation}” in {system}",
+      "responded": "{actor} replied to a customer",
+      "messageSent": "{actor} sent a message",
+      "botTurn": "{actor} answered in a conversation",
+      "pausedForApproval": "{actor} paused and asked for approval",
+      "escalated": "{actor} handed a conversation to your team",
+      "provisioningAttempted": "{actor} tried to set up billing",
+      "provisioningRequested": "{actor} asked for billing to be set up",
+      "provisioningFailed": "Setting up billing didn't work",
+      "provisioningCompleted": "Billing was set up",
+      "other": "{actor} · {action}"
+    }
   },
   "policy": {
     "google": "Sign in with Google",

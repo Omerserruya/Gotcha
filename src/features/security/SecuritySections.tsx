@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import type { AuditEntry, AuditFacet, LoginEvent } from '@/api/contracts/security';
 
 import styles from './Security.module.css';
+import { shortWhen } from './when';
 import { auditVerdict, describeAuditAction } from '@/api/contracts/security';
 
 /**
@@ -132,8 +133,6 @@ export async function AuditSection({
   }
 
   const now = new Date();
-  const clock = new Intl.DateTimeFormat(locale, { timeStyle: 'short' });
-  const day = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
 
   return (
     <>
@@ -156,11 +155,7 @@ export async function AuditSection({
               data-succeeded={verdict === true ? 'yes' : verdict === false ? 'no' : 'unrecorded'}
             >
               <time className={styles.auditTime} dateTime={entry.createdAt}>
-                {sameDay(at, now)
-                  ? clock.format(at)
-                  : sameDay(at, new Date(now.getTime() - DAY))
-                    ? t('audit.yesterday')
-                    : day.format(at)}
+                {shortWhen(at, now, locale, t('audit.yesterday'))}
               </time>
               {/*
                 ★★ `succeeded` is `null` on every `adapter.*` row — nothing
@@ -169,7 +164,7 @@ export async function AuditSection({
                 with neither still says nothing rather than guessing (null is
                 "not recorded", not "failed").
               */}
-              <span className={styles.auditText}>{describeAuditAction(entry.action).name}</span>
+              <span className={styles.auditText}>{auditSentence(entry, t)}</span>
               <span
                 className={[styles.auditKind, verdict === false ? styles.failed : '']
                   .join(' ')
@@ -195,17 +190,6 @@ export async function AuditSection({
 const ACTORS = ['ai', 'user', 'system'] as const;
 type Actor = (typeof ACTORS)[number];
 
-/** Today's rows carry the clock (02's "09:41"); older ones, the date. */
-function sameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-const DAY = 24 * 60 * 60 * 1000;
-
 /** How many facets ride in the head before the rest go under "More". */
 const HEAD_FACETS = 4;
 
@@ -229,24 +213,27 @@ function AuditHead({
   readonly truncated: boolean;
   readonly t: Awaited<ReturnType<typeof getTranslations<'security'>>>;
 }) {
-  const chip = (facet: AuditFacet) => {
-    const { name, outcome } = describeAuditAction(facet.action);
-    return (
-      <span
-        key={facet.action}
-        className={styles.auditChip}
-        data-outcome={outcome ?? 'unrecorded'}
-        title={
-          outcome === 'err'
-            ? `${t('audit.didNotWork')} · ${t('audit.times', { count: facet.count })}`
-            : t('audit.times', { count: facet.count })
-        }
-      >
-        {name}
-      </span>
-    );
-  };
-  const rest = facets.slice(HEAD_FACETS);
+  /*
+    One chip per name: the worked and failed halves of a tool are ONE thing
+    to a reader, and two chips with the same words read as a duplicate. The
+    failures ride on the title.
+  */
+  const chip = (facet: MergedFacet) => (
+    <span
+      key={facet.name}
+      className={styles.auditChip}
+      data-failed={facet.failed > 0 ? 'some' : 'none'}
+      title={
+        facet.failed > 0
+          ? t('audit.timesFailed', { count: facet.count, failed: facet.failed })
+          : t('audit.times', { count: facet.count })
+      }
+    >
+      {facet.name}
+    </span>
+  );
+  const merged = mergeFacets(facets);
+  const rest = merged.slice(HEAD_FACETS);
 
   return (
     <header className={styles.auditHead}>
@@ -256,7 +243,7 @@ function AuditHead({
           <span className={styles.auditChip} data-current="yes">
             {t('audit.all')}
           </span>
-          {facets.slice(0, HEAD_FACETS).map(chip)}
+          {merged.slice(0, HEAD_FACETS).map(chip)}
           {rest.length > 0 || truncated ? (
             <details className={styles.auditMore} data-testid="audit-facets-more">
               <summary className={styles.auditChip}>{t('audit.more')}</summary>
@@ -278,4 +265,69 @@ function AuditHead({
       </span>
     </header>
   );
+}
+
+interface MergedFacet {
+  readonly name: string;
+  readonly count: number;
+  readonly failed: number;
+}
+
+/** Facets by the words a reader sees, in the order the log ranks them. */
+export function mergeFacets(facets: readonly AuditFacet[]): MergedFacet[] {
+  const byName = new Map<string, { count: number; failed: number }>();
+  for (const facet of facets) {
+    const { name, outcome } = describeAuditAction(facet.action);
+    const seen = byName.get(name) ?? { count: 0, failed: 0 };
+    seen.count += facet.count;
+    if (outcome === 'err') seen.failed += facet.count;
+    byName.set(name, seen);
+  }
+  return [...byName].map(([name, v]) => ({ name, ...v }));
+}
+
+/** The connector operations with a verb; any other runs as "ran …". */
+const VERBS = ['get', 'search', 'update', 'process', 'summarize', 'create', 'cancel', 'list'];
+
+/** Actions whose sentence is known word for word. */
+const KNOWN = {
+  'ai.responded': 'responded',
+  'message.sent': 'messageSent',
+  'ai.bot_turn': 'botTurn',
+  'ai.paused_for_approval': 'pausedForApproval',
+  'ai.tool_call.escalate_to_human': 'escalated',
+  'billing.provisioning_attempted': 'provisioningAttempted',
+  'billing.provisioning_request_created': 'provisioningRequested',
+  'billing.provisioning_failed': 'provisioningFailed',
+  'billing.provisioning_completed': 'provisioningCompleted',
+} as const;
+
+/**
+ * 02's row is a sentence — who did what. The log carries the actor and the
+ * action; the object (which customer, which order, how much) is not on the
+ * read, so the sentence stops at the verb. Nothing raw is printed: no ids,
+ * no phone numbers.
+ */
+export function auditSentence(
+  entry: AuditEntry,
+  t: Awaited<ReturnType<typeof getTranslations<'security'>>>,
+): string {
+  const actor = ACTORS.includes(entry.actorType as Actor)
+    ? t(`audit.who.${entry.actorType as Actor}`)
+    : t('audit.who.unknown');
+  const adapter = /^adapter\.(?:ok|err)\.([a-z0-9]+)\.([a-z0-9_]+)$/.exec(entry.action);
+  if (adapter) {
+    const [verb, ...rest] = adapter[2]!.split('_');
+    const system = adapter[1]!.charAt(0).toUpperCase() + adapter[1]!.slice(1);
+    return VERBS.includes(verb!)
+      ? t('audit.sentence.connector', { actor, verb: verb!, object: rest.join(' '), system })
+      : t('audit.sentence.connectorOther', {
+          actor,
+          operation: adapter[2]!.replaceAll('_', ' '),
+          system,
+        });
+  }
+  const known = KNOWN[entry.action as keyof typeof KNOWN];
+  if (known) return t(`audit.sentence.${known}`, { actor });
+  return t('audit.sentence.other', { actor, action: describeAuditAction(entry.action).name });
 }

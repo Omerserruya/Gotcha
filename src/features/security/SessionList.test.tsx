@@ -221,3 +221,22 @@ describe('★★ the list states its totals, because counting its rows gives thr
     expect(list).toHaveAttribute('data-others', '0');
   });
 });
+
+describe('★ 16 — a device’s sub-line is one line: this device, the city, when', () => {
+  it('the address rides on the title; "Yesterday" for yesterday', () => {
+    const y = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    show([
+      session({
+        id: 'me',
+        current: true,
+        city: 'Tel Aviv',
+        country: 'IL',
+        ip: '89.138.184.196',
+        lastUsed: y,
+      }),
+    ]);
+    const detail = screen.getByTestId('session-detail-me');
+    expect(detail).toHaveTextContent(/^This device · Tel Aviv · Yesterday$/);
+    expect(detail).toHaveAttribute('title', '89.138.184.196');
+  });
+});
