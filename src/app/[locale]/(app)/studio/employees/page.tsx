@@ -1,6 +1,20 @@
 import { getTranslations } from 'next-intl/server';
 
+import {
+  automationCeiling,
+  choicesFor,
+  currentChoice,
+  hasOwnWords,
+  humaniseToolName,
+  isTheAdminsChoice,
+  resolveAvailability,
+} from '@/api/contracts/capabilities';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
+import { loadChannels } from '@/features/channels/load-channels';
+import { HireSheet } from '@/features/employees/hire/HireSheet';
+import type { HireTool } from '@/features/employees/hire/hire-plan';
+import { loadKnowledge } from '@/features/knowledge/load-knowledge';
+import { Link } from '@/i18n/navigation';
 import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
 import styles from '@/features/employees/Employees.module.css';
@@ -45,15 +59,50 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly employee?: string }>;
+  readonly searchParams?: Promise<{
+    readonly employee?: string;
+    /** 07b–07d: the Hire sheet, and its step. */
+    readonly hire?: string;
+    readonly step?: string;
+  }>;
 } = {}) {
   const t = await getTranslations('employees');
+  const tc = await getTranslations('capabilities');
+  const params = (await searchParams) ?? {};
+  const hiring = params.hire === '1';
   // The detail's permissions and connected tools are the business's, read once.
-  const [employees, { capabilities, integrations }] = await Promise.all([
-    loadEmployees(),
-    loadCapabilities(),
-  ]);
-  const wanted = (await searchParams)?.employee;
+  const [employees, { capabilities, integrations }, channelData, knowledgeData] = await Promise.all(
+    [
+      loadEmployees(),
+      loadCapabilities(),
+      // The Hire sheet's reads, only when it is open.
+      hiring ? loadChannels() : Promise.resolve(null),
+      hiring ? loadKnowledge() : Promise.resolve(null),
+    ],
+  );
+  const wanted = params.employee;
+  /* Step 2's rows: the business's own actions, as 10 reads and words them. */
+  const hireTools: readonly HireTool[] = hiring
+    ? (capabilities ?? [])
+        .filter((c) => isTheAdminsChoice(resolveAvailability(c)))
+        .map((c) => ({
+          toolName: c.toolName,
+          label: hasOwnWords(c.toolName)
+            ? tc(`tool.${c.toolName}` as 'tool.send_message')
+            : humaniseToolName(c.toolName),
+          group: automationCeiling(c) === null ? ('answering' as const) : ('commitments' as const),
+          choices: choicesFor(c),
+          current: currentChoice(c),
+        }))
+    : [];
+  const hireChannels = [
+    ...new Set(
+      (channelData?.channels ?? [])
+        .filter((c) => c.connectionStatus === 'CONNECTED')
+        .map((c) => c.channel),
+    ),
+  ];
+  const step = params.step === '2' ? 2 : params.step === '3' ? 3 : 1;
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
 
   /*
@@ -76,15 +125,15 @@ export default async function Page({
       title={t('title')}
       description={summary}
       actions={
-        // 07b–07d (hiring) are not built yet: drawn, and it says so.
-        <span
+        // 07b–07d: the Hire sheet, read-only until creating is allowed.
+        <Link
+          href={{ pathname: '/studio/employees', query: { hire: '1' } }}
           className={styles.hire}
-          aria-disabled="true"
-          title={t('hireNotYet')}
           data-testid="hire"
+          scroll={false}
         >
           {t('hire')}
-        </span>
+        </Link>
       }
     >
       <StudioSplit
@@ -112,6 +161,16 @@ export default async function Page({
           )
         }
       />
+      {hiring ? (
+        <HireSheet
+          channels={hireChannels}
+          tools={hireTools}
+          knowledge={
+            knowledgeData?.sources ? knowledgeData.sources.map((k) => k.name).filter(Boolean) : null
+          }
+          initialStep={step}
+        />
+      ) : null}
     </PageContainer>
   );
 }

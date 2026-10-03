@@ -136,5 +136,112 @@
       "title": "Worth changing",
       "none": "Nothing to suggest yet."
     }
+  },
+  "hireFlow": {
+    "title": "Hire an AI employee",
+    "line": "You can change any of this later",
+    "steps": "Steps",
+    "close": "Close",
+    "step": {
+      "1": "Responsibility",
+      "2": "Limits",
+      "3": "Try it"
+    },
+    "job": {
+      "customer_support": {
+        "name": "Customer support",
+        "text": "Orders, delivery, returns and the questions customers ask most.",
+        "dayOne": "Answer customers about their orders, delivery and returns, from what GOTCHA already knows about your business."
+      },
+      "sales": {
+        "name": "Sales",
+        "text": "Answers questions before a purchase and helps people choose.",
+        "dayOne": "Answer questions before a purchase and help customers choose, from your catalogue and knowledge."
+      },
+      "booking": {
+        "name": "Bookings",
+        "text": "Visits and appointments, straight into your calendar.",
+        "dayOne": "Take booking requests and answer questions about availability."
+      },
+      "custom": {
+        "name": "Something else",
+        "text": "Describe the job in your own words.",
+        "dayOne": "The job you describe."
+      }
+    },
+    "one": {
+      "title": "What should it be responsible for?",
+      "sub": "Pick the closest job. You can sharpen it later.",
+      "goal": "The job, in your own words",
+      "where": "Where should it work?",
+      "noChannels": "No channel is connected yet — connect one in Settings · Channels.",
+      "callIt": "Call it"
+    },
+    "channel": {
+      "WHATSAPP": "WhatsApp",
+      "EMAIL": "Email",
+      "INSTAGRAM": "Instagram",
+      "MESSENGER": "Messenger",
+      "WEBCHAT": "Web chat",
+      "TELEGRAM": "Telegram",
+      "SMS": "SMS",
+      "VOICE": "Phone"
+    },
+    "two": {
+      "title": "What may it settle on its own?",
+      "sub": "Your business's actions, as they are set today. Change any of them for this employee.",
+      "noTools": "No connected system offers actions yet.",
+      "group": {
+        "answering": "Answering questions",
+        "commitments": "Commitments and money"
+      },
+      "choice": {
+        "do_it": "Do it",
+        "ask_me": "Ask me",
+        "never": "Never"
+      },
+      "ceiling": "This changes orders or money, so it always asks first.",
+      "handover": "Always hand over to a person when…",
+      "when": {
+        "askPerson": "they ask for a person",
+        "annoyed": "they sound annoyed",
+        "vip": "a VIP writes",
+        "askedTwice": "someone asks twice about the same thing"
+      },
+      "addAnother": "add another"
+    },
+    "three": {
+      "title": "See it answer eight real ones",
+      "sub": "A test before anything goes live.",
+      "stat": {
+        "reviewed": "Reviewed",
+        "better": "You preferred its reply",
+        "same": "Just as good",
+        "worse": "Worse"
+      },
+      "case": "Case {n} / 8",
+      "notRun": "The test runs once you're allowed to create the employee.",
+      "run": "Run the test",
+      "hire": "Hire it",
+      "watch": "Hire in watch-only mode"
+    },
+    "side": {
+      "dayOne": "What it will do on day one",
+      "knows": "It already knows",
+      "knowsNone": "No knowledge source could be read.",
+      "cost": "What these limits cost you",
+      "costNone": "Nothing estimates approvals per day yet.",
+      "costLabel": "approvals a day",
+      "soFar": "So far"
+    },
+    "continue": "Continue",
+    "cancel": "Cancel",
+    "back": "Back",
+    "notYet": "Hiring from here comes next — nothing is created until it does.",
+    "note": {
+      "1": "Nothing goes live until you've tried it in step 3",
+      "2": "Nothing is live until you have seen step 3",
+      "3": "Nothing is created yet"
+    }
   }
 }

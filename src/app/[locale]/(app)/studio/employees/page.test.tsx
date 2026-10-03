@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { employeeSchema } from '@/api/contracts/employees';
 import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
+import { HireSheet } from '@/features/employees/hire/HireSheet';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 
@@ -17,6 +18,17 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
 }));
 vi.mock('server-only', () => ({}));
+const { loadChannels, loadKnowledge } = vi.hoisted(() => ({
+  loadChannels: vi.fn(async () => ({
+    channels: [
+      { channel: 'WHATSAPP', connectionStatus: 'CONNECTED' },
+      { channel: 'EMAIL', connectionStatus: 'ERROR' },
+    ],
+  })),
+  loadKnowledge: vi.fn(async () => ({ sources: [{ name: 'Returns policy' }] })),
+}));
+vi.mock('@/features/channels/load-channels', () => ({ loadChannels }));
+vi.mock('@/features/knowledge/load-knowledge', () => ({ loadKnowledge }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 const employee = (id: string, status = 'ACTIVE') =>
@@ -79,5 +91,27 @@ describe('★★ 07 is 02’s screen — header, then the list beside the select
         read === null ? 'employees-unavailable' : 'employees-empty',
       );
     }
+  });
+});
+
+describe('★ 07b — Hire opens the sheet; its reads only then', () => {
+  it('without ?hire, no sheet and no extra reads', async () => {
+    loadChannels.mockClear();
+    loadKnowledge.mockClear();
+    const tree = await page([employee('a')]);
+    expect(find(tree, HireSheet)).toBeNull();
+    expect(loadChannels).not.toHaveBeenCalled();
+    expect(loadKnowledge).not.toHaveBeenCalled();
+  });
+
+  it('?hire=1&step=2: the sheet at step 2, with the CONNECTED channels only', async () => {
+    const tree = await page([employee('a')], { hire: '1', step: '2' });
+    const props = find<{ initialStep: number; channels: string[]; knowledge: string[] }>(
+      tree,
+      HireSheet,
+    );
+    expect(props?.initialStep).toBe(2);
+    expect(props?.channels).toEqual(['WHATSAPP']);
+    expect(props?.knowledge).toEqual(['Returns policy']);
   });
 });
