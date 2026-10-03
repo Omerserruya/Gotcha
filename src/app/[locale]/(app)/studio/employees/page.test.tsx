@@ -5,7 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { employeeSchema } from '@/api/contracts/employees';
 import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
+import { EditSheet } from '@/features/employees/edit/EditSheet';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
+import { HiredDialog } from '@/features/employees/hired/HiredDialog';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 
@@ -115,5 +117,24 @@ describe('★ 07b — Hire opens the sheet; its reads only then', () => {
     // Named as 13 names them (the mock translator returns the key).
     expect(props?.channels).toEqual([{ type: 'WHATSAPP', name: 'name.WHATSAPP' }]);
     expect(props?.knowledge).toEqual(['Returns policy']);
+  });
+});
+
+describe('★ 07e / 07f — the dialog and the sheet, by query', () => {
+  it('neither without its query', async () => {
+    const tree = await page([employee('a')]);
+    expect(find(tree, EditSheet)).toBeNull();
+    expect(find(tree, HiredDialog)).toBeNull();
+  });
+
+  it('?edit=1 edits the SELECTED employee', async () => {
+    const tree = await page([employee('a'), employee('b')], { employee: 'b', edit: '1' });
+    expect(find<{ employee: { id: string } }>(tree, EditSheet)?.employee.id).toBe('b');
+  });
+
+  it('?hired=<id> is that employee; an unknown id opens nothing', async () => {
+    const tree = await page([employee('a'), employee('b')], { hired: 'b' });
+    expect(find<{ employee: { id: string } }>(tree, HiredDialog)?.employee.id).toBe('b');
+    expect(find(await page([employee('a')], { hired: 'zz' }), HiredDialog)).toBeNull();
   });
 });

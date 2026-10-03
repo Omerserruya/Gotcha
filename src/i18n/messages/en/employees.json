@@ -77,7 +77,6 @@
   "hireNotYet": "Hiring from here comes next.",
   "detail": {
     "edit": "Edit",
-    "editNotYet": "Editing from here comes next.",
     "strip": {
       "handled": "Handled in all",
       "alone": "Resolved alone",
@@ -252,5 +251,61 @@
       "2": "Nothing is live until you have seen step 3",
       "3": "Nothing is created yet"
     }
+  },
+  "edit": {
+    "title": "Edit {name}",
+    "close": "Close",
+    "apply": "Changes apply from its next reply",
+    "applyOpen": "Changes apply from its next reply — in {count, plural, one {its # open conversation} other {its # open conversations}} too",
+    "edited": "Last edited {when}",
+    "responsible": "Responsible for",
+    "handles": "What it handles",
+    "handlesNone": "Its conversations aren't grouped by topic yet.",
+    "add": "+ Add",
+    "how": "How it answers",
+    "tone": "Tone",
+    "languages": "Languages",
+    "signsOff": "Signs off as",
+    "signsOffNone": "No sign-off is stored for an employee.",
+    "saysAi": "Says it is AI when asked",
+    "saysAiNone": "No disclosure rule is stored for an employee.",
+    "handsTo": "Hands to:",
+    "handsToNone": "No handover target is stored for an employee.",
+    "setInChannels": "Set in Settings · Channels",
+    "setInCore": "Set in Settings · Business core",
+    "preview": "Preview with these rules",
+    "previewNone": "Nothing replays a conversation under new rules yet.",
+    "save": "Save changes",
+    "saveNotYet": "Saving changes how a working employee answers customers — waiting for approval.",
+    "cancel": "Cancel",
+    "changes": "{count, plural, one {# change} other {# changes}}",
+    "noChanges": "No changes"
+  },
+  "hired": {
+    "close": "Close",
+    "title": {
+      "ACTIVE": "{name} is working",
+      "PAUSED": "{name} is paused",
+      "DRAFT": "{name} is a draft"
+    },
+    "created": "Created {when}",
+    "watch": "Drafts first, and tells you",
+    "watchNone": "There is no watch-only mode: an active employee answers on its own.",
+    "answers": {
+      "ACTIVE": "It answers on its own",
+      "PAUSED": "It does not answer while paused",
+      "DRAFT": "It does not answer yet"
+    },
+    "change": "Change",
+    "rules": "{count, plural, one {# handover rule} other {# handover rules}}",
+    "noRules": "No handover rules",
+    "reachNone": "Nothing estimates how much will reach you.",
+    "adjust": "Adjust",
+    "gaps": "The readiness test found {count, plural, one {one gap} other {# gaps}}",
+    "testedOn": "Readiness test of {when}",
+    "noGaps": "The readiness test found no gaps",
+    "notTested": "No readiness test yet",
+    "resolve": "Resolve it",
+    "see": "See it in Studio"
   }
 }

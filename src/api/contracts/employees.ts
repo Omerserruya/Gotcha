@@ -85,20 +85,54 @@ export const employeeSchema = z.object({
   /** `[{ label, type, value, enabled }]` — the label is written by a person. */
   escalationRules: z
     .array(
-      z.object({
-        label: z.string().catch('').default(''),
-        enabled: z.boolean().catch(true).default(true),
-      }),
+      /*
+       * `.passthrough()`: the stored rule also has `type` and `value`. PATCH
+       * replaces the whole array, so 07f's Save must send them back as read.
+       */
+      z
+        .object({
+          label: z.string().catch('').default(''),
+          enabled: z.boolean().catch(true).default(true),
+        })
+        .passthrough(),
     )
     .catch([])
     .default([]),
   /** `{ role, responsibility, … }` — the responsibility is 07's subline. */
   identity: z
     .object({ responsibility: z.string().nullable().catch(null).default(null) })
+    // PATCH replaces the whole object: `role` and the guidelines ride along.
+    .passthrough()
     .nullable()
     .catch(null)
     .default(null),
   goal: z.string().nullable().catch(null).default(null),
+  /** 07e's "Hired …" time. Nothing records who created it. */
+  createdAt: z.string().nullable().catch(null).default(null),
+  /** 07f's "Last edited …". Nothing records who edited it. */
+  updatedAt: z.string().nullable().catch(null).default(null),
+  /**
+   * The last readiness test, persisted by `POST …/readiness-test`. Only what
+   * 07e draws: when it ran and what it recommends. The questions, the
+   * coverage and the score stay on the server.
+   */
+  readinessReport: z
+    .object({
+      generatedAt: z.string().nullable().catch(null).default(null),
+      recommendations: z
+        .array(
+          z.object({
+            type: z.string().catch('other').default('other'),
+            title: z.string().catch('').default(''),
+            detail: z.string().catch('').default(''),
+          }),
+        )
+        .catch([])
+        .default([]),
+    })
+    .nullable()
+    .catch(null)
+    .default(null),
 });
 
 export type Employee = z.infer<typeof employeeSchema>;

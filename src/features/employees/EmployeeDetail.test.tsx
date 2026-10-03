@@ -13,6 +13,22 @@ vi.mock('next-intl/server', () => ({
     createTranslator({ locale: 'en', messages: { employees, channels }, namespace }),
   getFormatter: async () => createFormatter({ locale: 'en' }),
 }));
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    scroll: _scroll,
+    ...rest
+  }: {
+    href: { pathname: string; query?: Record<string, string> };
+    children: React.ReactNode;
+    scroll?: boolean;
+  }) => (
+    <a href={`${href.pathname}?${new URLSearchParams(href.query)}`} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('./PauseEmployee', () => ({ PauseEmployee: () => <button type="button">Pause</button> }));
 vi.mock('./DeleteEmployee', () => ({ DeleteEmployee: () => null }));
 
@@ -177,6 +193,12 @@ describe('★★ 07’s detail — what it is, from what the route already sends
     expect(screen.getByTestId('card-handles')).toHaveTextContent("aren't grouped by topic yet");
     expect(screen.getByTestId('card-how')).toHaveTextContent('No reply is picked out yet.');
     expect(screen.getByTestId('card-worth')).toHaveTextContent('Nothing to suggest yet.');
-    expect(screen.getByTestId('edit')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('★ 07f — Edit opens the sheet over this employee', async () => {
+    await show();
+    const edit = screen.getByTestId('edit');
+    expect(edit).not.toHaveAttribute('aria-disabled');
+    expect(edit).toHaveAttribute('href', '/studio/employees?employee=a&edit=1');
   });
 });

@@ -18,6 +18,7 @@ import {
 import { channelNameList } from '@/api/contracts/inbox';
 import { isConnected, type Integration } from '@/api/contracts/integrations';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { Link } from '@/i18n/navigation';
 
 import { DeleteEmployee } from './DeleteEmployee';
 import styles from './EmployeeDetail.module.css';
@@ -50,7 +51,6 @@ const MAY_DO_ROWS = 6;
  *   A reply from today        no reply is picked out per employee
  *   What it handles           nothing groups its conversations by topic
  *   Worth changing            nothing proposes a change
- *   Edit                      07f is not built
  */
 export async function EmployeeDetail({
   employee,
@@ -112,15 +112,18 @@ export async function EmployeeDetail({
             openConversations={employee.openConversations}
             paused={employee.status === 'PAUSED'}
           />
-          {/* 07f (Edit an employee) is not built: drawn, and it says so. */}
-          <span
+          {/* 07f: the Edit sheet over this screen. */}
+          <Link
+            href={{
+              pathname: '/studio/employees',
+              query: { employee: employee.id, edit: '1' },
+            }}
             className={styles.button}
-            aria-disabled="true"
-            title={t('detail.editNotYet')}
             data-testid="edit"
+            scroll={false}
           >
             {t('detail.edit')}
-          </span>
+          </Link>
           <DeleteEmployee employee={employee} />
         </div>
       </header>

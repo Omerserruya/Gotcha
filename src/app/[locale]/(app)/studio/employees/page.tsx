@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import {
   automationCeiling,
+  capabilityStance,
   choicesFor,
   currentChoice,
   hasOwnWords,
@@ -10,9 +11,13 @@ import {
   resolveAvailability,
 } from '@/api/contracts/capabilities';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
-import { channelName } from '@/api/contracts/inbox';
+import type { Employee } from '@/api/contracts/employees';
+import { channelName, channelNameList } from '@/api/contracts/inbox';
+import { isConnected } from '@/api/contracts/integrations';
 import { loadChannels } from '@/features/channels/load-channels';
+import { EditSheet } from '@/features/employees/edit/EditSheet';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
+import { HiredDialog } from '@/features/employees/hired/HiredDialog';
 import type { HireTool } from '@/features/employees/hire/hire-plan';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import { Link } from '@/i18n/navigation';
@@ -65,6 +70,10 @@ export default async function Page({
     /** 07b–07d: the Hire sheet, and its step. */
     readonly hire?: string;
     readonly step?: string;
+    /** 07f: the Edit sheet over the selected employee. */
+    readonly edit?: string;
+    /** 07e: "Hired", for this employee. */
+    readonly hired?: string;
   }>;
 } = {}) {
   const t = await getTranslations('employees');
@@ -107,6 +116,14 @@ export default async function Page({
   ].map((type) => ({ type, name: channelName(type, tch) ?? tch('name.other') }));
   const step = params.step === '2' ? 2 : params.step === '3' ? 3 : 1;
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
+  const editing = params.edit === '1' && selected !== null ? selected : null;
+  const hired = params.hired ? (employees?.find((e) => e.id === params.hired) ?? null) : null;
+  /* Named as 07's detail names them: stored lowercase, the enum upper. */
+  const namedChannels = (employee: Employee) =>
+    channelNameList(
+      employee.channels.map((channel) => channel.toUpperCase()),
+      tch,
+    );
 
   /*
     07, measured: 02's screen header — the title, a line that counts them,
@@ -164,6 +181,25 @@ export default async function Page({
           )
         }
       />
+      {editing ? (
+        <EditSheet
+          employee={editing}
+          channels={namedChannels(editing)}
+          tools={integrations ? integrations.filter(isConnected).map((i) => i.name) : null}
+          mayDo={
+            capabilities
+              ? capabilities
+                  .filter((c) => c.kind === 'action')
+                  .map((c) => ({
+                    toolName: c.toolName,
+                    label: humaniseToolName(c.toolName),
+                    stance: capabilityStance(c),
+                  }))
+              : null
+          }
+        />
+      ) : null}
+      {hired ? <HiredDialog employee={hired} channels={namedChannels(hired)} /> : null}
       {hiring ? (
         <HireSheet
           channels={hireChannels}

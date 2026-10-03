@@ -11,10 +11,16 @@
     z-index: var(--z-panel);
   }
 
+  /*
+   * 72%, not the mock's 40%: the mock dims twice — the rail at opacity .45
+   * and the frame at .4, both under its 0.4 scrim — so what the eye sees is
+   * ~27% brightness. One overlay at 72% matches those pixels without touching
+   * the rail. 07b–07f share it; Settings' drawers measure 0.4 alone.
+   */
   .scrim {
     position: absolute;
     inset: 0;
-    background-color: rgb(10 10 10 / 40%);
+    background-color: rgb(10 10 10 / 72%);
   }
 
   .sheet {
