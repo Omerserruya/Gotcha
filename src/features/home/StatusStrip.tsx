@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { Link } from '@/i18n/navigation';
+
 import styles from './Home.module.css';
 
 /**
@@ -29,7 +31,11 @@ export async function StatusStrip({
 
   return (
     <div className={styles.statusStrip}>
-      <span
+      {/* 01d: the pill opens the notifications panel over Home. */}
+      <Link
+        href={{ pathname: '/home', query: { notifications: '1' } }}
+        scroll={false}
+        data-testid="signals"
         className={[styles.statusPill, isQuiet ? styles.statusCalm : undefined]
           .filter(Boolean)
           .join(' ')}
@@ -55,7 +61,7 @@ export async function StatusStrip({
             : signals > 0
               ? t('signals', { count: signals })
               : t('noSignals')}
-      </span>
+      </Link>
 
       {/*
         This clause used to vanish when the count failed, and the argument for

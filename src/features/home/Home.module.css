@@ -49,6 +49,8 @@
     padding-inline: var(--space-12);
     font-size: var(--font-size-label);
     color: var(--intent-neutral-text);
+    /* A link drawn as a pill. */
+    text-decoration: none;
   }
 
   .statusDot {

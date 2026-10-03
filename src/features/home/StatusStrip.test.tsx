@@ -4,6 +4,23 @@ import { describe, expect, it, vi } from 'vitest';
 
 import messages from '@/i18n/messages/en/home.json';
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({
+    href,
+    children,
+    scroll: _scroll,
+    ...rest
+  }: {
+    href: { pathname: string; query?: Record<string, string> };
+    children: React.ReactNode;
+    scroll?: boolean;
+  }) => (
+    <a href={`${href.pathname}?${new URLSearchParams(href.query)}`} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 import { StatusStrip } from './StatusStrip';
 
 /**
@@ -64,5 +81,13 @@ describe('quiet is only claimed when something checked', () => {
   it('still counts them when the read succeeded', async () => {
     render(await strip({ waiting: 3 }));
     expect(screen.getByText(/3 waiting on you/i)).toBeInTheDocument();
+  });
+});
+
+describe('★ 01d — the signals pill opens the notifications panel', () => {
+  it('links to Home with the panel open', async () => {
+    render(await strip({ signals: 2 }));
+    expect(screen.getByTestId('signals')).toHaveAttribute('href', '/home?notifications=1');
+    expect(screen.getByTestId('signals')).toHaveTextContent('2 signals');
   });
 });

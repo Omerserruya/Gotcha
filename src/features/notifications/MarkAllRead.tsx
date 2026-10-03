@@ -2,9 +2,7 @@
 
 import { useTransition } from 'react';
 
-import { Button } from '@/design-system/primitives/button/Button';
-
-import { markAllRead } from './mark-read';
+import { markAllRead, markRead } from './mark-read';
 
 /**
  * Clears the unread count.
@@ -14,17 +12,41 @@ import { markAllRead } from './mark-read';
  * the interface said otherwise, they would stop checking. The pending state is
  * short and honest.
  */
-export function MarkAllRead({ label }: { label: string }) {
+export function MarkAllRead({ label, className }: { label: string; className?: string }) {
   const [isPending, startTransition] = useTransition();
-
   return (
-    <Button
-      variant="ghost"
-      size="sm"
+    <button
+      type="button"
+      className={className}
       disabled={isPending}
+      data-testid="notifications-mark-all"
       onClick={() => startTransition(() => void markAllRead())}
     >
       {label}
-    </Button>
+    </button>
+  );
+}
+
+/** One notification read — all the platform can do to one. */
+export function MarkRead({
+  id,
+  label,
+  className,
+}: {
+  id: string;
+  label: string;
+  className?: string;
+}) {
+  const [isPending, startTransition] = useTransition();
+  return (
+    <button
+      type="button"
+      className={className}
+      disabled={isPending}
+      data-testid={`notification-read-${id}`}
+      onClick={() => startTransition(() => void markRead(id))}
+    >
+      {label}
+    </button>
   );
 }

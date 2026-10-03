@@ -39,7 +39,7 @@ async function dispatch(call: () => Promise<unknown>): Promise<{ ok: boolean }> 
   try {
     await call();
     // The unread count is rendered on the server, so it has to be re-read.
-    revalidatePath('/[locale]/(app)/notifications', 'page');
+    revalidatePath('/[locale]/(app)/home', 'page');
     return { ok: true };
   } catch (cause) {
     logger.warn('notifications.mark_read_failed', { cause });
