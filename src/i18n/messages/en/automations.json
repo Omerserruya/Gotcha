@@ -22,7 +22,6 @@
     "never": "Never run"
   },
   "create": "New automation",
-  "createNotYet": "Building an automation from here comes next.",
   "step": {
     "send_message_text": "Send a message",
     "send_message_image": "Send an image",
@@ -51,5 +50,28 @@
     "stopsNone": "Nothing records why a run stopped yet.",
     "times": "{count, plural, one {time in all} other {times in all}}"
   },
-  "summary": "{running, plural, =0 {None running} one {One running} other {# running}}{off, plural, =0 {} one {, one off} other {, # off}}. {runs, plural, =0 {None has run yet.} one {They've run once in all.} other {They've run # times in all.}}"
+  "summary": "{running, plural, =0 {None running} one {One running} other {# running}}{off, plural, =0 {} one {, one off} other {, # off}}. {runs, plural, =0 {None has run yet.} one {They've run once in all.} other {They've run # times in all.}}",
+  "createSheet": {
+    "close": "Close",
+    "title": "New automation",
+    "line": "Describe it, or build it step by step",
+    "sentenceLabel": "What it should do",
+    "sentencePlaceholder": "When someone complains twice about the same order, send it to a person and tell me",
+    "build": "Build it",
+    "buildNone": "Nothing turns a sentence into steps yet.",
+    "whenPlaceholder": "What starts it",
+    "settingsNone": "Each step's settings aren't drawn yet.",
+    "remove": "Remove {step}",
+    "add": "Add a step",
+    "caught": "If this had been running last month",
+    "caughtNone": "Nothing replays past conversations against a rule yet.",
+    "start": "Start it",
+    "watch": "Watch it for a week, tell me before it acts",
+    "watchNone": "There is no watch-only mode: an automation is on or off.",
+    "on": "Turn it on now",
+    "save": "Save automation",
+    "saveNotYet": "Saving writes an automation — waiting for approval.",
+    "test": "Test on a past conversation",
+    "cancel": "Cancel"
+  }
 }

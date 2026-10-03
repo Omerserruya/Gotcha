@@ -2,9 +2,11 @@ import { getTranslations } from 'next-intl/server';
 
 import { AutomationDetail } from '@/features/automations/AutomationDetail';
 import { AutomationRail } from '@/features/automations/AutomationRail';
+import { NewAutomation } from '@/features/automations/create/NewAutomation';
 import styles from '@/features/automations/Automations.module.css';
 import { loadAutomations } from '@/features/automations/load-automations';
 import { StudioSplit } from '@/features/studio/StudioSplit';
+import { Link } from '@/i18n/navigation';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -36,11 +38,16 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly automation?: string }>;
+  readonly searchParams?: Promise<{
+    readonly automation?: string;
+    /** 21: the New automation sheet. */
+    readonly create?: string;
+  }>;
 } = {}) {
   const t = await getTranslations('automations');
   const automations = await loadAutomations();
-  const wanted = (await searchParams)?.automation;
+  const params = (await searchParams) ?? {};
+  const wanted = params.automation;
   const selected = automations?.find((a) => a.id === wanted) ?? automations?.[0] ?? null;
 
   /*
@@ -70,15 +77,15 @@ export default async function Page({
           : t('description')
       }
       actions={
-        // 21 (New automation) is not built yet: drawn, and it says so.
-        <span
+        // 21: the New automation sheet over this screen.
+        <Link
+          href={{ pathname: '/studio/automations', query: { create: '1' } }}
           className={styles.create}
-          aria-disabled="true"
-          title={t('createNotYet')}
           data-testid="create-automation"
+          scroll={false}
         >
           {t('create')}
-        </span>
+        </Link>
       }
     >
       <StudioSplit
@@ -103,6 +110,7 @@ export default async function Page({
           )
         }
       />
+      {params.create === '1' ? <NewAutomation /> : null}
     </PageContainer>
   );
 }
