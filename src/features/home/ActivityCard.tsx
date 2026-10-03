@@ -126,7 +126,10 @@ function money(values: Record<string, unknown>, format: Format): string {
 
 function clockTime(at: string, format: Format): string {
   const when = new Date(at);
-  return Number.isNaN(when.getTime()) ? '' : format.dateTime(when, { timeStyle: 'short' });
+  // 24-hour, as 02 writes it ("08:12").
+  return Number.isNaN(when.getTime())
+    ? ''
+    : format.dateTime(when, { timeStyle: 'short', hourCycle: 'h23' });
 }
 
 /**

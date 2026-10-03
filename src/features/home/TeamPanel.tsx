@@ -168,7 +168,7 @@ function secondLine(
          * panel. That is the expensive kind of wrong evidence — not obviously
          * broken, quietly wrong in a way a reviewer rationalises.
          */
-        time: format.dateTime(until, { hour: '2-digit', minute: '2-digit' }),
+        time: format.dateTime(until, { hour: '2-digit', minute: '2-digit', hour12: false }),
       });
     }
   }

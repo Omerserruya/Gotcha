@@ -44,7 +44,12 @@ export async function LoginHistory({
     );
   }
 
-  const when = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' });
+  // 24-hour, as the rest of the product writes a time.
+  const when = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    hourCycle: 'h23',
+  });
 
   return (
     <ul className={styles.rows} data-testid="login-history">

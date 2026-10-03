@@ -31,8 +31,15 @@ export default getRequestConfig(async ({ requestLocale }) => {
         greeting: { weekday: 'long', day: 'numeric', month: 'long' },
         short: { day: 'numeric', month: 'short' },
         medium: { day: 'numeric', month: 'short', year: 'numeric' },
-        time: { hour: '2-digit', minute: '2-digit' },
-        timestamp: { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' },
+        // 24-hour in every language: 02 writes `09:12`, never `9:12 AM`.
+        time: { hour: '2-digit', minute: '2-digit', hour12: false },
+        timestamp: {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        },
       },
       number: {
         integer: { maximumFractionDigits: 0 },

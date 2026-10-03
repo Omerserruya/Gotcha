@@ -40,7 +40,11 @@ export async function PeopleTable({
     return <p className={styles.empty}>{t('empty')}</p>;
   }
 
-  const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 
   /**
    * What this row may do.
