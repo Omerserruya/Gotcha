@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { ConversationHeader } from '@/features/inbox/ConversationHeader';
+import { ClearQueueList, ClearQueuePane } from '@/features/inbox/ClearQueue';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { PageContainer } from '@/shell/PageContainer';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
@@ -52,6 +53,9 @@ vi.mock('next-intl/server', () => ({
   getFormatter: async () => ({}),
 }));
 vi.mock('server-only', () => ({}));
+/* 02b's reads, only on a clear queue: no network here. */
+const loadClearQueue = vi.hoisted(() => vi.fn(async () => ({ overview: null, inFlight: null })));
+vi.mock('@/features/inbox/load-clear-queue', () => ({ loadClearQueue }));
 
 /*
  * ⚠ `ConversationList` now imports the locale-aware `Link`, which pulls in
@@ -152,10 +156,10 @@ const data = (over: Record<string, unknown> = {}) => {
   };
 };
 
-const page = async (over: Record<string, unknown> = {}) => {
+const page = async (over: Record<string, unknown> = {}, query: Record<string, string> = {}) => {
   loadInbox.mockResolvedValue(data(over));
   const { default: Page } = await import('./page');
-  return Page({ searchParams: Promise.resolve({}) });
+  return Page({ searchParams: Promise.resolve(query) });
 };
 
 beforeEach(() => {
@@ -600,5 +604,32 @@ describe('⚠⚠ the queue menu is told who is looking — or Delete is offered 
     expect(props?.role).toBe('ADMIN');
     expect(props?.greeting).toBe(true);
     expect(props?.colleagues).toEqual([{ id: 'u2', name: 'Dana' }]);
+  });
+});
+
+describe('★★ 02b — the queue is clear, and only then', () => {
+  const props = (tree: unknown, type: unknown) =>
+    propsOf<Record<string, unknown>>(tree as never, type);
+
+  it('the default view, read and empty: the clear list and the pane, from their own read', async () => {
+    loadClearQueue.mockClear();
+    const tree = await page({ rows: [], open: null, messages: null });
+    expect(loadClearQueue).toHaveBeenCalledTimes(1);
+    expect((props(tree, ConversationList)?.clear as { type?: unknown } | null)?.type).toBe(
+      ClearQueueList,
+    );
+    expect(JSON.stringify(Object.keys(props(tree, ClearQueuePane) ?? {}))).toContain('clear');
+  });
+
+  it.each([
+    ['a failed read', { rows: null, open: null, messages: null }, {}],
+    ['a busy queue', { rows: [row()], open: null, messages: null }, {}],
+    ['another view', { rows: [], open: null, messages: null }, { view: 'resolved' }],
+    ['a channel filter', { rows: [], open: null, messages: null }, { channel: 'WHATSAPP' }],
+  ])('not on %s — and no extra read', async (_, data, query) => {
+    loadClearQueue.mockClear();
+    const tree = await page(data as never, query as never);
+    expect(loadClearQueue).not.toHaveBeenCalled();
+    expect(props(tree, ClearQueuePane)).toBeNull();
   });
 });

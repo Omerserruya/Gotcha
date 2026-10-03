@@ -187,5 +187,33 @@
     "replyingTo": "Replying to {who}",
     "cancelReply": "Don’t reply to this message",
     "noFileOnReply": "A file can’t be sent as a reply to a message"
+  },
+  "clear": {
+    "title": "The queue is clear",
+    "answered": "{count, plural, one {GOTCHA answered # conversation today.} other {GOTCHA answered # conversations today.}}",
+    "anything": "Anything it cannot handle will appear here.",
+    "going": "Still going on",
+    "on": "{count, plural, one {GOTCHA is on # conversation} other {GOTCHA is on # conversations}}",
+    "onNone": "GOTCHA is not in a conversation right now",
+    "live": "live",
+    "held": "Held by a broken system",
+    "heldNone": "Nothing records what is held while a system is down.",
+    "waiting": "Waiting on the customer to reply",
+    "waitingNone": "Nothing counts the conversations waiting on a customer.",
+    "foot": "New conversations land here unless an automation is running them.",
+    "nothing": "Nothing to read",
+    "allAlone": "Every conversation today was answered without a person.",
+    "nothingWaiting": "Nothing is waiting on you.",
+    "seeAnswered": "See what GOTCHA answered",
+    "write": "Write to a customer",
+    "writeNotYet": "Starting a conversation from the inbox isn't built yet.",
+    "stat": {
+      "answered": "Answered by GOTCHA today",
+      "reply": "Average reply time",
+      "passed": "Passed to a person",
+      "seconds": "{count}s",
+      "minutes": "{count}m",
+      "whyNone": "Nothing records why a conversation was passed to a person."
+    }
   }
 }

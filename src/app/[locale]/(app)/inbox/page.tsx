@@ -10,11 +10,13 @@ import {
   OrdersChip,
 } from '@/features/inbox/ConversationDetail';
 import { StreamLive } from '@/features/inbox/StreamLive';
+import { ClearQueueList, ClearQueuePane } from '@/features/inbox/ClearQueue';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { IdentityPanel } from '@/features/inbox/IdentityPanel';
 import styles from '@/features/inbox/Inbox.module.css';
 import { parseChannelFilter, parseInboxView } from '@/features/inbox/inbox-views';
+import { loadClearQueue } from '@/features/inbox/load-clear-queue';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { PendingPane } from '@/features/inbox/PendingPane';
 import { ContextSkeleton, StreamSkeleton } from '@/features/inbox/Skeletons';
@@ -74,6 +76,14 @@ export default async function Page({
   const view = parseInboxView(rawView);
   const channel = parseChannelFilter(rawChannel);
   const data = await loadInbox(c, cursor, view, channel);
+  /*
+    02b: the queue is clear — the default view, unfiltered, read and empty.
+    Its own reads only then, so a busy inbox pays for nothing.
+  */
+  const clear =
+    data.rows !== null && data.rows.length === 0 && view === 'queue' && channel === null
+      ? await loadClearQueue()
+      : null;
   /*
    * One `now` for the whole render. Computed per row, two conversations a
    * second apart could age differently within one screenshot — and the
@@ -141,6 +151,7 @@ export default async function Page({
             greeting={data.greeting}
             view={view}
             channel={channel}
+            clear={clear ? <ClearQueueList clear={clear} /> : null}
           />
         </section>
 
@@ -249,7 +260,9 @@ export default async function Page({
           )}
           <div className={styles.chatBody}>
             <div className={styles.conversationPane}>
-              {data.open === null ? (
+              {data.open === null && clear ? (
+                <ClearQueuePane clear={clear} />
+              ) : data.open === null ? (
                 <p className={styles.note} data-testid="inbox-nothing-open">
                   {data.rows === null ? t('open.unavailable') : t('open.none')}
                 </p>

@@ -1,4 +1,5 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
 
 import {
   channelName,
@@ -66,7 +67,10 @@ export async function ConversationList({
   greeting = null,
   view = 'queue',
   channel = null,
+  clear = null,
 }: {
+  /** 02b: drawn in place of the empty note when the queue is clear. */
+  readonly clear?: ReactNode;
   /** `null` when the read failed. Never an empty queue. */
   readonly rows: readonly ConversationRow[] | null;
   /**
@@ -513,7 +517,9 @@ export async function ConversationList({
           nothing teaches an agent that N is all there is.
         */}
 
-          {dated.length === 0 && undated.length === 0 ? (
+          {dated.length === 0 && undated.length === 0 && clear ? (
+            clear
+          ) : dated.length === 0 && undated.length === 0 ? (
             <p className={styles.note} data-testid="queue-empty">
               {channel === null ? t('queue.empty') : t('queue.filter.emptyFiltered')}
             </p>
