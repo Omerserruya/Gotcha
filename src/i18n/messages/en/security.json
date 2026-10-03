@@ -1,6 +1,6 @@
 {
   "title": "Security",
-  "description": "Who can get in, and the record of everything that happened — including everything GOTCHA did.",
+  "description": "Who can get in, and a record of everything that happened — by a person or by GOTCHA.",
   "forbidden": "You don't have permission to do that.",
   "heading": {
     "sessions": "Where you're signed in",
@@ -36,7 +36,13 @@
     "everyone": "Require two-factor for everyone",
     "impliedByEveryone": "Already required, because everyone must use it.",
     "failed": "That didn't save. Try again.",
-    "unavailable": "We couldn't read your two-factor settings, so they aren't shown. This doesn't mean two-factor is off."
+    "unavailable": "We couldn't read your two-factor settings, so they aren't shown. This doesn't mean two-factor is off.",
+    "title": "Two-step sign-in",
+    "state": {
+      "everyone": "Required for everyone",
+      "admins": "Required for admins",
+      "none": "Not required"
+    }
   },
   "audit": {
     "unavailable": "We can't read the activity log yet, so this list is not available. It isn't empty — we just can't show it.",
@@ -47,6 +53,14 @@
       "system": "The system"
     },
     "didNotWork": "didn't work",
-    "moreActions": "More kinds of activity exist than shown here."
+    "moreActions": "More kinds of activity exist than shown here.",
+    "export": "Export",
+    "exportNotYet": "Exporting the log from here comes next."
+  },
+  "policy": {
+    "google": "Sign in with Google",
+    "googleNone": "Nothing here reads whether Google sign-in is on.",
+    "session": "Sign out after inactivity",
+    "sessionNone": "Session length is set for the whole platform, not for this workspace — and it is not an inactivity timeout."
   }
 }

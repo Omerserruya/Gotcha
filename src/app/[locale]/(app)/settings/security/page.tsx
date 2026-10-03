@@ -14,13 +14,10 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * *"Access control, plus the record of everything that happened — including
  * everything GOTCHA did."*
  *
- * Four sections, four independent reads, four independent failure states. The
- * order is what someone came for: where you are signed in, then who has signed
- * in, then who must prove who they are, then everything that happened.
- *
- * The activity log is last and, today, unavailable — no route serves
- * `AuditLog`, though the AI reads it constantly for its own reasoning. It says
- * so rather than showing an empty list.
+ * Four sections, four independent reads, four independent failure states,
+ * laid out as 02 draws them: the sign-in policy beside where you are signed
+ * in, then everything that happened. Recent sign-ins are not in 02 and sit
+ * last.
  */
 export default async function Page() {
   const t = await getTranslations('security');
@@ -36,48 +33,69 @@ export default async function Page() {
     facetsTruncated,
   } = await loadSecurity();
 
+  /*
+    16, measured: sign-in on the left beside where you are signed in, then
+    "Everything that happened" — the audit — as one card. Sign-ins (the login
+    history) are not in 02 and stay below it: they are this screen's record of
+    who got in, which the audit does not carry.
+  */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      <section className={styles.section} data-testid="section-sessions">
-        <h2 className={styles.sectionHeading}>{t('heading.sessions')}</h2>
-        <SessionList sessions={sessions} available={sessionsAvailable} />
-      </section>
+      <div className={styles.topRow}>
+        {/*
+          The switches are absent when the policy could not be read — an
+          unchecked switch would assert that two-factor is NOT required. But
+          the card stays, and says so: "we could not find out" is never silent.
+        */}
+        <section className={styles.card} data-testid="section-mfa">
+          <h2 className="srOnly">{t('heading.mfa')}</h2>
+          {tenant ? (
+            <MfaPolicy policy={tenant} />
+          ) : (
+            <p className={styles.unavailable} data-testid="mfa-unavailable">
+              {t('mfa.unavailable')}
+            </p>
+          )}
+          {/* 02's two more rows. Nothing here reads either: "—", and why. */}
+          <div className={styles.policyRow} title={t('policy.googleNone')}>
+            <span className={styles.policyText}>
+              <span className={styles.policyName}>{t('policy.google')}</span>
+            </span>
+            <span className={styles.policyNone}>—</span>
+          </div>
+          <div className={styles.policyRow} title={t('policy.sessionNone')}>
+            <span className={styles.policyText}>
+              <span className={styles.policyName}>{t('policy.session')}</span>
+            </span>
+            <span className={styles.policyNone}>—</span>
+          </div>
+        </section>
 
-      <section className={styles.section} data-testid="section-logins">
-        <h2 className={styles.sectionHeading}>{t('heading.logins')}</h2>
-        <LoginHistory events={logins} available={loginsAvailable} />
-      </section>
+        <section className={styles.card} data-testid="section-sessions">
+          <h2 className={styles.cardTitle}>{t('heading.sessions')}</h2>
+          <SessionList sessions={sessions} available={sessionsAvailable} />
+        </section>
+      </div>
 
-      {/*
-        The switches are absent when the policy could not be read — an
-        unchecked switch would assert that two-factor is NOT required, which is
-        a claim about this tenant's security we have no basis for.
-        
-        But the SECTION stays, and says so. Rendering nothing at all is how a
-        wrong URL hid here for six capture runs: the fetch 404'd, the section
-        vanished, and a screen missing a whole control looked like a screen
-        with no control. Same principle as the rest of this screen — "we could
-        not find out" must never be silent.
-      */}
-      <section className={styles.section} data-testid="section-mfa">
-        <h2 className={styles.sectionHeading}>{t('heading.mfa')}</h2>
-        {tenant ? (
-          <MfaPolicy policy={tenant} />
-        ) : (
-          <p className={styles.unavailable} data-testid="mfa-unavailable">
-            {t('mfa.unavailable')}
-          </p>
-        )}
-      </section>
-
-      <section className={styles.section} data-testid="section-audit">
-        <h2 className={styles.sectionHeading}>{t('heading.audit')}</h2>
+      <section className={styles.auditCard} data-testid="section-audit">
+        <header className={styles.auditHead}>
+          <h2 className={styles.cardTitle}>{t('heading.audit')}</h2>
+          {/* Nothing exports the log from here yet. */}
+          <span className={styles.export} aria-disabled="true" title={t('audit.exportNotYet')}>
+            {t('audit.export')}
+          </span>
+        </header>
         <AuditSection
           entries={audit}
           available={auditAvailable}
           facets={facets}
           facetsTruncated={facetsTruncated}
         />
+      </section>
+
+      <section className={styles.card} data-testid="section-logins">
+        <h2 className={styles.cardTitle}>{t('heading.logins')}</h2>
+        <LoginHistory events={logins} available={loginsAvailable} />
       </section>
     </SettingsSection>
   );

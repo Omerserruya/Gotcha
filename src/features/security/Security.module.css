@@ -266,3 +266,144 @@
     color: var(--intent-urgent-text);
   }
 }
+
+@layer features {
+  /*
+   * 16, measured: two cards side by side (474 · 400 at 888, gap 14), then the
+   * audit card full width. Each card is white, 14px radius, one hairline.
+   */
+  .topRow {
+    display: grid;
+    grid-template-columns: minmax(0, 474fr) minmax(0, 400fr);
+    gap: var(--space-14);
+    align-items: start;
+    line-height: normal;
+  }
+
+  .card,
+  .auditCard {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    line-height: normal;
+  }
+
+  .cardTitle {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* A card whose first child is its title gets 02's header strip. */
+  .card > .cardTitle {
+    padding-block: var(--space-13);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .card > .block,
+  .card > .rows,
+  .card > .unavailable,
+  .card > .empty {
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+
+  /* ── 02's policy rows: name over a muted line, the state at the end ── */
+  .policyRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-18);
+  }
+
+  .policyRow + .policyRow,
+  .block + .policyRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .policyText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .policyName {
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .policySub {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .policyNone {
+    flex: none;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .auditHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-18);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .auditHead > .cardTitle {
+    flex: 1;
+  }
+
+  .export {
+    flex: none;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
+
+  .auditCard > :not(.auditHead) {
+    padding-inline: var(--space-18);
+  }
+
+  @media (width <= 900px) {
+    .topRow {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
+
+@layer features {
+  .mfa {
+    display: flex;
+    flex-direction: column;
+    padding-block-end: var(--space-12);
+  }
+
+  .mfa > .switchRow {
+    padding-block: var(--space-4);
+    padding-inline: var(--space-18);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  .mfa > .problem {
+    padding-inline: var(--space-18);
+  }
+
+  .mfa + .policyRow,
+  .unavailable + .policyRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+}

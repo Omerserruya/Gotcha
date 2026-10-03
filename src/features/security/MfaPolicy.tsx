@@ -40,8 +40,27 @@ export function MfaPolicy({ policy }: { readonly policy: TenantSecurity }) {
     });
   }
 
+  const state = value.mfaRequiredForAllUsers
+    ? 'everyone'
+    : value.mfaRequiredForAdmins
+      ? 'admins'
+      : 'none';
+
+  /*
+    16: 02's first policy row — "Two-step sign-in" over what is required —
+    and its two live switches beneath it. 02 shows an "On" chip and "4 of 4
+    set up"; nothing reads who has enrolled, so the line says only the rule.
+  */
   return (
-    <div className={styles.block} data-testid="mfa-policy">
+    <div className={styles.mfa} data-testid="mfa-policy">
+      <div className={styles.policyRow}>
+        <span className={styles.policyText}>
+          <span className={styles.policyName}>{t('mfa.title')}</span>
+          <span className={styles.policySub} data-testid="mfa-state">
+            {t(`mfa.state.${state}`)}
+          </span>
+        </span>
+      </div>
       <label className={styles.switchRow}>
         <input
           type="checkbox"
