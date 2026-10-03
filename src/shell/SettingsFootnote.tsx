@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 
-import { Link } from '@/i18n/navigation';
+import { Link, usePathname } from '@/i18n/navigation';
 
 import styles from './SettingsFootnote.module.css';
 
@@ -21,6 +21,15 @@ import styles from './SettingsFootnote.module.css';
  */
 export function SettingsFootnote() {
   const t = useTranslations('navigation');
+  const pathname = usePathname();
+
+  /*
+    ★ ONE SCREEN, NOT EVERY ONE. 02 draws this footnote on 11 (Workspace)
+    only; 12–17 have none. 18 has its own ("Hidden unless someone turns it
+    on…"), which is not drawn: nothing here hides Developer, so it would be
+    untrue.
+  */
+  if (pathname !== '/settings/workspace') return null;
 
   return (
     <p className={styles.footnote}>

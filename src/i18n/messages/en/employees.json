@@ -1,5 +1,5 @@
 {
-  "title": "AI employees",
+  "title": "Your AI employees",
   "description": "What each one is responsible for, and how much of it they finish on their own.",
   "unavailable": "We couldn't read your AI employees just now.",
   "none": "No AI employees yet.",
@@ -67,5 +67,12 @@
     "label": "Test chat",
     "never": "Nobody has opened the test chat for this one.",
     "at": "Last opened {when}"
-  }
+  },
+  "rail": {
+    "open": "{n} open",
+    "label": "Your AI employees"
+  },
+  "summary": "{working, plural, =0 {None working} one {One working} other {# working}}{paused, plural, =0 {} one {, one paused} other {, # paused}}.",
+  "hire": "Hire an employee",
+  "hireNotYet": "Hiring from here comes next."
 }

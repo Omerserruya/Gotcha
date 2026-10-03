@@ -4,6 +4,7 @@ import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import styles from '@/features/capabilities/Capabilities.module.css';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
+import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -37,43 +38,40 @@ export default async function Page() {
   const t = await getTranslations('capabilities');
   const { capabilities, usage, integrations } = await loadCapabilities();
 
-  if (capabilities === null) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
-      </PageContainer>
-    );
-  }
+  /*
+    10, measured: 02's header — the title over a line that wraps at 720, no
+    action — then the systems (290) beside the permissions (`26px 36px`).
 
-  if (capabilities.length === 0) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <div className={styles.empty} data-testid="capabilities-empty">
-          <p className={styles.emptyLead}>{t('none')}</p>
-          <p className={styles.emptyBody}>{t('noneBody')}</p>
-        </div>
-      </PageContainer>
-    );
-  }
-
+    ★★ The rail and the permissions are SIBLINGS, never nested: both are
+    async server components, and the structural test does not run a nested
+    one. `StudioSplit` takes them as two props — still siblings.
+  */
   return (
-    <PageContainer title={t('title')} description={t('description')}>
-      {/*
-        ★★ A SPLIT, AND THE WRAPPER IS A PLAIN `div` ON PURPOSE.
-        The rail is a SIBLING of the permissions panel, not a child — both are
-        async server components, and nesting one in the other yields a tree with
-        an unresolved node to the structural test, which does not run it. (React
-        itself renders nested async components; the limit is the test's.)
-
-        A `div` is not a component, so wrapping both in one changes nothing about
-        that: they are still siblings. Before this they were siblings in document
-        order and the page was one long column — seventeen systems in full, and
-        only then the thing the reader came for.
-      */}
-      <div className={styles.split}>
-        <IntegrationRail integrations={integrations} />
-        <CapabilityScreen capabilities={capabilities} usage={usage} />
-      </div>
+    <PageContainer
+      layout="screen"
+      flush
+      narrowDescription
+      title={t('title')}
+      description={t('description')}
+    >
+      <StudioSplit
+        label={t('rail.label')}
+        listWidth="narrow"
+        detailPad="wide"
+        list={<IntegrationRail integrations={integrations} />}
+        detail={
+          capabilities === null ? (
+            <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
+          ) : capabilities.length === 0 ? (
+            <div className={styles.empty} data-testid="capabilities-empty">
+              <p className={styles.emptyLead}>{t('none')}</p>
+              <p className={styles.emptyBody}>{t('noneBody')}</p>
+            </div>
+          ) : (
+            <CapabilityScreen capabilities={capabilities} usage={usage} />
+          )
+        }
+      />
     </PageContainer>
   );
 }

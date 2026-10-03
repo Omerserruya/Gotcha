@@ -21,7 +21,7 @@ export default async function Page() {
         // 02's "Read the docs ↗". No developer documentation is published, so
         // it is drawn and says so rather than linking nowhere.
         <span
-          className={styles.actionQuiet}
+          className={styles.actionOutline}
           aria-disabled="true"
           title={t('settingsDocsNone')}
           data-testid="developer-docs"

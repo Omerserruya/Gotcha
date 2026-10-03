@@ -20,6 +20,7 @@ export function PageContainer({
   layout = 'document',
   fill = false,
   flush = false,
+  narrowDescription = false,
   children,
 }: {
   /** Already translated. */
@@ -80,6 +81,8 @@ export function PageContainer({
    * the panel's edges, as 03's queue does (`[300x775]` from the header down).
    */
   flush?: boolean;
+  /** `screen` only: the line under the title wraps at 720, as 10's does. */
+  narrowDescription?: boolean;
   children?: ReactNode;
 }) {
   if (layout === 'screen') {
@@ -91,7 +94,14 @@ export function PageContainer({
           <header className={styles.screenHeader}>
             <div className={styles.screenHeading}>
               <h1 className={styles.screenTitle}>{title}</h1>
-              {description ? <p className={styles.screenDescription}>{description}</p> : null}
+              {description ? (
+                <p
+                  className={styles.screenDescription}
+                  data-narrow={narrowDescription ? '' : undefined}
+                >
+                  {description}
+                </p>
+              ) : null}
             </div>
             {actions ? <div className={styles.screenAside}>{actions}</div> : null}
           </header>

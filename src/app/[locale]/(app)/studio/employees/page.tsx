@@ -1,8 +1,10 @@
 import { getTranslations } from 'next-intl/server';
 
 import { EmployeeList } from '@/features/employees/EmployeeList';
+import { EmployeeRail } from '@/features/employees/EmployeeRail';
 import styles from '@/features/employees/Employees.module.css';
 import { loadEmployees } from '@/features/employees/load-employees';
+import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -39,43 +41,68 @@ import { pageMetadata } from '@/shell/page-metadata';
  * **No knowledge-coverage-by-topic and no escalation-analysis suggestions** —
  * neither has a source.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly employee?: string }>;
+} = {}) {
   const t = await getTranslations('employees');
   const employees = await loadEmployees();
+  const wanted = (await searchParams)?.employee;
+  const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
 
-  if (employees === null) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <p data-testid="employees-unavailable">{t('unavailable')}</p>
-      </PageContainer>
-    );
-  }
-
-  if (employees.length === 0) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <div className={styles.empty} data-testid="employees-empty">
-          <p className={styles.emptyLead}>{t('none')}</p>
-          {/* The consequence, not just the absence. */}
-          <p className={styles.emptyBody}>{t('noneBody')}</p>
-        </div>
-      </PageContainer>
-    );
-  }
+  /*
+    07, measured: 02's screen header — the title, a line that counts them,
+    and "Hire an employee" on the right — over a split: the list (330) and
+    the selected employee (888), each scrolling inside itself.
+  */
+  const summary = employees?.length
+    ? t('summary', {
+        working: employees.filter((e) => e.status === 'ACTIVE').length,
+        paused: employees.filter((e) => e.status === 'PAUSED').length,
+      })
+    : t('description');
 
   return (
-    <PageContainer title={t('title')} description={t('description')}>
-      <div className={styles.screen} data-testid="employees-screen">
-        {/*
-          Stated once, above the list, because it is a fact about GOTCHA
-          rather than about any one employee.
-        */}
-        <p className={styles.cannotFire} data-testid="cannot-fire">
-          {t('cannotFire')}
-        </p>
-
-        <EmployeeList employees={employees} />
-      </div>
+    <PageContainer
+      layout="screen"
+      flush
+      title={t('title')}
+      description={summary}
+      actions={
+        // 07b–07d (hiring) are not built yet: drawn, and it says so.
+        <span
+          className={styles.hire}
+          aria-disabled="true"
+          title={t('hireNotYet')}
+          data-testid="hire"
+        >
+          {t('hire')}
+        </span>
+      }
+    >
+      <StudioSplit
+        label={t('rail.label')}
+        list={
+          employees && selected ? (
+            <EmployeeRail employees={employees} selectedId={selected.id} />
+          ) : null
+        }
+        detail={
+          employees === null ? (
+            <p data-testid="employees-unavailable">{t('unavailable')}</p>
+          ) : selected === null ? (
+            <div className={styles.empty} data-testid="employees-empty">
+              <p className={styles.emptyLead}>{t('none')}</p>
+              {/* The consequence, not just the absence. */}
+              <p className={styles.emptyBody}>{t('noneBody')}</p>
+            </div>
+          ) : (
+            // S1: the selected employee's card; S2 draws 02's detail grid.
+            <EmployeeList employees={[selected]} />
+          )
+        }
+      />
     </PageContainer>
   );
 }

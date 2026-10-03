@@ -7,29 +7,18 @@
    * nowhere to put.
    */
 
-  .screen {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-16);
+  /* 02's header action: dark, radius 9, `padding:9px 16px`, 12.5px. */
+  .hire {
+    padding: var(--space-9) var(--space-16);
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    font-size: var(--font-size-meta);
+    color: var(--action-text);
+    line-height: normal;
   }
 
-  /*
-   * The verb the product does not have.
-   *
-   * Stated once, above the list, rather than beside every card: it is a fact
-   * about GOTCHA and not about any one employee. Omitting it silently would
-   * read as an oversight in a design that names four verbs.
-   */
-  .cannotFire {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
-    color: var(--text-body);
-    background-color: var(--panel-inset);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
+  .hire[aria-disabled='true'] {
+    cursor: default;
   }
 
   .list {

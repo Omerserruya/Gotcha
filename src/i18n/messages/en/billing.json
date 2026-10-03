@@ -88,7 +88,7 @@
     "failuresUnknown": "There's no payment method on file, so there's nothing for GOTCHA to charge. We couldn't load your invoices just now, so we can't say whether any charges have already failed."
   },
   "pricing": {
-    "title": "Plan & pricing",
+    "title": "Change plan",
     "description": "What you are on, what it costs, and what changing it would do.",
     "unavailable": "We could not load your plan just now. Nothing has changed.",
     "heading": {

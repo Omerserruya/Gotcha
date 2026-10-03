@@ -1,16 +1,24 @@
 @layer features {
+  /* 02's header action: dark, radius 9, `padding:9px 16px`, 12.5px. */
+  .create {
+    padding: var(--space-9) var(--space-16);
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    font-size: var(--font-size-meta);
+    color: var(--action-text);
+    line-height: normal;
+  }
+
+  .create[aria-disabled='true'] {
+    cursor: default;
+  }
+
   /*
    * Screen 09 · Studio · Automations.
    *
    * A list of what runs unattended, and — above it — the one thing this
    * screen cannot tell you: which times it ran, and what happened.
    */
-
-  .screen {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-16);
-  }
 
   /*
    * Said once, above the list, because it is a fact about GOTCHA rather than

@@ -16,5 +16,12 @@
   "runs": {
     "total": "Has run {count} times in total",
     "never": "Has never run — usually that means nothing has matched its trigger yet"
-  }
+  },
+  "rail": {
+    "label": "Automations",
+    "ran": "Ran {n} {count, plural, one {time} other {times}}",
+    "never": "Never run"
+  },
+  "create": "New automation",
+  "createNotYet": "Building an automation from here comes next."
 }

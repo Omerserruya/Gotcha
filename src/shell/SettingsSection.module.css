@@ -57,17 +57,16 @@
     gap: var(--space-10);
   }
 
-  /* A secondary header action: white, bordered, `padding:9px 14px`, 12.5px. */
-  .actionQuiet {
-    padding: var(--space-9) var(--space-14);
+  /* A secondary header action: outline only, `padding:9px 16px`, 12.5px (18). */
+  .actionOutline {
+    padding: var(--space-9) var(--space-16);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-item);
-    background-color: var(--panel-field);
     font-size: var(--font-size-meta);
     color: var(--text-body);
   }
 
-  .actionQuiet[aria-disabled='true'] {
+  .actionOutline[aria-disabled='true'] {
     cursor: default;
   }
 

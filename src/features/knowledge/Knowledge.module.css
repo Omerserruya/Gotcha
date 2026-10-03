@@ -1,4 +1,18 @@
 @layer features {
+  /* 02's header action: dark, radius 9, `padding:9px 16px`, 12.5px. */
+  .add {
+    padding: var(--space-9) var(--space-16);
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    font-size: var(--font-size-meta);
+    color: var(--action-text);
+    line-height: normal;
+  }
+
+  .add[aria-disabled='true'] {
+    cursor: default;
+  }
+
   /*
    * Screen 08 · Studio · What GOTCHA knows.
    *

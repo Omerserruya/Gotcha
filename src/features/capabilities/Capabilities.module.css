@@ -252,28 +252,6 @@
 }
 
 @layer features {
-  /*
-   * ★★ THE SCREEN WAS ONE LONG COLUMN. The rail and the permissions panel are
-   * siblings of `PageContainer`, so they stacked in document order — the rail's
-   * seventeen systems in full, and only then the thing the reader came for.
-   *
-   * A grid rather than a flex row, so the rail takes a share of the width
-   * instead of its content's width, and it collapses to one column on a narrow
-   * viewport where a 240px rail beside anything is unreadable.
-   */
-  .split {
-    display: grid;
-    gap: var(--space-20);
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-  }
-
-  @media (width >= 60rem) {
-    .split {
-      grid-template-columns: var(--size-rail) minmax(0, 1fr);
-    }
-  }
-
   .railSearch {
     display: flex;
     flex-direction: column;

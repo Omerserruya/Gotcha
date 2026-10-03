@@ -92,6 +92,10 @@
     color: var(--text-muted);
   }
 
+  .screenDescription[data-narrow] {
+    max-inline-size: 720px;
+  }
+
   .screenAside {
     display: flex;
     align-items: center;

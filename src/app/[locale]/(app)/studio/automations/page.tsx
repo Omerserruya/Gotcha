@@ -1,8 +1,10 @@
 import { getTranslations } from 'next-intl/server';
 
 import { AutomationList } from '@/features/automations/AutomationList';
+import { AutomationRail } from '@/features/automations/AutomationRail';
 import styles from '@/features/automations/Automations.module.css';
 import { loadAutomations } from '@/features/automations/load-automations';
+import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -31,38 +33,68 @@ import { pageMetadata } from '@/shell/page-metadata';
  *
  * **No dry-run, no natural-language rule assembly, no watch-only mode.**
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly automation?: string }>;
+} = {}) {
   const t = await getTranslations('automations');
   const automations = await loadAutomations();
+  const wanted = (await searchParams)?.automation;
+  const selected = automations?.find((a) => a.id === wanted) ?? automations?.[0] ?? null;
 
-  if (automations === null) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <p data-testid="automations-unavailable">{t('unavailable')}</p>
-      </PageContainer>
-    );
-  }
-
-  if (automations.length === 0) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <div className={styles.empty} data-testid="automations-empty">
-          <p className={styles.emptyLead}>{t('none')}</p>
-          {/* The consequence, not just the absence. */}
-          <p className={styles.emptyBody}>{t('noneBody')}</p>
-        </div>
-      </PageContainer>
-    );
-  }
-
+  /*
+    09, measured: 02's header with "New automation" on the right, then the
+    list (330) beside the selected automation (`28px 36px`, gap 18). With
+    none, the frame is still drawn — the list empty in its shape, the
+    detail saying so — rather than one sentence on an empty page.
+  */
   return (
-    <PageContainer title={t('title')} description={t('description')}>
-      <div className={styles.screen} data-testid="automations-screen">
-        <p className={styles.noHistory} data-testid="no-history">
-          {t('noHistory')}
-        </p>
-        <AutomationList automations={automations} />
-      </div>
+    <PageContainer
+      layout="screen"
+      flush
+      title={t('title')}
+      description={t('description')}
+      actions={
+        // 21 (New automation) is not built yet: drawn, and it says so.
+        <span
+          className={styles.create}
+          aria-disabled="true"
+          title={t('createNotYet')}
+          data-testid="create-automation"
+        >
+          {t('create')}
+        </span>
+      }
+    >
+      <StudioSplit
+        label={t('rail.label')}
+        detailPad="snug"
+        list={
+          automations && selected ? (
+            <AutomationRail automations={automations} selectedId={selected.id} />
+          ) : null
+        }
+        detail={
+          automations === null ? (
+            <p data-testid="automations-unavailable">{t('unavailable')}</p>
+          ) : selected === null ? (
+            <div className={styles.empty} data-testid="automations-empty">
+              <p className={styles.emptyLead}>{t('none')}</p>
+              {/* The consequence, not just the absence. */}
+              <p className={styles.emptyBody}>{t('noneBody')}</p>
+            </div>
+          ) : (
+            <>
+              <p className={styles.noHistory} data-testid="no-history">
+                {t('noHistory')}
+              </p>
+              {/* S1: the selected automation's card; S2 draws WHEN/THEN. */}
+              <AutomationList automations={[selected]} />
+            </>
+          )
+        }
+      />
     </PageContainer>
   );
 }

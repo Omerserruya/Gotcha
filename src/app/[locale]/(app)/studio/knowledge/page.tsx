@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
+import styles from '@/features/knowledge/Knowledge.module.css';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -33,25 +34,44 @@ export default async function Page() {
   const { sources, unanswered, conflicts, conflictsScannedAt, everImported } =
     await loadKnowledge();
 
-  // Both halves failed: that is a read failure, not a knowledge base with
-  // nothing in it, and the two must never look the same.
-  if (sources === null && unanswered === null) {
-    return (
-      <PageContainer title={t('title')} description={t('description')}>
-        <p data-testid="knowledge-unavailable">{t('unavailable')}</p>
-      </PageContainer>
-    );
-  }
-
+  /*
+    08, measured: 02's header with "Add knowledge" on the right, and no
+    split — the body is 02's screen body (`24px 40px 30px`, gap 16), filling
+    the frame and scrolling inside it.
+  */
   return (
-    <PageContainer title={t('title')} description={t('description')}>
-      <KnowledgeScreen
-        sources={sources}
-        unanswered={unanswered}
-        conflicts={conflicts}
-        conflictsScannedAt={conflictsScannedAt}
-        everImported={everImported}
-      />
+    <PageContainer
+      layout="screen"
+      fill
+      title={t('title')}
+      description={t('description')}
+      actions={
+        // 08b (Add knowledge) is not built yet: drawn, and it says so.
+        <span
+          className={styles.add}
+          aria-disabled="true"
+          title={t('addNotYet')}
+          data-testid="add-knowledge"
+        >
+          {t('add')}
+        </span>
+      }
+    >
+      {/*
+        Both halves failed: that is a read failure, not a knowledge base with
+        nothing in it, and the two must never look the same.
+      */}
+      {sources === null && unanswered === null ? (
+        <p data-testid="knowledge-unavailable">{t('unavailable')}</p>
+      ) : (
+        <KnowledgeScreen
+          sources={sources}
+          unanswered={unanswered}
+          conflicts={conflicts}
+          conflictsScannedAt={conflictsScannedAt}
+          everImported={everImported}
+        />
+      )}
     </PageContainer>
   );
 }
