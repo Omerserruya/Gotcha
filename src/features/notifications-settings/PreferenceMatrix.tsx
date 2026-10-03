@@ -1,17 +1,23 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import type { NotificationPreferences } from '@/api/contracts/notifications';
+import { Link } from '@/i18n/navigation';
 
 import styles from './Notifications.module.css';
 import type { ObservedVolume } from './volume';
 
 /** 02's rows, each tied to the event that sends it — or to none. */
+/**
+ * `about`: 02's static line under the event — what it covers, not data. The
+ * approval row's line in 02 is a count ("3 so far today"); nothing counts it,
+ * so it has none.
+ */
 const ROWS = [
   { key: 'approval', event: 'tool.approval_required', approvals: true },
-  { key: 'actionFailed', event: null },
-  { key: 'systemDown', event: 'integration.check_failed' },
+  { key: 'actionFailed', event: null, about: true },
+  { key: 'systemDown', event: 'integration.check_failed', about: true },
   { key: 'employeeDown', event: null },
-  { key: 'complaints', event: null },
+  { key: 'complaints', event: null, about: true },
   { key: 'campaign', event: 'broadcast.completed' },
   { key: 'assigned', event: 'conversation.assigned' },
 ] as const;
@@ -27,7 +33,8 @@ const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
  * that channel reaches you at all — and, for approvals, when approvals do.
  * A row with no event behind it ("an action failed", "an AI employee stops
  * working", "complaints spike") sends nothing: its cells are "—", not off.
- * Who is told at all is the workspace's rules (below); these only filter what
+ * Who is told at all is the workspace's rules (their own page, linked from the
+ * foot); these only filter what
  * reaches you. Nothing writes preferences from here yet: the switches show
  * the state and say so.
  */
@@ -48,6 +55,8 @@ export async function PreferenceMatrix({
     preferences[channel] &&
     (!('approvals' in row) || preferences.approvals);
 
+  const nothing = volume !== null && volume.count === 0 && !volume.atLeast;
+
   return (
     <>
       <section className={styles.matrix} data-testid="pref-matrix">
@@ -64,8 +73,21 @@ export async function PreferenceMatrix({
             <li key={row.key} className={styles.matrixRow} data-testid={`pref-row-${row.key}`}>
               <span className={styles.matrixEvent}>
                 <span className={styles.matrixName}>{t(`row.${row.key}`)}</span>
+                {/*
+                  A row nothing sends says so; what it would cover rides on
+                  its title. A live row carries 02's line beneath it.
+                */}
                 {row.event === null ? (
-                  <span className={styles.matrixSub}>{t('nothingSends')}</span>
+                  <span
+                    className={styles.matrixSub}
+                    title={'about' in row ? t(`about.${row.key}`) : undefined}
+                  >
+                    {t('nothingSends')}
+                  </span>
+                ) : 'about' in row ? (
+                  <span className={styles.matrixSub} data-testid={`pref-about-${row.key}`}>
+                    {t(`about.${row.key}`)}
+                  </span>
                 ) : null}
               </span>
               {CHANNELS.map((channel) => (
@@ -87,7 +109,20 @@ export async function PreferenceMatrix({
             </li>
           ))}
         </ul>
-        <p className={styles.matrixFoot}>{t('foot')}</p>
+        {/* The matrix is not the whole story: the rules are a page of their own. */}
+        <p className={styles.matrixFoot}>
+          {t.rich('foot', {
+            rules: (chunks) => (
+              <Link
+                href="/settings/notifications/rules"
+                className={styles.matrixFootLink}
+                data-testid="pref-rules-link"
+              >
+                {chunks} →
+              </Link>
+            ),
+          })}
+        </p>
       </section>
 
       <div className={styles.prefCards}>
@@ -111,11 +146,16 @@ export async function PreferenceMatrix({
           <h2 className={styles.prefTitleAi}>
             {volume === null
               ? t('volume.unknown')
-              : t(volume.atLeast ? 'volume.atLeast' : 'volume.about', {
-                  n: format.number(volume.perDay),
-                })}
+              : nothing
+                ? t('volume.nothing', { days: volume.days })
+                : t(volume.atLeast ? 'volume.atLeast' : 'volume.about', {
+                    n: format.number(volume.perDay),
+                  })}
           </h2>
-          <p className={styles.prefNoteAi}>{t('volume.note', { days: volume?.days ?? 7 })}</p>
+          {/* "about 0 a day" is a figure of nothing; the title says the window. */}
+          {nothing ? null : (
+            <p className={styles.prefNoteAi}>{t('volume.note', { days: volume?.days ?? 7 })}</p>
+          )}
         </section>
       </div>
     </>

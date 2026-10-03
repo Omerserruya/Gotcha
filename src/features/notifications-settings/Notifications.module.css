@@ -260,32 +260,25 @@
     color: var(--text-faint);
   }
 
-  /* A switch, drawn: on is dark, off is the well. */
+  /*
+   * 02's toggle: a plain pill, 34 × 18, no knob — on is ink, off is the
+   * hairline colour. It shows a state; nothing slides.
+   */
   .switch {
-    position: relative;
-    inline-size: 30px;
+    display: block;
+    inline-size: 34px;
     block-size: 18px;
     border-radius: 9px;
-    background-color: var(--border-strong);
-  }
-
-  .switch::after {
-    content: '';
-    position: absolute;
-    inset-block-start: 2px;
-    inset-inline-start: 2px;
-    inline-size: 14px;
-    block-size: 14px;
-    border-radius: 50%;
-    background-color: var(--panel-field);
+    background-color: var(--border-default);
   }
 
   .switch[data-on='yes'] {
     background-color: var(--action-base);
   }
 
-  .switch[data-on='yes']::after {
-    inset-inline-start: 14px;
+  .matrixFootLink {
+    color: var(--text-primary);
+    text-decoration: none;
   }
 
   .matrixFoot {

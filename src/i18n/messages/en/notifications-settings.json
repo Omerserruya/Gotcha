@@ -118,7 +118,7 @@
     "on": "on",
     "off": "off",
     "switchNotYet": "Changing this from here comes next.",
-    "foot": "Your channels filter what reaches you. Who is told at all is the workspace's rules, below.",
+    "foot": "Your channels filter what reaches you. Who is told at all is <rules>the workspace's rules</rules>",
     "quiet": {
       "title": "Quiet hours",
       "window": "{from} – {to}",
@@ -134,7 +134,17 @@
       "about": "You get about {n} a day",
       "atLeast": "You get at least {n} a day",
       "unknown": "How many you get isn't known",
-      "note": "Counted over the last {days} days."
+      "note": "Counted over the last {days} days.",
+      "nothing": "Nothing reached you in the last {days} days."
+    },
+    "about": {
+      "actionFailed": "A refund or cancellation didn't go through",
+      "systemDown": "Shopify, CRM, returns",
+      "complaints": "Compared with a normal week"
     }
+  },
+  "rulesPage": {
+    "title": "The workspace's rules",
+    "description": "Who is told at all. Each person's own channels then filter what reaches them."
   }
 }
