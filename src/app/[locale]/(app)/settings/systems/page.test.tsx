@@ -13,13 +13,24 @@ vi.mock('next-intl/server', () => ({
       messages: { 'business-core': messages, systems },
       namespace: namespace as 'systems',
     }),
+  getLocale: async () => 'en',
 }));
 vi.mock('@/shell/SettingsSection', () => ({
   SettingsSection: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock('@/shell/Drawer', () => ({
-  Drawer: ({ testId, title, children }: { testId: string; title: string; children: ReactNode }) => (
-    <aside data-testid={testId} aria-label={title}>
+  Drawer: ({
+    testId,
+    title,
+    line,
+    children,
+  }: {
+    testId: string;
+    title: string;
+    line?: string;
+    children: ReactNode;
+  }) => (
+    <aside data-testid={testId} aria-label={title} data-line={line}>
       {children}
     </aside>
   ),
@@ -29,13 +40,32 @@ const { stub, loadCapabilities } = vi.hoisted(() => ({
   loadCapabilities: vi.fn(async () => ({ capabilities: [] })),
 }));
 vi.mock('@/features/integrations/BusinessCore', () => ({ BusinessCore: stub('core') }));
-vi.mock('@/features/integrations/PartDrawer', () => ({ PartDrawer: stub('part') }));
+vi.mock('@/features/integrations/PartDrawer', () => ({
+  PartDrawer: ({ storeHost }: { storeHost: string | null }) => (
+    <div data-testid="part" data-host={storeHost ?? ''} />
+  ),
+}));
 vi.mock('@/features/integrations/AcrossDrawer', () => ({ AcrossDrawer: stub('across') }));
 vi.mock('@/features/capabilities/load-capabilities', () => ({ loadCapabilities }));
+const { workspaceDomain } = vi.hoisted(() => ({
+  workspaceDomain: { value: null as string | null },
+}));
+vi.mock('@/features/workspace/load-workspace', () => ({
+  loadWorkspace: async () => ({ workspace: { websiteDomain: workspaceDomain.value } }),
+}));
+vi.mock('@/features/workspace/load-languages', () => ({
+  loadLanguages: async () => ({ systemLocale: 'he' }),
+}));
 vi.mock('@/features/integrations/load-business-core', () => ({
   loadBusinessCore: async () => ({
     useCase: null,
-    roles: [{ role: 'ecommerce', candidates: [] }],
+    roles: [
+      {
+        role: 'ecommerce',
+        elected: { slug: 'shopify', name: 'Shopify' },
+        candidates: [{ slug: 'shopify', name: 'Shopify', connected: true, status: 'CONNECTED' }],
+      },
+    ],
     catalogueNotes: [],
   }),
 }));
@@ -67,5 +97,28 @@ describe('★ 14 — 14c/14d and 14e open over it', () => {
   it('an unknown part opens nothing', async () => {
     await open({ part: 'nonsense' });
     expect(screen.queryByTestId('drawer-part')).toBeNull();
+  });
+});
+
+describe('★ 14d corrections — the line and the host', () => {
+  it('the drawer’s line is a sentence: "The catalogue and orders."', async () => {
+    await open({ part: 'ecommerce' });
+    expect(screen.getByTestId('drawer-part')).toHaveAttribute(
+      'data-line',
+      'The catalogue and orders.',
+    );
+  });
+
+  it('the store host only when the website IS the Shopify store', async () => {
+    workspaceDomain.value = 'https://urban-supply-gotcha-demo.myshopify.com';
+    const { unmount } = await open({ part: 'ecommerce' });
+    expect(screen.getByTestId('part')).toHaveAttribute(
+      'data-host',
+      'urban-supply-gotcha-demo.myshopify.com',
+    );
+    unmount();
+    workspaceDomain.value = 'https://www.avivco.il';
+    await open({ part: 'ecommerce' });
+    expect(screen.getByTestId('part')).toHaveAttribute('data-host', '');
   });
 });

@@ -347,8 +347,26 @@
     border-radius: var(--radius-step);
   }
 
-  .drawerSystemName {
+  .drawerSystemText {
+    display: flex;
     flex: 1;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+
+  .drawerSystemSub {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .drawerState {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
+
+  .drawerSystemName {
     font-size: 13.5px;
     font-weight: 500;
     color: var(--text-primary);
@@ -445,6 +463,12 @@
     padding-inline: var(--space-14);
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-step);
+  }
+
+  .acrossNumber {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
   }
 
   .acrossName {

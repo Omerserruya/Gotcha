@@ -105,7 +105,14 @@
     "askedFirst": "Asked first",
     "whatWhere": "What goes where",
     "acrossTitle": "Across both · what goes where",
-    "acrossLine": "One customer, asked for in order, and what GOTCHA writes where."
+    "acrossLine": "One customer, asked for in order, and what GOTCHA writes where.",
+    "needsFixing": "{name} needs fixing before its actions can be set.",
+    "notSetUp": "Not turned on for this workspace yet — that happens in Integrations.",
+    "notSetUpShort": "Not set up",
+    "checked": "checked {date}",
+    "newRecord": "Anyone else — a new record is made",
+    "summaryIn": "AI summary, in {language}",
+    "summary": "AI summary"
   },
   "open": "Open {part}",
   "openAcross": "Open across both"

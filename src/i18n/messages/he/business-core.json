@@ -105,7 +105,14 @@
     "askedFirst": "נשאל ראשון",
     "whatWhere": "מה נכתב לאן",
     "acrossTitle": "משותף לשניהם · מה נכתב לאן",
-    "acrossLine": "לקוח אחד, שנשאל לפי סדר, ומה GOTCHA כותב לאן."
+    "acrossLine": "לקוח אחד, שנשאל לפי סדר, ומה GOTCHA כותב לאן.",
+    "needsFixing": "צריך לתקן את {name} לפני שאפשר להגדיר את הפעולות שלו.",
+    "notSetUp": "עדיין לא הופעל לסביבת העבודה הזו — זה נעשה באינטגרציות.",
+    "notSetUpShort": "לא הוגדר",
+    "checked": "נבדק {date}",
+    "newRecord": "כל השאר — נוצרת רשומה חדשה",
+    "summaryIn": "סיכום AI, ב{language}",
+    "summary": "סיכום AI"
   },
   "open": "פתיחת {part}",
   "openAcross": "פתיחת משותף לשניהם"

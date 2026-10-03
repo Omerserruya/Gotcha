@@ -38,6 +38,7 @@ vi.mock('next-intl/server', () => ({
       messages: { 'business-core': messages, capabilities },
       namespace: namespace as 'business-core',
     }),
+  getLocale: async () => 'en',
 }));
 vi.mock('@/features/capabilities/PermissionChoice', () => ({
   PermissionChoice: ({ capability }: { capability: { toolName: string } }) => (
@@ -131,6 +132,84 @@ describe('★ 14c / 14d — a part’s drawer', () => {
 describe('★ 14e — across both', () => {
   it('asks the customer-records system first, then GOTCHA makes a record', async () => {
     inIntl(await AcrossDrawer({ crm: core.roles[1]! }));
-    expect(screen.getByTestId('across-order')).toHaveTextContent(/^ShopifyAsked firstGOTCHA/);
+    expect(screen.getByTestId('across-order')).toHaveTextContent(
+      /^1ShopifyAsked first2GOTCHAAnyone else — a new record is made$/,
+    );
+  });
+});
+
+describe('★ 14d corrections (measurement of 052d0c2)', () => {
+  const shopify = {
+    id: 'i1',
+    slug: 'shopify',
+    name: 'Shopify',
+    authType: 'OAUTH2' as const,
+    catalogTools: [
+      {
+        id: 't1',
+        slug: 'process_refund',
+        name: 'Refund an order',
+        riskLevel: null,
+        enabled: false,
+      },
+      { id: 't2', slug: 'cancel_order', name: 'Cancel an order', riskLevel: null, enabled: false },
+    ],
+    tenantConnection: { id: 'c1', status: 'ERROR' as const, lastTestedAt: '2026-10-01T10:00:00Z' },
+  };
+  const failingStore = businessCoreSchema.parse({
+    roles: [
+      {
+        role: 'ecommerce',
+        candidates: [{ slug: 'shopify', name: 'Shopify', connected: false, status: 'ERROR' }],
+      },
+    ],
+  }).roles[0]!;
+
+  it('a broken system’s actions are its catalogue’s, with why they cannot be set', async () => {
+    inIntl(
+      await PartDrawer({
+        part: failingStore,
+        capabilities: [],
+        integration: shopify as never,
+        storeHost: 'urban-supply-gotcha-demo.myshopify.com',
+      }),
+    );
+    expect(screen.getByTestId('part-actions-blocked')).toHaveTextContent(
+      'Shopify needs fixing before its actions can be set.',
+    );
+    expect(screen.getByTestId('part-actions')).toHaveTextContent('Refund an order');
+    expect(screen.getByTestId('part-action-off-process_refund')).toHaveAttribute(
+      'title',
+      'Shopify needs fixing before its actions can be set.',
+    );
+    expect(screen.getByTestId('part-playing-sub')).toHaveTextContent(
+      'urban-supply-gotcha-demo.myshopify.com · checked Oct 1',
+    );
+  });
+
+  it('a listed, settable action gets 10’s control', async () => {
+    inIntl(
+      await PartDrawer({
+        part: store,
+        capabilities: [
+          capabilitySchema.parse({ toolName: 'shopify.process_refund', integration: 'shopify' }),
+        ],
+        integration: shopify as never,
+      }),
+    );
+    expect(screen.getByTestId('choice-shopify.process_refund')).toBeInTheDocument();
+    expect(screen.getByTestId('part-action-off-cancel_order')).toHaveTextContent('Not set up');
+  });
+});
+
+describe('★ 14e corrections — no paragraphs', () => {
+  it('the matching rules ride on GOTCHA’s card; the row says "AI summary, in Hebrew"', async () => {
+    inIntl(await AcrossDrawer({ crm: core.roles[1]!, language: 'Hebrew' }));
+    expect(screen.getByTestId('across-gotcha')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/exactly one person matches.*two or more match/i),
+    );
+    expect(screen.getByTestId('across-writeback')).toHaveTextContent(/AI summary, in Hebrew$/);
+    expect(screen.getByTestId('across-drawer').querySelectorAll('p')).toHaveLength(0);
   });
 });

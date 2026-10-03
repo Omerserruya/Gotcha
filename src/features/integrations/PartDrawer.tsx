@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 import {
   connectedButFailing,
@@ -14,6 +14,7 @@ import {
   resolveAvailability,
   type Capability,
 } from '@/api/contracts/capabilities';
+import type { Integration } from '@/api/contracts/integrations';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { PermissionChoice } from '@/features/capabilities/PermissionChoice';
 import { Link } from '@/i18n/navigation';
@@ -36,12 +37,19 @@ import { ElectPart } from './ElectPart';
 export async function PartDrawer({
   part,
   capabilities,
+  integration = null,
+  storeHost = null,
 }: {
   readonly part: RolePart;
   readonly capabilities: readonly Capability[] | null;
+  /** The playing system's record: its own action catalogue and last check. */
+  readonly integration?: Integration | null;
+  /** The store's own host, when it is known to be this system's. */
+  readonly storeHost?: string | null;
 }) {
   const t = await getTranslations('business-core');
   const tc = await getTranslations('capabilities');
+  const locale = await getLocale();
   const state = partState(part);
   const failing = part.candidates.find((c) => connectedButFailing(c));
   const playing = part.elected?.name ?? failing?.name ?? null;
@@ -51,13 +59,46 @@ export async function PartDrawer({
   const actions = playingSlug
     ? (capabilities ?? []).filter((c) => c.integration === playingSlug)
     : [];
+  /*
+    The system's OWN catalogue of actions — refund, cancel, … — from its
+    integration record. `GET /tool-permissions` lists a system's actions only
+    once each is provisioned and enabled, and writes are never auto-
+    provisioned; so for a broken or new connection it lists none, and the
+    actions are drawn from the catalogue with why they cannot be set yet.
+  */
+  const catalogue = integration?.catalogTools ?? [];
+  const capabilityFor = (slug: string) =>
+    (capabilities ?? []).find(
+      (c) => c.toolName === `${playingSlug}.${slug}` || c.toolName === `integration.${slug}`,
+    ) ?? null;
+  const failingNow = state === 'connected_but_failing';
+  const checked = integration?.tenantConnection?.lastTestedAt ?? null;
 
   return (
     <div className={drawer.drawerBody} data-testid={`part-drawer-${part.role}`}>
       <div className={drawer.field}>
         <span className={drawer.fieldLabel}>{t('drawer.connection')}</span>
         <div className={styles.drawerSystem} data-testid="part-playing">
-          <span className={styles.drawerSystemName}>{playing ?? '—'}</span>
+          <span className={styles.drawerSystemText}>
+            <span className={styles.drawerSystemName}>{playing ?? '—'}</span>
+            {storeHost || checked ? (
+              <span className={styles.drawerSystemSub} data-testid="part-playing-sub">
+                {[
+                  storeHost,
+                  checked
+                    ? t('drawer.checked', {
+                        date: new Intl.DateTimeFormat(locale, {
+                          day: 'numeric',
+                          month: 'short',
+                        }).format(new Date(checked)),
+                      })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            ) : null}
+          </span>
           <span className={styles.chip} data-tone={CHIP_TONE[state]}>
             {t(`chip.${isInferred(part) && state === 'chosen' ? 'inferred' : state}`)}
           </span>
@@ -104,10 +145,49 @@ export async function PartDrawer({
       </p>
 
       <h3 className={drawer.sectionTitle}>{t('drawer.mayDo')}</h3>
+      {failingNow && playing ? (
+        <p className={styles.drawerState} data-testid="part-actions-blocked">
+          {t('drawer.needsFixing', { name: playing })}
+        </p>
+      ) : null}
       {playing === null ? (
         <p className={styles.drawerNone} data-testid="part-actions-none">
           —
         </p>
+      ) : catalogue.length > 0 ? (
+        <ul className={styles.drawerActions} data-testid="part-actions">
+          {catalogue.map((tool) => {
+            const capability = capabilityFor(tool.slug);
+            const availability = capability ? resolveAvailability(capability) : null;
+            return (
+              <li key={tool.slug} className={styles.drawerAction}>
+                <span className={styles.drawerActionName}>{tool.name}</span>
+                {capability && availability && isTheAdminsChoice(availability) ? (
+                  <PermissionChoice capability={capability} />
+                ) : (
+                  <span
+                    className={styles.drawerNone}
+                    data-testid={`part-action-off-${tool.slug}`}
+                    title={
+                      failingNow
+                        ? t('drawer.needsFixing', { name: playing })
+                        : availability && !isTheAdminsChoice(availability)
+                          ? availability.reason === 'missing_scope' &&
+                            availability.missingScopes.length > 0
+                            ? tc('blocked.missingScopesNamed', {
+                                scopes: availability.missingScopes.join(', '),
+                              })
+                            : tc(`blocked.${availability.reason}` as 'blocked.missing_scope')
+                          : t('drawer.notSetUp')
+                    }
+                  >
+                    {failingNow ? '—' : t('drawer.notSetUpShort')}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       ) : capabilities === null ? (
         <p
           className={styles.drawerNone}
