@@ -75,6 +75,43 @@
     background-color: var(--panel-field);
   }
 
+  /* No conflict: the card's shape, neutral — no alert edge. */
+  .conflictCard[data-state='empty'] {
+    border-color: var(--border-default);
+  }
+
+  .conflictEmpty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .conflictEmptyTitle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .conflictEmptyTitle::before {
+    content: '';
+    flex: none;
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: 50%;
+    background-color: var(--text-disabled);
+  }
+
+  .conflictEmptyLine {
+    margin: 0;
+    padding-inline-start: 16px;
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
   .conflicts {
     display: flex;
     flex-direction: column;
@@ -249,6 +286,9 @@
 
   /* A way in: `#FAF8F4`, `padding:6px 18px 2px`, mono 10px. */
   .wayHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
     margin: 0;
     padding: var(--space-6) 18px 2px;
     background-color: var(--panel-base);
@@ -258,6 +298,22 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-subtle);
+  }
+
+  .wayIcon {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .wayName {
+    flex: 1;
+  }
+
+  .wayNote {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-micro);
+    letter-spacing: normal;
+    text-transform: none;
   }
 
   .sources,

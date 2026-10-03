@@ -1,6 +1,6 @@
-import { getTranslations } from 'next-intl/server';
+import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { KnowledgeScreen } from '@/features/knowledge/KnowledgeScreen';
+import { KnowledgeScreen, knowledgeSummary } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import styles from '@/features/knowledge/Knowledge.module.css';
 import { PageContainer } from '@/shell/PageContainer';
@@ -35,6 +35,28 @@ export default async function Page() {
     await loadKnowledge();
 
   /*
+    02's line is a SUMMARY from data — "Learned four ways: … Two things need
+    your answer." — as 07's is. Built from what was read; when a read failed
+    it would have to guess, so the description stays.
+  */
+  const format = await getFormatter();
+  const summary = knowledgeSummary(sources, conflicts, unanswered);
+  const line = summary
+    ? [
+        summary.ways.length > 0
+          ? t('summary.learned', {
+              count: summary.ways.length,
+              ways: format.list(
+                summary.ways.map((way) => t(`wayPhrase.${way}` as 'wayPhrase.website')),
+                { type: 'conjunction' },
+              ),
+            })
+          : t('summary.learnedNone'),
+        t('summary.needs', { count: summary.needAnswer }),
+      ].join(' ')
+    : t('description');
+
+  /*
     08, measured: 02's header with "Add knowledge" on the right, and no
     split — the body is 02's screen body (`24px 40px 30px`, gap 16), filling
     the frame and scrolling inside it.
@@ -45,7 +67,7 @@ export default async function Page() {
       headerPadEnd={22}
       fill
       title={t('title')}
-      description={t('description')}
+      description={line}
       actions={
         // 08b (Add knowledge) is not built yet: drawn, and it says so.
         <span

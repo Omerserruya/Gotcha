@@ -52,3 +52,22 @@ describe('★ how a source came in — the writers’ own sourceType', () => {
     expect(groups.map((g) => g.way)).toEqual(['website', 'uploaded']);
   });
 });
+
+import { knowledgeSummary } from './KnowledgeScreen';
+
+describe('★ 08’s header line is a summary from data', () => {
+  it('counts the ways in and what needs an answer — conflicts plus unanswered', () => {
+    const summary = knowledgeSummary(
+      [source('w', ['onboarding_scan']), source('u', ['file'])],
+      [{} as never],
+      [{} as never, {} as never],
+    );
+    expect(summary).toEqual({ ways: ['website', 'uploaded'], needAnswer: 3 });
+  });
+
+  it('★ a failed read gives no summary — the line would have to guess', () => {
+    expect(knowledgeSummary(null, [], [])).toBeNull();
+    expect(knowledgeSummary([], null, [])).toBeNull();
+    expect(knowledgeSummary([], [], null)).toBeNull();
+  });
+});

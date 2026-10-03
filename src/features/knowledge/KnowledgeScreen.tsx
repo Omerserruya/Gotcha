@@ -12,6 +12,17 @@ import {
 } from '@/api/contracts/knowledge';
 import { lastHeardFor, variantsOf, type Candidate } from '@/api/contracts/knowledge-candidates';
 
+import {
+  BookOpen,
+  FolderSync,
+  Globe,
+  Layers,
+  ListChecks,
+  MessagesSquare,
+  Shapes,
+  Upload,
+} from 'lucide-react';
+
 import { ResolveConflict } from './ResolveConflict';
 import styles from './Knowledge.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -124,21 +135,38 @@ export async function KnowledgeScreen({
         says that: the question, each answer and how often it was heard. The
         scan runs inside the import only — the coverage line says so, always.
       */}
-      <section className={styles.conflictCard} data-testid="conflicts-section">
+      {/*
+        With nothing to show, the card keeps its SHAPE — a title row and one
+        line — and loses its alarm: neutral, like "Worth changing" with no
+        suggestion. What it compared goes on the card itself (`title`).
+      */}
+      <section
+        className={styles.conflictCard}
+        data-state={conflicts && conflicts.length > 0 && everImported ? 'found' : 'empty'}
+        data-testid="conflicts-section"
+        title={
+          conflicts && conflicts.length > 0 && everImported ? undefined : t('conflicts.coverage')
+        }
+      >
         {conflicts === null ? (
-          <p className={styles.degraded} data-testid="conflicts-unavailable">
-            {t('conflicts.unavailable')}
-          </p>
+          <div className={styles.conflictEmpty} data-testid="conflicts-unavailable">
+            <p className={styles.conflictEmptyTitle}>{t('conflicts.emptyUnavailable')}</p>
+            <p className={styles.conflictEmptyLine}>{t('conflicts.emptyUnavailableLine')}</p>
+          </div>
         ) : !everImported ? (
-          <p className={styles.none} data-testid="conflicts-never-scanned">
-            {t('conflicts.neverScanned')}
-          </p>
+          <div className={styles.conflictEmpty} data-testid="conflicts-never-scanned">
+            <p className={styles.conflictEmptyTitle}>{t('conflicts.emptyNever')}</p>
+            <p className={styles.conflictEmptyLine}>{t('conflicts.emptyNeverLine')}</p>
+          </div>
         ) : conflicts.length === 0 ? (
-          <p className={styles.none} data-testid="conflicts-none">
-            {conflictsScannedAt
-              ? t('conflicts.noneScanned', { when: date(conflictsScannedAt) ?? '' })
-              : t('conflicts.none')}
-          </p>
+          <div className={styles.conflictEmpty} data-testid="conflicts-none">
+            <p className={styles.conflictEmptyTitle}>{t('conflicts.emptyNone')}</p>
+            <p className={styles.conflictEmptyLine}>
+              {conflictsScannedAt
+                ? t('conflicts.emptyNoneLineWhen', { when: date(conflictsScannedAt) ?? '' })
+                : t('conflicts.emptyNoneLine')}
+            </p>
+          </div>
         ) : (
           <ul className={styles.conflicts}>
             {conflicts.map((candidate) => {
@@ -205,10 +233,16 @@ export async function KnowledgeScreen({
           </ul>
         )}
 
-        {/* ★★ THE COVERAGE STATEMENT, ALWAYS — not only when the list is empty. */}
-        <p className={styles.coverage} data-testid="conflicts-coverage">
-          {t('conflicts.coverage')}
-        </p>
+        {/*
+          ★★ WHAT WAS COMPARED, beside what it found — the axis is the team's
+          own answers over time, not website against PDF. With nothing found
+          it is on the card instead (`title`), not a second paragraph.
+        */}
+        {conflicts && conflicts.length > 0 && everImported ? (
+          <p className={styles.coverage} data-testid="conflicts-coverage">
+            {t('conflicts.coverage')}
+          </p>
+        ) : null}
       </section>
 
       <div className={styles.bottom}>
@@ -236,7 +270,14 @@ export async function KnowledgeScreen({
             ) : (
               groups.map((group) => (
                 <div key={group.way} data-testid={`way-${group.way}`}>
-                  <p className={styles.wayHead}>{t(`way.${group.way}` as 'way.website')}</p>
+                  <p className={styles.wayHead}>
+                    <WayIcon way={group.way} />
+                    <span className={styles.wayName}>{t(`way.${group.way}` as 'way.website')}</span>
+                    {/* Only where it is true: every document came from the scan. */}
+                    {group.way === 'website' && group.sources.every(scannedOnly) ? (
+                      <span className={styles.wayNote}>{t('way.scanned')}</span>
+                    ) : null}
+                  </p>
                   <ul className={styles.sources}>
                     {group.sources.map((source) => {
                       const refreshed = date(lastRefreshed(source));
@@ -395,4 +436,46 @@ export function groupByWayIn(
   return WAY_ORDER.map((way) => ({ way, sources: sources.filter((s) => wayIn(s) === way) })).filter(
     (group) => group.sources.length > 0,
   );
+}
+
+/** A source every one of whose documents came from the website scan. */
+function scannedOnly(source: KnowledgeSource): boolean {
+  return (
+    source.documents.length > 0 &&
+    source.documents.every((document) => document.sourceType === 'onboarding_scan')
+  );
+}
+
+const WAY_ICONS = {
+  website: Globe,
+  uploaded: Upload,
+  drive: FolderSync,
+  confluence: BookOpen,
+  conversations: MessagesSquare,
+  answers: ListChecks,
+  mixed: Layers,
+  other: Shapes,
+} as const;
+
+function WayIcon({ way }: { readonly way: WayIn }) {
+  const Icon = WAY_ICONS[way];
+  return <Icon className={styles.wayIcon} size={13} aria-hidden="true" />;
+}
+
+/**
+ * 08's header line, a summary from data as 07's is: how many ways it
+ * learned and which, then what needs an answer — the conflicts plus the
+ * questions it could not answer. `null` when a read failed and the line
+ * would have to guess; the page then keeps the description.
+ */
+export function knowledgeSummary(
+  sources: readonly KnowledgeSource[] | null,
+  conflicts: readonly Candidate[] | null,
+  unanswered: readonly UnansweredQuestion[] | null,
+): { readonly ways: readonly WayIn[]; readonly needAnswer: number } | null {
+  if (sources === null || conflicts === null || unanswered === null) return null;
+  return {
+    ways: groupByWayIn(sources).map((group) => group.way),
+    needAnswer: conflicts.length + unanswered.length,
+  };
 }

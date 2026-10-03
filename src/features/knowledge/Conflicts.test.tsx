@@ -278,3 +278,20 @@ describe('★★ the header counts what it can, and names what it cannot', () =>
     expect(screen.getByTestId('counter-stale').querySelector('dd')).toHaveTextContent(/^—$/);
   });
 });
+
+describe('★ with nothing to show, the card keeps its shape and loses its alarm', () => {
+  it('neutral, a title row and one line — what it compared on the card itself', async () => {
+    await show({ conflicts: [], everImported: true });
+    const card = screen.getByTestId('conflicts-section');
+    expect(card).toHaveAttribute('data-state', 'empty');
+    expect(card).toHaveAttribute('title', expect.stringMatching(/past conversations/i));
+    expect(screen.getByTestId('conflicts-none').querySelectorAll('p')).toHaveLength(2);
+    expect(screen.queryByTestId('conflicts-coverage')).toBeNull();
+  });
+
+  it('found: the alert, and what was compared said beside it', async () => {
+    await show();
+    expect(screen.getByTestId('conflicts-section')).toHaveAttribute('data-state', 'found');
+    expect(screen.getByTestId('conflicts-coverage')).toBeInTheDocument();
+  });
+});
