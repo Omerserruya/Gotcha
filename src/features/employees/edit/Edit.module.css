@@ -150,8 +150,18 @@
     gap: var(--space-8);
   }
 
+  /* 02's list is 176 tall; the rest scrolls inside the card. */
+  .scroll {
+    max-block-size: 176px;
+    overflow-y: auto;
+  }
+
   .mayName {
+    flex: 1;
     min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: var(--font-size-meta);
     color: var(--text-secondary);
   }
@@ -162,11 +172,13 @@
     gap: var(--space-4);
   }
 
+  /* 02's compact pills: 10.5px, `3px 8px`, on one line. */
   .stance {
     padding: 3px var(--space-8);
     border: var(--border-width-thin) solid var(--border-subtle);
     border-radius: 6px;
-    font-size: var(--font-size-micro);
+    font-size: var(--font-size-counter);
+    white-space: nowrap;
     color: var(--text-disabled);
     cursor: not-allowed;
   }

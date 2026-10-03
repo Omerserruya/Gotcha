@@ -1,5 +1,6 @@
 'use client';
 
+import { Pause } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
@@ -27,11 +28,14 @@ export function PauseEmployee({
   name,
   openConversations,
   paused,
+  large = false,
 }: {
   readonly id: string;
   readonly name: string;
   readonly openConversations: number;
   readonly paused: boolean;
+  /** 07e: a full-size button, "Pause it", with its icon. */
+  readonly large?: boolean;
 }) {
   const t = useTranslations('employees');
   const [confirming, setConfirming] = useState(false);
@@ -54,7 +58,7 @@ export function PauseEmployee({
       <div className={styles.controls}>
         <button
           type="button"
-          className={styles.resume}
+          className={large ? styles.pauseLarge : styles.resume}
           data-testid={`resume-${id}`}
           disabled={busy}
           onClick={() => apply('ACTIVE')}
@@ -75,11 +79,18 @@ export function PauseEmployee({
       <div className={styles.controls}>
         <button
           type="button"
-          className={styles.pause}
+          className={large ? styles.pauseLarge : styles.pause}
           data-testid={`pause-${id}`}
           onClick={() => setConfirming(true)}
         >
-          {t('action.pause')}
+          {large ? (
+            <>
+              <Pause size={14} strokeWidth={2.2} aria-hidden="true" />
+              {t('action.pauseIt')}
+            </>
+          ) : (
+            t('action.pause')
+          )}
         </button>
       </div>
     );

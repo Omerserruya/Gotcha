@@ -173,6 +173,7 @@ export async function HiredDialog({
                 name={employee.name}
                 openConversations={employee.openConversations}
                 paused={employee.status === 'PAUSED'}
+                large
               />
             ) : null}
           </div>

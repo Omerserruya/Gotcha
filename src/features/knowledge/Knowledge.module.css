@@ -12,6 +12,8 @@
     font-size: var(--font-size-meta);
     color: var(--action-text);
     line-height: normal;
+    /* A link drawn as a button. */
+    text-decoration: none;
   }
 
   .add[aria-disabled='true'] {

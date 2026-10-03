@@ -52,6 +52,8 @@
     border-radius: var(--radius-item);
     font-size: var(--font-size-label);
     color: var(--text-body);
+    /* Edit is a link drawn as a button. */
+    text-decoration: none;
   }
 
   .button[aria-disabled='true'] {

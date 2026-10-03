@@ -31,8 +31,8 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 vi.mock('../PauseEmployee', () => ({
-  PauseEmployee: ({ paused }: { paused: boolean }) => (
-    <button type="button" data-testid="pause">
+  PauseEmployee: ({ paused, large }: { paused: boolean; large?: boolean }) => (
+    <button type="button" data-testid="pause" data-large={large ? 'yes' : 'no'}>
       {paused ? 'Resume' : 'Pause'}
     </button>
   ),
@@ -122,7 +122,8 @@ describe('★★ 07e — what is true of the employee, and "—" where nothing b
   it('See it in Studio closes onto the employee; a draft cannot be paused', async () => {
     await show();
     expect(screen.getByTestId('hired-see')).toHaveAttribute('href', '/studio/employees?employee=a');
-    expect(screen.getByTestId('pause')).toBeInTheDocument();
+    // 02's "Pause it": the full-size button, not 07's pill.
+    expect(screen.getByTestId('pause')).toHaveAttribute('data-large', 'yes');
   });
 
   it('a draft has no Pause', async () => {

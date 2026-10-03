@@ -148,6 +148,15 @@ describe('★★ 07f — the profile’s sentences, editable; Save drawn, not li
     );
   });
 
+  it('an empty responsibility shows what belongs there, not a blank box', () => {
+    sheet({ identity: null });
+    expect(screen.getByTestId('edit-responsibility')).toHaveValue('');
+    expect(screen.getByTestId('edit-responsibility')).toHaveAttribute(
+      'placeholder',
+      expect.stringMatching(/^What this employee is responsible for/),
+    );
+  });
+
   it('Cancel and ✕ go back to the employee', () => {
     sheet();
     expect(screen.getByText('Cancel')).toHaveAttribute('href', '/studio/employees?employee=a');

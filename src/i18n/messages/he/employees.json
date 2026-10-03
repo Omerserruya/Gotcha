@@ -20,6 +20,7 @@
   },
   "action": {
     "pause": "להשהות",
+    "pauseIt": "להשהות",
     "pauseConfirm": "להשהות בכל זאת",
     "keepRunning": "שימשיך לעבוד",
     "resume": "להפעיל מחדש",
@@ -279,7 +280,8 @@
     "saveNotYet": "שמירה משנה איך עובד פעיל עונה ללקוחות — ממתין לאישור.",
     "cancel": "ביטול",
     "changes": "{count, plural, one {שינוי אחד} other {# שינויים}}",
-    "noChanges": "אין שינויים"
+    "noChanges": "אין שינויים",
+    "responsiblePlaceholder": "על מה העובד הזה אחראי — למשל שאלות אחרי רכישה"
   },
   "hired": {
     "close": "סגירה",

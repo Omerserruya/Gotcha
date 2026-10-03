@@ -20,6 +20,7 @@
   },
   "action": {
     "pause": "Pause",
+    "pauseIt": "Pause it",
     "pauseConfirm": "Pause anyway",
     "keepRunning": "Keep it working",
     "resume": "Start it again",
@@ -279,7 +280,8 @@
     "saveNotYet": "Saving changes how a working employee answers customers — waiting for approval.",
     "cancel": "Cancel",
     "changes": "{count, plural, one {# change} other {# changes}}",
-    "noChanges": "No changes"
+    "noChanges": "No changes",
+    "responsiblePlaceholder": "What this employee is responsible for — e.g. questions after a purchase"
   },
   "hired": {
     "close": "Close",

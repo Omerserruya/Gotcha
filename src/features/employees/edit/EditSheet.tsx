@@ -110,6 +110,7 @@ export function EditSheet({
                 className={styles.field}
                 rows={2}
                 value={draft.responsibility}
+                placeholder={t('responsiblePlaceholder')}
                 aria-label={t('responsible')}
                 data-testid="edit-responsibility"
                 onChange={(e) => set({ responsibility: e.target.value })}
@@ -203,10 +204,12 @@ export function EditSheet({
                   —
                 </p>
               ) : (
-                <ul className={styles.rows}>
+                <ul className={`${styles.rows} ${styles.scroll}`} data-testid="edit-may-rows">
                   {mayDo.map((row) => (
                     <li key={row.toolName} className={styles.mayRow}>
-                      <span className={styles.mayName}>{row.label}</span>
+                      <span className={styles.mayName} title={row.label}>
+                        {row.label}
+                      </span>
                       <span className={styles.stances}>
                         {STANCES.map((stance) => (
                           <span

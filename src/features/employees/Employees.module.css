@@ -15,6 +15,8 @@
     font-size: var(--font-size-meta);
     color: var(--action-text);
     line-height: normal;
+    /* A link drawn as a button. */
+    text-decoration: none;
   }
 
   .hire[aria-disabled='true'] {
@@ -27,6 +29,21 @@
     flex-direction: column;
     gap: var(--space-6);
     margin-block-start: auto;
+  }
+
+  /* 07e's "Pause it": the size of the button beside it, with its icon. */
+  .pauseLarge {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    padding: var(--space-10) var(--space-18);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    background: none;
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--text-body);
+    cursor: pointer;
   }
 
   .pause,
