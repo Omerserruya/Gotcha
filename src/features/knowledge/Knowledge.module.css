@@ -1,4 +1,9 @@
 @layer features {
+  /*
+   * Screen 08 · Studio · What GOTCHA knows — measured. 02 sets no
+   * line-height on any of it.
+   */
+
   /* 02's header action: dark, radius 9, `padding:9px 16px`, 12.5px. */
   .add {
     padding: var(--space-9) var(--space-16);
@@ -13,257 +18,144 @@
     cursor: default;
   }
 
-  /*
-   * Screen 08 · Studio · What GOTCHA knows.
-   *
-   * The gaps come first and the sources second. The design leads with four
-   * headline counts, three of which have no source at all — and of what
-   * remains, the questions GOTCHA could not answer are the ones somebody can
-   * act on today.
-   */
-
+  /* The body's column; the bottom row takes what is left of the frame. */
   .screen {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: var(--space-24);
+    gap: var(--space-16);
+    min-block-size: 0;
+    line-height: normal;
   }
 
-  .section {
+  /* ── The strip: four cells in one white card, `padding:15px 18px` ── */
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .cell {
+    padding: 15px 18px;
+  }
+
+  .cell + .cell {
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .cell dt {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .cell dd {
+    margin: 3px 0 0;
+    font-size: 25px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .cell dd[data-tone='urgent'] {
+    color: var(--intent-urgent-text);
+  }
+
+  /* ── The conflict card: white, the alert edge, `padding:18px 20px` ── */
+  .conflictCard {
     display: flex;
     flex-direction: column;
     gap: var(--space-12);
-  }
-
-  .sectionHeading {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 500;
-  }
-
-  /* One half failed while the other loaded. Said in place, not as the page. */
-  .degraded {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    color: var(--text-subtle);
-  }
-
-  .none {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    color: var(--text-body);
-  }
-
-  /* ── Questions it could not answer ───────────────────────────────────── */
-  .gaps,
-  .sources {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
+    padding: 18px var(--space-20);
+    border: 1px solid var(--alert-edge);
     border-radius: var(--radius-card);
-    overflow: hidden;
-  }
-
-  .gap,
-  .source {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
-  }
-
-  .gap + .gap,
-  .source + .source {
-    border-block-start: var(--border-width-thin) solid var(--row-divider);
-  }
-
-  .gapQuestion {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
-  }
-
-  /*
-   * Times asked and people asking, kept apart. One person asking twenty
-   * times is a stuck customer; twenty people asking once is a missing page.
-   */
-  .gapCount {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  /* ── Where it learns from ────────────────────────────────────────────── */
-  .sourceName {
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--space-8);
-    font-size: var(--font-size-meta);
-    font-weight: 500;
-  }
-
-  /* Two sources here share a name; the name alone identifies neither. */
-  .disambiguate {
-    font-size: var(--font-size-caption);
-    font-weight: 400;
-    color: var(--text-subtle);
-  }
-
-  /*
-   * The date, never a verdict. There is no staleness policy in the platform,
-   * so nothing here is labelled fresh or out of date.
-   */
-  .sourceMeta {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  /* A document still processing is not answering anything yet. */
-  .pending {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--intent-neutral-text);
-  }
-
-  /* ── Nothing added yet ───────────────────────────────────────────────── */
-  .empty {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-  }
-
-  .emptyLead {
-    margin: 0;
-    font-size: var(--font-size-body-lg);
-    font-weight: 500;
-  }
-
-  .emptyBody {
-    margin: 0;
-    max-inline-size: var(--size-reading);
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
-    color: var(--text-body);
-  }
-
-  /*
-   * ── The conflict, which is the hero of screen 08 ──
-   *
-   * Two answers side by side with neither preferred. The platform refuses to
-   * pick one and so does this: no "most likely" badge, no ordering cue beyond
-   * the order it was given in.
-   */
-
-  .conflicts,
-  .variants {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+    background-color: var(--panel-field);
   }
 
   .conflicts {
+    display: flex;
+    flex-direction: column;
     gap: var(--space-16);
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
   .conflict {
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
-    padding: var(--space-12);
-    border: 1px solid var(--intent-urgent-edge);
-    background: var(--intent-urgent-surface);
-    border-radius: var(--radius-card);
+    gap: var(--space-12);
+  }
+
+  .conflictHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-12);
   }
 
   .conflictQuestion {
     margin: 0;
-    font-weight: 600;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
   }
 
-  .conflictAsked,
-  .variantMeta,
-  .conflictMeanwhile {
+  .conflictAsked {
+    flex: none;
     margin: 0;
     font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* Both answers side by side: `#FAF8F4`, radius 12, `padding:14px 16px`. */
+  .variants {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .variant {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding: var(--space-14) var(--space-16);
+    border-radius: 12px;
+    background-color: var(--panel-base);
+  }
+
+  /* A sentence somebody wrote: reading size, not 02's 22px figure. */
+  .variantAnswer {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    line-height: 1.45;
+    color: var(--text-primary);
+  }
+
+  .variantMeta {
+    margin: 0;
+    font-size: var(--font-size-label);
     color: var(--text-muted);
   }
 
-  .variants {
-    gap: var(--space-8);
-  }
-
-  /*
-   * Both answers get identical weight. A difference in emphasis would be the
-   * screen choosing, which is exactly what the platform declines to do.
-   */
-  .variant {
-    padding: var(--space-8);
-    /* All three tokens here were undefined, so each answer had no border, no
-       fill and square corners — sitting directly on the urgent surface with
-       nothing separating the two. White is what makes them read as two
-       things. */
-    border: 1px solid var(--border-default);
-    background: var(--panel-field);
-    border-radius: var(--radius-item);
-  }
-
-  .variantAnswer {
-    margin: 0 0 var(--space-4);
-  }
-
-  /* What the scan covered, said whether or not anything was found. */
+  .conflictMeanwhile,
   .coverage {
     margin: 0;
     font-size: var(--font-size-caption);
-    color: var(--text-muted);
+    line-height: 1.45;
+    color: var(--text-subtle);
   }
 
-  /* ── The header counters ── facts first, verdicts second. ── */
-
-  .counters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-8) var(--space-16);
-    padding-block-end: var(--space-12);
-    border-block-end: 1px solid var(--border-default);
-  }
-
-  .counter {
-    margin: 0;
-  }
-
-  /*
-   * The measure that does not exist. Quieter than the real counters, because
-   * it is an explanation rather than a number — but present, so a reader
-   * holding the design does not have to ask where it went.
-   */
-  .counterAbsent {
-    flex-basis: 100%;
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-  }
-
-  /*
-   * ── Resolving a conflict ──
-   *
-   * The buttons are the `Button` primitive, so nothing here restyles a
-   * control. Only the layout and the three sentences under it live here.
-   */
   .resolve {
     display: flex;
     flex-direction: column;
     gap: var(--space-8);
-    margin-block-start: var(--space-8);
   }
 
   .resolveRow {
@@ -288,11 +180,213 @@
     color: var(--text-body);
   }
 
-  /*
-   * Urgent rather than muted: every sentence with this class says something
-   * was not written, or was written and cannot be used yet.
-   */
   .resolveWarn {
     color: var(--intent-urgent-text);
+  }
+
+  /* ── The bottom row: the sources (the rest) beside the questions (400) ── */
+  .bottom {
+    flex: 1;
+    display: flex;
+    gap: var(--space-14);
+    min-block-size: 280px;
+  }
+
+  .sourcesCard,
+  .gapsCard {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .sourcesCard {
+    flex: 1;
+  }
+
+  .gapsCard {
+    flex: none;
+    inline-size: 400px;
+  }
+
+  .cardHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-12);
+    padding: var(--space-14) 18px;
+    border-block-end: 1px solid var(--panel-well);
+  }
+
+  .cardTitle {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .cardMeta {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .cardBody {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+
+  .cardFoot {
+    margin: 0;
+    padding: var(--space-14) 18px;
+    background-color: var(--table-head-surface);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* A way in: `#FAF8F4`, `padding:6px 18px 2px`, mono 10px. */
+  .wayHead {
+    margin: 0;
+    padding: var(--space-6) 18px 2px;
+    background-color: var(--panel-base);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-timestamp);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .sources,
+  .gaps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .source {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-6) 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .sourceText,
+  .gapText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .sourceName {
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .sourceMeta {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .disambiguate {
+    margin-inline-start: var(--space-6);
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .pending {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--intent-blocked-surface);
+    font-size: var(--font-size-micro);
+    color: var(--intent-blocked-text);
+  }
+
+  .gap {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: 13px 18px;
+    border-block-end: 1px solid var(--row-divider);
+  }
+
+  .gapQuestion {
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .gapCount {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  /* "Answer": outline, radius 7, `padding:5px 11px`, 11px. */
+  .answer {
+    flex: none;
+    padding: 5px 11px;
+    border: 1px solid var(--border-default);
+    border-radius: 7px;
+    font-size: var(--font-size-micro);
+    color: var(--text-body);
+    cursor: default;
+  }
+
+  .none,
+  .degraded {
+    margin: 0;
+    padding: var(--space-12) 18px;
+    font-size: var(--font-size-label);
+    line-height: 1.45;
+    color: var(--text-subtle);
+  }
+
+  .conflictCard .none,
+  .conflictCard .degraded {
+    padding: 0;
+  }
+
+  .degraded {
+    color: var(--text-muted);
+  }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-14) 18px;
+  }
+
+  .emptyLead {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .emptyBody {
+    margin: 0;
+    font-size: var(--font-size-label);
+    line-height: 1.45;
+    color: var(--text-body);
+  }
+
+  @media (width < 64rem) {
+    .strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .bottom {
+      flex-direction: column;
+    }
+
+    .gapsCard {
+      inline-size: auto;
+    }
   }
 }

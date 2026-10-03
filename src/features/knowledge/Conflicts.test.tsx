@@ -238,14 +238,20 @@ describe('★★ the header counts what it can, and names what it cannot', () =>
      * candidates under "what GOTCHA knows about your business" would be
      * counting the inbox as the filing cabinet.
      */
+    /*
+     * Superseded in part (S2, 2026-10-03): 02's strip is drawn, so its two
+     * labels are on the screen — over "—", never over a number. The rule that
+     * survives is the one that mattered: NO COUNT. The absence still explains
+     * itself, on the figure that is absent.
+     */
     const { container } = await show();
     const text = container.textContent ?? '';
-    expect(text).not.toMatch(/answers confidently|guesses sometimes/i);
     expect(text).not.toMatch(/\b\d+ topics\b/i);
-    // And the absence explains itself, so nobody re-requests it every time
-    // they read the design beside the screen.
-    expect(screen.getByTestId('counter-no-confidence')).toHaveTextContent(
-      /only on suggestions, before you accept/i,
+    const cell = screen.getByTestId('counter-no-confidence');
+    expect(cell).toHaveTextContent(/^Answers confidently—$/);
+    expect(cell.querySelector('dd')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/only on suggestions, before you accept/i),
     );
   });
 
@@ -260,13 +266,15 @@ describe('★★ the header counts what it can, and names what it cannot', () =>
   it('★ a failed conflict read does not count as zero conflicts', async () => {
     // The counter is a claim about the workspace. `null` is a claim about us.
     await show({ conflicts: null });
-    expect(screen.getByTestId('counter-conflicts')).toHaveTextContent(/couldn't check/i);
+    const figure = screen.getByTestId('counter-conflicts').querySelector('dd');
+    expect(figure).toHaveTextContent(/^—$/);
+    expect(figure).toHaveAttribute('title', expect.stringMatching(/couldn't check/i));
   });
 
-  it('★ no counters at all when the sources read failed', async () => {
-    // Every counter is derived from sources or conflicts. A header of
-    // zeroes over a failed read is the most confident thing on the page.
+  it('★ a failed sources read is "—" in the strip, never a zero', async () => {
+    // A header of zeroes over a failed read is the most confident thing on
+    // the page. Superseded in form (S2): the strip stays, its figure is "—".
     await show({ sources: null });
-    expect(screen.queryByTestId('knowledge-counters')).toBeNull();
+    expect(screen.getByTestId('counter-stale').querySelector('dd')).toHaveTextContent(/^—$/);
   });
 });

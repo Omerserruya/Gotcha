@@ -49,6 +49,14 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * answer**, with `timesAsked` and `distinctAskers` kept apart: one person
  * asking twenty times is a stuck customer, twenty people asking once is a
  * missing page, and a single "asked 23 times" cannot tell you which.
+ *
+ * ── 08, MEASURED (S2) ──
+ * A strip of four in one white card (25px figures); the conflict card (its
+ * question, both answers side by side on `#FAF8F4`, the control under them);
+ * then "Where it learns from" (grouped by how it came in, the documents' own
+ * `sourceType`) beside "Questions it couldn't answer" (400). The two
+ * figures nothing measures are "—" in their shape; the conflict answers are
+ * sentences people wrote, so they are set at reading size, not 02's 22px.
  */
 export async function KnowledgeScreen({
   sources,
@@ -69,121 +77,59 @@ export async function KnowledgeScreen({
   const date = (iso: string | null) =>
     iso ? format.dateTime(new Date(iso), { day: 'numeric', month: 'long', year: 'numeric' }) : null;
 
-  /*
-   * ══════════════════════════════════════════════════════════════════════
-   * ★★ THE HEADER IS THREE COUNTERS, NOT THE DESIGN'S FOUR
-   * ══════════════════════════════════════════════════════════════════════
-   * *"Answers confidently · 34 topics"* and *"Thin — guesses sometimes · 6"*
-   * are not rendered, and not because a threshold is missing.
-   *
-   * `confidence` is a column on `KnowledgeCandidate` and on no other
-   * knowledge model. A candidate is a suggestion awaiting approval, and
-   * approving one creates a `KnowledgeDocument`, which has no confidence
-   * column — so the score exists only while the thing is **not yet
-   * knowledge** and is discarded the moment it becomes knowledge.
-   *
-   * Counting pending candidates under a header that says *"what GOTCHA
-   * knows about your business"* would be counting the inbox as the filing
-   * cabinet. The screen says the measure does not exist instead.
-   *
-   * ── AND THE ONE WE DO COMPUTE SHOWS ITS WORKING ──
-   * "Out of date" is ours: ninety days, chosen between the design's own
-   * "rescanned yesterday · Fresh" and "last change 5 months ago · Ageing".
-   * So the counter names the threshold, and each source prints its date
-   * beside the verdict — a reader who thinks three months is fine for a
-   * returns policy can see the fact and disagree with us.
-   */
   const stale = sources ? staleSources(sources, new Date()) : [];
   const undated = sources ? undatedSources(sources) : [];
+  const groups = sources ? groupByWayIn(sources) : [];
 
   return (
     <div className={styles.screen} data-testid="knowledge-screen">
-      {sources !== null ? (
-        <section className={styles.counters} data-testid="knowledge-counters">
-          <p className={styles.counter} data-testid="counter-sources">
-            {t('counters.sources', { count: sources.length })}
-          </p>
-
-          {/*
-            ★ THE FACT IS THE COUNTER, THE THRESHOLD IS THE CAPTION.
-            "4 out of date" is a verdict; "4 not refreshed in 90 days" is
-            what we actually know, and it is the same length.
-          */}
-          <p className={styles.counter} data-testid="counter-stale">
-            {t('counters.stale', { count: stale.length, days: STALE_AFTER_DAYS })}
-          </p>
-
-          {/*
-            Separate, because "we cannot tell when this was last read" is a
-            different thing to tell somebody than "this is old". Shown only
-            when it is true — a zero here is noise.
-          */}
-          {undated.length > 0 ? (
-            <p className={styles.counter} data-testid="counter-undated">
-              {t('counters.undated', { count: undated.length })}
-            </p>
-          ) : null}
-
-          <p className={styles.counter} data-testid="counter-conflicts">
-            {conflicts === null
-              ? t('counters.conflictsUnknown')
-              : t('counters.conflicts', { count: conflicts.length })}
-          </p>
-
-          {/*
-            ★★ THE COUNTER THAT IS NOT THERE, SAID RATHER THAN OMITTED.
-            A reader coming from the design will look for "answers
-            confidently" and find nothing. An absence explains itself once;
-            a missing counter gets re-requested every time somebody reads
-            the design next to the screen.
-          */}
-          <p className={styles.counterAbsent} data-testid="counter-no-confidence">
-            {t('counters.noConfidence')}
-          </p>
-        </section>
-      ) : null}
+      {/*
+        ── THE STRIP: four figures, two of which nothing measures ──
+        ★ THE FACT IS THE CAPTION. "Out of date" is a verdict; "not refreshed
+        in 90 days" is what we know. And "answers confidently" / "thin" have
+        no source — "—" in their shape, not omitted, so the strip is 02's.
+      */}
+      <dl className={styles.strip} data-testid="knowledge-counters">
+        <div className={styles.cell} data-testid="counter-no-confidence">
+          <dt>{t('strip.confident')}</dt>
+          {/* Why there is no figure, kept where it is asked: on the figure. */}
+          <dd title={t('counters.noConfidence')}>—</dd>
+        </div>
+        <div className={styles.cell}>
+          <dt>{t('strip.thin')}</dt>
+          <dd>—</dd>
+        </div>
+        <div className={styles.cell} data-testid="counter-conflicts">
+          <dt>{t('strip.conflicts')}</dt>
+          <dd
+            data-tone={conflicts && conflicts.length > 0 ? 'urgent' : undefined}
+            title={conflicts === null ? t('counters.conflictsUnknown') : undefined}
+          >
+            {conflicts === null || !everImported ? '—' : format.number(conflicts.length)}
+          </dd>
+        </div>
+        <div className={styles.cell} data-testid="counter-stale">
+          <dt>{t('strip.stale', { days: STALE_AFTER_DAYS })}</dt>
+          <dd>{sources === null ? '—' : format.number(stale.length)}</dd>
+        </div>
+      </dl>
 
       {/*
         ════════════════════════════════════════════════════════════════════
         ★★ THE CONFLICT — AND IT IS NOT THE CONFLICT THE DESIGN DRAWS
         ════════════════════════════════════════════════════════════════════
-        The design shows two NAMED SOURCES disagreeing: "₪550 · your website ·
-        wholesale page · updated March" against "₪850 · Wholesale terms PDF ·
-        uploaded July".
-
-        What this platform detects is different and the schema says so in as
-        many words: *"The business answered this differently at different
-        times. We do NOT pick one."* It clusters semantically-equivalent
-        questions out of past conversations and keeps every answer that was
-        given, with how often each was said.
-
-        Cross-source contradiction — website versus PDF, with each side's
-        name and date — **does not exist**, and captioning these as though it
-        did would be inventing provenance. So the panel says what it is: the
-        business answered this question in more than one way, here is each
-        answer and how often it was heard.
-
-        ── AND THE SCAN IS NOT CONTINUOUS ──
-        `knowledge-clustering.stage.ts` runs inside the historical-import
-        pipeline only. An empty list means "nothing contradicted itself in
-        what we imported", never "GOTCHA's knowledge is consistent". That
-        sentence is on the screen, not in this comment.
+        02 shows two NAMED SOURCES disagreeing. What this platform detects is
+        the business having answered ONE question differently at different
+        times (*"We do NOT pick one"*), clustered from an import. So the card
+        says that: the question, each answer and how often it was heard. The
+        scan runs inside the import only — the coverage line says so, always.
       */}
-      <section className={styles.section} data-testid="conflicts-section">
-        <h2 className={styles.sectionHeading}>{t('conflicts.heading')}</h2>
-
+      <section className={styles.conflictCard} data-testid="conflicts-section">
         {conflicts === null ? (
           <p className={styles.degraded} data-testid="conflicts-unavailable">
             {t('conflicts.unavailable')}
           </p>
         ) : !everImported ? (
-          /*
-           * ★ NOTHING HAS EVER LOOKED, WHICH IS NOT "NOTHING DISAGREES".
-           * Without an import the clustering stage has never run at all, so
-           * an empty list here carries no information whatsoever — and
-           * "no contradictions" would be the most misleading thing on the
-           * screen.
-           */
           <p className={styles.none} data-testid="conflicts-never-scanned">
             {t('conflicts.neverScanned')}
           </p>
@@ -203,19 +149,14 @@ export async function KnowledgeScreen({
                   className={styles.conflict}
                   data-testid={`conflict-${candidate.id}`}
                 >
-                  <p className={styles.conflictQuestion}>{candidate.question}</p>
-                  <p className={styles.conflictAsked}>
-                    {t('conflicts.asked', { count: candidate.occurrenceCount })}
-                  </p>
+                  <div className={styles.conflictHead}>
+                    <p className={styles.conflictQuestion}>{candidate.question}</p>
+                    <p className={styles.conflictAsked}>
+                      {t('conflicts.asked', { count: candidate.occurrenceCount })}
+                    </p>
+                  </div>
 
-                  {/*
-                    ★ BOTH ANSWERS, NEITHER PREFERRED. The route sorts them
-                    by how often each was heard and the platform explicitly
-                    refuses to pick — so the screen shows the order it was
-                    given and marks nothing as the winner. An "most likely"
-                    badge here would be the product making the decision it
-                    says is the owner's.
-                  */}
+                  {/* ★ BOTH ANSWERS, NEITHER PREFERRED — in the order given. */}
                   <ul className={styles.variants}>
                     {variants.map((variant) => {
                       const heard = lastHeardFor(variant, candidate.examples);
@@ -231,21 +172,11 @@ export async function KnowledgeScreen({
                           </p>
                           <p className={styles.variantMeta}>
                             {t('conflicts.said', { count: variant.occurrenceCount })}
-                            {/*
-                              Dropped by the dedupe merge, so shown only
-                              where it survived. Absent is absent — a zero
-                              here would read as "no customers", which is
-                              a claim nobody made.
-                            */}
+                            {/* Absent is absent — a zero would read as "no customers". */}
                             {variant.customerCount !== null && variant.customerCount !== undefined
                               ? ` · ${t('conflicts.byCustomers', { count: variant.customerCount })}`
                               : ''}
-                            {/*
-                              Reconstructed from the representative examples
-                              via `variantKey`. At most three are returned,
-                              so a later variant may have none — and then it
-                              gets no date rather than borrowing another's.
-                            */}
+                            {/* At most three examples come back: no borrowed dates. */}
                             {heard
                               ? ` · ${t('conflicts.lastHeard', { when: date(heard) ?? '' })}`
                               : ''}
@@ -256,133 +187,212 @@ export async function KnowledgeScreen({
                   </ul>
 
                   {/*
-                    ★ WHAT IS TRUE UNTIL SOMEBODY DECIDES, SAID BEFORE THE
-                    CONTROL THAT DECIDES IT. "Nobody has decided which of
-                    these is right, so GOTCHA has both" is the cost of not
-                    pressing anything, and it is the reason to press.
-                  */}
-                  <p className={styles.conflictMeanwhile}>{t('conflicts.meanwhile')}</p>
-
-                  {/*
                     ⚠ THIS WRITES THE TENANT KNOWLEDGE BASE. Authorized by
                     Omer for this panel. Two presses, the second quoting the
                     answer back — see `ResolveConflict`. No test and no
-                    capture presses it.
-
-                    Only where there is something to choose between: a
-                    conflicted row whose `variants` did not survive the read
-                    gets the sentence above and no buttons, because "this one
-                    is right" needs more than one `this`.
+                    capture presses it. Only where there is more than one
+                    answer to choose between.
                   */}
                   {variants.length > 1 ? (
                     <ResolveConflict candidateId={candidate.id} variants={variants} />
                   ) : null}
+
+                  {/* What is true until somebody decides, said before it is decided. */}
+                  <p className={styles.conflictMeanwhile}>{t('conflicts.meanwhile')}</p>
                 </li>
               );
             })}
           </ul>
         )}
 
-        {/*
-          ★★ THE COVERAGE STATEMENT, ALWAYS, NOT ONLY WHEN THE LIST IS EMPTY.
-          A reader looking at two conflicts needs to know the scan was of one
-          import and has not run since, exactly as much as a reader looking
-          at none does.
-        */}
+        {/* ★★ THE COVERAGE STATEMENT, ALWAYS — not only when the list is empty. */}
         <p className={styles.coverage} data-testid="conflicts-coverage">
           {t('conflicts.coverage')}
         </p>
       </section>
 
-      {/* ── What it could not answer ─────────────────────────────────── */}
-      <section className={styles.section} data-testid="gaps-section">
-        <h2 className={styles.sectionHeading}>{t('gaps.heading')}</h2>
+      <div className={styles.bottom}>
+        {/* ── Where it learns from ─────────────────────────────────────── */}
+        <section className={styles.sourcesCard} data-testid="sources-section">
+          <header className={styles.cardHead}>
+            <h2 className={styles.cardTitle}>{t('sources.heading')}</h2>
+            {sources !== null ? (
+              <span className={styles.cardMeta} data-testid="counter-sources">
+                {t('counters.sources', { count: sources.length })}
+              </span>
+            ) : null}
+          </header>
 
-        {unanswered === null ? (
-          <p className={styles.degraded} data-testid="gaps-unavailable">
-            {t('gaps.unavailable')}
-          </p>
-        ) : unanswered.length === 0 ? (
-          <p className={styles.none} data-testid="gaps-none">
-            {t('gaps.none')}
-          </p>
-        ) : (
-          <ul className={styles.gaps}>
-            {unanswered.map((question) => (
-              <li key={question.id} className={styles.gap} data-testid={`gap-${question.id}`}>
-                <p className={styles.gapQuestion}>{question.question}</p>
-                {/*
-                  Kept apart on purpose. One person asking twenty times and
-                  twenty people asking once are different problems, and the
-                  design's single "asked 23 times" cannot distinguish them.
-                */}
-                <p className={styles.gapCount}>
-                  {t('gaps.asked', {
-                    times: question.timesAsked,
-                    people: question.distinctAskers,
-                  })}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ── Where it learns from ─────────────────────────────────────── */}
-      <section className={styles.section} data-testid="sources-section">
-        <h2 className={styles.sectionHeading}>{t('sources.heading')}</h2>
-
-        {sources === null ? (
-          <p className={styles.degraded} data-testid="sources-unavailable">
-            {t('sources.unavailable')}
-          </p>
-        ) : sources.length === 0 ? (
-          <div className={styles.empty} data-testid="sources-none">
-            <p className={styles.emptyLead}>{t('sources.none')}</p>
-            <p className={styles.emptyBody}>{t('sources.noneBody')}</p>
+          <div className={styles.cardBody}>
+            {sources === null ? (
+              <p className={styles.degraded} data-testid="sources-unavailable">
+                {t('sources.unavailable')}
+              </p>
+            ) : sources.length === 0 ? (
+              <div className={styles.empty} data-testid="sources-none">
+                <p className={styles.emptyLead}>{t('sources.none')}</p>
+                <p className={styles.emptyBody}>{t('sources.noneBody')}</p>
+              </div>
+            ) : (
+              groups.map((group) => (
+                <div key={group.way} data-testid={`way-${group.way}`}>
+                  <p className={styles.wayHead}>{t(`way.${group.way}` as 'way.website')}</p>
+                  <ul className={styles.sources}>
+                    {group.sources.map((source) => {
+                      const refreshed = date(lastRefreshed(source));
+                      const pending = notReadyCount(source);
+                      return (
+                        <li
+                          key={source.id}
+                          className={styles.source}
+                          data-testid={`source-${source.id}`}
+                        >
+                          <span className={styles.sourceText}>
+                            <span className={styles.sourceName}>
+                              {source.name || t('sources.unnamed')}
+                              {/* A shared name says what tells the two apart. */}
+                              {hasAmbiguousName(source, sources) ? (
+                                <span
+                                  className={styles.disambiguate}
+                                  data-testid={`same-name-${source.id}`}
+                                >
+                                  {t('sources.sameName')}
+                                </span>
+                              ) : null}
+                            </span>
+                            {/* WHEN, not whether that is good: no staleness policy exists. */}
+                            <span className={styles.sourceMeta} data-testid={`docs-${source.id}`}>
+                              {t('sources.documents', { count: source.documents.length })}
+                              {refreshed
+                                ? ` · ${t('sources.refreshed', { date: refreshed })}`
+                                : null}
+                            </span>
+                          </span>
+                          {pending > 0 ? (
+                            <span className={styles.pending} data-testid={`pending-${source.id}`}>
+                              {t('sources.pending', { count: pending })}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))
+            )}
           </div>
-        ) : (
-          <ul className={styles.sources}>
-            {sources.map((source) => {
-              const refreshed = date(lastRefreshed(source));
-              const pending = notReadyCount(source);
-              return (
-                <li key={source.id} className={styles.source} data-testid={`source-${source.id}`}>
-                  <p className={styles.sourceName}>
-                    {source.name || t('sources.unnamed')}
-                    {/*
-                      Two sources on this tenant share a name. Printing it
-                      twice tells the reader nothing about which is which, so
-                      an ambiguous name is shown with what distinguishes them.
-                    */}
-                    {hasAmbiguousName(source, sources) ? (
-                      <span className={styles.disambiguate} data-testid={`same-name-${source.id}`}>
-                        {t('sources.sameName')}
+
+          {/* "We cannot tell when this was read" is not "this is old": said apart. */}
+          {undated.length > 0 ? (
+            <p className={styles.cardFoot} data-testid="counter-undated">
+              {t('counters.undated', { count: undated.length })}
+            </p>
+          ) : null}
+        </section>
+
+        {/* ── What it could not answer ─────────────────────────────────── */}
+        <section className={styles.gapsCard} data-testid="gaps-section">
+          <header className={styles.cardHead}>
+            <h2 className={styles.cardTitle}>{t('gaps.heading')}</h2>
+          </header>
+
+          <div className={styles.cardBody}>
+            {unanswered === null ? (
+              <p className={styles.degraded} data-testid="gaps-unavailable">
+                {t('gaps.unavailable')}
+              </p>
+            ) : unanswered.length === 0 ? (
+              <p className={styles.none} data-testid="gaps-none">
+                {t('gaps.none')}
+              </p>
+            ) : (
+              <ul className={styles.gaps}>
+                {unanswered.map((question) => (
+                  <li key={question.id} className={styles.gap} data-testid={`gap-${question.id}`}>
+                    <span className={styles.gapText}>
+                      <span className={styles.gapQuestion}>{question.question}</span>
+                      {/* One person twenty times ≠ twenty people once: kept apart. */}
+                      <span className={styles.gapCount}>
+                        {t('gaps.asked', {
+                          times: question.timesAsked,
+                          people: question.distinctAskers,
+                        })}
                       </span>
-                    ) : null}
-                  </p>
-
-                  <p className={styles.sourceMeta} data-testid={`docs-${source.id}`}>
-                    {t('sources.documents', { count: source.documents.length })}
-                    {/*
-                      WHEN, not whether that is good. There is no staleness
-                      policy in the platform, so no source is labelled fresh
-                      or stale — the date is stated and the reader judges.
-                    */}
-                    {refreshed ? ` · ${t('sources.refreshed', { date: refreshed })}` : null}
-                  </p>
-
-                  {pending > 0 ? (
-                    <p className={styles.pending} data-testid={`pending-${source.id}`}>
-                      {t('sources.pending', { count: pending })}
-                    </p>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                    </span>
+                    {/* Answering writes knowledge; nothing does that from here yet. */}
+                    <span
+                      className={styles.answer}
+                      aria-disabled="true"
+                      title={t('gaps.answerNotYet')}
+                    >
+                      {t('gaps.answer')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      </div>
     </div>
+  );
+}
+
+/** How a source came in — from its documents' own `sourceType`. */
+export type WayIn =
+  'website' | 'uploaded' | 'drive' | 'confluence' | 'conversations' | 'answers' | 'mixed' | 'other';
+
+/**
+ * The writers' vocabulary, read from their write sites: `url` and
+ * `onboarding_scan` (the website), `file` and `text` (uploaded or typed),
+ * `google_drive` and `drive`, `confluence`, `historical_conversations`,
+ * `readiness_answer` (answers given during setup). Anything else — `ad`
+ * included — is "other" rather than a guess. A source whose documents came
+ * in different ways is "mixed"; one with none is "other".
+ */
+export function wayIn(source: KnowledgeSource): WayIn {
+  const of = (type: string): WayIn => {
+    switch (type) {
+      case 'url':
+      case 'onboarding_scan':
+        return 'website';
+      case 'file':
+      case 'text':
+        return 'uploaded';
+      case 'google_drive':
+      case 'drive':
+        return 'drive';
+      case 'confluence':
+        return 'confluence';
+      case 'historical_conversations':
+        return 'conversations';
+      case 'readiness_answer':
+        return 'answers';
+      default:
+        return 'other';
+    }
+  };
+  const ways = new Set(source.documents.map((document) => of(document.sourceType)));
+  if (ways.size === 0) return 'other';
+  return ways.size === 1 ? [...ways][0]! : 'mixed';
+}
+
+const WAY_ORDER: readonly WayIn[] = [
+  'website',
+  'uploaded',
+  'drive',
+  'confluence',
+  'conversations',
+  'answers',
+  'mixed',
+  'other',
+];
+
+/** Sources grouped by how they came in, in 02's order; empty groups left out. */
+export function groupByWayIn(
+  sources: readonly KnowledgeSource[],
+): readonly { readonly way: WayIn; readonly sources: readonly KnowledgeSource[] }[] {
+  return WAY_ORDER.map((way) => ({ way, sources: sources.filter((s) => wayIn(s) === way) })).filter(
+    (group) => group.sources.length > 0,
   );
 }

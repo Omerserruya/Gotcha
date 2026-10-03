@@ -4,9 +4,7 @@
   "unavailable": "We couldn't read your knowledge just now.",
   "counters": {
     "sources": "{count, plural, =0 {No sources yet} =1 {One source} other {# sources}}",
-    "stale": "{count, plural, =0 {All refreshed in the last {days} days} =1 {1 not refreshed in {days} days} other {# not refreshed in {days} days}}",
     "undated": "{count, plural, =1 {1 source has no last-read date} other {# sources have no last-read date}}",
-    "conflicts": "{count, plural, =0 {Nothing answered two ways} =1 {1 answered two ways} other {# answered two ways}}",
     "conflictsUnknown": "We couldn't check for contradictions",
     "noConfidence": "GOTCHA doesn't record how sure it is of what it already knows — that score exists only on suggestions, before you accept them."
   },
@@ -46,7 +44,9 @@
     "heading": "Questions it couldn't answer",
     "none": "Nothing has been asked that GOTCHA couldn't answer.",
     "unavailable": "We couldn't read the unanswered questions just now.",
-    "asked": "Asked {times, plural, =1 {once} other {# times}} by {people, plural, =1 {one person} other {# people}}"
+    "asked": "Asked {times, plural, =1 {once} other {# times}} by {people, plural, =1 {one person} other {# people}}",
+    "answer": "Answer",
+    "answerNotYet": "Answering from here comes next."
   },
   "sources": {
     "heading": "Where it learns from",
@@ -60,5 +60,21 @@
     "pending": "{count, plural, =1 {One document is still being read, so it isn't answering anything yet} other {# documents are still being read, so they aren't answering anything yet}}"
   },
   "add": "Add knowledge",
-  "addNotYet": "Adding knowledge from here comes next."
+  "addNotYet": "Adding knowledge from here comes next.",
+  "strip": {
+    "confident": "Answers confidently",
+    "thin": "Thin — guesses sometimes",
+    "conflicts": "Contradicts itself",
+    "stale": "Not refreshed in {days} days"
+  },
+  "way": {
+    "website": "Your website",
+    "uploaded": "Uploaded by you",
+    "drive": "Drive folder",
+    "confluence": "Confluence",
+    "conversations": "Past conversations",
+    "answers": "Your answers during setup",
+    "mixed": "Several ways in",
+    "other": "Other"
+  }
 }
