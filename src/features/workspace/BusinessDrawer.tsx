@@ -1,9 +1,15 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { displayHost, fieldOrigin, type Workspace } from '@/api/contracts/workspace';
+import {
+  countryName,
+  displayHost,
+  fieldOrigin,
+  industryReading,
+  type Workspace,
+} from '@/api/contracts/workspace';
 import { Link } from '@/i18n/navigation';
 import drawer from '@/design-system/styles/drawer.module.css';
 
@@ -21,6 +27,7 @@ import styles from './Workspace.module.css';
  */
 export function BusinessDrawer({ workspace }: { readonly workspace: Workspace }) {
   const t = useTranslations('workspace');
+  const locale = useLocale();
   const [name, setName] = useState(workspace.name ?? '');
   const [description, setDescription] = useState(workspace.description ?? '');
   const [address, setAddress] = useState(workspace.address ?? '');
@@ -100,13 +107,20 @@ export function BusinessDrawer({ workspace }: { readonly workspace: Workspace })
           <div className={drawer.field}>
             <span className={drawer.fieldLabel}>{t('business.industry')}</span>
             <span className={drawer.box} aria-disabled="true" title={t('business.notHere')}>
-              {workspace.industry || '—'}
+              {(() => {
+                const industry = industryReading(workspace.industry);
+                return industry === null
+                  ? '—'
+                  : 'code' in industry
+                    ? t(`business.industryName.${industry.code}`)
+                    : industry.text;
+              })()}
             </span>
           </div>
           <div className={drawer.field}>
             <span className={drawer.fieldLabel}>{t('business.country')}</span>
             <span className={drawer.box} aria-disabled="true" title={t('business.notHere')}>
-              {workspace.country || '—'}
+              {countryName(workspace.country, locale) ?? '—'}
             </span>
           </div>
         </div>

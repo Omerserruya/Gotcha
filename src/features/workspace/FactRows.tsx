@@ -1,17 +1,16 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 
 import { fieldOrigin, type DayKey, type Workspace, displayHost } from '@/api/contracts/workspace';
-import { Button } from '@/design-system/primitives/button/Button';
-import { Input } from '@/design-system/primitives/input/Input';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { saveWorkspaceFacts, type WriteResult } from './actions';
 import { summariseWeek, weekOf } from './hours';
 import styles from './Workspace.module.css';
+import { COMMON_CURRENCIES, currencyLabel, zoneFromInput, zoneLabel, zoneOptions } from './zones';
 
 /**
  * The facts an AI employee quotes to a customer, as 11's table.
@@ -27,14 +26,6 @@ type FactKey =
   'name' | 'website' | 'description' | 'address' | 'hours' | 'language' | 'currencyTimezone';
 
 type Panel = 'business' | 'hours' | 'language';
-
-const TIMEZONES: readonly string[] = (() => {
-  try {
-    return Intl.supportedValuesOf?.('timeZone') ?? [];
-  } catch {
-    return [];
-  }
-})();
 
 /**
  * The provenance field behind each row. Hours and currency & time zone have
@@ -56,6 +47,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
   const [timezone, setTimezone] = useState('');
   const [note, setNote] = useState<{ text: string; quiet?: boolean } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const zones = useMemo(() => zoneOptions(locale), [locale]);
 
   const origin = (key: FactKey) => {
     const field = PROVENANCE_FIELD[key];
@@ -64,12 +56,14 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
 
   function saveCurrencyTimezone() {
     setNote(null);
+    const zone = zoneFromInput(timezone, zones);
+    if (zone === null) {
+      setNote({ text: t('zoneUnknown') });
+      return;
+    }
     startTransition(async () => {
       const result = await saveWorkspaceFacts(
-        {
-          currency: currency.trim() ? currency.trim().toUpperCase() : null,
-          timezone: timezone.trim(),
-        },
+        { currency: currency || null, timezone: zone },
         workspace.updatedAt ?? null,
       );
       if (result.ok) {
@@ -119,7 +113,13 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
 
   const summary = summariseWeek(weekOf(workspace));
   const hoursNeverSaved = workspace.hours == null;
-  const hoursSwitchedOff = workspace.hours != null && workspace.hours.enabled === false;
+  /*
+    "Set, but switched off" only when there IS a week to switch off. Dev
+    stores `{ enabled: false }` and no schedule at all — that is "Not set",
+    and the drawer would otherwise show seven closed days under the claim.
+  */
+  const hoursSwitchedOff =
+    workspace.hours != null && workspace.hours.enabled === false && !summary.isEmpty;
   const hoursValue = hoursNeverSaved
     ? null
     : hoursSwitchedOff
@@ -191,8 +191,13 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
         and reads as one line. Enter saves, Esc cancels.
       */}
       {editing ? (
+        /*
+          11e, measured: the edit happens ON the row — [₪ ILS ▾] [London
+          (GMT+1)] Save Cancel — with a hint under it. The label is the row's,
+          once. Enter saves, Esc cancels.
+        */
         <div
-          className={styles.rowEditing}
+          className={styles.rowInline}
           data-testid="fact-currencyTimezone"
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
@@ -207,66 +212,78 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
             }
           }}
         >
-          <div className={styles.rowEditor}>
-            <div className={styles.label}>{t('fact.currencyTimezone')}</div>
-            <div className={styles.value}>
-              <div className={styles.editFields}>
-                <Input
-                  label={t('currency')}
-                  value={currency}
-                  maxLength={3}
-                  onChange={(e) => setCurrency(e.target.value)}
-                />
-                {/*
-                  ★ Searchable by city: the IANA zone name CONTAINS the city.
-                  Still free text underneath — a zone this browser does not
-                  list must not lock a tenant out of saving their own value.
-                */}
-                <Input
-                  label={t('fact.currencyTimezone')}
-                  value={timezone}
-                  list="timezone-options"
-                  onChange={(e) => setTimezone(e.target.value)}
-                />
-                <datalist id="timezone-options" data-testid="timezone-options">
-                  {TIMEZONES.map((zone) => (
-                    <option key={zone} value={zone} />
-                  ))}
-                </datalist>
-              </div>
-            </div>
-            <div className={styles.editActions}>
-              <Button
-                variant="primary"
-                size="sm"
-                data-testid="fact-save-currencyTimezone"
-                onClick={saveCurrencyTimezone}
-                disabled={isPending}
-              >
-                {isPending ? t('saving') : t('save')}
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditing(false);
-                  setNote(null);
-                }}
-              >
-                {t('cancel')}
-              </Button>
-              {note ? (
-                <span
-                  className={[styles.rowNote, note.quiet ? styles.rowNoteQuiet : '']
-                    .join(' ')
-                    .trim()}
-                  data-testid="fact-note-currencyTimezone"
-                  data-note-kind={note.quiet ? 'success' : 'problem'}
-                >
-                  {note.text}
-                </span>
-              ) : null}
-            </div>
+          <div className={styles.label}>{t('fact.currencyTimezone')}</div>
+          <div className={styles.inlineControls}>
+            <select
+              className={styles.inlineSelect}
+              aria-label={t('currency')}
+              value={currency}
+              data-testid="currency-select"
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              {currency === '' ? <option value="">—</option> : null}
+              {[
+                ...new Set([
+                  ...(workspace.currency ? [workspace.currency] : []),
+                  ...COMMON_CURRENCIES,
+                ]),
+              ].map((code) => (
+                <option key={code} value={code}>
+                  {currencyLabel(code, locale)}
+                </option>
+              ))}
+            </select>
+            {/*
+              ★ Searchable by city: "Type a city" finds the zone, shown as
+              02 writes it — "London (GMT+1)" — and saved as IANA.
+            */}
+            <input
+              className={styles.inlineCombo}
+              aria-label={t('timezone')}
+              placeholder={t('typeCity')}
+              list="timezone-options"
+              value={timezone}
+              data-testid="timezone-input"
+              onChange={(e) => setTimezone(e.target.value)}
+            />
+            <datalist id="timezone-options" data-testid="timezone-options">
+              {zones.map((zone) => (
+                <option key={zone.iana} value={zone.label} />
+              ))}
+            </datalist>
+            <button
+              type="button"
+              className={styles.inlineSave}
+              data-testid="fact-save-currencyTimezone"
+              onClick={saveCurrencyTimezone}
+              disabled={isPending}
+            >
+              {isPending ? t('saving') : t('save')}
+            </button>
+            <button
+              type="button"
+              className={styles.inlineCancel}
+              onClick={() => {
+                setEditing(false);
+                setNote(null);
+              }}
+            >
+              {t('cancel')}
+            </button>
           </div>
+          <p className={styles.inlineHint}>
+            {note ? (
+              <span
+                className={note.quiet ? styles.rowNoteQuiet : styles.rowNote}
+                data-testid="fact-note-currencyTimezone"
+                data-note-kind={note.quiet ? 'success' : 'problem'}
+              >
+                {note.text}
+              </span>
+            ) : (
+              t('currencyHint')
+            )}
+          </p>
         </div>
       ) : (
         <div className={styles.row} data-testid="fact-currencyTimezone">
@@ -278,7 +295,12 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
             data-testid="fact-value-currencyTimezone"
           >
             {workspace.currency || workspace.timezone
-              ? [workspace.currency ?? t('currencyUnset'), workspace.timezone]
+              ? [
+                  workspace.currency
+                    ? currencyLabel(workspace.currency, locale)
+                    : t('currencyUnset'),
+                  workspace.timezone ? zoneLabel(workspace.timezone, locale) : null,
+                ]
                   .filter(Boolean)
                   .join(' · ')
               : t('unset')}
@@ -300,7 +322,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
               setEditing(true);
               setNote(null);
               setCurrency(workspace.currency ?? '');
-              setTimezone(workspace.timezone ?? '');
+              setTimezone(workspace.timezone ? zoneLabel(workspace.timezone, locale) : '');
             }}
           >
             {t('edit')}

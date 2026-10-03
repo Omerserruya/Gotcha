@@ -328,3 +328,51 @@ export function displayHost(value: string): string {
       .replace(/\/+$/, '');
   }
 }
+
+/**
+ * The crawler's `businessType` codes — every value `site-crawl.service.ts`
+ * returns (`classify…`), which is how `industry` gets written by a scan.
+ * Onboarding writes free text instead ("SaaS / Customer Communication").
+ */
+export const INDUSTRY_CODES = [
+  'ecommerce',
+  'legal',
+  'saas',
+  'events',
+  'tourism',
+  'restaurant',
+  'health',
+  'realestate',
+] as const;
+export type IndustryCode = (typeof INDUSTRY_CODES)[number];
+
+/**
+ * How a stored industry reaches the screen: a crawler code by its NAME, the
+ * crawler's "generic" and an empty value as nothing, and a person's own
+ * free text as they wrote it. No code is ever shown as stored.
+ */
+export function industryReading(
+  value: string | null | undefined,
+): { readonly code: IndustryCode } | { readonly text: string } | null {
+  const v = value?.trim();
+  if (!v || v === 'generic') return null;
+  if ((INDUSTRY_CODES as readonly string[]).includes(v)) return { code: v as IndustryCode };
+  return { text: v };
+}
+
+/**
+ * A stored country by name: an ISO 3166 code through `Intl.DisplayNames`,
+ * the scan's "unknown" (and anything unreadable) as nothing.
+ */
+export function countryName(value: string | null | undefined, locale: string): string | null {
+  const v = value?.trim();
+  if (!v || v.toLowerCase() === 'unknown') return null;
+  if (/^[A-Za-z]{2}$/.test(v)) {
+    try {
+      return new Intl.DisplayNames([locale], { type: 'region' }).of(v.toUpperCase()) ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return v;
+}

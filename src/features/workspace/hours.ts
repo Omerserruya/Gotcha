@@ -99,9 +99,11 @@ export function hoursPatch(
    * the old carry-through exactly.
    */
   outside?: { aiOutsideHours?: 'active' | 'silent'; outsideHoursHandoffMessage?: string },
+  /** 11c's "Use these hours": off keeps the week stored and switches it off. */
+  use = true,
 ): Record<string, unknown> {
   return {
-    enabled: DAY_KEYS.some((day) => week[day].enabled),
+    enabled: use && DAY_KEYS.some((day) => week[day].enabled),
     schedule: Object.fromEntries(
       DAY_KEYS.map((day) => {
         const entry = week[day];

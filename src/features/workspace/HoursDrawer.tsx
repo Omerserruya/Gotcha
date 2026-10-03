@@ -33,6 +33,12 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
   );
   const [outsideMsg, setOutsideMsg] = useState(workspace.hours?.outsideHoursHandoffMessage ?? '');
   const [copied, setCopied] = useState(false);
+  /*
+    02's master switch. A stored week that is switched off is SHOWN, under
+    "Use these hours" off — never as seven closed days, which says something
+    else: that the business is closed every day.
+  */
+  const [use, setUse] = useState(workspace.hours ? workspace.hours.enabled !== false : true);
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -46,10 +52,15 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
     startTransition(async () => {
       const result = await saveWorkspaceFacts(
         {
-          hours: hoursPatch(week, workspace.hours ?? null, {
-            aiOutsideHours: aiOutside,
-            outsideHoursHandoffMessage: outsideMsg.trim(),
-          }),
+          hours: hoursPatch(
+            week,
+            workspace.hours ?? null,
+            {
+              aiOutsideHours: aiOutside,
+              outsideHoursHandoffMessage: outsideMsg.trim(),
+            },
+            use,
+          ),
         },
         workspace.updatedAt ?? null,
       );
@@ -61,7 +72,18 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
   return (
     <>
       <div className={drawer.drawerBody} data-testid="hours-drawer">
-        <ul className={styles.weekRows}>
+        <label className={styles.weekUse}>
+          <input
+            type="checkbox"
+            className="srOnly"
+            checked={use}
+            data-testid="hours-use"
+            onChange={(e) => setUse(e.target.checked)}
+          />
+          <span className={styles.weekPill} aria-hidden="true" />
+          {t('hours.use')}
+        </label>
+        <ul className={styles.weekRows} data-in-use={use ? 'yes' : 'no'}>
           {DAY_KEYS.map((day) => (
             <li
               key={day}

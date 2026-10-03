@@ -58,6 +58,17 @@ describe('★ 11b — the business form', () => {
     expect(site).toHaveAttribute('aria-disabled', 'true');
     expect(site).toHaveAttribute('title', expect.stringMatching(/\S/));
     expect(screen.getByText('Home textiles')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('★ no stored value as stored: a crawler code by name, "unknown" as "—"', () => {
+    inIntl(<BusinessDrawer workspace={ws({ industry: 'ecommerce', country: 'unknown' })} />);
+    expect(screen.getByText('E-commerce')).toBeInTheDocument();
+    expect(screen.getByTestId('business-drawer')).not.toHaveTextContent(/ecommerce|unknown/);
+  });
+
+  it('a country code is a country', () => {
+    inIntl(<BusinessDrawer workspace={ws({ country: 'IL' })} />);
+    expect(screen.getByText('Israel')).toBeInTheDocument();
     expect(screen.getByTestId('business-note')).toHaveAttribute(
       'title',
       expect.stringMatching(/no field/i),
@@ -89,6 +100,23 @@ describe('★ 11c — the week, and what it cannot hold', () => {
       'title',
       expect.stringMatching(/no holiday calendar.*one-off closure/i),
     );
+  });
+
+  it('★ a stored week switched off is SHOWN, under "Use these hours" off', async () => {
+    inIntl(
+      <HoursDrawer
+        workspace={ws({
+          hours: {
+            enabled: false,
+            schedule: { sunday: { enabled: true, open: '09:00', close: '18:00' } },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId('hours-use')).not.toBeChecked();
+    expect(screen.getByTestId('hours-day-sunday')).toHaveAttribute('data-open', 'yes');
+    await userEvent.click(screen.getByTestId('drawer-save-hours'));
+    expect(saveWorkspaceFacts.mock.calls[0]![0].hours).toMatchObject({ enabled: false });
   });
 
   it('copying Sunday saves nothing', async () => {

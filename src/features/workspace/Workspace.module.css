@@ -45,9 +45,11 @@
     color: var(--text-faint);
   }
 
+  /* 02: plain grey "Edit", 11px — a link or a button, never underlined. */
   .edit {
-    font-size: var(--font-size-caption);
+    font-size: var(--font-size-micro);
     color: var(--text-subtle);
+    text-decoration: none;
     background: none;
     border: none;
     padding: 0;
@@ -775,11 +777,27 @@
     background-color: var(--panel-field);
   }
 
+  .weekUse {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  /* Switched off, the week stays visible — quieter, not closed. */
+  .weekRows[data-in-use='no'] {
+    opacity: 0.55;
+  }
+
+  .weekUse:has(input:checked) .weekPill,
   .weekSwitch:has(input:checked) .weekPill,
   .weekPill[data-on='yes'] {
     background-color: var(--action-base);
   }
 
+  .weekUse:has(input:checked) .weekPill::after,
   .weekSwitch:has(input:checked) .weekPill::after,
   .weekPill[data-on='yes']::after {
     inset-inline-start: 16px;
@@ -921,5 +939,72 @@
     background-color: var(--panel-footer);
     font-size: var(--font-size-meta);
     color: var(--text-secondary);
+  }
+}
+
+@layer features {
+  /* 11e on its own row: the row's label, the controls in the value column. */
+  .rowInline {
+    display: grid;
+    grid-template-columns: var(--size-fact-label) minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-20);
+    row-gap: var(--space-6);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+    border-block-start: var(--border-width-thin) solid var(--panel-base);
+    line-height: normal;
+  }
+
+  .inlineControls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .inlineSelect,
+  .inlineCombo {
+    padding-block: 7px;
+    padding-inline: var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .inlineCombo {
+    inline-size: 200px;
+  }
+
+  .inlineSave {
+    padding-block: 7px;
+    padding-inline: var(--space-14);
+    border: none;
+    border-radius: var(--radius-chip);
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    cursor: pointer;
+  }
+
+  .inlineCancel {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .inlineHint {
+    grid-column: 2;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
   }
 }

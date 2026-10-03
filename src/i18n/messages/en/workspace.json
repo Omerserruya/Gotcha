@@ -48,7 +48,8 @@
     "holidays": "Holidays and special days",
     "holidaysAuto": "Add Israeli holidays automatically",
     "addDay": "+ Add a special day",
-    "save": "Save hours"
+    "save": "Save hours",
+    "use": "Use these hours"
   },
   "day": {
     "sunday": "Sunday",
@@ -180,7 +181,17 @@
     "legend": "updates when you scan again. Anything you type yourself stays as it is.",
     "save": "Save changes",
     "title": "Business & website",
-    "line": "Changes reach every channel within a minute."
+    "line": "Changes reach every channel within a minute.",
+    "industryName": {
+      "ecommerce": "E-commerce",
+      "legal": "Legal services",
+      "saas": "Software (SaaS)",
+      "events": "Events and venues",
+      "tourism": "Travel and tourism",
+      "restaurant": "Restaurants",
+      "health": "Health and clinics",
+      "realestate": "Real estate"
+    }
   },
   "hoursDrawer": {
     "title": "Opening hours",
@@ -211,5 +222,9 @@
     "translateHint": "Nothing stores this choice yet.",
     "mine": "Your own interface language is {language} — that one is in your profile.",
     "mineUnknown": "Your own interface language is in your profile."
-  }
+  },
+  "timezone": "Time zone",
+  "typeCity": "Type a city",
+  "currencyHint": "The currency the AI quotes prices in, and the clock opening hours run on.",
+  "zoneUnknown": "Pick a city from the list."
 }

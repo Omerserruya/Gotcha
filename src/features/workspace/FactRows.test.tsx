@@ -175,7 +175,8 @@ describe('★ 11e · the single value edits in place, with the keyboard', () => 
     saveWorkspace.mockResolvedValue({ ok: true, data: {} });
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
-    await userEvent.type(screen.getByDisplayValue('Europe/London'), '{Enter}');
+    // Shown by city, saved as IANA.
+    await userEvent.type(screen.getByTestId('timezone-input'), '{Enter}');
     expect(saveWorkspace).toHaveBeenCalledWith(
       { currency: 'USD', timezone: 'Europe/London' },
       null,
@@ -186,7 +187,7 @@ describe('★ 11e · the single value edits in place, with the keyboard', () => 
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
     expect(screen.getByTestId('fact-save-currencyTimezone')).toBeInTheDocument();
-    await userEvent.type(screen.getByDisplayValue('Europe/London'), '{Escape}');
+    await userEvent.type(screen.getByTestId('timezone-input'), '{Escape}');
     expect(screen.queryByTestId('fact-save-currencyTimezone')).toBeNull();
     expect(saveWorkspace).not.toHaveBeenCalled();
   });
@@ -198,15 +199,40 @@ describe('★ 11e · the time zone picker is searchable', () => {
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
     const list = screen.getByTestId('timezone-options');
     expect(list.querySelectorAll('option').length).toBeGreaterThan(100);
-    expect(list.querySelector('option[value="Asia/Jerusalem"]')).not.toBeNull();
+    expect(list.querySelector('option[value^="Jerusalem (GMT"]')).not.toBeNull();
   });
 
-  it('leaves the field free text, so an unlisted zone can still be saved', async () => {
+  it('shows the city and its offset, never the IANA name', async () => {
     renderRows();
     await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
-    const input = screen.getByDisplayValue('Europe/London');
+    const input = screen.getByTestId('timezone-input') as HTMLInputElement;
+    expect(input.value).toMatch(/^London \(GMT/);
     expect(input).toHaveAttribute('list', 'timezone-options');
-    expect(input.tagName).toBe('INPUT');
+    expect(screen.getByTestId('currency-select')).toHaveDisplayValue('$ USD');
+  });
+
+  it('an IANA name typed as is can still be saved; anything else is not sent', async () => {
+    saveWorkspace.mockResolvedValue({ ok: true, data: {} });
+    renderRows();
+    await userEvent.click(screen.getByTestId('fact-edit-currencyTimezone'));
+    const input = screen.getByTestId('timezone-input');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'somewhere{Enter}');
+    expect(saveWorkspace).not.toHaveBeenCalled();
+    expect(screen.getByTestId('fact-note-currencyTimezone')).toHaveTextContent(/pick a city/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Asia/Jerusalem{Enter}');
+    expect(saveWorkspace).toHaveBeenCalledWith(
+      { currency: 'USD', timezone: 'Asia/Jerusalem' },
+      null,
+    );
+  });
+
+  it('the read row says it the same way', () => {
+    renderRows();
+    expect(screen.getByTestId('fact-value-currencyTimezone')).toHaveTextContent(
+      /^\$ USD · London \(GMT/,
+    );
   });
 });
 
@@ -241,5 +267,22 @@ describe('★ a missing key renders as NOTHING in production, not as a key', () 
   it('and the real catalogue renders the label the guard looks for', () => {
     renderRows();
     expect(screen.getByTestId('fact-language')).toHaveTextContent(/^Language/);
+  });
+});
+
+describe('★ the hours row says "Set" only when there is a week', () => {
+  it('{ enabled: false } with no schedule — dev’s — is "Not set"', () => {
+    renderRows({ hours: { enabled: false } });
+    expect(screen.getByTestId('fact-value-hours')).toHaveTextContent(/not set/i);
+  });
+
+  it('a stored week switched off is "switched off"', () => {
+    renderRows({
+      hours: {
+        enabled: false,
+        schedule: { sunday: { enabled: true, open: '09:00', close: '18:00' } },
+      },
+    });
+    expect(screen.getByTestId('fact-value-hours')).toHaveTextContent(/switched off/i);
   });
 });
