@@ -10,6 +10,7 @@ import {
   resolveAvailability,
 } from '@/api/contracts/capabilities';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
+import { channelName } from '@/api/contracts/inbox';
 import { loadChannels } from '@/features/channels/load-channels';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
 import type { HireTool } from '@/features/employees/hire/hire-plan';
@@ -95,13 +96,15 @@ export default async function Page({
           current: currentChoice(c),
         }))
     : [];
+  // Named as 13 names them — never the enum ("SHOPIFY_LIVE_CHAT").
+  const tch = await getTranslations('channels');
   const hireChannels = [
     ...new Set(
       (channelData?.channels ?? [])
         .filter((c) => c.connectionStatus === 'CONNECTED')
         .map((c) => c.channel),
     ),
-  ];
+  ].map((type) => ({ type, name: channelName(type, tch) ?? tch('name.other') }));
   const step = params.step === '2' ? 2 : params.step === '3' ? 3 : 1;
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
 

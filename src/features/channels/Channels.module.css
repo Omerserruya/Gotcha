@@ -930,19 +930,26 @@
   .timelineStep:not(:last-child)::after {
     content: '';
     position: absolute;
-    inset-block: 18px calc(-1 * var(--space-14));
-    inset-inline-start: 4px;
+    inset-block: 22px calc(-1 * var(--space-14));
+    inset-inline-start: 9px;
     inline-size: 2px;
     background-color: var(--border-default);
   }
 
+  /* The stepper's own marker, 20px: done a green ✓, current a black dot. */
   .timelineDot {
+    display: flex;
     flex: none;
-    inline-size: 10px;
-    block-size: 10px;
-    margin-block-start: 4px;
-    border: 2px solid var(--border-strong);
+    align-items: center;
+    justify-content: center;
+    inline-size: 20px;
+    block-size: 20px;
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-round);
+    background-color: var(--panel-field);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--panel-field);
   }
 
   .timelineStep[data-state='done'] .timelineDot {
@@ -950,8 +957,21 @@
     background-color: var(--signal-done-text);
   }
 
+  .timelineStep[data-state='done'] .timelineDot::before {
+    content: '✓';
+  }
+
   .timelineStep[data-state='active'] .timelineDot {
     border-color: var(--action-base);
+    background-color: var(--action-base);
+  }
+
+  .timelineStep[data-state='active'] .timelineDot::before {
+    content: '';
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: var(--radius-round);
+    background-color: var(--panel-field);
   }
 
   .timelineStep[data-state='failed'] .timelineDot {

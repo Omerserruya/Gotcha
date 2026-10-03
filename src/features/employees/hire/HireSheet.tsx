@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import type { AdminChoice } from '@/api/contracts/capabilities';
@@ -43,16 +43,37 @@ export function HireSheet({
   knowledge,
   initialStep = 1,
 }: {
-  /** The business's connected channels, by type. */
-  readonly channels: readonly string[];
+  /** The business's connected channels: their type and their name, as 13 names them. */
+  readonly channels: readonly { readonly type: string; readonly name: string }[];
   readonly tools: readonly HireTool[];
   /** Knowledge source names, or null when they could not be read. */
   readonly knowledge: readonly string[] | null;
   readonly initialStep?: Step;
 }) {
   const t = useTranslations('employees.hireFlow');
+  const locale = useLocale();
   const [step, setStep] = useState<Step>(initialStep);
-  const [plan, setPlan] = useState<HirePlan>(() => emptyPlan(channels, tools));
+  const [plan, setPlan] = useState<HirePlan>(() =>
+    emptyPlan(
+      channels.map((c) => c.type),
+      tools,
+    ),
+  );
+  const nameOf = (type: string) => channels.find((c) => c.type === type)?.name ?? type;
+  /* From step 2, the head's line is the plan so far: "Sales · WhatsApp and Email". */
+  const summary =
+    plan.job === null
+      ? null
+      : [
+          plan.job === 'custom'
+            ? plan.goal.trim() || t('job.custom.name')
+            : t(`job.${plan.job}.name`),
+          plan.channels.length > 0
+            ? new Intl.ListFormat(locale, { type: 'conjunction' }).format(plan.channels.map(nameOf))
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
 
   const set = (patch: Partial<HirePlan>) => setPlan((p) => ({ ...p, ...patch }));
   const toggle = (list: readonly string[], value: string) =>
@@ -81,7 +102,9 @@ export function HireSheet({
         <header className={styles.head}>
           <div className={styles.titles}>
             <h2 className={styles.title}>{t('title')}</h2>
-            <p className={styles.line}>{t('line')}</p>
+            <p className={styles.line} data-testid="hire-line">
+              {step > 1 && summary ? summary : t('line')}
+            </p>
           </div>
           <ol className={styles.stepper} aria-label={t('steps')}>
             {([1, 2, 3] as const).map((n) => (
@@ -146,16 +169,14 @@ export function HireSheet({
                     ) : (
                       channels.map((channel) => (
                         <button
-                          key={channel}
+                          key={channel.type}
                           type="button"
-                          aria-pressed={plan.channels.includes(channel)}
+                          aria-pressed={plan.channels.includes(channel.type)}
                           className={styles.chip}
-                          data-testid={`hire-channel-${channel}`}
-                          onClick={() => set({ channels: toggle(plan.channels, channel) })}
+                          data-testid={`hire-channel-${channel.type}`}
+                          onClick={() => set({ channels: toggle(plan.channels, channel.type) })}
                         >
-                          {t.has(`channel.${channel}`)
-                            ? t(`channel.${channel}` as 'channel.WHATSAPP')
-                            : channel}
+                          {channel.name}
                         </button>
                       ))
                     )}
@@ -185,8 +206,15 @@ export function HireSheet({
                   </p>
                 ) : (
                   groups.map(([key, list]) =>
-                    list.length > 0 ? (
-                      <section key={key} className={styles.group}>
+                    list.length === 0 ? (
+                      <section key={key} className={styles.group} data-testid={`hire-group-${key}`}>
+                        <h4 className={styles.eyebrow}>{t(`two.group.${key}`)}</h4>
+                        <p className={styles.groupNone} title={t(`two.groupNone.${key}`)}>
+                          —
+                        </p>
+                      </section>
+                    ) : (
+                      <section key={key} className={styles.group} data-testid={`hire-group-${key}`}>
                         <h4 className={styles.eyebrow}>{t(`two.group.${key}`)}</h4>
                         <ul className={styles.rows}>
                           {list.map((tool) => (
@@ -227,7 +255,7 @@ export function HireSheet({
                           ))}
                         </ul>
                       </section>
-                    ) : null,
+                    ),
                   )
                 )}
                 <section className={styles.handover}>
@@ -369,6 +397,7 @@ export function HireSheet({
                 </p>
               </>
             )}
+            <p className={styles.sideNext}>{t(`side.next.${step}`)}</p>
           </aside>
         </div>
       </section>

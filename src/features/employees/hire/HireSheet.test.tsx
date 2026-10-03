@@ -36,7 +36,10 @@ const sheet = (props: Partial<Parameters<typeof HireSheet>[0]> = {}) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ employees }}>
       <HireSheet
-        channels={['WHATSAPP', 'EMAIL']}
+        channels={[
+          { type: 'WHATSAPP', name: 'WhatsApp' },
+          { type: 'SHOPIFY_LIVE_CHAT', name: 'Shopify live chat' },
+        ]}
         tools={TOOLS}
         knowledge={['Returns policy']}
         {...props}
@@ -108,5 +111,37 @@ describe('★ 07d — the report’s shape, and nothing created', () => {
     sheet({ initialStep: 3 });
     await userEvent.click(screen.getByTestId('hire-back'));
     expect(screen.getByTestId('hire-sheet')).toHaveAttribute('data-step', '2');
+  });
+});
+
+describe('★ 07b–07d corrections (measurement of aca09ea)', () => {
+  it('a channel by its name, never its enum', () => {
+    sheet();
+    expect(screen.getByTestId('hire-channel-SHOPIFY_LIVE_CHAT')).toHaveTextContent(
+      'Shopify live chat',
+    );
+  });
+
+  it('from step 2, the head’s line is the plan so far', async () => {
+    sheet();
+    expect(screen.getByTestId('hire-line')).toHaveTextContent('You can change any of this later');
+    await userEvent.click(screen.getByTestId('hire-job-sales'));
+    await userEvent.click(screen.getByTestId('hire-continue'));
+    expect(screen.getByTestId('hire-line')).toHaveTextContent(
+      'Sales · WhatsApp and Shopify live chat',
+    );
+  });
+
+  it('an empty group is drawn with "—" and why, never left out', () => {
+    sheet({
+      initialStep: 2,
+      tools: [TOOLS[1]!],
+    });
+    const group = screen.getByTestId('hire-group-answering');
+    expect(group).toHaveTextContent('—');
+    expect(group.querySelector('p')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/changes something/),
+    );
   });
 });

@@ -208,7 +208,11 @@
         "vip": "a VIP writes",
         "askedTwice": "someone asks twice about the same thing"
       },
-      "addAnother": "add another"
+      "addAnother": "add another",
+      "groupNone": {
+        "answering": "Everything this employee can do today changes something.",
+        "commitments": "Nothing this employee can do today changes orders or money."
+      }
     },
     "three": {
       "title": "See it answer eight real ones",
@@ -232,7 +236,12 @@
       "cost": "What these limits cost you",
       "costNone": "Nothing estimates approvals per day yet.",
       "costLabel": "approvals a day",
-      "soFar": "So far"
+      "soFar": "So far",
+      "next": {
+        "1": "Next: how much it may decide alone, and when it should hand over.",
+        "2": "Next: you see it answer before anything is created.",
+        "3": "Hiring from here comes next — nothing is created until it does."
+      }
     },
     "continue": "Continue",
     "cancel": "Cancel",
