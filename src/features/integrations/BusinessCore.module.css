@@ -35,48 +35,137 @@
     color: var(--text-subtle);
   }
 
-  .useCases {
-    list-style: none;
-    margin: var(--space-8) 0 0;
-    padding: 0;
+  /* 02's header row: "Your business runs on" and a segmented control. */
+  .useCaseRow {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-8);
+    align-items: center;
+    gap: var(--space-12);
+    line-height: normal;
+  }
+
+  .useCaseLabel {
+    margin: 0;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-subtle);
+  }
+
+  .useCaseNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* `#F5F2EC`, radius 9, `padding:3px`, gap 2; the chosen one dark. */
+  .useCases {
+    display: flex;
+    gap: 2px;
+    margin: 0;
+    padding: 3px;
+    border-radius: var(--radius-item);
+    background-color: var(--table-head-surface);
+    list-style: none;
   }
 
   .useCase {
-    font-size: var(--font-size-meta);
+    padding: var(--space-6) 11px;
+    border-radius: 7px;
+    font-size: var(--font-size-label);
     color: var(--text-body);
-    background-color: var(--panel-inset);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-control);
-    padding-block: var(--space-8);
-    padding-inline: var(--space-14);
   }
 
   .useCase[data-selected='true'] {
-    color: var(--intent-calm-text);
-    background-color: var(--intent-calm-surface);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  /* The parts as one white card, grouped. */
+  .table {
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  /* A group's head: `#F5F2EC`, `padding:6px 16px` — a mono name and a note. */
+  .groupHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+    margin: 0;
+    padding: var(--space-6) var(--space-16);
+    background-color: var(--table-head-surface);
+  }
+
+  .groupName {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .groupNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .partMain {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+    min-inline-size: 0;
+  }
+
+  .partControl {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--space-4);
+    inline-size: 240px;
+  }
+
+  /* The state chip: radius 6, `padding:3px 8px`, 11px. */
+  .chip {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    font-size: var(--font-size-micro);
+    white-space: nowrap;
+  }
+
+  .chip[data-tone='good'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .chip[data-tone='warn'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .chip[data-tone='quiet'] {
+    background-color: var(--panel-well);
+    color: var(--text-body);
   }
 
   .parts {
-    list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-10);
+    list-style: none;
   }
 
+  /* A part, as a row: `padding:6px 16px`, gap 16 — what it is, who serves it, its state. */
   .part {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-    padding-block: var(--space-12);
-    padding-inline: var(--space-16);
+    align-items: center;
+    gap: var(--space-16);
+    padding: var(--space-8) var(--space-16);
+    border-block-end: 1px solid var(--border-subtle);
   }
 
   .partName {
@@ -130,10 +219,16 @@
 
   /* ── 14e · what is written back, and what is not a setting ───────────── */
 
+  /* ACROSS BOTH: what runs over both — the write-back facts. */
   .writeback {
-    margin-block-start: var(--space-24);
-    border-block-start: 1px solid var(--border-subtle);
-    padding-block-start: var(--space-16);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding-block-end: var(--space-12);
+  }
+
+  .writeback > :not(.groupHead) {
+    margin-inline: var(--space-16);
   }
 
   /*

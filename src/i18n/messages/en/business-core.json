@@ -3,10 +3,10 @@
   "description": "What GOTCHA is allowed to look at, and which system it asks.",
   "unavailable": "We could not read your business core just now.",
   "useCase": {
-    "heading": "What does your business do?",
+    "heading": "Your business runs on",
     "hint": "This decides which parts GOTCHA asks you about. A leads business is never asked about shipping or returns.",
-    "ecommerce": "Sell online",
-    "leads": "Take enquiries and leads",
+    "ecommerce": "Online store",
+    "leads": "Leads & sales",
     "both": "Both",
     "unset": "Choose one to see the parts that apply to you."
   },
@@ -61,5 +61,20 @@
   },
   "returns": {
     "elsewhere": "Returns are chosen on their own switch, not here — an explicit choice there wins over whatever GOTCHA would otherwise fall back to."
+  },
+  "group": {
+    "store": "Online store",
+    "storeNote": "where orders and products come from",
+    "leads": "Leads & sales",
+    "leadsNote": "enquiries, deals and contacts",
+    "both": "Across both"
+  },
+  "chip": {
+    "chosen": "Working",
+    "inferred": "Fallback",
+    "connected_none_chosen": "Choose one",
+    "connected_but_failing": "Needs fixing",
+    "nothing_connected": "Not connected",
+    "impossible": "Not available"
   }
 }
