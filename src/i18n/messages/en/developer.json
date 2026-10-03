@@ -1,0 +1,16 @@
+{
+  "keys": {
+    "title": "API keys",
+    "new": "New key",
+    "none": "GOTCHA has no API keys yet — nothing issues or checks one."
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "add": "Add endpoint",
+    "none": "GOTCHA doesn't call out to endpoints yet. Incoming triggers for automations are set up on the automation."
+  },
+  "access": {
+    "title": "Access for someone outside your team",
+    "none": "There is no API-only access yet: everyone invited joins as a member of the team."
+  }
+}

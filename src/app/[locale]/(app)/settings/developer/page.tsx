@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
+import { DeveloperScreen } from '@/features/developer/DeveloperScreen';
 import { pageMetadata } from '@/shell/page-metadata';
 import styles from '@/shell/SettingsSection.module.css';
 import { SettingsSection } from '@/shell/SettingsSection';
@@ -29,7 +30,9 @@ export default async function Page() {
           {t('settingsDocs')}
         </span>
       }
-    />
+    >
+      <DeveloperScreen />
+    </SettingsSection>
   );
 }
 
