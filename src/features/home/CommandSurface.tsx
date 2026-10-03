@@ -25,13 +25,16 @@ import { useAgentRun, type AgentStep } from './use-agent-run';
 export function CommandSurface({
   tone = 'busy',
   openQuestions = null,
+  initial = '',
 }: {
+  /** 19's ASK: the question, put in the box — never sent on its own. */
+  initial?: string;
   tone?: 'busy' | 'quiet' | 'dayOne';
   /** 01b: questions GOTCHA could not answer, for "Answer the 4 open questions". */
   openQuestions?: number | null;
 }) {
   const t = useTranslations('home.command');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(initial);
   const { state, run, cancel } = useAgentRun();
 
   const isRunning = state.status === 'running';

@@ -7,6 +7,7 @@ import { Link } from '@/i18n/navigation';
 import styles from './AppShell.module.css';
 import { AccountControl } from './AccountControl';
 import { CommandHint } from './CommandHint';
+import { CommandPalette } from './CommandPalette';
 import { PrimaryNavigation, SettingsNavigation } from './PrimaryNavigation';
 
 /**
@@ -52,6 +53,9 @@ export async function AppShell({ children }: { children: ReactNode }) {
           <AccountControl />
         </div>
       </div>
+
+      {/* 19: ⌘K from every screen, inside a sheet too. */}
+      <CommandPalette />
 
       <div className={styles.surface}>
         {/* `tabIndex={-1}` so the skip link can actually move focus here. */}

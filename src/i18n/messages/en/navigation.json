@@ -76,5 +76,22 @@
     "calls": "Calls"
   },
   "settingsDocs": "Read the docs ↗",
-  "settingsDocsNone": "No developer documentation is published yet."
+  "settingsDocsNone": "No developer documentation is published yet.",
+  "palette": {
+    "close": "Close",
+    "esc": "ESC to close",
+    "group": {
+      "do": "Do this",
+      "go": "Go to",
+      "ask": "Ask"
+    },
+    "doNone": "Nothing turns a sentence into an action yet.",
+    "someone": "Someone",
+    "conversation": "conversation",
+    "ask": "Ask GOTCHA: “{question}”",
+    "askMeta": "on Home",
+    "searchFailed": "Conversations couldn't be searched just now.",
+    "keys": "↑↓ move · ↵ open · esc close",
+    "everywhere": "Works from every screen"
+  }
 }

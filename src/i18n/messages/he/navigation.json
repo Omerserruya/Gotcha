@@ -76,5 +76,22 @@
     "calls": "שיחות"
   },
   "settingsDocs": "לקריאת התיעוד ↗",
-  "settingsDocsNone": "עדיין לא פורסם תיעוד למפתחים."
+  "settingsDocsNone": "עדיין לא פורסם תיעוד למפתחים.",
+  "palette": {
+    "close": "סגירה",
+    "esc": "ESC לסגירה",
+    "group": {
+      "do": "לעשות",
+      "go": "לעבור אל",
+      "ask": "לשאול"
+    },
+    "doNone": "עדיין אין המרה של משפט לפעולה.",
+    "someone": "מישהו",
+    "conversation": "שיחה",
+    "ask": "לשאול את GOTCHA: “{question}”",
+    "askMeta": "בדף הבית",
+    "searchFailed": "לא הצלחנו לחפש שיחות כרגע.",
+    "keys": "↑↓ מעבר · ↵ פתיחה · esc סגירה",
+    "everywhere": "עובד מכל מסך"
+  }
 }

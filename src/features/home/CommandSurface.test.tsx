@@ -70,3 +70,11 @@ describe('★ 01c — day-one chips', () => {
     ]);
   });
 });
+
+describe('★ 19 — ASK fills the box, and never sends', () => {
+  it('the question is in the box; nothing ran', () => {
+    box({ tone: 'busy', initial: 'How many refunds?' });
+    expect(screen.getByRole('textbox')).toHaveValue('How many refunds?');
+    // The run mock throws if called: reaching here means nothing was sent.
+  });
+});

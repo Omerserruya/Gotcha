@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { HomeScreen } from '@/features/home/HomeScreen';
 import { NotificationsPanel } from '@/features/notifications/NotificationsPanel';
 
 vi.mock('@/features/home/HomeScreen', () => ({ HomeScreen: () => null }));
@@ -48,5 +49,17 @@ describe('★ 01d — the panel over Home, by query', () => {
       find<{ kind: unknown }>(await page({ notifications: '1', kind: 'x' }), NotificationsPanel)
         ?.kind,
     ).toBeNull();
+  });
+});
+
+describe('★ 19 — ?ask= reaches the command box, capped', () => {
+  it('passes the question; absent is empty', async () => {
+    expect(find<{ ask: string }>(await page({ ask: 'refunds?' }), HomeScreen)?.ask).toBe(
+      'refunds?',
+    );
+    expect(find<{ ask: string }>(await page(), HomeScreen)?.ask).toBe('');
+    expect(
+      find<{ ask: string }>(await page({ ask: 'x'.repeat(900) }), HomeScreen)?.ask,
+    ).toHaveLength(500);
   });
 });

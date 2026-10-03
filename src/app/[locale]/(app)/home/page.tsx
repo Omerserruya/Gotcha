@@ -10,12 +10,14 @@ export default async function Page({
     /** 01d: the notifications panel over Home, and its filter. */
     readonly notifications?: string;
     readonly kind?: string;
+    /** 19's ASK: fills the command box. */
+    readonly ask?: string;
   }>;
 } = {}) {
   const params = (await searchParams) ?? {};
   return (
     <>
-      <HomeScreen />
+      <HomeScreen ask={(params.ask ?? '').slice(0, 500)} />
       {params.notifications === '1' ? (
         <NotificationsPanel kind={isKind(params.kind) ? params.kind : null} />
       ) : null}

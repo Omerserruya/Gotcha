@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useSyncExternalStore } from 'react';
 
 import styles from './AppShell.module.css';
+import { OPEN_COMMAND_PALETTE } from './CommandPalette';
 
 /**
  * The platform's command modifier, as an external store.
@@ -31,7 +32,12 @@ export function CommandHint() {
   const modifier = useSyncExternalStore(noopSubscribe, clientModifier, serverModifier);
 
   return (
-    <button type="button" className={styles.commandHint}>
+    <button
+      type="button"
+      className={styles.commandHint}
+      data-testid="command-hint"
+      onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_PALETTE))}
+    >
       <kbd className={styles.commandKey}>{modifier}</kbd>
       <span className={styles.commandHintLabel}>{t('commandPalette')}</span>
     </button>

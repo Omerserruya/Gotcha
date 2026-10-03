@@ -33,7 +33,7 @@ import { WorthKnowing } from './WorthKnowing';
  * such rather than omitted or filled with plausible figures: the ranked queue,
  * GOTCHA's activity stream, and three of the four quiet-day cards.
  */
-export async function HomeScreen() {
+export async function HomeScreen({ ask = '' }: { readonly ask?: string } = {}) {
   const t = await getTranslations('home');
   const format = await getFormatter();
   const {
@@ -125,6 +125,7 @@ export async function HomeScreen() {
           to do the work nobody schedules. */}
       <CommandSurface
         tone={isDayOne ? 'dayOne' : isQuiet ? 'quiet' : 'busy'}
+        initial={ask}
         openQuestions={
           /*
             Counted only from a COMPLETE list: the read is capped at
