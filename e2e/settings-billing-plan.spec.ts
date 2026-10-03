@@ -31,7 +31,7 @@ import { shoot as captureScreen } from './shoot';
  * pending change on this database, so `pricing-pending` will not render, and
  * asserting its absence would prove nothing — it is absent on a blank page
  * too. The typed sentences (DOWNGRADE vs CANCEL), the applied-change guard
- * and the year are asserted in `Pricing.test.tsx` and `PlanLine.test.tsx`
+ * and the year are asserted in `Pricing.test.tsx` and `Overview.test.tsx`
  * instead, where the branch can actually be reached.
  *
  * **What CAN be photographed is the more useful half anyway:** this tenant has
@@ -93,9 +93,9 @@ async function openPlan(page: Page, locale: 'en' | 'he') {
     'no page heading — is the app serving on this origin?',
   ).toBeVisible({ timeout: 15_000 });
 
-  await expect(page.getByTestId('section-plan'), missingIds('an id this screen emits')).toBeVisible(
-    { timeout: 15_000 },
-  );
+  await expect(page.getByTestId('plan-cards'), missingIds('an id this screen emits')).toBeVisible({
+    timeout: 15_000,
+  });
 
   return page;
 }
@@ -157,10 +157,10 @@ for (const size of SIZES) {
 
       await openPlan(page, 'en');
 
-      const plan = page.getByTestId('plan-line');
+      // Yours is the dark card, by its NAME — `ai_voice` reached a shot once.
+      const plan = page.locator('[data-kind="current"]');
       await expect(plan).toBeVisible();
-      // A NAME, never a key. `ai_voice` reached a screenshot once already.
-      await expect(page.getByTestId('plan-name')).not.toHaveText(/^[a-z][a-z0-9]*_[a-z0-9_]+$/);
+      await expect(plan).not.toHaveText(/\bai_voice\b/);
       await expect(plan).toHaveText(/\$|US\$/);
       await expect(plan).not.toHaveText(/₪/);
 
@@ -247,26 +247,19 @@ for (const size of SIZES) {
      * Asserted by CONTENT on every tile, not by counting them — a count would
      * pass on four tiles that all said nothing.
      */
-    test('4 · every package says what happens to the credits', async ({ page }) => {
+    test('4 · picking a cheaper plan says nothing is charged now', async ({ page }) => {
       if (onlyOneProject()) return;
 
-      await openPlan(page, 'en');
+      // Picking is a link (`?plan=`); nothing is written by choosing.
+      await page.goto('/en/settings/billing/plan?plan=foundation');
 
-      const packages = page.getByTestId('package');
-      const count = await packages.count();
-      expect(count, 'no packages rendered — the plan is credit_packages_eligible').toBeGreaterThan(
-        0,
-      );
+      const summary = page.getByTestId('switch-summary');
+      await expect(summary).toHaveAttribute('data-direction', 'down');
+      await expect(page.getByTestId('switch-charged')).toContainText('Nothing');
+      // And the switch is drawn, and not live.
+      await expect(page.getByTestId('switch-button')).toHaveAttribute('aria-disabled', 'true');
 
-      for (let i = 0; i < count; i += 1) {
-        await expect(packages.nth(i).getByTestId('package-expiry')).toHaveText(/expire/i);
-      }
-
-      // And an empty shelf must never be blamed on their plan. This tenant is
-      // eligible, so the ineligible sentence must not be the one showing.
-      await expect(page.getByTestId('packages-ineligible')).toHaveCount(0);
-
-      await shoot(page, `${size.name}-4-packages`);
+      await shoot(page, `${size.name}-4-picked`);
     });
 
     /*

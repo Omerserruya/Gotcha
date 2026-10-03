@@ -6,6 +6,8 @@ import {
   packagesResponseSchema,
   type CurrencyBlock,
   type PackagesResponse,
+  catalogPlans,
+  type CatalogPlan,
 } from '@/api/contracts/pricing';
 import { paymentMethodListSchema, type PaymentMethod } from '@/api/contracts/billing-profile';
 import { billingEndpoints } from '@/api/endpoints/registry';
@@ -27,6 +29,8 @@ import { z } from 'zod';
 
 /** `/billing/pricing` — the catalogue plus the currency and FX attribution. */
 const pricingResponseSchema = z.object({
+  /** 17b's cards. Read plan by plan in `catalogPlans`. */
+  plans: z.unknown().default([]),
   currency: currencyBlockSchema,
   currentPlanKey: z.string().nullable().default(null),
   tax: z
@@ -57,6 +61,8 @@ export interface PricingData {
   readonly packages: PackagesResponse | null;
   /** How many cards are on file. Zero means an upgrade will be declined. */
   readonly paymentMethods: readonly PaymentMethod[] | null;
+  /** The catalog, `[]` when the read failed or held nothing readable. */
+  readonly catalog: readonly CatalogPlan[];
 }
 
 export async function loadPricing(): Promise<PricingData> {
@@ -113,5 +119,6 @@ export async function loadPricing(): Promise<PricingData> {
     disclaimer: pricing?.disclaimer ?? null,
     packages,
     paymentMethods,
+    catalog: catalogPlans(pricing?.plans),
   };
 }

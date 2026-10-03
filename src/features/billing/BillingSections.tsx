@@ -1,7 +1,5 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
-import { planNameFor, type Plan, type Subscription } from '@/api/contracts/billing';
-
 import {
   failedInvoices,
   receiptAbsence,
@@ -10,112 +8,7 @@ import {
   type Invoice,
 } from '@/api/contracts/invoices';
 
-import { isStillPending } from '@/api/contracts/pricing';
-import { Link } from '@/i18n/navigation';
-
 import styles from './Billing.module.css';
-
-/**
- * The plan, its price, and when it renews.
- *
- * **The currency is whatever the subscription carries** — the demo tenant is
- * charged `$1,499.00 USD`, not the design's `₪1,290`. That number is a mockup,
- * and converting it or showing a symbol the row does not have would put a
- * price in front of somebody that nobody agreed to.
- *
- * `cancelAtPeriodEnd` and a scheduled `pendingChange` are both rendered,
- * because "renews on the 8th" and "ends on the 8th" are opposite facts that
- * would otherwise look identical.
- */
-export async function PlanLine({
-  subscription,
-  plans,
-}: {
-  readonly subscription: Subscription | null;
-  readonly plans: readonly Plan[];
-}) {
-  const t = await getTranslations('billing');
-  const locale = await getLocale();
-
-  if (!subscription) {
-    return (
-      <p className={styles.unavailable} data-testid="plan-unavailable">
-        {t('plan.unavailable')}
-      </p>
-    );
-  }
-
-  const day = new Intl.DateTimeFormat(locale, { dateStyle: 'long' });
-  const price =
-    subscription.snapshotPrice != null && subscription.snapshotCurrency
-      ? new Intl.NumberFormat(locale, {
-          style: 'currency',
-          currency: subscription.snapshotCurrency,
-          maximumFractionDigits: 0,
-        }).format(Number(subscription.snapshotPrice))
-      : null;
-
-  return (
-    <div className={styles.plan} data-testid="plan">
-      <p className={styles.planLine} data-testid="plan-line">
-        {/*
-          The plan's NAME, not its key. `ai_voice` is a machine identifier and
-          the most prominent line on a billing screen is the worst place for
-          one — the same class of error as rendering a cuid as an object name.
-          It is also translatable, which a key can never be.
-
-          Falls back to the key only when the plan is not in the list at all:
-          an unrecognised plan is still the one they are paying for, and a
-          blank where the plan name belongs would be worse.
-        */}
-        <span className={styles.planName} data-testid="plan-name">
-          {planNameFor(plans, subscription.planKey, locale) ?? subscription.planKey}
-        </span>
-        {price ? <span className={styles.planPrice}>{price}</span> : null}
-        {subscription.currentPeriodEnd ? (
-          <span className={styles.planRenews}>
-            {/*
-              Ending and renewing are opposite facts about the same date, and
-              a line that says only "12 September" tells you neither.
-            */}
-            {subscription.cancelAtPeriodEnd
-              ? t('plan.endsOn', { date: day.format(new Date(subscription.currentPeriodEnd)) })
-              : t('plan.renewsOn', { date: day.format(new Date(subscription.currentPeriodEnd)) })}
-          </span>
-        ) : null}
-      </p>
-
-      {/*
-        `isStillPending`, not a truthiness check on the object.
-
-        The scheduler MARKS `appliedAt` and never deletes the row
-        (`subscription.service.ts:524`), and `getSubscriptionForTenant` loads
-        the relation unconditionally — so a change applied a year ago arrives
-        on every response looking exactly like one that has not happened.
-
-        This line used to read `pendingChange?.targetPlanKey`, which would
-        have gone on saying "Changes to Foundation at renewal" every day after
-        it already changed to Foundation. Found while reading the same table
-        for 17b; nothing on this screen could have surfaced it, because the
-        field it turns on was not in our contract.
-      */}
-      {isStillPending(subscription.pendingChange) && subscription.pendingChange?.targetPlanKey ? (
-        <p className={styles.planNote} data-testid="plan-pending">
-          {t('plan.changesAtRenewal', {
-            // The scheduled plan gets the same treatment as the current one.
-            plan:
-              planNameFor(plans, subscription.pendingChange.targetPlanKey, locale) ??
-              subscription.pendingChange.targetPlanKey,
-          })}
-        </p>
-      ) : null}
-      {/* 02's "Change plan" (17b), beside what you are on. */}
-      <Link href="/settings/billing/plan" className={styles.planChange} data-testid="plan-change">
-        {t('plan.change')}
-      </Link>
-    </div>
-  );
-}
 
 /**
  * Invoices.

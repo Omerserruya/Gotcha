@@ -409,3 +409,51 @@ export function upgradeWillBeDeclined(paymentMethodCount: number): boolean {
 export function creditsGrantedOnUpgrade(targetIncluded: number, currentAllowance: number): number {
   return Math.max(0, targetIncluded - currentAllowance);
 }
+
+/**
+ * One plan of `GET /billing/pricing`'s `plans` — the catalog 17b's cards are
+ * drawn from: the public plans plus any custom one negotiated for this
+ * tenant, each with its price, its credits, its features and the
+ * conversations its credits come to.
+ *
+ * Read per plan (`catalogPlans`), so one plan the contract cannot read costs
+ * that card, not the screen.
+ */
+export const catalogPlanSchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  nameHe: z.string().nullable().default(null),
+  billingInterval: z.string().nullable().default(null),
+  salesOnly: z.boolean().default(false),
+  basePrice: z
+    .object({
+      display: z.object({ amount: z.string(), currency: z.string() }),
+    })
+    .nullable()
+    .default(null),
+  includedCredits: z.number().default(0),
+  features: z
+    .array(
+      z.object({
+        key: z.string(),
+        nameEn: z.string(),
+        nameHe: z.string().nullable().default(null),
+        included: z.boolean().default(false),
+      }),
+    )
+    .default([]),
+  estimate: z
+    .object({ chat: z.object({ monthly: z.number().nullable().default(null) }).nullable() })
+    .nullable()
+    .default(null),
+});
+
+export type CatalogPlan = z.infer<typeof catalogPlanSchema>;
+
+export function catalogPlans(raw: unknown): CatalogPlan[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((p) => {
+    const parsed = catalogPlanSchema.safeParse(p);
+    return parsed.success ? [parsed.data] : [];
+  });
+}

@@ -1166,3 +1166,257 @@
     }
   }
 }
+
+@layer features {
+  /* ── 17b · the plans, side by side (gap 14), 18 × 18 × 16, radius 16 ── */
+  .choiceCards {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: var(--space-14);
+    margin: 0;
+    padding: 0;
+    padding-block-start: var(--space-10);
+    list-style: none;
+    line-height: normal;
+  }
+
+  .choiceItem {
+    display: flex;
+  }
+
+  .choiceCard {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding: var(--space-18) var(--space-18) var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 16px;
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .choiceCard[data-kind='current'] {
+    border-color: transparent;
+    background-color: var(--frame-raised);
+    color: var(--frame-text);
+  }
+
+  .choiceCard[data-kind='selected'] {
+    border: 2px solid var(--action-base);
+  }
+
+  .choiceTagMine,
+  .choiceTagSelected {
+    position: absolute;
+    inset-block-start: -10px;
+    inset-inline-start: var(--space-16);
+    padding-block: var(--space-4);
+    padding-inline: 7px;
+    border-radius: 5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+  }
+
+  .choiceTagMine {
+    background-color: var(--signal-ai);
+    color: var(--text-primary);
+  }
+
+  .choiceTagSelected {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .choiceNameRow,
+  .choicePriceRow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+  }
+
+  .choicePriceRow {
+    gap: 0;
+  }
+
+  .choiceRadio {
+    flex: none;
+    align-self: center;
+    inline-size: 18px;
+    block-size: 18px;
+    border: var(--border-width-thin) solid var(--border-strong);
+    border-radius: var(--radius-round);
+  }
+
+  .choiceCard[data-kind='selected'] .choiceRadio {
+    border: 5px solid var(--action-base);
+  }
+
+  .choiceName {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .choicePrice {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .choicePer {
+    margin-inline-start: var(--space-2);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .choiceCard[data-kind='current'] .choicePer {
+    color: var(--frame-text-secondary);
+  }
+
+  .choiceCredits {
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+  }
+
+  .choiceFeatures {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .choiceFeature {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .choiceCard[data-kind='current'] .choiceFeature {
+    color: var(--frame-text-body);
+  }
+
+  .choiceNone {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-faint);
+  }
+
+  /* What switching would do (582) beside the button column (300). */
+  .switchRow {
+    display: grid;
+    grid-template-columns: minmax(0, 582fr) minmax(0, 300fr);
+    gap: var(--space-14);
+    align-items: start;
+    line-height: normal;
+  }
+
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-18);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .summaryTitle {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .summaryNone {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .summaryRow {
+    display: flex;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
+
+  .summaryLabel {
+    flex: none;
+    inline-size: 130px;
+    color: var(--text-subtle);
+  }
+
+  .summaryValue {
+    flex: none;
+    inline-size: 110px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .summaryNote {
+    color: var(--text-muted);
+  }
+
+  .switchSide {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .switchActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .switchButton {
+    display: flex;
+    justify-content: center;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-18);
+    border-radius: 10px;
+    background-color: var(--action-base);
+    color: var(--action-text);
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    cursor: default;
+  }
+
+  .switchKeep {
+    align-self: center;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .switchFine {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: 1.5;
+    color: var(--text-subtle);
+  }
+
+  .switchNotes {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  @media (width <= 900px) {
+    .choiceCards {
+      grid-auto-flow: row;
+    }
+
+    .switchRow {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

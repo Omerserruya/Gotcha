@@ -6,8 +6,8 @@ import { serverApi } from '@/api/client/server-api';
 import styles from '@/features/billing/Billing.module.css';
 import { ChangePlanGate } from '@/features/billing/ChangePlanGate';
 import { loadPricing } from '@/features/billing/load-pricing';
-import { CreditPackagesSection, CurrentPlanSection } from '@/features/billing/Pricing';
-import { PlanLine } from '@/features/billing/BillingSections';
+import { PlanCards, SwitchActions, SwitchSummary } from '@/features/billing/PlanChoice';
+import { CurrentPlanSection } from '@/features/billing/Pricing';
 import { logger } from '@/observability/logger';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
@@ -24,10 +24,15 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * subscription. So the screen leads with the date rather than with a control,
  * and states the service's own guarantee that nothing moves until then.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly plan?: string }>;
+}) {
   const t = await getTranslations('billing.pricing');
   const nav = await getTranslations('navigation');
-  const { subscription, currency, tax, disclaimer, packages, paymentMethods } = await loadPricing();
+  const picked = (await searchParams)?.plan ?? null;
+  const { subscription, currency, tax, disclaimer, paymentMethods, catalog } = await loadPricing();
 
   const plans = await serverApi()
     .get({ endpoint: billingEndpoints.plans(), payload: plansResponseSchema, raw: true })
@@ -38,48 +43,52 @@ export default async function Page() {
       return [];
     });
 
+  const currentKey = subscription?.planKey ?? null;
+  const current = catalog.find((p) => p.key === currentKey) ?? null;
+  // Only a plan on offer, and not the one you are on, can be picked.
+  const target =
+    picked && picked !== currentKey ? (catalog.find((p) => p.key === picked) ?? null) : null;
+
+  /*
+    17b, measured: the plans side by side, then what switching would do
+    beside the button that does it. The notes that used to be the screen —
+    the deferred date, "replaceable, never clearable", tax, currency, a
+    scheduled change — are its fine print now, under the button.
+  */
   return (
     <SettingsSection
       title={t('title')}
-      description={t('description')}
       // 17b: a sub-page of Usage & billing, "← Usage & billing" above the title.
       back={{ href: '/settings/billing', label: nav('settings.billing') }}
     >
-      <section className={styles.section} data-testid="section-plan">
-        <h2 className={styles.sectionHeading}>{t('heading.current')}</h2>
-        <PlanLine subscription={subscription} plans={plans} />
-        <CurrentPlanSection
-          subscription={subscription}
-          plans={plans}
-          currency={currency}
-          tax={tax}
-          disclaimer={disclaimer}
-        />
-      </section>
+      <PlanCards catalog={catalog} currentKey={currentKey} selectedKey={target?.key ?? null} />
 
-      <section className={styles.section} data-testid="section-change">
-        <h2 className={styles.sectionHeading}>{t('heading.change')}</h2>
-        <ChangePlanGate
-          /*
-           * The date a change WOULD take effect is the period end — the same
-           * value `changePlan` writes as `effectiveAt`. When one is already
-           * scheduled its own date is shown above; this is the date a NEW one
-           * would land on.
-           */
-          effectiveAt={subscription?.currentPeriodEnd ?? null}
-          /*
-           * Null means the read failed, not that there is no card. Treating
-           * an unknown as "no payment method" would tell somebody with a
-           * valid card that their upgrade will be declined.
-           */
-          hasPaymentMethod={paymentMethods === null || paymentMethods.length > 0}
-        />
-      </section>
-
-      <section className={styles.section} data-testid="section-packages">
-        <h2 className={styles.sectionHeading}>{t('heading.packages')}</h2>
-        <CreditPackagesSection packages={packages} />
-      </section>
+      <div className={styles.switchRow}>
+        <SwitchSummary target={target} current={current} subscription={subscription} />
+        <div className={styles.switchSide}>
+          <SwitchActions target={target} current={current} methods={paymentMethods} />
+          <div className={styles.switchNotes}>
+            <CurrentPlanSection
+              subscription={subscription}
+              plans={plans}
+              currency={currency}
+              tax={tax}
+              disclaimer={disclaimer}
+            />
+            <ChangePlanGate
+              /*
+               * The date a change WOULD take effect is the period end — the
+               * same value `changePlan` writes as `effectiveAt`.
+               */
+              effectiveAt={subscription?.currentPeriodEnd ?? null}
+              /*
+               * Null means the read failed, not that there is no card.
+               */
+              hasPaymentMethod={paymentMethods === null || paymentMethods.length > 0}
+            />
+          </div>
+        </div>
+      </div>
     </SettingsSection>
   );
 }

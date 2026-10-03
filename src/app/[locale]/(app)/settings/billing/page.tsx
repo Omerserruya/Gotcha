@@ -8,6 +8,7 @@ import { BuyCredits } from '@/features/billing/BuyCredits';
 import { CreditsSection } from '@/features/billing/Credits';
 import { BillingOverlay } from '@/features/billing/BillingOverlay';
 import { loadBilling } from '@/features/billing/load-billing';
+import { CreditPackagesSection } from '@/features/billing/Pricing';
 import {
   BillingCard,
   CreditsWent,
@@ -88,6 +89,13 @@ export default async function Page({
             billable={profileReading(profile) !== 'no_account'}
             hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
           />
+          {/*
+            Nothing to buy says why — the plan cannot, the shelf is empty, or
+            we could not find out — rather than leaving the dialog blank.
+          */}
+          {!packages || packages.packages.length === 0 ? (
+            <CreditPackagesSection packages={packages} />
+          ) : null}
         </BillingOverlay>
       ) : panel === 'low' ? (
         <BillingOverlay kind="drawer" title={t('overview.overlay.low')}>

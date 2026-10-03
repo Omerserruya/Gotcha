@@ -190,3 +190,35 @@ describe('★ 17 — the Billing card', () => {
     expect(screen.getByTestId('billing-row-invoices')).toHaveTextContent('None yet');
   });
 });
+
+describe('★ 17 — a change already applied is not announced (ported from PlanLine)', () => {
+  const SCHEDULED = {
+    changeType: 'DOWNGRADE',
+    targetPlanKey: 'foundation',
+    effectiveAt: '2027-09-08T14:19:24.353Z',
+    appliedAt: null,
+  };
+  const hero = async (pendingChange: unknown) =>
+    render(
+      await PlanHero({
+        subscription: sub({ pendingChange }),
+        plans: [
+          { key: 'ai_voice', name: 'AI Voice' },
+          { key: 'foundation', name: 'Foundation' },
+        ],
+        credits: null,
+      }),
+    );
+
+  it('announces one still coming, by the plan’s name', async () => {
+    await hero(SCHEDULED);
+    expect(screen.getByTestId('plan-pending')).toHaveTextContent(
+      'Changes to Foundation at renewal',
+    );
+  });
+
+  it('says NOTHING once the scheduler has applied it', async () => {
+    await hero({ ...SCHEDULED, appliedAt: '2026-09-08T00:00:00Z' });
+    expect(screen.queryByTestId('plan-pending')).toBeNull();
+  });
+});

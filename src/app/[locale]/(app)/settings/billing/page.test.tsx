@@ -26,7 +26,8 @@ vi.mock('@/features/billing/load-billing', () => ({
     profile: null,
     paymentMethods: null,
     credits: null,
-    packages: [],
+    // A failed read — the shape `loadBilling` returns for one: null, not [].
+    packages: null,
   }),
 }));
 const { stub } = vi.hoisted(() => ({
@@ -41,6 +42,7 @@ vi.mock('@/features/billing/Overview', () => ({
 }));
 vi.mock('@/features/billing/Credits', () => ({ CreditsSection: stub('credits') }));
 vi.mock('@/features/billing/BuyCredits', () => ({ BuyCredits: stub('buy') }));
+vi.mock('@/features/billing/Pricing', () => ({ CreditPackagesSection: stub('packages-why') }));
 vi.mock('@/features/billing/AutoPurchase', () => ({ AutoPurchase: stub('auto-purchase') }));
 vi.mock('@/features/billing/BillingProfile', () => ({
   BillingProfileSection: stub('profile'),
@@ -84,5 +86,12 @@ describe('★ 17 — the left column runs to the frame’s bottom', () => {
   it('the section fills', async () => {
     await open();
     expect(screen.getByTestId('settings-section')).toHaveAttribute('data-fill', 'yes');
+  });
+});
+
+describe('★ 17d — nothing to buy says why, rather than a blank dialog', () => {
+  it('no packages read: the reasons section is in the dialog', async () => {
+    await open('buy');
+    expect(screen.getByTestId('packages-why')).toBeInTheDocument();
   });
 });

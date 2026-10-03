@@ -238,5 +238,37 @@
       "title": "Invoices",
       "description": "Every charge, and its receipt when there is one."
     }
+  },
+  "choice": {
+    "yours": "Your plan",
+    "selected": "Selected",
+    "perMonth": "/ month",
+    "credits": "{credits} credits",
+    "creditsAndChats": "{credits} credits · ≈ {chats} conversations",
+    "noCatalog": "We couldn't read the plans on offer just now.",
+    "summary": {
+      "title": "What happens if you switch today",
+      "pick": "Pick a plan to see what changes.",
+      "chargedNow": "Charged now",
+      "nothing": "Nothing",
+      "downNote": "moving down takes effect at renewal",
+      "creditsNow": "Credits added now",
+      "none": "None",
+      "from": "From {date}",
+      "atRenewal": "At renewal",
+      "fromToday": "From today",
+      "perMonth": "{price} a month",
+      "eachCycle": "{credits} credits each cycle",
+      "prorated": "A move up is charged now for the days left — the amount is worked out when you switch."
+    },
+    "switch": "Switch plan",
+    "switchTo": "Switch to {plan}",
+    "switchNotYet": "Changing plan from here comes next.",
+    "keep": "Keep {plan}",
+    "keepCurrent": "Keep your plan",
+    "chargedTo": "Charged to {brand} · {last4}.",
+    "card": "Card",
+    "noCard": "No payment method on file — a move up would be declined.",
+    "downAtRenewal": "Moving down a plan takes effect at renewal, never mid-cycle."
   }
 }
