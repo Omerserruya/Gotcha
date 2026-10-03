@@ -37,6 +37,10 @@ export async function ActivityCard({
   const t = await getTranslations('home.working');
   const format = await getFormatter();
 
+  const nothingHandled =
+    timeSaved !== null &&
+    (timeSaved.basis ? timeSaved.basis.conversationsHandled === 0 : timeSaved.secondsSaved === 0);
+
   return (
     <section className={styles.activityCard}>
       <div className={styles.activityTitle}>
@@ -72,15 +76,18 @@ export async function ActivityCard({
           <div>
             <span className={styles.activityTimeSaved}>
               {t('timeSaved')}{' '}
-              <span className={styles.activityTimeSavedValue}>
-                {formatDuration(timeSaved.secondsSaved, t, format)}
+              <span className={styles.activityTimeSavedValue} data-testid="time-saved">
+                {/* Derived from what GOTCHA handled: nothing handled, no figure. */}
+                {nothingHandled ? '—' : formatDuration(timeSaved.secondsSaved, t, format)}
               </span>
             </span>
-            <p className={styles.activityBasis}>
-              {timeSaved.basis?.source === 'measured'
-                ? t('timeSavedMeasured')
-                : t('timeSavedDefault')}
-            </p>
+            {nothingHandled ? null : (
+              <p className={styles.activityBasis}>
+                {timeSaved.basis?.source === 'measured'
+                  ? t('timeSavedMeasured')
+                  : t('timeSavedDefault')}
+              </p>
+            )}
           </div>
         ) : null}
 
