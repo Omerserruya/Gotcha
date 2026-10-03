@@ -173,7 +173,10 @@ describe('⚠ no team is one line, not four disclaimers', () => {
     const card = screen.getByTestId('team-load');
     expect(card.querySelectorAll('p')).toHaveLength(1);
     const none = screen.getByTestId('team-none');
-    expect(none).toHaveTextContent(/Nobody on the team takes conversations yet/);
+    // The read counts AGENT-role users only; an admin who answers is not in it,
+    // so "nobody takes conversations" would be false. Say what is counted.
+    expect(none).toHaveTextContent('Only people with the Agent role are counted here.');
+    expect(none).not.toHaveTextContent(/Nobody/);
     expect(none.getAttribute('title')).toMatch(/grows with how long/);
   });
 });

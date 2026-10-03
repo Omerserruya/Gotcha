@@ -9,7 +9,6 @@
     "openNow": "Open now",
     "takenToday": "Taken today",
     "unnamed": "Unnamed",
-    "none": "Nobody on the team is set up to take conversations yet.",
     "humansOnly": "This is the human team. GOTCHA's AI employees are not in this list, so it is smaller than the people and machines actually working.",
     "unavailable": "We couldn't read the team's workload just now.",
     "noSpeed": "There's no reply-speed column here. The only timing GOTCHA records measures from when a conversation was claimed to each reply in it, so it grows with how long a conversation runs — beside a name that would read as slowness."
@@ -47,7 +46,7 @@
     "today": "Today's numbers — they reset at midnight.",
     "noSpeed": "No reply-speed column",
     "humansOnly": "People only, not GOTCHA",
-    "none": "Nobody on the team takes conversations yet."
+    "none": "Only people with the Agent role are counted here."
   },
   "askedShort": {
     "grouped": "Grouped by GOTCHA"

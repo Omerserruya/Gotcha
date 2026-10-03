@@ -124,7 +124,10 @@ describe('★★ one table — people and AI employees, alphabetical, no ranking
     expect(screen.getByTestId('team-unavailable')).toBeInTheDocument();
     unmount();
     render(await TeamTable({ agents: [], aiEmployees: [] }));
-    expect(screen.getByTestId('team-none')).toBeInTheDocument();
+    // What is counted, never "nobody takes conversations": admins who answer are not in the read.
+    expect(screen.getByTestId('team-none')).toHaveTextContent(
+      'Only people with the Agent role are counted here.',
+    );
   });
 
   it('the handover card keeps its place', async () => {
