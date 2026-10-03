@@ -26,7 +26,7 @@ export function CommandSurface({
   tone = 'busy',
   openQuestions = null,
 }: {
-  tone?: 'busy' | 'quiet';
+  tone?: 'busy' | 'quiet' | 'dayOne';
   /** 01b: questions GOTCHA could not answer, for "Answer the 4 open questions". */
   openQuestions?: number | null;
 }) {
@@ -59,15 +59,17 @@ export function CommandSurface({
     on every day.
   */
   const suggestions =
-    tone === 'quiet'
-      ? [
-          openQuestions && openQuestions > 0
-            ? t('quiet.answerCounted', { count: openQuestions })
-            : t('quiet.answer'),
-          t('quiet.dormant'),
-          t('quiet.recap'),
-        ]
-      : [t('suggestions.summarise'), t('suggestions.waiting'), t('suggestions.campaign')];
+    tone === 'dayOne'
+      ? [t('dayOne.learned'), t('dayOne.test'), t('dayOne.store')]
+      : tone === 'quiet'
+        ? [
+            openQuestions && openQuestions > 0
+              ? t('quiet.answerCounted', { count: openQuestions })
+              : t('quiet.answer'),
+            t('quiet.dormant'),
+            t('quiet.recap'),
+          ]
+        : [t('suggestions.summarise'), t('suggestions.waiting'), t('suggestions.campaign')];
 
   return (
     <form className={styles.surface} onSubmit={submit}>

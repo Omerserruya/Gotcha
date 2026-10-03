@@ -20,14 +20,40 @@ export async function StatusStrip({
   waiting,
   signals,
   isQuiet,
+  dayOne = null,
 }: {
   /** Conversations sitting unassigned. Null when the count failed to load. */
   waiting: number | null;
   /** Unread notifications. Null when unavailable. */
   signals: number | null;
   isQuiet: boolean;
+  /**
+   * 01c: not live yet. The pill says so — and only so: nothing restricts who
+   * GOTCHA answers before going live, so 02's "replies only to your team" is
+   * not said. The right side is the trial, when there is one.
+   */
+  dayOne?: { readonly trialDays: number | null } | null;
 }) {
   const t = await getTranslations('home.status');
+
+  if (dayOne) {
+    return (
+      <div className={styles.statusStrip}>
+        <span
+          className={[styles.statusPill, styles.statusSetup].join(' ')}
+          data-testid="setup-pill"
+        >
+          <span className={styles.statusDot} aria-hidden="true" />
+          {t('notLive')}
+        </span>
+        {dayOne.trialDays != null ? (
+          <span className={styles.statusMeta} data-testid="trial">
+            {t('trial', { days: dayOne.trialDays })}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className={styles.statusStrip}>

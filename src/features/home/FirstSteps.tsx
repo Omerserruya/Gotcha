@@ -80,12 +80,32 @@ export async function FirstSteps({
         ))}
       </ol>
 
-      <p className={styles.footnote}>
-        {setup.goLive?.eligible ? t('goLiveReady') : t('goLiveBlocked')}
-        {setup.trial?.daysRemaining != null
-          ? ` · ${t('trial', { days: setup.trial.daysRemaining })}`
-          : ''}
-      </p>
+      {/*
+        01c's Go live: locked, with what holds it, until the server says it is
+        eligible — and then drawn, not live: going live is a write that puts
+        GOTCHA in front of real customers.
+      */}
+      <div className={styles.goLive} data-testid="go-live">
+        <div className={styles.goLiveText}>
+          <span className={styles.goLiveTitle}>{t('goLive.title')}</span>
+          <span className={styles.goLiveBody}>{t('goLive.body')}</span>
+        </div>
+        <span
+          className={styles.goLiveButton}
+          aria-disabled="true"
+          data-testid="go-live-button"
+          title={
+            setup.goLive?.eligible
+              ? t('goLive.notYet')
+              : t('goLive.lockedBy', {
+                  steps:
+                    (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') || '—',
+                })
+          }
+        >
+          {setup.goLive?.eligible ? t('goLive.go') : t('goLive.locked')}
+        </span>
+      </div>
     </section>
   );
 }
@@ -146,12 +166,10 @@ function Row({
             <span className={styles.rowTitleNext}>{title}</span>
             <span className={styles.nextChip}>{t('next')}</span>
           </div>
-          <p className={styles.rowBodyNext}>{pendingLine(step, ingest, t) ?? body}</p>
+          <p className={styles.rowBodyNext}>{body}</p>
         </div>
         <div className={styles.rowActions}>
-          <Link href={stepDestination(step.id)} className={styles.actionPrimary}>
-            {action}
-          </Link>
+          <StepAction id={step.id} label={action} className={styles.actionPrimary} t={t} />
           {step.estimateMinutes > 0 ? (
             <span className={styles.estimate}>
               {t('estimate', { minutes: step.estimateMinutes })}
@@ -177,10 +195,37 @@ function Row({
           {blocker ? t('blocked', { step: stepTitle(blocker, t) }) : body}
         </div>
       </div>
-      <Link href={stepDestination(step.id)} className={styles.actionSecondary}>
-        {action}
-      </Link>
+      <StepAction id={step.id} label={action} className={styles.actionSecondary} t={t} />
     </li>
+  );
+}
+
+/** A link where a screen completes the step; drawn, with why, where none does. */
+function StepAction({
+  id,
+  label,
+  className,
+  t,
+}: {
+  id: string;
+  label: string;
+  className: string | undefined;
+  t: Translate;
+}) {
+  const href = stepDestination(id);
+  return href ? (
+    <Link href={href} className={className} data-testid={`step-action-${id}`}>
+      {label}
+    </Link>
+  ) : (
+    <span
+      className={className}
+      aria-disabled="true"
+      title={t('noScreen')}
+      data-testid={`step-action-${id}`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -197,25 +242,19 @@ function stepTitle(id: string, t: Translate): string {
  */
 function ingestSuffix(step: SetupStep, ingest: KnowledgeIngest, t: Translate): string {
   if (step.id !== 'add_knowledge' || !ingest) return '';
-  return ` — ${t('ingest', { pages: ingest.pagesRead, drafted: ingest.answersDrafted })}`;
-}
-
-/**
- * What is still waiting on a person, named.
- *
- * `pendingTopics` is a sample; `answersNeedingConfirmation` is the true total,
- * and the two must not be confused — the count comes from the total, the names
- * from the sample.
- */
-function pendingLine(step: SetupStep, ingest: KnowledgeIngest, t: Translate): string | null {
-  if (step.id !== 'hire_employee' || !ingest || ingest.answersNeedingConfirmation === 0)
-    return null;
+  const read = t('ingest', { pages: ingest.pagesRead, drafted: ingest.answersDrafted });
+  /*
+    The answers waiting on a person, counted from the TRUE total —
+    `pendingTopics` is a sample. This lived on `hire_employee`, which the
+    server completes when an employee exists, not when answers are confirmed.
+  */
+  if (ingest.answersNeedingConfirmation === 0) return ` — ${read}`;
+  // The count from the total; the names (three) from the sample.
   const topics = ingest.pendingTopics.slice(0, 3).map((entry) => entry.topic);
-  if (topics.length === 0) return null;
-  return t('ingestPending', {
-    count: ingest.answersNeedingConfirmation,
-    topics: topics.join(', '),
-  });
+  const waiting = t('ingestWaiting', { count: ingest.answersNeedingConfirmation });
+  return topics.length > 0
+    ? ` — ${read} · ${waiting}: ${topics.join(', ')}`
+    : ` — ${read} · ${waiting}`;
 }
 
 function clockTime(at: string, format: Format): string {

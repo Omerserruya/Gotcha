@@ -53,6 +53,16 @@
     text-decoration: none;
   }
 
+  /* 01c: setup, in the lavender of the next step. */
+  .statusSetup {
+    background-color: var(--step-next-chip-surface);
+    color: var(--step-next-chip-text);
+  }
+
+  .statusSetup .statusDot {
+    background-color: var(--step-next);
+  }
+
   .statusDot {
     inline-size: var(--size-dot);
     block-size: var(--size-dot);

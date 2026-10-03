@@ -80,14 +80,23 @@ export async function HomeScreen() {
 
   return (
     <div className={styles.page}>
-      <StatusStrip waiting={queue?.waiting ?? null} signals={signals} isQuiet={isQuiet} />
+      <StatusStrip
+        waiting={queue?.waiting ?? null}
+        signals={signals}
+        isQuiet={isQuiet}
+        dayOne={isDayOne && setup ? { trialDays: setup.trial?.daysRemaining ?? null } : null}
+      />
 
       <header className={styles.greeting}>
         <Text role="serifInline" tone="subtle" as="p">
-          {format.dateTime(now, 'greeting')}
+          {isDayOne ? t('dayOne.eyebrow') : format.dateTime(now, 'greeting')}
         </Text>
         <Text role="hero" as="h1" className={styles.greetingHeading}>
-          {isQuiet ? t(`greeting.quiet.${partOfDay}`) : t(`greeting.${partOfDay}`)}
+          {isDayOne
+            ? t('dayOne.heading')
+            : isQuiet
+              ? t(`greeting.quiet.${partOfDay}`)
+              : t(`greeting.${partOfDay}`)}
         </Text>
         <Text role="body" tone="muted" className={styles.greetingSummary}>
           {/*
@@ -97,23 +106,25 @@ export async function HomeScreen() {
             the backlog right now - so the sentence says both rather than
             leaving the reader to reconcile them.
           */}
-          {!overview
-            ? t('summaryUnavailable')
-            : isQuiet
-              ? t('summaryQuiet')
-              : overview.totalConversations === 0 && (queue?.waiting ?? 0) > 0
-                ? t('summaryBacklog', { waiting: queue?.waiting ?? 0 })
-                : t('summary', {
-                    total: overview.totalConversations,
-                    handled: overview.aiHandledCount,
-                  })}
+          {isDayOne && setup
+            ? dayOneLine(setup, ingest, t)
+            : !overview
+              ? t('summaryUnavailable')
+              : isQuiet
+                ? t('summaryQuiet')
+                : overview.totalConversations === 0 && (queue?.waiting ?? 0) > 0
+                  ? t('summaryBacklog', { waiting: queue?.waiting ?? 0 })
+                  : t('summary', {
+                      total: overview.totalConversations,
+                      handled: overview.aiHandledCount,
+                    })}
         </Text>
       </header>
 
       {/* The suggestions change with the mood: a quiet morning is the moment
           to do the work nobody schedules. */}
       <CommandSurface
-        tone={isQuiet ? 'quiet' : 'busy'}
+        tone={isDayOne ? 'dayOne' : isQuiet ? 'quiet' : 'busy'}
         openQuestions={
           /*
             Counted only from a COMPLETE list: the read is capped at
@@ -218,4 +229,20 @@ export async function HomeScreen() {
       )}
     </div>
   );
+}
+
+/**
+ * 01c's line: what the scan did, and what is left — "GOTCHA read 214 pages
+ * and drafted 38 answers. Six steps left." Without a scan, the steps alone.
+ */
+function dayOneLine(
+  setup: NonNullable<Awaited<ReturnType<typeof loadHomeData>>['setup']>,
+  ingest: Awaited<ReturnType<typeof loadHomeData>>['ingest'],
+  t: Awaited<ReturnType<typeof getTranslations<'home'>>>,
+): string {
+  const left = setup.steps.filter((step) => step.state !== 'done').length;
+  const steps = left > 0 ? t('dayOne.stepsLeft', { count: left }) : t('dayOne.allSteps');
+  return ingest && ingest.pagesRead > 0
+    ? `${t('dayOne.read', { pages: ingest.pagesRead, drafted: ingest.answersDrafted })} ${steps}`
+    : steps;
 }

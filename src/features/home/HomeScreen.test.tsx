@@ -13,9 +13,11 @@ vi.mock('@/i18n/navigation', () => ({ Link: 'a', useRouter: () => ({}), usePathn
 
 import { ActivityCard } from './ActivityCard';
 import { CommandSurface } from './CommandSurface';
+import { FirstSteps } from './FirstSteps';
 import styles from './Home.module.css';
 import { HomeScreen } from './HomeScreen';
 import { QuietWork } from './QuietWork';
+import { StatusStrip } from './StatusStrip';
 import { TeamPanel } from './TeamPanel';
 import { WorthKnowing } from './WorthKnowing';
 
@@ -156,6 +158,66 @@ describe('★ a busy day is three columns, with Worth knowing', () => {
       all(tree, (e) => (e.props as { className?: string }).className === styles.columns),
     ).toHaveLength(1);
     expect(all(tree, (e) => e.type === WorthKnowing)).toHaveLength(1);
+    expect(all(tree, (e) => e.type === QuietWork)).toHaveLength(0);
+  });
+});
+
+describe('★★ 01c — day one: the same Home, its own head', () => {
+  const setup = {
+    steps: [
+      { id: 'connect_channel', state: 'done', blockedBy: [], estimateMinutes: 5 },
+      { id: 'add_knowledge', state: 'done', blockedBy: [], estimateMinutes: 5 },
+      { id: 'hire_employee', state: 'next', blockedBy: [], estimateMinutes: 4 },
+      { id: 'invite_team', state: 'waiting', blockedBy: [], estimateMinutes: 2 },
+    ],
+    isLive: false,
+    goLive: { eligible: false, blockedBy: ['hire_employee'] },
+    trial: { daysRemaining: 14, conversationsUsed: 0 },
+  };
+  const ingest = {
+    pagesRead: 214,
+    answersDrafted: 38,
+    answersNeedingConfirmation: 0,
+    pendingTopics: [],
+  };
+
+  it('the status line is "not live" and the trial — never "replies only to your team"', async () => {
+    const tree = await screen({ setup, ingest, isQuiet: false });
+    const [strip] = all<{ dayOne: unknown }>(tree, (e) => e.type === StatusStrip);
+    expect(strip?.props.dayOne).toEqual({ trialDays: 14 });
+  });
+
+  it('the eyebrow, the heading and the line come from the setup and the scan', async () => {
+    const text = JSON.stringify(await screen({ setup, ingest, isQuiet: false }));
+    expect(text).toContain('dayOne.eyebrow');
+    expect(text).toContain('dayOne.heading');
+    expect(text).toContain('dayOne.read');
+    expect(text).toContain('dayOne.stepsLeft');
+    expect(text).not.toContain('greeting.');
+  });
+
+  it('no scan yet: the steps alone, no "read 0 pages"', async () => {
+    const text = JSON.stringify(await screen({ setup, ingest: null, isQuiet: false }));
+    expect(text).not.toContain('dayOne.read');
+    expect(text).toContain('dayOne.stepsLeft');
+  });
+
+  it('a scan that read nothing says nothing about pages either', async () => {
+    const text = JSON.stringify(
+      await screen({
+        setup,
+        ingest: { ...ingest, pagesRead: 0, answersDrafted: 0 },
+        isQuiet: false,
+      }),
+    );
+    expect(text).not.toContain('dayOne.read');
+  });
+
+  it('the day-one chips, and First steps in place of the columns', async () => {
+    const tree = await screen({ setup, ingest, isQuiet: false });
+    const [box] = all<{ tone: string }>(tree, (e) => e.type === CommandSurface);
+    expect(box?.props.tone).toBe('dayOne');
+    expect(all(tree, (e) => e.type === FirstSteps)).toHaveLength(1);
     expect(all(tree, (e) => e.type === QuietWork)).toHaveLength(0);
   });
 });

@@ -258,9 +258,43 @@
     opacity: 0.55;
   }
 
-  .footnote {
-    font-size: var(--font-size-label);
-    color: var(--text-subtle);
-    margin-block-start: var(--space-11);
+  /* 01c's Go live: a dark row closing the block. */
+  .goLive {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    margin-block-start: var(--space-12);
+    padding: var(--space-12) var(--space-18);
+    border-radius: 12px;
+    background-color: var(--frame-raised);
+  }
+
+  .goLiveText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .goLiveTitle {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--frame-text);
+  }
+
+  .goLiveBody {
+    font-size: var(--font-size-caption);
+    color: var(--frame-text-secondary);
+  }
+
+  .goLiveButton {
+    flex: none;
+    padding: var(--space-6) var(--space-14);
+    border: var(--border-width-thin) solid var(--frame-line);
+    border-radius: 8px;
+    font-size: var(--font-size-caption);
+    color: var(--frame-text-muted);
+    cursor: not-allowed;
   }
 }

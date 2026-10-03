@@ -59,3 +59,14 @@ describe('★ 01b — the chips shift with the day', () => {
     expect(chips()[0]).toBe('Answer the open questions ↗');
   });
 });
+
+describe('★ 01c — day-one chips', () => {
+  it('what was learned, a test, the store', () => {
+    box({ tone: 'dayOne' });
+    expect(chips()).toEqual([
+      'What did you learn from my site? ↗',
+      'Send me a test message ↗',
+      'Connect my store ↗',
+    ]);
+  });
+});

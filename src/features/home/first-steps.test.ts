@@ -89,7 +89,8 @@ describe('step copy', () => {
    */
   it('returns null for an unknown step rather than inventing a key', () => {
     expect(stepCopyKey('verify_domain')).toBeNull();
-    expect(stepDestination('verify_domain')).toBe('/settings');
+    // And no destination: an unknown step is not sent to Settings at large.
+    expect(stepDestination('verify_domain')).toBeNull();
   });
 });
 

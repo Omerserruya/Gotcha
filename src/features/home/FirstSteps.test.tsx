@@ -129,9 +129,10 @@ describe('FirstSteps', () => {
    * The count must come from the total, the names from the sample - reading
    * the count off the sample would under-report what is waiting.
    */
-  it('counts pending answers from the total, not from the sample', async () => {
+  it('counts pending answers from the total, not from the sample — on the knowledge step', async () => {
     await renderBlock();
     const line = screen.getByText(/need your word/);
+    expect(line.textContent).toContain('214 pages read');
     expect(line.textContent).toContain('12 need your word');
     expect(line.textContent).toContain('returns window');
     // Four topics were sent; the line names three.
@@ -140,18 +141,42 @@ describe('FirstSteps', () => {
 
   it('says what is in the way of a blocked step', async () => {
     await renderBlock();
-    expect(screen.getByText(/Needs Confirm what GOTCHA learned first/)).toBeInTheDocument();
+    expect(screen.getByText(/Needs Hire your first AI employee first/)).toBeInTheDocument();
   });
 
-  it('reports go-live as held back, and the trial beside it', async () => {
+  it('★ Go live is locked, with what holds it, while it is not eligible', async () => {
     await renderBlock();
-    const note = screen.getByText(/Go live opens once/);
-    expect(note.textContent).toContain('12 days left on your trial');
+    const button = screen.getByTestId('go-live-button');
+    expect(button).toHaveTextContent('Locked');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute(
+      'title',
+      'Waiting on: Hire your first AI employee, Set the handover rules',
+    );
   });
 
-  it('says go-live is ready once nothing gates it', async () => {
+  it('★ eligible, Go live is drawn — and still not live: it is a write', async () => {
     await renderBlock({ ...status, goLive: { eligible: true, blockedBy: [] }, trial: null });
-    expect(screen.getByText(/Everything that gates go-live is done/)).toBeInTheDocument();
+    const button = screen.getByTestId('go-live-button');
+    expect(button).toHaveTextContent('Go live');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute('title', expect.stringMatching(/waiting for approval/));
+  });
+
+  it.each([
+    ['hire_employee', '/studio/employees?hire=1'],
+    ['connect_store', '/settings/systems'],
+  ])('★ %s opens the screen that completes it', async (id, href) => {
+    await renderBlock();
+    expect(screen.getByTestId(`step-action-${id}`)).toHaveAttribute('href', href);
+  });
+
+  it('★ a step no screen sets is drawn, with why — never a link to the wrong page', async () => {
+    await renderBlock();
+    const action = screen.getByTestId('step-action-handover_rules');
+    expect(action).not.toHaveAttribute('href');
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(action).toHaveAttribute('title', 'No screen sets this yet.');
   });
 
   /*

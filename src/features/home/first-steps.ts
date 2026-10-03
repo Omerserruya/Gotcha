@@ -15,22 +15,35 @@ import type { SetupStatus, SetupStep } from '@/api/contracts/setup';
  * into Settings and abandon them there." Until those sheets exist, a step
  * points at the page that owns it rather than at a route that does not exist.
  */
-const DESTINATIONS: Record<string, string> = {
-  connect_channel: '/settings',
-  connect_store: '/settings',
-  add_knowledge: '/studio/knowledge',
-  hire_employee: '/studio/knowledge',
-  handover_rules: '/settings',
-  approval_limits: '/settings',
-  test_conversation: '/inbox',
-  invite_team: '/settings',
+/**
+ * Where each step is completed — the screen whose write the server checks
+ * (`services/auth/src/routes/setup-state.ts`). `null`: no screen sets it.
+ *
+ *   handover_rules   done when the policy has `escalationKeywords` or
+ *                    `blockedTopics`. Only Workspace's "Never say" writes
+ *                    the second, and that is not a handover rule.
+ *   approval_limits  `maxDiscountPercent` / `refundRequiresApproval` /
+ *                    `maxRefundAmount` — written by `PUT /api/ai-assist/policy`,
+ *                    which no screen calls.
+ *   test_conversation  a conversation marked `isTest` — no screen makes one.
+ */
+const DESTINATIONS: Record<string, string | null> = {
+  connect_channel: '/settings/channels',
+  connect_store: '/settings/systems',
+  add_knowledge: '/studio/knowledge?add=1',
+  hire_employee: '/studio/employees?hire=1',
+  handover_rules: null,
+  approval_limits: null,
+  test_conversation: null,
+  invite_team: '/settings/people',
 };
 
 /** Steps with their own wording. An unrecognised id is shown, never hidden. */
 const KNOWN_STEPS = new Set(Object.keys(DESTINATIONS));
 
-export function stepDestination(id: string): string {
-  return DESTINATIONS[id] ?? '/settings';
+/** `null` when no screen completes the step. */
+export function stepDestination(id: string): string | null {
+  return DESTINATIONS[id] ?? null;
 }
 
 export function stepCopyKey(id: string): string | null {

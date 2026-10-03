@@ -107,3 +107,18 @@ describe('★ 01b — the quiet strip names the last handover, as "—"', () => 
     expect(screen.queryByTestId('last-handover')).toBeNull();
   });
 });
+
+describe('★ 01c — the day-one status line', () => {
+  it('not live yet, and the trial', async () => {
+    render(await strip({ dayOne: { trialDays: 14 } }));
+    expect(screen.getByTestId('setup-pill')).toHaveTextContent('Setting up · not live yet');
+    expect(screen.getByTestId('setup-pill')).not.toHaveTextContent(/only to your team/);
+    expect(screen.getByTestId('trial')).toHaveTextContent('Trial · 14 days left');
+    expect(screen.queryByTestId('signals')).toBeNull();
+  });
+
+  it('no trial: no trial line', async () => {
+    render(await strip({ dayOne: { trialDays: null } }));
+    expect(screen.queryByTestId('trial')).toBeNull();
+  });
+});

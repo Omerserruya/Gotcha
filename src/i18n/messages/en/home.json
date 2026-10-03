@@ -36,6 +36,11 @@
       "dormant": "Write to the people who went quiet",
       "recap": "Read yesterday back to me",
       "answerCounted": "{count, plural, one {Answer the open question} other {Answer the # open questions}}"
+    },
+    "dayOne": {
+      "learned": "What did you learn from my site?",
+      "test": "Send me a test message",
+      "store": "Connect my store"
     }
   },
   "metrics": {
@@ -270,7 +275,9 @@
     "waitingOnYou": "{count, plural, =0 {Nothing waiting on you} one {# waiting on you} other {# waiting on you}}",
     "waitingUnknown": "Waiting count unavailable",
     "lastHandover": "Last handover",
-    "lastHandoverNone": "Nothing records when a conversation was last handed to a person."
+    "lastHandoverNone": "Nothing records when a conversation was last handed to a person.",
+    "notLive": "Setting up · not live yet",
+    "trial": "{days, plural, one {Trial · # day left} other {Trial · # days left}}"
   },
   "insight": {
     "title": "Worth knowing",
@@ -307,11 +314,7 @@
     "estimate": "{minutes} min",
     "blocked": "Needs {step} first",
     "unavailable": "Setup progress could not be loaded just now.",
-    "goLiveBlocked": "Go live opens once the steps that decide whether GOTCHA can act are done.",
-    "goLiveReady": "Everything that gates go-live is done.",
-    "trial": "{days, plural, one {# day} other {# days}} left on your trial",
     "ingest": "{pages, plural, one {# page} other {# pages}} read, {drafted, plural, one {# answer} other {# answers}} drafted",
-    "ingestPending": "{count, plural, one {# needs your word} other {# need your word}} — {topics}",
     "step": {
       "connect_channel": {
         "title": "Connect a channel",
@@ -329,9 +332,9 @@
         "action": "Add knowledge"
       },
       "hire_employee": {
-        "title": "Confirm what GOTCHA learned",
-        "body": "Answers are drafted and waiting on your word before anyone sees them.",
-        "action": "Review answers"
+        "title": "Hire your first AI employee",
+        "body": "Pick its job and where it answers.",
+        "action": "Hire"
       },
       "handover_rules": {
         "title": "Set the handover rules",
@@ -345,7 +348,7 @@
       },
       "test_conversation": {
         "title": "Send yourself a test",
-        "body": "In setup mode GOTCHA answers only your team's own numbers. Nothing reaches a customer.",
+        "body": "A conversation you mark as a test, to see how GOTCHA answers.",
         "action": "Send a test"
       },
       "invite_team": {
@@ -353,6 +356,23 @@
         "body": "The people who will take over when GOTCHA hands a conversation across.",
         "action": "Invite"
       }
+    },
+    "noScreen": "No screen sets this yet.",
+    "ingestWaiting": "{count, plural, one {# needs your word} other {# need your word}}",
+    "goLive": {
+      "title": "Go live",
+      "body": "GOTCHA starts answering real customers.",
+      "locked": "Locked",
+      "go": "Go live",
+      "lockedBy": "Waiting on: {steps}",
+      "notYet": "Going live puts GOTCHA in front of real customers — waiting for approval."
     }
+  },
+  "dayOne": {
+    "eyebrow": "Setting up",
+    "heading": "Your workspace is ready",
+    "read": "GOTCHA read {pages, plural, one {# page} other {# pages}} and drafted {drafted, plural, one {# answer} other {# answers}}.",
+    "stepsLeft": "{count, plural, one {One step left before it can go live.} other {# steps left before it can go live.}}",
+    "allSteps": "Every step is done."
   }
 }
