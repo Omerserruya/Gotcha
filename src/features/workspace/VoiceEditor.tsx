@@ -134,9 +134,12 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
         >
           {trimmed || t('sourceNone')}
         </p>
-        <p className={styles.status} data-testid="voice-status">
-          {status ?? sourceLine}
-        </p>
+        {/* With no voice the line above already says so: said once. */}
+        {trimmed || status ? (
+          <p className={styles.status} data-testid="voice-status">
+            {status ?? sourceLine}
+          </p>
+        ) : null}
         {sampleBox}
         <button
           type="button"

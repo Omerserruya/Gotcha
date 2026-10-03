@@ -58,7 +58,6 @@
   "cancel": "Cancel",
   "invite": {
     "open": "Invite someone",
-    "heading": "Invite someone",
     "email": "Email",
     "emailPlaceholder": "name@yourbusiness.co.il",
     "name": "Name",
@@ -72,7 +71,11 @@
     "duplicate": "That person is already a member of this workspace.",
     "seatLimit": "Your plan has no seats left. Deactivating a member frees one.",
     "forbidden": "You don't have permission to do that.",
-    "failed": "That didn't send. Try again."
+    "failed": "That didn't send. Try again.",
+    "role": "Role",
+    "roleAgent": "Agent",
+    "roleFixed": "Everyone is invited as an Agent: the invite takes no role.",
+    "noTeam": "No team"
   },
   "tabs": {
     "label": "People and teams",

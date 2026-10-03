@@ -6,7 +6,6 @@ import { useState, useTransition } from 'react';
 import type { Department } from '@/api/contracts/people';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Link } from '@/i18n/navigation';
-import { Input } from '@/design-system/primitives/input/Input';
 
 import { inviteMember, type PeopleWriteResult } from './actions';
 import styles from './People.module.css';
@@ -44,7 +43,7 @@ export function InviteForm({
   const t = useTranslations('people');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [teamIds, setTeamIds] = useState<readonly string[]>([]);
+  const [teamId, setTeamId] = useState('');
   const [result, setResult] = useState<PeopleWriteResult<{ setupLink?: string | null }> | null>(
     null,
   );
@@ -53,7 +52,7 @@ export function InviteForm({
   function submit() {
     setResult(null);
     startTransition(async () => {
-      const outcome = await inviteMember({ email, name, departmentIds: teamIds });
+      const outcome = await inviteMember({ email, name, departmentIds: teamId ? [teamId] : [] });
       setResult(outcome);
       if (outcome.ok) {
         // The fields clear but the panel STAYS OPEN, because the success
@@ -61,7 +60,7 @@ export function InviteForm({
         // one copy of a link the admin may need to send by hand.
         setEmail('');
         setName('');
-        setTeamIds([]);
+        setTeamId('');
       }
     });
   }
@@ -70,58 +69,78 @@ export function InviteForm({
 
   const fieldErrors = result && !result.ok && result.reason === 'invalid' ? result.fields : {};
 
+  /*
+    12, measured: ONE inline row — email, name, role, team, Send invite,
+    Cancel — inside a violet edge. Each control keeps a label for a screen
+    reader; the eye gets 02's row.
+
+    ── WHAT THE ROUTE TAKES, AND SO WHAT THE ROW HOLDS ──
+      name   REQUIRED by `POST /api/agents` (`z.string().min(1)`): 02 has no
+             name field, so it is one more input in the row — a constraint,
+             not a design choice. What it is for is on the field (`title`).
+      role   the route invites every person as AGENT and takes no role: the
+             control shows "Agent" and is not live.
+      team   the route takes several; the row offers one (or none), as 02's
+             single dropdown does.
+  */
   return (
     <section className={styles.invite} data-testid="invite-form">
-      <h2 className={styles.inviteHeading}>{t('invite.heading')}</h2>
-
-      <div className={styles.inviteFields}>
-        <Input
-          label={t('invite.email')}
+      <div className={styles.inviteRow}>
+        <label className="srOnly" htmlFor="invite-email">
+          {t('invite.email')}
+        </label>
+        <input
+          id="invite-email"
+          className={styles.inviteEmail}
           type="email"
           value={email}
           autoComplete="off"
           placeholder={t('invite.emailPlaceholder')}
+          aria-invalid={fieldErrors.email ? true : undefined}
           onChange={(e) => setEmail(e.target.value)}
-          {...(fieldErrors.email ? { error: fieldErrors.email } : {})}
         />
-        <Input
-          label={t('invite.name')}
+        <label className="srOnly" htmlFor="invite-name">
+          {t('invite.name')}
+        </label>
+        <input
+          id="invite-name"
+          className={styles.inviteInput}
           value={name}
           autoComplete="off"
-          hint={t('invite.nameHint')}
+          placeholder={t('invite.name')}
+          title={t('invite.nameHint')}
+          aria-invalid={fieldErrors.name ? true : undefined}
           onChange={(e) => setName(e.target.value)}
-          {...(fieldErrors.name ? { error: fieldErrors.name } : {})}
         />
-      </div>
-
-      {/*
-        Teams are checkboxes, not a single select.
-        `departmentIds` is an array and someone may belong to several, so a
-        control that accepted one would quietly forget the rest. A tenant with
-        no teams yet gets no control at all rather than an empty menu.
-      */}
-      {teams.length > 0 ? (
-        <fieldset className={styles.inviteTeams}>
-          <legend className={styles.inviteLegend}>{t('invite.teams')}</legend>
+        <label className="srOnly" htmlFor="invite-role">
+          {t('invite.role')}
+        </label>
+        <select
+          id="invite-role"
+          className={styles.inviteSelect}
+          disabled
+          title={t('invite.roleFixed')}
+          data-testid="invite-role"
+        >
+          <option>{t('invite.roleAgent')}</option>
+        </select>
+        <label className="srOnly" htmlFor="invite-team">
+          {t('invite.teams')}
+        </label>
+        <select
+          id="invite-team"
+          className={styles.inviteSelect}
+          value={teamId}
+          data-testid="invite-team"
+          onChange={(e) => setTeamId(e.target.value)}
+        >
+          <option value="">{t('invite.noTeam')}</option>
           {teams.map((team) => (
-            <label key={team.id} className={styles.inviteTeam}>
-              <input
-                type="checkbox"
-                checked={teamIds.includes(team.id)}
-                data-testid={`invite-team-${team.id}`}
-                onChange={(e) =>
-                  setTeamIds((ids) =>
-                    e.target.checked ? [...ids, team.id] : ids.filter((id) => id !== team.id),
-                  )
-                }
-              />
+            <option key={team.id} value={team.id}>
               {team.name}
-            </label>
+            </option>
           ))}
-        </fieldset>
-      ) : null}
-
-      <div className={styles.inviteActions}>
+        </select>
         <Button
           variant="primary"
           size="sm"
@@ -137,6 +156,12 @@ export function InviteForm({
           {t('cancel')}
         </Link>
       </div>
+
+      {fieldErrors.email || fieldErrors.name ? (
+        <p className={styles.inviteNote} data-testid="invite-field-error">
+          {fieldErrors.email ?? fieldErrors.name}
+        </p>
+      ) : null}
 
       {result ? <InviteOutcome result={result} /> : null}
     </section>

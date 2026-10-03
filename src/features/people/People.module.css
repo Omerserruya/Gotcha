@@ -249,12 +249,6 @@
     gap: var(--space-12);
   }
 
-  .inviteHeading {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 600;
-  }
-
   .inviteFields {
     display: flex;
     flex-wrap: wrap;
@@ -266,27 +260,39 @@
     min-inline-size: 0;
   }
 
-  .inviteTeams {
-    border: none;
-    margin: 0;
-    padding: 0;
+  /* 02's row: the fields `#FAF8F4`, radius 10, `padding:10px 13px`, 13px. */
+  .inviteRow {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-12);
+    gap: var(--space-10);
   }
 
-  .inviteLegend {
-    padding: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
+  .inviteEmail,
+  .inviteInput,
+  .inviteSelect {
+    min-inline-size: 0;
+    padding: var(--space-10) 13px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
   }
 
-  .inviteTeam {
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-    font-size: var(--font-size-meta);
+  .inviteEmail {
+    flex: 1;
+    min-inline-size: 180px;
+  }
+
+  .inviteInput {
+    inline-size: 150px;
+  }
+
+  .inviteSelect:disabled {
+    color: var(--text-primary);
+    cursor: default;
   }
 
   .inviteActions {

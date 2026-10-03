@@ -40,6 +40,8 @@ describe('★ 11 — "How GOTCHA should sound" is read first, edited in place', 
   it('nothing set says so, in the place the words would be', () => {
     show(null);
     expect(screen.getByTestId('voice-text')).toHaveTextContent('Nothing learned yet');
+    // Said once — not again as the source line under it.
+    expect(screen.getAllByText('Nothing learned yet')).toHaveLength(1);
   });
 
   it('"Edit" opens the field in place, and "Done" closes it', () => {
