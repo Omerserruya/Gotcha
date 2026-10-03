@@ -1,64 +1,148 @@
 import type { QuietDayItem } from '@/api/contracts/analytics';
 
 /**
- * Which message a ranked item uses, and where its action goes.
+ * 01b's rows — "Worth an hour, while it is quiet" — ONE PER SOURCE.
  *
- * Pure and separate from the card so both can be tested without a translation
- * runtime — this is where an unrecognised source would otherwise reach the
- * screen as a missing-key crash.
+ * The ranker (`packages/shared/src/lib/quiet-day-ranking.ts`) emits an item
+ * per question, per term, per conflict. 02 draws one row per kind of work:
+ * "Four questions it could not answer this week", the questions in its line,
+ * one "Answer them". So items are grouped by `source`, in the order of each
+ * group's best rank.
+ *
+ * What the ranker emits, by source:
+ *
+ *   unanswered_question  kind `knowledge_gap.<reason>`
+ *                        values { question, askCount, askedBy }
+ *   knowledge_conflict   kind `knowledge_conflict.pending`
+ *                        values { field, affectedCustomerCount }
+ *   product_demand       kind `product_demand.not_stocked`
+ *                        values { term, askCount, askedBy, weeksRunning }
+ *   dormant_customers    kind `dormant_customers.reachable`
+ *                        values { count, quietForDays }
+ *
+ * ★ An item without the values its sentence needs is DROPPED, not drawn: a
+ * missing ICU argument renders as nothing in production, and the row was an
+ * empty line with a button. A source this list does not know gets no row.
+ *
+ * Counts across items: `askCount` adds up; `askedBy` does not — the same
+ * person can ask two questions — so a group says "asked N times".
  */
 
-/** Sources with their own wording. Anything else falls back rather than throws. */
-const KNOWN_SOURCES = new Set([
-  'knowledge_gap',
+export const QUIET_SOURCES = [
+  'unanswered_question',
   'knowledge_conflict',
   'product_demand',
   'dormant_customers',
-]);
+] as const;
+export type QuietSource = (typeof QUIET_SOURCES)[number];
 
-/**
- * Where each row leads.
- *
- * Dormant customers go to the campaign builder, not to a draft: the drafted
- * message was dropped as a product decision, and the flow is create → template
- * approval → send.
- */
-const DESTINATIONS: Record<string, string> = {
-  knowledge_gap: '/studio/knowledge',
+/** 02's left edge: amber a gap, red a conflict, green an opportunity. */
+export type QuietTone = 'gap' | 'conflict' | 'opportunity' | null;
+
+export interface QuietRow {
+  readonly source: QuietSource;
+  /** The message key under `home.quietWork.item`. */
+  readonly key: 'gaps' | 'conflicts' | 'demandOne' | 'demandMany' | 'dormant';
+  readonly values: Record<string, string | number>;
+  readonly href: string;
+  readonly tone: QuietTone;
+  readonly effect: QuietDayItem['effect'];
+}
+
+const HREF: Record<QuietSource, string> = {
+  unanswered_question: '/studio/knowledge',
   knowledge_conflict: '/studio/knowledge',
   product_demand: '/analytics/topics',
   dormant_customers: '/outreach',
 };
 
-export interface QuietDayCopy {
-  readonly key: string;
-  readonly values: Record<string, string | number>;
-  readonly href: string;
-}
+const TONE: Record<QuietSource, QuietTone> = {
+  unanswered_question: 'gap',
+  knowledge_conflict: 'conflict',
+  product_demand: null,
+  dormant_customers: 'opportunity',
+};
 
-export function quietDayCopy(item: QuietDayItem): QuietDayCopy {
-  // `kind` is `<source>.<detail>`; the wording is keyed on the source, because
-  // the detail distinguishes why a gap exists, not how to describe it.
-  const source = item.kind.includes('.') ? item.kind.slice(0, item.kind.indexOf('.')) : item.kind;
-  const key = KNOWN_SOURCES.has(source) ? source : 'fallback';
+const str = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-  return {
-    key,
-    values: scalarsOf(item.values),
-    href: DESTINATIONS[source] ?? '/',
-  };
-}
+/** The values each source's sentence needs. */
+const VALID: Record<QuietSource, (v: Record<string, unknown>) => boolean> = {
+  unanswered_question: (v) => str(v.question) && num(v.askCount),
+  knowledge_conflict: (v) => str(v.field),
+  product_demand: (v) => str(v.term) && num(v.askCount) && num(v.askedBy) && num(v.weeksRunning),
+  dormant_customers: (v) => num(v.count) && num(v.quietForDays),
+};
 
-/**
- * The values ICU can interpolate.
- *
- * `values` is `Record<string, unknown>` by contract. Anything that is not a
- * scalar is dropped rather than stringified into `[object Object]`.
- */
-function scalarsOf(values: Record<string, unknown>): Record<string, string | number> {
-  const out: Record<string, string | number> = {};
-  for (const [key, value] of Object.entries(values)) {
-    if (typeof value === 'string' || typeof value === 'number') out[key] = value;
+const isSource = (s: string): s is QuietSource => (QUIET_SOURCES as readonly string[]).includes(s);
+
+/** Up to four, in rank order, as a phrase. */
+const list = (parts: readonly string[]) => parts.slice(0, 4).join(', ');
+
+const sum = (items: readonly QuietDayItem[], key: string) =>
+  items.reduce((total, i) => total + (num(i.values[key]) ? (i.values[key] as number) : 0), 0);
+
+export function quietRows(items: readonly QuietDayItem[]): readonly QuietRow[] {
+  const groups = new Map<QuietSource, QuietDayItem[]>();
+  for (const item of [...items].sort((a, b) => a.rank - b.rank)) {
+    if (!isSource(item.source) || !VALID[item.source](item.values)) continue;
+    groups.set(item.source, [...(groups.get(item.source) ?? []), item]);
   }
-  return out;
+
+  return [...groups.entries()].map(([source, group]): QuietRow => {
+    const first = group[0]!;
+    const base = { source, href: HREF[source], tone: TONE[source], effect: first.effect };
+    switch (source) {
+      case 'unanswered_question':
+        return {
+          ...base,
+          key: 'gaps',
+          values: {
+            count: group.length,
+            questions: list(group.map((i) => `“${String(i.values.question).trim()}”`)),
+            asked: sum(group, 'askCount'),
+          },
+        };
+      case 'knowledge_conflict':
+        return {
+          ...base,
+          key: 'conflicts',
+          values: { count: group.length, fields: list(group.map((i) => String(i.values.field))) },
+        };
+      case 'product_demand':
+        return group.length === 1
+          ? {
+              ...base,
+              key: 'demandOne',
+              values: {
+                term: String(first.values.term),
+                askedBy: first.values.askedBy as number,
+                weeksRunning: first.values.weeksRunning as number,
+              },
+            }
+          : {
+              ...base,
+              key: 'demandMany',
+              values: {
+                count: group.length,
+                terms: list(group.map((i) => String(i.values.term))),
+                asked: sum(group, 'askCount'),
+              },
+            };
+      case 'dormant_customers':
+        return {
+          ...base,
+          key: 'dormant',
+          values: {
+            count: first.values.count as number,
+            quietForDays: first.values.quietForDays as number,
+          },
+        };
+    }
+  });
+}
+
+/** How many questions the list holds — 01b's "Answer the N open questions". */
+export function openQuestionCount(items: readonly QuietDayItem[]): number {
+  return items.filter((i) => i.source === 'unanswered_question').length;
 }

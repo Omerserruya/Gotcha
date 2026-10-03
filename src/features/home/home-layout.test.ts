@@ -57,3 +57,20 @@ describe('★ 01b — a quiet day is two columns', () => {
     expect(rule('columnsQuiet')).toMatch(/grid-template-rows:\s*minmax\(0, 1fr\)/);
   });
 });
+
+describe('★ 01b — the work rows: one line, buttons not links, edges by type', () => {
+  it('the actions are links drawn as buttons', () => {
+    expect(rule('actionPrimary,\\s*\\.actionSecondary')).toMatch(/text-decoration:\s*none/);
+  });
+  it('the body is one line', () => {
+    expect(rule('workRowBody')).toMatch(/white-space:\s*nowrap/);
+    expect(rule('workRowBody')).toMatch(/text-overflow:\s*ellipsis/);
+  });
+  it.each([
+    ['workRowGap', 'intent-blocked-edge'],
+    ['workRowConflict', 'intent-urgent-edge'],
+    ['workRowOpportunity', 'intent-opportunity-edge'],
+  ])('.%s is %s', (selector, token) => {
+    expect(rule(selector)).toContain(`var(--${token})`);
+  });
+});

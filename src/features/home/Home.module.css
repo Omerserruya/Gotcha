@@ -717,9 +717,17 @@
     border-block-start: var(--border-width-thin) solid var(--panel-well);
   }
 
-  /* Amber: blocking. Until it is settled the question goes to a person. */
-  .workRowBlocking {
+  /* 02's edge by type: amber a gap, red a conflict, green an opportunity. */
+  .workRowGap {
     border-inline-start-color: var(--intent-blocked-edge);
+  }
+
+  .workRowConflict {
+    border-inline-start-color: var(--intent-urgent-edge);
+  }
+
+  .workRowOpportunity {
+    border-inline-start-color: var(--intent-opportunity-edge);
   }
 
   .workRowText {
@@ -733,10 +741,14 @@
     color: var(--text-primary);
   }
 
+  /* One line, as 02's: the questions cut with an ellipsis. */
   .workRowBody {
     font-size: var(--font-size-meta);
     color: var(--text-muted);
     margin-block-start: var(--space-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .workRowActions {
@@ -754,6 +766,8 @@
     padding-inline: var(--space-12);
     cursor: pointer;
     white-space: nowrap;
+    /* Links drawn as buttons. */
+    text-decoration: none;
   }
 
   .actionPrimary {

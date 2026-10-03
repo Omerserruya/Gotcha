@@ -2,53 +2,109 @@ import { describe, expect, it } from 'vitest';
 
 import type { QuietDayItem } from '@/api/contracts/analytics';
 
-import { quietDayCopy } from './quiet-day-item';
+import { openQuestionCount, QUIET_SOURCES, quietRows } from './quiet-day-item';
 
-const item = (overrides: Partial<QuietDayItem> = {}): QuietDayItem => ({
-  id: 'q1',
+/** As `quiet-day-ranking.ts` emits them. */
+const gap = (id: string, question: string, askCount: number, rank: number): QuietDayItem => ({
+  id,
   source: 'unanswered_question',
   effect: 'removes_work',
-  wouldRemoveConversations: 30,
-  basis: { askCount: 33 },
+  basis: {},
   kind: 'knowledge_gap.no_knowledge',
-  values: { question: 'What is the dispatch cut-off?', askCount: 33, askedBy: 28 },
-  rank: 1,
-  ...overrides,
+  values: { question, askCount, askedBy: askCount - 1 },
+  rank,
 });
+const demand = (id: string, term: string, rank: number, extra = {}): QuietDayItem => ({
+  id,
+  source: 'product_demand',
+  effect: 'removes_work',
+  basis: {},
+  kind: 'product_demand.not_stocked',
+  values: { term, askCount: 22, askedBy: 20, weeksRunning: 2, ...extra },
+  rank,
+});
+const dormant: QuietDayItem = {
+  id: 'd',
+  source: 'dormant_customers',
+  effect: 'creates_opportunity',
+  basis: {},
+  kind: 'dormant_customers.reachable',
+  values: { count: 640, quietForDays: 90 },
+  rank: 9,
+};
 
-describe('quietDayCopy', () => {
-  /*
-   * The wording is keyed on the SOURCE, not the whole kind: the detail after
-   * the dot says why a gap exists, not how to describe it. Keying on the full
-   * kind would need a message per reason and crash on a new one.
-   */
-  it('keys on the source, so a new reason does not need new copy', () => {
-    expect(quietDayCopy(item({ kind: 'knowledge_gap.no_knowledge' })).key).toBe('knowledge_gap');
-    expect(quietDayCopy(item({ kind: 'knowledge_gap.low_confidence' })).key).toBe('knowledge_gap');
-    expect(quietDayCopy(item({ kind: 'knowledge_gap.conflicting' })).key).toBe('knowledge_gap');
+describe('★★ 01b — one row per source, in the ranker’s order', () => {
+  it('two questions are ONE row: counted, listed, asked-times summed', () => {
+    const rows = quietRows([gap('a', 'Dispatch cut-off?', 20, 1), gap('b', 'Gift wrap?', 13, 2)]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      source: 'unanswered_question',
+      key: 'gaps',
+      values: { count: 2, questions: '“Dispatch cut-off?”, “Gift wrap?”', asked: 33 },
+      tone: 'gap',
+    });
   });
 
-  it('falls back rather than asking for a message that does not exist', () => {
-    const copy = quietDayCopy(item({ kind: 'seasonal_spike.detected' }));
-    expect(copy.key).toBe('fallback');
-    expect(copy.href).toBe('/');
+  it('groups are ordered by their best rank, whatever order they arrive in', () => {
+    // Shuffled on purpose: input already in rank order cannot tell a sort from none.
+    const rows = quietRows([dormant, gap('a', 'Q?', 3, 2), demand('x', 'navy towels', 1)]);
+    expect(rows.map((r) => r.source)).toEqual([
+      'product_demand',
+      'unanswered_question',
+      'dormant_customers',
+    ]);
   });
 
-  /*
-   * The drafted message was dropped as a product decision: dormant customers
-   * go through create → template approval → send. The row must not lead to a
-   * draft that does not exist.
-   */
-  it('sends dormant customers to the campaign flow, not to a draft', () => {
-    const copy = quietDayCopy(
-      item({ kind: 'dormant_customers.reachable', effect: 'creates_opportunity' }),
+  it('one term reads as itself; several as a list', () => {
+    expect(quietRows([demand('x', 'navy towels', 1)])[0]).toMatchObject({
+      key: 'demandOne',
+      values: { term: 'navy towels', askedBy: 20, weeksRunning: 2 },
+      tone: null,
+    });
+    expect(
+      quietRows([demand('x', 'navy towels', 1), demand('y', 'king linen', 2)])[0],
+    ).toMatchObject({
+      key: 'demandMany',
+      values: { count: 2, terms: 'navy towels, king linen', asked: 44 },
+    });
+  });
+
+  it('the edge by type: amber a gap, green an opportunity, none for demand', () => {
+    const tones = Object.fromEntries(
+      quietRows([gap('a', 'Q?', 3, 1), demand('x', 't', 2), dormant]).map((r) => [
+        r.source,
+        r.tone,
+      ]),
     );
-    expect(copy.key).toBe('dormant_customers');
-    expect(copy.href).toBe('/outreach');
+    expect(tones).toEqual({
+      unanswered_question: 'gap',
+      product_demand: null,
+      dormant_customers: 'opportunity',
+    });
   });
 
-  it('drops a non-scalar value rather than rendering [object Object]', () => {
-    const copy = quietDayCopy(item({ values: { term: 'navy towels', meta: { a: 1 } } }));
-    expect(copy.values).toEqual({ term: 'navy towels' });
+  it('★ an item missing what its sentence needs is dropped, never an empty row', () => {
+    expect(
+      quietRows([demand('x', 'navy towels', 1, { askedBy: undefined, weeksRunning: undefined })]),
+    ).toEqual([]);
+    expect(quietRows([gap('a', '  ', 3, 1)])).toEqual([]);
+  });
+
+  it('★ a source this list does not know gets no row', () => {
+    expect(quietRows([{ ...dormant, source: 'knowledge_gap' }])).toEqual([]);
+  });
+
+  it('the chip counts the ranker’s source — `unanswered_question`, not the kind', () => {
+    expect(openQuestionCount([gap('a', 'Q?', 3, 1), gap('b', 'R?', 3, 2), dormant])).toBe(2);
+    expect(openQuestionCount([{ ...gap('a', 'Q?', 3, 1), source: 'knowledge_gap' }])).toBe(0);
+  });
+
+  it('knows exactly the sources the ranker reports', () => {
+    expect([...QUIET_SOURCES].sort()).toEqual([
+      'dormant_customers',
+      'knowledge_conflict',
+      'product_demand',
+      'unanswered_question',
+    ]);
   });
 });

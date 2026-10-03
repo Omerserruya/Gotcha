@@ -8,6 +8,7 @@ import { CommandSurface } from './CommandSurface';
 import { FirstSteps } from './FirstSteps';
 import { homeFace } from './first-steps';
 import { QueueList } from './QueueList';
+import { openQuestionCount } from './quiet-day-item';
 import { QuietWork } from './QuietWork';
 import styles from './Home.module.css';
 import { loadHomeData, QUIET_DAY_LIMIT } from './load-home-data';
@@ -120,7 +121,7 @@ export async function HomeScreen() {
             shows — "Answer the 4 open questions" would then be false.
           */
           quietDay && quietDay.data.length < QUIET_DAY_LIMIT
-            ? quietDay.data.filter((item) => item.source === 'knowledge_gap').length
+            ? openQuestionCount(quietDay.data)
             : null
         }
       />

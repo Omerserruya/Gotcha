@@ -44,7 +44,7 @@ export function ConflictRow({ conflict }: { conflict: IntelligenceReview }) {
   }
 
   return (
-    <div className={[styles.workRow, styles.workRowBlocking].join(' ')}>
+    <div className={[styles.workRow, styles.workRowConflict].join(' ')}>
       <div className={styles.workRowText}>
         <Title>{t('title')}</Title>
         <p className={styles.workRowBody}>

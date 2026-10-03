@@ -51,7 +51,7 @@ const data = (over: Record<string, unknown>) => ({
     data: [
       {
         id: 'a',
-        source: 'knowledge_gap',
+        source: 'unanswered_question',
         kind: 'x',
         rank: 1,
         effect: 'removes_work',
@@ -60,7 +60,7 @@ const data = (over: Record<string, unknown>) => ({
       },
       {
         id: 'b',
-        source: 'knowledge_gap',
+        source: 'unanswered_question',
         kind: 'x',
         rank: 2,
         effect: 'removes_work',
@@ -128,7 +128,7 @@ describe('★★ 01b — a quiet day', () => {
   it('★ a full page may hold more: no count rather than an undercount', async () => {
     const item = (id: string) => ({
       id,
-      source: 'knowledge_gap',
+      source: 'unanswered_question',
       kind: 'x',
       rank: 1,
       effect: 'removes_work',

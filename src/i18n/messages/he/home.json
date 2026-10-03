@@ -218,30 +218,30 @@
     "unavailable": "לא הצלחנו לטעון את הרשימה כרגע.",
     "missingSource": "סתירות בידע עדיין לא נכללות בדירוג הזה.",
     "item": {
-      "knowledge_gap": {
-        "title": "{askedBy, plural, one {שאלה} other {שאלות}} ש-GOTCHA לא ידעה לענות עליהן",
-        "body": "”{question}“ — נשאלה {askCount, plural, one {פעם אחת} two {פעמיים} other {# פעמים}} על ידי {askedBy, plural, one {אדם אחד} two {# אנשים} other {# אנשים}}.",
-        "action": "ענו עליה"
+      "gaps": {
+        "title": "{count, plural, one {שאלה שלא ידע לענות עליה} other {# שאלות שלא ידע לענות עליהן}}",
+        "body": "{questions} — {asked, plural, one {נשאלה פעם אחת} other {נשאלו # פעמים}}",
+        "action": "{count, plural, one {לענות עליה} other {לענות עליהן}}"
       },
-      "knowledge_conflict": {
-        "title": "שני מקורות עדיין חלוקים לגבי {field}",
-        "body": "עד שתכריעו, GOTCHA מעבירה כל שאלה שנוגעת בזה לאדם.",
-        "action": "הכריעו"
+      "conflicts": {
+        "title": "{count, plural, one {שני מקורות עדיין חלוקים לגבי {fields}} other {מקורות חלוקים לגבי # דברים}}",
+        "body": "{count, plural, one {עד שתבחר, GOTCHA מעביר כל שאלה בנושא לאדם.} other {{fields} — עד שתבחר, GOTCHA מעביר את השאלות האלה לאדם.}}",
+        "action": "לפתור"
       },
-      "product_demand": {
-        "title": "{askedBy, plural, one {אדם אחד ביקש} two {# אנשים ביקשו} other {# אנשים ביקשו}} {term}",
-        "body": "אינכם מחזיקים את זה. {weeksRunning, plural, =1 {שבוע ראשון.} two {שבועיים ברציפות.} other {# שבועות ברציפות.}}",
-        "action": "מי ביקש"
+      "demandOne": {
+        "title": "{askedBy, plural, one {אדם אחד ביקש} other {# אנשים ביקשו}} {term}",
+        "body": "אין לך את זה במלאי. {weeksRunning, plural, =1 {שבוע ראשון.} other {# שבועות ברצף.}}",
+        "action": "לראות מי"
       },
-      "dormant_customers": {
+      "demandMany": {
+        "title": "{count} דברים שביקשו ואין לך במלאי",
+        "body": "{terms} — {asked, plural, one {בקשה אחת} other {# בקשות}}",
+        "action": "לראות מי"
+      },
+      "dormant": {
         "title": "{count, plural, one {לקוח אחד נעלם} two {# לקוחות נעלמו} other {# לקוחות נעלמו}}",
         "body": "אין קשר כבר {quietForDays, plural, one {יום} two {יומיים} other {# ימים}}. פנייה אליהם פותחת שיחות, לא סוגרת אותן.",
         "action": "פתחו קמפיין"
-      },
-      "fallback": {
-        "title": "משהו ששווה שעה",
-        "body": "GOTCHA סימנה את זה, אבל הניסוח עבורו עוד לא נכתב.",
-        "action": "הצצה"
       }
     }
   },

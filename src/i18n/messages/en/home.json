@@ -218,30 +218,30 @@
     "unavailable": "This list could not be loaded just now.",
     "missingSource": "Knowledge conflicts are not in this ranking yet.",
     "item": {
-      "knowledge_gap": {
-        "title": "{askedBy, plural, one {A question} other {Questions}} GOTCHA could not answer",
-        "body": "“{question}” — asked {askCount, plural, one {once} other {# times}} by {askedBy, plural, one {# person} other {# people}}.",
-        "action": "Answer it"
+      "gaps": {
+        "title": "{count, plural, one {A question it could not answer} other {# questions it could not answer}}",
+        "body": "{questions} — asked {asked, plural, one {once} other {# times}}",
+        "action": "{count, plural, one {Answer it} other {Answer them}}"
       },
-      "knowledge_conflict": {
-        "title": "Two sources still disagree about {field}",
-        "body": "Until you pick one, GOTCHA passes every question touching it to a person.",
+      "conflicts": {
+        "title": "{count, plural, one {Two sources still disagree about {fields}} other {Sources disagree about # things}}",
+        "body": "{count, plural, one {Until you pick one, GOTCHA passes every question touching it to a person.} other {{fields} — until you pick, GOTCHA passes those questions to a person.}}",
         "action": "Resolve it"
       },
-      "product_demand": {
+      "demandOne": {
         "title": "{askedBy, plural, one {# person} other {# people}} asked for {term}",
         "body": "You do not stock it. {weeksRunning, plural, =1 {First week.} other {# weeks running.}}",
         "action": "See who"
       },
-      "dormant_customers": {
+      "demandMany": {
+        "title": "{count} things people asked for that you do not stock",
+        "body": "{terms} — asked {asked, plural, one {once} other {# times}}",
+        "action": "See who"
+      },
+      "dormant": {
         "title": "{count, plural, one {# customer has} other {# customers have}} gone quiet",
         "body": "No contact for {quietForDays, plural, one {# day} other {# days}}. Reaching them starts conversations rather than ending them.",
         "action": "Start a campaign"
-      },
-      "fallback": {
-        "title": "Something worth an hour",
-        "body": "GOTCHA flagged this but the wording for it is not written yet.",
-        "action": "Take a look"
       }
     }
   },

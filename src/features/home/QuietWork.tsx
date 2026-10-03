@@ -7,7 +7,7 @@ import { Link } from '@/i18n/navigation';
 
 import { ConflictRow } from './ConflictRow';
 import styles from './Home.module.css';
-import { quietDayCopy } from './quiet-day-item';
+import { quietRows, type QuietRow } from './quiet-day-item';
 
 /**
  * "Worth an hour, while it is quiet" — the quiet day's replacement for the queue.
@@ -36,10 +36,13 @@ export async function QuietWork({
   const t = await getTranslations('home.quietWork');
 
   const items = quietDay?.data ?? [];
-  const work = items.filter((item) => item.effect === 'removes_work');
-  const opportunities = items.filter((item) => item.effect === 'creates_opportunity');
+  const rows = quietRows(items);
+  const work = rows.filter((row) => row.effect === 'removes_work');
+  const opportunities = rows.filter((row) => row.effect === 'creates_opportunity');
   const rankerMissedConflicts = quietDay?.sources.knowledge_conflict === false;
-  const isEmpty = items.length === 0 && conflicts.length === 0;
+  const isEmpty = rows.length === 0 && conflicts.length === 0;
+  /* 02: the first row's action is the dark one. */
+  const firstKey = work[0]?.source ?? (conflicts.length > 0 ? null : opportunities[0]?.source);
 
   return (
     <>
@@ -53,16 +56,16 @@ export async function QuietWork({
       </div>
 
       <div className={styles.workCard}>
-        {work.map((item) => (
-          <QuietRow key={item.id} item={item} t={t} />
+        {work.map((row) => (
+          <QuietRowView key={row.source} row={row} t={t} primary={row.source === firstKey} />
         ))}
 
         {conflicts.map((conflict) => (
           <ConflictRow key={conflict.id} conflict={conflict} />
         ))}
 
-        {opportunities.map((item) => (
-          <QuietRow key={item.id} item={item} t={t} />
+        {opportunities.map((row) => (
+          <QuietRowView key={row.source} row={row} t={t} primary={row.source === firstKey} />
         ))}
 
         <p className={styles.workFooter}>
@@ -81,18 +84,26 @@ export async function QuietWork({
 
 type Translate = ReturnType<typeof getTranslations> extends Promise<infer T> ? T : never;
 
-function QuietRow({ item, t }: { item: QuietDay['data'][number]; t: Translate }) {
-  const { key, values, href } = quietDayCopy(item);
+const TONE_CLASS = {
+  gap: styles.workRowGap,
+  conflict: styles.workRowConflict,
+  opportunity: styles.workRowOpportunity,
+} as const;
 
+function QuietRowView({ row, t, primary }: { row: QuietRow; t: Translate; primary: boolean }) {
   return (
-    <div className={styles.workRow}>
+    <div
+      className={[styles.workRow, row.tone ? TONE_CLASS[row.tone] : ''].join(' ').trim()}
+      data-testid={`quiet-row-${row.source}`}
+      data-tone={row.tone ?? 'none'}
+    >
       <div className={styles.workRowText}>
-        <p className={styles.workRowTitle}>{t(`item.${key}.title`, values)}</p>
-        <p className={styles.workRowBody}>{t(`item.${key}.body`, values)}</p>
+        <p className={styles.workRowTitle}>{t(`item.${row.key}.title`, row.values)}</p>
+        <p className={styles.workRowBody}>{t(`item.${row.key}.body`, row.values)}</p>
       </div>
       <div className={styles.workRowActions}>
-        <Link href={href} className={styles.actionSecondary}>
-          {t(`item.${key}.action`)}
+        <Link href={row.href} className={primary ? styles.actionPrimary : styles.actionSecondary}>
+          {t(`item.${row.key}.action`, row.values)}
         </Link>
       </div>
     </div>
