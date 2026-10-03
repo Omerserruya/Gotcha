@@ -91,3 +91,19 @@ describe('★ 01d — the signals pill opens the notifications panel', () => {
     expect(screen.getByTestId('signals')).toHaveTextContent('2 signals');
   });
 });
+
+describe('★ 01b — the quiet strip names the last handover, as "—"', () => {
+  it('quiet: "Last handover —" with why', async () => {
+    render(await strip({ isQuiet: true, waiting: 0 }));
+    expect(screen.getByTestId('last-handover')).toHaveTextContent('Last handover —');
+    expect(screen.getByTestId('last-handover')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/Nothing records/),
+    );
+  });
+
+  it('busy: not drawn', async () => {
+    render(await strip({ isQuiet: false }));
+    expect(screen.queryByTestId('last-handover')).toBeNull();
+  });
+});

@@ -22,7 +22,14 @@ import { useAgentRun, type AgentStep } from './use-agent-run';
  * what an operator actually needs is "did it look at the order, did the refund
  * go through" — not how it decided.
  */
-export function CommandSurface({ tone = 'busy' }: { tone?: 'busy' | 'quiet' }) {
+export function CommandSurface({
+  tone = 'busy',
+  openQuestions = null,
+}: {
+  tone?: 'busy' | 'quiet';
+  /** 01b: questions GOTCHA could not answer, for "Answer the 4 open questions". */
+  openQuestions?: number | null;
+}) {
   const t = useTranslations('home.command');
   const [message, setMessage] = useState('');
   const { state, run, cancel } = useAgentRun();
@@ -46,11 +53,21 @@ export function CommandSurface({ tone = 'busy' }: { tone?: 'busy' | 'quiet' }) {
     }
   }
 
-  const suggestions = [
-    t('suggestions.summarise'),
-    t('suggestions.waiting'),
-    t('suggestions.campaign'),
-  ];
+  /*
+    01b: on a quiet day the chips shift from triage to improvement. They
+    existed in the catalogue and were never drawn — the busy three showed
+    on every day.
+  */
+  const suggestions =
+    tone === 'quiet'
+      ? [
+          openQuestions && openQuestions > 0
+            ? t('quiet.answerCounted', { count: openQuestions })
+            : t('quiet.answer'),
+          t('quiet.dormant'),
+          t('quiet.recap'),
+        ]
+      : [t('suggestions.summarise'), t('suggestions.waiting'), t('suggestions.campaign')];
 
   return (
     <form className={styles.surface} onSubmit={submit}>

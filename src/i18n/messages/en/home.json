@@ -3,7 +3,11 @@
     "morning": "Good morning",
     "afternoon": "Good afternoon",
     "evening": "Good evening",
-    "quiet": "Quiet morning"
+    "quiet": {
+      "morning": "Quiet morning",
+      "afternoon": "Quiet afternoon",
+      "evening": "Quiet evening"
+    }
   },
   "summary": "{total, plural, =0 {Nothing has come in yet today.} one {One conversation today, # handled without you.} other {# conversations today, {handled} handled without you.}}",
   "summaryBacklog": "{waiting, plural, one {Nothing new today. # conversation is still waiting from before.} other {Nothing new today. # conversations are still waiting from before.}}",
@@ -30,7 +34,8 @@
     "quiet": {
       "answer": "Answer the open questions",
       "dormant": "Write to the people who went quiet",
-      "recap": "Read yesterday back to me"
+      "recap": "Read yesterday back to me",
+      "answerCounted": "{count, plural, one {Answer the open question} other {Answer the # open questions}}"
     }
   },
   "metrics": {
@@ -263,7 +268,9 @@
     "noSignals": "No signals",
     "signalsUnknown": "Signals unavailable",
     "waitingOnYou": "{count, plural, =0 {Nothing waiting on you} one {# waiting on you} other {# waiting on you}}",
-    "waitingUnknown": "Waiting count unavailable"
+    "waitingUnknown": "Waiting count unavailable",
+    "lastHandover": "Last handover",
+    "lastHandoverNone": "Nothing records when a conversation was last handed to a person."
   },
   "insight": {
     "title": "Worth knowing",

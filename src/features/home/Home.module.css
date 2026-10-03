@@ -71,6 +71,13 @@
     background-color: var(--signal-done-text);
   }
 
+  /* 01b: a second clause, set apart by a rule as 02 draws it. */
+  .statusAside {
+    margin-inline-start: var(--space-14);
+    padding-inline-start: var(--space-14);
+    border-inline-start: var(--border-width-thin) solid var(--border-strong);
+  }
+
   .statusMeta {
     display: flex;
     align-items: center;
@@ -203,6 +210,25 @@
     padding-inline: var(--space-40);
   }
 
+  /* 01b, measured: two columns on a quiet day — 646 · 478. */
+  .columnsQuiet {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    /* As the rail: present when needed, not a bright bar down the panel. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+    display: grid;
+    grid-template-columns: minmax(0, 646fr) minmax(0, 478fr);
+    /* Bounded, so each column's card scrolls inside rather than growing. */
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--space-14);
+    /* `padding: 20px 40px 30px` in the source; the foot trimmed to 24 — see
+       the note on .statusStrip, the same amount off each end. */
+    padding-block: var(--space-20) var(--space-24);
+    padding-inline: var(--space-40);
+  }
+
   .columns::-webkit-scrollbar {
     inline-size: 6px;
   }
@@ -238,7 +264,8 @@
   }
 
   /* The list scrolls inside its card; the card never pushes the page. */
-  .queueColumn > .queueCard {
+  .queueColumn > .queueCard,
+  .queueColumn > .workCard {
     flex: 0 1 auto;
     min-block-size: 0;
     overflow-y: auto;

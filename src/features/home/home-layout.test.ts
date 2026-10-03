@@ -24,7 +24,9 @@ describe('★ 01 sits inside the frame, in three columns', () => {
   });
 
   it('the queue scrolls inside its card', () => {
-    expect(rule('queueColumn > \\.queueCard')).toMatch(/overflow-y:\s*auto/);
+    expect(rule('queueColumn > \\.queueCard,\\s*\\.queueColumn > \\.workCard')).toMatch(
+      /overflow-y:\s*auto/,
+    );
   });
 
   it('a row is one line: the name cut, the channel beside it', () => {
@@ -44,5 +46,14 @@ describe('★ 01d — a lone "Mark read" aligns with the text', () => {
     expect(/\.quiet:first-child\s*\{([^}]*)\}/.exec(panel)?.[1]).toMatch(
       /margin-inline-start:\s*calc\(-1 \* var\(--space-6\)\)/,
     );
+  });
+});
+
+describe('★ 01b — a quiet day is two columns', () => {
+  it('646 · 478, bounded like the busy grid', () => {
+    expect(rule('columnsQuiet')).toMatch(
+      /grid-template-columns:\s*minmax\(0, 646fr\) minmax\(0, 478fr\)/,
+    );
+    expect(rule('columnsQuiet')).toMatch(/grid-template-rows:\s*minmax\(0, 1fr\)/);
   });
 });

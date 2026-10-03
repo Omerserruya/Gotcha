@@ -86,7 +86,7 @@ export async function HomeScreen() {
           {format.dateTime(now, 'greeting')}
         </Text>
         <Text role="hero" as="h1" className={styles.greetingHeading}>
-          {isQuiet ? t('greeting.quiet') : t(`greeting.${partOfDay}`)}
+          {isQuiet ? t(`greeting.quiet.${partOfDay}`) : t(`greeting.${partOfDay}`)}
         </Text>
         <Text role="body" tone="muted" className={styles.greetingSummary}>
           {/*
@@ -111,7 +111,12 @@ export async function HomeScreen() {
 
       {/* The suggestions change with the mood: a quiet morning is the moment
           to do the work nobody schedules. */}
-      <CommandSurface tone={isQuiet ? 'quiet' : 'busy'} />
+      <CommandSurface
+        tone={isQuiet ? 'quiet' : 'busy'}
+        openQuestions={
+          quietDay ? quietDay.data.filter((item) => item.source === 'knowledge_gap').length : null
+        }
+      />
 
       {/*
         Day one. The design is explicit that this is not a separate onboarding
@@ -134,7 +139,7 @@ export async function HomeScreen() {
       ) : null}
 
       {isDayOne ? null : (
-        <div className={styles.columns}>
+        <div className={isQuiet ? styles.columnsQuiet : styles.columns}>
           <section className={styles.queueColumn}>
             {isQuiet ? (
               <QuietWork quietDay={quietDay} conflicts={conflicts} />
@@ -168,23 +173,39 @@ export async function HomeScreen() {
             )}
           </section>
 
-          {/* 01, measured: three columns — 447 · 331 (dark) · 331. */}
-          <div className={styles.activityColumn}>
-            <ActivityCard
-              events={activity}
-              timeSaved={timeSaved}
-              inFlight={inFlight}
-              allowance={allowance}
-              now={now}
-            />
-          </div>
+          {isQuiet ? (
+            /* 01b, measured: two columns — the work, then the dark card over the team. */
+            <aside className={styles.asideColumn}>
+              <ActivityCard
+                events={activity}
+                timeSaved={timeSaved}
+                inFlight={inFlight}
+                allowance={allowance}
+                now={now}
+              />
+              <TeamPanel team={team} presence={presence} />
+            </aside>
+          ) : (
+            <>
+              {/* 01, measured: three columns — 447 · 331 (dark) · 331. */}
+              <div className={styles.activityColumn}>
+                <ActivityCard
+                  events={activity}
+                  timeSaved={timeSaved}
+                  inFlight={inFlight}
+                  allowance={allowance}
+                  now={now}
+                />
+              </div>
 
-          <aside className={styles.asideColumn}>
-            <WorthKnowing insights={insights} />
+              <aside className={styles.asideColumn}>
+                <WorthKnowing insights={insights} />
 
-            {/* Always drawn: an empty team and a failed read are both states. */}
-            <TeamPanel team={team} presence={presence} />
-          </aside>
+                {/* Always drawn: an empty team and a failed read are both states. */}
+                <TeamPanel team={team} presence={presence} />
+              </aside>
+            </>
+          )}
         </div>
       )}
     </div>

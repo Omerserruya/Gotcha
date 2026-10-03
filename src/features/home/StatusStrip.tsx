@@ -75,6 +75,16 @@ export async function StatusStrip({
       */}
       <span className={styles.statusMeta}>
         {waiting === null ? t('waitingUnknown') : t('waitingOnYou', { count: waiting })}
+        {/* 01b's "Last handover 3 hours ago": nothing records it. */}
+        {isQuiet ? (
+          <span
+            className={styles.statusAside}
+            title={t('lastHandoverNone')}
+            data-testid="last-handover"
+          >
+            {t('lastHandover')} —
+          </span>
+        ) : null}
       </span>
     </div>
   );
