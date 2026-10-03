@@ -14,6 +14,8 @@ import { packagePrice } from '@/api/contracts/pricing';
 import { Button } from '@/design-system/primitives/button/Button';
 
 import { buyCreditPack, type BuyOutcome } from './actions';
+import { Link } from '@/i18n/navigation';
+
 import styles from './Billing.module.css';
 
 /**
@@ -93,6 +95,8 @@ export function BuyCredits({
   packages,
   billable,
   hasPaymentMethod,
+  card = null,
+  receiptTo = null,
 }: {
   readonly packages: PackagesResponse | null;
   /**
@@ -102,6 +106,10 @@ export function BuyCredits({
    */
   readonly billable: boolean;
   readonly hasPaymentMethod: boolean;
+  /** 02's "Pay with": the card that would be charged, when one was read. */
+  readonly card?: { readonly brand: string | null; readonly last4: string | null } | null;
+  /** 02's "Receipt to …", beside the button. */
+  readonly receiptTo?: string | null;
 }) {
   const t = useTranslations('billing');
   const format = useFormatter();
@@ -125,6 +133,20 @@ export function BuyCredits({
   const [isPending, startTransition] = useTransition();
 
   const pkg: CreditPackage | undefined = sellable.find((p) => p.key === chosen);
+
+  /*
+   * One fact is said once. When every pack shares its expiry — all four
+   * never expire on this tenant — it is one line under the tiles, not the
+   * same sentence in each of them.
+   */
+  const expiryOf = (p: CreditPackage) =>
+    p.expiryPolicy === 'DAYS_AFTER_PURCHASE'
+      ? t('pricing.packages.expiry.DAYS_AFTER_PURCHASE', { days: p.expiryDays ?? 0 })
+      : t(`pricing.packages.expiry.${p.expiryPolicy}`);
+  const sharedExpiry =
+    sellable.length > 0 && new Set(sellable.map(expiryOf)).size === 1
+      ? expiryOf(sellable[0]!)
+      : null;
 
   /*
    * One key per (package, quantity). See the note above: this is the whole
@@ -190,8 +212,6 @@ export function BuyCredits({
 
   return (
     <section className={styles.block} data-testid="buy-credits">
-      <h3 className={styles.buyHeading}>{t('buy.heading')}</h3>
-
       <ul className={styles.buyPacks} data-testid="buy-packs">
         {sellable.map((p) => (
           <li key={p.key}>
@@ -251,15 +271,46 @@ export function BuyCredits({
                 them when these credits die. Before it, this can — and it is
                 read per pack, never from the summary.
               */}
-              <span className={styles.buyPackExpiry} data-testid={`buy-pack-expiry-${p.key}`}>
-                {p.expiryPolicy === 'DAYS_AFTER_PURCHASE'
-                  ? t('pricing.packages.expiry.DAYS_AFTER_PURCHASE', { days: p.expiryDays ?? 0 })
-                  : t(`pricing.packages.expiry.${p.expiryPolicy}`)}
+              {/* 02's "₪0.065 each": arithmetic on the two real numbers. */}
+              {packagePrice(p) && p.credits > 0 ? (
+                <span className={styles.buyPackEach} data-testid={`buy-pack-each-${p.key}`}>
+                  {t('buy.each', {
+                    price: format.number(packagePrice(p)!.amount / p.credits, {
+                      style: 'currency',
+                      currency: packagePrice(p)!.currency,
+                      maximumSignificantDigits: 2,
+                    }),
+                  })}
+                </span>
+              ) : null}
+              <span
+                className={sharedExpiry ? 'srOnly' : styles.buyPackExpiry}
+                data-testid={`buy-pack-expiry-${p.key}`}
+              >
+                {expiryOf(p)}
               </span>
             </label>
           </li>
         ))}
       </ul>
+
+      {sharedExpiry ? (
+        <p className={styles.buyShared} data-testid="buy-expiry-shared">
+          {sharedExpiry}
+        </p>
+      ) : null}
+
+      {/* 02's "Pay with": the card, or its absence in the same row. */}
+      <p className={styles.buyPayWith} data-testid="buy-pay-with">
+        <span className={styles.buyPayLabel}>{t('buy.payWith')}</span>
+        <span className={styles.buyPayCard}>
+          {card
+            ? `${card.brand ?? t('profile.unknownBrand')} · ${card.last4 ?? '—'}`
+            : hasPaymentMethod
+              ? '—'
+              : t('profile.noCardRow')}
+        </span>
+      </p>
 
       {pkg ? (
         <label className={styles.buyQuantity}>
@@ -294,7 +345,7 @@ export function BuyCredits({
         one that leaves the account.
       */}
       {total && pkg?.taxed ? (
-        <dl className={styles.buyTotals} data-testid="buy-totals">
+        <dl className="srOnly" data-testid="buy-totals">
           <div>
             <dt>{t('buy.net')}</dt>
             <dd data-testid="buy-net">{money(format, total.net, price?.currency ?? null)}</dd>
@@ -372,14 +423,37 @@ export function BuyCredits({
         that happens. The primitive carries both states, and `variant="primary"`
         is right here because buying is the panel's one action.
       */}
-      <Button
-        variant="primary"
-        data-testid="buy-button"
-        disabled={isPending || blocked !== null || !total}
-        onClick={buy}
-      >
-        {isPending ? t('buy.buying') : t('buy.action')}
-      </Button>
+      {/*
+        02: ONE button, the money in its label — "Pay ₪290 · incl. VAT
+        ₪343.20". The net, tax and total stay above for a screen reader.
+      */}
+      <div className={styles.buyActions}>
+        <Button
+          variant="primary"
+          data-testid="buy-button"
+          disabled={isPending || blocked !== null || !total}
+          onClick={buy}
+        >
+          {isPending
+            ? t('buy.buying')
+            : total && pkg?.taxed
+              ? pkg.taxed.exempt
+                ? t('buy.payExempt', { net: money(format, total.net, price?.currency ?? null) })
+                : t('buy.pay', {
+                    net: money(format, total.net, price?.currency ?? null),
+                    gross: money(format, total.gross, price?.currency ?? null),
+                  })
+              : t('buy.action')}
+        </Button>
+        <Link href="/settings/billing" className={styles.buyCancel}>
+          {t('autoPurchase.cancel')}
+        </Link>
+        {receiptTo ? (
+          <span className={styles.buyReceipt} data-testid="buy-receipt">
+            {t('buy.receiptTo', { email: receiptTo })}
+          </span>
+        ) : null}
+      </div>
 
       {/*
         TWO REASONS, TWO REPAIRS. "Nobody to invoice" and "nothing to charge"

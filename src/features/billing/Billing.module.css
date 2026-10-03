@@ -638,7 +638,9 @@
     padding: 0;
     list-style: none;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    /* 02: one row, however many packs. */
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
     gap: var(--space-10);
   }
 
@@ -1117,7 +1119,7 @@
     inset-block-start: 50%;
     inset-inline-start: 50%;
     translate: -50% -50%;
-    inline-size: min(552px, calc(100% - var(--space-32)));
+    inline-size: min(700px, calc(100% - var(--space-32)));
     max-block-size: calc(100% - var(--space-32));
     border-radius: var(--radius-panel);
   }
@@ -1759,5 +1761,66 @@
     border-radius: 10px;
     font-size: var(--font-size-body-sm);
     color: var(--text-primary);
+  }
+}
+
+@layer features {
+  .buyPackEach {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .buyShared {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .buyPayWith {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+  }
+
+  .buyPayLabel {
+    flex: none;
+    inline-size: 70px;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .buyPayCard {
+    flex: 1;
+    padding-block: var(--space-9);
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .buyActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .buyCancel {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+    text-decoration: none;
+  }
+
+  .buyReceipt {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  @media (width <= 700px) {
+    .buyPacks {
+      grid-auto-flow: row;
+    }
   }
 }

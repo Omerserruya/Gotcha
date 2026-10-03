@@ -79,7 +79,7 @@ export default async function Page({
       </div>
 
       {panel === 'buy' ? (
-        <BillingOverlay kind="dialog" title={t('overview.overlay.buy')}>
+        <BillingOverlay kind="dialog" title={t('overview.overlay.buy')} line={t('buy.subline')}>
           <BuyCredits
             packages={packages}
             /*
@@ -90,6 +90,8 @@ export default async function Page({
             */
             billable={profileReading(profile) !== 'no_account'}
             hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
+            card={paymentMethods?.[0] ?? null}
+            receiptTo={profile?.billingEmail ?? null}
           />
           {/*
             Nothing to buy says why — the plan cannot, the shelf is empty, or

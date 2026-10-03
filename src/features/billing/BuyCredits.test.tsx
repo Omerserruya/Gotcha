@@ -6,6 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { packagesResponseSchema } from '@/api/contracts/pricing';
 import messages from '@/i18n/messages/en/billing.json';
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
+
 import { BuyCredits } from './BuyCredits';
 
 /**
@@ -46,6 +52,10 @@ const PACKS = packagesResponseSchema.parse({
        *
        * A fixture is a claim that the platform can produce this object. This
        * one could not have come from anywhere.
+       *
+       * ★ AND THE WIRE MOVED AGAIN (2026-10-03): the route now sends `price`
+       * as a DisplayPrice object. The contract reads both; this flat one is
+       * the older shape, and `WIRE` below is today's.
        */
       price: '100.00',
       currency: 'ILS',
@@ -549,5 +559,75 @@ describe('★★ the four defects a browser walk found in one panel', () => {
     expect(button.tagName).toBe('BUTTON');
     /* The primitive's class, which carries both states. */
     expect(button.className).not.toBe('');
+  });
+});
+
+/** Today's wire: four packs priced as DisplayPrice, all never expiring. */
+const WIRE = packagesResponseSchema.parse({
+  eligible: true,
+  packages: [
+    ['credits_1000', 1000, '25.00'],
+    ['credits_5000', 5000, '110.00'],
+    ['credits_20000', 20000, '399.00'],
+    ['credits_50000', 50000, '899.00'],
+  ].map(([key, credits, amount]) => ({
+    key,
+    name: `${Number(credits).toLocaleString('en')} credits`,
+    credits,
+    price: {
+      base: { amount, currency: 'USD', formatted: `$${amount}` },
+      display: { amount, currency: 'USD', formatted: `$${amount}` },
+      isEstimatedConversion: false,
+      chargedCurrency: 'USD',
+      fx: null,
+    },
+    taxed: {
+      net: amount,
+      tax: (Number(amount) * 0.18).toFixed(2),
+      gross: (Number(amount) * 1.18).toFixed(2),
+      percent: 18,
+    },
+    expiryPolicy: 'NEVER',
+  })),
+});
+
+const showWire = (extra: Record<string, unknown> = {}) =>
+  render(
+    <NextIntlClientProvider locale="en" messages={{ billing: messages }}>
+      <BuyCredits packages={WIRE} billable hasPaymentMethod {...extra} />
+    </NextIntlClientProvider>,
+  );
+
+describe('★ 17d — 02’s dialog (measurement of 208d849)', () => {
+  it('no second "Buy credits" heading inside the dialog', () => {
+    showWire();
+    expect(screen.queryByRole('heading', { name: /buy credits/i })).toBeNull();
+  });
+
+  it('a tile is credits, price and price per credit; the shared expiry is said once', () => {
+    showWire();
+    expect(screen.getByTestId('buy-pack-each-credits_1000')).toHaveTextContent('$0.025 each');
+    expect(
+      screen
+        .getAllByText('These credits do not expire.')
+        .filter((el) => !el.classList.contains('srOnly')),
+    ).toHaveLength(1);
+    expect(screen.getByTestId('buy-expiry-shared')).toBeInTheDocument();
+  });
+
+  it('one button, the money in its label', () => {
+    showWire();
+    expect(screen.getByTestId('buy-button')).toHaveTextContent('Pay $25.00 · incl. VAT $29.50');
+  });
+
+  it('"Pay with" the card, and the receipt address beside the button', () => {
+    showWire({ card: { brand: 'Visa', last4: '4417' }, receiptTo: 'finance@example.com' });
+    expect(screen.getByTestId('buy-pay-with')).toHaveTextContent('Pay withVisa · 4417');
+    expect(screen.getByTestId('buy-receipt')).toHaveTextContent('Receipt to finance@example.com');
+  });
+
+  it('no card: "No card on file" in the same row', () => {
+    showWire({ hasPaymentMethod: false });
+    expect(screen.getByTestId('buy-pay-with')).toHaveTextContent('No card on file');
   });
 });

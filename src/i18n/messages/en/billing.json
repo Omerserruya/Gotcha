@@ -202,7 +202,13 @@
     "unsettled": "We don't yet know whether that payment went through. Please do NOT try again — you may already have been charged. Check your invoices in a few minutes, and contact us if nothing appears.",
     "tooManyMax": "This pack allows at most {max} in one purchase. Nothing was charged.",
     "notPurchasable": "This pack isn't available on your plan, or is no longer sold. Nothing was charged, and trying again won't change it — the list you're looking at may be out of date.",
-    "failed": "We couldn't complete that, and we can't tell you whether your card was charged. Check your invoices before trying again, and contact us if something appears that shouldn't have."
+    "failed": "We couldn't complete that, and we can't tell you whether your card was charged. Check your invoices before trying again, and contact us if something appears that shouldn't have.",
+    "each": "{price} each",
+    "payWith": "Pay with",
+    "pay": "Pay {net} · incl. VAT {gross}",
+    "payExempt": "Pay {net}",
+    "receiptTo": "Receipt to {email}",
+    "subline": "Added straight away."
   },
   "overview": {
     "yourPlan": "Your plan",
