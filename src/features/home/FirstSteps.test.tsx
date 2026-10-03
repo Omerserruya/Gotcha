@@ -141,7 +141,8 @@ describe('FirstSteps', () => {
 
   it('says what is in the way of a blocked step', async () => {
     await renderBlock();
-    expect(screen.getByText(/Needs Hire your first AI employee first/)).toBeInTheDocument();
+    expect(screen.getByText('After you hire your first AI employee.')).toBeInTheDocument();
+    expect(screen.queryByText(/Needs .* first/)).toBeNull();
   });
 
   it('★ Go live is locked, with what holds it, while it is not eligible', async () => {
@@ -191,5 +192,34 @@ describe('FirstSteps', () => {
   it('shows a step it has no copy for rather than dropping it', async () => {
     await renderBlock({ ...status, steps: [...status.steps, step({ id: 'verify_domain' })] });
     expect(screen.getByText('verify_domain')).toBeInTheDocument();
+  });
+});
+
+describe('★ 01c — measured against 02', () => {
+  it('a done step’s time is 24-hour, as everywhere else', async () => {
+    // 18:20 UTC is 21:20 in Jerusalem — which `timeStyle: short` wrote as "9:20 PM".
+    await renderBlock({
+      ...status,
+      steps: [
+        step({ id: 'connect_channel', state: 'done', completedAt: '2026-09-14T18:20:00.000Z' }),
+      ],
+    });
+    expect(screen.getByText('21:20')).toBeInTheDocument();
+    expect(screen.queryByText(/PM|AM/)).toBeNull();
+  });
+
+  it('the foot under the card says what replaces it', async () => {
+    await renderBlock();
+    expect(screen.getByTestId('first-steps-foot')).toHaveTextContent(
+      "Once you go live, today's numbers and the queue take this space.",
+    );
+  });
+
+  it('an unknown blocker still reads as a sentence', async () => {
+    await renderBlock({
+      ...status,
+      steps: [step({ id: 'connect_store', state: 'blocked', blockedBy: ['verify_domain'] })],
+    });
+    expect(screen.getByText('Waiting on: verify_domain')).toBeInTheDocument();
   });
 });

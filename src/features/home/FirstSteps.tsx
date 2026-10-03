@@ -32,81 +32,88 @@ export async function FirstSteps({
   const next = nextStep(setup);
 
   return (
-    <section className={styles.block}>
-      <div className={styles.header}>
-        <h2 className={styles.title}>{t('title')}</h2>
-        <span className={styles.progressText}>
-          {progress.isComplete
-            ? t('allDone')
-            : t('progress', { done: progress.done, minutes: progress.minutesLeft })}
-        </span>
-        {/*
+    <>
+      <section className={styles.block}>
+        <div className={styles.header}>
+          <h2 className={styles.title}>{t('title')}</h2>
+          <span className={styles.progressText}>
+            {progress.isComplete
+              ? t('allDone')
+              : t('progress', { done: progress.done, minutes: progress.minutesLeft })}
+          </span>
+          {/*
           The design offers "Hide"; dismissal has no backend flag to persist it,
           and a hide that reappears on the next load is worse than none. So the
           label leads where the steps live instead of pretending to remember.
         */}
-        <Link href="/settings" className={styles.hide}>
-          {t('hide')}
-        </Link>
-      </div>
+          <Link href="/settings" className={styles.hide}>
+            {t('hide')}
+          </Link>
+        </div>
 
-      {/* One segment per step: progress you can count, not a percentage. */}
-      <div className={styles.strip} aria-hidden="true">
-        {setup.steps.map((step) => (
-          <span
-            key={step.id}
-            className={[
-              styles.segment,
-              step.state === 'done' ? styles.segmentDone : '',
-              step.state === 'next' ? styles.segmentNext : '',
-            ]
-              .join(' ')
-              .trim()}
-          />
-        ))}
-      </div>
+        {/* One segment per step: progress you can count, not a percentage. */}
+        <div className={styles.strip} aria-hidden="true">
+          {setup.steps.map((step) => (
+            <span
+              key={step.id}
+              className={[
+                styles.segment,
+                step.state === 'done' ? styles.segmentDone : '',
+                step.state === 'next' ? styles.segmentNext : '',
+              ]
+                .join(' ')
+                .trim()}
+            />
+          ))}
+        </div>
 
-      <ol className={styles.list}>
-        {setup.steps.map((step, index) => (
-          <Row
-            key={step.id}
-            step={step}
-            position={index + 1}
-            isNext={next?.id === step.id}
-            ingest={ingest}
-            t={t}
-            format={format}
-          />
-        ))}
-      </ol>
+        <ol className={styles.list}>
+          {setup.steps.map((step, index) => (
+            <Row
+              key={step.id}
+              step={step}
+              position={index + 1}
+              isNext={next?.id === step.id}
+              ingest={ingest}
+              t={t}
+              format={format}
+            />
+          ))}
+        </ol>
 
-      {/*
+        {/*
         01c's Go live: locked, with what holds it, until the server says it is
         eligible — and then drawn, not live: going live is a write that puts
         GOTCHA in front of real customers.
       */}
-      <div className={styles.goLive} data-testid="go-live">
-        <div className={styles.goLiveText}>
-          <span className={styles.goLiveTitle}>{t('goLive.title')}</span>
-          <span className={styles.goLiveBody}>{t('goLive.body')}</span>
+        <div className={styles.goLive} data-testid="go-live">
+          <div className={styles.goLiveText}>
+            <span className={styles.goLiveTitle}>{t('goLive.title')}</span>
+            <span className={styles.goLiveBody}>{t('goLive.body')}</span>
+          </div>
+          <span
+            className={styles.goLiveButton}
+            aria-disabled="true"
+            data-testid="go-live-button"
+            title={
+              setup.goLive?.eligible
+                ? t('goLive.notYet')
+                : t('goLive.lockedBy', {
+                    steps:
+                      (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') ||
+                      '—',
+                  })
+            }
+          >
+            {setup.goLive?.eligible ? t('goLive.go') : t('goLive.locked')}
+          </span>
         </div>
-        <span
-          className={styles.goLiveButton}
-          aria-disabled="true"
-          data-testid="go-live-button"
-          title={
-            setup.goLive?.eligible
-              ? t('goLive.notYet')
-              : t('goLive.lockedBy', {
-                  steps:
-                    (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') || '—',
-                })
-          }
-        >
-          {setup.goLive?.eligible ? t('goLive.go') : t('goLive.locked')}
-        </span>
-      </div>
-    </section>
+      </section>
+      {/* True: once live, Home's face is the ordinary one (`homeFace`). */}
+      <p className={styles.foot} data-testid="first-steps-foot">
+        {t('foot')}
+      </p>
+    </>
   );
 }
 
@@ -189,11 +196,11 @@ function Row({
       <span className={styles.badge} aria-hidden="true">
         {position}
       </span>
-      <div className={styles.rowText}>
-        <div className={styles.rowTitle}>{title}</div>
-        <div className={styles.rowBody}>
-          {blocker ? t('blocked', { step: stepTitle(blocker, t) }) : body}
-        </div>
+      <div className={[styles.rowText, styles.rowLine].join(' ')}>
+        <span className={styles.rowTitle}>{title}</span>
+        <span className={styles.rowBody} title={blocker ? undefined : body}>
+          {blocker ? afterStep(blocker, t) : body}
+        </span>
       </div>
       <StepAction id={step.id} label={action} className={styles.actionSecondary} t={t} />
     </li>
@@ -229,6 +236,12 @@ function StepAction({
   );
 }
 
+/** "After you hire your first AI employee." — a sentence per blocker. */
+function afterStep(id: string, t: Translate): string {
+  const key = stepCopyKey(id);
+  return key ? t(`step.${key}.after`) : t('blockedBy', { step: id });
+}
+
 function stepTitle(id: string, t: Translate): string {
   const key = stepCopyKey(id);
   return key ? t(`step.${key}.title`) : id;
@@ -259,5 +272,8 @@ function ingestSuffix(step: SetupStep, ingest: KnowledgeIngest, t: Translate): s
 
 function clockTime(at: string, format: Format): string {
   const when = new Date(at);
-  return Number.isNaN(when.getTime()) ? '' : format.dateTime(when, { timeStyle: 'short' });
+  // 24-hour, as the rest of the product writes a time ("09:02").
+  return Number.isNaN(when.getTime())
+    ? ''
+    : format.dateTime(when, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }

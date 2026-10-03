@@ -312,49 +312,56 @@
     "hide": "Hide — finish later in Settings",
     "next": "DO THIS NEXT",
     "estimate": "{minutes} min",
-    "blocked": "Needs {step} first",
     "unavailable": "Setup progress could not be loaded just now.",
     "ingest": "{pages, plural, one {# page} other {# pages}} read, {drafted, plural, one {# answer} other {# answers}} drafted",
     "step": {
       "connect_channel": {
         "title": "Connect a channel",
         "body": "WhatsApp, Instagram or email — wherever your customers already write to you.",
-        "action": "Connect"
+        "action": "Connect",
+        "after": "After you connect a channel."
       },
       "connect_store": {
         "title": "Connect your store",
         "body": "Until this is done GOTCHA can answer about orders, but not refund, cancel or track them.",
-        "action": "Connect store"
+        "action": "Connect store",
+        "after": "After you connect your store."
       },
       "add_knowledge": {
         "title": "Add what GOTCHA should know",
         "body": "Point it at your site and it reads the pages itself.",
-        "action": "Add knowledge"
+        "action": "Add knowledge",
+        "after": "After you add what GOTCHA should know."
       },
       "hire_employee": {
         "title": "Hire your first AI employee",
         "body": "Pick its job and where it answers.",
-        "action": "Hire"
+        "action": "Hire",
+        "after": "After you hire your first AI employee."
       },
       "handover_rules": {
         "title": "Set the handover rules",
         "body": "When a person takes over — anger, money, wholesale — and what happens outside working hours.",
-        "action": "Set rules"
+        "action": "Set rules",
+        "after": "After you set the handover rules."
       },
       "approval_limits": {
         "title": "Choose what needs your approval",
         "body": "Refunds above an amount you set, cancellations, discounts.",
-        "action": "Set limits"
+        "action": "Set limits",
+        "after": "After you choose what needs your approval."
       },
       "test_conversation": {
         "title": "Send yourself a test",
         "body": "A conversation you mark as a test, to see how GOTCHA answers.",
-        "action": "Send a test"
+        "action": "Send a test",
+        "after": "After you send yourself a test."
       },
       "invite_team": {
         "title": "Invite your team",
         "body": "The people who will take over when GOTCHA hands a conversation across.",
-        "action": "Invite"
+        "action": "Invite",
+        "after": "After you invite your team."
       }
     },
     "noScreen": "No screen sets this yet.",
@@ -366,7 +373,9 @@
       "go": "Go live",
       "lockedBy": "Waiting on: {steps}",
       "notYet": "Going live puts GOTCHA in front of real customers — waiting for approval."
-    }
+    },
+    "foot": "Once you go live, today's numbers and the queue take this space.",
+    "blockedBy": "Waiting on: {step}"
   },
   "dayOne": {
     "eyebrow": "Setting up",

@@ -78,3 +78,30 @@ describe('★ 01b — the work rows: one line, buttons not links, edges by type'
     expect(rule(selector)).toContain(`var(--${token})`);
   });
 });
+
+describe('★ 01c — First steps is one card that fits the frame', () => {
+  const steps = readFileSync('src/features/home/FirstSteps.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const r = (selector: string) =>
+    new RegExp(`(?:^|\\n)\\s*\\.${selector}\\s*\\{([^}]*)\\}`).exec(steps)?.[1] ?? '';
+  it('a white bordered card, r18, 880, bounded', () => {
+    expect(r('block')).toMatch(/background-color:\s*var\(--panel-field\)/);
+    expect(r('block')).toMatch(/border-radius:\s*18px/);
+    expect(r('block')).toMatch(/inline-size:\s*880px/);
+    expect(r('block')).toMatch(/min-block-size:\s*0/);
+  });
+  it('the steps scroll inside; Go live never shrinks away', () => {
+    expect(r('list')).toMatch(/overflow-y:\s*auto/);
+    expect(r('goLive')).toMatch(/flex:\s*none/);
+  });
+  it('a waiting row is one line', () => {
+    expect(r('rowLine \\.rowBody')).toMatch(/white-space:\s*nowrap/);
+    expect(r('rowLine \\.rowTitle')).toMatch(/white-space:\s*nowrap/);
+    expect(r('doneText')).toMatch(/white-space:\s*nowrap/);
+  });
+  it('"Hide" is quiet text, not a link', () => {
+    expect(r('hide')).toMatch(/text-decoration:\s*none/);
+  });
+});

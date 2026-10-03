@@ -19,30 +19,34 @@
    * are on every other morning: it takes what is left and scrolls inside it,
    * so the greeting and the command box stay put.
    */
+  /*
+   * 01c, measured: ONE white card on the command box's measure (880),
+   * `r18 · p 15px 20px 13px`. It takes what is left of the frame; the steps
+   * scroll inside it and Go live stays pinned at its foot.
+   */
   .block {
+    display: flex;
+    flex-direction: column;
     inline-size: 880px;
     max-inline-size: calc(100% - var(--space-40) * 2);
     margin-inline: auto;
-    margin-block-start: var(--space-24);
+    margin-block-start: 15px;
     flex: 1;
     min-block-size: 0;
-    overflow-y: auto;
-    padding-block-end: var(--space-24);
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-heavy) transparent;
+    padding: 15px 20px 13px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 18px;
+    background-color: var(--panel-field);
+    overflow: hidden;
   }
 
-  .block::-webkit-scrollbar {
-    inline-size: 6px;
-  }
-
-  .block::-webkit-scrollbar-thumb {
-    background-color: var(--border-heavy);
-    border-radius: var(--radius-key);
-  }
-
-  .block::-webkit-scrollbar-track {
-    background: transparent;
+  /* "Once you go live…", under the card. */
+  .foot {
+    inline-size: 880px;
+    max-inline-size: calc(100% - var(--space-40) * 2);
+    margin: var(--space-10) auto var(--space-14);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
   }
 
   .header {
@@ -69,6 +73,8 @@
     border: none;
     padding: 0;
     cursor: pointer;
+    /* Quiet text, as 02's — not a link's underline. */
+    text-decoration: none;
   }
 
   .hide:hover {
@@ -99,9 +105,16 @@
 
   .list {
     display: flex;
+    flex: 1;
     flex-direction: column;
-    margin-block-start: var(--space-11);
+    min-block-size: 0;
+    overflow-y: auto;
+    margin: var(--space-11) 0 0;
+    padding: 0;
+    list-style: none;
     border-block-start: var(--border-width-thin) solid var(--panel-well);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
   }
 
   .row {
@@ -164,8 +177,32 @@
 
   /* A finished step is one quiet line: it is history, not an instruction. */
   .doneText {
+    overflow: hidden;
     font-size: var(--font-size-body-sm);
     color: var(--text-subtle);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 02's waiting row: one line — the name, then what it is, cut if it must be. */
+  .rowLine {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .rowLine .rowTitle {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .rowLine .rowBody {
+    min-inline-size: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .doneTime {
@@ -261,6 +298,7 @@
   /* 01c's Go live: a dark row closing the block. */
   .goLive {
     display: flex;
+    flex: none;
     align-items: center;
     gap: var(--space-14);
     margin-block-start: var(--space-12);
