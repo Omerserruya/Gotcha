@@ -39,21 +39,25 @@ export default async function Page() {
   return (
     <SettingsSection title={t('title')} description={t('description')}>
       {workspace ? <ScanPanel domain={workspace.websiteDomain ?? null} /> : null}
-      {workspace ? <FactRows workspace={workspace} /> : <p>{t('unavailable')}</p>}
+      {workspace ? (
+        <FactRows
+          workspace={workspace}
+          languagePanel={
+            <Languages
+              share={languages.share}
+              systemLocale={languages.systemLocale}
+              myLocale={languages.myLocale}
+              storedLanguage={workspace.languages[0] ?? null}
+            />
+          }
+        />
+      ) : (
+        <p>{t('unavailable')}</p>
+      )}
       <div className={styles.cards}>
         {voice ? <VoiceEditor voice={voice} /> : <p>{t('voice.unavailable')}</p>}
         {claims ? <ProhibitedClaims claims={claims.claims} /> : <p>{t('claims.unavailable')}</p>}
       </div>
-      {/*
-        Screen 11d's content (which languages are arriving), not 11's — kept
-        here until 11d is measured and it moves to the Language row's edit.
-      */}
-      <Languages
-        share={languages.share}
-        systemLocale={languages.systemLocale}
-        myLocale={languages.myLocale}
-        storedLanguage={workspace?.languages[0] ?? null}
-      />
     </SettingsSection>
   );
 }

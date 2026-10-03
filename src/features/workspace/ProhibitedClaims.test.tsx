@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -33,6 +33,8 @@ function renderClaims(locale: 'en' | 'he' = 'en') {
 describe('★ the field names the thing and the button names the verb', () => {
   it('does not render the same string twice', () => {
     renderClaims();
+    // The editing opens in place, from 02's "Add a rule".
+    fireEvent.click(screen.getByTestId('claims-open'));
     const button = screen.getByRole('button', { name: /^add$/i });
     const field = screen.getByLabelText(/new rule/i);
 
@@ -44,6 +46,7 @@ describe('★ the field names the thing and the button names the verb', () => {
 
   it('holds in Hebrew too, where the same key would duplicate identically', () => {
     renderClaims('he');
+    fireEvent.click(screen.getByTestId('claims-open'));
     const button = screen.getByRole('button', { name: /הוספה/ });
     expect(button).toBeInTheDocument();
     expect(screen.getByLabelText(/כלל חדש/)).toBeInTheDocument();
@@ -54,5 +57,14 @@ describe('the list it was given', () => {
   it('renders an existing rule rather than an empty state', () => {
     renderClaims();
     expect(screen.getByText(/Promise a delivery date/i)).toBeInTheDocument();
+  });
+});
+
+describe('★ 11 draws a read state; the editing opens in place', () => {
+  it('the rules as bullets and "Add a rule" — no field, no Remove until it is opened', () => {
+    renderClaims();
+    expect(screen.queryByLabelText(/new rule/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^remove$/i })).toBeNull();
+    expect(screen.getByTestId('claims-open')).toHaveTextContent('Add a rule');
   });
 });

@@ -309,3 +309,22 @@ export type AcceptResult = z.infer<typeof acceptResultSchema>;
 export function siteWasReadable(reach: CrawlReach | null): boolean {
   return reach === null || reach.distinctTextPages > 1;
 }
+
+/**
+ * A website as 02 writes it: the host alone — "avivco.il", never
+ * "https://www.avivco.il/". The field arrives as a full URL; the scheme and
+ * `www.` are noise beside a name, and the full URL wrapped 11's banner onto
+ * two lines. A value that does not parse is shown without its scheme.
+ */
+export function displayHost(value: string): string {
+  const trimmed = value.trim();
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    return url.host.replace(/^www\./i, '');
+  } catch {
+    return trimmed
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+      .replace(/^www\./i, '')
+      .replace(/\/+$/, '');
+  }
+}

@@ -1,9 +1,17 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { useLocale, useTranslations } from 'next-intl';
 import { Fragment, useState, useTransition } from 'react';
 
-import { DAY_KEYS, fieldOrigin, type DayKey, type Workspace } from '@/api/contracts/workspace';
+import {
+  DAY_KEYS,
+  fieldOrigin,
+  type DayKey,
+  type Workspace,
+  displayHost,
+} from '@/api/contracts/workspace';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
 
@@ -64,7 +72,14 @@ const PROVENANCE_FIELD: Partial<Record<FactKey, string>> = {
   language: 'primaryLanguage',
 };
 
-export function FactRows({ workspace }: { workspace: Workspace }) {
+export function FactRows({
+  workspace,
+  languagePanel = null,
+}: {
+  workspace: Workspace;
+  /** 11d: shown inside the Language row's edit. */
+  languagePanel?: ReactNode;
+}) {
   const t = useTranslations('workspace');
   const locale = useLocale();
   const [editing, setEditing] = useState<FactKey | null>(null);
@@ -393,7 +408,8 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
       */}
       {row(
         'website',
-        workspace.websiteDomain ?? null,
+        // The host alone, as 02 writes it — never the scheme or `www.`.
+        workspace.websiteDomain ? displayHost(workspace.websiteDomain) : null,
         null,
         workspace.websiteDomain ? t('website.readOnly') : t('website.notSet'),
       )}
@@ -627,6 +643,12 @@ export function FactRows({ workspace }: { workspace: Workspace }) {
             hint={t('languageNote')}
             onChange={(e) => setLanguage(e.target.value)}
           />
+          {/*
+            11d's account of the languages — which arrive, what GOTCHA writes
+            in, what this person sees — opened with the row, not printed under
+            the page. A server panel, handed in.
+          */}
+          {languagePanel}
         </div>,
       )}
 

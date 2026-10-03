@@ -369,15 +369,30 @@
   }
 
   /* The inline "From website" badge, where the design puts it. */
+  /*
+   * 02's "From website" chip — on the rows and as the banner's legend, one
+   * look for both: violet, radius 6, `padding:3px 8px`, 10.5px, a dot.
+   */
   .fromWebsite {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     margin-inline-start: var(--space-8);
-    font-size: var(--font-size-caption);
-    color: var(--intent-calm-text);
-    background-color: var(--intent-calm-surface);
-    border-radius: var(--radius-badge);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-8);
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--ai-avatar-surface);
+    font-size: var(--font-size-counter);
+    line-height: normal;
+    color: var(--ai-avatar-text);
     white-space: nowrap;
+  }
+
+  .fromWebsite::before {
+    content: '';
+    inline-size: 5px;
+    block-size: 5px;
+    border-radius: 50%;
+    background-color: currentcolor;
   }
 
   /* A caveat under a value — never a second value. */
@@ -566,6 +581,51 @@
     font-size: var(--font-size-meta);
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
+  }
+
+  /* A quiet link at a card's foot: "Edit", "Add a rule", "Done". */
+  .cardLink {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    border-block-end: 1px solid var(--border-strong);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .cardLink:hover {
+    color: var(--text-primary);
+  }
+
+  /* The voice, read: its words at 13px — where 02 has tone chips. */
+  .voiceText {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    line-height: 1.5;
+    color: var(--text-body);
+  }
+
+  .voiceUnset {
+    color: var(--text-subtle);
+  }
+
+  /* A rule, read: a bullet. */
+  .claim::before {
+    content: '';
+    flex: none;
+    inline-size: 4px;
+    block-size: 4px;
+    border-radius: 50%;
+    background-color: var(--text-subtle);
+  }
+
+  .claimEmpty {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
   }
 
   @media (width < 64rem) {

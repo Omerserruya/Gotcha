@@ -38,6 +38,7 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
   const tRoot = useTranslations('workspace');
   const [list, setList] = useState<readonly string[]>(claims);
   const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -80,45 +81,52 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
     <section className={styles.card} data-card="claims" data-testid="claims-card">
       <p className={styles.cardTitle}>{t('title')}</p>
 
+      {/*
+        02 draws a READ state — the rules as bullets and an "Add a rule" link.
+        The link opens the editing in place: the field, and each rule's Remove.
+      */}
       <div className={styles.claims} data-testid="claims-list">
-        {list.length === 0 ? <p className={styles.claim}>{t('empty')}</p> : null}
+        {list.length === 0 ? <p className={styles.claimEmpty}>{t('empty')}</p> : null}
 
         {list.map((claim, index) => (
           <div key={`${claim}-${index}`} className={styles.claim}>
             <span className={styles.claimText}>{claim}</span>
-            <button
-              type="button"
-              className={styles.claimRemove}
-              disabled={isPending}
-              onClick={() =>
-                write(
-                  list.filter((_, i) => i !== index),
-                  list,
-                )
-              }
-            >
-              {t('remove')}
-            </button>
+            {editing ? (
+              <button
+                type="button"
+                className={styles.claimRemove}
+                disabled={isPending}
+                onClick={() =>
+                  write(
+                    list.filter((_, i) => i !== index),
+                    list,
+                  )
+                }
+              >
+                {t('remove')}
+              </button>
+            ) : null}
           </div>
         ))}
 
-        <div className={styles.claimAdd} data-testid="claims-add">
-          <Input
-            label={t('newRule')}
-            value={draft}
-            placeholder={t('placeholder')}
-            maxLength={MAX_CLAIM_LENGTH}
-            disabled={isFull}
-            hint={isFull ? t('full', { max: MAX_CLAIMS }) : undefined}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                add();
-              }
-            }}
-          />
-          {/*
+        {editing ? (
+          <div className={styles.claimAdd} data-testid="claims-add">
+            <Input
+              label={t('newRule')}
+              value={draft}
+              placeholder={t('placeholder')}
+              maxLength={MAX_CLAIM_LENGTH}
+              disabled={isFull}
+              hint={isFull ? t('full', { max: MAX_CLAIMS }) : undefined}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  add();
+                }
+              }}
+            />
+            {/*
             `addAction`, not `add`. The field's label and this button both
             read `t('add')` and both rendered "Add a rule", one above the
             other — a label naming the thing and a button naming the verb are
@@ -129,10 +137,28 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
             duplicate label is invisible to a type checker, to a test that
             queries by role, and to a reader who knows what it meant to say.
           */}
-          <Button size="sm" onClick={add} disabled={isPending || isFull || !draft.trim()}>
-            {t('addAction')}
-          </Button>
-        </div>
+            <Button size="sm" onClick={add} disabled={isPending || isFull || !draft.trim()}>
+              {t('addAction')}
+            </Button>
+            <button
+              type="button"
+              className={styles.cardLink}
+              data-testid="claims-done"
+              onClick={() => setEditing(false)}
+            >
+              {t('done')}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={styles.cardLink}
+            data-testid="claims-open"
+            onClick={() => setEditing(true)}
+          >
+            {t('add')}
+          </button>
+        )}
       </div>
 
       {status ? (

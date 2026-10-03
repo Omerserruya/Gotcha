@@ -26,6 +26,7 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
   const format = useFormatter();
 
   const [draft, setDraft] = useState(voice.guidance ?? '');
+  const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -106,67 +107,104 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
         ? t('sourceLearned')
         : t('sourceNone');
 
+  const sampleBox = (
+    <div>
+      <div
+        className={[styles.sample, shownSample ? '' : styles.sampleUnavailable].join(' ').trim()}
+        data-testid="voice-sample"
+      >
+        {shownSample ?? panelMessage}
+      </div>
+      <p className={styles.sampleCaption}>{t('sampleTitle')}</p>
+    </div>
+  );
+
+  /*
+    11 draws a READ state — the setting, the sample, its caption — and edits
+    in place (11e). The voice is stored as words, so the words are what the
+    read state shows where 02 has tone chips.
+  */
+  if (!editing) {
+    return (
+      <section className={styles.card} data-card="voice" data-testid="voice-card">
+        <p className={styles.cardTitle}>{t('title')}</p>
+        <p
+          className={[styles.voiceText, trimmed ? '' : styles.voiceUnset].join(' ').trim()}
+          data-testid="voice-text"
+        >
+          {trimmed || t('sourceNone')}
+        </p>
+        <p className={styles.status} data-testid="voice-status">
+          {status ?? sourceLine}
+        </p>
+        {sampleBox}
+        <button
+          type="button"
+          className={styles.cardLink}
+          data-testid="voice-edit"
+          onClick={() => setEditing(true)}
+        >
+          {t('edit')}
+        </button>
+      </section>
+    );
+  }
+
   return (
     <section className={styles.card} data-card="voice" data-testid="voice-card">
       <p className={styles.cardTitle}>{t('title')}</p>
 
-      <div className={styles.voiceGrid}>
-        <div>
-          <textarea
-            className={styles.voiceField}
-            data-testid="voice-field"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={t('placeholder')}
-            maxLength={VOICE_MAX}
-            aria-label={t('title')}
-            aria-describedby="voice-help"
-          />
-          <p id="voice-help" className={styles.sampleCaption}>
-            {t('help')}
-          </p>
+      <textarea
+        className={styles.voiceField}
+        data-testid="voice-field"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder={t('placeholder')}
+        maxLength={VOICE_MAX}
+        aria-label={t('title')}
+        aria-describedby="voice-help"
+      />
+      <p id="voice-help" className={styles.sampleCaption}>
+        {t('help')}
+      </p>
 
-          <div className={styles.voiceFooter}>
-            <Button
-              variant="primary"
-              size="sm"
-              data-testid="voice-save"
-              onClick={save}
-              // Short-but-not-empty is the only invalid state: empty is a
-              // deliberate revert, and the server treats it as one.
-              disabled={isPending || tooShort}
-            >
-              {isPending ? tRoot('saving') : isRevert ? t('revert') : tRoot('save')}
-            </Button>
-            <span
-              className={[styles.status, isError ? styles.statusError : ''].join(' ').trim()}
-              data-testid="voice-status"
-            >
-              {status ?? sourceLine}
-            </span>
-            <span
-              className={[styles.counter, tooShort ? styles.counterShort : ''].join(' ').trim()}
-              data-testid="voice-counter"
-            >
-              {tooShort
-                ? t('tooShort', { count: trimmed.length, min: VOICE_MIN })
-                : t('counter', { count: trimmed.length, max: VOICE_MAX })}
-            </span>
-          </div>
-        </div>
-
-        <div>
-          <div
-            className={[styles.sample, shownSample ? '' : styles.sampleUnavailable]
-              .join(' ')
-              .trim()}
-            data-testid="voice-sample"
-          >
-            {shownSample ?? panelMessage}
-          </div>
-          <p className={styles.sampleCaption}>{t('sampleTitle')}</p>
-        </div>
+      <div className={styles.voiceFooter}>
+        <Button
+          variant="primary"
+          size="sm"
+          data-testid="voice-save"
+          onClick={save}
+          // Short-but-not-empty is the only invalid state: empty is a
+          // deliberate revert, and the server treats it as one.
+          disabled={isPending || tooShort}
+        >
+          {isPending ? tRoot('saving') : isRevert ? t('revert') : tRoot('save')}
+        </Button>
+        <button
+          type="button"
+          className={styles.cardLink}
+          data-testid="voice-done"
+          onClick={() => setEditing(false)}
+        >
+          {t('done')}
+        </button>
+        <span
+          className={[styles.status, isError ? styles.statusError : ''].join(' ').trim()}
+          data-testid="voice-status"
+        >
+          {status ?? sourceLine}
+        </span>
+        <span
+          className={[styles.counter, tooShort ? styles.counterShort : ''].join(' ').trim()}
+          data-testid="voice-counter"
+        >
+          {tooShort
+            ? t('tooShort', { count: trimmed.length, min: VOICE_MIN })
+            : t('counter', { count: trimmed.length, max: VOICE_MAX })}
+        </span>
       </div>
+
+      {sampleBox}
     </section>
   );
 }

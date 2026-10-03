@@ -83,7 +83,9 @@
     "sampleUnavailable": "A sample can't be generated right now. Your guidance is unaffected.",
     "generating": "Writing a sample…",
     "revert": "Clear and let GOTCHA learn it again",
-    "reverted": "Handed back to the learner. GOTCHA will work this out again from your own messages."
+    "reverted": "Handed back to the learner. GOTCHA will work this out again from your own messages.",
+    "edit": "Edit",
+    "done": "Done"
   },
   "claims": {
     "title": "Never say",
@@ -95,7 +97,8 @@
     "placeholder": "Promise a delivery date the carrier hasn't given",
     "remove": "Remove",
     "removed": "Removed “{claim}”",
-    "full": "That's the limit — {max} rules. Remove one to add another."
+    "full": "That's the limit — {max} rules. Remove one to add another.",
+    "done": "Done"
   },
   "currencyUnset": "No currency set",
   "languageUnset": "No language set",

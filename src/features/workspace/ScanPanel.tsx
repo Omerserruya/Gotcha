@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { siteWasReadable, type ScanResult } from '@/api/contracts/workspace';
+import { displayHost, siteWasReadable, type ScanResult } from '@/api/contracts/workspace';
 import { Globe } from 'lucide-react';
 
 import { Button } from '@/design-system/primitives/button/Button';
@@ -44,7 +44,8 @@ export function ScanPanel({ domain }: { readonly domain: string | null }) {
     02's banner sentence. The domain is named when we have one — "filled in
     from avivco.il" is a verifiable claim and "from your website" is not.
   */
-  const intro = domain ? tWorkspace('intro.withSite', { domain }) : tWorkspace('intro.noSite');
+  const host = domain ? displayHost(domain) : null;
+  const intro = host ? tWorkspace('intro.withSite', { domain: host }) : tWorkspace('intro.noSite');
   const [result, setResult] = useState<ScanResult | null>(null);
   const [failed, setFailed] = useState(false);
   const [taken, setTaken] = useState<{ accepted: number; skipped: number } | null>(null);
@@ -96,7 +97,7 @@ export function ScanPanel({ domain }: { readonly domain: string | null }) {
           className={styles.scanAgain}
           onClick={scan}
           disabled={isPending}
-          title={domain ? t('beforeYouStart', { domain }) : undefined}
+          title={host ? t('beforeYouStart', { domain: host }) : undefined}
           data-testid="scan-run"
         >
           {isPending ? t('running') : t('button')}
