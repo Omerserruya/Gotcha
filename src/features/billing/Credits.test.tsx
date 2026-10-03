@@ -155,8 +155,12 @@ describe('an estimate always says what it rests on', () => {
         sample: { conversations: 88, creditsConsumed: 660, conversationAttributedPct: 76 },
       },
     });
+    // 02's tile: the figure, then the average it rests on — the tenant's own.
     expect(measured.getByTestId('credits-estimate-observed')).toHaveTextContent(
-      /actually been using/i,
+      /≈ 120 conversations/,
+    );
+    expect(measured.getByTestId('credits-estimate-basis')).toHaveTextContent(
+      /average of 7\.5 credits per conversation/,
     );
     expect(measured.getByTestId('credits-estimate-basis')).toHaveTextContent(/your own usage/i);
     // And names how much of the burn the per-conversation figure describes.
@@ -292,5 +296,26 @@ describe("★ 17 · the framing is credits, and two of the design's lines are re
     const composition = purchasedOnly.getByTestId('credits-composition');
     expect(composition).toHaveTextContent(/500 bought separately/);
     expect(composition).not.toHaveTextContent(/plan credits/);
+  });
+});
+
+describe('★ 17 — 02’s bar is holdings, drawn only when it can be believed', () => {
+  it('no bar on the measured tenant: an empty bar is the 100% this refuses to draw', async () => {
+    await render17c();
+    expect(screen.queryByTestId('credits-bar')).toBeNull();
+  });
+
+  it('a bar once spend is real and credits are held', async () => {
+    await render17c({
+      usage: { consumedCredits: 100, remainingPlanCredits: 900, consumedPct: 10 },
+      purchasedCredits: { balance: 300 },
+      totalAvailableCredits: 1200,
+      observedRemaining: {
+        ...MEASURED.observedRemaining,
+        reason: null,
+        sample: { conversations: 40, creditsConsumed: 100, conversationAttributedPct: 100 },
+      },
+    });
+    expect(screen.getByTestId('credits-bar')).toBeInTheDocument();
   });
 });

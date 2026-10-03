@@ -89,10 +89,9 @@ async function openBilling(page: Page, locale: 'en' | 'he') {
     'no page heading — is the app serving on this origin?',
   ).toBeVisible({ timeout: 15_000 });
 
-  await expect(
-    page.getByTestId('section-runway'),
-    missingIds('an id this screen emits'),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('plan-hero'), missingIds('an id this screen emits')).toBeVisible({
+    timeout: 15_000,
+  });
 
   return page;
 }
@@ -108,7 +107,7 @@ async function openBilling(page: Page, locale: 'en' | 'he') {
  * the assertion's default 5s was too short while the helpers use 15s.
  *
  * But `Credits` is a SERVER component. By the time `openBilling` returns —
- * having already waited 15s for `section-runway` — the whole page HTML
+ * having already waited 15s for `plan-hero` — the whole page HTML
  * exists, and `credits-no-metering` is either in it or it is not. There is no
  * later fetch for a longer timeout to catch.
  *
@@ -207,7 +206,7 @@ for (const size of SIZES) {
 
       await openBilling(page, 'en');
 
-      const plan = page.getByTestId('plan-line');
+      const plan = page.getByTestId('plan-hero');
       await expect(plan).toBeVisible();
 
       /*
@@ -227,31 +226,23 @@ for (const size of SIZES) {
     });
 
     /*
-     * 2 · THE SHOT THAT MATTERS ON THIS TENANT.
+     * 2 · THE PRICE IS PER NOTHING WHEN THE PERIOD DISAGREES.
      *
-     * No chat volume option, so `limit` is null. There is no bar, no "1,840
-     * left" and no exhaustion date — and the screen must still read as
-     * working. A page showing 0 with nothing else looks broken.
-     *
-     * Asserted POSITIVELY by content: the explanation must be present and must
-     * say what is true. Asserting merely that no error appears would pass on a
-     * blank section, which is the failure this test exists to prevent.
+     * The ACTIVE row says `billingInterval: MONTHLY` over a period from
+     * 2026-09-08 to 2027-09-08. "$1,499 a month" beside a year would be a
+     * claim about money nobody can check, so the bare price stands.
      */
-    test('2 · a plan with no conversation cap reads as working', async ({ page }) => {
+    test('2 · the price claims no interval its period contradicts', async ({ page }) => {
       if (onlyOneProject()) return;
 
       await openBilling(page, 'en');
 
-      const runway = page.getByTestId('runway');
-      await expect(runway).toHaveAttribute('data-metered', 'no');
+      const price = page.getByTestId('plan-price');
+      await expect(price).toBeVisible();
+      await expect(price).not.toHaveText(/a month|a year/i);
+      await expect(page.getByTestId('credits')).toBeVisible();
 
-      const explanation = page.getByTestId('runway-unmetered');
-      await expect(explanation).toBeVisible();
-      await expect(explanation).toHaveText(/doesn't cap conversations/i);
-      // And it names the period it actually has, which here is a YEAR.
-      await expect(explanation).toHaveText(/2027/);
-
-      await shoot(page, `${size.name}-2-no-allowance`);
+      await shoot(page, `${size.name}-2-bare-price`);
     });
 
     /*
@@ -288,16 +279,15 @@ for (const size of SIZES) {
 
       await openBilling(page, 'en');
 
-      await expect(page.getByTestId('section-invoices')).toBeVisible();
-      await expect(page.getByTestId('section-breakdown')).toBeVisible();
+      await expect(page.getByTestId('billing-row-invoices')).toBeVisible();
+      await expect(page.getByTestId('breakdown')).toBeVisible();
 
-      // Whichever state each is in, it must never be the silently-empty one.
-      const invoicesEmpty = await page.getByTestId('invoices-empty').count();
-      const invoicesUnavailable = await page.getByTestId('invoices-unavailable').count();
-      expect(
-        invoicesEmpty + invoicesUnavailable + (await page.getByTestId('invoices').count()),
-        'the invoices section rendered neither content, an empty state, nor an explanation',
-      ).toBeGreaterThan(0);
+      // Whichever state each is in, it must never be the silently-empty one:
+      // the invoices row says something, and every breakdown row has a value.
+      await expect(page.getByTestId('billing-row-invoices').locator('dd')).not.toHaveText('');
+      for (const key of ['ai', 'team', 'outbound', 'voice']) {
+        await expect(page.getByTestId(`breakdown-${key}-count`)).not.toHaveText('');
+      }
 
       await shoot(page, `${size.name}-4-unserved-sections`);
     });
@@ -309,8 +299,8 @@ for (const size of SIZES) {
       await openBilling(page, 'he');
 
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-      await expect(page.getByTestId('section-runway')).toBeVisible();
-      await expect(page.getByTestId('runway-unmetered')).toBeVisible();
+      await expect(page.getByTestId('plan-hero')).toBeVisible();
+      await expect(page.getByTestId('credits')).toBeVisible();
 
       await shoot(page, `${size.name}-5-hebrew`);
     });

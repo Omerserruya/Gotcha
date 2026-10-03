@@ -2,11 +2,9 @@ import 'server-only';
 
 import { serverApi } from '@/api/client/server-api';
 import {
-  allowanceSchema,
   plansResponseSchema,
   subscriptionResponseSchema,
   usageBreakdownSchema,
-  type Allowance,
   type Plan,
   type Subscription,
   type UsageBreakdown,
@@ -41,7 +39,6 @@ import { logger } from '@/observability/logger';
 type AutoPurchaseData = Awaited<ReturnType<typeof autoPurchaseResponseSchema.parse>>;
 
 export interface BillingData {
-  readonly allowance: Allowance | null;
   readonly subscription: Subscription | null;
   /**
    * Plan names by key. The subscription carries `planKey` — `ai_voice` — and a
@@ -86,7 +83,6 @@ export async function loadBilling(): Promise<BillingData> {
   const api = serverApi();
 
   const [
-    allowance,
     subscription,
     plans,
     invoices,
@@ -97,12 +93,6 @@ export async function loadBilling(): Promise<BillingData> {
     credits,
     packages,
   ] = await Promise.all([
-    api
-      .get({ endpoint: usageEndpoints.allowance(), payload: allowanceSchema })
-      .catch((cause: unknown) => {
-        logger.warn('billing.allowance_failed', { cause });
-        return null;
-      }),
     api
       .get({
         endpoint: billingEndpoints.subscription(),
@@ -207,7 +197,6 @@ export async function loadBilling(): Promise<BillingData> {
   ]);
 
   return {
-    allowance,
     subscription: subscription?.subscription ?? null,
     plans: plans?.plans ?? [],
     invoices,

@@ -1,11 +1,6 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
-import {
-  planNameFor,
-  type Plan,
-  type Subscription,
-  type UsageBreakdown,
-} from '@/api/contracts/billing';
+import { planNameFor, type Plan, type Subscription } from '@/api/contracts/billing';
 
 import {
   failedInvoices,
@@ -119,93 +114,6 @@ export async function PlanLine({
         {t('plan.change')}
       </Link>
     </div>
-  );
-}
-
-/**
- * *"Where the month went."*
- *
- * Contracted and not yet served. Every piece exists — `Conversation.handledBy`
- * for the split, `Broadcast` for outbound, `VoiceCallSession` for minutes —
- * and nothing aggregates them.
- *
- * Each figure is independently nullable, because they come from different
- * places and a backend that can answer three of four should be able to say so.
- * A missing figure is omitted rather than shown as zero: "no outbound
- * messages" and "we did not count" are different, and on a billing screen the
- * difference is money.
- */
-export async function UsageBreakdownSection({
-  breakdown,
-}: {
-  readonly breakdown: UsageBreakdown | null;
-}) {
-  const t = await getTranslations('billing');
-  const locale = await getLocale();
-
-  if (!breakdown) {
-    return (
-      <p className={styles.unavailable} data-testid="breakdown-unavailable">
-        {t('breakdown.unavailable')}
-      </p>
-    );
-  }
-
-  const number = new Intl.NumberFormat(locale);
-  const rows: { key: string; label: string; value: string }[] = [];
-
-  if (breakdown.handledByAi != null) {
-    rows.push({
-      key: 'ai',
-      label: t('breakdown.byAi'),
-      value: number.format(breakdown.handledByAi),
-    });
-  }
-  if (breakdown.handledByPeople != null) {
-    rows.push({
-      key: 'people',
-      label: t('breakdown.byPeople'),
-      value: number.format(breakdown.handledByPeople),
-    });
-  }
-  if (breakdown.outboundMessages != null) {
-    rows.push({
-      key: 'outbound',
-      label: t('breakdown.outbound'),
-      value: number.format(breakdown.outboundMessages),
-    });
-  }
-  if (breakdown.voiceMinutes != null) {
-    rows.push({
-      key: 'voice',
-      label: t('breakdown.voiceMinutes'),
-      value:
-        breakdown.voiceMinutesLimit != null
-          ? t('breakdown.ofLimit', {
-              used: number.format(breakdown.voiceMinutes),
-              limit: number.format(breakdown.voiceMinutesLimit),
-            })
-          : number.format(breakdown.voiceMinutes),
-    });
-  }
-
-  if (rows.length === 0) {
-    return (
-      <p className={styles.empty} data-testid="breakdown-empty">
-        {t('breakdown.empty')}
-      </p>
-    );
-  }
-
-  return (
-    <ul className={styles.rows} data-testid="breakdown">
-      {rows.map((row) => (
-        <li key={row.key} className={styles.row} data-testid={`breakdown-${row.key}`}>
-          <span className={styles.rowLabel}>{row.label}</span>
-          <span className={styles.rowValue}>{row.value}</span>
-        </li>
-      ))}
-    </ul>
   );
 }
 

@@ -451,17 +451,122 @@
 
   /* ── Screen 17c · Credits ────────────────────────────────────────────── */
 
+  /* 17's first card: 18 × 20, white, gap 12. */
   .credits {
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
+    gap: var(--space-12);
+    padding-block: var(--space-18);
+    padding-inline: var(--space-20);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    line-height: normal;
+  }
+
+  .creditsHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .creditsCycle {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+  }
+
+  .creditsFigure {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-10);
+    margin: 0;
   }
 
   .creditsBalance {
-    margin: 0;
-    font-size: var(--font-size-body-lg);
-    font-weight: 500;
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-hero);
     color: var(--text-primary);
+  }
+
+  .creditsComposition {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+  }
+
+  .creditsBar {
+    display: flex;
+    block-size: 8px;
+    border-radius: 4px;
+    background-color: var(--panel-inset);
+    overflow: hidden;
+  }
+
+  .creditsBarPlan {
+    background-color: var(--action-base);
+  }
+
+  .creditsBarBought {
+    background-color: var(--signal-ai);
+  }
+
+  .creditsLegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-18);
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .creditsKey {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-6);
+  }
+
+  .creditsSwatchPlan,
+  .creditsSwatchBought {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: var(--radius-mark);
+    background-color: var(--action-base);
+  }
+
+  .creditsSwatchBought {
+    background-color: var(--signal-ai);
+  }
+
+  .creditsTiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-10);
+    margin-block-start: var(--space-2);
+  }
+
+  .creditsTile {
+    padding-block: var(--space-11);
+    padding-inline: var(--space-14);
+    border-radius: var(--radius-control);
+    background-color: var(--panel-footer);
+  }
+
+  .creditsTileValue {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .creditsTileSub {
+    margin: var(--space-3) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
   }
 
   .creditsNote {
@@ -633,5 +738,391 @@
     background: var(--intent-urgent-surface);
     font-size: var(--font-size-caption);
     color: var(--intent-urgent-text);
+  }
+}
+
+@layer features {
+  /*
+   * 17, measured. The plan: one dark band, 20 × 22, radius 16 — the tag, the
+   * name at 30 with its price, the facts at 12, and the two ways out.
+   */
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: var(--space-24);
+    padding-block: var(--space-20);
+    padding-inline: var(--space-22);
+    border-radius: 16px;
+    background-color: var(--frame-raised);
+    line-height: normal;
+  }
+
+  .heroMain {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .heroTagRow,
+  .heroNameRow,
+  .heroFacts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin: 0;
+  }
+
+  .heroTagRow {
+    gap: var(--space-10);
+    align-items: center;
+  }
+
+  .heroTag {
+    padding-block: var(--space-4);
+    padding-inline: 7px;
+    border-radius: 5px;
+    background-color: var(--signal-ai);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+
+  .heroSince {
+    font-size: var(--font-size-label);
+    color: var(--menu-dark-icon);
+  }
+
+  .heroNameRow {
+    gap: var(--space-14);
+  }
+
+  .heroName {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-hero);
+    color: var(--frame-text);
+  }
+
+  .heroPrice {
+    font-size: 15px;
+    color: var(--frame-text-body);
+  }
+
+  .heroFacts {
+    gap: var(--space-18);
+    font-size: var(--font-size-label);
+    color: var(--frame-text-secondary);
+  }
+
+  .heroActions {
+    display: flex;
+    flex: none;
+    gap: var(--space-8);
+  }
+
+  .heroChange,
+  .heroBuy {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-18);
+    border-radius: 10px;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .heroChange {
+    background-color: var(--frame-text);
+    color: var(--text-primary);
+  }
+
+  .heroBuy {
+    background-color: var(--frame-selected);
+    color: var(--frame-text);
+  }
+
+  /* Then two columns, 507 · 375 at 896, gap 14. */
+  .overview {
+    display: grid;
+    grid-template-columns: minmax(0, 507fr) minmax(0, 375fr);
+    gap: var(--space-14);
+    align-items: start;
+    line-height: normal;
+  }
+
+  .overviewMain,
+  .overviewSide {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    min-inline-size: 0;
+  }
+
+  .cardHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-10);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .cardTitle {
+    flex: 1;
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .cardHeadNote {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .underlineLink {
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-strong);
+  }
+
+  /* ── Where credits went: name · avg 90 · count 60 · credits 70 ─────── */
+  .went,
+  .billingCard {
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .wentRows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .wentRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-meta);
+  }
+
+  .wentRow + .wentRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .wentName {
+    flex: 1;
+    min-inline-size: 0;
+    color: var(--text-primary);
+  }
+
+  .wentAvg {
+    inline-size: 90px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .wentCount {
+    inline-size: 60px;
+    text-align: end;
+    color: var(--text-secondary);
+  }
+
+  .wentCredits {
+    inline-size: 70px;
+    text-align: end;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* ── When credits run low ─────────────────────────────────────────── */
+  .lowCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .lowHead {
+    display: flex;
+    align-items: baseline;
+  }
+
+  .lowRule {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--text-body);
+  }
+
+  .lowCap {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .alertLine,
+  .billingAlert {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--intent-urgent-text);
+  }
+
+  /* ── Billing: label 84 · value · action ───────────────────────────── */
+  .billingRows {
+    margin: 0;
+  }
+
+  .billingRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+  }
+
+  .billingRow + .billingRow {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .billingRow > dt {
+    flex: none;
+    inline-size: 84px;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .billingRow > dd {
+    flex: 1;
+    min-inline-size: 0;
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .billingAll {
+    flex: none;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .billingAlert {
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .cycleValue {
+    margin: 0;
+    padding-block: var(--space-14);
+    padding-inline: var(--space-16);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-footer);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  .cycleValueLabel {
+    color: var(--text-subtle);
+  }
+
+  /* ── 17c · 17d · 17e over 17 ──────────────────────────────────────── */
+  .overlayLayer {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-panel);
+  }
+
+  .overlayScrim {
+    position: absolute;
+    inset: 0;
+    background-color: var(--panel-scrim);
+  }
+
+  .overlayDrawer,
+  .overlayDialog {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .overlayDrawer {
+    inset-block: 0;
+    inset-inline-end: 0;
+    inline-size: min(620px, 100%);
+  }
+
+  .overlayDialog {
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    translate: -50% -50%;
+    inline-size: min(552px, calc(100% - var(--space-32)));
+    max-block-size: calc(100% - var(--space-32));
+    border-radius: var(--radius-panel);
+  }
+
+  .overlayHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: 22px var(--space-18);
+    padding-inline: var(--space-26);
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .overlayTitle {
+    flex: 1;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+  }
+
+  .overlayClose {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .overlayBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-block-size: 0;
+    overflow-y: auto;
+    padding-block: 22px;
+    padding-inline: var(--space-26);
+  }
+
+  @media (width <= 900px) {
+    .hero {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .overview {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 }

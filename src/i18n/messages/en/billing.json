@@ -1,37 +1,12 @@
 {
   "title": "Usage & billing",
   "description": "Everything GOTCHA does uses credits. You see what's left, and how far it goes.",
-  "heading": {
-    "runway": "Conversations this period",
-    "credits": "Credits left",
-    "breakdown": "Where the period went",
-    "invoices": "Invoices",
-    "autoPurchase": "Running low",
-    "profile": "Billing details"
-  },
   "plan": {
     "unavailable": "We couldn't read your plan just now.",
     "renewsOn": "renews {date}",
     "endsOn": "ends {date}",
     "changesAtRenewal": "Changes to {plan} at renewal.",
     "change": "Change plan"
-  },
-  "runway": {
-    "unavailable": "We couldn't read your usage just now.",
-    "of": " of {limit}",
-    "left": "{left} left",
-    "leftUntil": "{left} left — at today's pace, enough until {until}",
-    "usedOnly": "{used} so far",
-    "noAllowance": "This plan doesn't cap conversations, so there's nothing to run out of. The current period runs until {until}."
-  },
-  "breakdown": {
-    "unavailable": "We can't show the breakdown yet.",
-    "empty": "Nothing recorded for this period yet.",
-    "byAi": "Handled by AI employees",
-    "byPeople": "Handled by your team",
-    "outbound": "Outbound messages",
-    "voiceMinutes": "Phone minutes",
-    "ofLimit": "{used} of {limit}"
   },
   "invoices": {
     "unavailable": "We couldn't read your invoices just now.",
@@ -133,13 +108,11 @@
     }
   },
   "credits": {
-    "heading": "Credits",
     "unavailable": "We could not load your credits just now.",
-    "balance": "{credits} credits available",
     "split": {
-      "expiring": "{credits} of these come with your plan and expire when it renews on {date}.",
-      "expiringNoDate": "{credits} of these come with your plan and expire when it renews.",
-      "purchased": "{credits} were bought separately."
+      "expiring": "Plan {credits} · expire {date}",
+      "expiringNoDate": "Plan {credits} · expire at renewal",
+      "purchased": "Bought separately {credits}"
     },
     "awaitingGrant": {
       "lead": "No credits have been issued for this billing period yet.",
@@ -149,12 +122,12 @@
       "withheld": "We are not showing a usage figure for this period. The number the system reports counts expired credits as if they had been spent, so it would overstate what you actually used."
     },
     "estimate": {
-      "plan": "At your plan's rate that is about {chats} more conversations.",
-      "observed": "At the rate you have actually been using credits, that is about {chats} more conversations.",
       "observedBasis": "Measured from your own usage over the last {days} days.",
       "planBasis": "Based on your plan's published rate, not on your own usage.",
       "partiallyAttributed": "Only {pct}% of that usage was tied to a conversation — the rest was other AI work — so a per-conversation figure describes less of it than it looks.",
-      "awaitingGrant": "A per-conversation estimate comes back once this period's credits are granted. There is nothing to work it out from yet."
+      "awaitingGrant": "Comes back once this period's credits are granted.",
+      "conversations": "≈ {chats} conversations",
+      "observedAverage": "At your average of {avg} credits per conversation — your own usage, last {days} days"
     },
     "observed": {
       "noMetering": "You have had {conversations} conversations in the last {days} days and no credits were recorded against them, so we cannot measure your own rate. That is about what has been metered, not about how much you have used GOTCHA.",
@@ -164,7 +137,12 @@
     "cycleEnds": "This cycle ends {to}.",
     "composition": "{plan} of {included} plan credits + {purchased} bought separately",
     "compositionPlanOnly": "{plan} of {included} plan credits",
-    "compositionPurchasedOnly": "{purchased} bought separately"
+    "compositionPurchasedOnly": "{purchased} bought separately",
+    "left": "Credits left",
+    "runout": {
+      "label": "Until renewal",
+      "none": "Nothing yet projects when credits run out against the renewal date."
+    }
   },
   "buy": {
     "heading": "Buy credits",
@@ -187,5 +165,77 @@
     "tooManyMax": "This pack allows at most {max} in one purchase. Nothing was charged.",
     "notPurchasable": "This pack isn't available on your plan, or is no longer sold. Nothing was charged, and trying again won't change it — the list you're looking at may be out of date.",
     "failed": "We couldn't complete that, and we can't tell you whether your card was charged. Check your invoices before trying again, and contact us if something appears that shouldn't have."
+  },
+  "overview": {
+    "yourPlan": "Your plan",
+    "since": "since {date}",
+    "per": {
+      "month": "{price} a month",
+      "year": "{price} a year"
+    },
+    "included": "{credits, number} credits included",
+    "renews": "Renews {date}",
+    "ends": "Ends {date}",
+    "changes": "Changes to {plan} at renewal",
+    "planUnread": "We couldn't read your plan just now.",
+    "changePlan": "Change plan",
+    "buyCredits": "Buy credits",
+    "change": "Change",
+    "went": {
+      "title": "Where credits went",
+      "columns": "Avg · count · credits",
+      "kind": {
+        "ai": "AI conversations",
+        "team": "Team conversations, AI assist",
+        "outbound": "Outbound messages",
+        "voice": "Phone minutes"
+      },
+      "noCredits": "Nothing counts credits by kind of work yet."
+    },
+    "low": {
+      "title": "When credits run low",
+      "unset": "Not set up — when credits run out, the AI stops answering.",
+      "buys": "Buys more automatically when credit drops to {threshold}%.",
+      "off": "Doesn't buy more automatically.",
+      "cap": "Most you could spend this month: {cap}",
+      "notACap": "With pay-as-you-go, this limit stops automatic purchases — not the bill."
+    },
+    "billing": {
+      "title": "Billing",
+      "edit": "Edit details",
+      "cardLabel": "Card",
+      "invoicedTo": "Invoiced to",
+      "receiptsTo": "Receipts to",
+      "invoices": "Invoices",
+      "all": "All",
+      "card": "{brand} · {last4}",
+      "cardBrand": "Card",
+      "noCard": "None on file",
+      "cardUnread": "We couldn't check for a payment method just now.",
+      "invoicesUnread": "We couldn't read your invoices just now.",
+      "none": "None yet",
+      "reading": {
+        "no_account": "This workspace has no billing account yet.",
+        "never_entered": "No billing details have been entered yet.",
+        "emptied": "Billing details were entered and have since been cleared.",
+        "filled": "Not filled in."
+      },
+      "noCardFailed": "{count, plural, one {No payment method on file, and one charge has already failed.} other {No payment method on file, and # charges have already failed.}}",
+      "failed": "{count, plural, one {One charge didn't go through — {total} {currency}.} other {# charges didn't go through — {total} {currency}.}}"
+    },
+    "value": {
+      "label": "This cycle so far",
+      "none": "Nothing computes the hours your team didn't spend, or revenue from outreach, yet."
+    },
+    "overlay": {
+      "close": "Close",
+      "low": "When credits run low",
+      "buy": "Buy credits",
+      "details": "Billing details"
+    },
+    "invoicesPage": {
+      "title": "Invoices",
+      "description": "Every charge, and its receipt when there is one."
+    }
   }
 }

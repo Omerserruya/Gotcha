@@ -6,35 +6,45 @@ import { hasSomethingToCharge, profileReading } from '@/api/contracts/billing-pr
 import { BillingProfileSection } from '@/features/billing/BillingProfile';
 import { BuyCredits } from '@/features/billing/BuyCredits';
 import { CreditsSection } from '@/features/billing/Credits';
-import { Invoices, PlanLine, UsageBreakdownSection } from '@/features/billing/BillingSections';
+import { BillingOverlay } from '@/features/billing/BillingOverlay';
 import { loadBilling } from '@/features/billing/load-billing';
-import { Runway } from '@/features/billing/Runway';
+import {
+  BillingCard,
+  CreditsWent,
+  CycleValue,
+  PlanHero,
+  RunningLow,
+} from '@/features/billing/Overview';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
  * Settings · Usage & billing — screen 17.
  *
- * *"Usage as runway, not credits. The user should know how long they are good
- * for, not do arithmetic."*
+ * *"Your plan up front, credits in conversations."* 02's layout: the plan,
+ * dark, across the top; then credits left and where they went on the left,
+ * and running low, billing and the cycle's value on the right.
  *
- * Runway first, because that is the question someone opened this screen with.
- * Then the plan, where the period went, and the invoices.
+ * Buying credits (17d), the running-low rule (17c) and the billing details
+ * (17e) open over it from their buttons (`?panel=`); every invoice is its own
+ * page (`./invoices`), behind the Billing card's All.
  *
- * Three things the design draws are absent, and none is softened: the value
- * line (nothing computes hours saved or revenue attributed), the overage rate,
- * and the overage RATE, which has no field.
+ * Not drawn, because nothing reads them: 02's "3 AI employees · All
+ * channels", the run-out projection ("Lasts until renewal" is "—"), credits
+ * per kind of work, and the value line (hours saved, outreach revenue).
  *
- * **The spending cap is no longer among them.** `AutoPurchasePolicy` carries
- * `maxMonthlySpend`, two thresholds and five limit behaviours, and it is
- * configured on this tenant — 500.00 with 110.00 already spent. That
- * sentence used to say the cap had no field anywhere; it was written before
- * anyone read that model.
+ * The conversations allowance ("Conversations this period") is not on 02's
+ * screen and is gone from it: on this tenant it said only that the plan does
+ * not cap conversations.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{ readonly panel?: string }>;
+}) {
   const t = await getTranslations('billing');
+  const panel = (await searchParams)?.panel;
   const {
-    allowance,
     subscription,
     plans,
     invoices,
@@ -48,74 +58,60 @@ export default async function Page() {
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      <PlanLine subscription={subscription} plans={plans} />
+      <PlanHero subscription={subscription} plans={plans} credits={credits} />
 
-      <section className={styles.section} data-testid="section-runway">
-        <h2 className={styles.sectionHeading}>{t('heading.runway')}</h2>
-        <Runway allowance={allowance} />
-      </section>
+      <div className={styles.overview}>
+        <div className={styles.overviewMain}>
+          <CreditsSection credits={credits} />
+          <CreditsWent breakdown={breakdown} />
+        </div>
+        <div className={styles.overviewSide}>
+          <RunningLow
+            policy={autoPurchase?.policy ?? null}
+            currency={autoPurchase?.currency ?? 'ILS'}
+          />
+          <BillingCard profile={profile} methods={paymentMethods} invoices={invoices} />
+          <CycleValue />
+        </div>
+      </div>
 
-      <section className={styles.section} data-testid="section-credits">
-        <h2 className={styles.sectionHeading}>{t('heading.credits')}</h2>
-        <CreditsSection credits={credits} />
-      </section>
-
-      {/*
-        Screen 17d, directly under the balance.
-
-        Somebody reading "0 credits available" is one line away from the
-        thing that fixes it, and the two facts that decide whether it CAN be
-        fixed — who the invoice is made out to and what pays it — are already
-        on this page rather than a navigation away.
-      */}
-      <section className={styles.section} data-testid="section-buy">
-        <BuyCredits
-          packages={packages}
-          /*
-            `buyCredits()` checks `no_billable_entity` FIRST, so these are
-            the server's own two gates read back in the same order. Passed as
-            two booleans rather than one: "nobody to invoice" and "nothing to
-            charge" are different problems with different repairs, and one
-            sentence for both sends half of them to do the wrong thing.
-          */
-          billable={profileReading(profile) !== 'no_account'}
-          hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
-        />
-      </section>
-
-      <section className={styles.section} data-testid="section-breakdown">
-        <h2 className={styles.sectionHeading}>{t('heading.breakdown')}</h2>
-        <UsageBreakdownSection breakdown={breakdown} />
-      </section>
-
-      <section className={styles.section} data-testid="section-auto-purchase">
-        <h2 className={styles.sectionHeading}>{t('heading.autoPurchase')}</h2>
-        <AutoPurchase
-          policy={autoPurchase?.policy ?? null}
-          currency={autoPurchase?.currency ?? 'ILS'}
-        />
-      </section>
-
-      <section className={styles.section} data-testid="section-profile">
-        <h2 className={styles.sectionHeading}>{t('heading.profile')}</h2>
-        <BillingProfileSection
-          profile={profile}
-          methods={paymentMethods}
-          /*
-            `null` when the invoices read failed, NOT zero. Defaulting to an
-            empty array here is what let a lost fetch silently remove "and 4
-            charges have already failed" from the warning below it.
-          */
-          failedInvoiceCount={
-            invoices === null ? null : invoices.filter((i) => i.status === 'FAILED').length
-          }
-        />
-      </section>
-
-      <section className={styles.section} data-testid="section-invoices">
-        <h2 className={styles.sectionHeading}>{t('heading.invoices')}</h2>
-        <Invoices invoices={invoices} />
-      </section>
+      {panel === 'buy' ? (
+        <BillingOverlay kind="dialog" title={t('overview.overlay.buy')}>
+          <BuyCredits
+            packages={packages}
+            /*
+              `buyCredits()` checks `no_billable_entity` FIRST, so these are
+              the server's own two gates read back in the same order — two
+              booleans, because "nobody to invoice" and "nothing to charge"
+              have different repairs.
+            */
+            billable={profileReading(profile) !== 'no_account'}
+            hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
+          />
+        </BillingOverlay>
+      ) : panel === 'low' ? (
+        <BillingOverlay kind="drawer" title={t('overview.overlay.low')}>
+          <AutoPurchase
+            policy={autoPurchase?.policy ?? null}
+            currency={autoPurchase?.currency ?? 'ILS'}
+          />
+        </BillingOverlay>
+      ) : panel === 'details' ? (
+        <BillingOverlay kind="drawer" title={t('overview.overlay.details')}>
+          <BillingProfileSection
+            profile={profile}
+            methods={paymentMethods}
+            /*
+              `null` when the invoices read failed, NOT zero — defaulting to an
+              empty array is what once silently removed "and 4 charges have
+              already failed" from the warning.
+            */
+            failedInvoiceCount={
+              invoices === null ? null : invoices.filter((i) => i.status === 'FAILED').length
+            }
+          />
+        </BillingOverlay>
+      ) : null}
     </SettingsSection>
   );
 }

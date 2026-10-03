@@ -75,6 +75,10 @@ export const subscriptionSchema = z.object({
   snapshotPrice: z.union([z.string(), z.number()]).nullable().optional(),
   snapshotCurrency: z.string().nullable().optional(),
   currentPeriodEnd: z.string().nullable().optional(),
+  /** 17's "per month / per year" is only said when the period agrees with it. */
+  currentPeriodStart: z.string().nullable().optional(),
+  /** 17's "since March 2025": when this subscription began. */
+  createdAt: z.string().nullable().optional(),
   cancelAtPeriodEnd: z.boolean().default(false),
   billingInterval: z.string().nullable().optional(),
   /**
@@ -205,3 +209,24 @@ export const usageBreakdownSchema = z.object({
 });
 
 export type UsageBreakdown = z.infer<typeof usageBreakdownSchema>;
+
+/**
+ * What the price is per — said only when the period agrees with the interval.
+ *
+ * The demo tenant's ACTIVE row reads `billingInterval: MONTHLY` over a period
+ * from 2026-09-08 to 2027-09-08. "$1,499 a month" beside a year-long period
+ * would be a claim about money nobody can check, so a disagreement says
+ * nothing and the bare price stands.
+ */
+export function pricePer(subscription: Subscription): 'month' | 'year' | null {
+  const start = subscription.currentPeriodStart ? Date.parse(subscription.currentPeriodStart) : NaN;
+  const end = subscription.currentPeriodEnd ? Date.parse(subscription.currentPeriodEnd) : NaN;
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  const days = (end - start) / (24 * 60 * 60 * 1000);
+  const interval = subscription.billingInterval?.toUpperCase();
+  if (interval === 'MONTHLY' && days >= 27 && days <= 32) return 'month';
+  if ((interval === 'YEARLY' || interval === 'ANNUAL') && days >= 360 && days <= 370) {
+    return 'year';
+  }
+  return null;
+}

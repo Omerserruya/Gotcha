@@ -13,10 +13,11 @@ import {
 import styles from './Billing.module.css';
 
 /**
- * Credits — screen 17c.
+ * Credits left — 17's first card.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * THE USAGE BAR IS NOT DRAWN, AND THAT IS THE POINT OF THIS COMPONENT
+ * (02's bar is drawn as holdings instead, and only when it can be believed)
  * ════════════════════════════════════════════════════════════════════════════
  * `consumedCredits` is `includedAllowance - includedRemaining`, so anything
  * that removes credits without spending them lands in it — and expiry removes
@@ -49,192 +50,232 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
   }
 
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
-  const day = new Intl.DateTimeFormat(locale, { dateStyle: 'long' });
+  /*
+    02 writes "12 Sep – 12 Oct". A cycle that crosses a year carries it, or a
+    year-long period reads "8 Sep – 8 Sep".
+  */
+  const crossesYear =
+    credits.period.startsAt != null &&
+    (credits.period.resetsAt ?? credits.period.endsAt) != null &&
+    new Date(credits.period.startsAt).getFullYear() !==
+      new Date((credits.period.resetsAt ?? credits.period.endsAt)!).getFullYear();
+  const day = new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'short',
+    ...(crossesYear ? { year: 'numeric' } : {}),
+  });
+  const longDay = new Intl.DateTimeFormat(locale, { dateStyle: 'long' });
 
   const expiring = expiringAtRenewal(credits);
   const purchased = purchasedBalance(credits);
   const observed = credits.observedRemaining;
   const renewsAt = credits.period.resetsAt ?? credits.period.endsAt;
+  const trustworthy = consumptionIsTrustworthy(credits, new Date());
+  const waiting = awaitingGrant(credits);
+
+  /*
+    02's bar, as HOLDINGS rather than spend: the plan's credits still held
+    (dark) and those bought separately (violet), against what the cycle
+    started with. It is drawn only when the payload's consumption can be
+    believed and the period's credits have been granted — otherwise an empty
+    bar is the same picture as the 100% this component refuses to draw.
+  */
+  const whole = credits.plan.includedCredits + purchased;
+  const bar = trustworthy && !waiting && whole > 0;
 
   return (
     <div
       className={styles.credits}
       data-testid="credits"
-      data-consumption={consumptionIsTrustworthy(credits, new Date()) ? 'shown' : 'withheld'}
+      data-consumption={trustworthy ? 'shown' : 'withheld'}
     >
-      {/*
-        The cycle, above the number it bounds. The design puts it there and it
-        is the difference between "14,640 credits" and "14,640 credits until
-        12 October" — the second is a runway and the first is a quantity.
-      */}
-      {credits.period.startsAt && renewsAt ? (
-        <p className={styles.creditsBasis} data-testid="credits-cycle">
-          {t('cycle', {
-            from: day.format(new Date(credits.period.startsAt)),
-            to: day.format(new Date(renewsAt)),
-          })}
-        </p>
-      ) : renewsAt ? (
-        <p className={styles.creditsBasis} data-testid="credits-cycle">
-          {t('cycleEnds', { to: day.format(new Date(renewsAt)) })}
-        </p>
-      ) : null}
-
-      <p className={styles.creditsBalance} data-testid="credits-balance">
-        {t('balance', { credits: number.format(credits.totalAvailableCredits) })}
+      <p className={styles.creditsHead}>
+        <span>{t('left')}</span>
+        {/*
+          The cycle, above the number it bounds: "14,640 until 12 October" is a
+          runway, and "14,640" alone is a quantity.
+        */}
+        {credits.period.startsAt && renewsAt ? (
+          <span className={styles.creditsCycle} data-testid="credits-cycle">
+            {t('cycle', {
+              from: day.format(new Date(credits.period.startsAt)),
+              to: day.format(new Date(renewsAt)),
+            })}
+          </span>
+        ) : renewsAt ? (
+          <span className={styles.creditsCycle} data-testid="credits-cycle">
+            {t('cycleEnds', { to: day.format(new Date(renewsAt)) })}
+          </span>
+        ) : null}
       </p>
 
-      {/*
-        What the total is made of — the design's "12,640 of 20,000 plan
-        credits + 2,000 top-up".
-
-        Two departures. It does NOT carry "Used 7,360", because that figure is
-        `consumedCredits` and counts expiry as spend: 7,360 used would be the
-        same claim as the 100% bar this screen refuses to draw.
-
-        And the purchased half is not called a "top-up kept until used".
-        `CreditExpiryPolicy` has PERIOD_END, the summary route strips
-        `expiresAt`, and permanence is a promise the screen cannot check.
-      */}
-      {credits.plan.includedCredits > 0 || purchased > 0 ? (
-        <p className={styles.creditsNote} data-testid="credits-composition">
-          {credits.plan.includedCredits > 0 && purchased > 0
-            ? t('composition', {
-                plan: number.format(expiring),
-                included: number.format(credits.plan.includedCredits),
-                purchased: number.format(purchased),
-              })
-            : credits.plan.includedCredits > 0
-              ? t('compositionPlanOnly', {
+      <p className={styles.creditsFigure}>
+        <span className={styles.creditsBalance} data-testid="credits-balance">
+          {number.format(credits.totalAvailableCredits)}
+        </span>
+        {/*
+          What the total is made of — 02's "12,640 of 20,000 plan credits +
+          2,000 top-up". No "Used 7,360": that is `consumedCredits`, which
+          counts expiry as spend. And the purchased half is "bought
+          separately", never a "top-up kept until used": the summary route
+          strips `expiresAt`, so permanence is a promise nothing here checks.
+        */}
+        {credits.plan.includedCredits > 0 || purchased > 0 ? (
+          <span className={styles.creditsComposition} data-testid="credits-composition">
+            {credits.plan.includedCredits > 0 && purchased > 0
+              ? t('composition', {
                   plan: number.format(expiring),
                   included: number.format(credits.plan.includedCredits),
+                  purchased: number.format(purchased),
                 })
-              : t('compositionPurchasedOnly', { purchased: number.format(purchased) })}
-        </p>
+              : credits.plan.includedCredits > 0
+                ? t('compositionPlanOnly', {
+                    plan: number.format(expiring),
+                    included: number.format(credits.plan.includedCredits),
+                  })
+                : t('compositionPurchasedOnly', { purchased: number.format(purchased) })}
+          </span>
+        ) : null}
+      </p>
+
+      {bar ? (
+        <div className={styles.creditsBar} aria-hidden="true" data-testid="credits-bar">
+          <span
+            className={styles.creditsBarPlan}
+            style={{ inlineSize: `${(expiring / whole) * 100}%` }}
+          />
+          <span
+            className={styles.creditsBarBought}
+            style={{ inlineSize: `${(purchased / whole) * 100}%` }}
+          />
+        </div>
       ) : null}
 
       {/*
-        The two buckets, which do NOT have the same fate. INCLUDED is gated on
-        `periodKey` in `deriveBalanceFromLots` and dies at renewal; the rest
-        does not — though not because the model forbids it, only because every
-        package on sale is sold non-expiring. So the expiring half is named
-        with its date and the other half is named without a promise.
+        The legend names the two halves, which do NOT share a fate: the plan's
+        credits die at renewal; the bought ones are named without a promise.
       */}
-      {expiring > 0 ? (
-        <p className={styles.creditsNote} data-testid="credits-expiring">
-          {renewsAt
-            ? t('split.expiring', {
-                credits: number.format(expiring),
-                date: day.format(new Date(renewsAt)),
-              })
-            : t('split.expiringNoDate', { credits: number.format(expiring) })}
-        </p>
-      ) : null}
-
-      {purchased > 0 ? (
-        <p className={styles.creditsNote} data-testid="credits-purchased">
-          {t('split.purchased', { credits: number.format(purchased) })}
+      {expiring > 0 || purchased > 0 ? (
+        <p className={styles.creditsLegend}>
+          {expiring > 0 ? (
+            <span className={styles.creditsKey} data-testid="credits-expiring">
+              <span className={styles.creditsSwatchPlan} aria-hidden="true" />
+              {renewsAt
+                ? t('split.expiring', {
+                    credits: number.format(expiring),
+                    date: longDay.format(new Date(renewsAt)),
+                  })
+                : t('split.expiringNoDate', { credits: number.format(expiring) })}
+            </span>
+          ) : null}
+          {purchased > 0 ? (
+            <span className={styles.creditsKey} data-testid="credits-purchased">
+              <span className={styles.creditsSwatchBought} aria-hidden="true" />
+              {t('split.purchased', { credits: number.format(purchased) })}
+            </span>
+          ) : null}
         </p>
       ) : null}
 
       {/*
-        A contracted allowance with nothing granted is not a spent one.
-
-        This tenant's subscription is ACTIVE since 2026-09-08 for 7,000
-        credits; the only lot ever issued expired on 2026-08-28 and the
-        balance snapshot still names period 2026-07. "7,000 included" beside
-        "0 remaining" reads as a loss unless somebody says which is the
+        A contracted allowance with nothing granted is not a spent one — "7,000
+        included" beside "0" reads as a loss unless somebody says which is the
         contract and which is the holding.
       */}
-      {awaitingGrant(credits) ? (
+      {waiting ? (
         <div className={styles.creditsNotice} data-testid="credits-awaiting-grant">
           <p className={styles.creditsNoticeLead}>{t('awaitingGrant.lead')}</p>
           <p className={styles.creditsNote}>
             {t('awaitingGrant.body', {
               included: number.format(credits.plan.includedCredits),
-              date: credits.period.startsAt ? day.format(new Date(credits.period.startsAt)) : '—',
+              date: credits.period.startsAt
+                ? longDay.format(new Date(credits.period.startsAt))
+                : '—',
             })}
           </p>
         </div>
       ) : null}
 
-      {!consumptionIsTrustworthy(credits, new Date()) ? (
-        <p className={styles.creditsNote} data-testid="credits-consumption-withheld">
-          {/*
-            Said plainly rather than omitted silently. A missing usage figure
-            on a billing screen looks like a loading failure; this says it is
-            a deliberate refusal and why.
-          */}
+      {/*
+        02's two translations of the number. TWO ESTIMATES, NEVER SUBSTITUTED:
+        `observedRemaining` is this tenant's measured burn, `estimatedRemaining`
+        the plan's published ratio, and the tile names which it is. Neither is
+        shown while the period's credits have not been granted — both divide a
+        balance the screen has just disowned, and "about 0 conversations" would
+        be read as a measurement.
+      */}
+      <div className={styles.creditsTiles}>
+        {waiting ? (
+          <div className={styles.creditsTile} data-testid="credits-estimate-withheld">
+            <p className={styles.creditsTileValue}>—</p>
+            <p className={styles.creditsTileSub}>{t('estimate.awaitingGrant')}</p>
+          </div>
+        ) : observed.chats != null && observed.basis === 'TENANT_ACTUAL' ? (
+          <div className={styles.creditsTile} data-testid="credits-estimate-observed">
+            <p className={styles.creditsTileValue}>
+              {t('estimate.conversations', { chats: number.format(observed.chats) })}
+            </p>
+            <p className={styles.creditsTileSub} data-testid="credits-estimate-basis">
+              {observed.creditsPerConversation != null
+                ? t('estimate.observedAverage', {
+                    // A rate keeps its tenth: 7.5 is not 8.
+                    avg: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(
+                      observed.creditsPerConversation,
+                    ),
+                    days: OBSERVED_WINDOW_DAYS,
+                  })
+                : t('estimate.observedBasis', { days: OBSERVED_WINDOW_DAYS })}
+            </p>
+          </div>
+        ) : credits.estimatedRemaining.chats != null ? (
+          <div className={styles.creditsTile} data-testid="credits-estimate-plan">
+            <p className={styles.creditsTileValue}>
+              {t('estimate.conversations', {
+                chats: number.format(credits.estimatedRemaining.chats),
+              })}
+            </p>
+            <p className={styles.creditsTileSub} data-testid="credits-estimate-basis">
+              {t('estimate.planBasis')}
+            </p>
+          </div>
+        ) : (
+          <div className={styles.creditsTile} data-testid="credits-estimate-none">
+            <p className={styles.creditsTileValue}>—</p>
+          </div>
+        )}
+        {/*
+          "Lasts until renewal" needs a projected run-out against the renewal
+          date, and nothing computes one for credits: "—", and why on its title.
+        */}
+        <div className={styles.creditsTile} data-testid="credits-runout" title={t('runout.none')}>
+          <p className={styles.creditsTileValue}>—</p>
+          <p className={styles.creditsTileSub}>{t('runout.label')}</p>
+        </div>
+      </div>
+
+      {observed.chats != null &&
+      observed.basis === 'TENANT_ACTUAL' &&
+      !waiting &&
+      observed.sample.conversationAttributedPct < 100 ? (
+        <p className={styles.creditsBasis} data-testid="credits-attribution">
+          {t('estimate.partiallyAttributed', { pct: observed.sample.conversationAttributedPct })}
+        </p>
+      ) : null}
+
+      {/*
+        Said plainly rather than omitted: a missing usage figure on a billing
+        screen looks like a loading failure; this says it is a refusal and why.
+      */}
+      {!trustworthy ? (
+        <p className={styles.creditsBasis} data-testid="credits-consumption-withheld">
           {t('consumption.withheld')}
         </p>
       ) : null}
 
       {/*
-        TWO ESTIMATES, NEVER SUBSTITUTED.
-
-        `estimatedRemaining` is the PLAN's published ratio. `observedRemaining`
-        is this tenant's measured burn. The route ships both "each labelled
-        with its basis" because "a screen that silently swapped them would make
-        a pricing claim out of one customer's behaviour". So whichever is
-        shown, the screen names which it is.
-      */}
-      {/*
-        ★ AND NEITHER IS SHOWN WHILE THE PERIOD'S CREDITS HAVE NOT BEEN
-        GRANTED.
-
-        Both estimates divide a BALANCE by a rate. While `awaitingGrant()`,
-        that balance is zero for a reason the two paragraphs above spend
-        their whole length explaining — the grant has not happened, and this
-        is not credit anybody spent. Rendering "about 0 more conversations"
-        underneath is a forecast from an input the screen has just disowned,
-        and it is worse than the estimate standing alone: by that point the
-        reader has been taught to trust this screen's carefulness, so they
-        read the 0 as a measurement.
-
-        Same shape as 13e's "0 of 0 conversations read is not progress — it
-        is a pipeline that has not started counting", and the same answer.
-        A forecast from an ungranted allowance is not a small forecast; it is
-        not a forecast. So the estimate is withheld and the screen says it
-        comes back when the credits are granted — which also tells somebody
-        that nothing here is broken.
-      */}
-      {awaitingGrant(credits) ? (
-        <p className={styles.creditsBasis} data-testid="credits-estimate-withheld">
-          {t('estimate.awaitingGrant')}
-        </p>
-      ) : observed.chats != null && observed.basis === 'TENANT_ACTUAL' ? (
-        <div className={styles.creditsEstimate} data-testid="credits-estimate-observed">
-          <p className={styles.creditsNote}>
-            {t('estimate.observed', { chats: number.format(observed.chats) })}
-          </p>
-          <p className={styles.creditsBasis} data-testid="credits-estimate-basis">
-            {t('estimate.observedBasis', { days: OBSERVED_WINDOW_DAYS })}
-          </p>
-          {observed.sample.conversationAttributedPct < 100 ? (
-            <p className={styles.creditsBasis} data-testid="credits-attribution">
-              {t('estimate.partiallyAttributed', {
-                pct: observed.sample.conversationAttributedPct,
-              })}
-            </p>
-          ) : null}
-        </div>
-      ) : credits.estimatedRemaining.chats != null ? (
-        <div className={styles.creditsEstimate} data-testid="credits-estimate-plan">
-          <p className={styles.creditsNote}>
-            {t('estimate.plan', { chats: number.format(credits.estimatedRemaining.chats) })}
-          </p>
-          <p className={styles.creditsBasis} data-testid="credits-estimate-basis">
-            {t('estimate.planBasis')}
-          </p>
-        </div>
-      ) : null}
-
-      {/*
-        `no_consumption_recorded` arrives with `sample.conversations: 88`,
-        because the service tests `creditsConsumed <= 0` BEFORE the sample
-        gate. It is a statement about METERING, not activity — and rendering
-        it as "no activity" would be a flat falsehood sitting next to the 88
-        that disproves it.
+        `no_consumption_recorded` arrives with conversations in the sample: a
+        statement about METERING, not activity — "no activity" would be false
+        beside the number that disproves it.
       */}
       {ranWithoutMetering(credits) ? (
         <p className={styles.creditsBasis} data-testid="credits-no-metering">
