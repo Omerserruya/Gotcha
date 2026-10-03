@@ -105,3 +105,24 @@ describe('★ 01c — First steps is one card that fits the frame', () => {
     expect(r('hide')).toMatch(/text-decoration:\s*none/);
   });
 });
+
+describe('★ 01 — composition against 02: no line-height leaking into the head and strip', () => {
+  it.each(['greeting', 'strip', 'metricValue > \\*'])('.%s is line-height normal', (selector) => {
+    expect(rule(selector)).toMatch(/line-height:\s*normal/);
+  });
+});
+
+describe('★ 12b / 12c — measured proportions', () => {
+  const roles = readFileSync('src/features/roles/Roles.module.css', 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  const r = (selector: string) =>
+    new RegExp(`(?:^|\\n)\\s*\\.${selector}\\s*\\{([^}]*)\\}`).exec(roles)?.[1] ?? '';
+  it('12b: the two cards 494 · 380', () => {
+    expect(r('cards')).toMatch(/grid-template-columns:\s*minmax\(0, 494fr\) minmax\(0, 380fr\)/);
+  });
+  it('12c: the side column 240', () => {
+    expect(r('newRole')).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) 240px/);
+  });
+});

@@ -104,7 +104,8 @@
    * and everything under them is a scan.
    */
   .greeting {
-    /* `padding: 20px 40px 0` in the source. */
+    /* `padding: 20px 40px 0` in the source. 02 sets no line-height. */
+    line-height: normal;
     padding-block: var(--space-20) 0;
     padding-inline: var(--space-40);
     display: flex;
@@ -129,6 +130,8 @@
     align-items: stretch;
     border-block: var(--border-width-thin) solid var(--border-default);
     flex-wrap: wrap;
+    /* 02 sets no line-height: body 1.6 made each cell 11px taller. */
+    line-height: normal;
   }
 
   .metric {
@@ -151,6 +154,11 @@
     align-items: baseline;
     gap: var(--space-9);
     margin-block-start: var(--space-4);
+  }
+
+  /* The figure's own role sets a display line-height; 02's is normal. */
+  .metricValue > * {
+    line-height: normal;
   }
 
   .share {
