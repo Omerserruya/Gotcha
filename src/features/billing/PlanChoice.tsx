@@ -55,7 +55,15 @@ export async function PlanCards({
         const current = plan.key === currentKey;
         const selected = !current && plan.key === selectedKey;
         const price = priceOf(plan, locale);
-        const chats = plan.estimate?.chat?.monthly ?? null;
+        /*
+          Only an estimate FROM the credits is drawn beside them. The default
+          sold volume is the same 250 on 750 and on 7,000 credits, and beside
+          the credits it reads as "more credits buy the same thing".
+        */
+        const chats =
+          plan.estimate?.chat?.basis === 'CREDIT_RATIO'
+            ? (plan.estimate.chat.monthly ?? null)
+            : null;
         const features = plan.features.filter((f) => f.included).slice(0, FEATURES_SHOWN);
         const body = (
           <>

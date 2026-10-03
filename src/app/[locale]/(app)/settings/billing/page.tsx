@@ -98,14 +98,23 @@ export default async function Page({
           ) : null}
         </BillingOverlay>
       ) : panel === 'low' ? (
-        <BillingOverlay kind="drawer" title={t('overview.overlay.low')}>
+        <BillingOverlay
+          kind="drawer"
+          title={t('overview.overlay.low')}
+          line={t('autoPurchase.subline')}
+        >
           <AutoPurchase
             policy={autoPurchase?.policy ?? null}
             currency={autoPurchase?.currency ?? 'ILS'}
+            paygRate={autoPurchase?.paygRate ?? null}
           />
         </BillingOverlay>
       ) : panel === 'details' ? (
-        <BillingOverlay kind="drawer" title={t('overview.overlay.details')}>
+        <BillingOverlay
+          kind="drawer"
+          title={t('overview.overlay.details')}
+          line={t('profile.subline')}
+        >
           <BillingProfileSection
             profile={profile}
             methods={paymentMethods}

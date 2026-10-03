@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
@@ -10,7 +11,7 @@ import {
 import styles from './Billing.module.css';
 
 /**
- * Screen 17d — topping up, and what happens when you stop.
+ * Screen 17c — when credits run low, and what happens when you stop.
  *
  * ── THE FIVE BEHAVIOURS ARE NOT FIVE SETTINGS OF ONE THING ──
  * `STOP_AI` and `PAYG` are **opposite answers to the same question**: one
@@ -32,19 +33,34 @@ import styles from './Billing.module.css';
  * about is not a warning**, and a screen showing only the trigger hides that
  * somebody is told first.
  */
+type Option = 'pack' | 'payg' | 'stop';
+
+/** Which of 02's three answers the stored policy is. */
+export function optionOf(policy: Policy): Option {
+  if (policy.enabled) return 'pack';
+  if (policy.limitBehavior === 'PAYG') return 'payg';
+  return 'stop';
+}
+
+/**
+ * 17c's body, measured: three answers as cards (the stored one marked),
+ * "If the limit is reached", and "Alerts". Read state: every control is the
+ * stored value, and nothing here writes — the auto-purchase write spends
+ * money and is not wired from this screen.
+ */
 export async function AutoPurchase({
   policy,
   currency,
+  paygRate = null,
 }: {
   readonly policy: Policy | null;
   readonly currency: string;
+  readonly paygRate?: string | null;
 }) {
   const t = await getTranslations('billing');
   const format = await getFormatter();
 
   if (policy === null) {
-    // Nothing configured. Not a policy of defaults — the difference decides
-    // whether "buys more at 10%" is a fact about this tenant or a guess.
     return (
       <p className={styles.unavailable} data-testid="auto-purchase-unset">
         {t('autoPurchase.unset')}
@@ -53,66 +69,105 @@ export async function AutoPurchase({
   }
 
   const used = capUsed(policy);
+  const option = optionOf(policy);
+
+  const card = (key: Option, children: ReactNode) => (
+    <div
+      className={styles.lowOption}
+      data-current={option === key ? 'yes' : 'no'}
+      data-testid={`auto-option-${key}`}
+    >
+      <span className={styles.lowRadio} aria-hidden="true" />
+      <div className={styles.lowOptionBody}>
+        <p className={styles.lowOptionName}>{t(`autoPurchase.option.${key}`)}</p>
+        {children}
+      </div>
+    </div>
+  );
 
   return (
-    <div className={styles.block} data-testid="auto-purchase">
-      <p className={styles.autoState} data-testid="auto-state">
-        {policy.enabled
-          ? t('autoPurchase.on', { threshold: policy.thresholdPct })
-          : t('autoPurchase.off')}
-      </p>
+    <div className={styles.lowDrawer} data-testid="auto-purchase">
+      {card(
+        'pack',
+        <>
+          <p className={styles.lowOptionText} data-testid="auto-state">
+            {policy.enabled
+              ? t('autoPurchase.on', { threshold: policy.thresholdPct })
+              : t('autoPurchase.off')}
+          </p>
+          {/* The cap, with what has gone against it. */}
+          <p className={styles.lowOptionText} data-testid="auto-cap">
+            {policy.maxMonthlySpend === null
+              ? t('autoPurchase.noCap')
+              : t('autoPurchase.cap', {
+                  cap: policy.maxMonthlySpend,
+                  spent: policy.monthSpentAmount,
+                  currency,
+                  used: used === null ? '' : format.number(used, { style: 'percent' }),
+                })}
+          </p>
+        </>,
+      )}
+      {card(
+        'payg',
+        <>
+          {paygRate ? (
+            <p className={styles.lowOptionText} data-testid="auto-payg-rate">
+              {t('autoPurchase.paygRate', { rate: paygRate, currency })}
+            </p>
+          ) : null}
+          {/*
+            A behaviour the platform honours and the settings API refuses —
+            shown, not hidden: the warning below is ABOUT pay-as-you-go.
+          */}
+          {!isSettable(policy.limitBehavior) ? (
+            <p className={styles.lowOptionText} data-testid="auto-unsettable">
+              {t('autoPurchase.unsettable')}
+            </p>
+          ) : null}
+          {/* THE COMBINATION THAT LOOKS SAFE AND IS NOT. */}
+          {policy.maxMonthlySpend !== null && spendsPastZero(policy.limitBehavior) ? (
+            <p className={styles.autoContradiction} data-testid="auto-cap-not-a-cap">
+              {t('autoPurchase.capIsNotACap')}
+            </p>
+          ) : null}
+        </>,
+      )}
+      {card('stop', <p className={styles.lowOptionText}>{t('autoPurchase.stopText')}</p>)}
 
-      {/*
-        Both thresholds, because the gap between them is the point: somebody
-        hears about it at 80% and the purchase happens at 10%.
-      */}
-      {policy.enabled ? (
-        <p className={styles.autoWarning} data-testid="auto-warning">
-          {t('autoPurchase.warnsFirst', { warn: policy.warningThresholdPct })}
-        </p>
-      ) : null}
-
-      {/* The cap, with what has gone against it. */}
-      <p className={styles.autoCap} data-testid="auto-cap">
-        {policy.maxMonthlySpend === null
-          ? t('autoPurchase.noCap')
-          : t('autoPurchase.cap', {
-              cap: policy.maxMonthlySpend,
-              spent: policy.monthSpentAmount,
-              currency,
-              used: used === null ? '' : format.number(used, { style: 'percent' }),
-            })}
-      </p>
-
-      {/*
-        What happens when it runs out, described by tomorrow rather than by
-        the enum's name.
-      */}
-      <p className={styles.autoBehavior} data-testid="auto-behavior">
+      <h3 className={styles.lowHeading}>{t('autoPurchase.ifReached')}</h3>
+      {/* What happens when it runs out, described by tomorrow, not the enum. */}
+      <p className={styles.lowOptionText} data-testid="auto-behavior">
         {t(`autoPurchase.behavior.${policy.limitBehavior}` as 'autoPurchase.behavior.STOP_AI')}
       </p>
 
+      <h3 className={styles.lowHeading}>{t('autoPurchase.alerts')}</h3>
       {/*
-        A behaviour the platform honours and the settings API refuses. Shown
-        as unavailable rather than hidden: the cap warning below is ABOUT
-        pay-as-you-go, and a warning about an option nobody can see is a
-        puzzle.
+        Both thresholds, because the gap is the point: somebody hears at 80%
+        and the purchase happens at 10%. 02's other two alerts have no field.
       */}
-      {!isSettable(policy.limitBehavior) ? (
-        <p className={styles.autoUnsettable} data-testid="auto-unsettable">
-          {t('autoPurchase.unsettable')}
-        </p>
-      ) : null}
-
-      {/*
-        THE COMBINATION THAT LOOKS SAFE AND IS NOT. A cap with pay-as-you-go
-        stops the auto-purchase, not the bill.
-      */}
-      {policy.maxMonthlySpend !== null && spendsPastZero(policy.limitBehavior) ? (
-        <p className={styles.autoContradiction} data-testid="auto-cap-not-a-cap">
-          {t('autoPurchase.capIsNotACap')}
-        </p>
-      ) : null}
+      <ul className={styles.lowAlerts}>
+        <li className={styles.lowAlert}>
+          <span
+            className={styles.lowPill}
+            data-on={policy.enabled ? 'yes' : 'no'}
+            aria-hidden="true"
+          />
+          <span data-testid={policy.enabled ? 'auto-warning' : undefined}>
+            {policy.enabled
+              ? t('autoPurchase.warnsFirst', { warn: policy.warningThresholdPct })
+              : t('autoPurchase.warnAt', { warn: policy.warningThresholdPct })}
+          </span>
+        </li>
+        <li className={styles.lowAlert} title={t('autoPurchase.alertNone')}>
+          <span className={styles.lowNone}>—</span>
+          <span>{t('autoPurchase.alertPurchase')}</span>
+        </li>
+        <li className={styles.lowAlert} title={t('autoPurchase.alertNone')}>
+          <span className={styles.lowNone}>—</span>
+          <span>{t('autoPurchase.alertLimit')}</span>
+        </li>
+      </ul>
     </div>
   );
 }

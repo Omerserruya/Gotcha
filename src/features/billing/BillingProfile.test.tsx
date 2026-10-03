@@ -106,3 +106,29 @@ describe('both facts, stated together, when both were read', () => {
     expect(screen.getByTestId('payment-method')).toHaveTextContent(/Visa ending 4242/);
   });
 });
+
+describe('★ 17e — 02’s fields, as stored', () => {
+  it('a filled profile fills 02’s boxes; PO and language have no column: "—", and why', async () => {
+    render(
+      await BillingProfileSection({
+        profile: billingProfileSchema.parse({
+          billingName: 'Aviv & Co. Ltd',
+          vatId: '515234781',
+          billingAddress: '14 Ha’arba’a, Tel Aviv',
+          billingCountry: 'IL',
+          billingEmail: 'finance@example.com',
+        }),
+        methods: [{ id: 'pm', brand: 'Visa', last4: '4417', isDefault: true }],
+        failedInvoiceCount: 0,
+      }),
+    );
+    const fields = screen.getByTestId('profile-fields');
+    expect(fields).toHaveTextContent('Legal nameAviv & Co. Ltd');
+    expect(fields).toHaveTextContent('Company no. / VAT ID515234781');
+    const po = screen.getByText('Purchase order / reference').nextElementSibling;
+    expect(po).toHaveTextContent(/^—$/);
+    expect(po).toHaveAttribute('title', 'GOTCHA has no field for this yet.');
+    expect(screen.getByTestId('profile-send-to')).toHaveTextContent('finance@example.com');
+    expect(screen.getByTestId('payment-method')).toHaveTextContent('Visa ending 4417');
+  });
+});

@@ -67,7 +67,14 @@ export default async function Page({
         <SwitchSummary target={target} current={current} subscription={subscription} />
         <div className={styles.switchSide}>
           <SwitchActions target={target} current={current} methods={paymentMethods} />
-          <div className={styles.switchNotes}>
+          {/*
+            02's fine print is two lines (above, in SwitchActions). Everything
+            else this screen must say — tax, currency, a scheduled change, the
+            deferred date, "replaceable, never clearable", the platform's
+            disclaimer — is one "Details" line that opens it.
+          */}
+          <details className={styles.switchNotes} data-testid="switch-details">
+            <summary className={styles.switchNotesSummary}>{t('details')}</summary>
             <CurrentPlanSection
               subscription={subscription}
               plans={plans}
@@ -82,11 +89,12 @@ export default async function Page({
                */
               effectiveAt={subscription?.currentPeriodEnd ?? null}
               /*
-               * Null means the read failed, not that there is no card.
+               * The missing card is said once, in the fine print above; the
+               * gate's own sentence would say it a second time.
                */
-              hasPaymentMethod={paymentMethods === null || paymentMethods.length > 0}
+              hasPaymentMethod
             />
-          </div>
+          </details>
         </div>
       </div>
     </SettingsSection>

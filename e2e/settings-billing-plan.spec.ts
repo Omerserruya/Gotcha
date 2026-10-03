@@ -188,6 +188,8 @@ for (const size of SIZES) {
 
       await openPlan(page, 'en');
 
+      // The notes are behind 02's one "Details" line; opening it writes nothing.
+      await page.getByTestId('switch-details').locator('summary').click();
       const deferred = page.getByTestId('change-deferred');
       await expect(deferred).toBeVisible();
       await expect(deferred).toHaveText(/end of your billing period/i);
@@ -229,10 +231,10 @@ for (const size of SIZES) {
 
       await openPlan(page, 'en');
 
-      const noCard = page.getByTestId('change-no-card');
+      // Said once, in 02's fine print under the button.
+      const noCard = page.getByTestId('switch-fine');
       await expect(noCard).toBeVisible();
       await expect(noCard).toHaveText(/declined/i);
-      await expect(noCard).toHaveText(/add a card/i);
 
       await shoot(page, `${size.name}-3-no-card`);
     });
@@ -275,6 +277,7 @@ for (const size of SIZES) {
 
       await openPlan(page, 'en');
 
+      await page.getByTestId('switch-details').locator('summary').click();
       const disclaimer = page.getByTestId('pricing-disclaimer');
       await expect(disclaimer).toBeVisible();
       await expect(disclaimer).toHaveText(/plan configuration/i);
@@ -297,6 +300,8 @@ for (const size of SIZES) {
 
       await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
+      // The notes are behind 02's one "Details" line; opening it writes nothing.
+      await page.getByTestId('switch-details').locator('summary').click();
       const deferred = page.getByTestId('change-deferred');
       await expect(deferred).toBeVisible();
       await expect(deferred).toHaveText(/[֐-׿]/);

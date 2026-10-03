@@ -15,10 +15,13 @@ import styles from './Billing.module.css';
 export async function BillingOverlay({
   kind,
   title,
+  line,
   children,
 }: {
   readonly kind: 'drawer' | 'dialog';
   readonly title: string;
+  /** 02's muted line under the title. */
+  readonly line?: string;
   readonly children: ReactNode;
 }) {
   const t = await getTranslations('billing.overview.overlay');
@@ -35,7 +38,10 @@ export async function BillingOverlay({
         aria-label={title}
       >
         <header className={styles.overlayHead}>
-          <h2 className={styles.overlayTitle}>{title}</h2>
+          <div className={styles.overlayTitles}>
+            <h2 className={styles.overlayTitle}>{title}</h2>
+            {line ? <p className={styles.overlayLine}>{line}</p> : null}
+          </div>
           <Link
             href="/settings/billing"
             className={styles.overlayClose}

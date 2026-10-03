@@ -443,7 +443,20 @@ export const catalogPlanSchema = z.object({
     )
     .default([]),
   estimate: z
-    .object({ chat: z.object({ monthly: z.number().nullable().default(null) }).nullable() })
+    .object({
+      chat: z
+        .object({
+          monthly: z.number().nullable().default(null),
+          /**
+           * `DECLARED_VOLUME` is the chat volume the plan SELLS by default —
+           * 250 a month on every plan here, whatever its credits — and
+           * `CREDIT_RATIO` is the credits divided by an assumption. Only the
+           * second is "what these credits come to".
+           */
+          basis: z.enum(['DECLARED_VOLUME', 'CREDIT_RATIO']).nullable().catch(null).default(null),
+        })
+        .nullable(),
+    })
     .nullable()
     .default(null),
 });

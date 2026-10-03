@@ -56,8 +56,33 @@ export async function BillingProfileSection({
 
   const nothingToCharge = methods !== null && !hasSomethingToCharge(methods);
 
+  const card = methods !== null && methods.length > 0 ? methods[0]! : null;
+
+  /*
+    17e, measured: Payment method; "Tax invoice made out to" as 02's fields;
+    "Send invoices and receipts to". Read state — the values as stored, in
+    02's boxes, and nothing here writes yet.
+  */
   return (
-    <div className={styles.block} data-testid="billing-profile">
+    <div className={styles.detailsDrawer} data-testid="billing-profile">
+      <h3 className={styles.lowHeading}>{t('profile.paymentMethod')}</h3>
+      {card ? (
+        <div className={styles.detailsCard} data-testid="payment-method">
+          <span className={styles.detailsBrand} aria-hidden="true">
+            {(card.brand ?? t('profile.unknownBrand')).toUpperCase()}
+          </span>
+          <span className={styles.detailsCardText}>
+            {t('profile.card', {
+              brand: card.brand ?? t('profile.unknownBrand'),
+              last4: card.last4 ?? '????',
+            })}
+          </span>
+          <span className={styles.detailsAction} aria-disabled="true" title={t('profile.notYet')}>
+            {t('profile.replace')}
+          </span>
+        </div>
+      ) : null}
+
       {/*
         ════════════════════════════════════════════════════════════════════
         THE MOST CONSEQUENTIAL SENTENCE ON THIS SCREEN, AND IT USED TO
@@ -97,15 +122,7 @@ export async function BillingProfileSection({
         </p>
       ) : null}
 
-      {methods !== null && methods.length > 0 ? (
-        <p className={styles.card} data-testid="payment-method">
-          {t('profile.card', {
-            brand: methods[0]!.brand ?? t('profile.unknownBrand'),
-            last4: methods[0]!.last4 ?? '????',
-          })}
-        </p>
-      ) : null}
-
+      <h3 className={styles.lowHeading}>{t('profile.invoiceTo')}</h3>
       {/*
         FOUR facts, not one blank form.
 
@@ -132,12 +149,25 @@ export async function BillingProfileSection({
           {t('profile.emptied')}
         </p>
       ) : (
-        <dl className={styles.profileFields} data-testid="profile-fields">
-          <Field label={t('profile.name')} value={profile?.billingName ?? null} />
-          <Field label={t('profile.email')} value={profile?.billingEmail ?? null} />
-          <Field label={t('profile.vatId')} value={profile?.vatId ?? null} />
-          <Field label={t('profile.address')} value={profile?.billingAddress ?? null} />
-        </dl>
+        <>
+          <div className={styles.detailsFields} data-testid="profile-fields">
+            <Field label={t('profile.legalName')} value={profile?.billingName ?? null} />
+            <Field label={t('profile.vatId')} value={profile?.vatId ?? null} />
+            <Field label={t('profile.address')} value={profile?.billingAddress ?? null} />
+            <Field label={t('profile.country')} value={profile?.billingCountry ?? null} />
+            {/* 02's two more fields have no column: "—", and why. */}
+            <Field label={t('profile.po')} value={null} none={t('profile.noField')} />
+            <Field label={t('profile.language')} value={null} none={t('profile.noField')} />
+          </div>
+          <h3 className={styles.lowHeading}>{t('profile.sendTo')}</h3>
+          <p className={styles.detailsChips} data-testid="profile-send-to">
+            {profile?.billingEmail ? (
+              <span className={styles.detailsChip}>{profile.billingEmail}</span>
+            ) : (
+              <span className={styles.lowNone}>—</span>
+            )}
+          </p>
+        </>
       )}
 
       {/*
@@ -150,12 +180,22 @@ export async function BillingProfileSection({
   );
 }
 
-function Field({ label, value }: { readonly label: string; readonly value: string | null }) {
-  if (value === null) return null;
+function Field({
+  label,
+  value,
+  none,
+}: {
+  readonly label: string;
+  readonly value: string | null;
+  /** Why there is no value, when the platform has no column for it. */
+  readonly none?: string;
+}) {
   return (
-    <div className={styles.profileField}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
+    <label className={styles.detailsField}>
+      <span className={styles.detailsLabel}>{label}</span>
+      <span className={styles.detailsBox} title={value === null ? none : undefined}>
+        {value ?? '—'}
+      </span>
+    </label>
   );
 }

@@ -39,7 +39,14 @@ vi.mock('@/i18n/navigation', () => ({
 
 import { PlanCards, SwitchActions, SwitchSummary } from './PlanChoice';
 
-const plan = (key: string, name: string, amount: string, credits: number, chats: number) => ({
+const plan = (
+  key: string,
+  name: string,
+  amount: string,
+  credits: number,
+  chats: number,
+  basis: 'CREDIT_RATIO' | 'DECLARED_VOLUME' = 'CREDIT_RATIO',
+) => ({
   key,
   name,
   billingInterval: 'MONTHLY',
@@ -49,13 +56,13 @@ const plan = (key: string, name: string, amount: string, credits: number, chats:
     { key: 'a', nameEn: 'One AI employee', included: true },
     { key: 'b', nameEn: 'Phone calls', included: false },
   ],
-  estimate: { chat: { monthly: chats } },
+  estimate: { chat: { monthly: chats, basis } },
 });
 
 /** The catalog this tenant is offered, as `/billing/pricing` sends it. */
 const CATALOG = catalogPlans([
   plan('foundation', 'Foundation', '39.00', 750, 94),
-  plan('ai_workforce', 'AI Workforce', '97.00', 2000, 250),
+  plan('ai_workforce', 'AI Workforce', '97.00', 2000, 250, 'DECLARED_VOLUME'),
   plan('ai_voice', 'AI Voice', '1499.00', 7000, 875),
   { key: 'broken' }, // one plan the contract cannot read costs only its card
 ]);
@@ -144,5 +151,14 @@ describe('★ 17b — the switch is drawn, and not live', () => {
   it('an unread payment method claims no card and no absence', async () => {
     render(await SwitchActions({ target: null, current: null, methods: null }));
     expect(screen.getByTestId('switch-fine')).not.toHaveTextContent(/Charged to|No payment/);
+  });
+});
+
+describe('★ 17b — conversations beside credits only when they come FROM the credits', () => {
+  it('the default sold volume (250 on every plan) is not drawn as what the credits buy', async () => {
+    render(await PlanCards({ catalog: CATALOG, currentKey: 'ai_voice', selectedKey: null }));
+    const card = screen.getByTestId('plan-card-ai_workforce');
+    expect(card).toHaveTextContent('2,000 credits');
+    expect(card).not.toHaveTextContent(/conversations/);
   });
 });
