@@ -1,6 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { AddKnowledge, isAddWay } from '@/features/knowledge/add/AddKnowledge';
+import { isAddWay } from '@/features/knowledge/add/add-way';
+import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
 import { KnowledgeScreen, knowledgeSummary } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
 import styles from '@/features/knowledge/Knowledge.module.css';

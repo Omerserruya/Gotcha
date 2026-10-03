@@ -23,7 +23,8 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import { ADD_WAYS, AddKnowledge, isAddWay, type AddWay } from './AddKnowledge';
+import { ADD_WAYS, isAddWay, type AddWay } from './add-way';
+import { AddKnowledge } from './AddKnowledge';
 
 const sheet = (initialWay?: AddWay) =>
   render(
