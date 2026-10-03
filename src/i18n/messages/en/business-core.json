@@ -90,5 +90,23 @@
     "writeback": "After every conversation",
     "writebackPurpose": "what gets written back"
   },
-  "foot": "Connections themselves are added and managed in <link>Studio · Integrations</link>. Here you only decide which one plays which part."
+  "foot": "Connections themselves are added and managed in <link>Studio · Integrations</link>. Here you only decide which one plays which part.",
+  "drawer": {
+    "connection": "Connection",
+    "connectedIn": "Connected in Integrations",
+    "available": "Available",
+    "connect": "Connect ↗",
+    "reads": "What GOTCHA reads",
+    "readsNone": "Nothing here says what GOTCHA reads from this part, or how much of it, yet.",
+    "mayDo": "What GOTCHA may do there",
+    "actionsUnread": "We couldn't read this system's actions just now.",
+    "noActions": "This system has no actions GOTCHA can take.",
+    "manage": "Manage the connection in Integrations ↗",
+    "askedFirst": "Asked first",
+    "whatWhere": "What goes where",
+    "acrossTitle": "Across both · what goes where",
+    "acrossLine": "One customer, asked for in order, and what GOTCHA writes where."
+  },
+  "open": "Open {part}",
+  "openAcross": "Open across both"
 }

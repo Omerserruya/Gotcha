@@ -25,8 +25,8 @@ export async function Drawer({
   readonly title: string;
   readonly line?: string;
   readonly closeHref: string;
-  /** 02's widths: 560 (11b, 11c), 620 (11d). */
-  readonly width?: 560 | 600 | 620;
+  /** 02's widths: 560 (11b, 11c), 600 (12d, 14c), 620 (11d), 820 (14e). */
+  readonly width?: 560 | 600 | 620 | 820;
   readonly testId?: string;
   readonly children: ReactNode;
 }) {

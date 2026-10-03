@@ -45,7 +45,7 @@ import styles from './BusinessCore.module.css';
  * differ, because one of them asks somebody to redo work they have done.
  */
 /** The chip's tone for each state: working, needs a hand, or nothing to do. */
-const CHIP_TONE = {
+export const CHIP_TONE = {
   chosen: 'good',
   connected_none_chosen: 'warn',
   connected_but_failing: 'warn',
@@ -181,6 +181,17 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                     <span className={styles.systemNone}>—</span>
                   )}
                 </div>
+                <span aria-hidden="true" />
+                {/* 14e: both rows open the across-both drawer. */}
+                <Link
+                  href={{ pathname: '/settings/systems', query: { panel: 'across' } }}
+                  className={styles.open}
+                  aria-label={t('openAcross')}
+                  data-testid="core-open-across-identity"
+                  scroll={false}
+                >
+                  ›
+                </Link>
               </article>
             </li>
             <li>
@@ -200,6 +211,17 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                     <span className={styles.systemNone}>—</span>
                   )}
                 </div>
+                <span aria-hidden="true" />
+                {/* 14e: both rows open the across-both drawer. */}
+                <Link
+                  href={{ pathname: '/settings/systems', query: { panel: 'across' } }}
+                  className={styles.open}
+                  aria-label={t('openAcross')}
+                  data-testid="core-open-across-writeback"
+                  scroll={false}
+                >
+                  ›
+                </Link>
               </article>
             </li>
           </ul>
@@ -483,6 +505,16 @@ function Part({
       >
         {t(`chip.${isInferred(part) && state === 'chosen' ? 'inferred' : state}`)}
       </span>
+      {/* 14c / 14d: the row opens its part's drawer. */}
+      <Link
+        href={{ pathname: '/settings/systems', query: { part: part.role } }}
+        className={styles.open}
+        aria-label={t('open', { part: t(`part.${part.role}`) })}
+        data-testid={`core-open-${part.role}`}
+        scroll={false}
+      >
+        ›
+      </Link>
     </article>
   );
 }

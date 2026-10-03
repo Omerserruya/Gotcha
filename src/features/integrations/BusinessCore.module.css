@@ -155,7 +155,7 @@
   */
   .part {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 240px 110px;
+    grid-template-columns: minmax(0, 1fr) 240px 110px 16px;
     align-items: center;
     gap: var(--space-16);
     padding: var(--space-8) var(--space-16);
@@ -318,5 +318,173 @@
 
   .footLink {
     color: var(--text-primary);
+  }
+}
+
+@layer features {
+  /* 02's "›": the row opens its drawer. */
+  .open {
+    justify-self: end;
+    font-size: 16px;
+    color: var(--text-faint);
+    text-decoration: none;
+  }
+
+  .open:hover {
+    color: var(--text-primary);
+  }
+}
+
+@layer features {
+  /* ── 14c / 14d · a part's drawer ──────────────────────────────────────── */
+  .drawerSystem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+  }
+
+  .drawerSystemName {
+    flex: 1;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .drawerGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .drawerEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: var(--letter-spacing-eyebrow);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .drawerList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .drawerListRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block: var(--space-8);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .drawerLink {
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .drawerNone {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-faint);
+  }
+
+  .drawerActions {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .drawerAction {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    padding-block: var(--space-10);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .drawerActionName {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .drawerFootLink {
+    margin-block-start: auto;
+    padding-block-start: var(--space-12);
+  }
+
+  /* ── 14e · across both ────────────────────────────────────────────────── */
+  .acrossChain {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .acrossStep {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-step);
+  }
+
+  .acrossName {
+    font-size: var(--font-size-meta);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .acrossSub {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .acrossRules {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding-inline-start: var(--space-16);
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  .acrossRow {
+    display: grid;
+    grid-template-columns: 200px 160px minmax(0, 1fr);
+    gap: var(--space-12);
+    align-items: baseline;
+    padding-block: var(--space-12);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .acrossEvent {
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .acrossBoards {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
   }
 }
