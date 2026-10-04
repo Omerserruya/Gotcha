@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ArrowUp, Image as ImageIcon, Paperclip, X } from 'lucide-react';
 
@@ -11,6 +11,9 @@ import { REPLY_TO_EVENT, type ReplyTarget } from './reply-event';
 import { COMPOSE_KINDS, type ComposeKind } from './compose-kinds';
 import { sendReply, type SendResult } from './send-actions';
 import { MAX_MEDIA_BYTES, sendMedia, type MediaResult } from './send-media';
+
+/** As many as the old app took at once. */
+const MAX_FILES = 5;
 import { Link } from '@/i18n/navigation';
 
 import styles from './Inbox.module.css';
@@ -65,7 +68,25 @@ export function Composer({
    * A chosen file, HELD until Send. The media route sends on upload, so
    * choosing a file must not be the moment it leaves.
    */
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<readonly File[]>([]);
+  const file = files[0] ?? null;
+  /* Image previews, as object URLs — made once per file, released when it goes. */
+  const previews = useMemo(
+    () =>
+      files.map((f) =>
+        f.type.startsWith('image/') && typeof URL.createObjectURL === 'function'
+          ? URL.createObjectURL(f)
+          : null,
+      ),
+    [files],
+  );
+  useEffect(
+    () => () => {
+      for (const url of previews) if (url) URL.revokeObjectURL(url);
+    },
+    [previews],
+  );
+  const [dragging, setDragging] = useState(false);
   const [result, setResult] = useState<SendResult | MediaResult | null>(null);
   /*
    * ★ WHAT THE DRAFT WAS BEFORE GOTCHA REWORKED IT. The chips replace
@@ -110,9 +131,15 @@ export function Composer({
    */
   const conflict = file !== null && replying !== null;
 
-  const choose = (chosen: File | undefined) => {
+  /** Adds what was chosen or dropped — up to five, as the old app allowed. */
+  const add = (chosen: FileList | readonly File[] | null | undefined) => {
     setResult(null);
-    setFile(chosen ?? null);
+    if (!chosen) return;
+    setFiles((now) => [...now, ...Array.from(chosen)].slice(0, MAX_FILES));
+  };
+  const remove = (index: number) => {
+    setResult(null);
+    setFiles((now) => now.filter((_, i) => i !== index));
   };
 
   const rework = (kind: ComposeKind) => {
@@ -134,6 +161,19 @@ export function Composer({
   return (
     <form
       className={styles.composer}
+      data-dragging={dragging ? 'yes' : undefined}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes('Files') || busy) return;
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length || busy) return;
+        event.preventDefault();
+        setDragging(false);
+        add(event.dataTransfer.files);
+      }}
       data-testid="composer"
       onSubmit={(event) => {
         event.preventDefault();
@@ -141,10 +181,28 @@ export function Composer({
         setPending(true);
         void (async () => {
           try {
-            const outcome =
-              file === null
-                ? await sendReply(conversationId, text, replying?.id)
-                : await sendMedia(conversationId, file, text);
+            let outcome: SendResult | MediaResult;
+            let sent = 0;
+            if (files.length === 0) {
+              outcome = await sendReply(conversationId, text, replying?.id);
+            } else {
+              /*
+               * One upload per file (the route takes one). The words go with
+               * the FIRST only — five copies of a caption is not what was
+               * written. A failure stops the rest; what did not go stays held.
+               */
+              outcome = { ok: true };
+              for (const [i, f] of files.entries()) {
+                outcome = await sendMedia(conversationId, f, i === 0 ? text : '');
+                if (!outcome.ok) break;
+                sent += 1;
+              }
+              if (!outcome.ok && sent > 0) {
+                setFiles((now) => now.slice(sent));
+                setText('');
+                router.refresh();
+              }
+            }
             setResult(outcome);
             /*
              * Cleared only on success. A failed send that empties the box loses
@@ -153,7 +211,7 @@ export function Composer({
              */
             if (outcome.ok) {
               setText('');
-              setFile(null);
+              setFiles([]);
               setReplying(null);
               setBefore(null);
               setComposed(null);
@@ -212,23 +270,38 @@ export function Composer({
         onChange={(event) => setText(event.target.value)}
       />
 
-      {/* The held file, with the way to take it back out. */}
-      {file === null ? null : (
-        <p className={styles.composerFile} data-testid="composer-file">
-          <Paperclip size={12} aria-hidden="true" />
-          <span className={styles.composerFileName}>{file.name}</span>
-          <span className={styles.composerFileNote}>{t('attached')}</span>
-          <button
-            type="button"
-            className={styles.composerIcon}
-            data-testid="composer-file-remove"
-            aria-label={t('removeFile', { name: file.name })}
-            disabled={busy}
-            onClick={() => choose(undefined)}
-          >
-            <X size={13} aria-hidden="true" />
-          </button>
-        </p>
+      {/* The held files — a picture as itself — each with the way to take it back out. */}
+      {files.length === 0 ? null : (
+        <ul className={styles.composerFiles} data-testid="composer-files">
+          {files.map((f, i) => (
+            <li
+              key={`${f.name}-${i}`}
+              className={styles.composerFile}
+              data-testid={`composer-file-${i}`}
+            >
+              {previews[i] ? (
+                // eslint-disable-next-line @next/next/no-img-element -- a local object URL
+                <img className={styles.composerThumb} src={previews[i]!} alt="" />
+              ) : (
+                <Paperclip size={12} aria-hidden="true" />
+              )}
+              <span className={styles.composerFileName}>{f.name}</span>
+              <button
+                type="button"
+                className={styles.composerIcon}
+                data-testid={`composer-file-remove-${i}`}
+                aria-label={t('removeFile', { name: f.name })}
+                disabled={busy}
+                onClick={() => remove(i)}
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+          <li className={styles.composerFileNote}>
+            {t('attachedCount', { count: files.length, max: MAX_FILES })}
+          </li>
+        </ul>
       )}
 
       {/*
@@ -245,20 +318,22 @@ export function Composer({
           ref={imageInput}
           type="file"
           accept="image/*"
+          multiple
           hidden
           data-testid="composer-image-input"
           onChange={(event) => {
-            choose(event.target.files?.[0]);
+            add(event.target.files);
             event.target.value = '';
           }}
         />
         <input
           ref={fileInput}
           type="file"
+          multiple
           hidden
           data-testid="composer-file-input"
           onChange={(event) => {
-            choose(event.target.files?.[0]);
+            add(event.target.files);
             event.target.value = '';
           }}
         />
@@ -268,7 +343,7 @@ export function Composer({
           data-testid="composer-attach-image"
           aria-label={t('attachImage')}
           title={t('attachImage')}
-          disabled={busy}
+          disabled={busy || files.length >= MAX_FILES}
           onClick={() => imageInput.current?.click()}
         >
           <ImageIcon size={15} aria-hidden="true" />
@@ -279,7 +354,7 @@ export function Composer({
           data-testid="composer-attach-file"
           aria-label={t('attachFile')}
           title={t('attachFile')}
-          disabled={busy}
+          disabled={busy || files.length >= MAX_FILES}
           onClick={() => fileInput.current?.click()}
         >
           <Paperclip size={15} aria-hidden="true" />

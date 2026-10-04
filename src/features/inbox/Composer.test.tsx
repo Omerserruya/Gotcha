@@ -327,7 +327,7 @@ describe('★★ 02’s bar — the four controls that have a backend', () => {
     const u = user();
     show();
     await u.upload(screen.getByTestId('composer-image-input'), photo());
-    expect(screen.getByTestId('composer-file')).toHaveTextContent('receipt.png');
+    expect(screen.getByTestId('composer-file-0')).toHaveTextContent('receipt.png');
     expect(media).not.toHaveBeenCalled();
     // A file alone is something to send.
     expect(screen.getByTestId('composer-send')).toBeEnabled();
@@ -344,15 +344,15 @@ describe('★★ 02’s bar — the four controls that have a backend', () => {
     await waitFor(() => expect(media).toHaveBeenCalledWith('c1', file, 'Here it is'));
     expect(sent).not.toHaveBeenCalled();
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    expect(screen.queryByTestId('composer-file')).toBeNull();
+    expect(screen.queryByTestId('composer-files')).toBeNull();
   });
 
   it('★ a file can be taken back out before it goes', async () => {
     const u = user();
     show();
     await u.upload(screen.getByTestId('composer-image-input'), photo());
-    await u.click(screen.getByTestId('composer-file-remove'));
-    expect(screen.queryByTestId('composer-file')).toBeNull();
+    await u.click(screen.getByTestId('composer-file-remove-0'));
+    expect(screen.queryByTestId('composer-files')).toBeNull();
     expect(screen.getByTestId('composer-send')).toBeDisabled();
   });
 
@@ -364,7 +364,7 @@ describe('★★ 02’s bar — the four controls that have a backend', () => {
     await u.type(screen.getByTestId('composer-body'), 'caption');
     await u.click(screen.getByTestId('composer-send'));
     await waitFor(() => expect(screen.getByTestId('composer-problem')).toHaveTextContent(/16 MB/));
-    expect(screen.getByTestId('composer-file')).toBeInTheDocument();
+    expect(screen.getByTestId('composer-file-0')).toBeInTheDocument();
     expect(screen.getByTestId('composer-body')).toHaveValue('caption');
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -450,7 +450,7 @@ describe('★★ 02’s Reply — answering one message', () => {
     reply();
     expect(screen.getByTestId('composer-conflict')).toBeInTheDocument();
     expect(screen.getByTestId('composer-send')).toBeDisabled();
-    expect(screen.getByTestId('composer-file')).toBeInTheDocument();
+    expect(screen.getByTestId('composer-file-0')).toBeInTheDocument();
     expect(screen.getByTestId('composer-replying')).toBeInTheDocument();
   });
 
@@ -465,5 +465,64 @@ describe('★★ 02’s Reply — answering one message', () => {
       /isn’t in this conversation/,
     );
     expect(screen.getByTestId('composer-body')).toHaveValue('Tomorrow');
+  });
+});
+
+describe('★★ up to five files — each its own upload, the words once', () => {
+  const user = () => userEvent.setup();
+  const file = (name: string, type = 'image/png') => new File(['x'], name, { type });
+
+  it('sent in order; the caption with the FIRST only', async () => {
+    media.mockResolvedValue({ ok: true });
+    const u = user();
+    show();
+    const [a, b] = [file('a.png'), file('b.pdf', 'application/pdf')];
+    await u.upload(screen.getByTestId('composer-file-input'), [a, b]);
+    expect(screen.getByTestId('composer-files')).toHaveTextContent('2 of 5');
+    await u.type(screen.getByTestId('composer-body'), 'Both');
+    await u.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(media).toHaveBeenCalledTimes(2));
+    expect(media.mock.calls[0]).toEqual(['c1', a, 'Both']);
+    expect(media.mock.calls[1]).toEqual(['c1', b, '']);
+  });
+
+  it('never more than five held; the attach buttons rest at five', async () => {
+    const u = user();
+    show();
+    await u.upload(
+      screen.getByTestId('composer-file-input'),
+      ['1', '2', '3', '4', '5', '6'].map((n) => file(`${n}.png`)),
+    );
+    expect(screen.getByTestId('composer-file-4')).toBeInTheDocument();
+    expect(screen.queryByTestId('composer-file-5')).toBeNull();
+    expect(screen.getByTestId('composer-attach-file')).toBeDisabled();
+  });
+
+  it('★ the second fails: the first is gone (sent), the rest stay to retry, the words went with the first', async () => {
+    media
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    const u = user();
+    show();
+    await u.upload(screen.getByTestId('composer-file-input'), [
+      file('a.png'),
+      file('b.png'),
+      file('c.png'),
+    ]);
+    await u.type(screen.getByTestId('composer-body'), 'Three');
+    await u.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(media).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('composer-file-0')).toHaveTextContent('b.png');
+    expect(screen.getByTestId('composer-file-1')).toHaveTextContent('c.png');
+    expect(screen.getByTestId('composer-body')).toHaveValue('');
+  });
+
+  it('a file dropped on the composer is held, not sent', async () => {
+    show();
+    const dropped = file('drop.png');
+    const composer = screen.getByTestId('composer');
+    fireEvent.drop(composer, { dataTransfer: { files: [dropped], types: ['Files'] } });
+    expect(screen.getByTestId('composer-file-0')).toHaveTextContent('drop.png');
+    expect(media).not.toHaveBeenCalled();
   });
 });

@@ -191,7 +191,8 @@
     },
     "replyingTo": "תשובה ל{who}",
     "cancelReply": "ביטול התשובה להודעה הזו",
-    "noFileOnReply": "אי אפשר לשלוח קובץ כתשובה להודעה"
+    "noFileOnReply": "אי אפשר לשלוח קובץ כתשובה להודעה",
+    "attachedCount": "{count} מתוך {max} · נשלחים כשלוחצים על שליחה"
   },
   "clear": {
     "title": "התור ריק",

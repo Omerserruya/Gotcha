@@ -2065,4 +2065,28 @@
     display: flex;
     gap: var(--space-10);
   }
+
+  /* Up to five held files, a picture as itself. */
+  .composerFiles {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0 0 var(--space-8);
+    list-style: none;
+  }
+
+  .composerThumb {
+    flex: none;
+    inline-size: 36px;
+    block-size: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+  }
+
+  /* A file dragged over the composer: it says it will take it. */
+  .composer[data-dragging='yes'] {
+    outline: 2px dashed var(--border-strong);
+    outline-offset: 2px;
+  }
 }

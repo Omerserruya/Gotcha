@@ -191,7 +191,8 @@
     },
     "replyingTo": "Replying to {who}",
     "cancelReply": "Don’t reply to this message",
-    "noFileOnReply": "A file can’t be sent as a reply to a message"
+    "noFileOnReply": "A file can’t be sent as a reply to a message",
+    "attachedCount": "{count} of {max} · sent when you press send"
   },
   "clear": {
     "title": "The queue is clear",
