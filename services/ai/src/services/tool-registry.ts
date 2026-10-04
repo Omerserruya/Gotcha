@@ -461,6 +461,10 @@ export interface GovernableTool {
   /** Dotted adapter name (`shopify.cancel_order`) or `integration.<slug>`. */
   name: string;
   integrationSlug: string;
+  /** TenantIntegration.status of the connection the tools hang off. */
+  integrationStatus: string;
+  /** The catalog row - the only key that is unique across providers. */
+  catalogToolId: string;
   slug: string;
   displayName: string;
   description: string;
@@ -533,24 +537,30 @@ export async function getExecutableToolCountsBySlug(): Promise<Map<string, numbe
 
 export async function getGovernableIntegrationTools(
   tenantId: string,
+  opts: { includeDisconnected?: boolean } = {},
 ): Promise<GovernableTool[]> {
   const { prisma } = await import("@chatcenter/shared");
 
-  // Connected integrations only: policy on a provider the tenant has not
-  // connected is not actionable, and the workspace lists those separately.
+  // Connected integrations only by default: the workspace lists unconnected
+  // providers separately. The permissions list passes includeDisconnected,
+  // because a connection in ERROR still HAS its provisioned tools and their
+  // policies - hiding them made the list empty for a tenant with 68 of them.
   const connections = await prisma.tenantIntegration.findMany({
-    where: { tenantId, status: "CONNECTED" },
-    select: { id: true, integration: { select: { id: true, slug: true } } },
+    where: opts.includeDisconnected ? { tenantId } : { tenantId, status: "CONNECTED" },
+    select: { id: true, status: true, integration: { select: { id: true, slug: true } } },
   });
   if (connections.length === 0) return [];
 
   // De-duplicate by slug. The dev estate has three Shopify connection rows for
-  // one tenant; keying by slug means the tool list is not tripled.
-  const bySlug = new Map<string, { tenantIntegrationId: string; integrationId: string }>();
-  for (const c of connections) {
+  // one tenant; keying by slug means the tool list is not tripled. A CONNECTED
+  // row wins over a broken one, so the status shown is the one that runs.
+  const bySlug = new Map<string, { tenantIntegrationId: string; integrationId: string; status: string }>();
+  for (const c of connections as any[]) {
     const slug = c.integration?.slug;
-    if (!slug || bySlug.has(slug)) continue;
-    bySlug.set(slug, { tenantIntegrationId: c.id, integrationId: c.integration!.id });
+    if (!slug) continue;
+    const prev = bySlug.get(slug);
+    if (prev && (prev.status === "CONNECTED" || c.status !== "CONNECTED")) continue;
+    bySlug.set(slug, { tenantIntegrationId: c.id, integrationId: c.integration!.id, status: String(c.status) });
   }
 
   const [catalogTools, tenantTools] = await Promise.all([
@@ -600,6 +610,8 @@ export async function getGovernableIntegrationTools(
     out.push({
       name: adapterDef ? `${integrationSlug}.${ct.slug}` : `integration.${ct.slug}`,
       integrationSlug,
+      integrationStatus: bySlug.get(integrationSlug)!.status,
+      catalogToolId: ct.id,
       slug: ct.slug,
       displayName: ct.name ?? ct.slug,
       description: ct.description ?? "",

@@ -40,6 +40,13 @@ vi.mock("@chatcenter/shared", async () => {
     RISK_GROUPS: ta.RISK_GROUPS,
     AuditAction: {},
     prisma: {
+      // The PUT resolves the name to one provider-scoped catalog row first.
+      catalogTool: {
+        findFirst: async (a: any) => ({
+          id: "ct1", integrationId: "i1", slug: a.where.slug, integration: { slug: a.where.integration?.slug },
+        }),
+        findMany: async (a: any) => [{ id: "ct1", integrationId: "i1", slug: a.where.slug, integration: { slug: "x" } }],
+      },
       tenantTool: {
         findFirst: async () => ({ id: "tt1", configOverrides: {} }),
         update: async (a: any) => { state.writes.push(["tenantTool.update", a.data]); return { id: "tt1" }; },
