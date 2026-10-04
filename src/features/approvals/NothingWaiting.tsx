@@ -2,6 +2,8 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { decisionStance, isOutcomeUnknown, type Approval } from '@/api/contracts/approvals';
 
+import { decisionSentence } from './decision-sentence';
+import type { HandledToday } from './handled';
 import type { decisionStats } from './load-approvals';
 
 import fill from '@/design-system/styles/fill.module.css';
@@ -42,11 +44,14 @@ export async function NothingWaiting({
   decided,
   mayBeIncomplete,
   requesterNames,
+  customerNames = {},
   now = new Date(),
 }: {
   readonly decided: readonly Approval[] | null;
   readonly mayBeIncomplete: boolean;
   readonly requesterNames: Readonly<Record<string, string>>;
+  /** The customer of each row, by approval id, where its conversation names one. */
+  readonly customerNames?: Readonly<Record<string, string>>;
   /** One `now` for the render: "today" decides whether a row shows a time or a date. */
   readonly now?: Date;
 }) {
@@ -59,11 +64,37 @@ export async function NothingWaiting({
    *   does was the defect a walk found: 29 rows at "12:43 AM" and no day.
    */
   const today = now.toDateString();
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toDateString();
   const when = (iso: string) => {
     const at = new Date(iso);
-    return at.toDateString() === today
-      ? format.dateTime(at, { hour: '2-digit', minute: '2-digit', hour12: false })
-      : format.dateTime(at, { day: 'numeric', month: 'short' });
+    if (at.toDateString() === today) {
+      return format.dateTime(at, { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+    if (at.toDateString() === yesterday) return t('decided.yesterday');
+    return format.dateTime(at, { day: 'numeric', month: 'short' });
+  };
+  const decidedToday = (decided ?? []).filter(
+    (approval) => approval.decidedAt && new Date(approval.decidedAt).toDateString() === today,
+  ).length;
+  const amountOf = (approval: Approval) =>
+    approval.facts.amount === null
+      ? null
+      : approval.facts.currency
+        ? format.number(approval.facts.amount, {
+            style: 'currency',
+            currency: approval.facts.currency,
+            maximumFractionDigits: 0,
+          })
+        : format.number(approval.facts.amount);
+  const sentence = (approval: Approval) => {
+    const { key, values } = decisionSentence(
+      approval,
+      customerNames[approval.id] ?? null,
+      amountOf(approval),
+    );
+    return key === 'none'
+      ? approval.summary
+      : t(`decided.sentence.${key}` as 'decided.sentence.refunded', values as never);
   };
 
   /*
@@ -84,11 +115,10 @@ export async function NothingWaiting({
     <section className={`${fill.fillCard} ${styles.decidedCard}`} data-testid="nothing-waiting">
       <header className={styles.decidedCardHeader}>
         <h2 className={styles.decidedHeading}>{t('decided.heading')}</h2>
-        {decided && decided.length > 0 ? (
-          <span className={styles.decidedCount}>
-            {mayBeIncomplete
-              ? t('decided.latest', { count: decided.length })
-              : t('decided.count', { count: decided.length })}
+        {/* 02: "7 today". Undo was ruled out (Omer, 2026-10-04), and with it the 24h. */}
+        {decided !== null ? (
+          <span className={styles.decidedCount} data-testid="decided-today">
+            {t('decided.today', { count: decidedToday })}
           </span>
         ) : null}
       </header>
@@ -143,7 +173,7 @@ export async function NothingWaiting({
                   className={styles.decidedSummary}
                   title={asked ? t('decided.askedBy', { who: asked }) : undefined}
                 >
-                  {approval.summary}
+                  {sentence(approval)}
                 </span>
                 {/*
                   ★★ HOW IT ENDED, IN ONE WORD — and the two endings 02's tidy
@@ -194,11 +224,58 @@ export async function NothingWaiting({
         100 per status — so the card says when it may be cut, in 02's footer
         bar, as one line.
       */}
-      {decided && decided.length > 0 && mayBeIncomplete ? (
-        <p className={styles.decidedFooter} data-testid="decided-incomplete">
-          {t('decided.incompleteShort')}
+      {/*
+        02's foot says a reason "teaches GOTCHA". Nothing reads a rejection's
+        reason (it is only ever written) — so the foot says what is true.
+      */}
+      {decided && decided.length > 0 ? (
+        <p className={styles.decidedFooter} data-testid="decided-foot">
+          {mayBeIncomplete ? t('decided.incompleteShort') : t('decided.kept')}
         </p>
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * 03c's dark card — what GOTCHA did today with nobody asked. See
+ * `handledToday` for how it is counted; never a value nobody recorded.
+ */
+export async function HandledCard({ handled }: { readonly handled: HandledToday | null }) {
+  const t = await getTranslations('approvals.handled');
+  const format = await getFormatter();
+  const figures = [
+    ['refunds', handled?.refunds],
+    ['lookups', handled?.lookups],
+    ['returns', handled?.returns],
+  ] as const;
+  return (
+    <section className={styles.handled} data-testid="handled-today">
+      <p className={styles.handledEyebrow}>{t('eyebrow')}</p>
+      {handled === null ? (
+        <p className={styles.handledLead} title={t('unread')} data-testid="handled-unread">
+          <span className={styles.handledNumber}>—</span>
+        </p>
+      ) : handled.total === 0 ? (
+        <p className={styles.handledLead} data-testid="handled-none">
+          <span className={styles.handledQuiet}>{t('none')}</span>
+        </p>
+      ) : (
+        <p className={styles.handledLead} data-testid="handled-total">
+          <span className={styles.handledNumber}>{format.number(handled.total)}</span>
+          <span className={styles.handledUnit}>{t('actions', { count: handled.total })}</span>
+        </p>
+      )}
+      <dl className={styles.handledFigures}>
+        {figures.map(([key, value]) => (
+          <div key={key} className={styles.handledFigure} data-testid={`handled-${key}`}>
+            <dt>{t(key)}</dt>
+            <dd title={value === undefined ? t('unread') : undefined}>
+              {value === undefined ? '—' : format.number(value)}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
@@ -228,11 +305,9 @@ export async function DecisionStats({
       <span>
         {t('stats.approvedWeek')} <strong>{stats.approvedThisWeek}</strong>
       </span>
-      {avg === null ? null : (
-        <span>
-          {t('stats.avgDecision')} <strong>{avg}</strong>
-        </span>
-      )}
+      <span>
+        {t('stats.avgDecision')} <strong>{avg ?? '—'}</strong>
+      </span>
     </p>
   );
 }

@@ -105,7 +105,8 @@ describe('★★ how it ended, in one word — and never "someone"', () => {
         params: { order_name: '#4812' },
       }),
     ]);
-    expect(screen.getByTestId('decided-a1')).toHaveTextContent('Cancel order #4812');
+    // 02's sentence: what was done, from the record's own facts.
+    expect(screen.getByTestId('decided-a1')).toHaveTextContent('Cancelled order #4812');
     expect(screen.getByTestId('decided-a1').textContent).not.toMatch(/tool call/);
   });
 
@@ -143,12 +144,13 @@ describe('★★ the three states of the decided list', () => {
     // `take: 100` per kind. A list that is silently partial is a record somebody
     // will trust as complete.
     await show([approval()], true);
-    expect(screen.getByTestId('decided-incomplete')).toHaveTextContent(/most recent decisions/i);
+    expect(screen.getByTestId('decided-foot')).toHaveTextContent(/most recent decisions/i);
   });
 
-  it('★ and when it may be, the count says "your latest", not a total', async () => {
+  it('★ the head counts today’s decisions — 02’s "7 today", with no 24h (Undo is gone)', async () => {
     await show([approval()], true);
-    expect(screen.getByTestId('nothing-waiting')).toHaveTextContent('Your latest 1');
+    expect(screen.getByTestId('decided-today')).toHaveTextContent(/^\d+ today$/);
+    expect(screen.getByTestId('nothing-waiting')).not.toHaveTextContent(/reversible|Undo/i);
   });
 });
 

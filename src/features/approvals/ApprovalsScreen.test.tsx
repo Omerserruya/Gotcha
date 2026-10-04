@@ -53,6 +53,7 @@ vi.mock('./actions', () => ({
 const NOW = Date.parse('2026-09-19T10:00:00.000Z');
 
 const approval = (over: Partial<Approval> = {}): Approval => ({
+  facts: { order: null, amount: null, currency: null },
   id: 'a1',
   conversationId: 'c1',
   contactId: 'k1',

@@ -57,7 +57,8 @@
   "rest": {
     "lead": "שום דבר לא ממתין להחלטה שלך.",
     "body": "כל מה שעלה היה בתוך הגבולות שהגדרת. GOTCHA טיפלה בזה והמשיכה.",
-    "title": "אין שום דבר שמחכה לך"
+    "title": "אין שום דבר שמחכה לך",
+    "busy": "כל מה שעלה היום היה בתוך הגבולות שקבעת."
   },
   "decided": {
     "heading": "מה החלטת קודם",
@@ -94,7 +95,25 @@
     "channel": {
       "whatsapp": "WhatsApp",
       "web": "האפליקציה"
-    }
+    },
+    "sentence": {
+      "refunded": "הוחזרו {amount} ל{name}",
+      "refundedOn": "הוחזרו {amount} על הזמנה {order}",
+      "refundedOrder": "הוחזרה הזמנה {order}",
+      "refundedOrderFor": "הוחזרה הזמנה {order} של {name}",
+      "refundAsked": "החזר של {amount} ל{name}",
+      "refundAskedOn": "החזר של {amount} על הזמנה {order}",
+      "refundAskedOrder": "החזר על הזמנה {order}",
+      "refundAskedOrderFor": "החזר על הזמנה {order} של {name}",
+      "cancelled": "בוטלה הזמנה {order} של {name}",
+      "cancelledOrder": "בוטלה הזמנה {order}",
+      "cancelAsked": "ביטול הזמנה {order} של {name}",
+      "cancelAskedOrder": "ביטול הזמנה {order}",
+      "withName": "{summary} · {name}"
+    },
+    "yesterday": "אתמול",
+    "today": "{count} היום",
+    "kept": "סיבה שנותנים נשמרת עם ההחלטה."
   },
   "moment": {
     "decided": "{summary}",
@@ -171,5 +190,14 @@
       "myself": "אטפל בזה בעצמי",
       "wrongOrder": "הזמנה שגויה"
     }
+  },
+  "handled": {
+    "eyebrow": "טופל בלי לשאול אותך · היום",
+    "actions": "{count, plural, one {פעולה} other {פעולות}}",
+    "none": "שום דבר לא רץ לבד היום.",
+    "unread": "לא הצלחנו לספור את הפעולות של היום.",
+    "refunds": "החזרים",
+    "lookups": "הזמנות שנבדקו",
+    "returns": "החזרות שנפתחו"
   }
 }

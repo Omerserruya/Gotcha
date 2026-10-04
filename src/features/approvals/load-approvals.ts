@@ -1,9 +1,19 @@
 import 'server-only';
 
+import { z } from 'zod';
+
 import { approvalsSchema, aiEmployeeIdOf, type Approval } from '@/api/contracts/approvals';
+import { toolUsageListSchema, type ToolUsage } from '@/api/contracts/capabilities';
 import { aiEmployeesSchema, isBuilderDraft, type AiEmployee } from '@/api/contracts/people';
 import { serverApi } from '@/api/client/server-api';
-import { aiEmployeeEndpoints, approvalEndpoints } from '@/api/endpoints/registry';
+import {
+  aiEmployeeEndpoints,
+  analyticsEndpoints,
+  approvalEndpoints,
+  inboxEndpoints,
+} from '@/api/endpoints/registry';
+
+import { startOfToday } from './handled';
 import { logger } from '@/observability/logger';
 
 /**
@@ -50,7 +60,21 @@ export interface ApprovalsData {
    * that matches the server's exactly, so the first render cannot mismatch.
    */
   readonly readAt: number;
+  /**
+   * Today's runs per tool, for 03c's "handled without asking you". `null`
+   * when the read failed or was not permitted (`analytics:dashboard:read`).
+   */
+  readonly usageToday: readonly ToolUsage[] | null;
+  /**
+   * The customer of each decided approval, by approval id, where the
+   * conversation names one. Approvals carry no contact on dev (`contact_id`
+   * is null on every row), so the name comes from the conversation.
+   */
+  readonly customerNames: Readonly<Record<string, string>>;
 }
+
+/** 03c names the customers on the rows a person will see — not on all 200. */
+const NAMED_ROWS = 40;
 
 /** The route's own page size. Hitting it means the window may be short. */
 const ROUTE_PAGE_SIZE = 100;
@@ -65,7 +89,8 @@ export async function loadApprovals(): Promise<ApprovalsData> {
       return value;
     };
 
-  const [pending, approved, rejected, aiEmployees] = await Promise.all([
+  const now = new Date();
+  const [pending, approved, rejected, aiEmployees, usageToday] = await Promise.all([
     api
       .get({ endpoint: approvalEndpoints.list('PENDING'), payload: approvalsSchema })
       .catch(degrade('approvals.pending_failed', null)),
@@ -78,6 +103,12 @@ export async function loadApprovals(): Promise<ApprovalsData> {
     api
       .get({ endpoint: aiEmployeeEndpoints.list(), payload: aiEmployeesSchema })
       .catch(degrade('approvals.ai_employees_failed', null)),
+    api
+      .get({
+        endpoint: analyticsEndpoints.toolUsageFrom(startOfToday(now).toISOString()),
+        payload: toolUsageListSchema,
+      })
+      .catch(degrade('approvals.usage_failed', null)),
   ]);
 
   const decided =
@@ -88,7 +119,9 @@ export async function loadApprovals(): Promise<ApprovalsData> {
         );
 
   return {
-    readAt: Date.now(),
+    readAt: now.getTime(),
+    usageToday,
+    customerNames: await customerNames(decided ?? []),
     pending,
     decided,
     aiEmployees: aiEmployees?.filter((ai) => !isBuilderDraft(ai)) ?? null,
@@ -148,4 +181,30 @@ export function decisionStats(
         ? null
         : Math.round(durations.reduce((sum, seconds) => sum + seconds, 0) / durations.length),
   };
+}
+
+/** Each conversation read once; a failed read is simply no name. */
+async function customerNames(decided: readonly Approval[]): Promise<Record<string, string>> {
+  const shown = decided.slice(0, NAMED_ROWS);
+  const ids = [...new Set(shown.map((a) => a.conversationId).filter((id): id is string => !!id))];
+  const api = serverApi();
+  const names = new Map(
+    await Promise.all(
+      ids.map(async (id) => {
+        const name = await api
+          .get({
+            endpoint: inboxEndpoints.conversation(id),
+            payload: z.object({ customerName: z.string().nullable().catch(null).default(null) }),
+          })
+          .then((c) => c.customerName?.trim() || null)
+          .catch(() => null);
+        return [id, name] as const;
+      }),
+    ),
+  );
+  return Object.fromEntries(
+    shown
+      .map((a) => [a.id, a.conversationId ? names.get(a.conversationId) : null] as const)
+      .filter((entry): entry is readonly [string, string] => typeof entry[1] === 'string'),
+  );
 }

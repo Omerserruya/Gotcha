@@ -2,7 +2,8 @@ import { getTranslations } from 'next-intl/server';
 
 import type { Approval } from '@/api/contracts/approvals';
 import { ApprovalsScreen } from '@/features/approvals/ApprovalsScreen';
-import { DecisionStats, NothingWaiting } from '@/features/approvals/NothingWaiting';
+import { handledToday } from '@/features/approvals/handled';
+import { DecisionStats, HandledCard, NothingWaiting } from '@/features/approvals/NothingWaiting';
 import { decisionStats, loadApprovals, requesterName } from '@/features/approvals/load-approvals';
 import styles from '@/features/approvals/Approvals.module.css';
 import { Link } from '@/i18n/navigation';
@@ -62,7 +63,15 @@ export default async function Page({
 } = {}) {
   const t = await getTranslations('approvals');
   const { view } = (await searchParams) ?? {};
-  const { pending, decided, decidedMayBeIncomplete, aiEmployees, readAt } = await loadApprovals();
+  const {
+    pending,
+    decided,
+    decidedMayBeIncomplete,
+    aiEmployees,
+    readAt,
+    usageToday,
+    customerNames,
+  } = await loadApprovals();
 
   const nameFor = (list: readonly Approval[] | null) =>
     Object.fromEntries(
@@ -102,6 +111,7 @@ export default async function Page({
           decided={decided}
           mayBeIncomplete={decidedMayBeIncomplete}
           requesterNames={nameFor(decided)}
+          customerNames={customerNames}
         />
       </PageContainer>
     );
@@ -112,6 +122,14 @@ export default async function Page({
    * first-class state rather than a blank — and it is where the record of
    * what you already decided lives.
    */
+  const now = new Date(readAt);
+  const handled = handledToday(usageToday, decided, now);
+  const decidedToday = (decided ?? []).filter(
+    (approval) =>
+      approval.decidedAt !== null &&
+      new Date(approval.decidedAt).toDateString() === now.toDateString(),
+  ).length;
+
   if (pending.length === 0) {
     return (
       /*
@@ -123,14 +141,21 @@ export default async function Page({
         /* A window: the header stays, the decisions scroll inside their card. */
         fill
         title={t('rest.title')}
-        description={t('rest.lead')}
+        /* "Inside the limits you set" only when something came up today. */
+        description={
+          (handled?.total ?? 0) > 0 || decidedToday > 0 ? t('rest.busy') : t('rest.lead')
+        }
         actions={<DecisionStats stats={decisionStats(decided, decidedMayBeIncomplete)} />}
       >
-        <NothingWaiting
-          decided={decided}
-          mayBeIncomplete={decidedMayBeIncomplete}
-          requesterNames={nameFor(decided)}
-        />
+        <div className={styles.rest}>
+          <HandledCard handled={handled} />
+          <NothingWaiting
+            decided={decided}
+            mayBeIncomplete={decidedMayBeIncomplete}
+            requesterNames={nameFor(decided)}
+            customerNames={customerNames}
+          />
+        </div>
       </PageContainer>
     );
   }

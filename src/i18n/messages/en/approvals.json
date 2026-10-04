@@ -57,7 +57,8 @@
   "rest": {
     "lead": "Nothing needs a decision from you.",
     "body": "Everything that came up was inside the limits you set. GOTCHA handled it and kept going.",
-    "title": "Nothing waiting on you"
+    "title": "Nothing waiting on you",
+    "busy": "Everything that came up today was inside the limits you set."
   },
   "decided": {
     "heading": "What you decided earlier",
@@ -94,7 +95,25 @@
     "channel": {
       "whatsapp": "WhatsApp",
       "web": "the app"
-    }
+    },
+    "sentence": {
+      "refunded": "Refunded {amount} to {name}",
+      "refundedOn": "Refunded {amount} on order {order}",
+      "refundedOrder": "Refunded order {order}",
+      "refundedOrderFor": "Refunded order {order} for {name}",
+      "refundAsked": "{amount} refund for {name}",
+      "refundAskedOn": "{amount} refund on order {order}",
+      "refundAskedOrder": "Refund on order {order}",
+      "refundAskedOrderFor": "Refund on order {order} for {name}",
+      "cancelled": "Cancelled order {order} for {name}",
+      "cancelledOrder": "Cancelled order {order}",
+      "cancelAsked": "Cancelling order {order} for {name}",
+      "cancelAskedOrder": "Cancelling order {order}",
+      "withName": "{summary} · {name}"
+    },
+    "yesterday": "Yesterday",
+    "today": "{count} today",
+    "kept": "A reason you give is kept with the decision."
   },
   "moment": {
     "decided": "{summary}",
@@ -171,5 +190,14 @@
       "myself": "I’ll handle it myself",
       "wrongOrder": "Wrong order"
     }
+  },
+  "handled": {
+    "eyebrow": "Handled without asking you · today",
+    "actions": "{count, plural, one {action} other {actions}}",
+    "none": "Nothing ran on its own today.",
+    "unread": "We couldn't count today's actions.",
+    "refunds": "Refunds",
+    "lookups": "Orders looked up",
+    "returns": "Returns opened"
   }
 }

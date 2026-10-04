@@ -14,7 +14,7 @@ vi.mock('next-intl/server', () => ({
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
-import { DecisionStats, NothingWaiting } from '@/features/approvals/NothingWaiting';
+import { DecisionStats, HandledCard, NothingWaiting } from '@/features/approvals/NothingWaiting';
 import { PageContainer } from '@/shell/PageContainer';
 
 /*
@@ -40,6 +40,8 @@ const emptyQueue = async () => {
     decided: [],
     decidedMayBeIncomplete: false,
     aiEmployees: [],
+    usageToday: null,
+    customerNames: {},
     readAt: '2026-09-20T09:00:00.000Z',
   });
   const { default: Page } = await import('./page');
@@ -91,6 +93,8 @@ describe('★★ 03 — things need your decision', () => {
       decided: [],
       decidedMayBeIncomplete: false,
       aiEmployees: [],
+      usageToday: null,
+      customerNames: {},
       readAt: at,
     });
     const { default: Page } = await import('./page');
@@ -126,6 +130,8 @@ describe('★ the history is reachable while items are pending — `?view=decide
       decided: [],
       decidedMayBeIncomplete: false,
       aiEmployees: [],
+      usageToday: null,
+      customerNames: {},
       readAt: Date.parse('2026-09-19T10:00:00.000Z'),
     });
     const { default: Page } = await import('./page');
@@ -134,5 +140,48 @@ describe('★ the history is reachable while items are pending — `?view=decide
     expect(props?.title).toBe('decided.heading');
     expect(props?.fill).toBe(true);
     expect(propsOf(tree, NothingWaiting)).not.toBeNull();
+  });
+});
+
+describe('★★ 03c — what GOTCHA handled leads, and the subline says only what is true', () => {
+  const rest = async (over: Record<string, unknown>) => {
+    loadApprovals.mockResolvedValue({
+      pending: [],
+      decided: [],
+      decidedMayBeIncomplete: false,
+      aiEmployees: [],
+      usageToday: null,
+      customerNames: {},
+      readAt: Date.parse('2026-10-04T12:00:00.000Z'),
+      ...over,
+    });
+    const { default: Page } = await import('./page');
+    return Page();
+  };
+
+  it('a quiet day: "Nothing needs a decision from you."', async () => {
+    const tree = await rest({ usageToday: [] });
+    expect(propsOf<{ description: string }>(tree, PageContainer)?.description).toBe('rest.lead');
+    expect(propsOf<{ handled: unknown }>(tree, HandledCard)?.handled).toEqual({
+      total: 0,
+      refunds: 0,
+      lookups: 0,
+      returns: 0,
+    });
+  });
+
+  it('something ran on its own today: "inside the limits you set"', async () => {
+    const tree = await rest({
+      usageToday: [
+        { toolName: 'shopify.get_order', executionCount: 3, successCount: 3, refusedCount: 0 },
+      ],
+    });
+    expect(propsOf<{ description: string }>(tree, PageContainer)?.description).toBe('rest.busy');
+  });
+
+  it('usage unread: the card in its shape, and no claim about the day', async () => {
+    const tree = await rest({ usageToday: null });
+    expect(propsOf<{ handled: unknown }>(tree, HandledCard)?.handled).toBeNull();
+    expect(propsOf<{ description: string }>(tree, PageContainer)?.description).toBe('rest.lead');
   });
 });

@@ -968,4 +968,85 @@
     outline: var(--border-width-thick) solid var(--border-focus);
     outline-offset: -2px;
   }
+
+  /* 03c's body: 02's two blocks, 20 apart, filling to the frame's foot. */
+  .rest {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-20);
+    min-block-size: 0;
+    padding-block-start: var(--space-12);
+  }
+
+  .rest .decidedCard {
+    flex: 1;
+    min-block-size: 0;
+    margin-block-start: 0;
+  }
+
+  /* 02: 1138×209, `#171717`, radius 16, `26px 28px`. */
+  .handled {
+    flex: none;
+    padding: 26px 28px;
+    border-radius: 16px;
+    background-color: var(--frame-raised);
+    line-height: normal;
+  }
+
+  .handledEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--frame-text-eyebrow);
+  }
+
+  .handledLead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-12);
+    margin: 14px 0 0;
+    min-block-size: 52px;
+  }
+
+  .handledNumber {
+    font-size: 52px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-giant);
+    color: var(--frame-text);
+  }
+
+  .handledUnit,
+  .handledQuiet {
+    font-size: 15px;
+    color: var(--frame-text-secondary);
+  }
+
+  .handledQuiet {
+    align-self: center;
+    font-size: 19px;
+    color: var(--frame-text);
+  }
+
+  .handledFigures {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 22px 0 0;
+    padding-block-start: 18px;
+    border-block-start: 1px solid var(--frame-selected);
+  }
+
+  .handledFigure dt {
+    font-size: var(--font-size-caption);
+    color: var(--menu-dark-icon);
+  }
+
+  .handledFigure dd {
+    margin: 4px 0 0;
+    font-size: 19px;
+    color: var(--frame-text);
+  }
 }

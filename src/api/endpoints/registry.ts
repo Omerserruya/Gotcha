@@ -167,6 +167,8 @@ export const analyticsEndpoints = {
    * does not need, so this can 403 on a screen that otherwise works.
    */
   toolUsage: () => endpoint('/api/analytics/tool-usage'),
+  /** The same, from an instant (ISO) to now — 03c's "today". */
+  toolUsageFrom: (from: string) => endpoint('/api/analytics/tool-usage?from={from}', { from }),
 } as const;
 
 /**
@@ -1083,6 +1085,9 @@ export const capabilityEndpoints = {
  */
 export const inboxEndpoints = {
   list: () => endpoint('/api/conversations'),
+  /** One conversation, every column — 03c reads its `customerName`. */
+  conversation: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}', { conversationId }),
   messages: (conversationId: string) =>
     endpoint('/api/conversations/{conversationId}/messages', { conversationId }),
 

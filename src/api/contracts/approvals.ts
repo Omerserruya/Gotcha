@@ -203,6 +203,7 @@ export const approvalSchema = z
   .transform(({ params, ...approval }) => ({
     ...approval,
     summary: approvalSummary({ summary: approval.summary, tool: approval.tool, params }),
+    facts: approvalFacts(params),
   }));
 
 export const approvalsSchema = z.array(approvalSchema);
@@ -493,4 +494,31 @@ export function providerOf(tool: string): string | null {
   const prefix = tool.includes('.') ? tool.split('.')[0]! : null;
   if (!prefix || prefix === 'integration') return null;
   return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+}
+
+/**
+ * The two facts 03c's sentence needs from `params` — the order and the amount —
+ * lifted here so the parameters themselves still never leave the contract.
+ * `currency` only when the call named one: an amount is never given a symbol
+ * nobody stated.
+ */
+export function approvalFacts(params: unknown): {
+  readonly order: string | null;
+  readonly amount: number | null;
+  readonly currency: string | null;
+} {
+  const p = (params && typeof params === 'object' ? params : {}) as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const amount =
+    typeof p.amount === 'number' && Number.isFinite(p.amount)
+      ? p.amount
+      : typeof p.amount === 'string' && Number.isFinite(Number(p.amount)) && p.amount.trim()
+        ? Number(p.amount)
+        : null;
+  const currency = text(p.currency);
+  return {
+    order: text(p.order_name) ?? text(p.orderName),
+    amount,
+    currency: currency && /^[A-Z]{3}$/.test(currency) ? currency : null,
+  };
 }
