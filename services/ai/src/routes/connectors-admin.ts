@@ -99,7 +99,7 @@ function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
 // browser-supplied return URL, so an attacker cannot redirect the callback to
 // an arbitrary destination. Unknown values collapse to `undefined` (the
 // default marketplace landing).
-const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems"]);
+const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems", "redesign_studio"]);
 function parseFlow(raw: unknown): string | undefined {
   return typeof raw === "string" && KNOWN_FLOWS.has(raw) ? raw : undefined;
 }
@@ -112,8 +112,18 @@ function parseFlow(raw: unknown): string | undefined {
 //     home - so a connect started in Settings returns to Settings, not the
 //     AI Studio marketplace)
 //   • otherwise                 → the provider's marketplace page
+//   • redesign_studio           → /v2/studio/capabilities in the redesigned app,
+//     `system=<slug>&connected=1`, or `system=<slug>&error=<code>` on failure
 function postOAuthRedirect(slug: string, flow: string | undefined, query: Record<string, string> = {}) {
   const base = resolveAppPublicUrl(process.env);
+  if (flow === "redesign_studio") {
+    // The base path is fixed, not read from anywhere a request can reach: it
+    // must equal the frontend-v2 build arg NEXT_PUBLIC_BASE_PATH.
+    const params = new URLSearchParams(
+      query.error ? { system: slug, error: query.error } : { system: slug, connected: "1", ...query },
+    );
+    return `${base}${REDESIGN_BASE_PATH}/studio/capabilities?${params.toString()}`;
+  }
   if (flow === "onboarding") {
     const params = new URLSearchParams({ connected: slug, ...query });
     return `${base}/setup?${params.toString()}`;
@@ -123,6 +133,72 @@ function postOAuthRedirect(slug: string, flow: string | undefined, query: Record
     return `${base}/settings/business-systems?${params.toString()}`;
   }
   return dashboardRedirect(slug, query);
+}
+
+const REDESIGN_BASE_PATH = "/v2";
+
+/**
+ * The failure codes a redesign-flow callback may put in its redirect. A closed
+ * set: a provider's error text or an exception message never reaches the URL.
+ */
+const OAUTH_FAILURE_CODES = new Set([
+  "denied",
+  "token_exchange_failed",
+  "catalog_missing",
+  "callback_error",
+  "validation_failed",
+  "shop_connected_elsewhere",
+  "link_failed",
+]);
+
+/**
+ * A callback that fails AFTER its state verified knows which flow started it.
+ * The redesigned app gets a redirect it can render; every other flow keeps the
+ * plain-text response it always had (`legacyBody`), byte for byte.
+ */
+function oauthFail(
+  res: Response,
+  slug: string,
+  flow: string | undefined,
+  status: number,
+  code: string,
+  legacyBody: string = code,
+): void {
+  if (flow === "redesign_studio") {
+    res.redirect(postOAuthRedirect(slug, flow, { error: OAUTH_FAILURE_CODES.has(code) ? code : "callback_error" }));
+    return;
+  }
+  res.status(status).send(legacyBody);
+}
+
+/**
+ * The provider sent the browser back with `?error=` (the user pressed Cancel,
+ * or consent was refused) - there is no code, only the state. For the redesign
+ * flow, verify and spend that state to learn where to send them, and land them
+ * on the studio with error=denied. Returns true when it answered.
+ *
+ * A state that does not verify proves nothing about who started this, so it
+ * gets the plain response: the flow cannot be trusted without it.
+ */
+async function redirectIfProviderDenied(
+  req: Request,
+  res: Response,
+  slug: string,
+  legacyBody: string,
+): Promise<boolean> {
+  const providerError = req.query.error;
+  const state = req.query.state;
+  if (!providerError || req.query.code || typeof state !== "string" || !state) return false;
+  // Spending the state here is harmless for every other flow: the provider
+  // has already ended this round-trip, so nothing could use it afterwards.
+  const consumed = await consumeOAuthState<any>(state, slug);
+  if (!consumed.ok || consumed.claims?.flow !== "redesign_studio") {
+    // Exactly what this callback answered before the redesign flow existed.
+    res.status(400).send(legacyBody);
+    return true;
+  }
+  res.redirect(postOAuthRedirect(slug, "redesign_studio", { error: "denied" }));
+  return true;
 }
 
 // base64url encode (no padding) - used for OAuth2 PKCE (Airtable).
@@ -428,7 +504,9 @@ router.get(
 );
 
 router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await redirectIfProviderDenied(req, res, "hubspot", "missing_code_or_state")) return;
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
     const consumed = await consumeOAuthState<any>(state as string, "hubspot");
@@ -439,6 +517,7 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
 
     const clientId = process.env.HUBSPOT_CLIENT_ID!;
     const clientSecret = process.env.HUBSPOT_CLIENT_SECRET!;
@@ -455,10 +534,10 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
         code: String(code),
       }).toString(),
     });
-    if (!tokenRes.ok) { res.status(400).send("token_exchange_failed"); return; }
+    if (!tokenRes.ok) { oauthFail(res, "hubspot", flow, 400, "token_exchange_failed"); return; }
     const j: any = await tokenRes.json();
     const cat = await findCatalog("hubspot");
-    if (!cat) { res.status(500).send("hubspot_catalog_missing"); return; }
+    if (!cat) { oauthFail(res, "hubspot", flow, 500, "catalog_missing", "hubspot_catalog_missing"); return; }
     await upsertConnection({
       tenantId: payload.tenantId,
       catalogId: cat.id,
@@ -471,7 +550,7 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
     });
     res.redirect(postOAuthRedirect("hubspot", payload.flow));
   } catch (err: any) {
-    res.status(500).send(`hubspot_callback_error:${err?.message || ""}`);
+    oauthFail(res, "hubspot", flow, 500, "callback_error", `hubspot_callback_error:${err?.message || ""}`);
   }
 });
 
@@ -560,6 +639,7 @@ router.get(
  * before anything is bound to a tenant.
  */
 router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
     const identity = getShopifyAppIdentity();
 
@@ -585,6 +665,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
 
     // 3. The state was minted for ONE store.
     if (normalizeShopifyShopDomain(payload.shop) !== shop) {
@@ -601,7 +682,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       clientId: identity.clientId,
       clientSecret: identity.clientSecret,
     });
-    if (!creds) { res.status(400).send("token_exchange_failed"); return; }
+    if (!creds) { oauthFail(res, "shopify", flow, 400, "token_exchange_failed"); return; }
 
     // ── Workspace ──
     //
@@ -687,10 +768,11 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         // disconnecting in the workspace that holds it.
         let base = "";
         try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+        if (flow === "redesign_studio") { oauthFail(res, "shopify", flow, 409, "shop_connected_elsewhere"); return; }
         res.redirect(`${base}/settings/business-systems?shopify_install_error=shop_connected_elsewhere`);
         return;
       }
-      res.status(500).send(`shopify_link_failed:${linked.reason}`);
+      oauthFail(res, "shopify", flow, 500, "link_failed", `shopify_link_failed:${linked.reason}`);
       return;
     }
 
@@ -723,7 +805,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
     // The message may carry request detail; the token cannot reach it (the
     // exchange returns null rather than throwing with a body).
     console.error("[shopify oauth] callback failed:", err?.message);
-    res.status(500).send("shopify_callback_error");
+    oauthFail(res, "shopify", flow, 500, "callback_error", "shopify_callback_error");
   }
 });
 
@@ -793,7 +875,9 @@ router.get(
 );
 
 router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await redirectIfProviderDenied(req, res, "airtable", `airtable_oauth_error:${String(req.query.error)}`)) return;
     const { code, state, error } = req.query;
     if (error) { res.status(400).send(`airtable_oauth_error:${String(error)}`); return; }
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
@@ -805,6 +889,7 @@ router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Resp
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
     const clientId = process.env.AIRTABLE_CLIENT_ID!;
     const clientSecret = process.env.AIRTABLE_CLIENT_SECRET || "";
     const redirect = process.env.AIRTABLE_REDIRECT_URI!;
@@ -820,12 +905,12 @@ router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Resp
     const tokenRes = await fetch("https://airtable.com/oauth2/v1/token", { method: "POST", headers, body: body.toString() });
     if (!tokenRes.ok) {
       const t = await tokenRes.text().catch(() => "");
-      res.status(400).send(`token_exchange_failed:${t.slice(0, 200)}`);
+      oauthFail(res, "airtable", flow, 400, "token_exchange_failed", `token_exchange_failed:${t.slice(0, 200)}`);
       return;
     }
     const j: any = await tokenRes.json();
     const cat = await findCatalog("airtable");
-    if (!cat) { res.status(500).send("airtable_catalog_missing"); return; }
+    if (!cat) { oauthFail(res, "airtable", flow, 500, "catalog_missing", "airtable_catalog_missing"); return; }
     await upsertConnection({
       tenantId: payload.tenantId,
       catalogId: cat.id,
@@ -842,7 +927,7 @@ router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Resp
     // mapping wizard before completing.
     res.redirect(postOAuthRedirect("airtable", payload.flow));
   } catch (err: any) {
-    res.status(500).send(`airtable_callback_error:${err?.message || ""}`);
+    oauthFail(res, "airtable", flow, 500, "callback_error", `airtable_callback_error:${err?.message || ""}`);
   }
 });
 
@@ -1161,7 +1246,9 @@ router.get(
 );
 
 router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await redirectIfProviderDenied(req, res, "salesforce", "missing_code_or_state")) return;
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
     const consumed = await consumeOAuthState<any>(state as string, "salesforce");
@@ -1172,6 +1259,7 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
     const clientId = process.env.SALESFORCE_CLIENT_ID!;
     const clientSecret = process.env.SALESFORCE_CLIENT_SECRET!;
     const redirect = process.env.SALESFORCE_REDIRECT_URI!;
@@ -1187,10 +1275,10 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
         code: String(code),
       }).toString(),
     });
-    if (!tokenRes.ok) { res.status(400).send("token_exchange_failed"); return; }
+    if (!tokenRes.ok) { oauthFail(res, "salesforce", flow, 400, "token_exchange_failed"); return; }
     const j: any = await tokenRes.json();
     const cat = await findCatalog("salesforce");
-    if (!cat) { res.status(500).send("salesforce_catalog_missing"); return; }
+    if (!cat) { oauthFail(res, "salesforce", flow, 500, "catalog_missing", "salesforce_catalog_missing"); return; }
     await upsertConnection({
       tenantId: payload.tenantId,
       catalogId: cat.id,
@@ -1206,7 +1294,7 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
     });
     res.redirect(postOAuthRedirect("salesforce", payload.flow));
   } catch (err: any) {
-    res.status(500).send(`salesforce_callback_error:${err?.message || ""}`);
+    oauthFail(res, "salesforce", flow, 500, "callback_error", `salesforce_callback_error:${err?.message || ""}`);
   }
 });
 
@@ -1241,7 +1329,9 @@ router.get(
 );
 
 router.get("/connectors/monday/oauth/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await redirectIfProviderDenied(req, res, "monday", "missing_code_or_state")) return;
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
     const consumed = await consumeOAuthState<{ tenantId: string; flow?: string }>(state as string, "monday");
@@ -1253,6 +1343,7 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
     const clientId = process.env.MONDAY_CLIENT_ID!;
     const clientSecret = process.env.MONDAY_CLIENT_SECRET!;
     const redirect = process.env.MONDAY_REDIRECT_URI!;
@@ -1267,10 +1358,10 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
         code: String(code),
       }).toString(),
     });
-    if (!tokenRes.ok) { res.status(400).send("token_exchange_failed"); return; }
+    if (!tokenRes.ok) { oauthFail(res, "monday", flow, 400, "token_exchange_failed"); return; }
     const j: any = await tokenRes.json();
     const cat = await findCatalog("monday");
-    if (!cat) { res.status(500).send("monday_catalog_missing"); return; }
+    if (!cat) { oauthFail(res, "monday", flow, 500, "catalog_missing", "monday_catalog_missing"); return; }
 
     // A token in hand is NOT a working connection. Prove the credential can
     // actually read from Monday before we persist CONNECTED - otherwise the
@@ -1300,7 +1391,7 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
     });
     res.redirect(postOAuthRedirect("monday", payload.flow, verified ? {} : { error: "validation_failed" }));
   } catch (err: any) {
-    res.status(500).send(`monday_callback_error:${err?.message || ""}`);
+    oauthFail(res, "monday", flow, 500, "callback_error", `monday_callback_error:${err?.message || ""}`);
   }
 });
 
