@@ -412,5 +412,12 @@
       "forbidden": "Only an admin can connect phone calls.",
       "failed": "That didn't connect — try again."
     }
+  },
+  "embed": {
+    "lead": "Paste this before the closing </body> tag on every page where the chat should appear.",
+    "copy": "Copy code",
+    "copied": "Copied",
+    "copyFailed": "The code couldn't be copied — select it and copy it by hand.",
+    "done": "Done"
   }
 }

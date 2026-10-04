@@ -1688,4 +1688,18 @@
     padding: 0;
     list-style: none;
   }
+
+  .embedCode {
+    margin: var(--space-8) 0 var(--space-12);
+    padding: var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: var(--panel-sunken);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    direction: ltr;
+  }
 }

@@ -131,7 +131,11 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
   const [name, setName] = useState('');
   const [mode, setMode] = useState<ResponseMode>('HUMAN_WITH_COPILOT');
   const [result, setResult] = useState<ChannelWriteResult<unknown> | null>(null);
+  const [widgetId, setWidgetId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Created: the code to paste on the site, in this same panel.
+  if (widgetId) return <EmbedSnippet widgetId={widgetId} onClose={onClose} />;
 
   return (
     <>
@@ -165,7 +169,9 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
                * emailed and no outside party has been told anything.
                */
               await setResponseMode(outcome.data.id, mode);
-              onClose();
+              // The widget is known by its external id; without one there is no code to give.
+              if (outcome.data.externalId) setWidgetId(outcome.data.externalId);
+              else onClose();
             })
           }
         >
@@ -372,4 +378,72 @@ function OAuthStep({ channel, name }: { readonly channel: ChannelType; readonly 
       ) : null}
     </>
   );
+}
+
+/**
+ * The web chat's embed code (the old app's snippet, HTML): identity only —
+ * the widget id and where to load it from. Colours and words live in the
+ * dashboard, not in a snippet pasted months ago.
+ */
+export function EmbedSnippet({
+  widgetId,
+  onClose,
+}: {
+  readonly widgetId: string;
+  readonly onClose: () => void;
+}) {
+  const t = useTranslations('channels.embed');
+  const [copied, setCopied] = useState<boolean | null>(null);
+  const code = embedCode(widgetId, window.location.origin);
+  return (
+    <div data-testid="webchat-embed">
+      <p className={styles.connectNote}>{t('lead')}</p>
+      <pre className={styles.embedCode} data-testid="webchat-embed-code">
+        {code}
+      </pre>
+      <div className={styles.connectActions}>
+        <Button
+          variant="primary"
+          size="sm"
+          data-testid="webchat-copy"
+          onClick={() =>
+            void navigator.clipboard
+              .writeText(code)
+              .then(() => setCopied(true))
+              .catch(() => setCopied(false))
+          }
+        >
+          {copied ? t('copied') : t('copy')}
+        </Button>
+        <Button size="sm" onClick={onClose}>
+          {t('done')}
+        </Button>
+      </div>
+      {copied === false ? (
+        <p className={styles.connectProblem} role="alert">
+          {t('copyFailed')}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** The snippet itself — pure, so the exact text is tested. */
+export function embedCode(widgetId: string, apiUrl: string): string {
+  // JSON, with `<` escaped: a value can never end the merchant's <script>.
+  const literal = (value: string) => JSON.stringify(value).replace(/</g, '\\u003c');
+  const id = literal(widgetId);
+  const api = literal(apiUrl);
+  return [
+    '<!-- GOTCHA chat -->',
+    '<script>',
+    '(function(){',
+    `  window.__chatcenter = { widgetId: ${id}, apiUrl: ${api} };`,
+    '  var s = document.createElement("script");',
+    `  s.src = ${literal(`${apiUrl}/widget/chatcenter-widget.js`)};`,
+    '  s.async = true;',
+    '  document.head.appendChild(s);',
+    '})();',
+    '</script>',
+  ].join('\n');
 }

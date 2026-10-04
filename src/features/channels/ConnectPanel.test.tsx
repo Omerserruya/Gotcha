@@ -7,11 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import messages from '@/i18n/messages/en/channels.json';
 
 const startChannelConnect = vi.hoisted(() => vi.fn());
+const connectWebChat = vi.hoisted(() => vi.fn());
+const setResponseMode = vi.hoisted(() => vi.fn());
 vi.mock('./actions', () => ({
   startChannelConnect,
   connectEmail: vi.fn(),
-  connectWebChat: vi.fn(),
-  setResponseMode: vi.fn(),
+  connectWebChat,
+  setResponseMode,
 }));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -21,7 +23,7 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import { ConnectPanel } from './ConnectPanel';
+import { ConnectPanel, embedCode } from './ConnectPanel';
 
 const assign = vi.fn();
 beforeEach(() => {
@@ -86,5 +88,32 @@ describe('★ the row itself: "Not set up yet" in place of Connect', () => {
     expect(screen.getByTestId('connect-not-set-up-OUTLOOK').getAttribute('title')).toMatch(
       /Outlook isn't set up on GOTCHA's side yet/,
     );
+  });
+});
+
+describe('★★ web chat: after Create, the code to paste — in the same panel', () => {
+  it('created: the snippet with ITS widget id; Copy copies exactly that', async () => {
+    connectWebChat.mockResolvedValue({ ok: true, data: { id: 'ch1', externalId: 'wc_123' } });
+    setResponseMode.mockResolvedValue({ ok: true });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    show('WEBCHAT');
+    await userEvent.click(screen.getByTestId('connect-webchat-create'));
+    const code = screen.getByTestId('webchat-embed-code').textContent ?? '';
+    expect(code).toContain('widgetId: "wc_123"');
+    expect(code).toContain('/widget/chatcenter-widget.js');
+    await userEvent.click(screen.getByTestId('webchat-copy'));
+    expect(writeText).toHaveBeenCalledWith(code);
+    expect(screen.getByTestId('webchat-copy')).toHaveTextContent('Copied');
+  });
+
+  it('the snippet escapes what it embeds — an id can never close the script', () => {
+    const code = embedCode('a"b</script><script>x', 'https://dev.gotcha.co.il');
+    // Exactly one closing tag — the snippet's own, at the end.
+    expect(code.match(/<\/script>/g)).toHaveLength(1);
+    expect(code.endsWith('</script>')).toBe(true);
+    expect(code).toContain('widgetId: "a\\"b\\u003c/script>\\u003cscript>x"');
+    expect(code).toContain('apiUrl: "https://dev.gotcha.co.il"');
+    expect(code).toContain('s.src = "https://dev.gotcha.co.il/widget/chatcenter-widget.js"');
   });
 });
