@@ -459,6 +459,21 @@ router.post(
       return;
     }
 
+    // PROOF BEFORE ANY WRITE. Discovery is also the credential check: Twilio
+    // answers 401 to a wrong Account SID / Auth Token. It used to run AFTER the
+    // channel rows were created, so every failed attempt left a channel in
+    // ERROR behind (and its id in the response). Now a failure writes nothing,
+    // and nothing is provisioned on the merchant's Twilio account either.
+    let numbers: Awaited<ReturnType<typeof listIncomingPhoneNumbers>>;
+    try {
+      numbers = await listIncomingPhoneNumbers({ channelId: "pending", accountSid, authToken });
+    } catch (twErr) {
+      const msg = (twErr as { message?: string })?.message ?? "twilio_error";
+      console.error("voice-channels.create: twilio discovery failed:", msg);
+      res.status(502).json({ error: "twilio_discovery_failed", message: msg });
+      return;
+    }
+
     const encryptedSecrets = encryptCredentials({ authToken, apiKeySecret: null });
     const webhookSecret = crypto.randomBytes(32).toString("hex");
 
@@ -488,6 +503,18 @@ router.post(
       return { channelId: ch.id, voiceChannelId: vc.id };
     });
 
+    try {
+      await upsertDiscoveredNumbers(created.voiceChannelId, numbers);
+    } catch (dbErr) {
+      // The credentials were good; our own write failed. Do not leave a
+      // half-made channel for the merchant to find - remove it (cascades to
+      // the voice channel and its numbers) and say so.
+      await prisma.communicationChannel.delete({ where: { id: created.channelId } }).catch(() => undefined);
+      console.error("voice-channels.create: saving discovered numbers failed:", (dbErr as Error)?.message);
+      res.status(500).json({ error: "failed_to_create" });
+      return;
+    }
+
     // Auto-provision API Key + TwiML App (best-effort - failures are logged
     // and surfaced via config.outboundProvisioningFailed; inbound still works).
     try {
@@ -501,33 +528,15 @@ router.post(
       console.warn("voice-channels.create: provisionOutboundResources threw:", provErr);
     }
 
-    // Discover numbers from Twilio. If this fails, leave the channel in
-    // ERROR so admin can retry - DO NOT delete the channel.
-    try {
-      const numbers = await listIncomingPhoneNumbers({
-        channelId: created.channelId,
-        accountSid,
-        authToken,
-      });
-      await upsertDiscoveredNumbers(created.voiceChannelId, numbers);
-      await prisma.communicationChannel.update({
-        where: { id: created.channelId },
-        data: { status: "ACTIVE" },
-      });
-      const fresh = await prisma.communicationChannel.findUnique({
-        where: { id: created.channelId },
-        include: CHANNEL_INCLUDE,
-      });
-      res.status(201).json({ data: serializeChannel(fresh as unknown as ChannelRow) });
-    } catch (twErr) {
-      const msg = (twErr as { message?: string })?.message ?? "twilio_error";
-      await prisma.communicationChannel.update({
-        where: { id: created.channelId },
-        data: { status: "ERROR", healthStatus: msg, healthCheckedAt: new Date() },
-      });
-      console.error("voice-channels.create: twilio discovery failed:", msg);
-      res.status(502).json({ error: "twilio_discovery_failed", message: msg, channelId: created.channelId });
-    }
+    await prisma.communicationChannel.update({
+      where: { id: created.channelId },
+      data: { status: "ACTIVE" },
+    });
+    const fresh = await prisma.communicationChannel.findUnique({
+      where: { id: created.channelId },
+      include: CHANNEL_INCLUDE,
+    });
+    res.status(201).json({ data: serializeChannel(fresh as unknown as ChannelRow) });
   } catch (err) {
     console.error("voice-channels.create error:", err);
     res.status(500).json({ error: "failed_to_create" });
