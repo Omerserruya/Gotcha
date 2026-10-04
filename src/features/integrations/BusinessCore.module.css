@@ -511,4 +511,25 @@
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
+
+  /* The catalogue's risk level beside an action's name (10's tag, smaller). */
+  .drawerRisk {
+    margin-inline-start: var(--space-8);
+    padding: 1px var(--space-6);
+    border-radius: 5px;
+    background-color: var(--intent-neutral-surface);
+    font-size: var(--font-size-micro);
+    color: var(--intent-neutral-text);
+    white-space: nowrap;
+  }
+
+  .drawerRisk[data-risk='MEDIUM'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .drawerRisk[data-risk='HIGH'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
 }

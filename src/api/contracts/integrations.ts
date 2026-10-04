@@ -157,6 +157,43 @@ export const connectionSchema = z
  * Naming what we use is the standing rule on this project, and this is the
  * fourth route it has caught handing out more than a page needs.
  */
+/** One credential a system asks for, as `authSchema.fields` describes it. */
+export const credentialFieldSchema = z.object({
+  key: z.string().min(1),
+  /** `text` · `url` · `password` · `select`; anything else is typed text. */
+  type: z.enum(['text', 'url', 'password', 'select']).catch('text'),
+  label: z.string().min(1),
+  required: z.boolean().catch(false).default(false),
+  options: z.array(z.string()).optional(),
+  placeholder: z.string().optional(),
+  default: z.string().optional(),
+});
+export type CredentialField = z.infer<typeof credentialFieldSchema>;
+
+/**
+ * How a system is connected, from `authSchema` — and ONLY that.
+ *
+ * ★ `authSchema` also carries `scopes` (raw OAuth scopes) and `helpText`
+ * (Airtable's names the scopes it needs). Neither may reach a screen, so the
+ * transform reads `oauth` and `fields` and nothing else leaves this contract.
+ *
+ * `oauth` is the schema's own flag, not `authType`: Airtable is typed
+ * `OAUTH2` and connects with a pasted token, and its schema says so. A field
+ * that fails to parse drops the form to none rather than the whole catalogue.
+ */
+export const connectSchema = z
+  .unknown()
+  .optional()
+  .transform((raw) => {
+    const schema = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
+    const fields = z.array(credentialFieldSchema).safeParse(schema.fields ?? []);
+    return {
+      oauth: schema.oauth === true,
+      fields: fields.success ? fields.data : [],
+    };
+  });
+export type ConnectShape = z.infer<typeof connectSchema>;
+
 export const integrationSchema = z.object({
   id: z.string().min(1),
   slug: z.string().min(1),
@@ -175,10 +212,13 @@ export const integrationSchema = z.object({
    * credentials that can be replaced in place via `PUT /:slug/credentials`,
    * which touches no tool activation and destroys no per-agent narrowing.
    *
-   * `authSchema` sits beside this on the wire and is deliberately NOT read: it
-   * carries the raw OAuth `scopes`, which this screen may never show.
+   * `authSchema` sits beside this on the wire and carries the raw OAuth
+   * `scopes`, which this screen may never show — so it is read through
+   * `connectSchema`, which keeps `oauth` and `fields` and drops the rest.
    */
   authType: z.enum(AUTH_TYPES).catch('CUSTOM'),
+  /** `authSchema` on the wire, reduced to what a Connect form needs. */
+  authSchema: connectSchema,
   catalogTools: z.array(capabilitySchema).default([]),
   tenantConnection: connectionSchema.nullable().optional(),
 });
@@ -340,4 +380,20 @@ export function byCategory(
     buckets.get(key)!.push(entry);
   }
   return order.map((category) => ({ category, entries: buckets.get(category)! }));
+}
+
+/**
+ * The catalogue names its actions in two cases ("Cancel Order", "Add order
+ * note"); the product writes sentence case. Acronyms (VIP, ETA) and the
+ * system's own name stay as they are.
+ */
+export function sentenceCase(name: string, keep: string | null): string {
+  return name
+    .split(' ')
+    .map((word, i) => {
+      if (/^[A-Z0-9]{2,}$/.test(word) || (keep !== null && word === keep)) return word;
+      const lower = word.toLowerCase();
+      return i === 0 ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
+    })
+    .join(' ');
 }

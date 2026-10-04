@@ -548,6 +548,12 @@ export const integrationEndpoints = {
   detail: (slug: string) => endpoint('/api/integrations/{slug}', { slug }),
   tools: (slug: string) => endpoint('/api/integrations/{slug}/tools', { slug }),
   /**
+   * 10's Connect (Omer, 2026-10-04): `{ credentials }`, encrypted at rest, and
+   * the connection is CONNECTED with the catalogue's default tools. Stores real
+   * secrets; no test reaches it.
+   */
+  connect: (slug: string) => endpoint('/api/integrations/{slug}/connect', { slug }),
+  /**
    * Screens 14b/14c — the use case, the parts, who CAN serve each and who
    * DOES. Never connects anything; connecting stays in the marketplace.
    *

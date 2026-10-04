@@ -1,5 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
+import { isConnected } from '@/api/contracts/integrations';
+import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
@@ -78,7 +80,9 @@ export default async function Page({
           />
         }
         detail={
-          capabilities === null ? (
+          integration !== null && !isConnected(integration) ? (
+            <AvailableSystem integration={integration} />
+          ) : capabilities === null ? (
             <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
           ) : capabilities.length === 0 ? (
             <div className={styles.empty} data-testid="capabilities-empty">

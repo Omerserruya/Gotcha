@@ -14,7 +14,7 @@ import {
   resolveAvailability,
   type Capability,
 } from '@/api/contracts/capabilities';
-import type { Integration } from '@/api/contracts/integrations';
+import { sentenceCase, toolSlugOf, type Integration } from '@/api/contracts/integrations';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { PermissionChoice } from '@/features/capabilities/PermissionChoice';
 import { Link } from '@/i18n/navigation';
@@ -60,17 +60,18 @@ export async function PartDrawer({
     ? (capabilities ?? []).filter((c) => c.integration === playingSlug)
     : [];
   /*
-    The system's OWN catalogue of actions — refund, cancel, … — from its
-    integration record. `GET /tool-permissions` lists a system's actions only
-    once each is provisioned and enabled, and writes are never auto-
-    provisioned; so for a broken or new connection it lists none, and the
-    actions are drawn from the catalogue with why they cannot be set yet.
+    The system's actions are `GET /tool-permissions`' rows for it — every
+    catalogue action of the connection, provisioned or not, each with its
+    state and risk (backend 3cee674f). They used to list only provisioned
+    and enabled tools, so this drawer drew them from `catalogTools` instead;
+    that second list is gone. The catalogue still NAMES them: its "Cancel
+    Order" reads better than a humanised tool name.
   */
-  const catalogue = integration?.catalogTools ?? [];
-  const capabilityFor = (slug: string) =>
-    (capabilities ?? []).find(
-      (c) => c.toolName === `${playingSlug}.${slug}` || c.toolName === `integration.${slug}`,
-    ) ?? null;
+  const catalogName = (toolName: string) => {
+    const slug = toolSlugOf(toolName);
+    const tool = integration?.catalogTools.find((c) => c.slug === slug);
+    return tool ? sentenceCase(tool.name, integration?.name ?? null) : null;
+  };
   const failingNow = state === 'connected_but_failing';
   const checked = integration?.tenantConnection?.lastTestedAt ?? null;
 
@@ -154,42 +155,6 @@ export async function PartDrawer({
         <p className={styles.drawerNone} data-testid="part-actions-none">
           —
         </p>
-      ) : catalogue.length > 0 ? (
-        <ul className={styles.drawerActions} data-testid="part-actions">
-          {catalogue.map((tool) => {
-            const capability = capabilityFor(tool.slug);
-            const availability = capability ? resolveAvailability(capability) : null;
-            return (
-              <li key={tool.slug} className={styles.drawerAction}>
-                <span className={styles.drawerActionName}>
-                  {sentenceCase(tool.name, integration?.name ?? null)}
-                </span>
-                {capability && availability && isTheAdminsChoice(availability) ? (
-                  <PermissionChoice capability={capability} />
-                ) : (
-                  <span
-                    className={styles.drawerNone}
-                    data-testid={`part-action-off-${tool.slug}`}
-                    title={
-                      failingNow
-                        ? t('drawer.needsFixing', { name: playing })
-                        : availability && !isTheAdminsChoice(availability)
-                          ? availability.reason === 'missing_scope' &&
-                            availability.missingScopes.length > 0
-                            ? tc('blocked.missingScopesNamed', {
-                                scopes: availability.missingScopes.join(', '),
-                              })
-                            : tc(`blocked.${availability.reason}` as 'blocked.missing_scope')
-                          : t('drawer.notSetUp')
-                    }
-                  >
-                    {failingNow ? '—' : t('drawer.notSetUpShort')}
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
       ) : capabilities === null ? (
         <p
           className={styles.drawerNone}
@@ -213,22 +178,35 @@ export async function PartDrawer({
             return (
               <li key={capability.toolName} className={styles.drawerAction}>
                 <span className={styles.drawerActionName}>
-                  {hasOwnWords(capability.toolName)
-                    ? tc(`tool.${capability.toolName}` as 'tool.send_message')
-                    : humaniseToolName(capability.toolName)}
+                  {catalogName(capability.toolName) ??
+                    (hasOwnWords(capability.toolName)
+                      ? tc(`tool.${capability.toolName}` as 'tool.send_message')
+                      : humaniseToolName(capability.toolName))}
+                  {capability.riskLevel ? (
+                    <span
+                      className={styles.drawerRisk}
+                      data-risk={capability.riskLevel}
+                      data-testid={`part-risk-${capability.toolName}`}
+                    >
+                      {tc(`risk.${capability.riskLevel}`)}
+                    </span>
+                  ) : null}
                 </span>
                 {isTheAdminsChoice(availability) ? (
                   <PermissionChoice capability={capability} />
                 ) : (
                   <span
                     className={styles.drawerNone}
+                    data-testid={`part-action-off-${capability.toolName}`}
                     title={
-                      availability.reason === 'missing_scope' &&
-                      availability.missingScopes.length > 0
-                        ? tc('blocked.missingScopesNamed', {
-                            scopes: availability.missingScopes.join(', '),
-                          })
-                        : tc(`blocked.${availability.reason}` as 'blocked.missing_scope')
+                      failingNow && playing
+                        ? t('drawer.needsFixing', { name: playing })
+                        : availability.reason === 'missing_scope' &&
+                            availability.missingScopes.length > 0
+                          ? tc('blocked.missingScopesNamed', {
+                              scopes: availability.missingScopes.join(', '),
+                            })
+                          : tc(`blocked.${availability.reason}` as 'blocked.missing_scope')
                     }
                   >
                     —
@@ -253,20 +231,4 @@ export async function PartDrawer({
       </footer>
     </div>
   );
-}
-
-/**
- * The catalogue names its actions in two cases ("Cancel Order", "Add order
- * note"); the product writes sentence case. Acronyms (VIP, ETA) and the
- * system's own name stay as they are.
- */
-export function sentenceCase(name: string, keep: string | null): string {
-  return name
-    .split(' ')
-    .map((word, i) => {
-      if (/^[A-Z0-9]{2,}$/.test(word) || (keep !== null && word === keep)) return word;
-      const lower = word.toLowerCase();
-      return i === 0 ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
-    })
-    .join(' ');
 }

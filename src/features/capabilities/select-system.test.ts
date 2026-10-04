@@ -36,8 +36,16 @@ describe('★ which system 10 shows', () => {
     expect(picked.actions.map((c) => c.toolName)).toEqual(['send_message']);
   });
 
-  it('★★ a system that is not connected, or unknown, falls back — never an empty detail', () => {
-    for (const wanted of ['hubspot', 'nope', undefined]) {
+  it('★★ a system that is not connected is its own screen, with nothing to set yet (Omer, 2026-10-04)', () => {
+    const picked = selectSystem('hubspot', CAPS, SYSTEMS);
+    expect(picked.selected).toBe('hubspot');
+    expect(picked.integration?.slug).toBe('hubspot');
+    // Its tool-permission rows (a stale connection's) are not settable from here.
+    expect(picked.actions).toEqual([]);
+  });
+
+  it('★★ an unknown or absent system falls back — never an empty detail', () => {
+    for (const wanted of ['nope', undefined]) {
       // The first CONNECTED system that brings actions: not `empty`, not `hubspot`.
       expect(selectSystem(wanted, CAPS, SYSTEMS).selected).toBe('shopify');
     }

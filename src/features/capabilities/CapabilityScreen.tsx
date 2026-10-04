@@ -94,6 +94,16 @@ export async function CapabilityScreen({
                     {hasOwnWords(capability.toolName)
                       ? t(`tool.${capability.toolName}` as 'tool.send_message')
                       : humaniseToolName(capability.toolName)}
+                    {/* The catalogue's risk level (backend 3cee674f), on integration rows. */}
+                    {capability.riskLevel ? (
+                      <span
+                        className={styles.risk}
+                        data-risk={capability.riskLevel}
+                        data-testid={`risk-${capability.toolName}`}
+                      >
+                        {t(`risk.${capability.riskLevel}`)}
+                      </span>
+                    ) : null}
                   </span>
                   {/*
                     ════════════════════════════════════════════════════════

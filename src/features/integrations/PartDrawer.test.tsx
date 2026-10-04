@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { businessCoreSchema } from '@/api/contracts/business-core';
 import { capabilitySchema } from '@/api/contracts/capabilities';
+import { sentenceCase } from '@/api/contracts/integrations';
 import capabilities from '@/i18n/messages/en/capabilities.json';
 import messages from '@/i18n/messages/en/business-core.json';
 
@@ -49,7 +50,7 @@ vi.mock('./ElectPart', () => ({ ElectPart: () => <div data-testid="elect" /> }))
 
 import { AcrossDrawer } from './AcrossDrawer';
 import { BusinessCore } from './BusinessCore';
-import { PartDrawer, sentenceCase } from './PartDrawer';
+import { PartDrawer } from './PartDrawer';
 
 const core = businessCoreSchema.parse({
   roles: [
@@ -165,11 +166,27 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
     ],
   }).roles[0]!;
 
-  it('a broken system’s actions are its catalogue’s, with why they cannot be set', async () => {
+  // Backend 3cee674f: every catalogue action of the connection, provisioned or
+  // not, with its state and risk — an ERROR connection still lists them.
+  const row = (slug: string, over: Record<string, unknown> = {}) =>
+    capabilitySchema.parse({
+      toolName: `shopify.${slug}`,
+      kind: 'integration',
+      integration: 'shopify',
+      integrationConnected: true,
+      integrationStatus: 'CONNECTED',
+      state: 'not_provisioned',
+      riskLevel: 'HIGH',
+      ...over,
+    });
+
+  it('a broken system’s actions are its rows, named by the catalogue, with why they cannot be set', async () => {
     inIntl(
       await PartDrawer({
         part: failingStore,
-        capabilities: [],
+        capabilities: [
+          row('process_refund', { integrationConnected: false, integrationStatus: 'ERROR' }),
+        ],
         integration: shopify as never,
         storeHost: 'urban-supply-gotcha-demo.myshopify.com',
       }),
@@ -178,27 +195,31 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
       'Hidden while Shopify needs fixing.',
     );
     expect(screen.getByTestId('part-actions')).toHaveTextContent('Refund an order');
-    expect(screen.getByTestId('part-action-off-process_refund')).toHaveAttribute(
+    expect(screen.getByTestId('part-action-off-shopify.process_refund')).toHaveAttribute(
       'title',
       'Hidden while Shopify needs fixing.',
     );
+    expect(screen.getByTestId('part-risk-shopify.process_refund')).toHaveTextContent('High risk');
     expect(screen.getByTestId('part-playing-sub')).toHaveTextContent(
       'urban-supply-gotcha-demo.myshopify.com · checked Oct 1',
     );
   });
 
-  it('a listed, settable action gets 10’s control', async () => {
+  it('★ the list is the backend’s: a catalogue action it does not list is not drawn', async () => {
     inIntl(
       await PartDrawer({
         part: store,
-        capabilities: [
-          capabilitySchema.parse({ toolName: 'shopify.process_refund', integration: 'shopify' }),
-        ],
+        capabilities: [row('process_refund'), row('get_order', { riskLevel: 'LOW' })],
         integration: shopify as never,
       }),
     );
+    // Not provisioned, on a connected system: settable — the PUT provisions it.
     expect(screen.getByTestId('choice-shopify.process_refund')).toBeInTheDocument();
-    expect(screen.getByTestId('part-action-off-cancel_order')).toHaveTextContent('Not set up');
+    expect(screen.getByTestId('choice-shopify.get_order')).toBeInTheDocument();
+    expect(screen.getByTestId('part-risk-shopify.get_order')).toHaveTextContent('Low risk');
+    // `cancel_order` is in the catalogue and not in the rows.
+    expect(screen.getByTestId('part-actions')).not.toHaveTextContent('Cancel an order');
+    expect(screen.getByTestId('part-actions').querySelectorAll('li')).toHaveLength(2);
   });
 });
 

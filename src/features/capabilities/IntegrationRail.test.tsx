@@ -323,3 +323,31 @@ describe('★★ 10’s rail selects a system', () => {
     expect(screen.getByTestId('connected-returnly')).not.toHaveTextContent(/action/);
   });
 });
+
+describe('★★ every integration has its own screen (Omer, 2026-10-04)', () => {
+  it('an available row opens it — the way to Connect, with its mark', async () => {
+    await show([entry({ slug: 'woocommerce', name: 'WooCommerce' })]);
+    const row = screen.getByTestId('available-woocommerce');
+    expect(row).toHaveAttribute('href', '?system=woocommerce');
+    expect(row).toHaveTextContent('Connect');
+    expect(row.querySelector('img')?.getAttribute('src')).toMatch(
+      /\/integrations\/woocommerce\.svg$/,
+    );
+  });
+
+  it('the open one is marked', async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+        {await IntegrationRail({
+          integrations: [
+            entry({ slug: 'stripe', name: 'Stripe' }),
+            entry({ slug: 'paypal', name: 'PayPal' }),
+          ],
+          selected: 'stripe',
+        })}
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('available-stripe')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('available-paypal')).not.toHaveAttribute('aria-current');
+  });
+});

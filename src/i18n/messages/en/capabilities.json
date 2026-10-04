@@ -75,7 +75,6 @@
     "categories": "Categories",
     "all": "All",
     "connect": "Connect",
-    "connectNotHere": "Connecting from here comes next — Business core connects systems today.",
     "connectedLabel": "Connected",
     "availableLabel": "Available",
     "countOf": "{count} of {total}",
@@ -109,5 +108,29 @@
   "ran": {
     "toApprovals": "Comes to Approvals",
     "off": "Switched off"
+  },
+  "risk": {
+    "LOW": "Low risk",
+    "MEDIUM": "Medium risk",
+    "HIGH": "High risk"
+  },
+  "available": {
+    "notConnected": "Not connected",
+    "brings": "What it brings",
+    "bringsNone": "The catalogue lists no actions for it.",
+    "connectTitle": "Connect {name}",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "secretNote": "Kept encrypted. Never shown again.",
+    "oauthNotHere": "{name} connects at its own site, and the way back from there leads to the previous app — so it cannot be connected from here yet.",
+    "noForm": "This one is set up with GOTCHA, not from a form.",
+    "connected": "Connected.",
+    "error": {
+      "missing": "Fill in every field, as {name} gives it.",
+      "not_here": "This one cannot be connected from here.",
+      "entitlement": "Connecting systems isn't part of this plan.",
+      "forbidden": "You don't have permission to connect systems.",
+      "failed": "It didn't connect. Nothing was saved — try again."
+    }
   }
 }

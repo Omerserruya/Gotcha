@@ -1,0 +1,247 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { createTranslator, NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { capabilitySchema } from '@/api/contracts/capabilities';
+import { integrationSchema } from '@/api/contracts/integrations';
+import messages from '@/i18n/messages/en/capabilities.json';
+
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
+/* Connecting stores real secrets: the action is a spy. */
+const connectIntegration = vi.hoisted(() => vi.fn());
+vi.mock('./connect-actions', () => ({ connectIntegration }));
+vi.mock('next-intl/server', () => ({
+  getTranslations: async (namespace: 'capabilities') =>
+    createTranslator({ locale: 'en', messages: { capabilities: messages }, namespace }),
+}));
+
+import { AvailableSystem } from './AvailableSystem';
+import { credentialsFor } from './connect-form';
+
+/** Dev's catalogue rows, as `GET /api/integrations` gives them (scopes included). */
+const woo = integrationSchema.parse({
+  id: 'i-woo',
+  slug: 'woocommerce',
+  name: 'WooCommerce',
+  category: 'ECOMMERCE',
+  description: 'Orders and stock',
+  authType: 'API_KEY',
+  authSchema: {
+    fields: [
+      {
+        key: 'storeUrl',
+        type: 'url',
+        label: 'Store URL',
+        required: true,
+        placeholder: 'https://shop.example.com',
+      },
+      { key: 'consumerKey', type: 'password', label: 'Consumer Key', required: true },
+      { key: 'consumerSecret', type: 'password', label: 'Consumer Secret', required: true },
+    ],
+    required: ['storeUrl', 'consumerKey', 'consumerSecret'],
+  },
+  catalogTools: [
+    { id: 't1', slug: 'get_order', name: 'Get Order', riskLevel: 'LOW' },
+    { id: 't2', slug: 'refund_order', name: 'Refund Order', riskLevel: 'HIGH' },
+  ],
+  tenantConnection: null,
+});
+const hubspot = integrationSchema.parse({
+  id: 'i-hs',
+  slug: 'hubspot',
+  name: 'HubSpot',
+  authType: 'OAUTH2',
+  authSchema: { oauth: true, fields: [], scopes: ['crm.objects.contacts.read'] },
+  tenantConnection: null,
+});
+const airtable = integrationSchema.parse({
+  id: 'i-at',
+  slug: 'airtable',
+  name: 'Airtable',
+  authType: 'OAUTH2',
+  authSchema: {
+    fields: [
+      {
+        key: 'apiKey',
+        type: 'password',
+        label: 'Personal Access Token',
+        required: true,
+        helpText: 'with scopes: data.records:read',
+      },
+    ],
+  },
+});
+/** Salesforce: OAuth, AND a field (which login host) — still connects at the provider. */
+const salesforce = integrationSchema.parse({
+  id: 'i-sf',
+  slug: 'salesforce',
+  name: 'Salesforce',
+  authType: 'OAUTH2',
+  authSchema: {
+    oauth: true,
+    fields: [
+      {
+        key: 'loginHost',
+        type: 'select',
+        label: 'Login Host',
+        required: true,
+        options: ['https://login.salesforce.com', 'https://test.salesforce.com'],
+      },
+    ],
+  },
+});
+const custom = integrationSchema.parse({
+  id: 'i-c',
+  slug: 'custom_api',
+  name: 'Custom API',
+  authType: 'CUSTOM',
+  authSchema: {},
+});
+
+const inIntl = (node: ReactNode) =>
+  render(
+    <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+      {node}
+    </NextIntlClientProvider>,
+  );
+
+beforeEach(() => {
+  refresh.mockReset();
+  connectIntegration.mockReset();
+});
+
+describe('★★ authSchema, reduced to a form — scopes never leave the contract', () => {
+  it('oauth is the schema’s flag, not authType: Airtable connects with a token', () => {
+    expect(hubspot.authSchema).toEqual({ oauth: true, fields: [] });
+    expect(airtable.authSchema.oauth).toBe(false);
+    expect(airtable.authSchema.fields.map((f) => f.key)).toEqual(['apiKey']);
+  });
+
+  it('★ no scopes, no helpText — not even inside a field', () => {
+    const text = JSON.stringify([hubspot, airtable, woo]);
+    expect(text).not.toMatch(/scopes|crm\.objects|helpText|data\.records/);
+  });
+
+  it('absent or broken is no form, never a rejected catalogue', () => {
+    expect(integrationSchema.parse({ id: 'x', slug: 'x', name: 'X' }).authSchema).toEqual({
+      oauth: false,
+      fields: [],
+    });
+    expect(
+      integrationSchema.parse({
+        id: 'x',
+        slug: 'x',
+        name: 'X',
+        authSchema: { fields: [{ nope: 1 }] },
+      }).authSchema.fields,
+    ).toEqual([]);
+  });
+});
+
+describe('★★ the tool-permissions row carries state and risk (backend 3cee674f)', () => {
+  it.each([
+    [{ state: 'not_provisioned', riskLevel: 'HIGH' }, 'not_provisioned', 'HIGH'],
+    [{ state: 'enabled', riskLevel: 'LOW' }, 'enabled', 'LOW'],
+    [{}, undefined, null],
+    // An unknown value is absent, never a rejected list.
+    [{ state: 'weird', riskLevel: 'EXTREME' }, undefined, null],
+  ])('%o → %s / %s', (over, state, risk) => {
+    const row = capabilitySchema.parse({ toolName: 'shopify.cancel_order', ...over });
+    expect(row.state).toBe(state);
+    expect(row.riskLevel).toBe(risk);
+  });
+});
+
+describe('★ credentialsFor — exactly what the catalogue asks for', () => {
+  const fields = [
+    { key: 'clientId', type: 'password' as const, label: 'Client ID', required: true },
+    {
+      key: 'environment',
+      type: 'select' as const,
+      label: 'Environment',
+      required: true,
+      options: ['live', 'sandbox'],
+    },
+    { key: 'note', type: 'text' as const, label: 'Note', required: false },
+  ];
+  it('trimmed, extras dropped, empty optional left out', () => {
+    expect(
+      credentialsFor(fields, { clientId: ' abc ', environment: 'live', note: '', extra: 'x' }),
+    ).toEqual({
+      clientId: 'abc',
+      environment: 'live',
+    });
+  });
+  it('a required field empty, or a choice not offered: nothing', () => {
+    expect(credentialsFor(fields, { clientId: '  ', environment: 'live' })).toBeNull();
+    expect(credentialsFor(fields, { clientId: 'a', environment: 'prod' })).toBeNull();
+  });
+});
+
+describe('★★ 10 for a system that is not connected — its own screen', () => {
+  it('mark, name, what it is, what it brings with its risk', async () => {
+    inIntl(await AvailableSystem({ integration: woo }));
+    expect(screen.getByTestId('system-head')).toHaveTextContent('WooCommerce');
+    expect(screen.getByTestId('system-line')).toHaveTextContent('Ecommerce · Orders and stock');
+    expect(screen.getByTestId('system-state')).toHaveTextContent('Not connected');
+    expect(screen.getByTestId('system-head').querySelector('img')?.getAttribute('src')).toMatch(
+      /\/integrations\/woocommerce\.svg$/,
+    );
+    expect(screen.getByTestId('brings-get_order')).toHaveTextContent('Get order');
+    expect(screen.getByTestId('brings-get_order')).toHaveTextContent('Low risk');
+    expect(screen.getByTestId('brings-refund_order')).toHaveTextContent('High risk');
+  });
+
+  it('★★ credentials: the form, and nothing is sent without the click', async () => {
+    inIntl(await AvailableSystem({ integration: woo }));
+    expect(screen.getByTestId('connect-consumerKey')).toHaveAttribute('type', 'password');
+    expect(screen.getByTestId('connect-storeUrl')).toHaveAttribute('type', 'url');
+    expect(screen.getByTestId('connect-submit')).toBeDisabled();
+    await userEvent.type(screen.getByTestId('connect-storeUrl'), 'https://shop.example.com');
+    await userEvent.type(screen.getByTestId('connect-consumerKey'), 'ck_1');
+    await userEvent.type(screen.getByTestId('connect-consumerSecret'), 'cs_1');
+    expect(connectIntegration).not.toHaveBeenCalled();
+    connectIntegration.mockResolvedValue({ ok: true });
+    await userEvent.click(screen.getByTestId('connect-submit'));
+    expect(connectIntegration).toHaveBeenCalledTimes(1);
+    expect(connectIntegration).toHaveBeenCalledWith('woocommerce', {
+      storeUrl: 'https://shop.example.com',
+      consumerKey: 'ck_1',
+      consumerSecret: 'cs_1',
+    });
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('a refusal in words', async () => {
+    connectIntegration.mockResolvedValue({ ok: false, reason: 'missing' });
+    inIntl(await AvailableSystem({ integration: airtable }));
+    await userEvent.type(screen.getByTestId('connect-apiKey'), 'pat');
+    await userEvent.click(screen.getByTestId('connect-submit'));
+    expect(screen.getByTestId('connect-problem')).toHaveTextContent(
+      'Fill in every field, as Airtable gives it.',
+    );
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('★ OAuth is drawn, with why; a system with no form too', async () => {
+    const one = inIntl(await AvailableSystem({ integration: hubspot }));
+    expect(screen.queryByTestId('connect-form')).toBeNull();
+    const drawn = screen.getByTestId('connect-drawn');
+    expect(drawn).toHaveAttribute('aria-disabled', 'true');
+    expect(drawn.getAttribute('title')).toMatch(/HubSpot connects at its own site/);
+    one.unmount();
+    // OAuth with a field of its own is still OAuth: no form.
+    const two = inIntl(await AvailableSystem({ integration: salesforce }));
+    expect(screen.queryByTestId('connect-form')).toBeNull();
+    expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(
+      /Salesforce connects at its own site/,
+    );
+    two.unmount();
+    inIntl(await AvailableSystem({ integration: custom }));
+    expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(/set up with GOTCHA/);
+    expect(screen.getByTestId('available-brings')).toHaveTextContent('—');
+  });
+});

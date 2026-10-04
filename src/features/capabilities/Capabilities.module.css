@@ -25,6 +25,9 @@
   }
 
   .systemTile {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
     flex: none;
     inline-size: 38px;
     block-size: 38px;
@@ -38,6 +41,17 @@
     flex-direction: column;
     gap: var(--space-4);
     min-inline-size: 0;
+  }
+
+  /* A mark inside its tile; the tile's own ground shows around it. */
+  .logo {
+    inline-size: 72%;
+    block-size: 72%;
+    object-fit: contain;
+  }
+
+  .logoIcon {
+    color: var(--text-muted);
   }
 
   .systemName {
@@ -334,8 +348,7 @@
   }
 
   /* A connected row: radius 9, `padding:9px 11px`, gap 10; selected white. */
-  .railRow,
-  .railRowStatic {
+  .railRow {
     display: flex;
     align-items: center;
     gap: var(--space-10);
@@ -346,7 +359,8 @@
     text-decoration: none;
   }
 
-  .railRowStatic {
+  /* An available row is a little tighter: 02 measures it at 8px. */
+  .railRowAvailable {
     padding-block: var(--space-8);
   }
 
@@ -356,6 +370,9 @@
   }
 
   .railTile {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
     flex: none;
     inline-size: 22px;
     block-size: 22px;
@@ -412,7 +429,7 @@
     border-radius: 7px;
     font-size: var(--font-size-micro);
     color: var(--text-primary);
-    cursor: default;
+    cursor: inherit;
   }
 
   .railChips {
@@ -440,5 +457,122 @@
     padding: 0 var(--space-10);
     font-size: var(--font-size-caption);
     color: var(--text-muted);
+  }
+
+  /* ── 10 for a system that is not connected: its own screen ── */
+  .available {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    line-height: normal;
+  }
+
+  .connectCard {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-14);
+    padding: var(--space-18);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .connectHeading {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .connectForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    inline-size: min(420px, 100%);
+  }
+
+  .connectField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .connectLabel {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .connectBox {
+    min-block-size: 36px;
+    padding: var(--space-8) var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .connectFoot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .connectButton {
+    padding: var(--space-8) var(--space-16);
+    border: none;
+    border-radius: var(--radius-item);
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .connectButton:disabled,
+  .connectButton[aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .connectNote {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .connectProblem {
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .bringsNone {
+    margin: 0;
+    padding: 13px 18px;
+    color: var(--text-subtle);
+  }
+
+  /* The catalogue's own risk level — stored, not inferred from a name. */
+  .risk {
+    margin-inline-start: var(--space-8);
+    padding: 2px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--intent-neutral-surface);
+    font-size: var(--font-size-micro);
+    color: var(--intent-neutral-text);
+    white-space: nowrap;
+  }
+
+  .risk[data-risk='MEDIUM'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .risk[data-risk='HIGH'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
   }
 }

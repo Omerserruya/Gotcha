@@ -134,6 +134,23 @@ export const capabilitySchema = z.object({
   /** Declared requirement and actual grant, for the fallback comparison. */
   requiredScopes: z.array(z.string()).optional(),
   grantedScopes: z.array(z.string()).optional(),
+
+  /* ── Integration rows only (backend 3cee674f) ───────────────────────────── */
+
+  /**
+   * `not_provisioned` is a catalogue action with no tenant row yet: it is off,
+   * and settable — the PUT provisions it on a CONNECTED integration. Absent on
+   * built-in rows. An unknown value is absent, not a rejected list.
+   */
+  state: z.enum(['enabled', 'disabled', 'not_provisioned']).optional().catch(undefined),
+  /** The connection's own status; an ERROR connection still lists its actions. */
+  integrationStatus: z.string().optional(),
+  catalogToolId: z.string().optional(),
+  /**
+   * The catalogue's own risk level — stored, unlike `riskGroup`, which is a
+   * regex over the name. `null` when the catalogue gives none.
+   */
+  riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullable().default(null).catch(null),
 });
 
 export type Capability = z.infer<typeof capabilitySchema>;

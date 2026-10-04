@@ -10,6 +10,7 @@ import { Link } from '@/i18n/navigation';
 import { humaniseCode } from '@/api/contracts/capabilities';
 import { byCategory, isIntegrationState, type Integration } from '@/api/contracts/integrations';
 
+import { IntegrationLogo } from './IntegrationLogo';
 import styles from './Capabilities.module.css';
 
 /**
@@ -30,20 +31,12 @@ import styles from './Capabilities.module.css';
  * names the three fields rather than saying "Search", which is a label that
  * promises everything.
  *
- * ── AND NO CONNECT BUTTON, WHICH IS A DECISION AND NOT AN OMISSION ──
- * `POST /:slug/connect` takes a `credentials` object and there is no OAuth
- * redirect anywhere in it. So a Connect control is two different things:
- *
- *   · `OAUTH2` — a re-authorisation at the provider, whose callback returns to
- *     whichever app `FRONTEND_URL` names. **That is not this app.** Same
- *     blocker as screen 13's connect flow, for the same reason.
- *   · everything else — a credentials form whose fields live in `authSchema`,
- *     which this screen deliberately does not read because it carries the raw
- *     OAuth scopes.
- *
- * A single "Connect" button over those two would work for neither. It is a
- * missing primary action of the kind already ruled on, not a gap to paper over.
- * So 02's "Connect" is drawn on each row, not live, with that reason.
+ * ── CONNECT IS ON EACH SYSTEM'S OWN SCREEN ──
+ * Every available row opens `?system=<slug>`: the system's mark, what it is,
+ * what it brings, and Connect (Omer, 2026-10-04). Its "Connect" here is the
+ * way there, not a second control — how a system connects (a credentials
+ * form, or OAuth at the provider) is that screen's to say. See
+ * `AvailableSystem`.
  *
  * ── 10, MEASURED ──
  * The search (`8px 11px`, white, radius 9); CONNECTED, a row per system that
@@ -147,7 +140,7 @@ export function IntegrationFinder({
                 aria-current={selected === 'builtin' ? 'page' : undefined}
                 data-testid="connected-builtin"
               >
-                <span className={styles.railTile} aria-hidden="true" />
+                <IntegrationLogo slug={null} size="rail" />
                 <span className={styles.railName}>{t('rail.builtIn')}</span>
                 <span className={styles.railCount}>
                   {t('rail.actions', { count: builtInCount })}
@@ -165,7 +158,7 @@ export function IntegrationFinder({
                   aria-current={selected === entry.slug ? 'page' : undefined}
                   data-testid={`connected-${entry.slug}`}
                 >
-                  <span className={styles.railTile} aria-hidden="true" />
+                  <IntegrationLogo slug={entry.slug} size="rail" />
                   <span className={styles.railName}>{entry.name}</span>
                   {/*
                     ★ A BROKEN CONNECTION STAYS IN "CONNECTED", WITH ITS STATE —
@@ -244,27 +237,25 @@ export function IntegrationFinder({
 
         <ul className={styles.railList}>
           {shown.map((entry) => (
-            <li
-              key={entry.slug}
-              className={styles.railRowStatic}
-              data-testid={`available-${entry.slug}`}
-            >
-              <span className={styles.railTile} aria-hidden="true" />
-              <span className={styles.railNameStack}>
-                <span className={styles.railName}>{entry.name}</span>
-                <span className={styles.railSub}>
-                  {[entry.category ? humaniseCode(entry.category) : null, entry.description]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
-              </span>
-              <span
-                className={styles.railConnect}
-                aria-disabled="true"
-                title={t('rail.connectNotHere')}
+            <li key={entry.slug}>
+              {/* Its own screen, where Connect is (Omer, 2026-10-04). */}
+              <Link
+                href={{ pathname: '/studio/capabilities', query: { system: entry.slug } }}
+                className={`${styles.railRow} ${styles.railRowAvailable}`}
+                aria-current={selected === entry.slug ? 'page' : undefined}
+                data-testid={`available-${entry.slug}`}
               >
-                {t('rail.connect')}
-              </span>
+                <IntegrationLogo slug={entry.slug} size="rail" />
+                <span className={styles.railNameStack}>
+                  <span className={styles.railName}>{entry.name}</span>
+                  <span className={styles.railSub}>
+                    {[entry.category ? humaniseCode(entry.category) : null, entry.description]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+                <span className={styles.railConnect}>{t('rail.connect')}</span>
+              </Link>
             </li>
           ))}
         </ul>

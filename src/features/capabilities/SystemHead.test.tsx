@@ -61,3 +61,15 @@ describe('★ 10’s system header', () => {
     expect(screen.queryByTestId('system-state')).toBeNull();
   });
 });
+
+describe('★ the system’s mark', () => {
+  it('its own logo; the built-in actions get the plug', async () => {
+    const one = render(await SystemHead({ integration: shopify, capabilities: caps, usage: null }));
+    expect(screen.getByTestId('system-head').querySelector('img')?.getAttribute('src')).toMatch(
+      /\/integrations\/shopify\.svg$/,
+    );
+    one.unmount();
+    render(await SystemHead({ integration: null, capabilities: caps, usage: null }));
+    expect(screen.getByTestId('system-head').querySelector('img')).toBeNull();
+  });
+});

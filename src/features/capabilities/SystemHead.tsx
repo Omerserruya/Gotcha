@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { usageFor, type Capability, type ToolUsage } from '@/api/contracts/capabilities';
 import { isIntegrationState, type Integration } from '@/api/contracts/integrations';
 
+import { IntegrationLogo } from './IntegrationLogo';
 import styles from './Capabilities.module.css';
 
 /**
@@ -40,7 +41,7 @@ export async function SystemHead({
 
   return (
     <header className={styles.systemHead} data-testid="system-head">
-      <span className={styles.systemTile} aria-hidden="true" />
+      <IntegrationLogo slug={integration?.slug ?? null} size="head" />
       <span className={styles.systemTitle}>
         <span className={styles.systemName}>{integration?.name ?? t('rail.builtIn')}</span>
         <span className={styles.systemLine} data-testid="system-line">

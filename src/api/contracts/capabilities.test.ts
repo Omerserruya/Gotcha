@@ -18,6 +18,7 @@ import {
 /** The rulings on screen 10, as assertions. Seventeen rows on this tenant. */
 
 const capability = (over: Partial<Capability> = {}): Capability => ({
+  riskLevel: null,
   toolName: 'update_crm',
   kind: 'action',
   category: 'crm',

@@ -25,6 +25,7 @@ vi.mock('next-intl/server', () => ({
 }));
 
 const capability = (over: Partial<Capability> = {}): Capability => ({
+  riskLevel: null,
   toolName: 'close_conversation',
   kind: 'action',
   category: 'messaging',
@@ -303,5 +304,22 @@ describe('★★ 02’s row: what it is, how it ran, one control — and nothing
   it('no foot line when every action may be automated', async () => {
     await renderScreen([capability({ riskGroup: 'read_only' })]);
     expect(screen.queryByTestId('ceiling-note')).toBeNull();
+  });
+});
+
+describe('★ the catalogue’s risk, on integration rows (backend 3cee674f)', () => {
+  it('stored risk is said; a built-in row has none', async () => {
+    await renderScreen([
+      capability({
+        toolName: 'shopify.cancel_order',
+        integration: 'shopify',
+        category: 'meta',
+        riskLevel: 'HIGH',
+      }),
+      capability({ toolName: 'send_message' }),
+    ]);
+    expect(screen.getByTestId('risk-shopify.cancel_order')).toHaveTextContent('High risk');
+    expect(screen.getByTestId('risk-shopify.cancel_order')).toHaveAttribute('data-risk', 'HIGH');
+    expect(screen.queryByTestId('risk-send_message')).toBeNull();
   });
 });
