@@ -108,7 +108,12 @@
     font-size: var(--font-size-meta);
     text-align: center;
     color: var(--text-subtle);
-    cursor: not-allowed;
+    cursor: pointer;
+  }
+
+  .drop[data-has-file='yes'] {
+    border-style: solid;
+    color: var(--text-primary);
   }
 
   .formRow {
@@ -137,9 +142,17 @@
   .go,
   .small,
   .primary {
+    border: none;
     border-radius: 10px;
+    font: inherit;
     font-weight: 500;
-    cursor: not-allowed;
+    cursor: pointer;
+  }
+
+  .go:disabled,
+  .primary:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 
   .go {
@@ -147,7 +160,6 @@
     background-color: var(--action-base);
     font-size: 13.5px;
     color: var(--action-text);
-    opacity: 0.5;
   }
 
   .connectors {
@@ -232,7 +244,6 @@
     background-color: var(--action-base);
     font-size: 13.5px;
     color: var(--action-text);
-    opacity: 0.5;
   }
 
   .cancel {
@@ -242,5 +253,24 @@
     font-size: 13.5px;
     color: var(--text-body);
     text-decoration: none;
+  }
+
+  /* What was added: its title, and that it is being read. */
+  .added {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
+
+  .addedTitle {
+    color: var(--text-primary);
+  }
+
+  .problem {
+    align-self: center;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
   }
 }

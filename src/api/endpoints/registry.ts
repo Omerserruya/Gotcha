@@ -983,6 +983,21 @@ export const knowledgeEndpoints = {
   sources: () => endpoint('/api/knowledge-bases'),
   unanswered: () => endpoint('/api/knowledge/unanswered-questions'),
   /**
+   * 08b's "Add knowledge" (Omer, 2026-10-04). Writes the knowledge every AI
+   * employee answers from; each document is embedded in the background.
+   *
+   *   createBase  `POST /api/knowledge-bases` `{ name }` — only when the
+   *               tenant has none to add to (entitlement + capacity gated).
+   *   addDocument `{ title, content, sourceType: 'text' }`, or
+   *               `{ sourceType: 'url', sourceUrl }` — the server reads the
+   *               page (SSRF-hardened) and refuses 400 when it cannot.
+   *   upload      multipart `file` (+ `title`): PDF, DOCX, DOC, MD, TXT, 10 MB.
+   */
+  createBase: () => endpoint('/api/knowledge-bases'),
+  addDocument: (baseId: string) => endpoint('/api/knowledge-bases/{baseId}/documents', { baseId }),
+  upload: (baseId: string) =>
+    endpoint('/api/knowledge-bases/{baseId}/documents/upload', { baseId }),
+  /**
    * Screen 08's conflicts, and the reason they need an import id first.
    *
    * ★ CONFLICT DETECTION RUNS INSIDE THE HISTORICAL-IMPORT PIPELINE ONLY.

@@ -27,3 +27,12 @@ export const EYEBROW: Record<AddWay, 'upload' | 'website' | 'drive' | 'conversat
 export function isAddWay(value: string | undefined): value is AddWay {
   return (ADD_WAYS as readonly string[]).includes(value ?? '');
 }
+
+/**
+ * Where an added source goes: a knowledge base, `none` yet (one is made
+ * first), or `unknown`.
+ *
+ * ★ `unknown` — the list of bases could not be read — is NOT "none": a failed
+ * read must never create a second base. It refuses, and sends nothing.
+ */
+export type KnowledgeBaseRef = { readonly id: string } | 'none' | 'unknown';

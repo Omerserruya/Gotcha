@@ -1,6 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { isAddWay } from '@/features/knowledge/add/add-way';
+import type { KnowledgeSource } from '@/api/contracts/knowledge';
+import { isAddWay, type KnowledgeBaseRef } from '@/features/knowledge/add/add-way';
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
 import { KnowledgeScreen, knowledgeSummary } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
@@ -108,10 +109,20 @@ export default async function Page({
         />
       )}
       {params.add === '1' ? (
-        <AddKnowledge initialWay={isAddWay(params.way) ? params.way : undefined} />
+        <AddKnowledge
+          initialWay={isAddWay(params.way) ? params.way : undefined}
+          base={baseOf(sources)}
+        />
       ) : null}
     </PageContainer>
   );
 }
 
 export const generateMetadata = pageMetadata('primary.studio');
+
+/** The newest active base (the route lists newest first); none; or unread. */
+function baseOf(sources: readonly KnowledgeSource[] | null): KnowledgeBaseRef {
+  if (sources === null) return 'unknown';
+  const active = sources.find((source) => source.isActive);
+  return active ? { id: active.id } : 'none';
+}

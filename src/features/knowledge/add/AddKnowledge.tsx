@@ -2,12 +2,20 @@
 
 import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 
 import hire from '@/features/employees/hire/Hire.module.css';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
-import { ADD_WAYS, EYEBROW, type AddWay } from './add-way';
+import {
+  addKnowledge,
+  DOCUMENT_TYPES,
+  documentProblem,
+  pageAddress,
+  type AddInput,
+  type AddResult,
+} from './add-knowledge';
+import { ADD_WAYS, EYEBROW, type AddWay, type KnowledgeBaseRef } from './add-way';
 import styles from './AddKnowledge.module.css';
 
 /**
@@ -15,9 +23,11 @@ import styles from './AddKnowledge.module.css';
  * cards, the chosen one's form under them, then "What it learned" and
  * "Teach all of it".
  *
- * Read-only, as Hire is: adding writes a source and runs extraction and
- * embedding, so every control that would send is drawn, not live, with
- * its reason. Choosing a way and typing are local.
+ * LIVE for a document, a page and a typed fact (Omer, 2026-10-04): each
+ * writes a document into the tenant's knowledge and the platform reads and
+ * embeds it in the background — so what comes back is "being read", never
+ * "learned". Nothing is sent without the button. Drive connects at Google or
+ * Atlassian, whose way back leads to the previous app: drawn, with why.
  *
  *   document       `POST …/documents/upload` — PDF, Word, Markdown or
  *                  text, up to 10 MB (`file-parser.service.ts`)
@@ -33,12 +43,54 @@ import styles from './AddKnowledge.module.css';
  *                     classifies them against what is known, before it
  *                     is added
  */
-export function AddKnowledge({ initialWay = 'document' }: { readonly initialWay?: AddWay }) {
+export function AddKnowledge({
+  initialWay = 'document',
+  base = 'unknown',
+}: {
+  readonly initialWay?: AddWay;
+  /** Where it goes: a base, `none` yet (one is made), or `unknown` (the read failed). */
+  readonly base?: KnowledgeBaseRef;
+}) {
   const t = useTranslations('knowledge.addSheet');
+  const router = useRouter();
   const [way, setWay] = useState<AddWay>(initialWay);
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [result, setResult] = useState<AddResult | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const input: AddInput | null =
+    way === 'document' && file
+      ? { way: 'document', file }
+      : way === 'page' && pageAddress(url)
+        ? { way: 'page', url }
+        : way === 'text' && title.trim() && body.trim()
+          ? { way: 'text', title, body }
+          : null;
+  const fileProblem = file ? documentProblem(file) : null;
+
+  function teach() {
+    if (input === null) return;
+    setResult(null);
+    startTransition(async () => {
+      const done = await addKnowledge(base, input, t('newBase'));
+      setResult(done);
+      if (done.ok) {
+        setFile(null);
+        setUrl('');
+        setTitle('');
+        setBody('');
+        router.refresh();
+      }
+    });
+  }
+
+  const choose = (next: File | null) => {
+    setResult(null);
+    setFile(next);
+  };
 
   return (
     <div className={hire.layer} data-testid="add-sheet" data-way={way}>
@@ -74,7 +126,10 @@ export function AddKnowledge({ initialWay = 'document' }: { readonly initialWay?
               aria-checked={way === w}
               className={styles.way}
               data-testid={`add-way-${w}`}
-              onClick={() => setWay(w)}
+              onClick={() => {
+                setWay(w);
+                setResult(null);
+              }}
             >
               <span className={styles.eyebrow}>{t(`eyebrow.${EYEBROW[w]}`)}</span>
               <span className={styles.wayName}>{t(`way.${w}.name`)}</span>
@@ -85,35 +140,59 @@ export function AddKnowledge({ initialWay = 'document' }: { readonly initialWay?
 
         <div className={styles.body}>
           {way === 'document' ? (
-            <div
+            <label
               className={styles.drop}
-              aria-disabled="true"
-              title={t('notYet')}
               data-testid="add-drop"
+              data-has-file={file ? 'yes' : 'no'}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                choose(e.dataTransfer.files[0] ?? null);
+              }}
             >
-              {t('drop')}
-            </div>
+              <input
+                type="file"
+                className="srOnly"
+                accept={DOCUMENT_TYPES.join(',')}
+                data-testid="add-file"
+                onChange={(e) => choose(e.target.files?.[0] ?? null)}
+              />
+              {file ? (
+                <span data-testid="add-file-name">
+                  {t('fileChosen', {
+                    name: file.name,
+                    size: Math.max(1, Math.round(file.size / 1024)),
+                  })}
+                </span>
+              ) : (
+                t('drop')
+              )}
+            </label>
           ) : way === 'page' ? (
             <div className={styles.formRow}>
               <input
                 className={styles.input}
                 type="url"
                 inputMode="url"
+                dir="ltr"
                 placeholder={t('urlPlaceholder')}
                 aria-label={t('way.page.name')}
                 value={url}
                 data-testid="add-url"
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => {
+                  setResult(null);
+                  setUrl(e.target.value);
+                }}
               />
-              <span
-                role="button"
+              <button
+                type="button"
                 className={styles.go}
-                aria-disabled="true"
-                title={t('notYet')}
+                disabled={input === null || isPending}
                 data-testid="add-read"
+                onClick={teach}
               >
-                {t('read')}
-              </span>
+                {isPending ? t('reading') : t('read')}
+              </button>
             </div>
           ) : way === 'drive' ? (
             <ul className={styles.connectors}>
@@ -124,7 +203,7 @@ export function AddKnowledge({ initialWay = 'document' }: { readonly initialWay?
                     role="button"
                     className={styles.small}
                     aria-disabled="true"
-                    title={t('notYet')}
+                    title={t('driveNotHere', { name: t(`connector.${c}`) })}
                     data-testid={`add-connect-${c}`}
                   >
                     {t('connect')}
@@ -140,7 +219,10 @@ export function AddKnowledge({ initialWay = 'document' }: { readonly initialWay?
                 aria-label={t('titlePlaceholder')}
                 value={title}
                 data-testid="add-title"
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setResult(null);
+                  setTitle(e.target.value);
+                }}
               />
               <textarea
                 className={styles.input}
@@ -149,7 +231,10 @@ export function AddKnowledge({ initialWay = 'document' }: { readonly initialWay?
                 aria-label={t('bodyPlaceholder')}
                 value={body}
                 data-testid="add-body"
-                onChange={(e) => setBody(e.target.value)}
+                onChange={(e) => {
+                  setResult(null);
+                  setBody(e.target.value);
+                }}
               />
             </div>
           ) : (
@@ -158,29 +243,54 @@ export function AddKnowledge({ initialWay = 'document' }: { readonly initialWay?
             </p>
           )}
 
+          {/*
+            "What it learned": the platform previews nothing before a source
+            is added, and reads it in the background after — so this says
+            what was added and that it is being read, never what it learned.
+          */}
           <section className={styles.learned} data-testid="add-learned">
             <header className={styles.learnedHead}>
               <h3 className={styles.learnedTitle}>{t('learned')}</h3>
               <span className={styles.meta}>—</span>
             </header>
-            <p className={styles.learnedNone} title={t('learnedNone')}>
-              —
-            </p>
+            {result?.ok ? (
+              <p className={styles.added} data-testid="add-added">
+                <span className={styles.addedTitle}>{result.title}</span>
+                <span className={styles.meta}>
+                  {result.status === 'ready' ? t('state.ready') : t('state.reading')}
+                </span>
+              </p>
+            ) : (
+              <p className={styles.learnedNone} title={t('learnedNone')}>
+                —
+              </p>
+            )}
           </section>
 
           <div className={styles.foot}>
-            <span
-              role="button"
-              className={styles.primary}
-              aria-disabled="true"
-              title={t('notYet')}
-              data-testid="add-teach"
-            >
-              {t('teach')}
-            </span>
+            {way === 'document' || way === 'text' ? (
+              <button
+                type="button"
+                className={styles.primary}
+                disabled={input === null || fileProblem !== null || isPending}
+                data-testid="add-teach"
+                onClick={teach}
+              >
+                {isPending ? t('teaching') : t('teach')}
+              </button>
+            ) : null}
             <Link href="/studio/knowledge" className={styles.cancel} scroll={false}>
               {t('cancel')}
             </Link>
+            {fileProblem && way === 'document' ? (
+              <span className={styles.problem} role="alert" data-testid="add-problem">
+                {t(`error.${fileProblem}`)}
+              </span>
+            ) : result && !result.ok ? (
+              <span className={styles.problem} role="alert" data-testid="add-problem">
+                {t(`error.${result.reason}`)}
+              </span>
+            ) : null}
           </div>
         </div>
       </section>

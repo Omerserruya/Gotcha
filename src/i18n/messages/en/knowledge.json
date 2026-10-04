@@ -141,7 +141,24 @@
     "learned": "What it learned",
     "learnedNone": "Nothing previews what a source teaches before it is added.",
     "teach": "Teach all of it",
-    "notYet": "Adding knowledge writes a source and runs extraction — waiting for approval.",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "newBase": "Knowledge",
+    "fileChosen": "{name} · {size} KB",
+    "reading": "Reading…",
+    "teaching": "Teaching…",
+    "state": {
+      "reading": "Being read — it answers once it is",
+      "ready": "Learned"
+    },
+    "driveNotHere": "{name} connects at its own site, and the way back from there leads to the previous app — so it cannot be connected from here yet.",
+    "error": {
+      "too_large": "Up to 10 MB.",
+      "wrong_type": "PDF, Word, Markdown or text only.",
+      "bad_url": "An address starting https://",
+      "unreadable": "There was no text to read in it. Nothing was added.",
+      "entitlement": "Knowledge isn't part of this plan.",
+      "forbidden": "You don't have permission to add knowledge.",
+      "failed": "It wasn't added — try again."
+    }
   }
 }

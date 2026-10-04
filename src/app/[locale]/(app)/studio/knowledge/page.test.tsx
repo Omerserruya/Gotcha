@@ -4,9 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
 
+const sources = vi.hoisted(() => ({ value: [] as unknown[] | null }));
 vi.mock('@/features/knowledge/load-knowledge', () => ({
   loadKnowledge: async () => ({
-    sources: [],
+    sources: sources.value,
     unanswered: [],
     conflicts: [],
     conflictsScannedAt: null,
@@ -69,5 +70,29 @@ describe('★ 08b — Add knowledge opens by query', () => {
     )?.actions;
     expect(actions?.props['data-testid']).toBe('add-knowledge');
     expect(actions?.props.href).toEqual({ pathname: '/studio/knowledge', query: { add: '1' } });
+  });
+});
+
+describe('★★ where an added source goes', () => {
+  const base = async () => find<{ base: unknown }>(await page({ add: '1' }), AddKnowledge)?.base;
+
+  it('the newest active base (the route lists newest first)', async () => {
+    sources.value = [
+      { id: 'kb-old-off', isActive: false, documents: [] },
+      { id: 'kb-new', isActive: true, documents: [] },
+      { id: 'kb-older', isActive: true, documents: [] },
+    ];
+    expect(await base()).toEqual({ id: 'kb-new' });
+  });
+
+  it('none yet: one is made when something is added', async () => {
+    sources.value = [];
+    expect(await base()).toBe('none');
+  });
+
+  it('★★ the read failed: unknown — never "none", which would make a second base', async () => {
+    sources.value = null;
+    expect(await base()).toBe('unknown');
+    sources.value = [];
   });
 });
