@@ -156,4 +156,18 @@ export type EmbeddedSignupLaunch = z.infer<typeof embeddedSignupLaunchSchema>;
 
 export const channelsConfigSchema = z.object({
   embeddedSignup: embeddedSignupLaunchSchema.nullish().default(null),
+  /** Both 13c choices in one read (backend 294adc0c). */
+  embeddedSignupByMode: z
+    .object({
+      coexistence: embeddedSignupLaunchSchema.nullish().default(null),
+      new_number: embeddedSignupLaunchSchema.nullish().default(null),
+    })
+    .nullish()
+    .catch(null)
+    .default(null),
+  /**
+   * Whether each OAuth provider's app credentials exist — a `false` one can
+   * never complete, so its Connect is drawn "not set up" up front.
+   */
+  providers: z.record(z.string(), z.boolean()).nullish().catch(null).default(null),
 });

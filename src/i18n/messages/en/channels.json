@@ -71,7 +71,8 @@
       "not_configured": "{channel} isn't set up on GOTCHA's side yet.",
       "forbidden": "Only an admin can connect a channel.",
       "failed": "{channel} couldn't be opened — try again."
-    }
+    },
+    "notSetUp": "Not set up yet"
   },
   "whatsapp": {
     "title": "WhatsApp numbers",

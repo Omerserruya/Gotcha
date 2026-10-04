@@ -32,7 +32,13 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
 }));
-vi.mock('./ConnectableRow', () => ({ ConnectableRow: () => null }));
+const rowProps = vi.hoisted(() => [] as { channel: string; notSetUp?: boolean }[]);
+vi.mock('./ConnectableRow', () => ({
+  ConnectableRow: (props: { channel: string; notSetUp?: boolean }) => {
+    rowProps.push(props);
+    return null;
+  },
+}));
 
 import { ChannelList } from './ChannelList';
 
@@ -139,5 +145,28 @@ describe('★ 13 corrections (measurement of 9b8dd9f)', () => {
       }),
     );
     expect(container.querySelector('[data-kind="connected"] [data-tone="email"]')).not.toBeNull();
+  });
+});
+
+describe('★ a provider with no app on the server is said up front, not after a click', () => {
+  it('outlook: false → not set up; the rest, and unread, stay live', async () => {
+    rowProps.length = 0;
+    render(
+      await ChannelList({
+        channels: [],
+        voice: [],
+        voiceOffered: false,
+        windowDays: 30,
+        providers: { outlook: false, gmail: true },
+      }),
+    );
+    const of = (c: string) => rowProps.find((p) => p.channel === c)?.notSetUp;
+    expect(of('OUTLOOK')).toBe(true);
+    expect(of('GMAIL')).toBe(false);
+    expect(of('SLACK')).toBe(false); // not in the map: unknown, so live
+    expect(of('WEBCHAT')).toBe(false); // no OAuth at all
+    rowProps.length = 0;
+    render(await ChannelList({ channels: [], voice: [], voiceOffered: false, windowDays: 30 }));
+    expect(rowProps.every((p) => p.notSetUp === false)).toBe(true);
   });
 });

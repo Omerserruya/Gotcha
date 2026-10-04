@@ -9,7 +9,7 @@ import { ImportPanel, LearningRow, ReportPanel } from '@/features/channels/Learn
 import { loadChannels } from '@/features/channels/load-channels';
 import {
   loadHistoryImport,
-  loadSignupLaunch,
+  loadChannelsConfig,
   loadWhatsAppNumbers,
 } from '@/features/channels/load-whatsapp';
 import { ChannelLanding } from '@/features/channels/ChannelLanding';
@@ -54,12 +54,14 @@ export default async function Page({
   const params = (await searchParams) ?? {};
   const landing = channelLandingOf(params);
   const panel = params.panel === 'whatsapp';
-  const [{ channels, voice, voiceOffered, windowDays }, whatsapp] = await Promise.all([
+  const [{ channels, voice, voiceOffered, windowDays }, whatsapp, config] = await Promise.all([
     loadChannels(),
     // 13b's reads only when its panel is open.
     panel
-      ? Promise.all([loadWhatsAppNumbers(), loadHistoryImport(params.import), loadSignupLaunch()])
+      ? Promise.all([loadWhatsAppNumbers(), loadHistoryImport(params.import)])
       : Promise.resolve(null),
+    // 13c's launches and which providers are set up: one read, every view.
+    loadChannelsConfig(),
   ]);
   const learn = whatsapp?.[1].status ?? null;
   const first = whatsapp?.[0]?.data[0] ?? null;
@@ -99,6 +101,7 @@ export default async function Page({
           voice={voice}
           voiceOffered={voiceOffered}
           windowDays={windowDays}
+          providers={config.providers}
         />
       ) : (
         <p>{t('unavailable')}</p>
@@ -118,7 +121,10 @@ export default async function Page({
           width={600}
           testId="drawer-connect"
         >
-          <ConnectWhatsApp launches={whatsapp[2]} closeHref="/settings/channels?panel=whatsapp" />
+          <ConnectWhatsApp
+            launches={config.launches}
+            closeHref="/settings/channels?panel=whatsapp"
+          />
         </Drawer>
       ) : view === 'progress' && learn ? (
         <Drawer
@@ -158,8 +164,8 @@ export default async function Page({
           <WhatsAppNumbers
             numbers={whatsapp[0]}
             connectable={
-              whatsapp[2].coexistence?.configured === true ||
-              whatsapp[2].newNumber?.configured === true
+              config.launches.coexistence?.configured === true ||
+              config.launches.newNumber?.configured === true
             }
             responseModes={Object.fromEntries(
               (channels ?? [])

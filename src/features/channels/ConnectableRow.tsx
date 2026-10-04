@@ -22,7 +22,14 @@ import { channelName } from '@/api/contracts/inbox';
  * *"inline"*: connecting a channel is a thing you do to that row, not a
  * separate page you are taken to and returned from.
  */
-export function ConnectableRow({ channel }: { readonly channel: ChannelType }) {
+export function ConnectableRow({
+  channel,
+  notSetUp = false,
+}: {
+  readonly channel: ChannelType;
+  /** Its provider has no app credentials on the server: drawn, not a dead-end button. */
+  readonly notSetUp?: boolean;
+}) {
   const t = useTranslations('channels');
   const [open, setOpen] = useState(false);
 
@@ -39,7 +46,15 @@ export function ConnectableRow({ channel }: { readonly channel: ChannelType }) {
         <span className={styles.detail}>{t(`pitch.${channel}` as 'pitch.WHATSAPP')}</span>
       </div>
 
-      {open ? null : (
+      {notSetUp ? (
+        <span
+          className={styles.notSetUp}
+          title={t('connect.start.not_configured', { channel: channelName(channel, t) ?? '' })}
+          data-testid={`connect-not-set-up-${channel}`}
+        >
+          {t('connect.notSetUp')}
+        </span>
+      ) : open ? null : (
         <button
           type="button"
           className={styles.connectOpen}

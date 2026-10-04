@@ -1,7 +1,12 @@
 import { AlertTriangle } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 
-import type { Channel, VoiceChannel } from '@/api/contracts/channels';
+import {
+  OAUTH_PLATFORMS,
+  type Channel,
+  type ChannelType,
+  type VoiceChannel,
+} from '@/api/contracts/channels';
 
 import styles from './Channels.module.css';
 import { ChannelTile } from './ChannelTile';
@@ -28,11 +33,14 @@ export async function ChannelList({
   voice,
   voiceOffered,
   windowDays,
+  providers = null,
 }: {
   readonly channels: readonly Channel[];
   readonly voice: readonly VoiceChannel[];
   readonly voiceOffered: boolean;
   readonly windowDays: number;
+  /** Which OAuth providers are set up (`/api/channels/config`); `null` when unread. */
+  readonly providers?: Readonly<Record<string, boolean>> | null;
 }) {
   const t = await getTranslations('channels');
   const locale = await getLocale();
@@ -106,7 +114,13 @@ export async function ChannelList({
         {rows.map((row) => {
           if (row.kind === 'connectable') {
             // The one interactive row, and the only client component here.
-            return <ConnectableRow key={`connectable:${row.channel}`} channel={row.channel} />;
+            return (
+              <ConnectableRow
+                key={`connectable:${row.channel}`}
+                channel={row.channel}
+                notSetUp={notSetUp(row.channel, providers)}
+              />
+            );
           }
 
           const troubled = isTroubled(row);
@@ -173,4 +187,16 @@ export async function ChannelList({
       </ul>
     </>
   );
+}
+
+/**
+ * A provider whose app credentials are absent can never complete OAuth — drawn
+ * "not set up" from the start, not a Connect that dead-ends. Unread: live.
+ */
+function notSetUp(
+  channel: ChannelType,
+  providers: Readonly<Record<string, boolean>> | null,
+): boolean {
+  const platform = (OAUTH_PLATFORMS as Partial<Record<ChannelType, string>>)[channel];
+  return platform !== undefined && providers?.[platform] === false;
 }

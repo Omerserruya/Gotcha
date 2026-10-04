@@ -22,18 +22,31 @@ export interface SignupLaunches {
   readonly newNumber: EmbeddedSignupLaunch | null;
 }
 
-export async function loadSignupLaunch(): Promise<SignupLaunches> {
-  // Both, up front: FB.login must run inside the click, so nothing may be awaited then.
-  const read = (mode: 'coexistence' | 'new_number') =>
-    serverApi()
-      .get({ endpoint: channelEndpoints.config(mode), payload: channelsConfigSchema })
-      .then((config) => config.embeddedSignup)
-      .catch((cause: unknown) => {
-        logger.warn('whatsapp.signup_config_failed', { mode, cause });
-        return null;
-      });
-  const [coexistence, newNumber] = await Promise.all([read('coexistence'), read('new_number')]);
-  return { coexistence, newNumber };
+export interface ChannelsConfig {
+  readonly launches: SignupLaunches;
+  /** Provider → its credentials exist; `null` when unread (then every Connect stays live). */
+  readonly providers: Readonly<Record<string, boolean>> | null;
+}
+
+/**
+ * One read of `/api/channels/config`: both of 13c's launches — up front,
+ * since FB.login must run inside the click — and which OAuth providers are
+ * set up at all.
+ */
+export async function loadChannelsConfig(): Promise<ChannelsConfig> {
+  const config = await serverApi()
+    .get({ endpoint: channelEndpoints.config(), payload: channelsConfigSchema })
+    .catch((cause: unknown) => {
+      logger.warn('channels.config_failed', { cause });
+      return null;
+    });
+  return {
+    launches: {
+      coexistence: config?.embeddedSignupByMode?.coexistence ?? null,
+      newNumber: config?.embeddedSignupByMode?.new_number ?? null,
+    },
+    providers: config?.providers ?? null,
+  };
 }
 
 export async function loadWhatsAppNumbers(): Promise<NumbersResponse | null> {

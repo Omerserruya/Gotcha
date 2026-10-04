@@ -1563,4 +1563,11 @@
     color: inherit;
     cursor: pointer;
   }
+
+  /* A provider not set up on the server: said in place of Connect, quietly. */
+  .notSetUp {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    white-space: nowrap;
+  }
 }

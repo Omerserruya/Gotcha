@@ -72,3 +72,19 @@ describe('★★ 13 — an OAuth channel connects at its provider (backend ecd64
     expect(screen.queryByTestId('connect-oauth-WHATSAPP')).toBeNull();
   });
 });
+
+describe('★ the row itself: "Not set up yet" in place of Connect', () => {
+  it('no button to press; the reason on its title', async () => {
+    const { ConnectableRow } = await import('./ConnectableRow');
+    render(
+      <NextIntlClientProvider locale="en" messages={{ channels: messages }}>
+        <ConnectableRow channel="OUTLOOK" notSetUp />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByTestId('connect-open-OUTLOOK')).toBeNull();
+    expect(screen.getByTestId('connect-not-set-up-OUTLOOK')).toHaveTextContent('Not set up yet');
+    expect(screen.getByTestId('connect-not-set-up-OUTLOOK').getAttribute('title')).toMatch(
+      /Outlook isn't set up on GOTCHA's side yet/,
+    );
+  });
+});

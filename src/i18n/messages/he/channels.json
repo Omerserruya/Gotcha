@@ -71,7 +71,8 @@
       "not_configured": "{channel} עוד לא מוגדר בצד של GOTCHA.",
       "forbidden": "רק מנהל יכול לחבר ערוץ.",
       "failed": "לא הצלחנו לפתוח את {channel} — אפשר לנסות שוב."
-    }
+    },
+    "notSetUp": "עוד לא מוגדר"
   },
   "whatsapp": {
     "title": "מספרי וואטסאפ",
