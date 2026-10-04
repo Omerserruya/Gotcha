@@ -334,3 +334,117 @@ describe('★ every message offers Reply, describing itself to the composer', ()
     expect(heard[0]?.who).toBe('Your team');
   });
 });
+
+describe('★★ media in the stream, as 02 draws it — never "A photo." when the photo is here', () => {
+  it('a photo: the picture itself, opening whole in a new tab; the adapter’s "[Image]" not printed', async () => {
+    await show([
+      message({ messageType: 'image', mediaUrl: '/api/uploads/a.jpg', body: '[Image]' }),
+    ]);
+    const photo = screen.getByTestId('photo-m1');
+    expect(photo).toHaveAttribute('href', '/api/uploads/a.jpg');
+    expect(photo).toHaveAttribute('target', '_blank');
+    expect(photo.querySelector('img')).toHaveAttribute('src', '/api/uploads/a.jpg');
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Image]');
+    expect(screen.queryByTestId('unknown-m1')).toBeNull();
+  });
+
+  it('a caption the customer wrote stays', async () => {
+    await show([
+      message({
+        messageType: 'image',
+        mediaUrl: '/api/uploads/a.jpg',
+        body: 'Look at the corner of the box.',
+      }),
+    ]);
+    expect(screen.getByTestId('message-m1')).toHaveTextContent('Look at the corner of the box.');
+  });
+
+  it('a voice note plays — and still says it can’t be read out', async () => {
+    await show([
+      message({ messageType: 'audio', mediaUrl: '/api/uploads/v.ogg', body: '[Voice message]' }),
+    ]);
+    expect(screen.getByTestId('audio-m1').querySelector('audio')).toHaveAttribute(
+      'src',
+      '/api/uploads/v.ogg',
+    );
+    expect(screen.getByTestId('voice-m1')).toHaveTextContent(/can't read it out/i);
+  });
+
+  it('video with its controls; a file by its name, to download', async () => {
+    const one = await show([
+      message({ messageType: 'video', mediaUrl: '/api/uploads/c.mp4', body: '' }),
+    ]);
+    expect(screen.getByTestId('video-m1')).toHaveAttribute('controls');
+    one.unmount();
+    await show([
+      message({
+        messageType: 'document',
+        mediaUrl: '/api/uploads/t.pdf',
+        fileName: 'Terms.pdf',
+        body: 'Terms.pdf',
+      }),
+    ]);
+    const file = screen.getByTestId('file-m1');
+    expect(file).toHaveTextContent('Terms.pdf');
+    expect(file).toHaveAttribute('download', 'Terms.pdf');
+    // The file's own name as caption is the label already — not printed twice.
+    expect(screen.getByTestId('message-m1').textContent?.match(/Terms\.pdf/g)).toHaveLength(1);
+  });
+
+  it('★ media that could not be fetched says so — never a blank bubble or "[Document]"', async () => {
+    await show([
+      message({
+        messageType: 'document',
+        mediaUrl: null,
+        body: '[Document]',
+        metadata: { mediaError: 'expired' },
+      }),
+    ]);
+    expect(screen.getByTestId('media-gone-m1')).toHaveTextContent("couldn't be fetched");
+    expect(screen.getByTestId('message-m1')).not.toHaveTextContent('[Document]');
+  });
+
+  it('★ an address that is not https or this host is never followed', async () => {
+    await show([message({ messageType: 'image', mediaUrl: 'javascript:alert(1)', body: '' })]);
+    expect(screen.queryByTestId('photo-m1')).toBeNull();
+    expect(screen.getByTestId('media-m1')).toHaveTextContent(/a photo/i);
+  });
+
+  it('a shared contact: who, and the number to call or write', async () => {
+    await show([
+      message({
+        messageType: 'contact',
+        body: 'Avi',
+        metadata: {
+          contacts: [
+            {
+              name: 'Avi',
+              organization: 'Carrier',
+              phones: [{ number: '+972 50-123 4567', waId: '972501234567' }],
+            },
+          ],
+        },
+      }),
+    ]);
+    const card = screen.getByTestId('contacts-m1');
+    expect(card).toHaveTextContent('AviCarrier');
+    expect(card.querySelector('a[href="tel:+972501234567"]')).not.toBeNull();
+    expect(card.querySelector('a[href="https://wa.me/972501234567"]')).not.toBeNull();
+    // The name is the card's head — not printed above it again.
+    expect(screen.getByTestId('message-m1').textContent?.match(/Avi/g)).toHaveLength(1);
+  });
+
+  it('a sticker is drawn small', async () => {
+    await show([
+      message({
+        messageType: 'sticker',
+        mediaUrl: 'https://cdn.example/s.webp',
+        body: '[Sticker]',
+      }),
+    ]);
+    expect(screen.getByTestId('photo-m1').querySelector('img')).toHaveAttribute(
+      'src',
+      'https://cdn.example/s.webp',
+    );
+  });
+});

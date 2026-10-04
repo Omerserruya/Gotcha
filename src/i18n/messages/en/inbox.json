@@ -36,7 +36,12 @@
       "noText": "A message with no text"
     },
     "reply": "Reply",
-    "replyTo": "Reply to this message"
+    "replyTo": "Reply to this message",
+    "mediaUnavailable": "This attachment couldn't be fetched — WhatsApp keeps media only a few days.",
+    "openPhoto": "Open the photo",
+    "file": "Download the file",
+    "contact": "A contact",
+    "call": "Call"
   },
   "queue": {
     "cap": "Showing the {count} most recent.",

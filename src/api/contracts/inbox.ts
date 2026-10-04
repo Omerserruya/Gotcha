@@ -281,6 +281,10 @@ export const KNOWN_MESSAGE_TYPES = [
   'template',
   'interactive',
   'system',
+  // Drawn since the media round: a voice note under its own name, a sticker, a shared contact.
+  'voice',
+  'sticker',
+  'contact',
 ] as const;
 export type KnownMessageType = (typeof KNOWN_MESSAGE_TYPES)[number];
 
@@ -355,6 +359,8 @@ export const messageSchema = z.object({
   /** Free string. Use `renderableType`, never a bare switch. */
   messageType: z.string().default('text'),
   mediaUrl: z.string().nullable().default(null),
+  /** The sender's own name for a file — the download's label. */
+  fileName: z.string().nullish().catch(null).default(null),
   createdAt: z.string(),
   /**
    * `PENDING · SENT · DELIVERED · READ · FAILED`. Read through `deliveryOf`,
@@ -436,6 +442,27 @@ export const messageSchema = z.object({
       /** `agent_transferred`. */
       fromAgentName: z.string().optional(),
       toAgentName: z.string().optional(),
+      /** The attachment could not be fetched (WhatsApp media expires) — said, never blank. */
+      mediaError: z.string().optional().catch(undefined),
+      /** A shared contact card: who, and the numbers to reach them. */
+      contacts: z
+        .array(
+          z.object({
+            name: z.string().nullish().catch(null),
+            organization: z.string().nullish().catch(null),
+            phones: z
+              .array(
+                z.object({
+                  number: z.string().nullish().catch(null),
+                  waId: z.string().nullish().catch(null),
+                }),
+              )
+              .catch([])
+              .default([]),
+          }),
+        )
+        .optional()
+        .catch(undefined),
       /**
        * ★★ A MESSAGE THE PROVIDER COULD NOT BE REPRESENTED AS ANYTHING ELSE.
        *

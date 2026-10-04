@@ -1,7 +1,6 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
-  hasTranscript,
   quotedState,
   senderLabel,
   reactionOf,
@@ -14,6 +13,8 @@ import {
 } from '@/api/contracts/inbox';
 
 import styles from './Inbox.module.css';
+import { ContactCards, MessageMedia } from './MessageMedia';
+import { isPlaceholderCaption, mediaKind } from './media';
 import { ReplyButton } from './ReplyButton';
 import { STREAM_SCROLLER } from './stream-scroller';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -170,7 +171,7 @@ export async function MessageStream({
          * one means the agent can see what was sent.
          */
         const rendered =
-          type === 'audio' || type === 'image' || type === 'video' || type === 'document';
+          mediaKind(message) !== null || (message.metadata?.contacts?.length ?? 0) > 0;
         return (
           <li
             key={message.id}
@@ -231,28 +232,13 @@ export async function MessageStream({
                 </p>
               ) : null}
 
-              {type === 'audio' ? (
-                /*
-                ★★ WE CANNOT READ IT OUT, AND THE DESIGN SAYS WE CAN.
-                An inbound voice note is stored as a file. The only
-                audio-specific code in the worker is a filename extension,
-                and the Deepgram credential exists without a client — "we
-                have the key" reads like "we have the feature".
-
-                So the stream says what it is and what it cannot do, rather
-                than rendering a player beside an absent transcript and
-                letting the agent conclude the transcript failed.
-              */
-                <p className={styles.mediaNote} data-testid={`voice-${message.id}`}>
-                  {hasTranscript(message) ? '' : t('stream.voiceNoTranscript')}
-                </p>
-              ) : null}
-
-              {type === 'image' || type === 'video' || type === 'document' ? (
-                <p className={styles.mediaNote} data-testid={`media-${message.id}`}>
-                  {t(`stream.media.${type}` as 'stream.media.image')}
-                </p>
-              ) : null}
+              {/*
+                ★ The attachment itself, as 02 draws it — a photo to see, a voice
+                note to play, a file to download — or, when it could not be
+                fetched, a sentence saying so. (Was "A photo." in words.)
+              */}
+              <MessageMedia message={message} t={(key) => t(`stream.${key}`)} />
+              <ContactCards message={message} t={(key) => t(`stream.${key}`)} />
 
               {/*
               ════════════════════════════════════════════════════════════════
@@ -273,7 +259,7 @@ export async function MessageStream({
                 <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
                   {t('stream.unsupported', { type: unsupported })}
                 </p>
-              ) : message.body.trim() !== '' ? (
+              ) : message.body.trim() !== '' && !isPlaceholderCaption(message) ? (
                 /* Isolated: a customer writes in their language, not the page's. */
                 <p className={styles.body}>
                   <UserText>{message.body}</UserText>
