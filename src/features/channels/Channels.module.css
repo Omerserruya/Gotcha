@@ -1610,4 +1610,13 @@
     font-size: var(--font-size-caption);
     color: var(--alert-text);
   }
+
+  .twilioNumbers {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin: var(--space-8) 0 var(--space-12);
+    padding: 0;
+    list-style: none;
+  }
 }

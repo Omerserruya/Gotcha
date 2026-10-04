@@ -370,5 +370,29 @@
       "callback_error": "Something went wrong on the way back from {channel}. Nothing was connected — try again.",
       "other": "{channel} didn't connect. Try again."
     }
+  },
+  "twilio": {
+    "friendlyName": "Name",
+    "accountSid": "Account SID",
+    "accountSidHint": "From your Twilio console — starts with AC.",
+    "accountSidBad": "An Account SID is AC followed by 32 letters and digits.",
+    "authToken": "Auth Token",
+    "connect": "Check and continue",
+    "checking": "Checking with Twilio…",
+    "later": "Do this later",
+    "pick": "{count, plural, one {Twilio has one number on this account. Choose it to answer calls with GOTCHA.} other {Twilio has # numbers on this account. Choose which ones GOTCHA answers.}}",
+    "noNumbers": "This Twilio account has no phone numbers yet. Buy one in Twilio, then come back.",
+    "activate": "{count, plural, one {Answer calls on 1 number} other {Answer calls on # numbers}}",
+    "activating": "Setting up the numbers…",
+    "done": "{count, plural, one {GOTCHA answers calls on 1 number now.} other {GOTCHA answers calls on # numbers now.}}",
+    "donePartly": "{done} set up; {failed} could not be — try those again from Phone calls.",
+    "close": "Done",
+    "error": {
+      "invalid": "Fill in every field, as Twilio gives them.",
+      "twilio": "Twilio didn't accept those details — check the Account SID and Auth Token.",
+      "not_offered": "Phone calls aren't available for this workspace yet.",
+      "forbidden": "Only an admin can connect phone calls.",
+      "failed": "That didn't connect — try again."
+    }
   }
 }

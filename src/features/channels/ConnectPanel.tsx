@@ -20,6 +20,7 @@ import {
   startChannelConnect,
   type ChannelWriteResult,
 } from './actions';
+import { TwilioStep } from './TwilioStep';
 import styles from './Channels.module.css';
 import { channelName } from '@/api/contracts/inbox';
 
@@ -41,11 +42,13 @@ import { channelName } from '@/api/contracts/inbox';
  * component whose every branch is a different feature.
  */
 
-type ConnectShape = 'provisioned' | 'credentials' | 'oauth' | 'whatsapp' | 'unavailable';
+type ConnectShape = 'provisioned' | 'credentials' | 'oauth' | 'whatsapp' | 'twilio' | 'unavailable';
 
 function shapeOf(channel: ChannelType): ConnectShape {
   if (channel === 'WEBCHAT') return 'provisioned';
   if (channel === 'EMAIL') return 'credentials';
+  // Phone calls with the merchant's own Twilio: fields, then its numbers.
+  if (channel === 'VOICE') return 'twilio';
   // 13c: WhatsApp has its own sheet — the question, then Meta.
   if (channel === 'WHATSAPP') return 'whatsapp';
   // Live (backend ecd64c4d): the provider's page, and back to this list.
@@ -82,6 +85,7 @@ export function ConnectPanel({
       {shape === 'provisioned' ? <WebChatStep onClose={onClose} /> : null}
       {shape === 'credentials' ? <EmailStep onClose={onClose} /> : null}
       {shape === 'oauth' ? <OAuthStep channel={channel} name={name} /> : null}
+      {shape === 'twilio' ? <TwilioStep onClose={onClose} /> : null}
       {shape === 'whatsapp' ? (
         <Link
           href="/settings/channels?panel=whatsapp&view=connect"

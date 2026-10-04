@@ -370,5 +370,29 @@
       "callback_error": "משהו השתבש בדרך חזרה מ-{channel}. שום דבר לא חובר — אפשר לנסות שוב.",
       "other": "{channel} לא חובר. אפשר לנסות שוב."
     }
+  },
+  "twilio": {
+    "friendlyName": "שם",
+    "accountSid": "Account SID",
+    "accountSidHint": "מהקונסולה של Twilio — מתחיל ב-AC.",
+    "accountSidBad": "Account SID הוא AC ואחריו 32 אותיות וספרות.",
+    "authToken": "Auth Token",
+    "connect": "בדיקה והמשך",
+    "checking": "בודק מול Twilio…",
+    "later": "אחר כך",
+    "pick": "{count, plural, one {יש מספר אחד בחשבון ה-Twilio. בוחרים אותו כדי ש-GOTCHA יענה לשיחות.} other {יש # מספרים בחשבון ה-Twilio. בוחרים על אילו GOTCHA יענה.}}",
+    "noNumbers": "בחשבון ה-Twilio הזה עוד אין מספרי טלפון. קונים מספר ב-Twilio וחוזרים.",
+    "activate": "{count, plural, one {מענה לשיחות במספר אחד} other {מענה לשיחות ב-# מספרים}}",
+    "activating": "מגדיר את המספרים…",
+    "done": "{count, plural, one {GOTCHA עונה עכשיו לשיחות במספר אחד.} other {GOTCHA עונה עכשיו לשיחות ב-# מספרים.}}",
+    "donePartly": "{done} הוגדרו; {failed} לא הצליחו — אפשר לנסות שוב משיחות טלפון.",
+    "close": "סיום",
+    "error": {
+      "invalid": "ממלאים את כל השדות כמו ש-Twilio נותן אותם.",
+      "twilio": "Twilio לא קיבל את הפרטים — כדאי לבדוק את ה-Account SID וה-Auth Token.",
+      "not_offered": "שיחות טלפון עוד לא זמינות לסביבת העבודה הזו.",
+      "forbidden": "רק מנהל יכול לחבר שיחות טלפון.",
+      "failed": "זה לא התחבר — אפשר לנסות שוב."
+    }
   }
 }

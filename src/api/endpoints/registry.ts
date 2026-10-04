@@ -560,6 +560,15 @@ export const channelEndpoints = {
  */
 export const voiceChannelEndpoints = {
   list: () => endpoint('/api/voice-channels'),
+  /**
+   * 13's Phone calls, bring your own Twilio: `{ friendlyName, accountSid,
+   * authToken }` → 201 `{ data: channel }` with the account's numbers. ⚠ A
+   * 502 `twilio_discovery_failed` still leaves the channel created (ERROR).
+   */
+  create: () => endpoint('/api/voice-channels'),
+  /** Points one number's webhooks at GOTCHA. Writes at Twilio. */
+  activate: (id: string, numberId: string) =>
+    endpoint('/api/voice-channels/{id}/numbers/{numberId}/activate', { id, numberId }),
 } as const;
 
 /**
