@@ -12,6 +12,7 @@ import {
 } from '@/api/contracts/people';
 import { departmentEndpoints, memberEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Writes for screen 12.
@@ -104,6 +105,7 @@ export async function inviteMember(input: {
     revalidatePath('/[locale]/settings/people', 'page');
     return { ok: true, data };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     /*
      * The email is NOT logged. It identifies a person, the write already
      * failed, and knowing which address was rejected is not worth putting a
@@ -131,6 +133,7 @@ export async function createTeam(input: {
     revalidatePath('/[locale]/settings/people', 'page');
     return { ok: true, data };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('people.create_team_failed', { cause });
     return classify(cause);
   }

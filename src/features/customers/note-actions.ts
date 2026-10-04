@@ -7,6 +7,7 @@ import { serverApi } from '@/api/client/server-api';
 import { noteDeleteSchema, noteWriteSchema, NOTE_MAX_LENGTH } from '@/api/contracts/customer-notes';
 import { customerEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Screen 04f's writes.
@@ -78,6 +79,7 @@ export async function createNote(
     revalidatePath('/[locale]/(app)/customers/[id]', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('customer.note_create_failed', { cause });
     return classify(cause);
   }
@@ -106,6 +108,7 @@ export async function editNote(
     revalidatePath('/[locale]/(app)/customers/[id]', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('customer.note_edit_failed', { cause });
     return classify(cause);
   }
@@ -134,6 +137,7 @@ export async function removeNote(contactId: string, noteId: string): Promise<Not
     revalidatePath('/[locale]/(app)/customers/[id]', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('customer.note_delete_failed', { cause });
     return classify(cause);
   }

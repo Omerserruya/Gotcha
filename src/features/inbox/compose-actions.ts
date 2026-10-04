@@ -8,6 +8,7 @@ import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { COMPOSE_KINDS, type ComposeKind } from './compose-kinds';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * 02's three composer chips — Rewrite · Shorter · Translate.
@@ -80,6 +81,7 @@ export async function composeDraft(
     });
     return text.trim() === '' ? { ok: false, reason: 'blank' } : { ok: true, text: text.trim() };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     // The draft is somebody's words to a customer: never logged.
     logger.warn('inbox.compose_failed', {
       kind,

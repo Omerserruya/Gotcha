@@ -11,6 +11,7 @@ import {
 } from '@/api/contracts/customer-orders';
 import { customerEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Screen 04d's writes. They move real money in a real store.
@@ -65,6 +66,7 @@ export async function runOrderAction(
     }
     return result;
   } catch (cause: unknown) {
+    await signInIfSignedOut(cause);
     /*
      * A thrown error is NOT "the action failed". It is "we do not know what
      * happened" — the same distinction as the unsettled charge on 17d, and

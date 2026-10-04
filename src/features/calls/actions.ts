@@ -7,6 +7,7 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { callEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * 05d / 05e — placing, ending and transferring a call (Omer, 2026-10-04).
@@ -71,6 +72,7 @@ export async function startCall(to: string, conversationId?: string): Promise<St
     revalidatePath(PATH, 'page');
     return { ok: true, mode: 'AGENT_FIRST', sessionId: result.sessionId };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('calls.start_failed', { cause });
     return { ok: false, reason: reasonOf(cause) };
   }
@@ -86,6 +88,7 @@ async function post(
     revalidatePath(PATH, 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn(event, { cause });
     return { ok: false, reason: reasonOf(cause) };
   }

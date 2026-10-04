@@ -11,6 +11,7 @@ import { logger } from '@/observability/logger';
 
 import { credentialsFor } from './connect-form';
 import { OAUTH_HERE, SALESFORCE_HOSTS } from './oauth';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 export type ConnectResult =
   | { readonly ok: true }
@@ -58,6 +59,7 @@ export async function connectIntegration(
     revalidatePath('/[locale]/(app)/settings/systems', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('capabilities.connect_failed', { slug, cause });
     if (isApiError(cause)) {
       if (cause.status === 400) return { ok: false, reason: 'missing' };
@@ -103,6 +105,7 @@ export async function startOAuth(slug: string, loginHost?: string): Promise<OAut
     if (new URL(url).protocol !== 'https:') return { ok: false, reason: 'failed' };
     return { ok: true, url };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('capabilities.oauth_start_failed', { slug, cause });
     if (isApiError(cause)) {
       if (cause.status === 409) return { ok: false, reason: 'needs_store' };

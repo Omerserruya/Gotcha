@@ -1,14 +1,12 @@
 import { NextIntlClientProvider } from 'next-intl';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import type { Route } from 'next';
 import type { ReactNode } from 'react';
 
 import { permissionEndpoints } from '@/api/endpoints/registry';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { effectivePermissionsSchema } from '@/api/contracts/identity';
-import { RETURN_TO_HEADER } from '@/auth/return-to';
+import { signInHere } from '@/api/client/signed-out';
 import { activeSession } from '@/auth/session-store';
 import { logger } from '@/observability/logger';
 import type { PermissionsStatus } from '@/permissions/permissions-context';
@@ -89,14 +87,6 @@ export default async function AuthenticatedLayout({
  * worst case is a control that turns out to be refused, with an error that
  * says so.
  */
-/** `/api/auth/login`, with where they were — read from the proxy's header. */
-async function signInHere(): Promise<Route> {
-  const here = (await headers()).get(RETURN_TO_HEADER);
-  return (
-    here ? `/api/auth/login?returnTo=${encodeURIComponent(here)}` : '/api/auth/login'
-  ) as Route;
-}
-
 async function loadPermissions(): Promise<{
   permissions: readonly string[];
   roleKey?: string;

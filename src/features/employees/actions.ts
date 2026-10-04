@@ -12,6 +12,7 @@ import {
 } from '@/api/contracts/employees';
 import { employeeEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Pause and resume. There is no third verb.
@@ -37,6 +38,7 @@ export async function setEmployeeStatus(
     revalidatePath('/[locale]/(app)/studio/employees', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       if (cause.status === 404) return { ok: false, reason: 'gone' };
@@ -78,6 +80,7 @@ export async function deleteEmployee(id: string): Promise<DeleteEmployeeResult> 
     revalidatePath('/[locale]/(app)/studio/employees', 'page');
     return { ok: true, result };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       if (cause.status === 404) return { ok: false, reason: 'gone' };

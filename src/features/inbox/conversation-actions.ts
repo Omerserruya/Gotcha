@@ -7,6 +7,7 @@ import { serverApi } from '@/api/client/server-api';
 import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { z } from 'zod';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * The three routes answer `{ data: conversation }` and nothing here reads it:
@@ -77,6 +78,7 @@ export async function claimConversation(conversationId: string): Promise<VerbRes
     refresh();
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       /*
        * "Conversation already assigned" — somebody else got there. Not a
@@ -108,6 +110,7 @@ export async function returnToAi(conversationId: string): Promise<VerbResult> {
     refresh();
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       /*
        * ★ THE 409 HERE MEANS SOMETHING ELSE ENTIRELY.
@@ -147,6 +150,7 @@ export async function transferConversation(
     refresh();
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       // "You can only transfer conversations assigned to you." A permission
       // with a precondition, not a fault: taking it first makes it possible.
@@ -195,6 +199,7 @@ export async function releaseConversation(conversationId: string): Promise<VerbR
     refresh();
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       /*
        * ⚠ 409 IS NOT GIVEN THE SAME MEANING AS claim's OR returnToAi's.
@@ -222,6 +227,7 @@ export async function closeConversation(conversationId: string): Promise<VerbRes
     refresh();
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       if (cause.status === 404) return { ok: false, reason: 'not_found' };
     }
@@ -252,6 +258,7 @@ export async function deleteConversation(
     refresh();
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       if (cause.status === 404) return { ok: false, reason: 'not_found' };
       if (cause.status === 403) return { ok: false, reason: 'not_allowed' };

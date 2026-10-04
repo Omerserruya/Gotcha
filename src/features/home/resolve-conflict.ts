@@ -4,6 +4,7 @@ import { serverApi } from '@/api/client/server-api';
 import { intelligenceReviewEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { z } from 'zod';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Settles one knowledge conflict.
@@ -30,6 +31,7 @@ export async function resolveConflict(
     });
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('home.conflict_resolve_failed', { decision, cause });
     return { ok: false };
   }

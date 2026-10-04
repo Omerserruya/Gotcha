@@ -7,6 +7,7 @@ import { serverApi } from '@/api/client/server-api';
 import { buyResultSchema } from '@/api/contracts/pricing';
 import { billingEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Screen 17d's write. It charges a card.
@@ -102,6 +103,7 @@ export async function buyCreditPack(
     revalidatePath('/[locale]/(app)/settings/billing', 'page');
     return { ok: true, units: result.units, invoiceId: result.invoiceId };
   } catch (cause: unknown) {
+    await signInIfSignedOut(cause);
     /*
      * The 409 arrives as a thrown API error, so the unsettled case has TWO
      * paths into this function and both must reach the same outcome. Handling

@@ -31,6 +31,7 @@ import { inspectResponseSchema, type InspectResponse } from '@/api/contracts/wha
 import { channelEndpoints } from '@/api/endpoints/registry';
 import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Neither verb returns anything the screen renders — the list is re-read
@@ -51,6 +52,7 @@ export async function inspectNumbers(code: string): Promise<InspectResponse | nu
       raw: true,
     });
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('whatsapp.inspect_failed', { cause });
     return null;
   }
@@ -70,6 +72,7 @@ export async function connectNumber(
     });
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('whatsapp.connect_failed', { cause });
     return { ok: false, message: (cause as Error)?.message ?? 'connect_failed' };
   }
@@ -86,6 +89,7 @@ export async function resumeNumber(id: string, pin: string): Promise<ConnectResu
     });
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('whatsapp.resume_failed', { cause });
     return { ok: false, message: (cause as Error)?.message ?? 'resume_failed' };
   }

@@ -6,6 +6,7 @@ import { notificationEndpoints } from '@/api/endpoints/registry';
 import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
 import { revalidatePath } from 'next/cache';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Marking read.
@@ -42,6 +43,7 @@ async function dispatch(call: () => Promise<unknown>): Promise<{ ok: boolean }> 
     revalidatePath('/[locale]/(app)/home', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('notifications.mark_read_failed', { cause });
     return { ok: false };
   }

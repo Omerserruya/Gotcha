@@ -7,6 +7,7 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Sending a reply.
@@ -100,6 +101,7 @@ export async function sendReply(
     revalidatePath('/[locale]/(app)/inbox', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     /*
      * ⚠ NOTHING IN THIS LOG IS THE MESSAGE. A failed send is exactly when
      * somebody is tempted to log the body to work out what happened, and the

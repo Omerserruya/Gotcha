@@ -11,6 +11,7 @@ import {
 } from '@/api/contracts/security';
 import { securityEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Writes for screen 16.
@@ -75,6 +76,7 @@ export async function revokeSession(id: string): Promise<SecurityWriteResult> {
     revalidatePath('/[locale]/settings/security', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('security.revoke_failed', { cause });
     return classify(cause);
   }
@@ -100,6 +102,7 @@ export async function revokeOtherSessions(): Promise<SecurityWriteResult> {
     revalidatePath('/[locale]/settings/security', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('security.revoke_all_failed', { cause });
     return classify(cause);
   }
@@ -125,6 +128,7 @@ export async function setMfaPolicy(next: TenantSecurity): Promise<SecurityWriteR
     revalidatePath('/[locale]/settings/security', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('security.mfa_policy_failed', { cause });
     return classify(cause);
   }

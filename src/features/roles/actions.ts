@@ -9,6 +9,7 @@ import { serverApi } from '@/api/client/server-api';
 import { grantSchema } from '@/api/contracts/roles';
 import { permissionEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Overrides on one person — screen 12e.
@@ -75,6 +76,7 @@ async function write(
     revalidatePath('/[locale]/(app)/settings/people', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       if (cause.status === 404) return { ok: false, reason: 'gone' };
@@ -126,6 +128,7 @@ export async function createRole(input: {
     revalidatePath('/[locale]/settings/people/roles', 'page');
     return { ok: true, id: data.id };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('roles.create_failed', { cause });
     if (isApiError(cause)) {
       if (cause.status === 409) return { ok: false, reason: 'name_taken' };

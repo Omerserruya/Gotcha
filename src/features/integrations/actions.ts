@@ -7,6 +7,7 @@ import { serverApi } from '@/api/client/server-api';
 import { electionResultSchema, type ElectionResult } from '@/api/contracts/business-core';
 import { integrationEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * The write behind screen 14c.
@@ -81,6 +82,7 @@ export async function electRole(role: string, slug: string): Promise<ElectResult
     revalidatePath('/[locale]/(app)/settings/systems', 'page');
     return { ok: true, data };
   } catch (cause: unknown) {
+    await signInIfSignedOut(cause);
     logger.warn('business_core.elect_failed', { cause, role });
     return classify(cause);
   }

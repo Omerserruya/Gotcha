@@ -12,6 +12,7 @@ import {
 } from '@/api/contracts/approvals';
 import { approvalEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * The three writes on screen 03.
@@ -156,6 +157,7 @@ export async function approveRequest(
       approval: result.approval,
     };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     return classify(cause, 'approvals.approve_failed');
   }
 }
@@ -187,6 +189,7 @@ export async function rejectRequest(
     revalidatePath('/[locale]/(app)/approvals', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     return classify(cause, 'approvals.reject_failed');
   }
 }
@@ -213,6 +216,7 @@ export async function retryExecution(id: string): Promise<ApprovalWriteResult> {
     // A 200 is "we tried again", not "it worked". Same distinction as approve.
     return { ok: true, dispatched: result.executed, dispatchError: result.error };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     return classify(cause, 'approvals.retry_failed');
   }
 }

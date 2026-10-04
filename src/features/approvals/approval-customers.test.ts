@@ -8,6 +8,14 @@ const post = vi.hoisted(() => vi.fn());
 vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }));
+vi.mock('next/navigation', () => ({
+  redirect: (to: string) => {
+    throw new Error(`REDIRECT ${to}`);
+  },
+}));
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-gotcha-return-to': '/en/approvals' }),
+}));
 
 import { approveRequest } from './actions';
 import { loadApprovalCustomers } from './approval-customers';
@@ -115,5 +123,16 @@ describe('★★ approve at the wire (backend 05979604)', () => {
       throw new ApiError({ kind: 'validation', status: 400, developerMessage: code });
     });
     expect(await approveRequest('a1', { amount: 120 })).toEqual({ ok: false, reason: code });
+  });
+});
+
+describe('★★ a 401 while deciding is sign-in, not "that didn’t go through"', () => {
+  it('approve: the session is over → sign-in with the way back', async () => {
+    post.mockImplementation(async () => {
+      throw new ApiError({ kind: 'authentication', status: 401 });
+    });
+    await expect(approveRequest('a1')).rejects.toThrow(
+      `REDIRECT /api/auth/login?returnTo=${encodeURIComponent('/en/approvals')}`,
+    );
   });
 });

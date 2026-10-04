@@ -7,6 +7,7 @@ import { serverApi } from '@/api/client/server-api';
 import { channelSchema, type Channel, type ResponseMode } from '@/api/contracts/channels';
 import { channelEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Writes for screen 13.
@@ -73,6 +74,7 @@ export async function connectWebChat(name: string): Promise<ChannelWriteResult<C
     revalidatePath('/[locale]/settings/channels', 'page');
     return { ok: true, data };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('channels.webchat_create_failed', { cause });
     return classify(cause);
   }
@@ -126,6 +128,7 @@ export async function connectEmail(input: EmailConnectInput): Promise<ChannelWri
     revalidatePath('/[locale]/settings/channels', 'page');
     return { ok: true, data };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     // `cause` carries a status and a route. It does not carry the body, which
     // is the whole point on a call that includes two passwords.
     logger.warn('channels.email_connect_failed', { cause });
@@ -153,6 +156,7 @@ export async function setResponseMode(
     revalidatePath('/[locale]/settings/channels', 'page');
     return { ok: true, data };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('channels.response_mode_failed', { cause });
     return classify(cause);
   }

@@ -18,6 +18,7 @@ import {
 } from '@/api/contracts/workspace';
 import { workspaceEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Writes for screen 11.
@@ -82,6 +83,7 @@ export async function saveWorkspaceFacts(
     revalidatePath('/[locale]/settings/workspace', 'page');
     return { ok: true, data };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('workspace.patch_failed', { cause });
     return classify(cause);
   }
@@ -105,6 +107,7 @@ export async function saveWorkspaceVoice(guidance: string): Promise<WriteResult<
     revalidatePath('/[locale]/settings/workspace', 'page');
     return { ok: true, data };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('workspace.voice_save_failed', { cause });
     return classify(cause);
   }
@@ -132,6 +135,7 @@ export async function previewVoiceSample(
     });
     return { ok: true, reply: data.reply };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause) && cause.code === 'SAMPLE_UNAVAILABLE') {
       return { ok: false, reason: 'unavailable' };
     }
@@ -159,6 +163,7 @@ export async function saveProhibitedClaims(
     revalidatePath('/[locale]/settings/workspace', 'page');
     return { ok: true, data };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('workspace.claims_save_failed', { cause });
     return classify(cause);
   }
@@ -188,6 +193,7 @@ export async function runWorkspaceScan(): Promise<ScanResult | null> {
     revalidatePath('/[locale]/settings/workspace', 'page');
     return data;
   } catch (cause) {
+    await signInIfSignedOut(cause);
     // A 409 lands here too. Reported as a refusal rather than a crash, since
     // "try again shortly" is the action either way.
     logger.warn('workspace.scan_failed', { cause });
@@ -221,6 +227,7 @@ export async function acceptScanFields(fields: readonly string[]): Promise<Accep
     revalidatePath('/[locale]/settings/workspace', 'page');
     return data;
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('workspace.scan_accept_failed', { cause });
     return null;
   }

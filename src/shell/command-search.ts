@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { serverApi } from '@/api/client/server-api';
 import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * 19's GO TO, for conversations: `GET /api/conversations?search=` — the one
@@ -58,6 +59,7 @@ export async function searchConversations(
       })),
     };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('command.search_failed', { cause });
     return { ok: false };
   }

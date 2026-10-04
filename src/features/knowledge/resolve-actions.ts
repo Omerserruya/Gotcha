@@ -13,6 +13,7 @@ import {
 import { knowledgeListSchema } from '@/api/contracts/knowledge';
 import { knowledgeEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Screen 08's resolve.
@@ -115,6 +116,7 @@ export async function resolveConflict(
       raw: true,
     });
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       /*
        * ★★ THE DISCRIMINATOR IS `developerMessage`, AND `cause.code` IS DEAD
@@ -193,6 +195,7 @@ async function documentUse(documentId: string | null | undefined): Promise<Docum
     // cannot see.
     return document ? documentUseOf(document.status) : 'unknown';
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('knowledge.resolve_confirm_failed', { documentId, cause });
     return 'unknown';
   }

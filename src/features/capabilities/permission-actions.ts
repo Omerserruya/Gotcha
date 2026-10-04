@@ -13,6 +13,7 @@ import {
 } from '@/api/contracts/capabilities';
 import { capabilityEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * Screen 10's write.
@@ -78,6 +79,7 @@ export async function setToolPermission(
     revalidatePath('/[locale]/(app)/studio/capabilities', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       /*
        * The route's own refusal: you cannot enable a tool whose integration

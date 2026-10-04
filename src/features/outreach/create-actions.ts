@@ -7,6 +7,7 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { outreachEndpoints, templateEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * 05 / 05c — creating outreach (Omer, 2026-10-04): a campaign as a DRAFT, and
@@ -68,6 +69,7 @@ export async function createCampaignDraft(draft: CampaignDraft): Promise<CreateR
     revalidatePath('/[locale]/(app)/outreach', 'page');
     return { ok: true, id: result.id };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     return refusal(cause, 'outreach.create_failed');
   }
 }
@@ -101,6 +103,7 @@ export async function createTemplate(draft: TemplateDraft): Promise<CreateResult
     revalidatePath('/[locale]/(app)/outreach/templates', 'page');
     return { ok: true, id: result.id };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     return refusal(cause, 'templates.create_failed');
   }
 }
@@ -116,6 +119,7 @@ export async function duplicateTemplate(id: string): Promise<CreateResult> {
     revalidatePath('/[locale]/(app)/outreach/templates', 'page');
     return { ok: true, id: result.id };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     return refusal(cause, 'templates.duplicate_failed');
   }
 }

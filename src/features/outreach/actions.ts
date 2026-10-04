@@ -7,6 +7,7 @@ import { serverApi } from '@/api/client/server-api';
 import { campaignSchema } from '@/api/contracts/outreach';
 import { outreachEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
  * The one write on screen 05, and it is destructive.
@@ -57,6 +58,7 @@ export async function stopCampaign(id: string): Promise<OutreachWriteResult> {
     revalidatePath('/[locale]/(app)/outreach', 'page');
     return { ok: true };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       if (cause.status === 400) return { ok: false, reason: 'not_stoppable' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
