@@ -132,5 +132,33 @@
       "forbidden": "You don't have permission to connect systems.",
       "failed": "It didn't connect. Nothing was saved — try again."
     }
+  },
+  "systemDown": "Hidden from GOTCHA while {name} needs fixing — reconnect it in Integrations.",
+  "oauth": {
+    "connect": "Connect at {name}",
+    "reconnect": "Reconnect {name}",
+    "opening": "Opening {name}…",
+    "loginHost": "Login host",
+    "note": "You approve it at {name}, then come back here.",
+    "error": {
+      "not_here": "This one can't be connected from here yet.",
+      "not_configured": "{name} is not set up on GOTCHA's side yet.",
+      "needs_store": "Connect your store from the Shopify App Store first.",
+      "forbidden": "You don't have permission to connect systems.",
+      "failed": "{name} couldn't be opened — try again."
+    }
+  },
+  "landing": {
+    "connected": "{name} is connected.",
+    "error": {
+      "denied": "You cancelled at {name} — nothing was connected.",
+      "token_exchange_failed": "{name} didn't confirm the connection. Nothing was connected — try again.",
+      "catalog_missing": "{name} isn't set up on GOTCHA's side yet. Nothing was connected.",
+      "callback_error": "Something went wrong on the way back from {name}. Nothing was connected — try again.",
+      "validation_failed": "{name} connected, but the first check against it failed.",
+      "shop_connected_elsewhere": "That store is already connected to another workspace.",
+      "link_failed": "{name} answered, but the store couldn't be linked to this workspace.",
+      "other": "{name} didn't connect. Try again."
+    }
   }
 }

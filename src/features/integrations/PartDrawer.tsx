@@ -9,12 +9,12 @@ import {
 } from '@/api/contracts/business-core';
 import {
   hasOwnWords,
-  humaniseToolName,
+  humaniseCode,
   isTheAdminsChoice,
   resolveAvailability,
   type Capability,
 } from '@/api/contracts/capabilities';
-import { sentenceCase, toolSlugOf, type Integration } from '@/api/contracts/integrations';
+import { catalogName, toolSlugOf, type Integration } from '@/api/contracts/integrations';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { PermissionChoice } from '@/features/capabilities/PermissionChoice';
 import { Link } from '@/i18n/navigation';
@@ -67,11 +67,6 @@ export async function PartDrawer({
     that second list is gone. The catalogue still NAMES them: its "Cancel
     Order" reads better than a humanised tool name.
   */
-  const catalogName = (toolName: string) => {
-    const slug = toolSlugOf(toolName);
-    const tool = integration?.catalogTools.find((c) => c.slug === slug);
-    return tool ? sentenceCase(tool.name, integration?.name ?? null) : null;
-  };
   const failingNow = state === 'connected_but_failing';
   const checked = integration?.tenantConnection?.lastTestedAt ?? null;
 
@@ -178,10 +173,10 @@ export async function PartDrawer({
             return (
               <li key={capability.toolName} className={styles.drawerAction}>
                 <span className={styles.drawerActionName}>
-                  {catalogName(capability.toolName) ??
+                  {catalogName(capability.toolName, integration) ??
                     (hasOwnWords(capability.toolName)
                       ? tc(`tool.${capability.toolName}` as 'tool.send_message')
-                      : humaniseToolName(capability.toolName))}
+                      : humaniseCode(toolSlugOf(capability.toolName) ?? capability.toolName))}
                   {capability.riskLevel ? (
                     <span
                       className={styles.drawerRisk}
@@ -192,14 +187,13 @@ export async function PartDrawer({
                     </span>
                   ) : null}
                 </span>
-                {isTheAdminsChoice(availability) ? (
-                  <PermissionChoice capability={capability} />
-                ) : (
-                  <span
-                    className={styles.drawerNone}
-                    data-testid={`part-action-off-${capability.toolName}`}
-                    title={
-                      failingNow && playing
+                {/* 10's control, always: disabled with its reason when the platform decides. */}
+                <PermissionChoice
+                  capability={capability}
+                  blocked={
+                    isTheAdminsChoice(availability)
+                      ? undefined
+                      : failingNow && playing
                         ? t('drawer.needsFixing', { name: playing })
                         : availability.reason === 'missing_scope' &&
                             availability.missingScopes.length > 0
@@ -207,11 +201,8 @@ export async function PartDrawer({
                               scopes: availability.missingScopes.join(', '),
                             })
                           : tc(`blocked.${availability.reason}` as 'blocked.missing_scope')
-                    }
-                  >
-                    —
-                  </span>
-                )}
+                  }
+                />
               </li>
             );
           })}

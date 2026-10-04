@@ -35,7 +35,19 @@ import styles from './Capabilities.module.css';
  * current state would be worse — an admin cannot fix a setting the screen
  * will not show them.**
  */
-export function PermissionChoice({ capability }: { readonly capability: Capability }) {
+export function PermissionChoice({
+  capability,
+  blocked,
+}: {
+  readonly capability: Capability;
+  /**
+   * Why none of the three can be chosen right now — a connection down, a
+   * permission not granted. The control is still drawn, its stored state
+   * marked, every segment disabled with this as its title: a state, never a
+   * paragraph beside the row.
+   */
+  readonly blocked?: string;
+}) {
   const t = useTranslations('capabilities');
   const [result, setResult] = useState<PermissionWriteResult | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -45,7 +57,7 @@ export function PermissionChoice({ capability }: { readonly capability: Capabili
   const ceiling = automationCeiling(capability);
 
   function choose(choice: AdminChoice) {
-    if (choice === current) return;
+    if (blocked !== undefined || choice === current) return;
     setResult(null);
     startTransition(async () => {
       setResult(await setToolPermission(capability, choice));
@@ -61,13 +73,18 @@ export function PermissionChoice({ capability }: { readonly capability: Capabili
     an admin cannot turn off what the screen will not show them.
   */
   const reasonFor = (choice: AdminChoice): string | undefined => {
+    if (blocked !== undefined) return blocked;
     if (choices.includes(choice) || ceiling === null) return undefined;
     const why = t(`choice.noAutomation.${ceiling}` as 'choice.noAutomation.unclassified');
     return current === choice ? `${why} ${t('choice.storedAutomatic')}` : why;
   };
 
   return (
-    <div className={styles.choice} data-testid={`choice-${capability.toolName}`}>
+    <div
+      className={styles.choice}
+      data-testid={`choice-${capability.toolName}`}
+      data-blocked={blocked !== undefined ? 'yes' : undefined}
+    >
       <div className={styles.choiceRow} role="group" aria-label={t('choice.label')}>
         {ADMIN_CHOICES.map((choice) => {
           const reason = reasonFor(choice);

@@ -147,29 +147,6 @@
     color: var(--text-subtle);
   }
 
-  .choice,
-  .blocked {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-  }
-
-  /*
-   * ★ THE FOURTH STATE. Not styled as an error — nothing is broken and the
-   * admin did nothing wrong. It is a repair somebody else has to perform,
-   * and it reads as an instruction rather than as an alarm.
-   */
-  .blocked {
-    max-inline-size: 260px;
-    font-size: var(--font-size-caption);
-    text-align: end;
-    color: var(--text-muted);
-  }
-
-  /* A disconnected provider is the one a merchant can act on themselves. */
-  .blocked[data-reason='integration_disconnected'] {
-    color: var(--intent-urgent-text);
-  }
-
   /*
    * Do it / Ask me / Never — 02's segmented control: `#F3F0EA`, radius 8,
    * `padding:3px`, gap 3; the stored one dark. Dark, not green: `never` is
@@ -177,6 +154,8 @@
    * one an admin happened to have.
    */
   .choice {
+    grid-column: 2;
+    grid-row: 1 / span 2;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -574,5 +553,43 @@
   .risk[data-risk='HIGH'] {
     background-color: var(--intent-urgent-surface);
     color: var(--intent-urgent-text);
+  }
+
+  /* One line for a connection that is down — said once, not on every row. */
+  .down {
+    margin: 0;
+    padding: var(--space-10) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--intent-blocked-surface);
+    font-size: var(--font-size-label);
+    color: var(--intent-blocked-text);
+  }
+
+  .oauth {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  /* The way back from a provider: once, above the system's screen. */
+  .landing {
+    margin: 0 0 var(--space-12);
+    padding: var(--space-10) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--signal-done-surface);
+    font-size: var(--font-size-label);
+    color: var(--signal-done-text);
+  }
+
+  .landing[data-outcome='problem'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .downRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
   }
 }

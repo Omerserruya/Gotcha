@@ -2,6 +2,8 @@ import { getTranslations } from 'next-intl/server';
 
 import { isConnected } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
+import { oauthFailure } from '@/features/capabilities/oauth';
+import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
@@ -41,12 +43,18 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly system?: string }>;
+  readonly searchParams?: Promise<{
+    readonly system?: string;
+    /** The way back from a provider (backend 381a5d1b). */
+    readonly connected?: string;
+    readonly error?: string;
+  }>;
 } = {}) {
   const t = await getTranslations('capabilities');
   const { capabilities, usage, integrations } = await loadCapabilities();
+  const params = (await searchParams) ?? {};
   const { integration, actions, selected } = selectSystem(
-    (await searchParams)?.system,
+    params.system,
     capabilities ?? [],
     integrations ?? [],
   );
@@ -80,21 +88,30 @@ export default async function Page({
           />
         }
         detail={
-          integration !== null && !isConnected(integration) ? (
-            <AvailableSystem integration={integration} />
-          ) : capabilities === null ? (
-            <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
-          ) : capabilities.length === 0 ? (
-            <div className={styles.empty} data-testid="capabilities-empty">
-              <p className={styles.emptyLead}>{t('none')}</p>
-              <p className={styles.emptyBody}>{t('noneBody')}</p>
-            </div>
-          ) : (
-            <>
-              <SystemHead integration={integration} capabilities={actions} usage={usage} />
-              <CapabilityScreen capabilities={actions} usage={usage} />
-            </>
-          )
+          <>
+            {integration && (params.connected === '1' || params.error) ? (
+              <OAuthLanding
+                slug={integration.slug}
+                name={integration.name}
+                outcome={params.connected === '1' ? 'connected' : oauthFailure(params.error)!}
+              />
+            ) : null}
+            {integration !== null && !isConnected(integration) ? (
+              <AvailableSystem integration={integration} />
+            ) : capabilities === null ? (
+              <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
+            ) : capabilities.length === 0 ? (
+              <div className={styles.empty} data-testid="capabilities-empty">
+                <p className={styles.emptyLead}>{t('none')}</p>
+                <p className={styles.emptyBody}>{t('noneBody')}</p>
+              </div>
+            ) : (
+              <>
+                <SystemHead integration={integration} capabilities={actions} usage={usage} />
+                <CapabilityScreen capabilities={actions} usage={usage} integration={integration} />
+              </>
+            )}
+          </>
         }
       />
     </PageContainer>

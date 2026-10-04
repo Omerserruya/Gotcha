@@ -12,7 +12,8 @@ const refresh = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
 /* Connecting stores real secrets: the action is a spy. */
 const connectIntegration = vi.hoisted(() => vi.fn());
-vi.mock('./connect-actions', () => ({ connectIntegration }));
+const startOAuth = vi.hoisted(() => vi.fn());
+vi.mock('./connect-actions', () => ({ connectIntegration, startOAuth }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'capabilities') =>
     createTranslator({ locale: 'en', messages: { capabilities: messages }, namespace }),
@@ -108,9 +109,16 @@ const inIntl = (node: ReactNode) =>
     </NextIntlClientProvider>,
   );
 
+const assign = vi.fn();
 beforeEach(() => {
   refresh.mockReset();
   connectIntegration.mockReset();
+  startOAuth.mockReset();
+  assign.mockReset();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: { ...window.location, assign },
+  });
 });
 
 describe('★★ authSchema, reduced to a form — scopes never leave the contract', () => {
@@ -226,19 +234,61 @@ describe('★★ 10 for a system that is not connected — its own screen', () =
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('★ OAuth is drawn, with why; a system with no form too', async () => {
-    const one = inIntl(await AvailableSystem({ integration: hubspot }));
-    expect(screen.queryByTestId('connect-form')).toBeNull();
-    const drawn = screen.getByTestId('connect-drawn');
-    expect(drawn).toHaveAttribute('aria-disabled', 'true');
-    expect(drawn.getAttribute('title')).toMatch(/HubSpot connects at its own site/);
-    one.unmount();
-    // OAuth with a field of its own is still OAuth: no form.
-    const two = inIntl(await AvailableSystem({ integration: salesforce }));
-    expect(screen.queryByTestId('connect-form')).toBeNull();
-    expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(
-      /Salesforce connects at its own site/,
+  it('★★ OAuth that comes back here is live: nothing opens without the click; then the provider', async () => {
+    inIntl(await AvailableSystem({ integration: hubspot }));
+    expect(screen.queryByTestId('connect-drawn')).toBeNull();
+    const start = screen.getByTestId('oauth-start');
+    expect(start).toHaveTextContent('Connect at HubSpot');
+    expect(startOAuth).not.toHaveBeenCalled();
+    startOAuth.mockResolvedValue({ ok: true, url: 'https://app.hubspot.com/oauth/authorize?x=1' });
+    await userEvent.click(start);
+    expect(startOAuth).toHaveBeenCalledWith('hubspot', undefined);
+    expect(assign).toHaveBeenCalledWith('https://app.hubspot.com/oauth/authorize?x=1');
+  });
+
+  it('Salesforce: its login host, sent with the start; a refusal is said, nothing opened', async () => {
+    startOAuth.mockResolvedValue({ ok: false, reason: 'not_configured' });
+    inIntl(await AvailableSystem({ integration: salesforce }));
+    await userEvent.selectOptions(
+      screen.getByTestId('oauth-login-host'),
+      'https://test.salesforce.com',
     );
+    await userEvent.click(screen.getByTestId('oauth-start'));
+    expect(startOAuth).toHaveBeenCalledWith('salesforce', 'https://test.salesforce.com');
+    expect(screen.getByTestId('oauth-problem')).toHaveTextContent(
+      "Salesforce is not set up on GOTCHA's side yet.",
+    );
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('★ OAuth whose way back is still the old app is drawn, with why; so is no form', async () => {
+    const stripe = integrationSchema.parse({
+      id: 'i-st',
+      slug: 'stripe',
+      name: 'Stripe',
+      authType: 'OAUTH2',
+      authSchema: { oauth: true, fields: [] },
+    });
+    const one = inIntl(await AvailableSystem({ integration: stripe }));
+    expect(screen.queryByTestId('oauth-start')).toBeNull();
+    expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(
+      /Stripe connects at its own site/,
+    );
+    one.unmount();
+    // A new Shopify store is installed from Shopify — not from here.
+    const shop = integrationSchema.parse({
+      id: 'i-sh',
+      slug: 'shopify',
+      name: 'Shopify',
+      authType: 'OAUTH2',
+      authSchema: {
+        oauth: true,
+        fields: [{ key: 'shop', type: 'text', label: 'Shop domain', required: true }],
+      },
+    });
+    const two = inIntl(await AvailableSystem({ integration: shop }));
+    expect(screen.queryByTestId('oauth-start')).toBeNull();
+    expect(screen.queryByTestId('connect-form')).toBeNull();
     two.unmount();
     inIntl(await AvailableSystem({ integration: custom }));
     expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(/set up with GOTCHA/);

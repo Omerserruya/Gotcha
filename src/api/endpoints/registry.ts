@@ -554,6 +554,20 @@ export const integrationEndpoints = {
    */
   connect: (slug: string) => endpoint('/api/integrations/{slug}/connect', { slug }),
   /**
+   * OAuth at the provider, returning to THIS app (backend 381a5d1b): the
+   * `redesign_studio` flow lands on `/v2/studio/capabilities?system=<slug>`
+   * with `connected=1` or `error=<code>`. Answers `{ url }` (not enveloped).
+   * Salesforce takes the login host; Shopify re-authorises the store already
+   * connected and refuses 409 without one.
+   */
+  oauthInit: (slug: string, loginHost?: string) =>
+    loginHost
+      ? endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio&loginHost={loginHost}', {
+          slug,
+          loginHost,
+        })
+      : endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio', { slug }),
+  /**
    * Screens 14b/14c — the use case, the parts, who CAN serve each and who
    * DOES. Never connects anything; connecting stays in the marketplace.
    *

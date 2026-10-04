@@ -397,3 +397,16 @@ export function sentenceCase(name: string, keep: string | null): string {
     })
     .join(' ');
 }
+
+/**
+ * An integration action's name as its catalogue writes it, sentence-cased —
+ * "Add VIP tag", not the humanised `shopify.add_vip_tag` ("Shopify add vip
+ * tag"). Matched on the slug after the provider; `null` when the catalogue
+ * has no such action or was not read.
+ */
+export function catalogName(toolName: string, integration: Integration | null): string | null {
+  if (!integration) return null;
+  const slug = toolSlugOf(toolName);
+  const tool = integration.catalogTools.find((c) => c.slug === slug);
+  return tool ? sentenceCase(tool.name, integration.name) : null;
+}

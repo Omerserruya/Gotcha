@@ -5,6 +5,7 @@ import {
   capabilitySchema,
   DESCRIBED_TOOLS,
   hasOwnWords,
+  humaniseCode,
   humaniseToolName,
   capabilityStance,
   groupByCategory,
@@ -171,6 +172,10 @@ describe("the platform's own descriptions never reach the screen", () => {
      */
     expect(humaniseToolName('shopify.cancel_order')).toBe('Shopify cancel order');
     expect(humaniseToolName('close_conversation')).toBe('Close conversation');
+    // The catalogue's acronyms survive a name it does not carry (10's fallback).
+    expect(humaniseCode('add_vip_tag')).toBe('Add VIP tag');
+    expect(humaniseCode('check_delivery_eta')).toBe('Check delivery ETA');
+    expect(humaniseCode('get_sku_stock')).toBe('Get SKU stock');
     expect(hasOwnWords('some_tool_added_next_quarter')).toBe(false);
   });
 });

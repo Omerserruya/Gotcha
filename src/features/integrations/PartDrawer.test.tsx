@@ -42,8 +42,18 @@ vi.mock('next-intl/server', () => ({
   getLocale: async () => 'en',
 }));
 vi.mock('@/features/capabilities/PermissionChoice', () => ({
-  PermissionChoice: ({ capability }: { capability: { toolName: string } }) => (
-    <span data-testid={`choice-${capability.toolName}`} />
+  PermissionChoice: ({
+    capability,
+    blocked,
+  }: {
+    capability: { toolName: string };
+    blocked?: string;
+  }) => (
+    <span
+      data-testid={`choice-${capability.toolName}`}
+      data-blocked={blocked ? 'yes' : undefined}
+      title={blocked}
+    />
   ),
 }));
 vi.mock('./ElectPart', () => ({ ElectPart: () => <div data-testid="elect" /> }));
@@ -195,7 +205,12 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
       'Hidden while Shopify needs fixing.',
     );
     expect(screen.getByTestId('part-actions')).toHaveTextContent('Refund an order');
-    expect(screen.getByTestId('part-action-off-shopify.process_refund')).toHaveAttribute(
+    // 10's control, disabled, with the reason as its title — no "—" in its place.
+    expect(screen.getByTestId('choice-shopify.process_refund')).toHaveAttribute(
+      'data-blocked',
+      'yes',
+    );
+    expect(screen.getByTestId('choice-shopify.process_refund')).toHaveAttribute(
       'title',
       'Hidden while Shopify needs fixing.',
     );

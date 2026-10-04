@@ -5,6 +5,8 @@ import { sentenceCase, type Integration } from '@/api/contracts/integrations';
 
 import { ConnectForm } from './ConnectForm';
 import { IntegrationLogo } from './IntegrationLogo';
+import { OAuthButton } from './OAuthButton';
+import { oauthHere } from './oauth';
 import styles from './Capabilities.module.css';
 
 const RISK = new Set(['LOW', 'MEDIUM', 'HIGH']);
@@ -15,8 +17,9 @@ const RISK = new Set(['LOW', 'MEDIUM', 'HIGH']);
  *
  * How it connects is the catalogue's to say:
  *   · fields  — a credentials form, live.
- *   · OAuth   — at the provider, whose way back (`postOAuthRedirect`) leads to
- *               the previous app's routes, never this one; drawn, with why.
+ *   · OAuth   — at the provider. Live where the way back comes here
+ *               (backend 381a5d1b: HubSpot, Salesforce, Monday); drawn, with
+ *               why, where it still leads to the previous app.
  *   · neither — `custom_api`: set up with GOTCHA, not by a form; drawn.
  */
 export async function AvailableSystem({ integration }: { readonly integration: Integration }) {
@@ -54,6 +57,8 @@ export async function AvailableSystem({ integration }: { readonly integration: I
         </h2>
         {!oauth && fields.length > 0 ? (
           <ConnectForm slug={integration.slug} name={integration.name} fields={fields} />
+        ) : oauth && oauthHere(integration.slug, false) ? (
+          <OAuthButton slug={integration.slug} name={integration.name} mode="connect" />
         ) : (
           <span
             className={styles.connectButton}

@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import { capabilitySchema, type Capability } from '@/api/contracts/capabilities';
 import messages from '@/i18n/messages/en/capabilities.json';
 
+import { setToolPermission } from './permission-actions';
 import { PermissionChoice } from './PermissionChoice';
 
 /**
@@ -119,5 +121,26 @@ describe('★★ a stored state the ceiling would now forbid', () => {
     show(tool({ toolName: 'c', enabled: false }));
     expect(screen.getByTestId('choice-c-never')).toHaveAttribute('data-current', 'yes');
     expect(screen.getByTestId('choice-c-ask_me')).toHaveAttribute('data-current', 'no');
+  });
+});
+
+describe('★★ blocked — the platform decides, so nothing can be chosen', () => {
+  it('all three disabled with the reason, the stored one marked, and no click writes', async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+        <PermissionChoice capability={tool()} blocked="Reconnect Shopify first." />
+      </NextIntlClientProvider>,
+    );
+    for (const choice of ['do_it', 'ask_me', 'never'] as const) {
+      const button = screen.getByTestId(`choice-shopify.get_order-${choice}`);
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('title', 'Reconnect Shopify first.');
+      await userEvent.click(button);
+    }
+    expect(screen.getByTestId('choice-shopify.get_order-ask_me')).toHaveAttribute(
+      'data-current',
+      'yes',
+    );
+    expect(setToolPermission).not.toHaveBeenCalled();
   });
 });

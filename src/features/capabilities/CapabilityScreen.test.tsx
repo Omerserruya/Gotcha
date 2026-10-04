@@ -3,6 +3,7 @@ import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Capability, ToolUsage } from '@/api/contracts/capabilities';
+import { integrationSchema } from '@/api/contracts/integrations';
 import messages from '@/i18n/messages/en/capabilities.json';
 
 import { CapabilityScreen } from './CapabilityScreen';
@@ -120,25 +121,35 @@ describe('the uniform facts are stated only when they are uniform', () => {
 });
 
 describe('★★ the fourth state, on screen', () => {
-  it('★★ a blocked row says what to repair instead of reading as "never"', async () => {
+  it('★★ a blocked row keeps its control — disabled, its state marked, the repair in a title', async () => {
     /*
-     * The difference the fourth state buys. "Never" looks like a decision
-     * somebody made; "reconnect it" is a repair somebody can perform. A
-     * three-state screen has to render one as the other.
+     * 06's ruling (states, not explanations): the earlier red sentence on
+     * every row is gone. The three segments stay, the stored one marked, and
+     * none can be pressed while the platform decides.
      */
     await renderScreen([
-      capability({ toolName: 'shopify.process_refund', integrationConnected: false }),
+      capability({
+        toolName: 'shopify.process_refund',
+        integrationConnected: false,
+        enabled: true,
+        requiresApproval: true,
+      }),
     ]);
-    const blocked = screen.getByTestId('blocked-shopify.process_refund');
-    expect(blocked).toHaveAttribute('data-reason', 'integration_disconnected');
-    expect(blocked).toHaveTextContent(/reconnect it/i);
-    // And the stance control is gone, because it is not the admin's to press.
-    expect(screen.queryByTestId('stance-shopify.process_refund')).toBeNull();
+    const control = screen.getByTestId('choice-shopify.process_refund');
+    expect(control).toHaveAttribute('data-blocked', 'yes');
+    for (const choice of ['do_it', 'ask_me', 'never']) {
+      const button = screen.getByTestId(`choice-shopify.process_refund-${choice}`);
+      expect(button).toBeDisabled();
+      expect(button.getAttribute('title')).toMatch(/reconnect it/i);
+    }
+    expect(screen.getByTestId('choice-shopify.process_refund-ask_me')).toHaveAttribute(
+      'data-current',
+      'yes',
+    );
+    expect(screen.getByTestId('capability-screen')).not.toHaveTextContent(/reconnect it/i);
   });
 
-  it('★★ names the missing scopes rather than saying "permissions are missing"', async () => {
-    // "Permissions are missing" sends somebody hunting for a setting. The
-    // list tells them which to grant — the same rule as 04d's panel.
+  it('★★ names the missing scopes — in the title, not beside the row', async () => {
     await renderScreen([
       capability({
         toolName: 'shopify.refund',
@@ -146,9 +157,59 @@ describe('★★ the fourth state, on screen', () => {
         missingScopes: ['write_orders', 'read_returns'],
       }),
     ]);
-    const blocked = screen.getByTestId('blocked-shopify.refund');
-    expect(blocked).toHaveTextContent(/write_orders/);
-    expect(blocked).toHaveTextContent(/read_returns/);
+    const title = screen.getByTestId('choice-shopify.refund-never').getAttribute('title');
+    expect(title).toMatch(/write_orders/);
+    expect(title).toMatch(/read_returns/);
+  });
+
+  it('★★ a system that is down is said ONCE, above its rows; names from its catalogue; no "meta" head', async () => {
+    const shopify = integrationSchema.parse({
+      id: 'i1',
+      slug: 'shopify',
+      name: 'Shopify',
+      catalogTools: [
+        { id: 't1', slug: 'add_vip_tag', name: 'Add VIP Tag' },
+        { id: 't2', slug: 'check_delivery_eta', name: 'Check Delivery ETA' },
+      ],
+    });
+    const row = (slug: string) =>
+      capability({
+        toolName: `shopify.${slug}`,
+        integration: 'shopify',
+        kind: 'integration',
+        category: 'meta',
+        integrationConnected: false,
+      });
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+        {await CapabilityScreen({
+          capabilities: [
+            row('add_vip_tag'),
+            row('check_delivery_eta'),
+            row('add_customer_to_segment'),
+          ],
+          usage: null,
+          integration: shopify,
+        })}
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getAllByTestId('system-down')).toHaveLength(1);
+    // Shopify re-authorises from here (backend 381a5d1b): the repair beside the line.
+    expect(screen.getByTestId('oauth-start')).toHaveTextContent('Reconnect Shopify');
+    expect(screen.getByTestId('system-down')).toHaveTextContent(
+      'Hidden from GOTCHA while Shopify needs fixing — reconnect it in Integrations.',
+    );
+    expect(screen.getByTestId('capability-shopify.add_vip_tag')).toHaveTextContent(/^Add VIP tag/);
+    expect(screen.getByTestId('capability-shopify.check_delivery_eta')).toHaveTextContent(
+      /^Check delivery ETA/,
+    );
+    // Not in the catalogue: the slug, without the provider.
+    expect(screen.getByTestId('capability-shopify.add_customer_to_segment')).toHaveTextContent(
+      /^Add customer to segment/,
+    );
+    expect(screen.getByTestId('capability-screen')).not.toHaveTextContent(
+      /WhatsApp and Instagram/i,
+    );
   });
 
   it('★★ an unknown provider keeps its control, and is not greyed out', async () => {
@@ -321,5 +382,28 @@ describe('★ the catalogue’s risk, on integration rows (backend 3cee674f)', (
     expect(screen.getByTestId('risk-shopify.cancel_order')).toHaveTextContent('High risk');
     expect(screen.getByTestId('risk-shopify.cancel_order')).toHaveAttribute('data-risk', 'HIGH');
     expect(screen.queryByTestId('risk-send_message')).toBeNull();
+  });
+});
+
+describe('★ Reconnect only where the way back comes here', () => {
+  it('a credentials system that is down says so, with no OAuth button', async () => {
+    const woo = integrationSchema.parse({ id: 'i2', slug: 'woocommerce', name: 'WooCommerce' });
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+        {await CapabilityScreen({
+          capabilities: [
+            capability({
+              toolName: 'woocommerce.get_order',
+              integration: 'woocommerce',
+              integrationConnected: false,
+            }),
+          ],
+          usage: null,
+          integration: woo,
+        })}
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('system-down')).toBeInTheDocument();
+    expect(screen.queryByTestId('oauth-start')).toBeNull();
   });
 });

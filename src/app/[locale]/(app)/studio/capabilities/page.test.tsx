@@ -5,6 +5,7 @@ import { capabilitySchema } from '@/api/contracts/capabilities';
 import { integrationSchema } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
+import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
 import { SystemHead } from '@/features/capabilities/SystemHead';
 
 const loadCapabilities = vi.hoisted(() => vi.fn());
@@ -74,6 +75,10 @@ describe('★★ 10 — every integration has its own screen', () => {
     expect(
       find<{ capabilities: { toolName: string }[] }>(tree, CapabilityScreen)?.capabilities,
     ).toHaveLength(1);
+    // Its catalogue names its rows.
+    expect(
+      find<{ integration: { slug: string } | null }>(tree, CapabilityScreen)?.integration?.slug,
+    ).toBe('shopify');
     expect(find(tree, SystemHead)).not.toBeNull();
   });
 
@@ -84,5 +89,23 @@ describe('★★ 10 — every integration has its own screen', () => {
       integrations: [shopify, woo],
     });
     expect(find(await page({ system: 'woocommerce' }), AvailableSystem)).not.toBeNull();
+  });
+});
+
+describe('★★ the way back from a provider', () => {
+  it.each([
+    [{ system: 'shopify', connected: '1' }, 'connected'],
+    [{ system: 'shopify', error: 'denied' }, 'denied'],
+    [{ system: 'shopify', error: 'made_up' }, 'other'],
+  ])('%o → said as %s, above the system', async (params, outcome) => {
+    const tree = await page(params);
+    expect(find<{ outcome: string; slug: string }>(tree, OAuthLanding)).toMatchObject({
+      outcome,
+      slug: 'shopify',
+    });
+  });
+
+  it('no return: nothing said', async () => {
+    expect(find(await page({ system: 'shopify' }), OAuthLanding)).toBeNull();
   });
 });

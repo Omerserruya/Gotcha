@@ -5,6 +5,7 @@ import {
   capabilityStance,
   groupByCategory,
   hasOwnWords,
+  humaniseCode,
   humaniseToolName,
   isTheAdminsChoice,
   isUniform,
@@ -14,7 +15,10 @@ import {
   type Capability,
   type ToolUsage,
 } from '@/api/contracts/capabilities';
+import { catalogName, toolSlugOf, type Integration } from '@/api/contracts/integrations';
 
+import { OAuthButton } from './OAuthButton';
+import { oauthHere } from './oauth';
 import { PermissionChoice } from './PermissionChoice';
 import styles from './Capabilities.module.css';
 
@@ -36,8 +40,11 @@ import styles from './Capabilities.module.css';
 export async function CapabilityScreen({
   capabilities,
   usage,
+  integration = null,
 }: {
   readonly capabilities: readonly Capability[];
+  /** The system these belong to — its catalogue names them. `null` for the built-in ones. */
+  readonly integration?: Integration | null;
   /** `null` when the usage read failed or was not permitted. Never zeroes. */
   readonly usage: readonly ToolUsage[] | null;
 }) {
@@ -56,15 +63,33 @@ export async function CapabilityScreen({
 
   return (
     <div className={styles.screen} data-testid="capability-screen">
+      {integration &&
+      capabilities.some((c) => resolveAvailability(c).reason === 'integration_disconnected') ? (
+        <div className={styles.downRow}>
+          <p className={styles.down} data-testid="system-down">
+            {t('systemDown', { name: integration.name })}
+          </p>
+          {oauthHere(integration.slug, true) ? (
+            <OAuthButton slug={integration.slug} name={integration.name} mode="reconnect" />
+          ) : null}
+        </div>
+      ) : null}
       {groups.map((group) => (
         <section
           key={group.category}
           className={styles.group}
           data-testid={`group-${group.category}`}
         >
-          <h2 className={styles.groupHeading}>
-            {t(`category.${group.category}` as 'category.messaging')}
-          </h2>
+          {/*
+            An integration's rows all arrive as category `meta` — the route
+            hardcodes it — so a head over them would call Shopify's orders
+            "WhatsApp and Instagram". They go under no head.
+          */}
+          {integration === null ? (
+            <h2 className={styles.groupHeading}>
+              {t(`category.${group.category}` as 'category.messaging')}
+            </h2>
+          ) : null}
 
           <ul className={styles.capabilities}>
             {group.capabilities.map((capability) => {
@@ -91,9 +116,12 @@ export async function CapabilityScreen({
                     back to its own name rather than to that prose.
                   */}
                   <span className={styles.what}>
-                    {hasOwnWords(capability.toolName)
-                      ? t(`tool.${capability.toolName}` as 'tool.send_message')
-                      : humaniseToolName(capability.toolName)}
+                    {catalogName(capability.toolName, integration) ??
+                      (hasOwnWords(capability.toolName)
+                        ? t(`tool.${capability.toolName}` as 'tool.send_message')
+                        : integration
+                          ? humaniseCode(toolSlugOf(capability.toolName) ?? capability.toolName)
+                          : humaniseToolName(capability.toolName))}
                     {/* The catalogue's risk level (backend 3cee674f), on integration rows. */}
                     {capability.riskLevel ? (
                       <span
@@ -167,27 +195,26 @@ export async function CapabilityScreen({
                   })()}
                   {(() => {
                     const availability = resolveAvailability(capability);
-                    return isTheAdminsChoice(availability) ? (
-                      <PermissionChoice capability={capability} />
-                    ) : (
-                      <span
-                        className={styles.blocked}
-                        data-reason={availability.reason}
-                        data-testid={`blocked-${capability.toolName}`}
-                      >
-                        {availability.reason === 'missing_scope' &&
-                        availability.missingScopes.length > 0
-                          ? /*
-                             ★ THE SCOPES BY NAME. "Permissions are missing"
-                             sends somebody hunting; the list tells them what
-                             to grant — the same rule as 04d's missing_scopes
-                             panel.
-                            */
-                            t('blocked.missingScopesNamed', {
-                              scopes: availability.missingScopes.join(', '),
-                            })
-                          : t(`blocked.${availability.reason}` as 'blocked.missing_scope')}
-                      </span>
+                    /*
+                      ★ The control, always — disabled with its reason when
+                      the platform decides, its stored state still marked
+                      (06's ruling: states, not explanations). The connection
+                      itself is said once, above the list.
+                    */
+                    return (
+                      <PermissionChoice
+                        capability={capability}
+                        blocked={
+                          isTheAdminsChoice(availability)
+                            ? undefined
+                            : availability.reason === 'missing_scope' &&
+                                availability.missingScopes.length > 0
+                              ? t('blocked.missingScopesNamed', {
+                                  scopes: availability.missingScopes.join(', '),
+                                })
+                              : t(`blocked.${availability.reason}` as 'blocked.missing_scope')
+                        }
+                      />
                     );
                   })()}
                 </li>

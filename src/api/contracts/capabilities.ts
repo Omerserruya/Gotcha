@@ -244,14 +244,17 @@ const ACRONYMS = new Set([
   'bff',
   'crm',
   'csv',
+  'eta',
   'faq',
   'id',
   'oidc',
   'pdf',
   'sla',
+  'sku',
   'sms',
   'url',
   'vat',
+  'vip',
 ]);
 
 /**

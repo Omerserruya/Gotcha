@@ -10,6 +10,7 @@ import { integrationEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { credentialsFor } from './connect-form';
+import { OAUTH_HERE, SALESFORCE_HOSTS } from './oauth';
 
 export type ConnectResult =
   | { readonly ok: true }
@@ -62,6 +63,53 @@ export async function connectIntegration(
       if (cause.status === 400) return { ok: false, reason: 'missing' };
       if (cause.status === 402) return { ok: false, reason: 'entitlement' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type OAuthStart =
+  | { readonly ok: true; readonly url: string }
+  | {
+      readonly ok: false;
+      /**
+       * `not_here` — this system does not come back here; `not_configured`
+       * — the provider's app is not set up (500 *_not_configured);
+       * `needs_store` — Shopify with no store connected yet (409);
+       * `forbidden` · `failed`.
+       */
+      readonly reason: 'not_here' | 'not_configured' | 'needs_store' | 'forbidden' | 'failed';
+    };
+
+/**
+ * 10's Connect for an OAuth system (Omer, 2026-10-04; backend 381a5d1b):
+ * `GET /api/connectors/:slug/oauth/init?flow=redesign_studio` — server-side,
+ * with the session — then the browser goes to the provider's page. Nothing
+ * is connected until the person approves there; the way back lands on this
+ * system's screen with `connected=1` or `error=<code>`.
+ */
+export async function startOAuth(slug: string, loginHost?: string): Promise<OAuthStart> {
+  if (!OAUTH_HERE[slug]) return { ok: false, reason: 'not_here' };
+  if (loginHost !== undefined && (slug !== 'salesforce' || !SALESFORCE_HOSTS.includes(loginHost))) {
+    return { ok: false, reason: 'failed' };
+  }
+  try {
+    const { url } = await serverApi().get({
+      endpoint: integrationEndpoints.oauthInit(slug, loginHost),
+      payload: z.object({ url: z.string().url() }),
+      raw: true,
+    });
+    // The provider's page, and only over https.
+    if (new URL(url).protocol !== 'https:') return { ok: false, reason: 'failed' };
+    return { ok: true, url };
+  } catch (cause) {
+    logger.warn('capabilities.oauth_start_failed', { slug, cause });
+    if (isApiError(cause)) {
+      if (cause.status === 409) return { ok: false, reason: 'needs_store' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 500 && /not_configured/.test(cause.developerMessage ?? '')) {
+        return { ok: false, reason: 'not_configured' };
+      }
     }
     return { ok: false, reason: 'failed' };
   }
