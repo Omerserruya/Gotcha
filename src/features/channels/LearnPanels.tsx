@@ -1,4 +1,4 @@
-import { RotateCw } from 'lucide-react';
+import { Bell, RotateCw } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
@@ -156,7 +156,7 @@ export async function ImportPanel({
   return (
     <>
       <div className={drawer.drawerBody} data-testid="import-panel" data-stage={status.stage}>
-        <ol className={styles.stepper} aria-label={t('learn.steps')}>
+        <ol className={`${styles.stepper} ${styles.stepperRuled}`} aria-label={t('learn.steps')}>
           {(['where', 'meta', 'number'] as const).map((s) => (
             <li key={s} className={styles.stepperStep} data-state="done">
               <span className={styles.stepperMark} aria-hidden="true">
@@ -260,6 +260,7 @@ export async function ImportPanel({
         {isRunning(status) ? (
           // 02's foot sentence. No estimate is reported, so no "N minutes left".
           <p className={styles.learnFoot} data-testid="import-foot">
+            <Bell size={14} aria-hidden="true" />
             {t('learn.closeAnytime')}
           </p>
         ) : null}
@@ -525,7 +526,7 @@ export async function ReportPanel({
 
       <footer className={drawer.drawerFoot}>
         <span
-          className={styles.learnPrimary}
+          className={`${styles.learnPrimary} ${styles.footStart}`}
           aria-disabled="true"
           title={`${t('review.bulkSafe')} ${notLive}`}
           data-testid="report-bulk"
@@ -540,12 +541,12 @@ export async function ReportPanel({
           {t('learn.later')}
         </Link>
         <span
-          className={drawer.drawerFootNote}
+          className={`${drawer.drawerFootNote} ${styles.rerun}`}
           aria-disabled="true"
           title={`${t('review.rerunSafe')} ${notLive}`}
           data-testid="report-rerun"
         >
-          <RotateCw size={13} aria-hidden="true" className={styles.rerunIcon} />
+          <RotateCw size={13} aria-hidden="true" />
           {t('learn.rerun')}
         </span>
       </footer>

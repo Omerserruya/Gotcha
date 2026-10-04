@@ -29,6 +29,7 @@ export function TwilioStep({ onClose }: { readonly onClose: () => void }) {
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [done, setDone] = useState<ActivationResult | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [showToken, setShowToken] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const sidBad = form.accountSid.trim() !== '' && accountSidProblem(form.accountSid);
@@ -114,6 +115,7 @@ export function TwilioStep({ onClose }: { readonly onClose: () => void }) {
     setForm((f) => ({ ...f, [key]: e.target.value }));
   return (
     <form
+      className={styles.connectStack}
       data-testid="twilio-form"
       onSubmit={(e) => {
         e.preventDefault();
@@ -131,6 +133,15 @@ export function TwilioStep({ onClose }: { readonly onClose: () => void }) {
         });
       }}
     >
+      <a
+        className={styles.connectHelp}
+        href="https://console.twilio.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid="twilio-help"
+      >
+        {t('help')}
+      </a>
       <Input
         label={t('friendlyName')}
         value={form.friendlyName}
@@ -150,7 +161,18 @@ export function TwilioStep({ onClose }: { readonly onClose: () => void }) {
       />
       <Input
         label={t('authToken')}
-        type="password"
+        type={showToken ? 'text' : 'password'}
+        trailing={
+          <button
+            type="button"
+            className={styles.connectReveal}
+            aria-pressed={showToken}
+            data-testid="twilio-token-show"
+            onClick={() => setShowToken(!showToken)}
+          >
+            {showToken ? t('hide') : t('show')}
+          </button>
+        }
         value={form.authToken}
         autoComplete="off"
         onChange={set('authToken')}

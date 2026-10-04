@@ -91,5 +91,7 @@ describe('★ 02’s pills: the answer to use leads, black; the rest bordered', 
     expect(screen.getByTestId('use-c1-0')).toHaveTextContent(/^Use 14 days$/);
     expect(screen.getByTestId('use-c1-1')).not.toHaveAttribute('data-tone');
     expect(screen.getByTestId('see-chats-c1')).toHaveAttribute('aria-disabled', 'true');
+    // 02: a conflict is Use, Use, Skip — no Edit.
+    expect(screen.queryByTestId('edit-open-c1')).toBeNull();
   });
 });

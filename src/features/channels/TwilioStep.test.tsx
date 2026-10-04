@@ -90,3 +90,20 @@ describe('★★ Phone calls with your own Twilio — inside the Connect panel',
     expect(screen.getByTestId('twilio-activate')).toBeDisabled();
   });
 });
+
+describe('★ the token is hidden until asked; the console is one link away', () => {
+  it('Show reveals it in place, Hide hides it; the help link opens Twilio', async () => {
+    show();
+    const token = screen.getByTestId('twilio-token');
+    expect(token).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByTestId('twilio-token-show'));
+    expect(token).toHaveAttribute('type', 'text');
+    await userEvent.click(screen.getByTestId('twilio-token-show'));
+    expect(token).toHaveAttribute('type', 'password');
+    expect(screen.getByTestId('twilio-help')).toHaveAttribute(
+      'href',
+      'https://console.twilio.com/',
+    );
+    expect(screen.getByTestId('twilio-help')).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+});

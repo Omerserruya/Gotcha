@@ -130,15 +130,18 @@ export function SuggestionActions({
                 {t('review.approve')}
               </button>
             )}
-            <button
-              type="button"
-              className={styles.reportAction}
-              disabled={isPending}
-              data-testid={`edit-open-${id}`}
-              onClick={() => setEditing(conflict ? (variants[0] ?? answer) : answer)}
-            >
-              {t('learn.edit')}
-            </button>
+            {/* 02: a conflict is decided between its answers — Use, Use, Skip; no Edit. */}
+            {conflict ? null : (
+              <button
+                type="button"
+                className={styles.reportAction}
+                disabled={isPending}
+                data-testid={`edit-open-${id}`}
+                onClick={() => setEditing(answer)}
+              >
+                {t('learn.edit')}
+              </button>
+            )}
             <button
               type="button"
               className={styles.reportAction}

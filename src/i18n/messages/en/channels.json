@@ -411,7 +411,10 @@
       "not_offered": "Phone calls aren't available for this workspace yet.",
       "forbidden": "Only an admin can connect phone calls.",
       "failed": "That didn't connect — try again."
-    }
+    },
+    "help": "Where to find these in the Twilio console → Account → API keys & tokens",
+    "show": "Show",
+    "hide": "Hide"
   },
   "embed": {
     "lead": "Paste this before the closing </body> tag on every page where the chat should appear.",

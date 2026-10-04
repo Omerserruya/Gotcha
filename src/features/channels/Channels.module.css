@@ -1104,10 +1104,33 @@
     gap: var(--space-8);
   }
 
+  /* 02: the sentence sits at the panel's foot, above the buttons, with a bell. */
   .learnFoot {
-    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    margin: auto 0 0;
     font-size: var(--font-size-label);
     color: var(--text-subtle);
+  }
+
+  /* 02: a full-width rule under 13e's stepper, as under the head. */
+  .stepperRuled {
+    margin-inline: calc(-1 * var(--space-26));
+    padding-inline: var(--space-26);
+    padding-block-end: 18px;
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  /* 13f's foot: Add starts the row; Run again keeps its icon inline. */
+  .footStart {
+    margin-inline-start: 0;
+  }
+
+  .rerun {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
   /* ── 13f ──────────────────────────────────────────────────────────────── */
@@ -1648,11 +1671,6 @@
     cursor: not-allowed;
   }
 
-  .rerunIcon {
-    margin-inline-end: 6px;
-    vertical-align: -2px;
-  }
-
   .reportEdit {
     margin-block-start: var(--space-8);
   }
@@ -1701,5 +1719,27 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     direction: ltr;
+  }
+
+  /* A connect form's own stack: the panel's 12px between its fields and buttons. */
+  .connectStack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin: 0;
+  }
+
+  .connectHelp {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .connectReveal {
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    cursor: pointer;
   }
 }
