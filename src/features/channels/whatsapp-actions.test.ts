@@ -16,13 +16,18 @@ describe('★★ inspect at the wire — the popup’s assets ride along, and on
   const body = () => (post.mock.calls.at(-1)![0] as { body: unknown }).body;
 
   it('code, business and WABA ids', async () => {
-    await inspectNumbers('abc', { businessPortfolioId: 'b1', wabaIds: ['w1'] });
-    expect(body()).toStrictEqual({ code: 'abc', businessPortfolioId: 'b1', wabaIds: ['w1'] });
+    await inspectNumbers('abc', { businessPortfolioId: 'b1', wabaIds: ['w1'] }, 'business-app');
+    expect(body()).toStrictEqual({
+      code: 'abc',
+      path: 'business-app',
+      businessPortfolioId: 'b1',
+      wabaIds: ['w1'],
+    });
   });
 
   it('none told: the code alone', async () => {
     await inspectNumbers('abc', { wabaIds: [] });
-    expect(body()).toStrictEqual({ code: 'abc' });
+    expect(body()).toStrictEqual({ code: 'abc', path: 'new' });
   });
 });
 

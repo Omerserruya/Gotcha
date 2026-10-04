@@ -28,21 +28,28 @@ const STEPS = ['where', 'meta', 'number', 'learn'] as const;
  *   3 Number         — exactly one number per pass, its PIN if it needs one
  *   4 Learn          — 13e, the import, once Meta sends the history
  *
- * Only "Continue with Meta" opens Meta. The path choice is drawn and kept:
- * the server owns the launch parameters (`featureType` included), and until
- * it takes the choice, what it returns is what is sent.
+ * Only "Continue with Meta" opens Meta, with the server's launch for the
+ * choice made here (backend 294adc0c) — fetched up front for both, since the
+ * popup must open inside the click — and inspect follows that choice's path.
  */
 export function ConnectWhatsApp({
-  launch,
+  launches,
   closeHref,
 }: {
-  readonly launch: EmbeddedSignupLaunch | null;
+  /** The server's launch per choice (backend 294adc0c). */
+  readonly launches: {
+    readonly coexistence: EmbeddedSignupLaunch | null;
+    readonly newNumber: EmbeddedSignupLaunch | null;
+  };
   readonly closeHref: string;
 }) {
   const t = useTranslations('channels.whatsapp.wizard');
   const router = useRouter();
-  const meta = useMetaSignup(launch);
   const [path, setPath] = useState<Path>('business_app');
+  const launch = path === 'business_app' ? launches.coexistence : launches.newNumber;
+  const meta = useMetaSignup(
+    [launches.coexistence, launches.newNumber].find((l) => l?.configured)?.appId ?? '',
+  );
   const [chosen, setChosen] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [failure, setFailure] = useState<string | null>(null);
@@ -222,7 +229,7 @@ export function ConnectWhatsApp({
                     : undefined
               }
               data-testid="continue-meta"
-              onClick={meta.start}
+              onClick={() => meta.start(launch)}
             >
               {t('where.continue')}
               <ExternalLink size={13} aria-hidden="true" />

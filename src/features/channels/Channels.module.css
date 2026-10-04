@@ -1305,6 +1305,11 @@
     color: var(--text-subtle);
   }
 
+  /* The last step hugs the end, so the four fill the row and the lines stretch. */
+  .step:last-child {
+    flex: none;
+  }
+
   .step:not(:last-child)::after {
     content: '';
     flex: 1;

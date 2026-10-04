@@ -118,7 +118,7 @@ export default async function Page({
           width={600}
           testId="drawer-connect"
         >
-          <ConnectWhatsApp launch={whatsapp[2]} closeHref="/settings/channels?panel=whatsapp" />
+          <ConnectWhatsApp launches={whatsapp[2]} closeHref="/settings/channels?panel=whatsapp" />
         </Drawer>
       ) : view === 'progress' && learn ? (
         <Drawer
@@ -157,7 +157,10 @@ export default async function Page({
         >
           <WhatsAppNumbers
             numbers={whatsapp[0]}
-            connectable={whatsapp[2]?.configured === true}
+            connectable={
+              whatsapp[2].coexistence?.configured === true ||
+              whatsapp[2].newNumber?.configured === true
+            }
             responseModes={Object.fromEntries(
               (channels ?? [])
                 .filter((channel) => channel.channel === 'WHATSAPP')

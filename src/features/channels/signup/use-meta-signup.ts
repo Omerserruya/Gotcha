@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { EmbeddedSignupLaunch, InspectResponse } from '@/api/contracts/whatsapp-connect';
+import { logger } from '@/observability/logger';
 
 import { inspectNumbers } from '../whatsapp-actions';
 import { useFacebookSdk } from './facebook-sdk';
 import {
   classifySignupAbort,
+  describeSignupResponse,
   interpretSignupMessage,
   isMetaOrigin,
   mergeSignupAssets,
@@ -30,8 +32,8 @@ export type SignupProblem = 'cancelled' | 'noCode' | 'inspectFailed' | 'unavaila
  * in a ref: the message lands after the click, and a state value captured by
  * the login callback would be empty.
  */
-export function useMetaSignup(launch: EmbeddedSignupLaunch | null) {
-  const sdk = useFacebookSdk(launch?.configured ? launch.appId : '');
+export function useMetaSignup(appId: string) {
+  const sdk = useFacebookSdk(appId);
   const assets = useRef<SignupAssets>({});
   const [stage, setStage] = useState<'idle' | 'authorizing' | 'reading'>('idle');
   const [problem, setProblem] = useState<SignupProblem | null>(null);
@@ -52,7 +54,8 @@ export function useMetaSignup(launch: EmbeddedSignupLaunch | null) {
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  function start() {
+  /** Synchronous to the click: Meta's window is a popup, and a popup needs the gesture. */
+  function start(launch: EmbeddedSignupLaunch | null) {
     const FB = window.FB;
     if (!FB || !launch?.configured) {
       setProblem('unavailable');
@@ -67,14 +70,17 @@ export function useMetaSignup(launch: EmbeddedSignupLaunch | null) {
         (response: unknown) => {
           const code = readAuthCode(response);
           if (!code) {
-            if (classifySignupAbort(response) === 'NO_CODE') setProblem('noCode');
+            // Said either way, and logged: a window closed without finishing
+            // must never look like a sheet that did nothing.
+            logger.warn('whatsapp.signup_no_code', { response: describeSignupResponse(response) });
+            setProblem(classifySignupAbort(response) === 'NO_CODE' ? 'noCode' : 'cancelled');
             setStage('idle');
             return;
           }
           setStage('reading');
           // The assets message can trail the callback by a beat.
           window.setTimeout(() => {
-            void inspectNumbers(code, assets.current).then((result) => {
+            void inspectNumbers(code, assets.current, launch.inspectPath).then((result) => {
               setStage('idle');
               if (result) setInspection(result);
               else setProblem('inspectFailed');

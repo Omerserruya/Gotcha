@@ -516,7 +516,10 @@ export const channelEndpoints = {
    * single source (app id, config id, response type, extras); a guessed
    * config id is what once produced the wrong signup experience.
    */
-  config: () => endpoint('/api/channels/config'),
+  config: (mode?: 'coexistence' | 'new_number') =>
+    mode
+      ? endpoint('/api/channels/config?mode={mode}', { mode })
+      : endpoint('/api/channels/config'),
   /** ★ WRITES at Meta — subscribeApp + register. Never fired automatically. */
   whatsappConnect: () => endpoint('/api/channels/whatsapp/connect'),
   /** Deliberate re-read from Meta. The list is built from stored state. */

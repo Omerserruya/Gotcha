@@ -145,6 +145,12 @@ export const embeddedSignupLaunchSchema = z.object({
   overrideDefaultResponseType: z.boolean().default(true),
   extras: z.record(z.string(), z.unknown()).default({}),
   configured: z.boolean().default(false),
+  /**
+   * Backend 294adc0c: what `POST /whatsapp/inspect` takes as `path` for this
+   * choice. On Embedded Signup v4 the choice itself happens in Meta's dialog;
+   * this steers the inspect.
+   */
+  inspectPath: z.enum(['business-app', 'new']).catch('new').default('new'),
 });
 export type EmbeddedSignupLaunch = z.infer<typeof embeddedSignupLaunchSchema>;
 

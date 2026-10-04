@@ -43,7 +43,7 @@ const { history } = vi.hoisted(() => ({
 vi.mock('@/features/channels/load-whatsapp', () => ({
   loadWhatsAppNumbers: async () => DEV_NUMBERS,
   loadHistoryImport: async () => history.value,
-  loadSignupLaunch: async () => null,
+  loadSignupLaunch: async () => ({ coexistence: null, newNumber: null }),
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>

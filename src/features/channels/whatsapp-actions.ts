@@ -61,12 +61,15 @@ export async function inspectNumbers(
   code: string,
   /** What the popup told us (business portfolio, WABA ids) — the server uses them. */
   assets: { readonly businessPortfolioId?: string; readonly wabaIds?: readonly string[] } = {},
+  /** The route's `path` (default `new`): `business-app` for a number on the Business app. */
+  path: 'business-app' | 'new' = 'new',
 ): Promise<InspectResponse | null> {
   try {
     return await serverApi().post({
       endpoint: channelEndpoints.whatsappInspect(),
       body: {
         code,
+        path,
         ...(assets.businessPortfolioId ? { businessPortfolioId: assets.businessPortfolioId } : {}),
         ...(assets.wabaIds?.length ? { wabaIds: [...assets.wabaIds] } : {}),
       },

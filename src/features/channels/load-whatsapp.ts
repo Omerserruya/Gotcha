@@ -16,15 +16,24 @@ import { logger } from '@/observability/logger';
  * about the workspace; a failed read is a statement about us. Conflating them
  * would tell somebody whose numbers are working that they have none.
  */
-/** 13c's launch parameters (`/api/channels/config`); `null` when unread. */
-export async function loadSignupLaunch(): Promise<EmbeddedSignupLaunch | null> {
-  return serverApi()
-    .get({ endpoint: channelEndpoints.config(), payload: channelsConfigSchema })
-    .then((config) => config.embeddedSignup)
-    .catch((cause: unknown) => {
-      logger.warn('whatsapp.signup_config_failed', { cause });
-      return null;
-    });
+/** 13c's launch parameters per choice (backend 294adc0c); each `null` when unread. */
+export interface SignupLaunches {
+  readonly coexistence: EmbeddedSignupLaunch | null;
+  readonly newNumber: EmbeddedSignupLaunch | null;
+}
+
+export async function loadSignupLaunch(): Promise<SignupLaunches> {
+  // Both, up front: FB.login must run inside the click, so nothing may be awaited then.
+  const read = (mode: 'coexistence' | 'new_number') =>
+    serverApi()
+      .get({ endpoint: channelEndpoints.config(mode), payload: channelsConfigSchema })
+      .then((config) => config.embeddedSignup)
+      .catch((cause: unknown) => {
+        logger.warn('whatsapp.signup_config_failed', { mode, cause });
+        return null;
+      });
+  const [coexistence, newNumber] = await Promise.all([read('coexistence'), read('new_number')]);
+  return { coexistence, newNumber };
 }
 
 export async function loadWhatsAppNumbers(): Promise<NumbersResponse | null> {

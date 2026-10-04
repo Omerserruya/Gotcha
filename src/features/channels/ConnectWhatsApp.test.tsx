@@ -30,11 +30,20 @@ const launch = embeddedSignupLaunchSchema.parse({
   responseType: 'code',
   extras: { sessionInfoVersion: '3' },
   configured: true,
+  inspectPath: 'business-app',
 });
-const show = (l: typeof launch | null = launch) =>
+const fresh = embeddedSignupLaunchSchema.parse({
+  ...launch,
+  configId: 'cfg-new',
+  inspectPath: 'new',
+});
+const show = (l: typeof launch | null = launch, n: typeof launch | null = fresh) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ channels: messages }}>
-      <ConnectWhatsApp launch={l} closeHref="/settings/channels?panel=whatsapp" />
+      <ConnectWhatsApp
+        launches={{ coexistence: l, newNumber: n }}
+        closeHref="/settings/channels?panel=whatsapp"
+      />
     </NextIntlClientProvider>,
   );
 
@@ -107,8 +116,34 @@ describe('★★ 13c — one question before Meta', () => {
     expect(screen.getByTestId('connect-waiting')).toBeInTheDocument();
   });
 
+  it('★ each choice launches with ITS parameters, and inspect follows its path (294adc0c)', async () => {
+    inspectNumbers.mockResolvedValue({ sessionId: 's1', candidates: [] });
+    show();
+    await userEvent.click(screen.getByTestId('path-new'));
+    await userEvent.click(screen.getByTestId('continue-meta'));
+    expect(login.mock.calls[0]![1].config_id).toBe('cfg-new');
+    await act(async () => {
+      login.mock.calls[0]![0]({ authResponse: { code: 'abc' } });
+      await vi.advanceTimersByTimeAsync(700);
+    });
+    expect(inspectNumbers.mock.calls[0]![2]).toBe('new');
+  });
+
+  it('the Business app choice inspects as business-app', async () => {
+    inspectNumbers.mockResolvedValue({ sessionId: 's1', candidates: [] });
+    show();
+    await userEvent.click(screen.getByTestId('continue-meta'));
+    expect(login.mock.calls[0]![1].config_id).toBe('cfg-1');
+    await act(async () => {
+      login.mock.calls[0]![0]({ authResponse: { code: 'abc' } });
+      await vi.advanceTimersByTimeAsync(700);
+    });
+    expect(inspectNumbers.mock.calls[0]![2]).toBe('business-app');
+  });
+
   it('not set up on the server: Continue is off, with why', () => {
-    show(embeddedSignupLaunchSchema.parse({ ...launch, configured: false }));
+    const off = embeddedSignupLaunchSchema.parse({ ...launch, configured: false });
+    show(off, off);
     expect(screen.getByTestId('continue-meta')).toBeDisabled();
     expect(screen.getByTestId('continue-meta').getAttribute('title')).toMatch(/isn't set up/);
   });
@@ -140,12 +175,13 @@ describe('★★ 13c — one question before Meta', () => {
     expect(await screen.findByTestId('connect-none')).toBeInTheDocument();
   });
 
-  it('closed without a code: back on step 1, nothing inspected', async () => {
+  it('closed without a code: back on step 1, nothing inspected — and SAID, never silent', async () => {
     show();
     await userEvent.click(screen.getByTestId('continue-meta'));
     act(() => login.mock.calls[0]![0]({ authResponse: null, status: 'unknown' }));
     expect(inspectNumbers).not.toHaveBeenCalled();
     expect(screen.getByTestId('path-business_app')).toBeInTheDocument();
+    expect(screen.getByTestId('launcher-problem')).toHaveTextContent('You closed Meta');
   });
 });
 
