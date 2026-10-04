@@ -55,7 +55,10 @@
   }
 
   /* ── The queue ───────────────────────────────────────────────────────── */
+  /* A column, so the foot (`margin-top: auto`) sits at its bottom, as in 02. */
   .queueColumn {
+    display: flex;
+    flex-direction: column;
     flex: none;
     inline-size: 300px;
     min-block-size: 0;
@@ -396,11 +399,13 @@
   }
 
   /* 02's key legend in the header: a bordered chip, 11.5px. */
+  /* 02: the key hint in mono. */
   .keys {
     margin: 0;
     padding: var(--space-4) var(--space-8);
     border: 1px solid var(--border-default);
     border-radius: 6px;
+    font-family: var(--font-mono);
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
     line-height: normal;
@@ -1171,9 +1176,10 @@
     color: var(--intent-neutral-text);
   }
 
+  /* 02: the arrows lighter than the steps (`#B4AFA5`). */
   .chainArrow {
     font-size: 12.5px;
-    color: var(--text-muted);
+    color: var(--text-disabled);
   }
 
   /* 02: the key on Approve — a small mono tile beside the word. */

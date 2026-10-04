@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState, useTransition } from 'react';
 
+import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import hire from '@/features/employees/hire/Hire.module.css';
 import { Link, useRouter } from '@/i18n/navigation';
 
@@ -257,7 +258,10 @@ export function AddKnowledge({
               <ul className={styles.connectors}>
                 {(['google_drive', 'confluence'] as const).map((c) => (
                   <li key={c} className={styles.connector}>
-                    <span>{t(`connector.${c}`)}</span>
+                    <span className={styles.connectorName}>
+                      <IntegrationLogo slug={c} size="rail" />
+                      {t(`connector.${c}`)}
+                    </span>
                     <button
                       type="button"
                       className={styles.small}

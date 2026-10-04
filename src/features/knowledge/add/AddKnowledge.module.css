@@ -303,4 +303,11 @@
     color: inherit;
     cursor: pointer;
   }
+
+  /* The source's mark before its name, as on 10. */
+  .connectorName {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
 }

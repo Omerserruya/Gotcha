@@ -218,6 +218,16 @@ describe('★★ Drive and Confluence — at the provider, and back here (backen
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it('each source carries its mark (Omer, 10): Drive’s logo; Confluence, which has none, the plug', () => {
+    render(drive());
+    const row = (id: string) => screen.getByTestId(id).closest('li')!;
+    expect(row('add-connect-google_drive').querySelector('img')?.getAttribute('src')).toMatch(
+      /\/integrations\/google_drive\.svg$/,
+    );
+    expect(row('add-connect-confluence').querySelector('img')).toBeNull();
+    expect(row('add-connect-confluence').querySelector('svg')).not.toBeNull();
+  });
+
   it('no way back: the URL is left alone', () => {
     render(drive(null));
     expect(replace).not.toHaveBeenCalled();

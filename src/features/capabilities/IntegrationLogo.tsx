@@ -30,6 +30,8 @@ export const INTEGRATION_LOGOS: Readonly<Record<string, string>> = {
   mongodb: 'mongodb.svg',
   aws_rds: 'aws_rds.svg',
   airtable: 'airtable.png',
+  // 08b's knowledge sources. Confluence has no mark in the old app either: the plug.
+  google_drive: 'google_drive.svg',
 };
 
 /** The tile 10 draws for a system: its mark, or the plug. Decorative — the name is beside it. */
