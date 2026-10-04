@@ -32,7 +32,7 @@ vi.mock("ioredis", () => ({
 }));
 vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Job: class {} }));
 
-const DB = vi.hoisted(() => ({ writes: [] as any[] }));
+const DB = vi.hoisted(() => ({ writes: [] as any[], data: [] as any[] }));
 vi.mock("@chatcenter/shared", async () => {
   const actual = await vi.importActual<any>("@chatcenter/shared");
   return {
@@ -40,7 +40,7 @@ vi.mock("@chatcenter/shared", async () => {
     prisma: {
       knowledgeIntegration: {
         findFirst: async () => null,
-        create: async (a: any) => { DB.writes.push(["create", a.data.provider]); return { id: "ki_1" }; },
+        create: async (a: any) => { DB.writes.push(["create", a.data.provider]); DB.data.push(a.data); return { id: "ki_1" }; },
         update: async () => ({ id: "ki_1" }),
       },
     },
@@ -69,7 +69,7 @@ const cb = (path: string, q: Record<string, string>) => request(app).get(`/api/k
 const flowOf = (url: string) =>
   JSON.parse(Buffer.from(new URL(url).searchParams.get("state")!.split(".")[1], "base64url").toString()).flow;
 
-beforeEach(() => { R.used.clear(); DB.writes = []; vi.unstubAllGlobals(); });
+beforeEach(() => { R.used.clear(); DB.writes = []; DB.data = []; vi.unstubAllGlobals(); });
 
 describe("init: the flow is a closed list signed into the state", () => {
   it("drive and confluence accept redesign_studio", async () => {
@@ -106,6 +106,18 @@ describe("success", () => {
       String(u).includes("oauth/token/accessible") ? ok([{ id: "cloud", name: "Site" }]) : ok({ access_token: "a", refresh_token: "r", expires_in: 3600 })));
     const res = await cb("confluence", { code: "c", state: st("confluence", "redesign_studio") });
     expect(res.headers.location).toBe(`${V2}?add=1&way=confluence&connected=1`);
+  });
+
+  it("★ the Confluence callback stores its tokens ENCRYPTED, like Drive", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) =>
+      String(u).includes("accessible") ? ok([{ id: "cloud", name: "Site" }]) : ok({ access_token: "at_plain", refresh_token: "rt_plain", expires_in: 3600 })));
+    await cb("confluence", { code: "c", state: st("confluence") });
+    const stored = DB.data[0].credentials;
+    expect(typeof stored).toBe("string");
+    expect(stored).not.toContain("at_plain");
+    expect(stored).not.toContain("rt_plain");
+    const { decryptCredentials } = await import("@chatcenter/shared");
+    expect(decryptCredentials(stored)).toMatchObject({ accessToken: "at_plain", refreshToken: "rt_plain", cloudId: "cloud" });
   });
 
   it("the old landings are unchanged", async () => {

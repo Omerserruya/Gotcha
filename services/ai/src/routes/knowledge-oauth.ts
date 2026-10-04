@@ -218,12 +218,13 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
         tenantId,
         knowledgeBaseId: kbId,
         provider: "confluence",
-        credentials: {
+        // Encrypted, like Drive's. These were stored as a plain object.
+        credentials: confluenceService.writeConfluenceCredentials({
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
           cloudId: site.id,
           expiresAt: Date.now() + tokens.expires_in * 1000,
-        },
+        }) as any,
         displayName: site.name || "Confluence",
         config: {},
       },

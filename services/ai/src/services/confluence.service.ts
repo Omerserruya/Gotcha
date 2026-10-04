@@ -1,16 +1,41 @@
-import { prisma } from "@chatcenter/shared";
+import { prisma, encryptCredentials, decryptCredentials, isEncrypted } from "@chatcenter/shared";
 import { upsertSyncedDocument } from "./embedding.service";
+
+export interface ConfluenceCredentials {
+  accessToken: string;
+  refreshToken: string;
+  cloudId: string;
+  expiresAt?: number;
+}
 
 interface ConfluenceIntegration {
   id: string;
-  credentials: {
-    accessToken: string;
-    refreshToken: string;
-    cloudId: string;
-    expiresAt?: number;
-  };
+  /**
+   * Encrypted (the current format, via encryptCredentials - the same as Drive)
+   * or a plain object (rows written before Confluence tokens were encrypted).
+   * Read it ONLY through readConfluenceCredentials.
+   */
+  credentials: string | ConfluenceCredentials;
   knowledgeBaseId: string;
   tenantId: string;
+}
+
+/**
+ * Read Confluence credentials in either format. Legacy plain rows keep working
+ * and are re-written encrypted on their next token refresh, so the estate
+ * converges without a migration and without a reconnect - the same rule as
+ * readDriveCredentials.
+ */
+export function readConfluenceCredentials(raw: unknown): ConfluenceCredentials {
+  if (typeof raw === "string") {
+    if (!isEncrypted(raw)) throw new Error("Stored Confluence credentials are unreadable");
+    return decryptCredentials(raw) as ConfluenceCredentials;
+  }
+  return (raw || {}) as ConfluenceCredentials;
+}
+
+export function writeConfluenceCredentials(credentials: ConfluenceCredentials): string {
+  return encryptCredentials(credentials as any);
 }
 
 interface ConfluenceSpace {
@@ -24,7 +49,7 @@ interface ConfluencePage {
 }
 
 async function confluenceFetch(integration: ConfluenceIntegration, path: string): Promise<any> {
-  const { accessToken, cloudId } = integration.credentials;
+  const { accessToken, cloudId } = readConfluenceCredentials(integration.credentials);
   const baseUrl = `https://api.atlassian.com/ex/confluence/${cloudId}`;
 
   const res = await fetch(`${baseUrl}${path}`, {
@@ -58,6 +83,7 @@ async function refreshConfluenceToken(integration: ConfluenceIntegration): Promi
   const clientId = process.env.CONFLUENCE_CLIENT_ID;
   const clientSecret = process.env.CONFLUENCE_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
+  const current = readConfluenceCredentials(integration.credentials);
 
   const res = await fetch("https://auth.atlassian.com/oauth/token", {
     method: "POST",
@@ -66,26 +92,28 @@ async function refreshConfluenceToken(integration: ConfluenceIntegration): Promi
       grant_type: "refresh_token",
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: integration.credentials.refreshToken,
+      refresh_token: current.refreshToken,
     }),
   });
 
   if (!res.ok) return null;
 
   const data: any = await res.json();
-  const newCredentials = {
-    ...integration.credentials,
+  const newCredentials: ConfluenceCredentials = {
+    ...current,
     accessToken: data.access_token,
-    refreshToken: data.refresh_token || integration.credentials.refreshToken,
+    refreshToken: data.refresh_token || current.refreshToken,
     expiresAt: Date.now() + data.expires_in * 1000,
   };
+  // Always written encrypted - this is also what converts a legacy plain row.
+  const stored = writeConfluenceCredentials(newCredentials);
 
   await prisma.knowledgeIntegration.update({
     where: { id: integration.id },
-    data: { credentials: newCredentials as any },
+    data: { credentials: stored as any },
   });
 
-  integration.credentials = newCredentials;
+  integration.credentials = stored;
   return data.access_token;
 }
 
@@ -154,7 +182,7 @@ export async function syncSpace(
         title: page.title,
         content,
         sourceType: "confluence",
-        sourceUrl: `https://api.atlassian.com/ex/confluence/${integration.credentials.cloudId}/wiki/spaces/${spaceKey}/pages/${page.id}`,
+        sourceUrl: `https://api.atlassian.com/ex/confluence/${readConfluenceCredentials(integration.credentials).cloudId}/wiki/spaces/${spaceKey}/pages/${page.id}`,
         changeKey: String(version),
         metadata: { integrationId: integration.id, confluencePageId: page.id, spaceKey },
       });
