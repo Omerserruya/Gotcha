@@ -149,7 +149,8 @@ describe('★★ the three states of the decided list', () => {
 
   it('★ the head counts today’s decisions — 02’s "7 today", with no 24h (Undo is gone)', async () => {
     await show([approval()], true);
-    expect(screen.getByTestId('decided-today')).toHaveTextContent(/^\d+ today$/);
+    // None today: what is shown, not "0 today" over a list from August.
+    expect(screen.getByTestId('decided-today')).toHaveTextContent('1 decision');
     expect(screen.getByTestId('nothing-waiting')).not.toHaveTextContent(/reversible|Undo/i);
   });
 });

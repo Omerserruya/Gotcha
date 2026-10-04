@@ -100,23 +100,42 @@ describe('★★ 02’s sentence, from what the record knows', () => {
     ['shopify.process_refund', 'REJECTED', { amount: 600 }, 'Adi Katz', '600', 'refundAsked'],
     ['shopify.cancel_order', 'APPROVED', { order_name: '#4812' }, 'Rotem Shani', null, 'cancelled'],
     ['shopify.cancel_order', 'REJECTED', { order_name: '#4812' }, null, null, 'cancelAskedOrder'],
-    ['shopify.send_invoice', 'APPROVED', {}, 'Noa Gil', null, 'withName'],
-    ['shopify.send_invoice', 'APPROVED', {}, null, null, 'none'],
+    [
+      'shopify.send_invoice',
+      'APPROVED',
+      { order_name: '#9' },
+      'Noa Gil',
+      null,
+      'done.send_invoice',
+    ],
+    [
+      'shopify.update_order_shipping_address',
+      'REJECTED',
+      {},
+      null,
+      null,
+      'asked.update_order_shipping_address',
+    ],
+    // A tool with no sentence of its own: its summary, and the name after it.
+    ['shopify.get_shop', 'APPROVED', {}, 'Noa Gil', null, 'withName'],
+    ['shopify.get_shop', 'APPROVED', {}, null, null, 'none'],
   ] as const)('%s %s → %s', (tool, status, params, name, amount, key) => {
     expect(decisionSentence(row(tool, status, params), name, amount).key).toBe(key);
   });
 
   it('the facts: an order, an amount, a currency only when the call named one', () => {
-    expect(approvalFacts({ order_name: '#1011', amount: '50' })).toEqual({
+    expect(approvalFacts({ order_name: '#1011', amount: '50', note: 'damaged item' })).toEqual({
       order: '#1011',
       amount: 50,
       currency: null,
+      note: 'damaged item',
     });
     expect(approvalFacts({ amount: 179, currency: 'ILS' }).currency).toBe('ILS');
     expect(approvalFacts({ amount: 'lots', currency: 'shekels' })).toEqual({
       order: null,
       amount: null,
       currency: null,
+      note: null,
     });
     // And the parameters themselves never leave the contract.
     expect(
@@ -200,5 +219,47 @@ describe('★★ 03c’s rows: when, the sentence with the customer, how it ende
   it('the average decision is "—" when none can be timed, not hidden', async () => {
     render(await DecisionStats({ stats: { approvedThisWeek: 0, avgDecisionSeconds: null } }));
     expect(screen.getByTestId('decision-stats')).toHaveTextContent('Avg decision —');
+  });
+});
+
+describe('★★ Edited — what ran, and what was asked', () => {
+  it('modifiedParams gives only its amount; the row says "Edited" and "(was …)"', async () => {
+    const edited = approvalSchema.parse({
+      id: 'e1',
+      tool: 'shopify.process_refund',
+      summary: 'ai-bot inbox tool call',
+      status: 'APPROVED',
+      executionState: 'SUCCEEDED',
+      params: { amount: 179, order_name: '#1842' },
+      modifiedParams: { amount: 120, order_name: '#1842', secret: 'x' },
+      decidedAt: TODAY,
+      expiresAt: TODAY,
+      createdAt: TODAY,
+    });
+    expect(edited.editedAmount).toBe(120);
+    expect(Object.keys(edited)).not.toContain('modifiedParams');
+    render(
+      await NothingWaiting({
+        decided: [edited],
+        mayBeIncomplete: false,
+        requesterNames: {},
+        customerNames: { e1: 'Dana Cohen' },
+        now: NOW,
+      }),
+    );
+    expect(screen.getByTestId('decided-e1')).toHaveTextContent(
+      'Refunded 120 (was 179) to Dana Cohen',
+    );
+    expect(screen.getByTestId('edited-e1')).toHaveTextContent('Edited');
+  });
+
+  it('a refund limit names the figure: "Refunds under 100"', async () => {
+    render(
+      await HandledCard({
+        handled: { total: 2, refunds: 1, lookups: 1, returns: 0 },
+        refundLimit: 100,
+      }),
+    );
+    expect(screen.getByTestId('handled-refunds')).toHaveTextContent('Refunds under 1001');
   });
 });

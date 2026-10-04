@@ -17,7 +17,18 @@ import {
 import { approveRequest, rejectRequest, retryExecution } from './actions';
 import { Link } from '@/i18n/navigation';
 
+import type { ApprovalCustomer } from './approval-customers';
 import { MomentAfter, type DecidedTrace, type MomentOutcome } from './MomentAfter';
+import {
+  approveChain,
+  EDITABLE_AMOUNT,
+  editedAmountProblem,
+  queueTitle,
+  requestTitle,
+  reversibilityOf,
+  whyBullets,
+  type Words,
+} from './request-words';
 import styles from './Approvals.module.css';
 
 /**
@@ -59,12 +70,21 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
+/** Omer, 2026-10-04: the reasons on offer, and "Other" to type one. */
+const REJECT_REASONS = ['policy', 'myself', 'wrongOrder', 'tooGenerous', 'other'] as const;
+type RejectReason = (typeof REJECT_REASONS)[number];
+
 export function ApprovalsScreen({
   pending,
   requesterNames,
   serverNow,
   decidedToday = null,
   decidedHistory = [],
+  customers = {},
+  handledToday = null,
+  aiAsked = [],
+  editAmountLive = false,
+  refundLimit = null,
 }: {
   readonly pending: readonly Approval[];
   /** `id → who asked`, resolved server-side so no cuid reaches the browser. */
@@ -78,6 +98,16 @@ export function ApprovalsScreen({
   readonly decidedToday?: number | null;
   /** The decided history, enough to count a run of one kind (03b's pattern). */
   readonly decidedHistory?: readonly DecidedTrace[];
+  /** 03's "The customer", per request — every fact null where unknown. */
+  readonly customers?: Readonly<Record<string, ApprovalCustomer>>;
+  /** What GOTCHA ran on its own today, for the queue's foot; `null` unknown. */
+  readonly handledToday?: number | null;
+  /** Requests an AI asked for whose employee cannot be named. */
+  readonly aiAsked?: readonly string[];
+  /** Backend's `edits.amount` is live: Edit amount becomes a field, not a drawing. */
+  readonly editAmountLive?: boolean;
+  /** "Refunds under N never reach you" — the REFUND policy's threshold, when set. */
+  readonly refundLimit?: number | null;
 }) {
   const t = useTranslations('approvals');
 
@@ -103,6 +133,10 @@ export function ApprovalsScreen({
 
   const [selectedId, setSelectedId] = useState<string | null>(pending[0]?.id ?? null);
   const [reason, setReason] = useState('');
+  /** Omer, 2026-10-04: a closed choice, and "Other" to type one. */
+  const [reasonChoice, setReasonChoice] = useState<RejectReason | null>(null);
+  /** The amount being edited, as typed; `null` when approving as asked. */
+  const [edited, setEdited] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /** What just happened, for the live region. Never a silent outcome. */
   const [announcement, setAnnouncement] = useState('');
@@ -117,6 +151,7 @@ export function ApprovalsScreen({
 
   const approveRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
+  const firstReasonRef = useRef<HTMLButtonElement>(null);
   const queueRef = useRef<HTMLUListElement>(null);
 
   const selected = pending.find((a) => a.id === selectedId) ?? pending[0] ?? null;
@@ -169,6 +204,8 @@ export function ApprovalsScreen({
       setMoment(null);
       setSelectedId(next.id);
       setReason('');
+      setReasonChoice(null);
+      setEdited(null);
       // Focus follows selection: the roving tabindex stays coherent and the
       // list, not the page, is what scrolls.
       queueRef.current?.querySelector<HTMLElement>(`[data-id="${next.id}"]`)?.focus();
@@ -216,7 +253,7 @@ export function ApprovalsScreen({
           }
           if (decidable) {
             event.preventDefault();
-            reasonRef.current?.focus();
+            firstReasonRef.current?.focus();
           }
           break;
       }
@@ -228,8 +265,15 @@ export function ApprovalsScreen({
 
   async function onApprove() {
     if (!selected || busy) return;
+    const original = selected.facts.amount;
+    const unit = EDITABLE_AMOUNT[selected.tool];
+    if (edited !== null && (!unit || original === null)) return;
+    if (edited !== null && original !== null && editedAmountProblem(edited, original, unit)) return;
     setBusy(true);
-    const result = await approveRequest(selected.id);
+    const result =
+      edited !== null && original !== null
+        ? await approveRequest(selected.id, { amount: Number(edited.trim().replace(',', '.')) })
+        : await approveRequest(selected.id);
     setBusy(false);
 
     if (!result.ok) {
@@ -273,12 +317,14 @@ export function ApprovalsScreen({
 
     if (!result.ok) {
       setAnnouncement(t(`error.${result.reason}` as 'error.stale'));
-      if (result.reason === 'reason_required') reasonRef.current?.focus();
+      if (result.reason === 'reason_required') firstReasonRef.current?.focus();
       return;
     }
     setAnnouncement(t('announce.rejected', { summary: selected.summary }));
     setMoment(null);
     setReason('');
+    setReasonChoice(null);
+    setEdited(null);
     move(1);
   }
 
@@ -342,6 +388,20 @@ export function ApprovalsScreen({
         : { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false };
     return new Intl.DateTimeFormat(locale, options).format(at);
   };
+  /** An amount in its currency when the call named one; never a symbol nobody stated. */
+  const amountOf = (approval: Approval): string | null =>
+    approval.facts.amount === null
+      ? null
+      : new Intl.NumberFormat(
+          locale,
+          approval.facts.currency
+            ? { style: 'currency', currency: approval.facts.currency, maximumFractionDigits: 0 }
+            : {},
+        ).format(approval.facts.amount);
+  const reasonText = (key: RejectReason) =>
+    key === 'tooGenerous' || key === 'other' ? t(`reject3.${key}`) : t(`action2.reasons.${key}`);
+  const say = (words: Words | null, fallback: string) =>
+    words ? t(`request.${words.key}` as 'request.queueRefund', words.values as never) : fallback;
   const createdClock = selected ? clock(selected.createdAt) : null;
   const expiresClock = selected ? dayClock(selected.expiresAt) : null;
 
@@ -437,10 +497,14 @@ export function ApprovalsScreen({
                             setMoment(null);
                             setSelectedId(approval.id);
                             setReason('');
+                            setReasonChoice(null);
+                            setEdited(null);
                           }}
                         >
                           <span className={styles.queueTop}>
-                            <span className={styles.queueSummary}>{approval.summary}</span>
+                            <span className={styles.queueSummary}>
+                              {say(queueTitle(approval, amountOf(approval)), approval.summary)}
+                            </span>
                             <span
                               className={styles.queueWhen}
                               data-soon={soon || lapsed ? '' : undefined}
@@ -452,9 +516,20 @@ export function ApprovalsScreen({
                                   : short(now.getTime() - Date.parse(approval.createdAt))}
                             </span>
                           </span>
-                          {requesterNames[approval.id] ? (
-                            <span className={styles.queueMeta}>
-                              {t('detail.requestedBy', { who: requesterNames[approval.id]! })}
+                          {/* 02's second line: for whom, and the order. */}
+                          {customers[approval.id]?.name || approval.facts.order ? (
+                            <span
+                              className={styles.queueMeta}
+                              data-testid={`queue-meta-${approval.id}`}
+                            >
+                              {[
+                                customers[approval.id]?.name,
+                                approval.facts.order
+                                  ? t('request.order', { order: approval.facts.order })
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </span>
                           ) : null}
                           {tag ? (
@@ -485,6 +560,25 @@ export function ApprovalsScreen({
               {decidedToday > 0 ? <span>{decidedToday}</span> : null}
             </Link>
           )}
+          {/*
+            02's foot: what never reaches you, and where to change it. The
+            limit itself is not stated — no policy field carries one.
+          */}
+          <p className={styles.queueFoot} data-testid="queue-foot">
+            {refundLimit !== null ? (
+              <span>
+                {t('queueFoot.under', {
+                  limit: new Intl.NumberFormat(locale).format(refundLimit),
+                })}{' '}
+              </span>
+            ) : null}
+            {handledToday !== null && handledToday > 0 ? (
+              <span>{t('queueFoot.handled', { count: handledToday })} </span>
+            ) : null}
+            <Link href="/studio/capabilities" className={styles.queueFootLink}>
+              {t('queueFoot.change')}
+            </Link>
+          </p>
         </div>
 
         {moment ? (
@@ -545,41 +639,66 @@ export function ApprovalsScreen({
                         })
                       : t('detail.requestedBy', { who: requesterNames[selected.id]! })
                     : createdClock
-                      ? t('detail2.eyebrowAutomation', { time: createdClock })
+                      ? aiAsked.includes(selected.id)
+                        ? t('detail3.eyebrowAi', { time: createdClock })
+                        : t('detail2.eyebrowAutomation', { time: createdClock })
                       : t('detail.requestedByAutomation')}
                 </p>
-                <h2 className={styles.detailSummary}>{selected.summary}</h2>
-                {visibleRiskTags(selected.riskTags).length > 0 ? (
-                  <ul className={styles.riskTags} data-testid="risk-tags">
-                    {visibleRiskTags(selected.riskTags).map((tag) => (
-                      <li key={tag} className={styles.riskTag} data-testid={`risk-${tag}`}>
-                        {/*
-                          An unrecognised tag renders as itself rather than
-                          vanishing. Hiding a risk label because we have no
-                          translation for it is the wrong way round here.
-                        */}
-                        {riskLabel(tag)}
-                      </li>
-                    ))}
-                  </ul>
+                <h2 className={styles.detailSummary} data-testid="detail-title">
+                  {say(
+                    requestTitle(
+                      selected,
+                      customers[selected.id]?.name ?? null,
+                      amountOf(selected),
+                    ),
+                    selected.summary,
+                  )}
+                </h2>
+                {/*
+                  02's line under the title: the order and the call's own note.
+                  The risk pills are gone from here — the queue's chip says it.
+                */}
+                {selected.facts.order || selected.facts.note ? (
+                  <p className={styles.detailFacts} data-testid="detail-facts">
+                    {[
+                      selected.facts.order
+                        ? t('request.orderLine', { order: selected.facts.order })
+                        : null,
+                      selected.facts.note,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
                 ) : null}
               </div>
+              {/* 02's top right — by what the action is; nothing where unknown. No Undo. */}
+              {reversibilityOf(selected.tool) ? (
+                <p className={styles.reversible} data-testid="reversible">
+                  <span>{t('detail3.reversible')}</span>
+                  <strong>
+                    {reversibilityOf(selected.tool) === 'yes'
+                      ? t('detail3.reversibleYes')
+                      : t('detail3.reversibleNo')}
+                  </strong>
+                </p>
+              ) : null}
             </header>
 
             {/*
-              02's cards, the two this platform can fill: why GOTCHA asks, and
-              what happens if nobody decides. "The customer" and "What happens
-              if you approve" need a customer summary and a consequence chain
-              that nothing records; they are not drawn.
+              02's four cards in two rows: why, the customer, what approving
+              does, and what waiting costs. Each fact the platform does not
+              hold is "—", never a guess.
             */}
             <div className={styles.detailCards}>
               {selected.reason || selected.policyRuleName ? (
                 <section className={styles.detailCard}>
                   <h3 className={styles.detailCardTitle}>{t('card.why')}</h3>
                   {selected.reason ? (
-                    <p className={styles.reason} data-testid="approval-reason">
-                      {selected.reason}
-                    </p>
+                    <ul className={styles.whyList} data-testid="approval-reason">
+                      {whyBullets(selected.reason).map((line, i) => (
+                        <li key={i}>{line}</li>
+                      ))}
+                    </ul>
                   ) : null}
                   {selected.policyRuleName ? (
                     <p className={styles.policyRule} data-testid="policy-rule">
@@ -588,6 +707,86 @@ export function ApprovalsScreen({
                   ) : null}
                 </section>
               ) : null}
+              {(() => {
+                const who = customers[selected.id];
+                const dash = (value: string | null) =>
+                  value ?? (
+                    <span title={t('customer.unread')} data-dash="">
+                      —
+                    </span>
+                  );
+                return (
+                  <section className={styles.detailCard} data-testid="customer-card">
+                    <h3 className={styles.detailCardTitle}>{t('customer.title')}</h3>
+                    <dl className={styles.customerFacts}>
+                      <div>
+                        <dt>{t('customer.since')}</dt>
+                        <dd data-testid="customer-since">
+                          {dash(
+                            who?.since
+                              ? new Intl.DateTimeFormat(locale, {
+                                  month: 'long',
+                                  year: 'numeric',
+                                }).format(new Date(who.since))
+                              : null,
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('customer.orders')}</dt>
+                        <dd data-testid="customer-orders">
+                          {dash(
+                            who?.lifetime
+                              ? t('customer.lifetime', {
+                                  amount: new Intl.NumberFormat(locale, {
+                                    style: 'currency',
+                                    currency: who.lifetime.currency,
+                                    maximumFractionDigits: 0,
+                                  }).format(who.lifetime.amount),
+                                })
+                              : null,
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('customer.refunds')}</dt>
+                        <dd data-testid="customer-refunds">
+                          {dash(
+                            who?.refunds == null
+                              ? null
+                              : who.refunds === 0
+                                ? t('customer.refundsNone')
+                                : String(who.refunds),
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('customer.mood')}</dt>
+                        <dd data-testid="customer-mood">{dash(who?.mood ?? null)}</dd>
+                      </div>
+                    </dl>
+                  </section>
+                );
+              })()}
+              <section className={styles.detailCard} data-testid="approve-chain">
+                <h3 className={styles.detailCardTitle}>{t('chain.title')}</h3>
+                <ol className={styles.chain}>
+                  {approveChain(
+                    selected,
+                    customers[selected.id]?.name ?? null,
+                    amountOf(selected),
+                  ).map((step, i) => [
+                    i > 0 ? (
+                      <li key={`arrow-${i}`} className={styles.chainArrow} aria-hidden="true">
+                        →
+                      </li>
+                    ) : null,
+                    <li key={step.key + i} className={styles.chainStep}>
+                      {say(step, '')}
+                    </li>,
+                  ])}
+                </ol>
+              </section>
               {decidable && expiresClock ? (
                 <section className={styles.detailCard} data-testid="if-you-leave-it">
                   <h3 className={styles.detailCardTitle}>{t('card.leave')}</h3>
@@ -614,12 +813,63 @@ export function ApprovalsScreen({
                     onClick={onApprove}
                   >
                     {t('action.approve')}
+                    <kbd className={styles.key} aria-hidden="true">
+                      A
+                    </kbd>
                   </button>
+                  {/*
+                    02's "Edit amount" — only on the tools the platform lets an
+                    approver edit (backend 05979604). A full refund carries no
+                    amount to edit: drawn, with why. Any other tool: not drawn.
+                  */}
+                  {!EDITABLE_AMOUNT[selected.tool] ? null : selected.facts.amount === null ? (
+                    <span
+                      className={styles.secondary}
+                      aria-disabled="true"
+                      title={t('error.edit_requires_original_amount')}
+                      data-testid="edit-amount"
+                    >
+                      {t('detail3.editAmount')}
+                    </span>
+                  ) : editAmountLive ? (
+                    <button
+                      type="button"
+                      className={styles.secondary}
+                      aria-expanded={edited !== null}
+                      data-testid="edit-amount"
+                      onClick={() =>
+                        setEdited(edited === null ? String(selected.facts.amount) : null)
+                      }
+                    >
+                      {edited === null
+                        ? t('detail3.editAmount')
+                        : t('detail3.editCancel', { amount: amountOf(selected)! })}
+                    </button>
+                  ) : (
+                    <span
+                      className={styles.secondary}
+                      aria-disabled="true"
+                      title={t('detail3.editNotYet')}
+                      data-testid="edit-amount"
+                    >
+                      {t('detail3.editAmount')}
+                    </span>
+                  )}
+                  <span
+                    className={styles.secondary}
+                    aria-disabled="true"
+                    title={t('detail3.askNotYet')}
+                    data-testid="ask-ai"
+                  >
+                    {requesterNames[selected.id]
+                      ? t('detail3.ask', { who: requesterNames[selected.id]! })
+                      : t('detail3.askAi')}
+                  </span>
                   <button
                     type="button"
                     className={styles.reject}
                     data-testid="reject"
-                    disabled={busy}
+                    disabled={busy || reason.trim() === ''}
                     onClick={onReject}
                   >
                     {t('action.reject')}
@@ -629,36 +879,76 @@ export function ApprovalsScreen({
                   </span>
                 </div>
 
+                {editAmountLive && edited !== null && selected.facts.amount !== null
+                  ? (() => {
+                      const unit = EDITABLE_AMOUNT[selected.tool] ?? 'major';
+                      const problem = editedAmountProblem(edited, selected.facts.amount!, unit);
+                      return (
+                        <label className={styles.editRow}>
+                          <span className={styles.reasonLabel}>{t('detail3.editLabel')}</span>
+                          <input
+                            className={styles.reasonInput}
+                            inputMode="decimal"
+                            value={edited}
+                            aria-invalid={problem !== null}
+                            data-testid="edit-amount-input"
+                            onChange={(event) => setEdited(event.target.value)}
+                          />
+                          {problem ? (
+                            <span
+                              className={styles.editProblem}
+                              role="alert"
+                              data-testid="edit-problem"
+                            >
+                              {problem === 'over'
+                                ? t('detail3.editOver', { amount: amountOf(selected)! })
+                                : unit === 'minor'
+                                  ? t('detail3.editInvalidMinor')
+                                  : t('detail3.editInvalid')}
+                            </span>
+                          ) : null}
+                        </label>
+                      );
+                    })()
+                  : null}
+
                 {/*
-                  02's reject bar: the question, and one-tap reasons. A tap
-                  FILLS the reason — it does not reject; Reject does. The route
-                  answers 400 without a reason, and a reason somebody chose by
-                  accident is worse than one they typed.
+                  02's reject bar, as Omer ruled: a closed choice, and "Other"
+                  to type one. A tap CHOOSES the reason — Reject rejects. The
+                  route answers 400 without one, so Reject waits for it.
                 */}
-                <div className={styles.rejectBar}>
-                  <label className={styles.reasonLabel} htmlFor="reject-reason">
-                    {t('action2.rejectPrompt')}
-                  </label>
-                  <input
-                    ref={reasonRef}
-                    id="reject-reason"
-                    className={styles.reasonInput}
-                    data-testid="reject-reason"
-                    value={reason}
-                    placeholder={t('action.rejectReasonLabel')}
-                    onChange={(event) => setReason(event.target.value)}
-                  />
-                  {(['policy', 'myself', 'wrongOrder'] as const).map((key) => (
+                <div className={styles.rejectBar} role="group" aria-labelledby="reject-prompt">
+                  <span className={styles.reasonLabel} id="reject-prompt">
+                    {t('reject3.prompt')}
+                  </span>
+                  {REJECT_REASONS.map((key, i) => (
                     <button
                       key={key}
+                      ref={i === 0 ? firstReasonRef : undefined}
                       type="button"
                       className={styles.reasonChip}
+                      aria-pressed={reasonChoice === key}
                       data-testid={`reason-${key}`}
-                      onClick={() => setReason(t(`action2.reasons.${key}`))}
+                      onClick={() => {
+                        setReasonChoice(key);
+                        setReason(key === 'other' ? '' : reasonText(key));
+                        if (key === 'other') setTimeout(() => reasonRef.current?.focus(), 0);
+                      }}
                     >
-                      {t(`action2.reasons.${key}`)}
+                      {reasonText(key)}
                     </button>
                   ))}
+                  {reasonChoice === 'other' ? (
+                    <input
+                      ref={reasonRef}
+                      className={styles.reasonInput}
+                      data-testid="reject-reason"
+                      aria-label={t('reject3.otherLabel')}
+                      value={reason}
+                      placeholder={t('reject3.otherLabel')}
+                      onChange={(event) => setReason(event.target.value)}
+                    />
+                  ) : null}
                 </div>
               </div>
             ) : (

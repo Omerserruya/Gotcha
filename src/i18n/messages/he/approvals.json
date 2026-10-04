@@ -2,7 +2,7 @@
   "title": "אישורים",
   "description": "GOTCHA כבר עשתה את העבודה. אלה ההחלטות שהיא לא יכולה לקבל לבד.",
   "unavailable": "לא הצלחנו לקרוא את האישורים שלך כרגע.",
-  "keys": "A אישור · R דחייה · ↓ הבא",
+  "keys": "A אישור · R דחייה",
   "queue": {
     "label": "ממתינים להחלטה",
     "awaiting": "ממתין לך",
@@ -50,9 +50,13 @@
   },
   "error": {
     "stale": "מישהו אחר החליט על זה, או שהמועד חלף. טוענים מחדש כדי להראות את המצב.",
-    "reason_required": "כתוב למה לפני הדחייה — GOTCHA משתמשת בסיבה כדי להפסיק לשאול לא נכון.",
+    "reason_required": "צריך לומר למה לפני שדוחים.",
     "forbidden": "אינך יכול להחליט על זה.",
-    "failed": "זה לא עבר."
+    "failed": "זה לא עבר.",
+    "edit_not_allowed": "את הפעולה הזו אי אפשר לאשר בסכום אחר.",
+    "amount_above_original": "סכום ערוך חייב להיות נמוך ממה שהתבקש.",
+    "invalid_amount": "את הסכום הזה אי אפשר לשלוח — כדאי לבדוק ולנסות שוב.",
+    "edit_requires_original_amount": "זה החזר מלא בלי סכום לערוך. אפשר לאשר כמו שהוא או לדחות."
   },
   "rest": {
     "lead": "שום דבר לא ממתין להחלטה שלך.",
@@ -88,7 +92,8 @@
       "lapsed": "המועד עבר",
       "cancelled": "בוטל",
       "didNotRun": "אושר · לא בוצע",
-      "outcomeUnknown": "אושר · התוצאה לא ידועה"
+      "outcomeUnknown": "אושר · התוצאה לא ידועה",
+      "edited": "נערך"
     },
     "incompleteShort": "ההחלטות האחרונות שלך — הרשימה מחזיקה את המאה האחרונות מכל סוג.",
     "byVia": "הוחלט על ידי {who} דרך {channel}",
@@ -109,11 +114,35 @@
       "cancelledOrder": "בוטלה הזמנה {order}",
       "cancelAsked": "ביטול הזמנה {order} של {name}",
       "cancelAskedOrder": "ביטול הזמנה {order}",
-      "withName": "{summary} · {name}"
+      "withName": "{summary} · {name}",
+      "done": {
+        "update_order_shipping_address": "עודכנה כתובת המשלוח{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "resend_confirmation": "נשלח שוב אישור ההזמנה{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "create_return": "נפתחה החזרה{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "exchange_order_item": "הוחלף פריט{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "send_invoice": "נשלחה חשבונית{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "add_order_note": "נוספה הערה{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "update_customer": "עודכן כרטיס הלקוח{name, select, none {} other { של {name}}}",
+        "add_vip_tag": "סומן כ-VIP{name, select, none {} other { של {name}}}",
+        "create_task": "נוצרה משימה{name, select, none {} other { של {name}}}"
+      },
+      "asked": {
+        "update_order_shipping_address": "שינוי כתובת משלוח{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "resend_confirmation": "שליחה חוזרת של אישור{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "create_return": "החזרה{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "exchange_order_item": "החלפת פריט{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "send_invoice": "שליחת חשבונית{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "add_order_note": "הערה{order, select, none {} other { בהזמנה {order}}}{name, select, none {} other { של {name}}}",
+        "update_customer": "שינוי בכרטיס הלקוח{name, select, none {} other { של {name}}}",
+        "add_vip_tag": "תיוג VIP{name, select, none {} other { של {name}}}",
+        "create_task": "משימה{name, select, none {} other { של {name}}}"
+      }
     },
     "yesterday": "אתמול",
     "today": "{count} היום",
-    "kept": "סיבה שנותנים נשמרת עם ההחלטה."
+    "kept": "סיבה שנותנים נשמרת עם ההחלטה.",
+    "shown": "{count, plural, one {החלטה אחת} other {# החלטות}}",
+    "wasAmount": "{now} (במקום {was})"
   },
   "moment": {
     "decided": "{summary}",
@@ -163,9 +192,12 @@
     "hours": "{n} שע׳"
   },
   "pending": {
-    "title": "{count, plural, one {דבר אחד מחכה להחלטה שלך} other {# דברים מחכים להחלטה שלך}}",
+    "title": "{count, select, 1 {דבר אחד מחכה להחלטה שלך} 2 {שני דברים מחכים להחלטה שלך} 3 {שלושה דברים מחכים להחלטה שלך} 4 {ארבעה דברים מחכים להחלטה שלך} 5 {חמישה דברים מחכים להחלטה שלך} 6 {שישה דברים מחכים להחלטה שלך} 7 {שבעה דברים מחכים להחלטה שלך} 8 {שמונה דברים מחכים להחלטה שלך} 9 {תשעה דברים מחכים להחלטה שלך} other {# דברים מחכים להחלטה שלך}}",
     "description": "GOTCHA עשה את העבודה.",
-    "soonest": "GOTCHA עשה את העבודה. המועד הקרוב הוא בעוד {in}."
+    "soonest": "GOTCHA עשה את העבודה. אחד מהם פג בעוד {in}.",
+    "minutes": "{n, plural, one {דקה} other {# דקות}}",
+    "hours": "{n, plural, one {שעה} two {שעתיים} other {# שעות}}",
+    "days": "{n, plural, one {יום} two {יומיים} other {# ימים}}"
   },
   "time": {
     "minutes": "{n} דק׳",
@@ -198,6 +230,67 @@
     "unread": "לא הצלחנו לספור את הפעולות של היום.",
     "refunds": "החזרים",
     "lookups": "הזמנות שנבדקו",
-    "returns": "החזרות שנפתחו"
+    "returns": "החזרות שנפתחו",
+    "refundsUnder": "החזרים עד {limit}"
+  },
+  "request": {
+    "queueRefund": "החזר {amount}",
+    "queueRefundOrder": "החזר על הזמנה {order}",
+    "queueCancel": "ביטול הזמנה {order}",
+    "refundTo": "החזר {amount} ל{name}",
+    "refundOn": "החזר {amount} על הזמנה {order}",
+    "refundOrderFor": "החזר על הזמנה {order} של {name}",
+    "cancelFor": "ביטול הזמנה {order} של {name}",
+    "summaryFor": "{summary} · {name}",
+    "order": "הזמנה {order}",
+    "orderLine": "הזמנה {order}",
+    "stepRefunded": "{amount} הוחזרו",
+    "stepOrderRefunded": "הזמנה {order} הוחזרה",
+    "stepShopifyRefund": "מסומן כמוחזר ב-Shopify",
+    "stepCancelled": "הזמנה {order} בוטלה",
+    "stepCancelledShopify": "הזמנה {order} בוטלה ב-Shopify",
+    "stepRuns": "{summary}",
+    "stepToldName": "{name} מקבל הודעה בשיחה",
+    "stepTold": "הלקוח מקבל הודעה בשיחה"
+  },
+  "customer": {
+    "title": "הלקוח",
+    "since": "איתך מאז",
+    "orders": "הזמנות",
+    "lifetime": "{amount} בסך הכול",
+    "refunds": "החזרים קודמים",
+    "refundsNone": "אין",
+    "mood": "מצב רוח",
+    "unread": "לא ידוע לבקשה הזו"
+  },
+  "chain": {
+    "title": "מה קורה אם מאשרים"
+  },
+  "detail3": {
+    "eyebrowAi": "התבקש על ידי עובד ה-AI שלך · {time}",
+    "editAmount": "עריכת סכום",
+    "ask": "לשאול את {who} שאלה",
+    "askAi": "לשאול את ה-AI שאלה",
+    "askNotYet": "שאלה על בקשה תגיע בהמשך.",
+    "reversible": "הפיך",
+    "reversibleYes": "כן",
+    "reversibleNo": "לא",
+    "editLabel": "סכום לאישור",
+    "editInvalid": "מספר גדול מאפס.",
+    "editOver": "לא יותר מ-{amount}.",
+    "editCancel": "להשאיר {amount}",
+    "editNotYet": "עריכת הסכום תגיע ברגע ש-GOTCHA יוכל לבצע אותה.",
+    "editInvalidMinor": "מספר שלם גדול מאפס."
+  },
+  "queueFoot": {
+    "handled": "{count, plural, one {GOTCHA טיפל היום בפעולה אחת לבד.} other {GOTCHA טיפל היום ב-# פעולות לבד.}}",
+    "change": "לשנות מה דורש אישור",
+    "under": "החזרים עד {limit} לא מגיעים אליך."
+  },
+  "reject3": {
+    "prompt": "דוחים? למה:",
+    "tooGenerous": "נדיב מדי",
+    "other": "אחר",
+    "otherLabel": "למה לא?"
   }
 }

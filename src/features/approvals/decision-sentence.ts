@@ -9,6 +9,19 @@ import type { Approval } from '@/api/contracts/approvals';
  * Returns a message key under `decided.sentence` and its values, so the
  * wording stays in the catalogue.
  */
+/** Tools with their own sentence (`decided.sentence.done|asked.<slug>`). */
+export const SENTENCE_TOOLS = [
+  'update_order_shipping_address',
+  'resend_confirmation',
+  'create_return',
+  'exchange_order_item',
+  'send_invoice',
+  'add_order_note',
+  'update_customer',
+  'add_vip_tag',
+  'create_task',
+] as const;
+
 export function decisionSentence(
   approval: Pick<Approval, 'tool' | 'status' | 'summary' | 'facts'>,
   name: string | null,
@@ -36,6 +49,13 @@ export function decisionSentence(
   if (slug === 'cancel_order' && order) {
     const p = done ? 'cancelled' : 'cancelAsked';
     return name ? { key: p, values: { order, name } } : { key: `${p}Order`, values: { order } };
+  }
+  // The common tools, one form each: what was done, on which order, for whom.
+  if ((SENTENCE_TOOLS as readonly string[]).includes(slug)) {
+    return {
+      key: `${done ? 'done' : 'asked'}.${slug}`,
+      values: { order: order ?? 'none', name: name ?? 'none' },
+    };
   }
   return fallback();
 }

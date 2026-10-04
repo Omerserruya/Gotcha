@@ -61,3 +61,32 @@ describe('★★ 03c reads today’s runs, and each row’s customer once', () =
     expect(data.usageToday).toEqual([]);
   });
 });
+
+describe('★ the refund limit is an enabled REFUND policy’s approval threshold', () => {
+  it.each([
+    [[], null],
+    [[{ actionKind: 'DISCOUNT', config: { managerApprovalAboveAmount: 50 } }], null],
+    [[{ actionKind: 'REFUND', enabled: false, config: { managerApprovalAboveAmount: 100 } }], null],
+    [
+      [
+        { actionKind: 'DISCOUNT', config: { managerApprovalAboveAmount: 50 } },
+        { actionKind: 'REFUND', config: { managerApprovalAboveAmount: 100 } },
+      ],
+      100,
+    ],
+  ])('%j → %s', async (policies, limit) => {
+    get.mockImplementation(
+      async ({
+        endpoint,
+        payload,
+      }: {
+        endpoint: { path: string };
+        payload: { parse: (v: unknown) => unknown };
+      }) => {
+        if (endpoint.path === '/api/business-policies') return payload.parse({ policies });
+        return payload.parse([]);
+      },
+    );
+    expect((await loadApprovals()).refundLimit).toBe(limit);
+  });
+});

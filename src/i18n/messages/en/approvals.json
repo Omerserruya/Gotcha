@@ -2,7 +2,7 @@
   "title": "Approvals",
   "description": "GOTCHA has done the work. These are the decisions it can't take on its own.",
   "unavailable": "We couldn't read your approvals just now.",
-  "keys": "A approve · R reject · ↓ next",
+  "keys": "A approve · R reject",
   "queue": {
     "label": "Waiting for a decision",
     "awaiting": "Waiting on you",
@@ -50,9 +50,13 @@
   },
   "error": {
     "stale": "Someone else decided this, or its deadline passed. Reloading to show where it stands.",
-    "reason_required": "Say why before rejecting — GOTCHA uses the reason to stop asking wrongly.",
+    "reason_required": "Say why before rejecting.",
     "forbidden": "You can't decide this one.",
-    "failed": "That didn't go through."
+    "failed": "That didn't go through.",
+    "edit_not_allowed": "This action can't be approved with a different amount.",
+    "amount_above_original": "An edited amount has to be less than what was asked.",
+    "invalid_amount": "That amount can't be sent — check it and try again.",
+    "edit_requires_original_amount": "This is a full refund with no amount to edit. Approve it as it is, or reject it."
   },
   "rest": {
     "lead": "Nothing needs a decision from you.",
@@ -88,7 +92,8 @@
       "lapsed": "Deadline passed",
       "cancelled": "Cancelled",
       "didNotRun": "Approved · didn’t run",
-      "outcomeUnknown": "Approved · outcome unknown"
+      "outcomeUnknown": "Approved · outcome unknown",
+      "edited": "Edited"
     },
     "incompleteShort": "Your most recent decisions — the list holds the last hundred of each kind.",
     "byVia": "Decided by {who} via {channel}",
@@ -109,11 +114,35 @@
       "cancelledOrder": "Cancelled order {order}",
       "cancelAsked": "Cancelling order {order} for {name}",
       "cancelAskedOrder": "Cancelling order {order}",
-      "withName": "{summary} · {name}"
+      "withName": "{summary} · {name}",
+      "done": {
+        "update_order_shipping_address": "Updated the shipping address{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "resend_confirmation": "Resent the confirmation{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "create_return": "Opened a return{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "exchange_order_item": "Exchanged an item{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "send_invoice": "Sent the invoice{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "add_order_note": "Added a note{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "update_customer": "Updated the customer record{name, select, none {} other { for {name}}}",
+        "add_vip_tag": "Tagged as VIP{name, select, none {} other { for {name}}}",
+        "create_task": "Created a task{name, select, none {} other { for {name}}}"
+      },
+      "asked": {
+        "update_order_shipping_address": "Shipping address change{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "resend_confirmation": "Resending the confirmation{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "create_return": "A return{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "exchange_order_item": "An item exchange{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "send_invoice": "Sending the invoice{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "add_order_note": "A note{order, select, none {} other { on order {order}}}{name, select, none {} other { for {name}}}",
+        "update_customer": "A customer record change{name, select, none {} other { for {name}}}",
+        "add_vip_tag": "A VIP tag{name, select, none {} other { for {name}}}",
+        "create_task": "A task{name, select, none {} other { for {name}}}"
+      }
     },
     "yesterday": "Yesterday",
     "today": "{count} today",
-    "kept": "A reason you give is kept with the decision."
+    "kept": "A reason you give is kept with the decision.",
+    "shown": "{count, plural, one {# decision} other {# decisions}}",
+    "wasAmount": "{now} (was {was})"
   },
   "moment": {
     "decided": "{summary}",
@@ -163,9 +192,12 @@
     "hours": "{n}h"
   },
   "pending": {
-    "title": "{count, plural, one {One thing needs your decision} other {# things need your decision}}",
+    "title": "{count, select, 1 {One thing needs your decision} 2 {Two things need your decision} 3 {Three things need your decision} 4 {Four things need your decision} 5 {Five things need your decision} 6 {Six things need your decision} 7 {Seven things need your decision} 8 {Eight things need your decision} 9 {Nine things need your decision} other {# things need your decision}}",
     "description": "GOTCHA has done the work.",
-    "soonest": "GOTCHA has done the work. The next deadline is in {in}."
+    "soonest": "GOTCHA has done the work. One of them expires in {in}.",
+    "minutes": "{n, plural, one {# minute} other {# minutes}}",
+    "hours": "{n, plural, one {an hour} other {# hours}}",
+    "days": "{n, plural, one {a day} other {# days}}"
   },
   "time": {
     "minutes": "{n}m",
@@ -198,6 +230,67 @@
     "unread": "We couldn't count today's actions.",
     "refunds": "Refunds",
     "lookups": "Orders looked up",
-    "returns": "Returns opened"
+    "returns": "Returns opened",
+    "refundsUnder": "Refunds under {limit}"
+  },
+  "request": {
+    "queueRefund": "Refund {amount}",
+    "queueRefundOrder": "Refund on order {order}",
+    "queueCancel": "Cancel order {order}",
+    "refundTo": "Refund {amount} to {name}",
+    "refundOn": "Refund {amount} on order {order}",
+    "refundOrderFor": "Refund on order {order} for {name}",
+    "cancelFor": "Cancel order {order} for {name}",
+    "summaryFor": "{summary} · {name}",
+    "order": "order {order}",
+    "orderLine": "Order {order}",
+    "stepRefunded": "{amount} refunded",
+    "stepOrderRefunded": "Order {order} refunded",
+    "stepShopifyRefund": "Marked refunded in Shopify",
+    "stepCancelled": "Order {order} cancelled",
+    "stepCancelledShopify": "Order {order} cancelled in Shopify",
+    "stepRuns": "{summary}",
+    "stepToldName": "{name} told in the conversation",
+    "stepTold": "The customer told in the conversation"
+  },
+  "customer": {
+    "title": "The customer",
+    "since": "With you since",
+    "orders": "Orders",
+    "lifetime": "{amount} lifetime",
+    "refunds": "Previous refunds",
+    "refundsNone": "None",
+    "mood": "Mood",
+    "unread": "Not known for this request"
+  },
+  "chain": {
+    "title": "What happens if you approve"
+  },
+  "detail3": {
+    "eyebrowAi": "Requested by your AI employee · {time}",
+    "editAmount": "Edit amount",
+    "ask": "Ask {who} a question",
+    "askAi": "Ask the AI a question",
+    "askNotYet": "Asking about a request comes next.",
+    "reversible": "Reversible",
+    "reversibleYes": "Yes",
+    "reversibleNo": "No",
+    "editLabel": "Amount to approve",
+    "editInvalid": "A number above zero.",
+    "editOver": "No more than {amount}.",
+    "editCancel": "Keep {amount}",
+    "editNotYet": "Editing the amount comes as soon as GOTCHA can carry it out.",
+    "editInvalidMinor": "A whole number above zero."
+  },
+  "queueFoot": {
+    "handled": "{count, plural, one {GOTCHA handled # on its own today.} other {GOTCHA handled # on its own today.}}",
+    "change": "Change what needs asking",
+    "under": "Refunds under {limit} never reach you."
+  },
+  "reject3": {
+    "prompt": "Rejecting? Say why:",
+    "tooGenerous": "Too generous",
+    "other": "Other",
+    "otherLabel": "Why not?"
   }
 }

@@ -6,9 +6,11 @@ import { approvalsSchema, aiEmployeeIdOf, type Approval } from '@/api/contracts/
 import { toolUsageListSchema, type ToolUsage } from '@/api/contracts/capabilities';
 import { aiEmployeesSchema, isBuilderDraft, type AiEmployee } from '@/api/contracts/people';
 import { serverApi } from '@/api/client/server-api';
+import { businessPoliciesSchema } from '@/api/contracts/business-policies';
 import {
   aiEmployeeEndpoints,
   analyticsEndpoints,
+  businessPolicyEndpoints,
   approvalEndpoints,
   inboxEndpoints,
 } from '@/api/endpoints/registry';
@@ -71,6 +73,12 @@ export interface ApprovalsData {
    * is null on every row), so the name comes from the conversation.
    */
   readonly customerNames: Readonly<Record<string, string>>;
+  /**
+   * Refunds under this never reach you: an enabled REFUND policy's
+   * `managerApprovalAboveAmount` (`GET /api/business-policies`). `null` when
+   * there is none — dev holds no rows — or the read failed; then no number.
+   */
+  readonly refundLimit: number | null;
 }
 
 /** 03c names the customers on the rows a person will see — not on all 200. */
@@ -90,7 +98,7 @@ export async function loadApprovals(): Promise<ApprovalsData> {
     };
 
   const now = new Date();
-  const [pending, approved, rejected, aiEmployees, usageToday] = await Promise.all([
+  const [pending, approved, rejected, aiEmployees, usageToday, policies] = await Promise.all([
     api
       .get({ endpoint: approvalEndpoints.list('PENDING'), payload: approvalsSchema })
       .catch(degrade('approvals.pending_failed', null)),
@@ -109,7 +117,11 @@ export async function loadApprovals(): Promise<ApprovalsData> {
         payload: toolUsageListSchema,
       })
       .catch(degrade('approvals.usage_failed', null)),
+    api
+      .get({ endpoint: businessPolicyEndpoints.list(), payload: businessPoliciesSchema })
+      .catch(degrade('approvals.policies_failed', null)),
   ]);
+  const refund = policies?.policies.find((p) => p.actionKind === 'REFUND' && p.enabled);
 
   const decided =
     approved === null && rejected === null
@@ -121,6 +133,7 @@ export async function loadApprovals(): Promise<ApprovalsData> {
   return {
     readAt: now.getTime(),
     usageToday,
+    refundLimit: refund?.config.managerApprovalAboveAmount ?? null,
     customerNames: await customerNames(decided ?? []),
     pending,
     decided,

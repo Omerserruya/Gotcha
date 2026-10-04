@@ -876,6 +876,11 @@
     color: var(--intent-urgent-text);
   }
 
+  /* 02: Edited amber. */
+  .decidedStatus[data-tone='edited'] {
+    color: var(--intent-blocked-text);
+  }
+
   .decidedStatus[data-tone='lapsed'] {
     color: var(--intent-blocked-text);
   }
@@ -1048,5 +1053,159 @@
     margin: 4px 0 0;
     font-size: 19px;
     color: var(--frame-text);
+  }
+
+  /* 02: the queue's foot, pinned — "Change what needs asking", underlined. */
+  .queueFoot {
+    margin: auto 0 0;
+    padding: var(--space-16) var(--space-20);
+    border-block-start: 1px solid var(--border-subtle);
+    font-size: var(--font-size-caption);
+    line-height: 1.5;
+    color: var(--text-subtle);
+  }
+
+  .queueFootLink {
+    padding-block-end: 2px;
+    border-block-end: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  /* 02: "Order #1842 · damaged item · …", 14px under the title. */
+  .detailFacts {
+    margin: var(--space-6) 0 0;
+    font-size: 14px;
+    color: var(--intent-neutral-text);
+  }
+
+  /* 02's top right: the label quiet, the answer below it. */
+  .reversible {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0;
+    text-align: end;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .reversible strong {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  /* 02: bullets, 8 apart, 9 from their mark. */
+  .whyList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .whyList li {
+    display: flex;
+    gap: 9px;
+  }
+
+  .whyList li::before {
+    content: '·';
+    color: var(--text-muted);
+  }
+
+  /* 02: label left, value right, 7 apart. */
+  .customerFacts {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 0;
+    font-size: 12.5px;
+  }
+
+  .customerFacts div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .customerFacts dt {
+    color: var(--text-subtle);
+  }
+
+  .customerFacts dd {
+    margin: 0;
+    color: var(--text-primary);
+  }
+
+  /* 02: chips joined by arrows, wrapping. */
+  .chain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .chainStep {
+    padding: var(--space-6) 11px;
+    border-radius: 7px;
+    background-color: var(--panel-inset);
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .chainArrow {
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  /* 02: the key on Approve, mono. */
+  .key {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--action-text);
+    opacity: 0.7;
+  }
+
+  /* 02: Edit amount, Ask — outlined, `11px 20px`, radius 10. */
+  .secondary {
+    padding: 11px var(--space-20);
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background: none;
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--intent-neutral-text);
+    cursor: pointer;
+  }
+
+  .secondary[aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .editRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .editProblem {
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .reasonChip[aria-pressed='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
   }
 }

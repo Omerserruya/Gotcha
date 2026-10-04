@@ -96,12 +96,26 @@ export type ApprovalWriteResult =
   | { readonly ok: false; readonly reason: 'reason_required' }
   /** Separation of duties: the approver may not be the requesting actor. */
   | { readonly ok: false; readonly reason: 'forbidden' }
-  | { readonly ok: false; readonly reason: 'failed' };
+  | { readonly ok: false; readonly reason: 'failed' }
+  | { readonly ok: false; readonly reason: EditRefusal };
+
+/** Backend 05979604's refusals of an edited amount: nothing decided, nothing sent. */
+export const EDIT_REFUSALS = [
+  'edit_not_allowed',
+  'amount_above_original',
+  'invalid_amount',
+  'edit_requires_original_amount',
+] as const;
+export type EditRefusal = (typeof EDIT_REFUSALS)[number];
 
 function classify(cause: unknown, event: string): ApprovalWriteResult {
   if (isApiError(cause)) {
     if (cause.status === 409) return { ok: false, reason: 'stale' };
     if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    const code = cause.developerMessage ?? '';
+    if (cause.status === 400 && (EDIT_REFUSALS as readonly string[]).includes(code)) {
+      return { ok: false, reason: code as EditRefusal };
+    }
   }
   logger.warn(event, { cause });
   return { ok: false, reason: 'failed' };
@@ -110,15 +124,25 @@ function classify(cause: unknown, event: string): ApprovalWriteResult {
 /**
  * Approve.
  *
- * **No `modifiedParams` is sent**, ever — see the note at the top of the file.
- * The action that runs is the action that was reviewed.
+ * With `edits` only for an edited amount (backend 05979604, Omer 2026-10-04):
+ * `{ edits: { amount } }` — the server checks the tool is allowed, the amount is
+ * no more than the original, and refuses 400 otherwise with nothing decided.
  */
-export async function approveRequest(id: string): Promise<ApprovalWriteResult> {
+export async function approveRequest(
+  id: string,
+  /**
+   * 03's "Edit amount": approved with a lower amount. Sent only when given.
+   */
+  edits?: { readonly amount: number },
+): Promise<ApprovalWriteResult> {
+  if (edits !== undefined && !(Number.isFinite(edits.amount) && edits.amount > 0)) {
+    return { ok: false, reason: 'failed' };
+  }
   try {
     const result = await serverApi().post({
       endpoint: approvalEndpoints.approve(id),
       payload: approveResultSchema,
-      body: {},
+      body: edits ? { edits: { amount: edits.amount } } : {},
       raw: true,
     });
     revalidatePath('/[locale]/(app)/approvals', 'page');

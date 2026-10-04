@@ -87,11 +87,19 @@ export async function NothingWaiting({
           })
         : format.number(approval.facts.amount);
   const sentence = (approval: Approval) => {
-    const { key, values } = decisionSentence(
-      approval,
-      customerNames[approval.id] ?? null,
-      amountOf(approval),
-    );
+    const asked = amountOf(approval);
+    // Edited: what ran, and what was asked — "Refunded 120 (was 179)".
+    const ran =
+      approval.editedAmount !== null && asked !== null
+        ? t('decided.wasAmount', {
+            now: amountOf({
+              ...approval,
+              facts: { ...approval.facts, amount: approval.editedAmount },
+            })!,
+            was: asked,
+          })
+        : asked;
+    const { key, values } = decisionSentence(approval, customerNames[approval.id] ?? null, ran);
     return key === 'none'
       ? approval.summary
       : t(`decided.sentence.${key}` as 'decided.sentence.refunded', values as never);
@@ -116,9 +124,11 @@ export async function NothingWaiting({
       <header className={styles.decidedCardHeader}>
         <h2 className={styles.decidedHeading}>{t('decided.heading')}</h2>
         {/* 02: "7 today". Undo was ruled out (Omer, 2026-10-04), and with it the 24h. */}
-        {decided !== null ? (
+        {decided !== null && decided.length > 0 ? (
           <span className={styles.decidedCount} data-testid="decided-today">
-            {t('decided.today', { count: decidedToday })}
+            {decidedToday > 0
+              ? t('decided.today', { count: decidedToday })
+              : t('decided.shown', { count: decided.length })}
           </span>
         ) : null}
       </header>
@@ -199,6 +209,15 @@ export async function NothingWaiting({
                   >
                     {t('decided.status.outcomeUnknown')}
                   </span>
+                ) : stance === 'approved' && approval.editedAmount !== null ? (
+                  <span
+                    className={styles.decidedStatus}
+                    data-tone="edited"
+                    data-testid={`edited-${approval.id}`}
+                    title={by}
+                  >
+                    {t('decided.status.edited')}
+                  </span>
                 ) : stance === 'rejected' && approval.decisionReason ? (
                   <span
                     className={styles.decidedStatus}
@@ -241,7 +260,14 @@ export async function NothingWaiting({
  * 03c's dark card — what GOTCHA did today with nobody asked. See
  * `handledToday` for how it is counted; never a value nobody recorded.
  */
-export async function HandledCard({ handled }: { readonly handled: HandledToday | null }) {
+export async function HandledCard({
+  handled,
+  refundLimit = null,
+}: {
+  readonly handled: HandledToday | null;
+  /** The REFUND policy's approval threshold, when one is set. */
+  readonly refundLimit?: number | null;
+}) {
   const t = await getTranslations('approvals.handled');
   const format = await getFormatter();
   const figures = [
@@ -269,9 +295,14 @@ export async function HandledCard({ handled }: { readonly handled: HandledToday 
       <dl className={styles.handledFigures}>
         {figures.map(([key, value]) => (
           <div key={key} className={styles.handledFigure} data-testid={`handled-${key}`}>
-            <dt>{t(key)}</dt>
+            <dt>
+              {key === 'refunds' && refundLimit !== null
+                ? t('refundsUnder', { limit: format.number(refundLimit) })
+                : t(key)}
+            </dt>
+            {/* No figure of nothing: on a quiet day, or unread, each is "—". */}
             <dd title={value === undefined ? t('unread') : undefined}>
-              {value === undefined ? '—' : format.number(value)}
+              {value === undefined || handled?.total === 0 ? '—' : format.number(value)}
             </dd>
           </div>
         ))}

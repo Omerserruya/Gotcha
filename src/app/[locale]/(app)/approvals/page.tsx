@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import type { Approval } from '@/api/contracts/approvals';
 import { ApprovalsScreen } from '@/features/approvals/ApprovalsScreen';
+import { loadApprovalCustomers } from '@/features/approvals/approval-customers';
 import { handledToday } from '@/features/approvals/handled';
 import { DecisionStats, HandledCard, NothingWaiting } from '@/features/approvals/NothingWaiting';
 import { decisionStats, loadApprovals, requesterName } from '@/features/approvals/load-approvals';
@@ -71,6 +72,7 @@ export default async function Page({
     readAt,
     usageToday,
     customerNames,
+    refundLimit,
   } = await loadApprovals();
 
   const nameFor = (list: readonly Approval[] | null) =>
@@ -148,7 +150,7 @@ export default async function Page({
         actions={<DecisionStats stats={decisionStats(decided, decidedMayBeIncomplete)} />}
       >
         <div className={styles.rest}>
-          <HandledCard handled={handled} />
+          <HandledCard handled={handled} refundLimit={refundLimit} />
           <NothingWaiting
             decided={decided}
             mayBeIncomplete={decidedMayBeIncomplete}
@@ -170,12 +172,25 @@ export default async function Page({
     .sort((x, y) => x - y)[0];
   const inWords = (ms: number) => {
     const minutes = Math.max(1, Math.round(ms / 60_000));
-    if (minutes < 60) return t('time.minutes', { n: minutes });
+    if (minutes < 60) return t('pending.minutes', { n: minutes });
     const hours = Math.round(minutes / 60);
     return hours < 48
-      ? t('time.hours', { n: hours })
-      : t('time.days', { n: Math.round(hours / 24) });
+      ? t('pending.hours', { n: hours })
+      : t('pending.days', { n: Math.round(hours / 24) });
   };
+  /*
+    "Requested by Support AI": a request the AI made (`ai-bot:…`) names no
+    employee, so it is named only where one employee could have made it.
+  */
+  const liveAi = aiEmployees ?? [];
+  const requesters = nameFor(pending);
+  const aiAsked: string[] = [];
+  for (const approval of pending) {
+    if (requesters[approval.id] || !approval.requestedBy.startsWith('ai-bot')) continue;
+    if (liveAi.length === 1) requesters[approval.id] = liveAi[0]!.name;
+    else aiAsked.push(approval.id);
+  }
+  const customers = await loadApprovalCustomers(pending);
 
   return (
     <PageContainer
@@ -205,7 +220,13 @@ export default async function Page({
     >
       <ApprovalsScreen
         pending={pending}
-        requesterNames={nameFor(pending)}
+        requesterNames={requesters}
+        aiAsked={aiAsked}
+        customers={customers}
+        handledToday={handled?.total ?? null}
+        /* Backend 05979604: `edits.amount` is live (Omer, 2026-10-04). */
+        editAmountLive
+        refundLimit={refundLimit}
         // The moment the queue was read, not the moment this rendered —
         // and it starts the client's clock at exactly the server's value, so
         // the first client render cannot disagree about what has lapsed.

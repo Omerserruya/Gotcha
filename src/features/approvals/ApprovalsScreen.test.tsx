@@ -53,7 +53,8 @@ vi.mock('./actions', () => ({
 const NOW = Date.parse('2026-09-19T10:00:00.000Z');
 
 const approval = (over: Partial<Approval> = {}): Approval => ({
-  facts: { order: null, amount: null, currency: null },
+  editedAmount: null,
+  facts: { order: null, amount: null, currency: null, note: null },
   id: 'a1',
   conversationId: 'c1',
   contactId: 'k1',
@@ -141,6 +142,8 @@ describe('shortcuts never fire from a text field', () => {
     const user = userEvent.setup();
     renderScreen([approval()]);
 
+    // "Other" opens the one free-text field.
+    await user.click(screen.getByTestId('reason-other'));
     const field = screen.getByTestId('reject-reason');
     await user.click(field);
     await user.type(field, 'already handled');
@@ -162,28 +165,27 @@ describe('shortcuts never fire from a text field', () => {
   });
 });
 
-describe('R goes to the reason, because the route demands one', () => {
-  it('focuses the reason field rather than rejecting', async () => {
+describe('R goes to the reasons, because the route demands one', () => {
+  it('focuses the first reason rather than rejecting', async () => {
     const user = userEvent.setup();
     renderScreen([approval()]);
 
     await user.keyboard('r');
 
-    expect(screen.getByTestId('reject-reason')).toHaveFocus();
+    expect(screen.getByTestId('reason-policy')).toHaveFocus();
     expect(reject).not.toHaveBeenCalled();
   });
 
-  it('refuses an empty reason without asking the server', async () => {
-    reject.mockResolvedValue({ ok: false, reason: 'reason_required' });
+  it('★ Reject waits for a reason — nothing reaches the server without one', async () => {
     const user = userEvent.setup();
     renderScreen([approval()]);
 
+    expect(screen.getByTestId('reject')).toBeDisabled();
     await user.click(screen.getByTestId('reject'));
-
-    await waitFor(() =>
-      expect(screen.getByTestId('approvals-announcement')).not.toBeEmptyDOMElement(),
-    );
-    expect(screen.getByTestId('reject-reason')).toHaveFocus();
+    expect(reject).not.toHaveBeenCalled();
+    // "Other" with nothing typed is no reason either.
+    await user.click(screen.getByTestId('reason-other'));
+    expect(screen.getByTestId('reject')).toBeDisabled();
   });
 });
 
@@ -304,13 +306,17 @@ describe('the moment after keeps the two axes apart', () => {
 });
 
 describe('nothing on this screen promises a reversal', () => {
-  it('renders IRREVERSIBLE as a label and no window anywhere', () => {
-    renderScreen([approval({ riskTags: ['IRREVERSIBLE'] })]);
+  it('★ says whether it can be put back by what it is — a refund cannot — and no window, no Undo', () => {
+    // Omer, 2026-10-04: "Reversible" by action type; Undo is gone.
+    renderScreen([approval({ tool: 'shopify.process_refund', riskTags: ['IRREVERSIBLE'] })]);
 
-    expect(screen.getByTestId('risk-IRREVERSIBLE')).toBeInTheDocument();
-    // "Reversible · Yes — within 24h" is read BEFORE the irreversible act.
-    // It would make someone approve a refund they would otherwise question.
-    expect(document.body.textContent).not.toMatch(/reversible|undo|take it back/i);
+    expect(screen.getByTestId('reversible')).toHaveTextContent('ReversibleNo');
+    expect(document.body.textContent).not.toMatch(/within 24h|undo|take it back/i);
+  });
+
+  it('★ and draws nothing where it is not known', () => {
+    renderScreen([approval({ tool: 'propose_plan' })]);
+    expect(screen.queryByTestId('reversible')).toBeNull();
   });
 
   it('offers no way to edit what will run', () => {
@@ -465,11 +471,21 @@ describe('★★ 03, measured — what the new layout says', () => {
     expect(screen.getByTestId('next-hint')).toHaveTextContent('2 more after this · ↓ for the next');
   });
 
-  it('⚠⚠ a one-tap reason FILLS the reason — it does not reject', async () => {
+  it('⚠⚠ a one-tap reason CHOOSES the reason — it does not reject; Reject sends it', async () => {
+    reject.mockResolvedValue({ ok: true });
     renderScreen([approval()]);
-    await userEvent.click(screen.getByTestId('reason-policy'));
-    expect(screen.getByTestId('reject-reason')).toHaveValue('Outside policy');
+    // Omer's closed choice, and "Other".
+    expect(
+      ['policy', 'myself', 'wrongOrder', 'tooGenerous', 'other'].map(
+        (key) => screen.getByTestId(`reason-${key}`).textContent,
+      ),
+    ).toEqual(['Outside policy', 'I’ll handle it myself', 'Wrong order', 'Too generous', 'Other']);
+    expect(screen.queryByTestId('reject-reason')).toBeNull();
+    await userEvent.click(screen.getByTestId('reason-tooGenerous'));
+    expect(screen.getByTestId('reason-tooGenerous')).toHaveAttribute('aria-pressed', 'true');
     expect(reject).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('reject'));
+    expect(reject).toHaveBeenCalledWith('a1', 'Too generous');
   });
 
   it('⚠ an unreadable date never throws the render — the eyebrow simply has no time', () => {
@@ -481,8 +497,9 @@ describe('★★ 03, measured — what the new layout says', () => {
 describe('★★ the supervisor’s three, against the test items', () => {
   it('⚠⚠ no tag reaches the screen as a raw code — MOVES_MONEY reads "Moves money"', () => {
     renderScreen([approval({ riskTags: ['MOVES_MONEY'] })]);
+    // The queue's chip says it; the detail no longer repeats it as a pill.
     expect(screen.getByTestId('queue-a1')).toHaveTextContent('Moves money');
-    expect(screen.getByTestId('risk-MOVES_MONEY')).toHaveTextContent('Moves money');
+    expect(screen.queryByTestId('risk-MOVES_MONEY')).toBeNull();
     expect(document.body.textContent).not.toContain('MOVES_MONEY');
   });
 
@@ -528,8 +545,7 @@ describe('⚠⚠ every risk tag the platform writes has words', () => {
 describe('★ REQUIRES_APPROVAL is not a pill here — every item on this screen requires it', () => {
   it('is left out, and any other tag beside it still shows', () => {
     renderScreen([approval({ riskTags: ['REQUIRES_APPROVAL', 'IRREVERSIBLE'] })]);
-    expect(screen.queryByTestId('risk-REQUIRES_APPROVAL')).toBeNull();
-    expect(screen.getByTestId('risk-IRREVERSIBLE')).toBeInTheDocument();
+    expect(screen.getByTestId('queue-a1')).toHaveTextContent("Can't be taken back");
     expect(screen.getByTestId('queue-a1')).not.toHaveTextContent(/needs a decision/i);
   });
 });
