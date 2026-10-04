@@ -69,6 +69,7 @@ export default async function Page({
     return (
       <PageContainer layout="screen" flush>
         <LiveCall
+          sessionId={liveCall.id}
           conversationId={liveCall.conversationId}
           customerNumber={liveCall.customerNumber}
           customerId={liveCall.customerId}

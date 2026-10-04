@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 
 import type { TranscriptLine } from '@/api/contracts/calls';
@@ -8,7 +8,9 @@ import { displayHandle } from '@/features/customers/phone';
 import { Link } from '@/i18n/navigation';
 import { useRealtimeEvent } from '@/realtime/realtime-provider';
 
+import { endCall } from './actions';
 import styles from './Calls.module.css';
+import { TransferPanel } from './TransferPanel';
 
 /**
  * Screen 05e — on a call. Measured.
@@ -39,6 +41,7 @@ import styles from './Calls.module.css';
  *   in-call approval — none exists on the voice path; nothing claims them.
  */
 export function LiveCall({
+  sessionId,
   conversationId,
   customerNumber,
   initialTranscript,
@@ -47,6 +50,8 @@ export function LiveCall({
   direction = null,
   startedAt = null,
 }: {
+  /** The voice session: what End call and Transfer act on. */
+  readonly sessionId: string;
   readonly conversationId: string;
   readonly customerNumber: string;
   readonly initialTranscript: readonly TranscriptLine[];
@@ -64,6 +69,9 @@ export function LiveCall({
   >([]);
   const [suggestions, setSuggestions] = useState<readonly string[]>([]);
   const [ended, setEnded] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  const [endProblem, setEndProblem] = useState<string | null>(null);
+  const [isEnding, startEnding] = useTransition();
   /*
     The clock runs only after mount: the server's "now" and the browser's
     differ, and a time computed on both is a hydration mismatch.
@@ -189,16 +197,17 @@ export function LiveCall({
         </span>
 
         {/*
-          Two controls, drawn and not live — they were buttons with no
-          handler. Mute is absent rather than disabled (its ruling).
+          05e: Transfer and End call — live (Omer, 2026-10-04), the old app's
+          calls. Mute is absent rather than disabled (its ruling).
         */}
         <div className={styles.liveActions}>
           <button
             type="button"
             className={styles.liveAction}
             data-testid="transfer"
-            disabled
-            title={t('live.notYet')}
+            aria-expanded={transferring}
+            disabled={ended}
+            onClick={() => setTransferring(!transferring)}
           >
             {t('live.transfer')}
           </button>
@@ -206,13 +215,26 @@ export function LiveCall({
             type="button"
             className={styles.liveEnd}
             data-testid="end-call"
-            disabled
-            title={t('live.notYet')}
+            disabled={ended || isEnding}
+            onClick={() => {
+              setEndProblem(null);
+              startEnding(async () => {
+                const result = await endCall(sessionId);
+                if (result.ok) setEnded(true);
+                else setEndProblem(t('live.endFailed'));
+              });
+            }}
           >
             {t('live.end')}
           </button>
         </div>
       </header>
+      {endProblem ? (
+        <p className={styles.transferProblem} role="alert" data-testid="end-problem">
+          {endProblem}
+        </p>
+      ) : null}
+      {transferring && !ended ? <TransferPanel sessionId={sessionId} who={who} /> : null}
 
       <div className={styles.liveBody}>
         <div className={styles.liveMain}>

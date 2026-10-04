@@ -47,7 +47,8 @@
     "doNone": "Nothing to do yet.",
     "careful": "Careful",
     "carefulNone": "Nothing to watch for yet.",
-    "ask": "Ask Copilot something…"
+    "ask": "Ask Copilot something…",
+    "endFailed": "The call didn't end. Try again."
   },
   "availabilityUnknown": "We couldn't check whether voice is set up for this workspace, so there's nothing reliable to show here yet. This is our side, not yours — try again in a moment.",
   "dialer": {
@@ -63,7 +64,19 @@
     "call": "Call {name}",
     "callSomeone": "Call",
     "letGotcha": "Let GOTCHA call them",
-    "notYet": "Calling from here isn't available yet."
+    "notYet": "Calling from here isn't available yet.",
+    "starting": "Calling…",
+    "ringing": "Ringing your line's phone — answer it, and they're connected.",
+    "inPlatform": "This line dials from a browser phone, which this app doesn't have yet. Nothing was dialled.",
+    "noNumber": "No phone number for this person.",
+    "error": {
+      "invalid_destination": "That isn't a number the line can call — use the full international form, like +972 50 123 4567.",
+      "no_active_voice_channel": "There's no active phone line to call from.",
+      "agent_phone_not_configured": "The line's agent has no phone number set, so nothing was dialled.",
+      "caller_id_not_configured": "The line has no caller ID set, so nothing was dialled.",
+      "forbidden": "You don't have permission to place calls.",
+      "failed": "The call didn't start. Nothing was dialled — try again."
+    }
   },
   "stats": {
     "week": "Calls this week",
@@ -91,5 +104,24 @@
     "missed": "Nobody picked up",
     "notAnswered": "They didn't answer",
     "failed": "The call didn't go through"
+  },
+  "transfer": {
+    "to": "Number to transfer to",
+    "placeholder": "+972 50 123 4567",
+    "fullNumber": "The full international number, starting with +.",
+    "add": "Add to the call",
+    "added": "{number} is on the call.",
+    "hold": "Hold {who}",
+    "resume": "Take {who} off hold",
+    "leave": "Hand over and leave",
+    "leaveConfirm": "Leave the call",
+    "stay": "Stay",
+    "leaveWhat": "You drop off; {who} and the person you added stay on the call.",
+    "left": "You left the call. It carries on without you.",
+    "error": {
+      "invalid_destination": "That isn't a number the line can call.",
+      "forbidden": "Only the person on the call, or an admin, can do that.",
+      "failed": "That didn't go through. The call is unchanged."
+    }
   }
 }

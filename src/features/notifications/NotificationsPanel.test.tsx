@@ -86,7 +86,9 @@ const panel = async (
   return render(await NotificationsPanel({ kind, now: NOW }));
 };
 
-beforeEach(() => loadNotifications.mockReset());
+beforeEach(() => {
+  loadNotifications.mockReset();
+});
 
 describe('★★ 01d — a panel of decisions and failures', () => {
   it('the head: "N new", Mark all read, Settings', async () => {

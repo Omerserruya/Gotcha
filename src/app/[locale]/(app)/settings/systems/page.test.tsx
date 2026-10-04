@@ -75,7 +75,9 @@ import Page from './page';
 const open = async (params: Record<string, string>) =>
   render(await Page({ searchParams: Promise.resolve(params) }));
 
-beforeEach(() => loadCapabilities.mockClear());
+beforeEach(() => {
+  loadCapabilities.mockClear();
+});
 
 describe('★ 14 — 14c/14d and 14e open over it', () => {
   it('14 alone reads no capabilities: they are only for a part’s drawer', async () => {

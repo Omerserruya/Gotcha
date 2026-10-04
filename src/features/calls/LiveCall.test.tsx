@@ -1,10 +1,21 @@
 import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { RealtimeEvent, RealtimeEventType } from '@/realtime/events';
 
 import messages from '@/i18n/messages/en/calls.json';
+
+/* Real phone calls: every action is a spy, asserted on. */
+const calls = vi.hoisted(() => ({
+  endCall: vi.fn(),
+  addToCall: vi.fn(),
+  holdCustomer: vi.fn(),
+  leaveCall: vi.fn(),
+}));
+vi.mock('./actions', () => calls);
+beforeEach(() => Object.values(calls).forEach((fn) => fn.mockReset()));
 
 import { LiveCall } from './LiveCall';
 
@@ -62,6 +73,7 @@ function renderCall(initial: Parameters<typeof LiveCall>[0]['initialTranscript']
   return render(
     <NextIntlClientProvider locale="en" messages={{ calls: messages }}>
       <LiveCall
+        sessionId="s-1"
         conversationId="conv-1"
         customerNumber="+447700900123"
         initialTranscript={initial}
@@ -181,16 +193,22 @@ describe('frames for another call never reach this one', () => {
 });
 
 describe('the controls are the two that exist', () => {
-  it('★★ draws transfer and end — and NOT live: they were buttons that did nothing', () => {
-    /*
-     * Superseded: these were live-looking buttons with no handler. Hanging up
-     * or moving a customer's live call waits on Omer, like Send; until then
-     * they are drawn disabled and say why.
-     */
+  it('★★ End call is live: one click ends this session — and nothing fires without it', async () => {
+    calls.endCall.mockResolvedValue({ ok: true });
     renderCall();
-    expect(screen.getByTestId('transfer')).toBeDisabled();
+    expect(calls.endCall).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('end-call'));
+    expect(calls.endCall).toHaveBeenCalledWith('s-1');
+    expect(screen.getByTestId('live-state')).toHaveTextContent('The call ended');
     expect(screen.getByTestId('end-call')).toBeDisabled();
-    expect(screen.getByTestId('end-call')).toHaveAttribute('title', 'Not available from here yet.');
+  });
+
+  it('a failed hang-up says so and leaves the call on', async () => {
+    calls.endCall.mockResolvedValue({ ok: false, reason: 'failed' });
+    renderCall();
+    await userEvent.click(screen.getByTestId('end-call'));
+    expect(screen.getByTestId('end-problem')).toHaveTextContent("The call didn't end.");
+    expect(screen.getByTestId('live-state')).toHaveTextContent('On the call');
   });
 
   it('offers no mute, not even a disabled one', () => {
@@ -216,6 +234,61 @@ describe('the controls are the two that exist', () => {
     });
     expect(screen.getByTestId('live-state')).toHaveTextContent('The call ended');
     expect(screen.getByTestId('end-call')).toBeDisabled();
+  });
+});
+
+describe('★★ 05e — Transfer, as the old app does it', () => {
+  const open = async () => {
+    renderCall();
+    await userEvent.click(screen.getByTestId('transfer'));
+    return screen.getByTestId('transfer-panel');
+  };
+
+  it('opens a panel; nothing is written by opening it', async () => {
+    await open();
+    expect(Object.values(calls).every((fn) => fn.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('adds a full international number, then offers hold and leave', async () => {
+    calls.addToCall.mockResolvedValue({ ok: true });
+    await open();
+    expect(screen.getByTestId('transfer-add')).toBeDisabled();
+    await userEvent.type(screen.getByTestId('transfer-to'), '+972 50 123 4567');
+    await userEvent.click(screen.getByTestId('transfer-add'));
+    expect(calls.addToCall).toHaveBeenCalledWith('s-1', '+972501234567');
+    expect(screen.getByTestId('transfer-added')).toHaveTextContent('+972501234567 is on the call.');
+    expect(screen.getByTestId('transfer-hold')).toBeInTheDocument();
+  });
+
+  it('hold toggles; leaving asks once more, then drops only you', async () => {
+    calls.addToCall.mockResolvedValue({ ok: true });
+    calls.holdCustomer.mockResolvedValue({ ok: true });
+    calls.leaveCall.mockResolvedValue({ ok: true });
+    await open();
+    await userEvent.type(screen.getByTestId('transfer-to'), '+972501234567');
+    await userEvent.click(screen.getByTestId('transfer-add'));
+    await userEvent.click(screen.getByTestId('transfer-hold'));
+    expect(calls.holdCustomer).toHaveBeenCalledWith('s-1', true);
+    expect(screen.getByTestId('transfer-hold')).toHaveAttribute('aria-pressed', 'true');
+    // A second press takes them off hold — the toggle, not "hold" twice.
+    await userEvent.click(screen.getByTestId('transfer-hold'));
+    expect(calls.holdCustomer).toHaveBeenLastCalledWith('s-1', false);
+    expect(screen.getByTestId('transfer-hold')).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByTestId('transfer-leave'));
+    expect(calls.leaveCall).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('transfer-leave-confirm'));
+    expect(calls.leaveCall).toHaveBeenCalledWith('s-1');
+    expect(screen.getByTestId('transfer-left')).toHaveTextContent('You left the call.');
+  });
+
+  it('a refusal is named in words', async () => {
+    calls.addToCall.mockResolvedValue({ ok: false, reason: 'invalid_destination' });
+    await open();
+    await userEvent.type(screen.getByTestId('transfer-to'), '+972501234567');
+    await userEvent.click(screen.getByTestId('transfer-add'));
+    expect(screen.getByTestId('transfer-problem')).toHaveTextContent(
+      "That isn't a number the line can call.",
+    );
   });
 });
 
@@ -254,6 +327,7 @@ describe('★★ 05e — the call as a page', () => {
     return render(
       <NextIntlClientProvider locale="en" messages={{ calls: messages }}>
         <LiveCall
+          sessionId="s-1"
           conversationId="conv-1"
           customerNumber="972524189930"
           initialTranscript={[]}

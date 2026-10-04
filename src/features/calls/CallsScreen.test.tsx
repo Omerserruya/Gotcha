@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
-import { createFormatter, createTranslator } from 'next-intl';
+import userEvent from '@testing-library/user-event';
+import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { callSchema, callSummarySchema, type Call } from '@/api/contracts/calls';
 import { customerRowSchema } from '@/api/contracts/customers';
@@ -34,6 +35,13 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
+/* The call is a real phone call: the action is a spy, and asserted on. */
+const startCall = vi.hoisted(() => vi.fn());
+vi.mock('./actions', () => ({ startCall }));
+beforeEach(() => {
+  startCall.mockReset();
+});
+
 import {
   callDuration,
   CallStats,
@@ -41,8 +49,18 @@ import {
   isMissed,
   keepCall,
   parseCallFilter,
+  dialable,
+  pastedNumber,
   RecentCalls,
 } from './CallsScreen';
+
+/** The dialer holds a client button now: render it inside the provider. */
+const renderDialer = async (props: Parameters<typeof DialerCard>[0]) =>
+  render(
+    <NextIntlClientProvider locale="en" messages={{ calls }}>
+      {await DialerCard(props)}
+    </NextIntlClientProvider>,
+  );
 
 /**
  * Screen 05d. This tenant has voice on and no number, so dev photographs the
@@ -103,7 +121,7 @@ describe('★★ the dialer — a live search, and no call placed from here', ()
   });
 
   it('★ results: the person, their number in display form, their tag; the first chosen', async () => {
-    render(await DialerCard({ query: 'dana', results: [dana] }));
+    await renderDialer({ query: 'dana', results: [dana] });
     const row = screen.getByTestId('dialer-k1');
     expect(row).toHaveTextContent('Dana Cohen');
     expect(row).toHaveTextContent('+972 52 418 9930');
@@ -112,30 +130,83 @@ describe('★★ the dialer — a live search, and no call placed from here', ()
     expect(row).toHaveAttribute('href', '/customers/k1');
   });
 
-  it('★★ "Call Dana" and "Let GOTCHA call them" are drawn and NOT live', async () => {
-    const { container } = render(await DialerCard({ query: 'dana', results: [dana] }));
-    expect(screen.getByText('Call Dana').closest('[aria-disabled]')).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+  it('★★ "Call Dana" is live — and nothing is dialled without the click', async () => {
+    await renderDialer({ query: 'dana', results: [dana] });
+    const call = screen.getByTestId('dialer-call');
+    expect(call).toHaveTextContent('Call Dana');
+    expect(call).toBeEnabled();
+    expect(startCall).not.toHaveBeenCalled();
+    startCall.mockResolvedValue({ ok: true, mode: 'AGENT_FIRST', sessionId: 's1' });
+    await userEvent.click(call);
+    expect(startCall).toHaveBeenCalledTimes(1);
+    // Stored without the +; dialled in E.164, as the route requires.
+    expect(startCall).toHaveBeenCalledWith('+972524189930', undefined);
+    expect(await screen.findByTestId('dialer-note')).toHaveTextContent(/Ringing your line's phone/);
+    // "Let GOTCHA call them" stays drawn: an AI calling was not decided.
     expect(screen.getByText('Let GOTCHA call them')).toHaveAttribute('aria-disabled', 'true');
-    // Nothing that could place a call: no button, no form action but the search.
-    expect(container.querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('★ a line that dials from the browser: nothing was dialled, and it says so', async () => {
+    startCall.mockResolvedValue({ ok: true, mode: 'IN_PLATFORM' });
+    await renderDialer({ query: 'dana', results: [dana] });
+    await userEvent.click(screen.getByTestId('dialer-call'));
+    expect(await screen.findByTestId('dialer-note')).toHaveTextContent('Nothing was dialled.');
+  });
+
+  it('a refusal is named in words, never a code', async () => {
+    startCall.mockResolvedValue({ ok: false, reason: 'no_active_voice_channel' });
+    await renderDialer({ query: 'dana', results: [dana] });
+    await userEvent.click(screen.getByTestId('dialer-call'));
+    const note = await screen.findByTestId('dialer-note');
+    expect(note).toHaveTextContent("There's no active phone line to call from.");
+    expect(note).toHaveAttribute('data-kind', 'problem');
+  });
+
+  it('a pasted number is called as it is; a person with no phone cannot be', async () => {
+    startCall.mockResolvedValue({ ok: true, mode: 'AGENT_FIRST', sessionId: null });
+    const one = await renderDialer({ query: '+972 50-123-4567', results: [] });
+    await userEvent.click(screen.getByTestId('dialer-call'));
+    expect(startCall).toHaveBeenCalledWith('+972501234567', undefined);
+    one.unmount();
+    await renderDialer({ query: 'dana', results: [{ ...dana, phone: null }] });
+    expect(screen.getByTestId('dialer-call')).toBeDisabled();
+    expect(screen.getByTestId('dialer-call')).toHaveAttribute(
+      'title',
+      'No phone number for this person.',
+    );
+  });
+
+  it.each([
+    ['+972501234567', '+972501234567'],
+    ['+1 (415) 555-1234', '+14155551234'],
+    ['0501234567', null],
+    ['dana', null],
+  ])('pastedNumber(%s) → %s', (raw, out) => {
+    expect(pastedNumber(raw)).toBe(out);
+  });
+
+  it.each([
+    ['972524189930', '+972524189930'],
+    ['+972524189930', '+972524189930'],
+    ['0524189930', null],
+    [null, null],
+  ])('dialable(%s) → %s', (raw, out) => {
+    expect(dialable(raw)).toBe(out);
   });
 
   it('⚠ three different empties: no query, no match, a failed search', async () => {
-    const one = render(await DialerCard({ query: '', results: [] }));
+    const one = await renderDialer({ query: '', results: [] });
     expect(screen.getByText('Type a name or a number.')).toBeInTheDocument();
     one.unmount();
-    const two = render(await DialerCard({ query: 'zzz', results: [] }));
+    const two = await renderDialer({ query: 'zzz', results: [] });
     expect(screen.getByTestId('dialer-no-match')).toBeInTheDocument();
     two.unmount();
-    render(await DialerCard({ query: 'zzz', results: null }));
+    await renderDialer({ query: 'zzz', results: null });
     expect(screen.getByTestId('dialer-failed')).toBeInTheDocument();
   });
 
   it('the search is a GET form keyed q, so the URL keeps it', async () => {
-    const { container } = render(await DialerCard({ query: 'dana', results: [] }));
+    const { container } = await renderDialer({ query: 'dana', results: [] });
     const form = container.querySelector('form')!;
     expect(form.getAttribute('method')).toBe('get');
     expect(screen.getByTestId('dialer-q')).toHaveAttribute('name', 'q');
@@ -143,7 +214,7 @@ describe('★★ the dialer — a live search, and no call placed from here', ()
   });
 
   it('"Or have GOTCHA call a list" keeps its place', async () => {
-    render(await DialerCard({ query: '', results: [] }));
+    await renderDialer({ query: '', results: [] });
     expect(screen.getByTestId('dialer-lists')).toHaveTextContent('Nothing yet.');
   });
 });

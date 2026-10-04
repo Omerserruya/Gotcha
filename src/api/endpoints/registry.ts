@@ -888,6 +888,19 @@ export const callEndpoints = {
   /** Voice MESSAGES, not a transcript column. Cursor-paginated, ≤500. */
   transcript: (id: string) => endpoint('/api/voice-sessions/{id}/transcript', { id }),
   context: (id: string) => endpoint('/api/voice-sessions/{id}/context', { id }),
+  /*
+   * 05d / 05e writes (Omer, 2026-10-04). The same calls the old frontend
+   * makes (`ChatCenter/frontend/src/lib/api.ts`).
+   */
+  /** `{ to, conversationId?, notes? }` → `{ mode: IN_PLATFORM | AGENT_FIRST, … }`. */
+  startOutbound: () => endpoint('/api/voice-sessions/start-outbound'),
+  hangup: (id: string) => endpoint('/api/voice-sessions/{id}/hangup', { id }),
+  /** `{ to, label? }` — a third party into the conference. */
+  addParticipant: (id: string) => endpoint('/api/voice-sessions/{id}/add-participant', { id }),
+  /** `{ hold }` — the customer on hold music while you consult. */
+  customerHold: (id: string) => endpoint('/api/voice-sessions/{id}/customer-hold', { id }),
+  /** Cold transfer: the agent's leg drops; customer and third party stay. */
+  agentLeave: (id: string) => endpoint('/api/voice-sessions/{id}/agent-leave', { id }),
 } as const;
 
 /**

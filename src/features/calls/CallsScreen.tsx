@@ -1,4 +1,4 @@
-import { Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing } from 'lucide-react';
+import { PhoneIncoming, PhoneMissed, PhoneOutgoing } from 'lucide-react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { wasAnswered, type Call, type CallSummary } from '@/api/contracts/calls';
@@ -7,6 +7,8 @@ import { initialsOf } from '@/features/customers/CustomerScreen';
 import { displayHandle } from '@/features/customers/phone';
 import { Link } from '@/i18n/navigation';
 
+import { CallButton } from './CallButton';
+import { dialable, pastedNumber } from './dial';
 import styles from './Calls.module.css';
 
 /**
@@ -136,12 +138,17 @@ export async function DialerCard({
       </div>
 
       <footer className={styles.dialerFoot}>
-        <span className={styles.dialerCall} aria-disabled="true" title={t('dialer.notYet')}>
-          <Phone size={14} strokeWidth={2} aria-hidden="true" />
-          {chosenName
-            ? t('dialer.call', { name: chosenName.split(/\s+/)[0]! })
-            : t('dialer.callSomeone')}
-        </span>
+        {/* 05d: live — the chosen person's phone, or a number pasted as it is. */}
+        <CallButton
+          to={chosen ? dialable(chosen.phone) : pastedNumber(query)}
+          label={
+            chosenName
+              ? t('dialer.call', { name: chosenName.split(/\s+/)[0]! })
+              : pastedNumber(query)
+                ? t('dialer.call', { name: pastedNumber(query)! })
+                : t('dialer.callSomeone')
+          }
+        />
         <span className={styles.dialerHand} aria-disabled="true" title={t('dialer.notYet')}>
           {t('dialer.letGotcha')}
         </span>
@@ -327,3 +334,5 @@ export async function RecentCalls({
     </section>
   );
 }
+
+export { dialable, pastedNumber } from './dial';
