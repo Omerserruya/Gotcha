@@ -759,6 +759,55 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePer
   }
 });
 
+/**
+ * The two WhatsApp onboarding choices a screen can offer: connect a number
+ * that already lives in the WhatsApp Business app (Coexistence), or a new
+ * number.
+ *
+ * What a choice can and cannot do is Meta's rule, encoded in
+ * buildEmbeddedSignupLaunch: on Embedded Signup v4 (the default) `extras` must
+ * be EMPTY - the unified dialog presents both choices itself, and adding
+ * `featureType` there "does nothing or silently downgrades the experience".
+ * So on v4 the choice steers our copy and the inspect `path`, not Meta's
+ * dialog. On v2/v3 the Coexistence flow IS selected by
+ * extras.featureType = "whatsapp_business_app_onboarding", and that is what a
+ * coexistence launch carries there. A dedicated Coexistence configuration, if
+ * one exists, comes from WHATSAPP_ES_COEXISTENCE_CONFIG_ID.
+ */
+const WHATSAPP_MODES = ["coexistence", "new_number"] as const;
+type WhatsappMode = (typeof WHATSAPP_MODES)[number];
+const COEXISTENCE_FEATURE_TYPE = "whatsapp_business_app_onboarding";
+
+function parseWhatsappMode(raw: unknown): WhatsappMode | undefined {
+  return typeof raw === "string" && (WHATSAPP_MODES as readonly string[]).includes(raw) ? (raw as WhatsappMode) : undefined;
+}
+
+export function embeddedSignupFor(mode: WhatsappMode | undefined, env: NodeJS.ProcessEnv = process.env) {
+  const base = buildEmbeddedSignupLaunch(env);
+  if (!mode) return base; // the configured default, unchanged
+  const extras: Record<string, unknown> = { ...base.extras };
+  let configId = base.configId;
+  if (mode === "coexistence") {
+    const coexConfig = (env.WHATSAPP_ES_COEXISTENCE_CONFIG_ID || "").trim();
+    if (coexConfig) configId = coexConfig;
+    if (base.esVersion !== "v4") extras.featureType = COEXISTENCE_FEATURE_TYPE;
+  } else {
+    delete extras.featureType;
+  }
+  return {
+    ...base,
+    configId,
+    extras,
+    configured: Boolean(base.appId && configId),
+    mode,
+    // Where the choice is actually made, so a screen does not promise what the
+    // dialog will not do: "meta_dialog" on v4, "feature_type" before it.
+    choiceMadeIn: base.esVersion === "v4" ? ("meta_dialog" as const) : ("feature_type" as const),
+    // The `path` POST /whatsapp-numbers/inspect expects for this choice.
+    inspectPath: mode === "coexistence" ? ("business-app" as const) : ("new" as const),
+  };
+}
+
 // ─── OAuth Init ──────────────────────────────────────────────
 
 const CHANNEL_PLATFORMS = ["messenger", "instagram", "whatsapp", "gmail", "outlook", "slack"] as const;
@@ -790,6 +839,7 @@ function buildChannelOAuth(opts: {
   wabaId?: string;
   phoneNumberId?: string;
   flow?: string;
+  waMode?: unknown;
 }): ChannelInitOutcome {
   const platform = String(opts.platform ?? "");
   if (!(CHANNEL_PLATFORMS as readonly string[]).includes(platform)) return { kind: "bad_platform" };
@@ -828,7 +878,7 @@ function buildChannelOAuth(opts: {
     // The old hand-rolled URL sent `setup: { channel: "WHATSAPP" }`, which is
     // not a documented field, and no version at all.
     oauthUrl = embeddedSignupDialogUrl({
-      launch: buildEmbeddedSignupLaunch(process.env),
+      launch: embeddedSignupFor(parseWhatsappMode(opts.waMode)),
       redirectUri: OAUTH_REDIRECT_URI,
       state,
       // The DIALOG version, which is not the Graph API version. This used to
@@ -993,6 +1043,7 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
       platform: req.query.platform,
       wabaId: req.query.wabaId as string,
       phoneNumberId: req.query.phoneNumberId as string,
+      waMode: req.query.mode,
       flow,
     });
     if (outcome.kind === "bad_platform") {
@@ -1036,6 +1087,7 @@ router.get("/oauth/init-url", authenticate, resolveTenant, async (req: Request, 
       platform: req.query.platform,
       wabaId: req.query.wabaId as string,
       phoneNumberId: req.query.phoneNumberId as string,
+      waMode: req.query.mode,
       flow: parseChannelFlow(req.query.flow),
     });
     if (outcome.kind === "bad_platform") {
@@ -2336,7 +2388,7 @@ router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
 
 // ─── Get OAuth Config (for frontend) ─────────────────────────
 
-router.get("/config", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (_req: Request, res: Response) => {
+router.get("/config", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   res.json({
     data: {
       metaAppId: META_APP_ID,
@@ -2344,7 +2396,14 @@ router.get("/config", authenticate, resolveTenant, requirePermission("channels:m
       // The canonical launch parameters. The browser passes these straight to
       // FB.login rather than assembling its own, which is what let the two
       // paths drift onto different Embedded Signup versions.
-      embeddedSignup: buildEmbeddedSignupLaunch(process.env),
+      // `?mode=coexistence|new_number` picks the launch for that choice; no
+      // mode is the configured default, as before.
+      embeddedSignup: embeddedSignupFor(parseWhatsappMode(req.query.mode)),
+      // Both choices at once, for a screen that offers them side by side.
+      embeddedSignupByMode: {
+        coexistence: embeddedSignupFor("coexistence"),
+        new_number: embeddedSignupFor("new_number"),
+      },
       oauthConfigured: !!(META_APP_ID && META_APP_SECRET && OAUTH_REDIRECT_URI),
       whatsappConfigured: !!(META_APP_ID && META_APP_SECRET && EMBEDDED_SIGNUP_CONFIG_ID),
       // Per-provider readiness: a provider whose app credentials are absent

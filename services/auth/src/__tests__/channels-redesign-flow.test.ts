@@ -121,7 +121,7 @@ vi.mock("@chatcenter/shared", async () => {
 });
 
 import { mintOAuthState } from "@chatcenter/shared";
-import { redesignChannelsUrl } from "../routes/channels";
+import { redesignChannelsUrl, embeddedSignupFor } from "../routes/channels";
 import channelsRouter from "../routes/channels";
 
 function app() {
@@ -248,5 +248,35 @@ describe("redesignChannelsUrl - the closed list", () => {
   it("WhatsApp pending → pending=1", () => {
     expect(new URL(redesignChannelsUrl("https://o", "whatsapp", "connected=whatsapp&pending=true")).search)
       .toBe("?connected=whatsapp&pending=1");
+  });
+});
+
+describe("WhatsApp: launch per onboarding choice (13c)", () => {
+  const env = (o: Record<string, string>) => ({ META_APP_ID: "app", WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: "cfg", ...o }) as any;
+
+  it("★ v4 (the default): both choices keep extras EMPTY - Meta's dialog makes the choice", () => {
+    const coex = embeddedSignupFor("coexistence", env({}));
+    const fresh = embeddedSignupFor("new_number", env({}));
+    expect(coex.extras).toEqual({});
+    expect(fresh.extras).toEqual({});
+    expect(coex).toMatchObject({ mode: "coexistence", choiceMadeIn: "meta_dialog", inspectPath: "business-app" });
+    expect(fresh).toMatchObject({ mode: "new_number", inspectPath: "new" });
+  });
+
+  it("★ v3: coexistence carries featureType whatsapp_business_app_onboarding; new_number never does", () => {
+    expect(embeddedSignupFor("coexistence", env({ WHATSAPP_ES_VERSION: "v3" })).extras)
+      .toMatchObject({ version: "v3", featureType: "whatsapp_business_app_onboarding" });
+    // Even when the env forces a featureType globally, "a new number" drops it.
+    expect(embeddedSignupFor("new_number", env({ WHATSAPP_ES_VERSION: "v3", WHATSAPP_ES_FEATURE_TYPE: "whatsapp_business_app_onboarding" })).extras)
+      .not.toHaveProperty("featureType");
+  });
+
+  it("a dedicated Coexistence configuration is used when set", () => {
+    expect(embeddedSignupFor("coexistence", env({ WHATSAPP_ES_COEXISTENCE_CONFIG_ID: "cfg_coex" })).configId).toBe("cfg_coex");
+    expect(embeddedSignupFor("new_number", env({ WHATSAPP_ES_COEXISTENCE_CONFIG_ID: "cfg_coex" })).configId).toBe("cfg");
+  });
+
+  it("no choice is exactly the configured default", () => {
+    expect(embeddedSignupFor(undefined, env({ WHATSAPP_ES_FEATURE_TYPE: "x" })).extras).toEqual({ featureType: "x" });
   });
 });
