@@ -21,8 +21,8 @@ import type { ApprovalCustomer } from './approval-customers';
 import { MomentAfter, type DecidedTrace, type MomentOutcome } from './MomentAfter';
 import {
   approveChain,
-  EDITABLE_AMOUNT,
-  editedAmountProblem,
+  editedValueProblem,
+  editTarget,
   queueTitle,
   requestTitle,
   reversibilityOf,
@@ -83,6 +83,7 @@ export function ApprovalsScreen({
   customers = {},
   handledToday = null,
   aiAsked = [],
+  decidedTotal = 0,
   editAmountLive = false,
   refundLimit = null,
 }: {
@@ -104,6 +105,8 @@ export function ApprovalsScreen({
   readonly handledToday?: number | null;
   /** Requests an AI asked for whose employee cannot be named. */
   readonly aiAsked?: readonly string[];
+  /** Every decision on record, for "Decided earlier · N" on a day with none yet. */
+  readonly decidedTotal?: number;
   /** Backend's `edits.amount` is live: Edit amount becomes a field, not a drawing. */
   readonly editAmountLive?: boolean;
   /** "Refunds under N never reach you" — the REFUND policy's threshold, when set. */
@@ -244,6 +247,17 @@ export function ApprovalsScreen({
             approveRef.current?.focus();
           }
           break;
+        case 'e':
+        case 'E':
+          // Opens Edit amount where the platform allows editing; elsewhere nothing.
+          if (!moment && decidable && editAmountLive && selected !== null) {
+            const target = editTarget(selected);
+            if (target?.original != null) {
+              event.preventDefault();
+              setEdited((current) => current ?? String(target.original));
+            }
+          }
+          break;
         case 'r':
         case 'R':
           if (moment) {
@@ -261,19 +275,22 @@ export function ApprovalsScreen({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [decidable, move, moment]);
+  }, [decidable, move, moment, editAmountLive, selected]);
 
   async function onApprove() {
     if (!selected || busy) return;
-    const original = selected.facts.amount;
-    const unit = EDITABLE_AMOUNT[selected.tool];
-    if (edited !== null && (!unit || original === null)) return;
-    if (edited !== null && original !== null && editedAmountProblem(edited, original, unit)) return;
+    const target = editTarget(selected);
+    if (edited !== null && (target === null || target.original === null)) return;
+    if (edited !== null && editedValueProblem(edited, target!.original!, target!.unit)) return;
     setBusy(true);
+    const value = edited === null ? null : Number(edited.trim().replace(',', '.'));
     const result =
-      edited !== null && original !== null
-        ? await approveRequest(selected.id, { amount: Number(edited.trim().replace(',', '.')) })
-        : await approveRequest(selected.id);
+      value === null
+        ? await approveRequest(selected.id)
+        : await approveRequest(
+            selected.id,
+            target!.field === 'amount' ? { amount: value } : { percentage: value },
+          );
     setBusy(false);
 
     if (!result.ok) {
@@ -400,6 +417,18 @@ export function ApprovalsScreen({
         ).format(approval.facts.amount);
   const reasonText = (key: RejectReason) =>
     key === 'tooGenerous' || key === 'other' ? t(`reject3.${key}`) : t(`action2.reasons.${key}`);
+  /** "Edit amount", or "Edit discount" on a coupon. */
+  const editLabel = (approval: Approval) =>
+    editTarget(approval)?.field === 'percentage'
+      ? t('detail3.editDiscount')
+      : t('detail3.editAmount');
+  /** What was asked, as shown: "₪179", or "20%". */
+  const originalShown = (approval: Approval) => {
+    const target = editTarget(approval);
+    return target?.field === 'percentage'
+      ? `${new Intl.NumberFormat(locale).format(target.original ?? 0)}%`
+      : (amountOf(approval) ?? '');
+  };
   const say = (words: Words | null, fallback: string) =>
     words ? t(`request.${words.key}` as 'request.queueRefund', words.values as never) : fallback;
   const createdClock = selected ? clock(selected.createdAt) : null;
@@ -556,8 +585,13 @@ export function ApprovalsScreen({
               className={styles.decidedLink}
               data-testid="decided-link"
             >
+              {/* 02: "Decided earlier today · 7"; none today, every decision and how many. */}
               <span>{decidedToday > 0 ? t('queue.decidedToday') : t('queue.decidedEarlier')}</span>
-              {decidedToday > 0 ? <span>{decidedToday}</span> : null}
+              {decidedToday > 0 ? (
+                <span>{decidedToday}</span>
+              ) : decidedTotal > 0 ? (
+                <span>{decidedTotal}</span>
+              ) : null}
             </Link>
           )}
           {/*
@@ -574,6 +608,8 @@ export function ApprovalsScreen({
             ) : null}
             {handledToday !== null && handledToday > 0 ? (
               <span>{t('queueFoot.handled', { count: handledToday })} </span>
+            ) : handledToday === 0 && refundLimit === null ? (
+              <span>{t('queueFoot.handledNone')} </span>
             ) : null}
             <Link href="/studio/capabilities" className={styles.queueFootLink}>
               {t('queueFoot.change')}
@@ -818,18 +854,20 @@ export function ApprovalsScreen({
                     </kbd>
                   </button>
                   {/*
-                    02's "Edit amount" — only on the tools the platform lets an
-                    approver edit (backend 05979604). A full refund carries no
-                    amount to edit: drawn, with why. Any other tool: not drawn.
+                    02's "Edit amount" — or "Edit discount" on a coupon — only
+                    on the tools the platform lets an approver edit (backend
+                    05979604, f16a5afa). Nothing to edit (a full refund): drawn,
+                    with why. Any other tool: not drawn.
                   */}
-                  {!EDITABLE_AMOUNT[selected.tool] ? null : selected.facts.amount === null ? (
+                  {editTarget(selected) === null ? null : editTarget(selected)!.original ===
+                    null ? (
                     <span
                       className={styles.secondary}
                       aria-disabled="true"
-                      title={t('error.edit_requires_original_amount')}
+                      title={t(`error.edit_requires_original_${editTarget(selected)!.field}`)}
                       data-testid="edit-amount"
                     >
-                      {t('detail3.editAmount')}
+                      {editLabel(selected)}
                     </span>
                   ) : editAmountLive ? (
                     <button
@@ -838,12 +876,12 @@ export function ApprovalsScreen({
                       aria-expanded={edited !== null}
                       data-testid="edit-amount"
                       onClick={() =>
-                        setEdited(edited === null ? String(selected.facts.amount) : null)
+                        setEdited(edited === null ? String(editTarget(selected)!.original) : null)
                       }
                     >
                       {edited === null
-                        ? t('detail3.editAmount')
-                        : t('detail3.editCancel', { amount: amountOf(selected)! })}
+                        ? editLabel(selected)
+                        : t('detail3.editCancel', { amount: originalShown(selected) })}
                     </button>
                   ) : (
                     <span
@@ -852,7 +890,7 @@ export function ApprovalsScreen({
                       title={t('detail3.editNotYet')}
                       data-testid="edit-amount"
                     >
-                      {t('detail3.editAmount')}
+                      {editLabel(selected)}
                     </span>
                   )}
                   <span
@@ -879,13 +917,17 @@ export function ApprovalsScreen({
                   </span>
                 </div>
 
-                {editAmountLive && edited !== null && selected.facts.amount !== null
+                {editAmountLive && edited !== null && editTarget(selected)?.original != null
                   ? (() => {
-                      const unit = EDITABLE_AMOUNT[selected.tool] ?? 'major';
-                      const problem = editedAmountProblem(edited, selected.facts.amount!, unit);
+                      const target = editTarget(selected)!;
+                      const problem = editedValueProblem(edited, target.original!, target.unit);
                       return (
                         <label className={styles.editRow}>
-                          <span className={styles.reasonLabel}>{t('detail3.editLabel')}</span>
+                          <span className={styles.reasonLabel}>
+                            {target.field === 'amount'
+                              ? t('detail3.editLabel')
+                              : t('detail3.editLabelPercent')}
+                          </span>
                           <input
                             className={styles.reasonInput}
                             inputMode="decimal"
@@ -901,10 +943,14 @@ export function ApprovalsScreen({
                               data-testid="edit-problem"
                             >
                               {problem === 'over'
-                                ? t('detail3.editOver', { amount: amountOf(selected)! })
-                                : unit === 'minor'
-                                  ? t('detail3.editInvalidMinor')
-                                  : t('detail3.editInvalid')}
+                                ? t('detail3.editOver', { amount: originalShown(selected) })
+                                : t(
+                                    target.unit === 'minor'
+                                      ? 'detail3.editInvalidMinor'
+                                      : target.unit === 'percent'
+                                        ? 'detail3.editInvalidPercent'
+                                        : 'detail3.editInvalid',
+                                  )}
                             </span>
                           ) : null}
                         </label>

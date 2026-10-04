@@ -1,11 +1,19 @@
 import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { approvalFacts, approvalSchema } from '@/api/contracts/approvals';
 import { toolUsageSchema } from '@/api/contracts/capabilities';
 import messages from '@/i18n/messages/en/approvals.json';
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
+    <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
     createTranslator({
@@ -56,7 +64,15 @@ describe('★★ handled without asking you — counted, never invented', () => 
       ],
       NOW,
     );
-    expect(handled).toEqual({ total: 14, refunds: 3, lookups: 9, returns: 2 });
+    // Each usage row tried once more than it succeeded: three misses, all Shopify's.
+    expect(handled).toEqual({
+      total: 14,
+      refunds: 3,
+      lookups: 9,
+      returns: 2,
+      failed: 3,
+      failingSystems: ['shopify'],
+    });
   });
 
   it('never below zero; without either read, unknown — not zero', () => {
@@ -129,6 +145,7 @@ describe('★★ 02’s sentence, from what the record knows', () => {
       amount: 50,
       currency: null,
       note: 'damaged item',
+      percentage: null,
     });
     expect(approvalFacts({ amount: 179, currency: 'ILS' }).currency).toBe('ILS');
     expect(approvalFacts({ amount: 'lots', currency: 'shekels' })).toEqual({
@@ -136,6 +153,7 @@ describe('★★ 02’s sentence, from what the record knows', () => {
       amount: null,
       currency: null,
       note: null,
+      percentage: null,
     });
     // And the parameters themselves never leave the contract.
     expect(
@@ -161,13 +179,21 @@ describe('★★ the dark card in its three states', () => {
   });
 
   it('nothing today: said, not a zero', async () => {
-    render(await HandledCard({ handled: { total: 0, refunds: 0, lookups: 0, returns: 0 } }));
+    render(
+      await HandledCard({
+        handled: { total: 0, refunds: 0, lookups: 0, returns: 0, failed: 0, failingSystems: [] },
+      }),
+    );
     expect(screen.getByTestId('handled-none')).toHaveTextContent('Nothing ran on its own today.');
     expect(screen.queryByTestId('handled-total')).toBeNull();
   });
 
   it('a count and its three figures — and no value nobody recorded', async () => {
-    render(await HandledCard({ handled: { total: 31, refunds: 18, lookups: 9, returns: 4 } }));
+    render(
+      await HandledCard({
+        handled: { total: 31, refunds: 18, lookups: 9, returns: 4, failed: 0, failingSystems: [] },
+      }),
+    );
     expect(screen.getByTestId('handled-total')).toHaveTextContent('31actions');
     expect(screen.getByTestId('handled-today')).not.toHaveTextContent(/₪|value/);
     expect(screen.getByTestId('handled-lookups')).toHaveTextContent('Orders looked up9');
@@ -256,10 +282,88 @@ describe('★★ Edited — what ran, and what was asked', () => {
   it('a refund limit names the figure: "Refunds under 100"', async () => {
     render(
       await HandledCard({
-        handled: { total: 2, refunds: 1, lookups: 1, returns: 0 },
+        handled: { total: 2, refunds: 1, lookups: 1, returns: 0, failed: 0, failingSystems: [] },
         refundLimit: 100,
       }),
     );
     expect(screen.getByTestId('handled-refunds')).toHaveTextContent('Refunds under 1001');
+  });
+});
+
+describe('★★ "nothing ran" never hides a broken connection', () => {
+  it('failures today: counted, the system named, the repair linked', async () => {
+    const handled = handledToday(
+      [
+        toolUsageSchema.parse({
+          toolName: 'shopify.get_customer_by_phone',
+          executionCount: 298,
+          successCount: 0,
+        }),
+        toolUsageSchema.parse({
+          toolName: 'shopify.get_customer',
+          executionCount: 58,
+          successCount: 0,
+        }),
+      ],
+      [],
+      NOW,
+    );
+    expect(handled).toMatchObject({ total: 0, failed: 356, failingSystems: ['shopify'] });
+    render(await HandledCard({ handled }));
+    expect(screen.queryByTestId('handled-none')).toBeNull();
+    expect(screen.getByTestId('handled-total')).toHaveTextContent('0');
+    expect(screen.getByTestId('handled-failed')).toHaveTextContent(
+      '356 tried and failed — Shopify needs fixing. Reconnect it',
+    );
+    expect(screen.getByTestId('handled-failed').querySelector('a')).toHaveAttribute(
+      'href',
+      JSON.stringify({ pathname: '/studio/capabilities', query: { system: 'shopify' } }),
+    );
+    expect(screen.getByTestId('handled-lookups')).toHaveTextContent('—');
+  });
+
+  it('several systems: the systems page', async () => {
+    render(
+      await HandledCard({
+        handled: {
+          total: 2,
+          refunds: 0,
+          lookups: 2,
+          returns: 0,
+          failed: 5,
+          failingSystems: ['hubspot', 'shopify'],
+        },
+      }),
+    );
+    expect(screen.getByTestId('handled-failed')).toHaveTextContent(
+      '5 tried and failed — a connection needs fixing.',
+    );
+    expect(screen.getByTestId('handled-failed').querySelector('a')).toHaveAttribute(
+      'href',
+      '/studio/capabilities',
+    );
+  });
+
+  it('Edited · 20% → 10% for a discount', async () => {
+    const edited = approvalSchema.parse({
+      id: 'p1',
+      tool: 'shopify.create_discount_code',
+      summary: 'Create discount code',
+      status: 'APPROVED',
+      params: { percentage: 20 },
+      modifiedParams: { percentage: 10 },
+      decidedAt: TODAY,
+      expiresAt: TODAY,
+      createdAt: TODAY,
+    });
+    render(
+      await NothingWaiting({
+        decided: [edited],
+        mayBeIncomplete: false,
+        requesterNames: {},
+        now: NOW,
+      }),
+    );
+    expect(screen.getByTestId('edited-p1')).toHaveTextContent('Edited · 20% → 10%');
   });
 });

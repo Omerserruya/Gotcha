@@ -293,6 +293,9 @@
 
   /* 02: `#121212`, radius 10, `padding:11px 22px`, 13.5px. */
   .approve {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
     padding: 11px 22px;
     border: 0;
     border-radius: var(--space-10);
@@ -1114,9 +1117,15 @@
     gap: 9px;
   }
 
+  /* 02's dot: green — nothing classifies a reason as for or against. */
   .whyList li::before {
-    content: '·';
-    color: var(--text-muted);
+    content: '';
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    margin-block-start: 5px;
+    border-radius: 50%;
+    background-color: var(--signal-done);
   }
 
   /* 02: label left, value right, 7 apart. */
@@ -1167,12 +1176,14 @@
     color: var(--text-muted);
   }
 
-  /* 02: the key on Approve, mono. */
+  /* 02: the key on Approve — a small mono tile beside the word. */
   .key {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background-color: var(--frame-selected);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 10px;
     color: var(--action-text);
-    opacity: 0.7;
   }
 
   /* 02: Edit amount, Ask — outlined, `11px 20px`, radius 10. */
@@ -1207,5 +1218,18 @@
   .reasonChip[aria-pressed='true'] {
     background-color: var(--action-base);
     color: var(--action-text);
+  }
+
+  /* Tried and failed today — amber on the dark card, with the repair. */
+  .handledFailed {
+    margin: var(--space-10) 0 0;
+    font-size: 13px;
+    color: var(--intent-blocked-edge);
+  }
+
+  .handledRepair {
+    color: var(--frame-text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 }

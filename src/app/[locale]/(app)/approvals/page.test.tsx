@@ -19,6 +19,7 @@ vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
 import { DecisionStats, HandledCard, NothingWaiting } from '@/features/approvals/NothingWaiting';
 import { ApprovalsScreen } from '@/features/approvals/ApprovalsScreen';
+import { approvalSchema } from '@/api/contracts/approvals';
 import { PageContainer } from '@/shell/PageContainer';
 
 /*
@@ -171,6 +172,8 @@ describe('★★ 03c — what GOTCHA handled leads, and the subline says only wh
       refunds: 0,
       lookups: 0,
       returns: 0,
+      failed: 0,
+      failingSystems: [],
     });
   });
 
@@ -193,16 +196,16 @@ describe('★★ 03c — what GOTCHA handled leads, and the subline says only wh
 describe('★ "Requested by Support AI" — named only where one employee could have asked', () => {
   const ask = async (aiEmployees: unknown[]) => {
     loadApprovals.mockResolvedValue({
+      // Parsed, as the loader hands it over: a real row has its facts.
       pending: [
-        {
+        approvalSchema.parse({
           id: 'p1',
           summary: 'x',
           tool: 'shopify.process_refund',
           requestedBy: 'ai-bot:chat',
           expiresAt: '2026-10-04T12:00:00.000Z',
           createdAt: '2026-10-04T09:00:00.000Z',
-          riskTags: [],
-        },
+        }),
       ],
       decided: [],
       decidedMayBeIncomplete: false,

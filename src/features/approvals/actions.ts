@@ -106,6 +106,9 @@ export const EDIT_REFUSALS = [
   'amount_above_original',
   'invalid_amount',
   'edit_requires_original_amount',
+  'percentage_above_original',
+  'invalid_percentage',
+  'edit_requires_original_percentage',
 ] as const;
 export type EditRefusal = (typeof EDIT_REFUSALS)[number];
 
@@ -134,16 +137,20 @@ export async function approveRequest(
   /**
    * 03's "Edit amount": approved with a lower amount. Sent only when given.
    */
-  edits?: { readonly amount: number },
+  edits?: { readonly amount: number } | { readonly percentage: number },
 ): Promise<ApprovalWriteResult> {
-  if (edits !== undefined && !(Number.isFinite(edits.amount) && edits.amount > 0)) {
+  const value = edits && ('amount' in edits ? edits.amount : edits.percentage);
+  if (edits !== undefined && !(Number.isFinite(value) && (value as number) > 0)) {
     return { ok: false, reason: 'failed' };
   }
   try {
     const result = await serverApi().post({
       endpoint: approvalEndpoints.approve(id),
       payload: approveResultSchema,
-      body: edits ? { edits: { amount: edits.amount } } : {},
+      // One field per request (backend f16a5afa): an amount or a percentage.
+      body: edits
+        ? { edits: 'amount' in edits ? { amount: edits.amount } : { percentage: edits.percentage } }
+        : {},
       raw: true,
     });
     revalidatePath('/[locale]/(app)/approvals', 'page');

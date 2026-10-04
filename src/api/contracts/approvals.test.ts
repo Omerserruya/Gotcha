@@ -31,7 +31,8 @@ const AN_HOUR_AGO = '2026-09-19T09:00:00.000Z';
 
 const approval = (over: Partial<Approval> = {}): Approval => ({
   editedAmount: null,
-  facts: { order: null, amount: null, currency: null, note: null },
+  editedPercentage: null,
+  facts: { order: null, amount: null, currency: null, note: null, percentage: null },
   id: 'a1',
   conversationId: 'c1',
   contactId: 'k1',

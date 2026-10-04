@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 
+import type { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
@@ -26,6 +27,13 @@ import { DecisionStats, NothingWaiting } from './NothingWaiting';
  * component at all.
  */
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
+    <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'approvals') =>
     createTranslator({ locale: 'en', messages: { approvals: messages }, namespace }),

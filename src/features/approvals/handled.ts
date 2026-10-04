@@ -17,6 +17,14 @@ export interface HandledToday {
   readonly refunds: number;
   readonly lookups: number;
   readonly returns: number;
+  /**
+   * Runs that were tried and did not succeed today. A broken connection makes
+   * "nothing ran" technically true and hides the state — 356 Shopify lookups
+   * failing on dev — so the failures are counted, and by whose system.
+   */
+  readonly failed: number;
+  /** The systems those failures were on (`shopify` of `shopify.get_order`). */
+  readonly failingSystems: readonly string[];
 }
 
 /** `shopify.process_refund` and `process_refund` are one tool. */
@@ -56,9 +64,16 @@ export function handledToday(
   }
 
   const alone = new Map<string, number>();
+  let failed = 0;
+  const failing = new Set<string>();
   for (const row of usage) {
     const slug = slugOf(row.toolName);
     alone.set(slug, (alone.get(slug) ?? 0) + row.successCount);
+    const misses = Math.max(0, row.executionCount - row.successCount);
+    if (misses > 0) {
+      failed += misses;
+      if (row.toolName.includes('.')) failing.add(row.toolName.split('.')[0]!);
+    }
   }
   let total = 0;
   const by = { refunds: 0, lookups: 0, returns: 0 };
@@ -69,5 +84,5 @@ export function handledToday(
       if (KIND[kind].test(slug)) by[kind] += own;
     }
   }
-  return { total, ...by };
+  return { total, ...by, failed, failingSystems: [...failing].sort() };
 }

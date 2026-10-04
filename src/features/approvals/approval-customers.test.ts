@@ -106,6 +106,9 @@ describe('★★ approve at the wire (backend 05979604)', () => {
     expect(post.mock.calls[0]![0].body).toStrictEqual({});
     await approveRequest('a1', { amount: 120 });
     expect(post.mock.calls[1]![0].body).toStrictEqual({ edits: { amount: 120 } });
+    // One field per request (backend f16a5afa).
+    await approveRequest('a1', { percentage: 12.5 });
+    expect(post.mock.calls[2]![0].body).toStrictEqual({ edits: { percentage: 12.5 } });
   });
 
   it('a non-positive amount is never sent', async () => {

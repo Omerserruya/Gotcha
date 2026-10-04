@@ -4,6 +4,7 @@ import type { Approval } from '@/api/contracts/approvals';
 import { ApprovalsScreen } from '@/features/approvals/ApprovalsScreen';
 import { loadApprovalCustomers } from '@/features/approvals/approval-customers';
 import { handledToday } from '@/features/approvals/handled';
+import { editTarget } from '@/features/approvals/request-words';
 import { DecisionStats, HandledCard, NothingWaiting } from '@/features/approvals/NothingWaiting';
 import { decisionStats, loadApprovals, requesterName } from '@/features/approvals/load-approvals';
 import styles from '@/features/approvals/Approvals.module.css';
@@ -213,7 +214,8 @@ export default async function Page({
             as offering an event that nothing raises.
           */}
           <p className={styles.keys} data-testid="approvals-keys">
-            {t('keys')}
+            {/* E only where a waiting request can be edited — never a dead key. */}
+            {pending.some((a) => editTarget(a)?.original != null) ? t('keysEdit') : t('keys')}
           </p>
         </>
       }
@@ -227,6 +229,7 @@ export default async function Page({
         /* Backend 05979604: `edits.amount` is live (Omer, 2026-10-04). */
         editAmountLive
         refundLimit={refundLimit}
+        decidedTotal={decided?.length ?? 0}
         // The moment the queue was read, not the moment this rendered —
         // and it starts the client's clock at exactly the server's value, so
         // the first client render cannot disagree about what has lapsed.

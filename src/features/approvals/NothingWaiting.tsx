@@ -2,6 +2,9 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { decisionStance, isOutcomeUnknown, type Approval } from '@/api/contracts/approvals';
 
+import { humaniseCode } from '@/api/contracts/capabilities';
+import { Link } from '@/i18n/navigation';
+
 import { decisionSentence } from './decision-sentence';
 import type { HandledToday } from './handled';
 import type { decisionStats } from './load-approvals';
@@ -209,14 +212,20 @@ export async function NothingWaiting({
                   >
                     {t('decided.status.outcomeUnknown')}
                   </span>
-                ) : stance === 'approved' && approval.editedAmount !== null ? (
+                ) : stance === 'approved' &&
+                  (approval.editedAmount !== null || approval.editedPercentage !== null) ? (
                   <span
                     className={styles.decidedStatus}
                     data-tone="edited"
                     data-testid={`edited-${approval.id}`}
                     title={by}
                   >
-                    {t('decided.status.edited')}
+                    {approval.editedPercentage !== null && approval.facts.percentage !== null
+                      ? t('decided.status.editedPercent', {
+                          was: format.number(approval.facts.percentage),
+                          now: format.number(approval.editedPercentage),
+                        })
+                      : t('decided.status.edited')}
                   </span>
                 ) : stance === 'rejected' && approval.decisionReason ? (
                   <span
@@ -256,6 +265,9 @@ export async function NothingWaiting({
   );
 }
 
+/** `shopify` → "Shopify": the brand's own casing, from the shared humaniser. */
+const systemName = (slug: string) => humaniseCode(slug);
+
 /**
  * 03c's dark card — what GOTCHA did today with nobody asked. See
  * `handledToday` for how it is counted; never a value nobody recorded.
@@ -282,7 +294,7 @@ export async function HandledCard({
         <p className={styles.handledLead} title={t('unread')} data-testid="handled-unread">
           <span className={styles.handledNumber}>—</span>
         </p>
-      ) : handled.total === 0 ? (
+      ) : handled.total === 0 && handled.failed === 0 ? (
         <p className={styles.handledLead} data-testid="handled-none">
           <span className={styles.handledQuiet}>{t('none')}</span>
         </p>
@@ -292,6 +304,33 @@ export async function HandledCard({
           <span className={styles.handledUnit}>{t('actions', { count: handled.total })}</span>
         </p>
       )}
+      {/*
+        Tried and failed today: said, with the repair — never hidden behind
+        "nothing ran". One system named and linked; several, the systems page.
+      */}
+      {handled !== null && handled.failed > 0 ? (
+        <p className={styles.handledFailed} data-testid="handled-failed">
+          {handled.failingSystems.length === 1
+            ? t('failedOne', {
+                count: handled.failed,
+                system: systemName(handled.failingSystems[0]!),
+              })
+            : t('failedMany', { count: handled.failed })}{' '}
+          <Link
+            href={
+              handled.failingSystems.length === 1
+                ? {
+                    pathname: '/studio/capabilities',
+                    query: { system: handled.failingSystems[0]! },
+                  }
+                : '/studio/capabilities'
+            }
+            className={styles.handledRepair}
+          >
+            {t('reconnect')}
+          </Link>
+        </p>
+      ) : null}
       <dl className={styles.handledFigures}>
         {figures.map(([key, value]) => (
           <div key={key} className={styles.handledFigure} data-testid={`handled-${key}`}>
@@ -302,7 +341,7 @@ export async function HandledCard({
             </dt>
             {/* No figure of nothing: on a quiet day, or unread, each is "—". */}
             <dd title={value === undefined ? t('unread') : undefined}>
-              {value === undefined || handled?.total === 0 ? '—' : format.number(value)}
+              {value === undefined || !value ? '—' : format.number(value)}
             </dd>
           </div>
         ))}

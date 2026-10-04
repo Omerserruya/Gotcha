@@ -24,17 +24,19 @@ vi.mock('./actions', () => ({
 }));
 
 import { ApprovalsScreen } from './ApprovalsScreen';
-import { editedAmountProblem, reversibilityOf, whyBullets } from './request-words';
+import { editedValueProblem, reversibilityOf, whyBullets } from './request-words';
 
 const NOW = Date.parse('2026-10-04T10:00:00.000Z');
 /** Dev's mock request, as the supervisor seeded it: a contact, no conversation. */
 const refund = (over: Partial<Approval> = {}): Approval => ({
   editedAmount: null,
+  editedPercentage: null,
   facts: {
     order: '#TEST-1842',
     amount: 179,
     currency: 'ILS',
     note: 'damaged item · full refund recommended',
+    percentage: null,
   },
   id: 'a1',
   conversationId: null,
@@ -212,7 +214,7 @@ describe('★ the rules behind the words', () => {
     ['', 'invalid'],
     ['abc', 'invalid'],
   ] as const)('edited %j of 179 → %s', (raw, problem) => {
-    expect(editedAmountProblem(raw, 179)).toBe(problem);
+    expect(editedValueProblem(raw, 179)).toBe(problem);
   });
 
   it('bullets split on sentences and lines, never mid-number', () => {
@@ -230,7 +232,7 @@ describe('★★ backend 05979604 — the allow-list, the units, the refusals', 
       [
         refund({
           tool: 'shopify.cancel_order',
-          facts: { order: '#1', amount: 50, currency: null, note: null },
+          facts: { order: '#1', amount: 50, currency: null, note: null, percentage: null },
         }),
       ],
       {
@@ -241,9 +243,16 @@ describe('★★ backend 05979604 — the allow-list, the units, the refusals', 
   });
 
   it('a full refund carries no amount: drawn, with why', () => {
-    show([refund({ facts: { order: '#1', amount: null, currency: null, note: null } })], {
-      editAmountLive: true,
-    });
+    show(
+      [
+        refund({
+          facts: { order: '#1', amount: null, currency: null, note: null, percentage: null },
+        }),
+      ],
+      {
+        editAmountLive: true,
+      },
+    );
     expect(screen.getByTestId('edit-amount')).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByTestId('edit-amount').getAttribute('title')).toMatch(
       /full refund with no amount/,
@@ -255,7 +264,7 @@ describe('★★ backend 05979604 — the allow-list, the units, the refusals', 
       [
         refund({
           tool: 'stripe.refund_payment',
-          facts: { order: null, amount: 500, currency: null, note: null },
+          facts: { order: null, amount: 500, currency: null, note: null, percentage: null },
         }),
       ],
       {
@@ -287,6 +296,103 @@ describe('★★ backend 05979604 — the allow-list, the units, the refusals', 
     show([refund()], { refundLimit: 100, handledToday: 3 });
     expect(screen.getByTestId('queue-foot')).toHaveTextContent(
       'Refunds under 100 never reach you. GOTCHA handled 3 on its own today.',
+    );
+  });
+});
+
+describe('★★ backend f16a5afa — a discount is edited by its percentage', () => {
+  const coupon = () =>
+    refund({
+      tool: 'shopify.create_discount_code',
+      summary: 'Create discount code',
+      facts: { order: null, amount: null, currency: null, note: null, percentage: 20 },
+    });
+
+  it('"Edit discount"; up to the original, never above 100; it sends { percentage }', async () => {
+    approve.mockResolvedValue({ ok: false, reason: 'stale' });
+    show([coupon()], { editAmountLive: true });
+    expect(screen.getByTestId('edit-amount')).toHaveTextContent('Edit discount');
+    await userEvent.click(screen.getByTestId('edit-amount'));
+    const field = screen.getByTestId('edit-amount-input');
+    await userEvent.clear(field);
+    await userEvent.type(field, '25');
+    expect(screen.getByTestId('edit-problem')).toHaveTextContent('No more than 20%.');
+    await userEvent.click(screen.getByTestId('approve'));
+    expect(approve).not.toHaveBeenCalled();
+    await userEvent.clear(field);
+    await userEvent.type(field, '12.5');
+    await userEvent.click(screen.getByTestId('approve'));
+    expect(approve).toHaveBeenCalledWith('a1', { percentage: 12.5 });
+  });
+
+  it('a coupon with no percentage: drawn, with why', () => {
+    show(
+      [
+        refund({
+          tool: 'shopify.create_vip_coupon',
+          facts: { order: null, amount: null, currency: null, note: null, percentage: null },
+        }),
+      ],
+      {
+        editAmountLive: true,
+      },
+    );
+    expect(screen.getByTestId('edit-amount')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('edit-amount').getAttribute('title')).toMatch(
+      /no percentage to edit/,
+    );
+  });
+
+  it.each([
+    ['150', 100, 'invalid'],
+    ['0', 20, 'invalid'],
+    ['10.123', 20, 'invalid'],
+    ['10.12', 20, null],
+  ] as const)('percent %j of %i → %s', (raw, original, problem) => {
+    expect(editedValueProblem(raw, original, 'percent')).toBe(problem);
+  });
+});
+
+describe('★★ 03, this round', () => {
+  it('E opens the edit field — and A’s key sits apart from the word', async () => {
+    show([refund()], { editAmountLive: true });
+    expect(screen.queryByTestId('edit-amount-input')).toBeNull();
+    await userEvent.keyboard('e');
+    expect(screen.getByTestId('edit-amount-input')).toHaveValue('179');
+    expect(approve).not.toHaveBeenCalled();
+    expect(screen.getByTestId('approve').querySelector('kbd')).toHaveTextContent('A');
+  });
+
+  it('E on a request nothing can edit does nothing — nor on a full refund with no amount', async () => {
+    const one = show([refund({ tool: 'shopify.cancel_order' })], { editAmountLive: true });
+    await userEvent.keyboard('e');
+    expect(screen.queryByTestId('edit-amount-input')).toBeNull();
+    one.unmount();
+    show(
+      [
+        refund({
+          facts: { order: '#1', amount: null, currency: null, note: null, percentage: null },
+        }),
+      ],
+      { editAmountLive: true },
+    );
+    await userEvent.keyboard('e');
+    expect(screen.queryByTestId('edit-amount-input')).toBeNull();
+    // And no hidden edit is left behind to block approving it as it is.
+    approve.mockResolvedValue({ ok: false, reason: 'stale' });
+    await userEvent.click(screen.getByTestId('approve'));
+    expect(approve).toHaveBeenCalledWith('a1');
+  });
+
+  it('"Decided earlier" carries every decision when none were today', () => {
+    show([refund()], { decidedToday: 0, decidedTotal: 29 });
+    expect(screen.getByTestId('decided-link')).toHaveTextContent('Decided earlier29');
+  });
+
+  it('a quiet day says so beside the link — the link never stands alone', () => {
+    show([refund()], { handledToday: 0 });
+    expect(screen.getByTestId('queue-foot')).toHaveTextContent(
+      'GOTCHA handled nothing on its own today. Change what needs asking',
     );
   });
 });

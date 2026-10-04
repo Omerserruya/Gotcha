@@ -56,7 +56,10 @@
     "edit_not_allowed": "את הפעולה הזו אי אפשר לאשר בסכום אחר.",
     "amount_above_original": "סכום ערוך חייב להיות נמוך ממה שהתבקש.",
     "invalid_amount": "את הסכום הזה אי אפשר לשלוח — כדאי לבדוק ולנסות שוב.",
-    "edit_requires_original_amount": "זה החזר מלא בלי סכום לערוך. אפשר לאשר כמו שהוא או לדחות."
+    "edit_requires_original_amount": "זה החזר מלא בלי סכום לערוך. אפשר לאשר כמו שהוא או לדחות.",
+    "percentage_above_original": "הנחה ערוכה חייבת להיות נמוכה ממה שהתבקש.",
+    "invalid_percentage": "את ההנחה הזו אי אפשר לשלוח — כדאי לבדוק ולנסות שוב.",
+    "edit_requires_original_percentage": "בהנחה הזו אין אחוז לערוך. אפשר לאשר כמו שהיא או לדחות."
   },
   "rest": {
     "lead": "שום דבר לא ממתין להחלטה שלך.",
@@ -93,7 +96,8 @@
       "cancelled": "בוטל",
       "didNotRun": "אושר · לא בוצע",
       "outcomeUnknown": "אושר · התוצאה לא ידועה",
-      "edited": "נערך"
+      "edited": "נערך",
+      "editedPercent": "נערך · {was}% ← {now}%"
     },
     "incompleteShort": "ההחלטות האחרונות שלך — הרשימה מחזיקה את המאה האחרונות מכל סוג.",
     "byVia": "הוחלט על ידי {who} דרך {channel}",
@@ -231,7 +235,10 @@
     "refunds": "החזרים",
     "lookups": "הזמנות שנבדקו",
     "returns": "החזרות שנפתחו",
-    "refundsUnder": "החזרים עד {limit}"
+    "refundsUnder": "החזרים עד {limit}",
+    "failedOne": "{count, plural, one {ניסיון אחד נכשל} other {# ניסיונות נכשלו}} — {system} צריך תיקון.",
+    "failedMany": "{count, plural, one {ניסיון אחד נכשל} other {# ניסיונות נכשלו}} — חיבור צריך תיקון.",
+    "reconnect": "לחבר מחדש"
   },
   "request": {
     "queueRefund": "החזר {amount}",
@@ -280,17 +287,22 @@
     "editOver": "לא יותר מ-{amount}.",
     "editCancel": "להשאיר {amount}",
     "editNotYet": "עריכת הסכום תגיע ברגע ש-GOTCHA יוכל לבצע אותה.",
-    "editInvalidMinor": "מספר שלם גדול מאפס."
+    "editInvalidMinor": "מספר שלם גדול מאפס.",
+    "editDiscount": "עריכת הנחה",
+    "editLabelPercent": "הנחה לאישור (%)",
+    "editInvalidPercent": "אחוז גדול מאפס, עד 100."
   },
   "queueFoot": {
     "handled": "{count, plural, one {GOTCHA טיפל היום בפעולה אחת לבד.} other {GOTCHA טיפל היום ב-# פעולות לבד.}}",
     "change": "לשנות מה דורש אישור",
-    "under": "החזרים עד {limit} לא מגיעים אליך."
+    "under": "החזרים עד {limit} לא מגיעים אליך.",
+    "handledNone": "היום GOTCHA לא טיפל בשום דבר לבד."
   },
   "reject3": {
     "prompt": "דוחים? למה:",
     "tooGenerous": "נדיב מדי",
     "other": "אחר",
     "otherLabel": "למה לא?"
-  }
+  },
+  "keysEdit": "A אישור · R דחייה · E עריכה"
 }

@@ -56,7 +56,10 @@
     "edit_not_allowed": "This action can't be approved with a different amount.",
     "amount_above_original": "An edited amount has to be less than what was asked.",
     "invalid_amount": "That amount can't be sent — check it and try again.",
-    "edit_requires_original_amount": "This is a full refund with no amount to edit. Approve it as it is, or reject it."
+    "edit_requires_original_amount": "This is a full refund with no amount to edit. Approve it as it is, or reject it.",
+    "percentage_above_original": "An edited discount has to be less than what was asked.",
+    "invalid_percentage": "That discount can't be sent — check it and try again.",
+    "edit_requires_original_percentage": "This discount carries no percentage to edit. Approve it as it is, or reject it."
   },
   "rest": {
     "lead": "Nothing needs a decision from you.",
@@ -93,7 +96,8 @@
       "cancelled": "Cancelled",
       "didNotRun": "Approved · didn’t run",
       "outcomeUnknown": "Approved · outcome unknown",
-      "edited": "Edited"
+      "edited": "Edited",
+      "editedPercent": "Edited · {was}% → {now}%"
     },
     "incompleteShort": "Your most recent decisions — the list holds the last hundred of each kind.",
     "byVia": "Decided by {who} via {channel}",
@@ -231,7 +235,10 @@
     "refunds": "Refunds",
     "lookups": "Orders looked up",
     "returns": "Returns opened",
-    "refundsUnder": "Refunds under {limit}"
+    "refundsUnder": "Refunds under {limit}",
+    "failedOne": "{count, plural, one {# tried and failed} other {# tried and failed}} — {system} needs fixing.",
+    "failedMany": "{count, plural, one {# tried and failed} other {# tried and failed}} — a connection needs fixing.",
+    "reconnect": "Reconnect it"
   },
   "request": {
     "queueRefund": "Refund {amount}",
@@ -280,17 +287,22 @@
     "editOver": "No more than {amount}.",
     "editCancel": "Keep {amount}",
     "editNotYet": "Editing the amount comes as soon as GOTCHA can carry it out.",
-    "editInvalidMinor": "A whole number above zero."
+    "editInvalidMinor": "A whole number above zero.",
+    "editDiscount": "Edit discount",
+    "editLabelPercent": "Discount to approve (%)",
+    "editInvalidPercent": "A percentage above zero, up to 100."
   },
   "queueFoot": {
     "handled": "{count, plural, one {GOTCHA handled # on its own today.} other {GOTCHA handled # on its own today.}}",
     "change": "Change what needs asking",
-    "under": "Refunds under {limit} never reach you."
+    "under": "Refunds under {limit} never reach you.",
+    "handledNone": "GOTCHA handled nothing on its own today."
   },
   "reject3": {
     "prompt": "Rejecting? Say why:",
     "tooGenerous": "Too generous",
     "other": "Other",
     "otherLabel": "Why not?"
-  }
+  },
+  "keysEdit": "A approve · R reject · E edit"
 }

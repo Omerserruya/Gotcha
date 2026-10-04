@@ -208,6 +208,8 @@ export const approvalSchema = z
     facts: approvalFacts(params),
     /** The amount that ran, when an approver edited it; `null` when nothing was. */
     editedAmount: modifiedParams != null ? approvalFacts(modifiedParams).amount : null,
+    /** The percentage that ran, when an approver edited a discount. */
+    editedPercentage: modifiedParams != null ? approvalFacts(modifiedParams).percentage : null,
   }));
 
 export const approvalsSchema = z.array(approvalSchema);
@@ -512,6 +514,8 @@ export function approvalFacts(params: unknown): {
   readonly currency: string | null;
   /** The call's own note ("damaged item · full refund"), when it wrote one. */
   readonly note: string | null;
+  /** A discount's percentage, on the coupon tools (backend f16a5afa). */
+  readonly percentage: number | null;
 } {
   const p = (params && typeof params === 'object' ? params : {}) as Record<string, unknown>;
   const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
@@ -527,5 +531,7 @@ export function approvalFacts(params: unknown): {
     amount,
     currency: currency && /^[A-Z]{3}$/.test(currency) ? currency : null,
     note: text(p.note),
+    percentage:
+      typeof p.percentage === 'number' && Number.isFinite(p.percentage) ? p.percentage : null,
   };
 }

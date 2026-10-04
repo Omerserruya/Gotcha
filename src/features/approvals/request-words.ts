@@ -116,25 +116,48 @@ export function reversibilityOf(tool: string): 'yes' | 'no' | null {
 }
 
 /**
- * The tools whose amount may be edited (backend 05979604's allow-list), and
- * the unit each takes: `major` up to two decimals, `minor` whole numbers.
- * On any other tool Edit amount is not drawn at all.
+ * The tools an approver may edit, the one field each takes and its unit —
+ * backend 05979604 (amount) and f16a5afa (percentage): `major` up to two
+ * decimals, `minor` whole numbers, `percent` up to two decimals and never
+ * above 100. On any other tool there is no edit at all.
  */
-export const EDITABLE_AMOUNT: Readonly<Record<string, 'major' | 'minor'>> = {
-  'shopify.process_refund': 'major',
-  'paypal.refund_capture': 'major',
-  'paypal.create_payment_link': 'major',
-  'stripe.refund_payment': 'minor',
-  'stripe.create_payment_link': 'minor',
-  'square.refund_payment': 'minor',
-  'square.create_payment_link': 'minor',
+export const EDITABLE: Readonly<
+  Record<string, { readonly field: 'amount' | 'percentage'; readonly unit: EditUnit }>
+> = {
+  'shopify.process_refund': { field: 'amount', unit: 'major' },
+  'paypal.refund_capture': { field: 'amount', unit: 'major' },
+  'paypal.create_payment_link': { field: 'amount', unit: 'major' },
+  'stripe.refund_payment': { field: 'amount', unit: 'minor' },
+  'stripe.create_payment_link': { field: 'amount', unit: 'minor' },
+  'square.refund_payment': { field: 'amount', unit: 'minor' },
+  'square.create_payment_link': { field: 'amount', unit: 'minor' },
+  'shopify.create_discount_code': { field: 'percentage', unit: 'percent' },
+  'shopify.create_one_time_coupon': { field: 'percentage', unit: 'percent' },
+  'shopify.create_vip_coupon': { field: 'percentage', unit: 'percent' },
+  'shopify.issue_compensation_coupon': { field: 'percentage', unit: 'percent' },
 };
+export type EditUnit = 'major' | 'minor' | 'percent';
 
-/** 03's edited amount: a positive number in the tool's unit, no more than what was asked. */
-export function editedAmountProblem(
+/** What may be edited on this request, and from what — `null` when nothing may. */
+export function editTarget(approval: Pick<Approval, 'tool' | 'facts'>): {
+  readonly field: 'amount' | 'percentage';
+  readonly unit: EditUnit;
+  /** `null`: the call carries none to edit (a full refund) — drawn, with why. */
+  readonly original: number | null;
+} | null {
+  const rule = EDITABLE[approval.tool];
+  if (!rule) return null;
+  return {
+    ...rule,
+    original: rule.field === 'amount' ? approval.facts.amount : approval.facts.percentage,
+  };
+}
+
+/** An edited value: positive, in the unit, no more than what was asked (nor 100%). */
+export function editedValueProblem(
   raw: string,
   original: number,
-  unit: 'major' | 'minor' = 'major',
+  unit: EditUnit = 'major',
 ): 'invalid' | 'over' | null {
   const text = raw.trim().replace(',', '.');
   const value = Number(text);
@@ -142,6 +165,7 @@ export function editedAmountProblem(
   if (unit === 'minor' ? !Number.isInteger(value) : !/^\d+(\.\d{1,2})?$/.test(text)) {
     return 'invalid';
   }
+  if (unit === 'percent' && value > 100) return 'invalid';
   if (value > original) return 'over';
   return null;
 }
