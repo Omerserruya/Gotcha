@@ -37,6 +37,7 @@ import {
   outgoingMessageQueue,
   evaluateToolGate,
 } from "@chatcenter/shared";
+import { applyApprovalEdits } from "../lib/approval-edits";
 
 /**
  * Dispatch an approved action by calling the AI service.
@@ -1006,7 +1007,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 /**
  * POST /api/approvals/:id/approve
- * Body: { decisionReason?, modifiedParams? }
+ * Body: { decisionReason?, modifiedParams?, edits?: { amount?: number } }
  *
  * Separation of duties: the approver MUST NOT be the same actor who
  * authored the originating bot action. For bot-initiated requests
@@ -1072,6 +1073,23 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     // already `?? false`. Unknown is not permission.
     const wantsModification =
       req.body?.modifiedParams != null && typeof req.body.modifiedParams === "object";
+
+    // "Edit amount": a bounded, allow-listed edit (see lib/approval-edits).
+    // Not combinable with a free-form modifiedParams - two edits to one action
+    // would leave no single version the approver agreed to.
+    const wantsEdits = req.body?.edits !== undefined;
+    let editedParams: Record<string, unknown> | null = null;
+    let edit: { field: string; key: string; from: number; to: number; unit: string } | null = null;
+    if (wantsEdits) {
+      if (wantsModification) {
+        return res.status(400).json({ error: "edit_not_allowed", message: "send edits or modifiedParams, not both" });
+      }
+      const applied = applyApprovalEdits(row.tool, (row.params ?? {}) as Record<string, unknown>, req.body.edits);
+      if (!applied.ok) return res.status(applied.status).json({ error: applied.error, message: applied.message });
+      editedParams = applied.params;
+      edit = applied.edit;
+    }
+
     if (wantsModification) {
       const gate = await evaluateToolGate(tenantId, row.tool);
       if (gate.approvalConfig?.allowModification !== true) {
@@ -1087,20 +1105,26 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     // Reached only once the edit is permitted, so this is the params the
     // approver actually agreed to. It is dispatched below, which is why the
     // gate above has to run BEFORE it rather than alongside it.
-    const effectiveParams = wantsModification
-      ? (req.body.modifiedParams as Record<string, unknown>)
-      : (row.params as Record<string, unknown>);
+    const effectiveParams = editedParams
+      ? editedParams
+      : wantsModification
+        ? (req.body.modifiedParams as Record<string, unknown>)
+        : (row.params as Record<string, unknown>);
 
     // ATOMIC CLAIM. The PENDING/expiry checks above are a fast path for good
     // error messages; THIS is the guard that matters. Two managers clicking at
     // once (or a double-click, or web racing a WhatsApp button) previously
     // both passed the checks and both dispatched - executing the action twice.
     // Exactly one caller can win the compare-and-set; the loser stops here.
+    // An edit is stored exactly where a modification is: `params` keeps the
+    // original for audit, `modifiedParams` holds what ran, and decidedBy /
+    // decidedAt say who edited and when (the edit IS the decision). Retry and
+    // the kernel resume both already read modifiedParams over params.
     const updated = await approveRequest(
       tenantId,
       row.id,
       actorId,
-      req.body?.modifiedParams,
+      editedParams ?? req.body?.modifiedParams,
       req.body?.decisionReason,
       { decisionChannel: (req.body?.decisionChannel as string) || "web", correlationId: row.correlationId ?? row.id },
     );
@@ -1173,6 +1197,8 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
 
     return res.json({
       approval: updated,
+      // Present only when the approver edited; null means approved as asked.
+      edit,
       dispatch: {
         ok: dispatch.ok,
         error: dispatch.error,
