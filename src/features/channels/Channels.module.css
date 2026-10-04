@@ -1570,4 +1570,44 @@
     color: var(--text-subtle);
     white-space: nowrap;
   }
+
+  /* 13f's decisions on a suggestion. */
+  button.reportAction {
+    border: 0;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .reportAction[data-tone='primary'] {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .reportEdit {
+    margin-block-start: var(--space-8);
+  }
+
+  .reportEditBox {
+    inline-size: 100%;
+    padding: var(--space-8) 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    resize: block;
+  }
+
+  .reportDecided {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+
+  .reportProblem {
+    margin: var(--space-6) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
 }

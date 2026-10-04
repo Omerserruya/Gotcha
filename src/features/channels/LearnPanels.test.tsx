@@ -7,6 +7,12 @@ import { importStatusSchema } from '@/api/contracts/historical-import';
 import { candidateSchema } from '@/api/contracts/knowledge-candidates';
 import messages from '@/i18n/messages/en/channels.json';
 
+/* The decisions are a client component with their own tests; here, what each card is given. */
+vi.mock('./SuggestionActions', () => ({
+  SuggestionActions: ({ id, variants }: { id: string; variants: readonly string[] }) => (
+    <span data-testid={`decide-${id}`} data-variants={variants.join('|')} />
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
     createTranslator({ locale: 'en', messages: { channels: messages }, namespace }),
@@ -182,6 +188,14 @@ describe('★ 13f — the report, no paragraphs', () => {
       'title',
       expect.stringMatching(/will not pick for you/),
     );
+    // Each observed answer goes to the decisions, to be used as it stands.
+    expect(within(card).getByTestId('decide-c2').getAttribute('data-variants')).toMatch(
+      /14 days.*\|.*30 days/,
+    );
+    expect(within(screen.getByTestId('candidate-c1')).getByTestId('decide-c1')).toHaveAttribute(
+      'data-variants',
+      '',
+    );
   });
 
   it('below the server’s floor is "Low confidence"; above it, the percentage', async () => {
@@ -206,14 +220,10 @@ describe('★ 13f — the report, no paragraphs', () => {
     expect(screen.getByTestId('report-bulk')).toHaveTextContent('Add 0 ready answers');
   });
 
-  it('every decision is drawn and not live', async () => {
+  it('★ a card’s decisions are live (Omer, decision 13); bulk and rerun stay drawn', async () => {
     render(await report());
+    expect(within(screen.getByTestId('candidate-c1')).getByTestId('decide-c1')).toBeInTheDocument();
     expect(screen.getByTestId('report-bulk')).toHaveAttribute('aria-disabled', 'true');
-    for (const el of within(screen.getByTestId('candidate-c1')).getAllByText(
-      /Approve|Edit|Reject/,
-    )) {
-      expect(el).toHaveAttribute('aria-disabled', 'true');
-    }
   });
 
   it('the only sentence is the head’s; the body has no paragraph of prose', async () => {

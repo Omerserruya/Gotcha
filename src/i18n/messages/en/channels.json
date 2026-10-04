@@ -327,6 +327,20 @@
         "noCode": "Meta didn't hand back a way to read your numbers. Nothing was connected — try again.",
         "inspectFailed": "We couldn't read the numbers on that account. Nothing was connected — try again."
       }
+    },
+    "decide": {
+      "approved": "Approved — GOTCHA answers with it now.",
+      "rejected": "Set aside — GOTCHA won’t use it.",
+      "saveApprove": "Save and approve",
+      "cancel": "Cancel",
+      "refused": {
+        "already_covered": "Your knowledge already answers this — nothing new was added.",
+        "no_knowledge_base": "There is no knowledge base to add it to yet — create one in Studio → Knowledge.",
+        "not_found": "This suggestion was already decided or is gone.",
+        "forbidden": "You don't have permission to change what GOTCHA knows.",
+        "too_long": "That answer is too long to save — shorten it.",
+        "failed": "That didn’t go through — try again."
+      }
     }
   },
   "rowSettings": "Settings",

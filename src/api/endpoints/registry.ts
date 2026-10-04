@@ -1116,6 +1116,9 @@ export const knowledgeEndpoints = {
    */
   approveCandidate: (candidateId: string) =>
     endpoint('/api/historical-imports/candidates/{candidateId}/approve', { candidateId }),
+  /** 13f's Reject / Skip: `{ ok: true }`; 404 when gone or already decided. */
+  rejectCandidate: (candidateId: string) =>
+    endpoint('/api/historical-imports/candidates/{candidateId}/reject', { candidateId }),
 } as const;
 
 /**

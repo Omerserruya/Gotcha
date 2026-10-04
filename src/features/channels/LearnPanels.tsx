@@ -13,6 +13,7 @@ import {
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
+import { SuggestionActions } from './SuggestionActions';
 import styles from './Channels.module.css';
 
 const href = (view: 'progress' | 'report', importId: string, tab?: string) => ({
@@ -292,10 +293,9 @@ const TABS = ['needs_a_look', 'ready', 'rejected', 'already_covered'] as const;
  * until you approve it." — the strip of four, three cards, the tabs, the
  * candidates as cards in two columns, the ready-in-bulk card, the footer.
  *
- * Approving, editing, rejecting, adding in bulk and running again are drawn
- * and not live: nothing in this app writes them yet, and each is a change to
- * what the AI tells customers. The reasons ride on their titles; no
- * explanatory paragraph.
+ * Approve, a variant to use, Edit and Reject are live (Omer, decision 13) —
+ * each a change to what the AI tells customers, made only on a press. Adding
+ * in bulk and running again stay drawn until he rules on them.
  */
 export async function ReportPanel({
   status,
@@ -435,30 +435,14 @@ export async function ReportPanel({
                     <p className={styles.reportAnswer}>{c.answer}</p>
                   )}
                   {groupOf(c) === 'needs_a_look' ? (
-                    <p className={styles.reportActions}>
-                      {c.conflict && variants.length > 1 ? (
-                        variants.map((v) => (
-                          <span
-                            key={v.key}
-                            className={styles.reportAction}
-                            aria-disabled="true"
-                            title={notLive}
-                          >
-                            {t('learn.use', { answer: v.answer.slice(0, 24) })}
-                          </span>
-                        ))
-                      ) : (
-                        <span className={styles.reportAction} aria-disabled="true" title={notLive}>
-                          {t('review.approve')}
-                        </span>
-                      )}
-                      <span className={styles.reportAction} aria-disabled="true" title={notLive}>
-                        {t('learn.edit')}
-                      </span>
-                      <span className={styles.reportAction} aria-disabled="true" title={notLive}>
-                        {c.conflict ? t('learn.skip') : t('review.reject')}
-                      </span>
-                    </p>
+                    // Live (Omer, decision 13): approve, use a variant, edit, reject.
+                    <SuggestionActions
+                      id={c.id}
+                      answer={c.answer}
+                      variants={
+                        c.conflict && variants.length > 1 ? variants.map((v) => v.answer) : []
+                      }
+                    />
                   ) : null}
                 </li>
               );
