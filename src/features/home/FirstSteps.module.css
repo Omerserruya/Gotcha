@@ -42,6 +42,9 @@
 
   /* "Once you go live…", under the card. */
   .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
     inline-size: 880px;
     max-inline-size: calc(100% - var(--space-40) * 2);
     margin: var(--space-10) auto var(--space-14);
@@ -103,12 +106,21 @@
     background-color: var(--signal-ai);
   }
 
-  .list {
+  /* The steps and Go live scroll together, so the last step is never under it. */
+  .scroller {
     display: flex;
     flex: 1;
     flex-direction: column;
     min-block-size: 0;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-heavy) transparent;
+  }
+
+  .list {
+    display: flex;
+    flex: none;
+    flex-direction: column;
     margin: var(--space-11) 0 0;
     padding: 0;
     list-style: none;
@@ -383,5 +395,17 @@
 
   .goLiveProblem a {
     color: inherit;
+  }
+
+  .footLink {
+    color: var(--text-secondary);
+    text-decoration: underline;
+    cursor: not-allowed;
+  }
+
+  .goLiveMark {
+    display: flex;
+    flex: none;
+    color: var(--frame-text-muted);
   }
 }

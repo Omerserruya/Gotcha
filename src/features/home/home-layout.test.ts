@@ -92,8 +92,9 @@ describe('★ 01c — First steps is one card that fits the frame', () => {
     expect(r('block')).toMatch(/inline-size:\s*880px/);
     expect(r('block')).toMatch(/min-block-size:\s*0/);
   });
-  it('the steps scroll inside; Go live never shrinks away', () => {
-    expect(r('list')).toMatch(/overflow-y:\s*auto/);
+  it('the steps and Go live scroll together — Go live last, never pinned over a step', () => {
+    expect(r('scroller')).toMatch(/overflow-y:\s*auto/);
+    expect(r('list')).not.toMatch(/overflow-y/);
     expect(r('goLive')).toMatch(/flex:\s*none/);
   });
   it('a waiting row is one line', () => {

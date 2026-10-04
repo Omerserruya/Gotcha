@@ -1,3 +1,4 @@
+import { Circle, Lock } from 'lucide-react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import type { KnowledgeIngest, SetupStatus, SetupStep } from '@/api/contracts/setup';
@@ -68,51 +69,76 @@ export async function FirstSteps({
           ))}
         </div>
 
-        <ol className={styles.list}>
-          {setup.steps.map((step, index) => (
-            <Row
-              key={step.id}
-              step={step}
-              position={index + 1}
-              isNext={next?.id === step.id}
-              ingest={ingest}
-              t={t}
-              format={format}
-            />
-          ))}
-        </ol>
+        {/* One scroller: the steps, then Go live as the last item (02) — never pinned over them. */}
+        <div className={styles.scroller}>
+          <ol className={styles.list}>
+            {setup.steps.map((step, index) => (
+              <Row
+                key={step.id}
+                step={step}
+                position={index + 1}
+                isNext={next?.id === step.id}
+                ingest={ingest}
+                t={t}
+                format={format}
+              />
+            ))}
+          </ol>
 
-        {/*
+          {/*
         01c's Go live: locked, with what holds it, until the server says it is
         eligible — then live (Omer, decision 01), asking once before the write
         that puts GOTCHA in front of real customers.
       */}
-        <div className={styles.goLive} data-testid="go-live">
-          <div className={styles.goLiveText}>
-            <span className={styles.goLiveTitle}>{t('goLive.title')}</span>
-            <span className={styles.goLiveBody}>{t('goLive.body')}</span>
-          </div>
-          {setup.goLive?.eligible ? (
-            // Live (Omer, decision 01): asks once, then goes live.
-            <GoLiveButton />
-          ) : (
-            <span
-              className={styles.goLiveButton}
-              aria-disabled="true"
-              data-testid="go-live-button"
-              title={t('goLive.lockedBy', {
-                steps:
-                  (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') || '—',
-              })}
-            >
-              {t('goLive.locked')}
+          <div className={styles.goLive} data-testid="go-live">
+            <span className={styles.goLiveMark} aria-hidden="true">
+              {setup.goLive?.eligible ? <Circle size={14} /> : <Lock size={14} />}
             </span>
-          )}
+            <div className={styles.goLiveText}>
+              <span className={styles.goLiveTitle}>{t('goLive.title')}</span>
+              <span className={styles.goLiveBody} data-testid="go-live-body">
+                {t('goLive.body')}
+                {setup.goLive?.eligible || (setup.goLive?.blockedBy ?? []).length === 0
+                  ? null
+                  : ` ${t('goLive.opensOnce', {
+                      steps: joinSteps(
+                        (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t).toLowerCase()),
+                        t,
+                      ),
+                    })}`}
+              </span>
+            </div>
+            {setup.goLive?.eligible ? (
+              // Live (Omer, decision 01): asks once, then goes live.
+              <GoLiveButton />
+            ) : (
+              <span
+                className={styles.goLiveButton}
+                aria-disabled="true"
+                data-testid="go-live-button"
+                title={t('goLive.lockedBy', {
+                  steps:
+                    (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') || '—',
+                })}
+              >
+                {t('goLive.locked')}
+              </span>
+            )}
+          </div>
         </div>
       </section>
       {/* True: once live, Home's face is the ordinary one (`homeFace`). */}
       <p className={styles.foot} data-testid="first-steps-foot">
-        {t('foot')}
+        <span>{t('foot')}</span>
+        {/* 02's "Send yourself a test message" — no screen sends one yet: drawn, with why. */}
+        <span
+          className={styles.footLink}
+          aria-disabled="true"
+          title={t('testMessageNotYet')}
+          data-testid="test-message"
+        >
+          {t('testMessage')}
+        </span>
       </p>
     </>
   );
@@ -197,7 +223,11 @@ function Row({
       <span className={styles.badge} aria-hidden="true">
         {position}
       </span>
-      <div className={[styles.rowText, styles.rowLine].join(' ')}>
+      <div
+        className={
+          TWO_LINES.has(step.id) ? styles.rowText : [styles.rowText, styles.rowLine].join(' ')
+        }
+      >
         <span className={styles.rowTitle}>{title}</span>
         <span className={styles.rowBody} title={blocker ? undefined : body}>
           {blocker ? afterStep(blocker, t) : body}
@@ -206,6 +236,18 @@ function Row({
       <StepAction id={step.id} label={action} className={styles.actionSecondary} t={t} />
     </li>
   );
+}
+
+/**
+ * 02 gives the two steps that decide whether GOTCHA can act — the store, the
+ * handover rules — their explanation on a second line; the rest stay one line.
+ */
+const TWO_LINES = new Set(['connect_store', 'handover_rules']);
+
+/** "the store and the handover rules", in the reader's language. */
+function joinSteps(steps: readonly string[], t: Translate): string {
+  if (steps.length <= 1) return steps[0] ?? '';
+  return `${steps.slice(0, -1).join(', ')} ${t('and')} ${steps.at(-1)}`;
 }
 
 /** A link where a screen completes the step; drawn, with why, where none does. */

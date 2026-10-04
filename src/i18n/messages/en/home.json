@@ -385,16 +385,21 @@
         "admin": "The workspace needs an active admin first.",
         "forbidden": "Only an admin can take the workspace live.",
         "failed": "That didn't go live — try again."
-      }
+      },
+      "opensOnce": "Opens once {steps} are set."
     },
     "foot": "Once you go live, today's numbers and the queue take this space.",
-    "blockedBy": "Waiting on: {step}"
+    "blockedBy": "Waiting on: {step}",
+    "and": "and",
+    "testMessage": "Send yourself a test message",
+    "testMessageNotYet": "Sending a test message from here comes next — message your WhatsApp number from your own phone meanwhile."
   },
   "dayOne": {
-    "eyebrow": "Setting up",
+    "eyebrow": "Day one",
     "heading": "Your workspace is ready",
     "read": "GOTCHA read {pages, plural, one {# page} other {# pages}} and drafted {drafted, plural, one {# answer} other {# answers}}.",
     "stepsLeft": "{count, plural, one {One step left before it can go live.} other {# steps left before it can go live.}}",
-    "allSteps": "Every step is done."
+    "allSteps": "Every step is done.",
+    "headingNamed": "Your workspace is ready, {name}"
   }
 }

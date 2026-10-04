@@ -3,7 +3,12 @@ import { isValidElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const loadHomeData = vi.hoisted(() => vi.fn());
-vi.mock('./load-home-data', () => ({ loadHomeData, QUIET_DAY_LIMIT: 4 }));
+const firstName = vi.hoisted(() => ({ value: null as string | null }));
+vi.mock('./load-home-data', () => ({
+  loadHomeData,
+  QUIET_DAY_LIMIT: 4,
+  loadViewerFirstName: async () => firstName.value,
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
   getFormatter: async () => ({ dateTime: () => 'date' }),
@@ -194,6 +199,15 @@ describe('★★ 01c — day one: the same Home, its own head', () => {
     expect(text).toContain('dayOne.read');
     expect(text).toContain('dayOne.stepsLeft');
     expect(text).not.toContain('greeting.');
+  });
+
+  it('★ the heading carries the viewer’s first name when known (02: "…ready, Maya")', async () => {
+    firstName.value = 'Maya';
+    const named = JSON.stringify(await screen({ setup, ingest, isQuiet: false }));
+    expect(named).toContain('dayOne.headingNamed');
+    firstName.value = null;
+    const plain = JSON.stringify(await screen({ setup, ingest, isQuiet: false }));
+    expect(plain).not.toContain('dayOne.headingNamed');
   });
 
   it('no scan yet: the steps alone, no "read 0 pages"', async () => {

@@ -38,6 +38,7 @@ import {
 import { teamSchema, type Team } from '@/api/contracts/team';
 import { unreadCountSchema } from '@/api/contracts/notifications';
 import {
+  authEndpoints,
   analyticsEndpoints,
   intelligenceReviewEndpoints,
   setupEndpoints,
@@ -45,6 +46,7 @@ import {
   notificationEndpoints,
   presenceEndpoints,
 } from '@/api/endpoints/registry';
+import { currentUserSchema } from '@/api/contracts/identity';
 import { logger } from '@/observability/logger';
 
 /**
@@ -324,4 +326,18 @@ export async function loadHomeData(): Promise<HomeData> {
     isQuiet: queue !== null && queue.waiting === 0,
     gate,
   };
+}
+
+/**
+ * 01c's "Your workspace is ready, Maya": the viewer's first name, from
+ * `/api/auth/me`. `null` when unread or unnamed — then the heading has none.
+ */
+export async function loadViewerFirstName(): Promise<string | null> {
+  return serverApi()
+    .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
+    .then((me) => me.user.name?.trim().split(/\s+/)[0] || null)
+    .catch((cause: unknown) => {
+      logger.warn('home.me_failed', { cause });
+      return null;
+    });
 }

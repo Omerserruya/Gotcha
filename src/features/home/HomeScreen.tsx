@@ -11,7 +11,7 @@ import { QueueList } from './QueueList';
 import { openQuestionCount } from './quiet-day-item';
 import { QuietWork } from './QuietWork';
 import styles from './Home.module.css';
-import { loadHomeData, QUIET_DAY_LIMIT } from './load-home-data';
+import { loadHomeData, loadViewerFirstName, QUIET_DAY_LIMIT } from './load-home-data';
 import { MetricStrip } from './MetricStrip';
 import { StatusStrip } from './StatusStrip';
 import { TeamPanel } from './TeamPanel';
@@ -82,6 +82,7 @@ export async function HomeScreen({
   }
 
   const now = new Date();
+  const firstName = isDayOne ? await loadViewerFirstName() : null;
   // From the viewer's clock: "good morning" at 9pm is worse than no greeting.
   const partOfDay = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
 
@@ -107,7 +108,9 @@ export async function HomeScreen({
         </Text>
         <Text role="hero" as="h1" className={styles.greetingHeading}>
           {isDayOne
-            ? t('dayOne.heading')
+            ? firstName
+              ? t('dayOne.headingNamed', { name: firstName })
+              : t('dayOne.heading')
             : isQuiet
               ? t(`greeting.quiet.${partOfDay}`)
               : t(`greeting.${partOfDay}`)}

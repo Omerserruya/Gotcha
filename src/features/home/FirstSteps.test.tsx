@@ -222,3 +222,23 @@ describe('★ 01c — measured against 02', () => {
     expect(screen.getByText('Waiting on: verify_domain')).toBeInTheDocument();
   });
 });
+
+describe('★ 01c as measured', () => {
+  it('locked, Go live says what it waits for — inline, not only in a title', async () => {
+    await renderBlock();
+    expect(screen.getByTestId('go-live-body')).toHaveTextContent(/Opens once .+ are set\./);
+  });
+
+  it('★ Go live is the last thing in the steps’ own scroller — never pinned over them', async () => {
+    await renderBlock();
+    const goLive = screen.getByTestId('go-live');
+    expect(goLive.parentElement?.lastElementChild).toBe(goLive);
+    expect(goLive.parentElement?.querySelector('ol')).not.toBeNull();
+  });
+
+  it('the foot: "Send yourself a test message", drawn with why', async () => {
+    await renderBlock();
+    expect(screen.getByTestId('test-message')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('test-message').getAttribute('title')).toBeTruthy();
+  });
+});
