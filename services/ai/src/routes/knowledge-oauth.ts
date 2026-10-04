@@ -70,6 +70,69 @@ function parseRequestedSources(body: any): googleDriveService.DriveSource[] {
 }
 
 
+// ─── Where a knowledge OAuth round-trip lands ───────────────
+
+// Allow-listed `flow` values, signed into the state - never a return URL from
+// the browser. `redesign_studio` lands in the redesigned app's knowledge page.
+const KNOWLEDGE_FLOWS = new Set(["onboarding", "redesign_studio"]);
+function parseKnowledgeFlow(raw: unknown, allowed: ReadonlySet<string> = KNOWLEDGE_FLOWS): string | undefined {
+  return typeof raw === "string" && allowed.has(raw) ? raw : undefined;
+}
+
+// Fixed, not read from anywhere a request reaches: must equal frontend-v2's
+// NEXT_PUBLIC_BASE_PATH.
+const REDESIGN_BASE_PATH = "/v2";
+const KNOWLEDGE_WAY: Record<string, string> = { google_drive: "drive", confluence: "confluence" };
+
+/** Failure codes a redesign-flow callback may put in its redirect. Closed. */
+const KNOWLEDGE_FAILURE_CODES = new Set(["denied", "token_exchange_failed", "no_accessible_site", "callback_error"]);
+
+function redesignKnowledgeUrl(provider: string, query: Record<string, string> = {}): string {
+  const base = resolveAppPublicUrl(process.env);
+  const params = new URLSearchParams({ add: "1", way: KNOWLEDGE_WAY[provider] ?? provider });
+  if (query.error) params.set("error", KNOWLEDGE_FAILURE_CODES.has(query.error) ? query.error : "callback_error");
+  else params.set("connected", "1");
+  return `${base}${REDESIGN_BASE_PATH}/studio/knowledge?${params.toString()}`;
+}
+
+/**
+ * A failure AFTER the state verified: the redesign flow gets a redirect it can
+ * render with a closed error code; every other flow keeps exactly the JSON
+ * error it always had.
+ */
+function knowledgeFail(
+  res: Response,
+  provider: string,
+  flow: string | undefined,
+  status: number,
+  code: string,
+  legacyBody: Record<string, unknown>,
+): void {
+  if (flow === "redesign_studio") {
+    res.redirect(redesignKnowledgeUrl(provider, { error: code }));
+    return;
+  }
+  res.status(status).json(legacyBody);
+}
+
+/**
+ * The user pressed Cancel at the provider (`?error=`, no code). Verify and
+ * spend the state to learn the flow: the redesign flow lands on error=denied,
+ * anything else - including a state that does not verify - gets the response
+ * this callback always gave. Returns true when it answered.
+ */
+async function knowledgeDenied(req: Request, res: Response, provider: string): Promise<boolean> {
+  const state = req.query.state;
+  if (!req.query.error || req.query.code || typeof state !== "string" || !state) return false;
+  const consumed = await consumeOAuthState<{ flow?: string }>(state, provider);
+  if (!consumed.ok || consumed.claims?.flow !== "redesign_studio") {
+    res.status(400).json({ error: "Missing code or state" });
+    return true;
+  }
+  res.redirect(redesignKnowledgeUrl(provider, { error: "denied" }));
+  return true;
+}
+
 // ─── Confluence OAuth ───────────────────────────────────────
 
 router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), (req: Request, res: Response) => {
@@ -85,7 +148,10 @@ router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveT
 
   // Single-use state (shared store): the jti is burned on callback so a
   // captured state cannot be replayed within its TTL.
-  const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "confluence", kbId, userId: (req as any).userId });
+  const { state } = mintOAuthState({
+    tenantId: req.tenantId!, provider: "confluence", kbId, userId: (req as any).userId,
+    flow: parseKnowledgeFlow(req.query.flow, new Set(["redesign_studio"])),
+  });
 
   const scopes = "read:confluence-content.all read:confluence-space.summary offline_access";
   const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${clientId}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&response_type=code&prompt=consent`;
@@ -94,17 +160,20 @@ router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveT
 });
 
 router.get("/oauth/confluence/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await knowledgeDenied(req, res, "confluence")) return;
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const consumed = await consumeOAuthState<{ tenantId: string; kbId: string }>(state as string, "confluence");
+    const consumed = await consumeOAuthState<{ tenantId: string; kbId: string; flow?: string }>(state as string, "confluence");
     if (!consumed.ok) {
       console.warn(`[confluence oauth] state rejected: ${consumed.reason}`);
       res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
       return;
     }
     const { tenantId, kbId } = consumed.claims;
+    flow = consumed.claims.flow;
 
     const clientId = process.env.CONFLUENCE_CLIENT_ID!;
     const clientSecret = process.env.CONFLUENCE_CLIENT_SECRET!;
@@ -126,7 +195,7 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
       console.error("[Confluence OAuth] Token exchange failed:", err);
-      res.status(400).json({ error: "Token exchange failed" });
+      knowledgeFail(res, "confluence", flow, 400, "token_exchange_failed", { error: "Token exchange failed" });
       return;
     }
 
@@ -138,7 +207,7 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     });
     const resources: any[] = await resourcesRes.json() as any[];
     if (!resources.length) {
-      res.status(400).json({ error: "No accessible Confluence sites found" });
+      knowledgeFail(res, "confluence", flow, 400, "no_accessible_site", { error: "No accessible Confluence sites found" });
       return;
     }
 
@@ -161,10 +230,10 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     });
 
     const frontendUrl = resolveAppPublicUrl(process.env);
-    res.redirect(`${frontendUrl}/knowledge?connected=confluence`);
+    res.redirect(flow === "redesign_studio" ? redesignKnowledgeUrl("confluence") : `${frontendUrl}/knowledge?connected=confluence`);
   } catch (err: any) {
     console.error("[Confluence OAuth] Callback error:", err.message);
-    res.status(500).json({ error: "OAuth callback failed" });
+    knowledgeFail(res, "confluence", flow, 500, "callback_error", { error: "OAuth callback failed" });
   }
 });
 
@@ -186,7 +255,7 @@ router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboa
 
   const { state } = mintOAuthState({
     tenantId: req.tenantId!, provider: "google_drive", kbId, userId: (req as any).userId,
-    flow: req.query.flow === "onboarding" ? "onboarding" : undefined,
+    flow: parseKnowledgeFlow(req.query.flow),
   });
 
   // ONE scope. Folder sources are a standing subscription to a subtree,
@@ -214,7 +283,9 @@ router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboa
 });
 
 router.get("/oauth/google-drive/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await knowledgeDenied(req, res, "google_drive")) return;
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
@@ -225,6 +296,7 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
     const { tenantId, kbId } = payload;
 
     const clientId = process.env.GOOGLE_CLIENT_ID!;
@@ -246,7 +318,7 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
       console.error("[Google Drive OAuth] Token exchange failed:", err);
-      res.status(400).json({ error: "Token exchange failed" });
+      knowledgeFail(res, "google_drive", flow, 400, "token_exchange_failed", { error: "Token exchange failed" });
       return;
     }
 
@@ -298,10 +370,16 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     const frontendUrl = resolveAppPublicUrl(process.env);
     // Onboarding-initiated connects return to the wizard (Movement 6 resumes
     // via the persisted progress checkpoint); everything else to the app.
-    res.redirect(payload.flow === "onboarding" ? `${frontendUrl}/setup?connected=google_drive` : `${frontendUrl}/knowledge?connected=google_drive`);
+    res.redirect(
+      payload.flow === "redesign_studio"
+        ? redesignKnowledgeUrl("google_drive")
+        : payload.flow === "onboarding"
+          ? `${frontendUrl}/setup?connected=google_drive`
+          : `${frontendUrl}/knowledge?connected=google_drive`,
+    );
   } catch (err: any) {
     console.error("[Google Drive OAuth] Callback error:", err.message);
-    res.status(500).json({ error: "OAuth callback failed" });
+    knowledgeFail(res, "google_drive", flow, 500, "callback_error", { error: "OAuth callback failed" });
   }
 });
 
