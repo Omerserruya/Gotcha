@@ -43,7 +43,8 @@ export function InviteForm({
   const t = useTranslations('people');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [teamId, setTeamId] = useState('');
+  /* Several teams at once (Omer, 12: "you can allow several") — the route takes a list. */
+  const [teamIds, setTeamIds] = useState<readonly string[]>([]);
   const [result, setResult] = useState<PeopleWriteResult<{ setupLink?: string | null }> | null>(
     null,
   );
@@ -52,7 +53,7 @@ export function InviteForm({
   function submit() {
     setResult(null);
     startTransition(async () => {
-      const outcome = await inviteMember({ email, name, departmentIds: teamId ? [teamId] : [] });
+      const outcome = await inviteMember({ email, name, departmentIds: teamIds });
       setResult(outcome);
       if (outcome.ok) {
         // The fields clear but the panel STAYS OPEN, because the success
@@ -60,7 +61,7 @@ export function InviteForm({
         // one copy of a link the admin may need to send by hand.
         setEmail('');
         setName('');
-        setTeamId('');
+        setTeamIds([]);
       }
     });
   }
@@ -80,8 +81,8 @@ export function InviteForm({
              not a design choice. What it is for is on the field (`title`).
       role   the route invites every person as AGENT and takes no role: the
              control shows "Agent" and is not live.
-      team   the route takes several; the row offers one (or none), as 02's
-             single dropdown does.
+      team   the route takes several, and so does the row (Omer, 12): 02's
+             dropdown, holding a checkbox per team.
   */
   return (
     <section className={styles.invite} data-testid="invite-form">
@@ -124,23 +125,40 @@ export function InviteForm({
         >
           <option>{t('invite.roleAgent')}</option>
         </select>
-        <label className="srOnly" htmlFor="invite-team">
-          {t('invite.teams')}
-        </label>
-        <select
-          id="invite-team"
-          className={styles.inviteSelect}
-          value={teamId}
-          data-testid="invite-team"
-          onChange={(e) => setTeamId(e.target.value)}
-        >
-          <option value="">{t('invite.noTeam')}</option>
-          {teams.map((team) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
-            </option>
-          ))}
-        </select>
+        <details className={styles.inviteTeams} data-testid="invite-team">
+          <summary className={styles.inviteSelect} aria-label={t('invite.teams')}>
+            {teamIds.length === 0
+              ? t('invite.noTeam')
+              : teamIds.length === 1
+                ? (teams.find((team) => team.id === teamIds[0])?.name ??
+                  t('invite.teamsCount', { count: 1 }))
+                : t('invite.teamsCount', { count: teamIds.length })}
+          </summary>
+          <fieldset className={styles.inviteTeamList}>
+            <legend className="srOnly">{t('invite.teams')}</legend>
+            {teams.length === 0 ? (
+              <span className={styles.inviteNote}>{t('invite.noTeams')}</span>
+            ) : (
+              teams.map((team) => (
+                <label key={team.id} className={styles.inviteTeamOption}>
+                  <input
+                    type="checkbox"
+                    checked={teamIds.includes(team.id)}
+                    data-testid={`invite-team-${team.id}`}
+                    onChange={() =>
+                      setTeamIds((now) =>
+                        now.includes(team.id)
+                          ? now.filter((id) => id !== team.id)
+                          : [...now, team.id],
+                      )
+                    }
+                  />
+                  {team.name}
+                </label>
+              ))
+            )}
+          </fieldset>
+        </details>
         <Button
           variant="primary"
           size="sm"

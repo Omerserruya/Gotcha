@@ -75,7 +75,9 @@
     "role": "תפקיד",
     "roleAgent": "נציג",
     "roleFixed": "כולם מוזמנים כנציגים: ההזמנה לא מקבלת תפקיד.",
-    "noTeam": "בלי צוות"
+    "noTeam": "בלי צוות",
+    "teamsCount": "{count, plural, one {צוות אחד} other {# צוותים}}",
+    "noTeams": "עוד אין צוותים."
   },
   "tabs": {
     "label": "אנשים וצוותים",

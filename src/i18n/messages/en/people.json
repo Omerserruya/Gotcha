@@ -75,7 +75,9 @@
     "role": "Role",
     "roleAgent": "Agent",
     "roleFixed": "Everyone is invited as an Agent: the invite takes no role.",
-    "noTeam": "No team"
+    "noTeam": "No team",
+    "teamsCount": "{count, plural, one {1 team} other {# teams}}",
+    "noTeams": "No teams yet."
   },
   "tabs": {
     "label": "People and teams",

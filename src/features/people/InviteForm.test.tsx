@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -53,11 +54,44 @@ describe('★ 12 — the invite is one inline row, opened from the header', () =
     expect(role).toHaveAttribute('title', expect.stringMatching(/takes no role/i));
   });
 
-  it('one team, or none by default', () => {
+  it('no team by default; the teams are there to tick (Omer, 12: several at once)', () => {
     show(true);
-    const team = screen.getByTestId('invite-team') as HTMLSelectElement;
-    expect(team.value).toBe('');
-    expect(team).toHaveTextContent('No team');
+    const team = screen.getByTestId('invite-team');
+    expect(team.querySelector('summary')).toHaveTextContent('No team');
     expect(team).toHaveTextContent('Support');
+  });
+});
+
+describe('★★ 12 — invited into several teams at once (Omer)', () => {
+  it('ticked teams all go with the invite; the summary counts them', async () => {
+    const { inviteMember } = await import('./actions');
+    // This one invite is answered, so the press can be watched — it still reaches no one.
+    vi.mocked(inviteMember)
+      .mockReset()
+      .mockResolvedValue({ ok: true, data: {} } as never);
+    render(
+      <NextIntlClientProvider locale="en" messages={{ people }}>
+        <InviteForm
+          teams={
+            [
+              { id: 't1', name: 'Support' },
+              { id: 't2', name: 'Sales' },
+            ] as never
+          }
+          open
+        />
+      </NextIntlClientProvider>,
+    );
+    await userEvent.click(screen.getByTestId('invite-team-t1'));
+    await userEvent.click(screen.getByTestId('invite-team-t2'));
+    expect(screen.getByTestId('invite-team').querySelector('summary')).toHaveTextContent('2 teams');
+    await userEvent.type(document.getElementById('invite-email')!, 'tomer@avivco.il');
+    await userEvent.type(document.getElementById('invite-name')!, 'Tomer');
+    await userEvent.click(screen.getByTestId('invite-send'));
+    expect(inviteMember).toHaveBeenCalledWith({
+      email: 'tomer@avivco.il',
+      name: 'Tomer',
+      departmentIds: ['t1', 't2'],
+    });
   });
 });
