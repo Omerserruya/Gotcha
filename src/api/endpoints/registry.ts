@@ -720,6 +720,12 @@ export const businessPolicyEndpoints = {
 export const customerEndpoints = {
   /** POST. Body `{ rules?, channel?, countOnly? }`. */
   list: () => endpoint('/api/contacts/segment'),
+  /**
+   * POST `{ externalId, channel, displayName?, email?, phone? }` → `{ data }`.
+   * ⚠ An UPSERT on (channel, externalId): an existing contact's fields are
+   * overwritten. 04's Add looks the person up first.
+   */
+  create: () => endpoint('/api/contacts'),
   detail: (id: string) => endpoint('/api/contacts/{id}', { id }),
   /**
    * Screen 04b's timeline. CONTACT-keyed, and the only one of the three

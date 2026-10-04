@@ -107,6 +107,11 @@ describe('★★ 04’s rows — what is true about them today', () => {
     expect(screen.getByTestId('since-k1')).toHaveTextContent('5 months');
   });
 
+  it('"1 month", never "a month"', async () => {
+    await show([row()], [conv({ status: 'CLOSED', lastMessageAt: '2026-09-02T12:00:00.000Z' })]);
+    expect(screen.getByTestId('since-k1')).toHaveTextContent(/^1 month$/);
+  });
+
   it('the footer: showing N of all, and the identity limit with its reason', async () => {
     await show([row()]);
     expect(screen.getByTestId('customer-count')).toHaveTextContent('Showing 1 of 4180');
@@ -170,9 +175,14 @@ describe('★★ the side column', () => {
     );
   });
 
-  it('who they are: in its shape, "—" with why', async () => {
+  it('who they are: label and "—" on a line, an empty bar under each', async () => {
     render(await WhoTheyAre());
-    expect(screen.getByTestId('who-they-are').textContent).not.toMatch(/\d/);
+    const card = screen.getByTestId('who-they-are');
+    expect(card.textContent).not.toMatch(/\d/);
+    const rows = card.querySelectorAll('li');
+    expect(rows).toHaveLength(4);
+    expect(rows[0]!.children[0]).toHaveTextContent('Bought once—');
+    expect(rows[0]!.children[1]?.getAttribute('aria-hidden')).toBe('true');
   });
 });
 
@@ -219,6 +229,29 @@ describe('★★ the join that makes a row "today"', () => {
       NOW,
     );
     expect(people.map((p) => p.primary.id)).toEqual(['x', 'y', 'z']);
+  });
+
+  it('★ "talking now" is open AND a word in the last 24 hours; waiting needs only open + theirs', () => {
+    const [stale] = peopleToday(
+      [row()],
+      [
+        conv({
+          status: 'OPEN',
+          lastMessageAt: '2026-09-04T12:00:00Z',
+          lastMessageDirection: 'INBOUND',
+        }),
+      ],
+      null,
+      NOW,
+    );
+    expect(stale).toMatchObject({ talking: false, waiting: true });
+    const [fresh] = peopleToday(
+      [row()],
+      [conv({ lastMessageAt: '2026-10-03T13:00:00Z' })],
+      null,
+      NOW,
+    );
+    expect(fresh?.talking).toBe(true);
   });
 
   it('segments: from the URL, and who is in them', () => {

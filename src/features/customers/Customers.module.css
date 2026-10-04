@@ -269,9 +269,12 @@
 
   /* 02's search: 260 wide, white, radius 9, `padding:8px 14px`, 12.5px. */
   .search {
+    margin: 0;
+  }
+
+  .headActions {
     display: flex;
     gap: 10px;
-    margin: 0;
   }
 
   /* 02: "Add a customer", outlined, radius 9, `8px 14px`. */
@@ -279,10 +282,69 @@
     padding: var(--space-8) var(--space-14);
     border: 1px solid var(--border-default);
     border-radius: 9px;
+    background: none;
+    font: inherit;
     font-size: 12.5px;
     color: var(--intent-neutral-text);
-    opacity: 0.5;
-    cursor: not-allowed;
+    cursor: pointer;
+  }
+
+  .addWrap {
+    position: relative;
+  }
+
+  .addPanel {
+    position: absolute;
+    inset-block-start: calc(100% + 6px);
+    inset-inline-end: 0;
+    z-index: 5;
+    inline-size: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-16);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    line-height: normal;
+  }
+
+  .addField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    font-size: var(--font-size-caption);
+    color: var(--text-muted);
+  }
+
+  .addField input {
+    padding: var(--space-8) 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  .addField input[aria-invalid='true'] {
+    border-color: var(--alert-text);
+  }
+
+  .addNote {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .addProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .addActions {
+    display: flex;
+    gap: var(--space-8);
   }
 
   .searchInput {
@@ -2314,5 +2376,38 @@
     margin: var(--space-8) 0 0;
     font-size: var(--font-size-caption);
     color: var(--alert-text);
+  }
+
+  /* 02's "Who your customers are": label and number on one line, a 4px bar under, rows 35 apart. */
+  .whoRows {
+    list-style: none;
+    margin: var(--space-12) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .whoRow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .whoTop {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  .whoCount {
+    color: var(--text-subtle);
+  }
+
+  .whoTrack {
+    block-size: 4px;
+    border-radius: 2px;
+    background-color: var(--panel-well);
   }
 }

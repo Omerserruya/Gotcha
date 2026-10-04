@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { collapseToPeople } from '@/api/contracts/customers';
 import { CustomerList, ReachOut, Segments, WhoTheyAre } from '@/features/customers/CustomerList';
+import { AddCustomer } from '@/features/customers/AddCustomer';
 import { DuplicateCard } from '@/features/customers/DuplicateCard';
 import {
   duplicateSuggestion,
@@ -86,33 +87,24 @@ export default async function Page({
           linkable and survives a reload, and the page stays a server
           component. 02's search field, 260 wide; Enter searches.
         */
-        <form className={styles.search} action="" method="get" data-testid="customer-search">
-          <label className="srOnly" htmlFor="customer-q">
-            {t('search.label')}
-          </label>
-          <input
-            id="customer-q"
-            name="q"
-            type="search"
-            className={styles.searchInput}
-            defaultValue={query}
-            placeholder={t('search.placeholder')}
-            data-testid="customer-search-input"
-          />
-          {/*
-            02's "Add a customer". The create route needs the channel identity
-            a customer writes from — an id this screen would have to invent,
-            and a guessed one makes a duplicate. Drawn, with why.
-          */}
-          <span
-            className={styles.addCustomer}
-            aria-disabled="true"
-            title={t('add.notYet')}
-            data-testid="add-customer"
-          >
-            {t('add.label')}
-          </span>
-        </form>
+        <div className={styles.headActions}>
+          <form className={styles.search} action="" method="get" data-testid="customer-search">
+            <label className="srOnly" htmlFor="customer-q">
+              {t('search.label')}
+            </label>
+            <input
+              id="customer-q"
+              name="q"
+              type="search"
+              className={styles.searchInput}
+              defaultValue={query}
+              placeholder={t('search.placeholder')}
+              data-testid="customer-search-input"
+            />
+          </form>
+          {/* 02's "Add a customer" — live: name and phone, never a duplicate. Outside the search form, so Enter there never searches. */}
+          <AddCustomer />
+        </div>
       }
     >
       {rows === null ? (

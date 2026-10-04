@@ -25,7 +25,7 @@ export interface PersonToday {
   readonly lastContactAt: string | null;
   /** That message, as the row's second line. */
   readonly situation: string | null;
-  /** A conversation with them is open right now. */
+  /** Open, and a word in the last 24 hours: "talking to you now". */
   readonly talking: boolean;
   /** …and the last word was theirs: they are waiting on you. */
   readonly waiting: boolean;
@@ -36,6 +36,7 @@ export interface PersonToday {
 }
 
 export const QUIET_AFTER_DAYS = 90;
+const NOW_WINDOW_MS = 24 * 3_600_000;
 
 export type Segment = 'everyone' | 'talking' | 'quiet';
 export function segmentOf(raw: string | undefined): Segment {
@@ -67,14 +68,17 @@ export function peopleToday(
         .map((id) => newest.get(id))
         .filter((c): c is ConversationFact => c !== undefined)
         .sort((a, b) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''))[0];
-      const talking = ids.some((id) => open.has(id));
       const at = latest?.lastMessageAt ?? null;
+      const isOpen = ids.some((id) => open.has(id));
+      // A month-old open conversation is not "now" (02: 37 of 4,180).
+      const talking = isOpen && at !== null && Date.parse(at) >= now.getTime() - NOW_WINDOW_MS;
       return {
         ...person,
         lastContactAt: at,
         situation: latest?.lastMessageBody?.replace(/\s+/g, ' ').trim() || null,
         talking,
-        waiting: talking && latest?.lastMessageDirection === 'INBOUND',
+        // Waiting stays on any open conversation whose last word was theirs.
+        waiting: isOpen && latest?.lastMessageDirection === 'INBOUND',
         quiet: ids.some((id) => quietIds?.has(id)),
         faded: at !== null && Date.parse(at) < quietBefore,
       };

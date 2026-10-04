@@ -376,7 +376,19 @@
   },
   "add": {
     "label": "Add a customer",
-    "notYet": "Customers are added when they first write to you; adding one by hand comes next."
+    "name": "Name",
+    "phone": "Phone",
+    "email": "Email (optional)",
+    "note": "They’re added as a WhatsApp customer. If the number is already here, that person opens instead.",
+    "submit": "Add",
+    "cancel": "Cancel",
+    "problem": {
+      "name": "Give them a name.",
+      "phone": "That doesn't look like a phone number — try 054-123 4567 or +972 54 123 4567.",
+      "email": "That email doesn't look right.",
+      "forbidden": "You don't have permission to add customers.",
+      "failed": "They weren't added — try again."
+    }
   },
   "today": {
     "waiting": "Waiting on you",
@@ -390,7 +402,7 @@
     "hours": "{n}h ago",
     "yesterday": "Yesterday",
     "days": "{n} days",
-    "months": "{n, plural, one {a month} other {# months}}"
+    "months": "{n, plural, one {# month} other {# months}}"
   },
   "reach": {
     "eyebrow": "Worth reaching out to",

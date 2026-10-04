@@ -293,20 +293,23 @@ export async function ReachOut({
   );
 }
 
-/** 02's "Who your customers are" — drawn in its shape: no read of order history for everyone. */
+/** 02's "Who your customers are" — in its shape: no read of order history for everyone. */
 export async function WhoTheyAre() {
   const t = await getTranslations('customers.who');
   return (
     <section className={styles.sideCard} data-testid="who-they-are">
       <h2 className={styles.sideTitle}>{t('title')}</h2>
-      <ul className={styles.bars}>
+      <ul className={styles.whoRows}>
         {(['bought', 'came', 'wholesale', 'never'] as const).map((key) => (
-          <li key={key} className={styles.bar}>
-            <span className={styles.barLabel}>{t(key)}</span>
-            <span className={styles.barTrack} aria-hidden="true" />
-            <span className={styles.barCount} title={t('unread')}>
-              —
+          <li key={key} className={styles.whoRow}>
+            <span className={styles.whoTop}>
+              <span>{t(key)}</span>
+              <span className={styles.whoCount} title={t('unread')}>
+                —
+              </span>
             </span>
+            {/* Empty: nothing read to fill it. */}
+            <span className={styles.whoTrack} aria-hidden="true" />
           </li>
         ))}
       </ul>
