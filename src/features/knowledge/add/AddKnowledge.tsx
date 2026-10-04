@@ -2,7 +2,7 @@
 
 import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 
 import hire from '@/features/employees/hire/Hire.module.css';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -12,8 +12,10 @@ import {
   DOCUMENT_TYPES,
   documentProblem,
   pageAddress,
+  startKnowledgeConnect,
   type AddInput,
   type AddResult,
+  type KnowledgeLanding,
 } from './add-knowledge';
 import { ADD_WAYS, EYEBROW, type AddWay, type KnowledgeBaseRef } from './add-way';
 import styles from './AddKnowledge.module.css';
@@ -26,8 +28,8 @@ import styles from './AddKnowledge.module.css';
  * LIVE for a document, a page and a typed fact (Omer, 2026-10-04): each
  * writes a document into the tenant's knowledge and the platform reads and
  * embeds it in the background — so what comes back is "being read", never
- * "learned". Nothing is sent without the button. Drive connects at Google or
- * Atlassian, whose way back leads to the previous app: drawn, with why.
+ * "learned". Nothing is sent without the button. Drive and Confluence connect at
+ * Google or Atlassian and come back here (backend df9ee4cd).
  *
  *   document       `POST …/documents/upload` — PDF, Word, Markdown or
  *                  text, up to 10 MB (`file-parser.service.ts`)
@@ -46,13 +48,45 @@ import styles from './AddKnowledge.module.css';
 export function AddKnowledge({
   initialWay = 'document',
   base = 'unknown',
+  landing = null,
 }: {
   readonly initialWay?: AddWay;
   /** Where it goes: a base, `none` yet (one is made), or `unknown` (the read failed). */
   readonly base?: KnowledgeBaseRef;
+  /** The way back from Google or Atlassian (backend df9ee4cd), when this render is one. */
+  readonly landing?: KnowledgeLanding | null;
 }) {
   const t = useTranslations('knowledge.addSheet');
   const router = useRouter();
+  /*
+    ★ Held in state from the first render: tidying the URL re-renders the page
+    without the query, and the sentence must outlive that (10's lesson).
+  */
+  const [said, setSaid] = useState(landing);
+  const arrived = landing !== null;
+  useEffect(() => {
+    if (arrived) {
+      router.replace(
+        { pathname: '/studio/knowledge', query: { add: '1', way: 'drive' } },
+        { scroll: false },
+      );
+    }
+  }, [arrived, router]);
+  const [connecting, setConnecting] = useState<'google_drive' | 'confluence' | null>(null);
+  const [connectProblem, setConnectProblem] = useState<string | null>(null);
+  function connect(connector: 'google_drive' | 'confluence') {
+    setConnectProblem(null);
+    setConnecting(connector);
+    startTransition(async () => {
+      const start = await startKnowledgeConnect(base, connector, t('newBase'));
+      if (start.ok) {
+        window.location.assign(start.url);
+        return;
+      }
+      setConnecting(null);
+      setConnectProblem(t(`connectProblem.${start.reason}`, { name: t(`connector.${connector}`) }));
+    });
+  }
   const [way, setWay] = useState<AddWay>(initialWay);
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -195,22 +229,53 @@ export function AddKnowledge({
               </button>
             </div>
           ) : way === 'drive' ? (
-            <ul className={styles.connectors}>
-              {(['google_drive', 'confluence'] as const).map((c) => (
-                <li key={c} className={styles.connector}>
-                  <span>{t(`connector.${c}`)}</span>
-                  <span
-                    role="button"
-                    className={styles.small}
-                    aria-disabled="true"
-                    title={t('driveNotHere', { name: t(`connector.${c}`) })}
-                    data-testid={`add-connect-${c}`}
-                  >
-                    {t('connect')}
+            <>
+              {said ? (
+                <p
+                  className={styles.landing}
+                  role="status"
+                  data-outcome={said.outcome === 'connected' ? 'ok' : 'problem'}
+                  data-testid="add-landing"
+                >
+                  <span>
+                    {t(`landing.${said.outcome}`, {
+                      name: t(`connector.${said.connector}`),
+                      provider: t(`provider.${said.connector}`),
+                    })}
                   </span>
-                </li>
-              ))}
-            </ul>
+                  <button
+                    type="button"
+                    className={styles.landingClose}
+                    aria-label={t('landing.close')}
+                    onClick={() => setSaid(null)}
+                  >
+                    ×
+                  </button>
+                </p>
+              ) : null}
+              {/* Live (backend df9ee4cd): at the provider, and back here. */}
+              <ul className={styles.connectors}>
+                {(['google_drive', 'confluence'] as const).map((c) => (
+                  <li key={c} className={styles.connector}>
+                    <span>{t(`connector.${c}`)}</span>
+                    <button
+                      type="button"
+                      className={styles.small}
+                      disabled={isPending}
+                      data-testid={`add-connect-${c}`}
+                      onClick={() => connect(c)}
+                    >
+                      {connecting === c ? t('opening') : t('connect')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {connectProblem ? (
+                <p className={styles.problem} role="alert" data-testid="add-connect-problem">
+                  {connectProblem}
+                </p>
+              ) : null}
+            </>
           ) : way === 'text' ? (
             <div className={styles.form}>
               <input

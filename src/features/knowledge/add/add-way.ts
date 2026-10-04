@@ -36,3 +36,15 @@ export function isAddWay(value: string | undefined): value is AddWay {
  * read must never create a second base. It refuses, and sends nothing.
  */
 export type KnowledgeBaseRef = { readonly id: string } | 'none' | 'unknown';
+
+/** The codes the way back can carry (a closed set on the backend). */
+export const KNOWLEDGE_CONNECT_FAILURES = [
+  'denied',
+  'token_exchange_failed',
+  'no_accessible_site',
+  'callback_error',
+] as const;
+export type KnowledgeLanding = {
+  readonly connector: 'google_drive' | 'confluence';
+  readonly outcome: 'connected' | (typeof KNOWLEDGE_CONNECT_FAILURES)[number] | 'other';
+};

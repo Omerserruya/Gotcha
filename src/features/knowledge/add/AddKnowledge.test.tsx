@@ -11,13 +11,16 @@ import type * as AddKnowledgeModule from './add-knowledge';
 const refresh = vi.hoisted(() => vi.fn());
 /* Adding writes knowledge every AI employee answers from: the write is a spy. */
 const addKnowledge = vi.hoisted(() => vi.fn());
+const startKnowledgeConnect = vi.hoisted(() => vi.fn());
+const replace = vi.hoisted(() => vi.fn());
 vi.mock('./add-knowledge', async (importOriginal) => ({
   ...(await importOriginal<typeof AddKnowledgeModule>()),
   addKnowledge,
+  startKnowledgeConnect,
 }));
 
 vi.mock('@/i18n/navigation', () => ({
-  useRouter: () => ({ refresh }),
+  useRouter: () => ({ refresh, replace }),
   Link: ({
     href,
     children,
@@ -34,7 +37,13 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import { ADD_WAYS, isAddWay, type AddWay, type KnowledgeBaseRef } from './add-way';
+import {
+  ADD_WAYS,
+  isAddWay,
+  type AddWay,
+  type KnowledgeBaseRef,
+  type KnowledgeLanding,
+} from './add-way';
 import { AddKnowledge } from './AddKnowledge';
 
 const sheet = (initialWay?: AddWay) =>
@@ -61,15 +70,6 @@ describe('★★ 08b — the ways in the platform has, and nothing that sends', 
     );
     expect(screen.getByTestId('add-way-drive')).toHaveTextContent('Google Drive or Confluence');
     expect(document.body.textContent).not.toMatch(/spreadsheet|Dropbox/i);
-  });
-
-  it('drive: drawn, with why — its way back still leads to the previous app', () => {
-    sheet('drive');
-    expect(screen.getByTestId('add-connect-google_drive')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByTestId('add-connect-google_drive')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/previous app/),
-    );
   });
 
   it('choosing a way and typing stay local', async () => {
@@ -176,5 +176,75 @@ describe('★★ 08b live (Omer, 2026-10-04) — and nothing is sent without the
       { way: 'document', file: pdf },
       'Knowledge',
     );
+  });
+});
+
+describe('★★ Drive and Confluence — at the provider, and back here (backend df9ee4cd)', () => {
+  const assign = vi.fn();
+  beforeEach(() => {
+    startKnowledgeConnect.mockReset();
+    replace.mockReset();
+    assign.mockReset();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, assign },
+    });
+  });
+  const drive = (landing: KnowledgeLanding | null = null) => (
+    <NextIntlClientProvider locale="en" messages={{ knowledge }}>
+      <AddKnowledge initialWay="drive" base={{ id: 'kb1' }} landing={landing} />
+    </NextIntlClientProvider>
+  );
+
+  it('Connect asks for the provider’s page, then goes there — only on the click', async () => {
+    startKnowledgeConnect.mockResolvedValue({
+      ok: true,
+      url: 'https://accounts.google.com/o/oauth2/auth?x',
+    });
+    render(drive());
+    expect(startKnowledgeConnect).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('add-connect-google_drive'));
+    expect(startKnowledgeConnect).toHaveBeenCalledWith({ id: 'kb1' }, 'google_drive', 'Knowledge');
+    expect(assign).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/auth?x');
+  });
+
+  it('a refusal is said; nothing opened', async () => {
+    startKnowledgeConnect.mockResolvedValue({ ok: false, reason: 'forbidden' });
+    render(drive());
+    await userEvent.click(screen.getByTestId('add-connect-confluence'));
+    expect(screen.getByTestId('add-connect-problem')).toHaveTextContent(
+      'Only an admin can connect a knowledge source.',
+    );
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('no way back: the URL is left alone', () => {
+    render(drive(null));
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('add-landing')).toBeNull();
+  });
+
+  it('★ the way back is said once, and outlives the tidied URL', async () => {
+    const { rerender } = render(drive({ connector: 'google_drive', outcome: 'denied' }));
+    expect(replace).toHaveBeenCalledWith(
+      { pathname: '/studio/knowledge', query: { add: '1', way: 'drive' } },
+      { scroll: false },
+    );
+    rerender(drive(null));
+    expect(screen.getByTestId('add-landing')).toHaveTextContent(
+      'You cancelled at Google — nothing was connected.',
+    );
+  });
+
+  it.each([
+    [{ connector: 'confluence', outcome: 'connected' }, 'Confluence is connected.'],
+    [
+      { connector: 'confluence', outcome: 'no_accessible_site' },
+      'No Confluence site you can reach',
+    ],
+    [{ connector: 'google_drive', outcome: 'other' }, "Google Drive didn't connect."],
+  ] as const)('%o → %s', (landing, words) => {
+    render(drive(landing));
+    expect(screen.getByTestId('add-landing')).toHaveTextContent(words);
   });
 });

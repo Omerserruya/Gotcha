@@ -150,7 +150,6 @@
       "reading": "Being read — it answers once it is",
       "ready": "Learned"
     },
-    "driveNotHere": "{name} connects at its own site, and the way back from there leads to the previous app — so it cannot be connected from here yet.",
     "error": {
       "too_large": "Up to 10 MB.",
       "wrong_type": "PDF, Word, Markdown or text only.",
@@ -159,6 +158,25 @@
       "entitlement": "Knowledge isn't part of this plan.",
       "forbidden": "You don't have permission to add knowledge.",
       "failed": "It wasn't added — try again."
+    },
+    "connectProblem": {
+      "not_configured": "{name} isn't set up on GOTCHA's side yet.",
+      "forbidden": "Only an admin can connect a knowledge source.",
+      "failed": "{name} couldn't be opened — try again."
+    },
+    "opening": "Opening…",
+    "landing": {
+      "connected": "{name} is connected.",
+      "denied": "You cancelled at {provider} — nothing was connected.",
+      "token_exchange_failed": "{provider} didn't confirm the connection. Nothing was connected — try again.",
+      "no_accessible_site": "No Confluence site you can reach was found — nothing was connected.",
+      "callback_error": "Something went wrong on the way back from {provider}. Nothing was connected — try again.",
+      "other": "{name} didn't connect. Try again.",
+      "close": "Close"
+    },
+    "provider": {
+      "google_drive": "Google",
+      "confluence": "Atlassian"
     }
   }
 }

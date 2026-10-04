@@ -1,7 +1,12 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import type { KnowledgeSource } from '@/api/contracts/knowledge';
-import { isAddWay, type KnowledgeBaseRef } from '@/features/knowledge/add/add-way';
+import {
+  isAddWay,
+  KNOWLEDGE_CONNECT_FAILURES,
+  type KnowledgeBaseRef,
+  type KnowledgeLanding,
+} from '@/features/knowledge/add/add-way';
 import { AddKnowledge } from '@/features/knowledge/add/AddKnowledge';
 import { KnowledgeScreen, knowledgeSummary } from '@/features/knowledge/KnowledgeScreen';
 import { loadKnowledge } from '@/features/knowledge/load-knowledge';
@@ -40,6 +45,9 @@ export default async function Page({
     /** 08b: the Add knowledge dialog, and the way in it opens on. */
     readonly add?: string;
     readonly way?: string;
+    /** The way back from Google or Atlassian (backend df9ee4cd). */
+    readonly connected?: string;
+    readonly error?: string;
   }>;
 } = {}) {
   const params = (await searchParams) ?? {};
@@ -110,8 +118,11 @@ export default async function Page({
       )}
       {params.add === '1' ? (
         <AddKnowledge
-          initialWay={isAddWay(params.way) ? params.way : undefined}
+          initialWay={
+            params.way === 'confluence' ? 'drive' : isAddWay(params.way) ? params.way : undefined
+          }
           base={baseOf(sources)}
+          landing={landingOf(params)}
         />
       ) : null}
     </PageContainer>
@@ -125,4 +136,26 @@ function baseOf(sources: readonly KnowledgeSource[] | null): KnowledgeBaseRef {
   if (sources === null) return 'unknown';
   const active = sources.find((source) => source.isActive);
   return active ? { id: active.id } : 'none';
+}
+
+/**
+ * The way back from a Drive or Confluence connect: which, and how it ended.
+ * Confluence has no card of its own — it lives on the Drive card.
+ */
+function landingOf(params: {
+  readonly way?: string;
+  readonly connected?: string;
+  readonly error?: string;
+}): KnowledgeLanding | null {
+  const connector =
+    params.way === 'drive' ? 'google_drive' : params.way === 'confluence' ? 'confluence' : null;
+  if (!connector) return null;
+  if (params.connected === '1') return { connector, outcome: 'connected' };
+  if (!params.error) return null;
+  return {
+    connector,
+    outcome: (KNOWLEDGE_CONNECT_FAILURES as readonly string[]).includes(params.error)
+      ? (params.error as KnowledgeLanding['outcome'])
+      : 'other',
+  };
 }

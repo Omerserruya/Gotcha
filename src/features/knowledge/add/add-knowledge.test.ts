@@ -4,9 +4,16 @@ import { ApiError } from '@/api/client/api-error';
 
 /** At the wire. `browserApi` is mocked: nothing is added. */
 const post = vi.hoisted(() => vi.fn());
-vi.mock('@/api/client/browser-api', () => ({ browserApi: { post } }));
+const get = vi.hoisted(() => vi.fn());
+vi.mock('@/api/client/browser-api', () => ({ browserApi: { post, get } }));
 
-import { addKnowledge, documentProblem, MAX_DOCUMENT_BYTES, pageAddress } from './add-knowledge';
+import {
+  addKnowledge,
+  documentProblem,
+  MAX_DOCUMENT_BYTES,
+  pageAddress,
+  startKnowledgeConnect,
+} from './add-knowledge';
 
 const doc = { id: 'd1', title: 'Terms', status: 'pending' };
 const path = (i: number) =>
@@ -15,6 +22,7 @@ const body = (i: number) => (post.mock.calls[i]![0] as { body: unknown }).body;
 
 beforeEach(() => {
   post.mockReset();
+  get.mockReset();
 });
 
 describe('★★ 08b at the wire', () => {
@@ -100,5 +108,62 @@ describe('★★ 08b at the wire', () => {
     const big = new File(['x'], 'big.pdf');
     Object.defineProperty(big, 'size', { value: MAX_DOCUMENT_BYTES + 1 });
     expect(documentProblem(big)).toBe('too_large');
+  });
+});
+
+describe('★★ Drive and Confluence at the wire', () => {
+  const getPath = (i: number) =>
+    (get.mock.calls[i]![0] as { endpoint: { path: string } }).endpoint.path;
+
+  it('asks for the redesign flow with the base', async () => {
+    get.mockResolvedValue({ url: 'https://accounts.google.com/o/oauth2/auth?s' });
+    expect(await startKnowledgeConnect({ id: 'kb1' }, 'google_drive', 'K')).toEqual({
+      ok: true,
+      url: 'https://accounts.google.com/o/oauth2/auth?s',
+    });
+    expect(getPath(0)).toBe('/api/knowledge/oauth/google-drive/init?kbId=kb1&flow=redesign_studio');
+    await startKnowledgeConnect({ id: 'kb1' }, 'confluence', 'K');
+    expect(getPath(1)).toBe('/api/knowledge/oauth/confluence/init?kbId=kb1&flow=redesign_studio');
+  });
+
+  it('no base yet: one is made first; an unread base: nothing at all', async () => {
+    post.mockResolvedValue({ id: 'kb-new' });
+    get.mockResolvedValue({ url: 'https://auth.atlassian.com/authorize' });
+    await startKnowledgeConnect('none', 'confluence', 'Knowledge');
+    expect(getPath(0)).toContain('kbId=kb-new');
+    get.mockClear();
+    post.mockClear();
+    expect(await startKnowledgeConnect('unknown', 'confluence', 'K')).toEqual({
+      ok: false,
+      reason: 'failed',
+    });
+    expect(get).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('an address that is not https is not followed; 403 is an admin’s; not configured is said', async () => {
+    get.mockResolvedValue({ url: 'http://accounts.google.com' });
+    expect(await startKnowledgeConnect({ id: 'kb1' }, 'google_drive', 'K')).toEqual({
+      ok: false,
+      reason: 'failed',
+    });
+    get.mockImplementation(async () => {
+      throw new ApiError({ kind: 'authorization', status: 403 });
+    });
+    expect(await startKnowledgeConnect({ id: 'kb1' }, 'google_drive', 'K')).toEqual({
+      ok: false,
+      reason: 'forbidden',
+    });
+    get.mockImplementation(async () => {
+      throw new ApiError({
+        kind: 'server',
+        status: 500,
+        developerMessage: 'Google Drive OAuth not configured',
+      });
+    });
+    expect(await startKnowledgeConnect({ id: 'kb1' }, 'google_drive', 'K')).toEqual({
+      ok: false,
+      reason: 'not_configured',
+    });
   });
 });

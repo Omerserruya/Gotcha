@@ -994,6 +994,16 @@ export const knowledgeEndpoints = {
    *   upload      multipart `file` (+ `title`): PDF, DOCX, DOC, MD, TXT, 10 MB.
    */
   createBase: () => endpoint('/api/knowledge-bases'),
+  /**
+   * Drive or Confluence at the provider, returning HERE (backend df9ee4cd):
+   * `/v2/studio/knowledge?add=1&way=drive|confluence&connected=1|error=<code>`.
+   * Answers `{ url }` (not enveloped). ADMIN only; `kbId` required.
+   */
+  oauthInit: (provider: 'google-drive' | 'confluence', kbId: string) =>
+    endpoint('/api/knowledge/oauth/{provider}/init?kbId={kbId}&flow=redesign_studio', {
+      provider,
+      kbId,
+    }),
   addDocument: (baseId: string) => endpoint('/api/knowledge-bases/{baseId}/documents', { baseId }),
   upload: (baseId: string) =>
     endpoint('/api/knowledge-bases/{baseId}/documents/upload', { baseId }),

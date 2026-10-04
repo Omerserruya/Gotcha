@@ -150,7 +150,6 @@
       "reading": "בקריאה — יענה ממנו כשתסתיים",
       "ready": "נלמד"
     },
-    "driveNotHere": "{name} מתחבר באתר שלו, והדרך חזרה משם מובילה לאפליקציה הקודמת — לכן עוד אי אפשר לחבר אותו מכאן.",
     "error": {
       "too_large": "עד 10MB.",
       "wrong_type": "רק PDF, Word, Markdown או טקסט.",
@@ -159,6 +158,25 @@
       "entitlement": "ידע לא כלול בתוכנית הזו.",
       "forbidden": "אין לך הרשאה להוסיף ידע.",
       "failed": "לא נוסף — אפשר לנסות שוב."
+    },
+    "connectProblem": {
+      "not_configured": "{name} עוד לא מוגדר בצד של GOTCHA.",
+      "forbidden": "רק מנהל יכול לחבר מקור ידע.",
+      "failed": "לא הצלחנו לפתוח את {name} — אפשר לנסות שוב."
+    },
+    "opening": "פותח…",
+    "landing": {
+      "connected": "{name} מחובר.",
+      "denied": "ביטלת ב-{provider} — שום דבר לא חובר.",
+      "token_exchange_failed": "{provider} לא אישר את החיבור. שום דבר לא חובר — אפשר לנסות שוב.",
+      "no_accessible_site": "לא נמצא אתר Confluence שיש לך גישה אליו — שום דבר לא חובר.",
+      "callback_error": "משהו השתבש בדרך חזרה מ-{provider}. שום דבר לא חובר — אפשר לנסות שוב.",
+      "other": "{name} לא חובר. אפשר לנסות שוב.",
+      "close": "סגירה"
+    },
+    "provider": {
+      "google_drive": "Google",
+      "confluence": "Atlassian"
     }
   }
 }

@@ -8,6 +8,8 @@ import { logger } from '@/observability/logger';
 
 import type { KnowledgeBaseRef } from './add-way';
 
+export type { KnowledgeLanding } from './add-way';
+
 /**
  * 08b's three live ways in — a document, a page, a typed fact — (Omer,
  * 2026-10-04). From the browser, as `send-media` is: a 10 MB file does not
@@ -123,6 +125,58 @@ export async function addKnowledge(
       if (cause.status === 400) return { ok: false, reason: 'unreadable' };
       if (cause.status === 402) return { ok: false, reason: 'entitlement' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type ConnectStart =
+  | { readonly ok: true; readonly url: string }
+  | { readonly ok: false; readonly reason: 'not_configured' | 'forbidden' | 'failed' };
+
+/**
+ * 08b's Drive and Confluence — live (backend df9ee4cd). The provider's page
+ * is asked for here, then the browser goes there; the way back lands on this
+ * sheet with `connected=1` or `error=<code>`. Nothing is connected until the
+ * person approves at the provider. A base is needed first, as for any source.
+ */
+export async function startKnowledgeConnect(
+  base: KnowledgeBaseRef,
+  connector: 'google_drive' | 'confluence',
+  newBaseName: string,
+): Promise<ConnectStart> {
+  if (base === 'unknown') return { ok: false, reason: 'failed' };
+  try {
+    const baseId =
+      base === 'none'
+        ? (
+            await browserApi.post({
+              endpoint: knowledgeEndpoints.createBase(),
+              payload: created,
+              body: { name: newBaseName },
+            })
+          ).id
+        : base.id;
+    const { url } = await browserApi.get({
+      endpoint: knowledgeEndpoints.oauthInit(
+        connector === 'google_drive' ? 'google-drive' : 'confluence',
+        baseId,
+      ),
+      payload: z.object({ url: z.string().url() }),
+      raw: true,
+    });
+    if (new URL(url).protocol !== 'https:') return { ok: false, reason: 'failed' };
+    return { ok: true, url };
+  } catch (cause) {
+    logger.warn('knowledge.connect_failed', {
+      connector,
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause)) {
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 500 && /not configured/i.test(cause.developerMessage ?? '')) {
+        return { ok: false, reason: 'not_configured' };
+      }
     }
     return { ok: false, reason: 'failed' };
   }

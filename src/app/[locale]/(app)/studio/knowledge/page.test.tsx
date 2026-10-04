@@ -96,3 +96,35 @@ describe('★★ where an added source goes', () => {
     sources.value = [];
   });
 });
+
+describe('★★ the way back from Google or Atlassian opens the sheet on its card', () => {
+  const props = async (query: Record<string, string>) =>
+    find<{ initialWay?: string; landing: unknown }>(
+      await page({ add: '1', ...query }),
+      AddKnowledge,
+    );
+
+  it.each([
+    [
+      { way: 'drive', connected: '1' },
+      'drive',
+      { connector: 'google_drive', outcome: 'connected' },
+    ],
+    [
+      { way: 'confluence', error: 'denied' },
+      'drive',
+      { connector: 'confluence', outcome: 'denied' },
+    ],
+    [
+      { way: 'confluence', error: 'made_up' },
+      'drive',
+      { connector: 'confluence', outcome: 'other' },
+    ],
+    [{ way: 'drive' }, 'drive', null],
+    [{ way: 'page', connected: '1' }, 'page', null],
+  ])('%o', async (query, way, landing) => {
+    const p = await props(query);
+    expect(p?.initialWay).toBe(way);
+    expect(p?.landing).toEqual(landing);
+  });
+});

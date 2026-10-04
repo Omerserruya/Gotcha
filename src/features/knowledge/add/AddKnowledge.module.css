@@ -255,13 +255,16 @@
     text-decoration: none;
   }
 
-  /* What was added: its title, and that it is being read. */
+  /* What was added: its title, and that it is being read — 02's row, `13px 18px`. */
   .added {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
-    gap: var(--space-12);
+    gap: var(--space-4) var(--space-12);
     margin: 0;
+    padding: 13px 18px;
     font-size: var(--font-size-meta);
+    overflow-wrap: anywhere;
   }
 
   .addedTitle {
@@ -272,5 +275,32 @@
     align-self: center;
     font-size: var(--font-size-caption);
     color: var(--alert-text);
+  }
+
+  /* The way back from Google or Atlassian, said once over the connectors. */
+  .landing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    margin: 0 0 var(--space-10);
+    padding: var(--space-10) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--signal-done-surface);
+    font-size: var(--font-size-label);
+    color: var(--signal-done-text);
+  }
+
+  .landing[data-outcome='problem'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .landingClose {
+    border: none;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
   }
 }
