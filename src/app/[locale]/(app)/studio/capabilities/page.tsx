@@ -89,11 +89,13 @@ export default async function Page({
         }
         detail={
           <>
-            {integration && (params.connected === '1' || params.error) ? (
+            {/* Always rendered, keyed by system: it holds the sentence after the URL is tidied. */}
+            {integration ? (
               <OAuthLanding
+                key={integration.slug}
                 slug={integration.slug}
                 name={integration.name}
-                outcome={params.connected === '1' ? 'connected' : oauthFailure(params.error)!}
+                outcome={params.connected === '1' ? 'connected' : oauthFailure(params.error)}
               />
             ) : null}
             {integration !== null && !isConnected(integration) ? (

@@ -407,3 +407,44 @@ describe('★ Reconnect only where the way back comes here', () => {
     expect(screen.queryByTestId('oauth-start')).toBeNull();
   });
 });
+
+describe('★ 10 groups an integration by the catalogue’s category', () => {
+  it('ACTION, WRITE, READ heads in that order; no category, no head', async () => {
+    const shopify = integrationSchema.parse({ id: 'i1', slug: 'shopify', name: 'Shopify' });
+    const row = (slug: string, category: string | null) =>
+      capability({
+        toolName: `shopify.${slug}`,
+        integration: 'shopify',
+        category: category as never,
+      });
+    render(
+      <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+        {await CapabilityScreen({
+          capabilities: [
+            row('get_order', 'READ'),
+            row('cancel_order', 'WRITE'),
+            row('send_invoice', 'ACTION'),
+            row('mystery', ''),
+          ],
+          usage: null,
+          integration: shopify,
+        })}
+      </NextIntlClientProvider>,
+    );
+    const heads = [...screen.getByTestId('capability-screen').querySelectorAll('h2')].map(
+      (h) => h.textContent,
+    );
+    expect(heads).toEqual(['Actions', 'Changing things', 'Looking things up']);
+    expect(screen.getByTestId('group-none').querySelector('h2')).toBeNull();
+    expect(screen.getByTestId('group-none')).toHaveTextContent('Mystery');
+  });
+});
+
+describe('★ built-in actions keep their stored category', () => {
+  it('a head per category, keyed by it', async () => {
+    await renderScreen([capability({ toolName: 'send_message', category: 'messaging' })]);
+    expect(screen.getByTestId('group-messaging').querySelector('h2')).toHaveTextContent(
+      messages.category.messaging,
+    );
+  });
+});

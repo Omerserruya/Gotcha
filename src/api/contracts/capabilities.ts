@@ -75,8 +75,16 @@ export const capabilitySchema = z.object({
   toolName: z.string().min(1),
   /** `action` on every row here. `read_only` capabilities do not appear. */
   kind: z.string().default('action'),
-  /** `messaging` · `crm` · `broadcast` · `meta` · `identity` · `workflow`. */
-  category: z.string().default(''),
+  /**
+   * Built-in rows: `messaging` · `crm` · `broadcast` · `identity` · `workflow`.
+   * Integration rows (backend c37f1cf7): the catalogue's `READ` · `WRITE` ·
+   * `DELETE` · `ACTION`, or `null` — kept as `''`.
+   */
+  category: z
+    .string()
+    .nullable()
+    .default('')
+    .transform((v) => v ?? ''),
   description: z.string().default(''),
   enabled: z.boolean().default(false),
   /** The design's "ask me first". True on 11 of 17 here. */
@@ -780,4 +788,29 @@ export function bodyFor(choice: AdminChoice): {
 } {
   if (choice === 'never') return { enabled: false, requiresApproval: true };
   return { enabled: true, requiresApproval: choice === 'ask_me' };
+}
+
+/** An integration's catalogue categories, riskier first (backend c37f1cf7). */
+export const INTEGRATION_CATEGORIES = ['ACTION', 'WRITE', 'DELETE', 'READ'] as const;
+export type IntegrationCategory = (typeof INTEGRATION_CATEGORIES)[number];
+
+/**
+ * An integration's rows by what they do — the catalogue's category, riskier
+ * first; a row with none (or one this list does not know) goes last, under no
+ * head. Empty groups are left out.
+ */
+export function groupIntegrationRows(capabilities: readonly Capability[]): readonly {
+  readonly category: IntegrationCategory | null;
+  readonly capabilities: readonly Capability[];
+}[] {
+  const known = (c: Capability): IntegrationCategory | null =>
+    (INTEGRATION_CATEGORIES as readonly string[]).includes(c.category)
+      ? (c.category as IntegrationCategory)
+      : null;
+  return [...INTEGRATION_CATEGORIES, null]
+    .map((category) => ({
+      category,
+      capabilities: capabilities.filter((c) => known(c) === category),
+    }))
+    .filter((group) => group.capabilities.length > 0);
 }

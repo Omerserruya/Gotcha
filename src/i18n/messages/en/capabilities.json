@@ -159,6 +159,13 @@
       "shop_connected_elsewhere": "That store is already connected to another workspace.",
       "link_failed": "{name} answered, but the store couldn't be linked to this workspace.",
       "other": "{name} didn't connect. Try again."
-    }
+    },
+    "close": "Close"
+  },
+  "integrationCategory": {
+    "ACTION": "Actions",
+    "WRITE": "Changing things",
+    "DELETE": "Removing things",
+    "READ": "Looking things up"
   }
 }

@@ -8,6 +8,7 @@ import {
   type RolePart,
 } from '@/api/contracts/business-core';
 import {
+  groupIntegrationRows,
   hasOwnWords,
   humaniseCode,
   isTheAdminsChoice,
@@ -167,46 +168,58 @@ export async function PartDrawer({
           —
         </p>
       ) : (
-        <ul className={styles.drawerActions} data-testid="part-actions">
-          {actions.map((capability) => {
-            const availability = resolveAvailability(capability);
-            return (
-              <li key={capability.toolName} className={styles.drawerAction}>
-                <span className={styles.drawerActionName}>
-                  {catalogName(capability.toolName, integration) ??
-                    (hasOwnWords(capability.toolName)
-                      ? tc(`tool.${capability.toolName}` as 'tool.send_message')
-                      : humaniseCode(toolSlugOf(capability.toolName) ?? capability.toolName))}
-                  {capability.riskLevel ? (
-                    <span
-                      className={styles.drawerRisk}
-                      data-risk={capability.riskLevel}
-                      data-testid={`part-risk-${capability.toolName}`}
-                    >
-                      {tc(`risk.${capability.riskLevel}`)}
-                    </span>
-                  ) : null}
-                </span>
-                {/* 10's control, always: disabled with its reason when the platform decides. */}
-                <PermissionChoice
-                  capability={capability}
-                  blocked={
-                    isTheAdminsChoice(availability)
-                      ? undefined
-                      : failingNow && playing
-                        ? t('drawer.needsFixing', { name: playing })
-                        : availability.reason === 'missing_scope' &&
-                            availability.missingScopes.length > 0
-                          ? tc('blocked.missingScopesNamed', {
-                              scopes: availability.missingScopes.join(', '),
-                            })
-                          : tc(`blocked.${availability.reason}` as 'blocked.missing_scope')
-                  }
-                />
-              </li>
-            );
-          })}
-        </ul>
+        <div data-testid="part-actions">
+          {groupIntegrationRows(actions).map((group) => (
+            <section key={group.category ?? 'none'} className={styles.drawerGroup}>
+              {/* The catalogue's category, riskier first (backend c37f1cf7). */}
+              {group.category !== null ? (
+                <h4 className={styles.drawerEyebrow}>
+                  {tc(`integrationCategory.${group.category}`)}
+                </h4>
+              ) : null}
+              <ul className={styles.drawerActions}>
+                {group.capabilities.map((capability) => {
+                  const availability = resolveAvailability(capability);
+                  return (
+                    <li key={capability.toolName} className={styles.drawerAction}>
+                      <span className={styles.drawerActionName}>
+                        {catalogName(capability.toolName, integration) ??
+                          (hasOwnWords(capability.toolName)
+                            ? tc(`tool.${capability.toolName}` as 'tool.send_message')
+                            : humaniseCode(toolSlugOf(capability.toolName) ?? capability.toolName))}
+                        {capability.riskLevel ? (
+                          <span
+                            className={styles.drawerRisk}
+                            data-risk={capability.riskLevel}
+                            data-testid={`part-risk-${capability.toolName}`}
+                          >
+                            {tc(`risk.${capability.riskLevel}`)}
+                          </span>
+                        ) : null}
+                      </span>
+                      {/* 10's control, always: disabled with its reason when the platform decides. */}
+                      <PermissionChoice
+                        capability={capability}
+                        blocked={
+                          isTheAdminsChoice(availability)
+                            ? undefined
+                            : failingNow && playing
+                              ? t('drawer.needsFixing', { name: playing })
+                              : availability.reason === 'missing_scope' &&
+                                  availability.missingScopes.length > 0
+                                ? tc('blocked.missingScopesNamed', {
+                                    scopes: availability.missingScopes.join(', '),
+                                  })
+                                : tc(`blocked.${availability.reason}` as 'blocked.missing_scope')
+                        }
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
 
       <footer className={styles.drawerFootLink}>

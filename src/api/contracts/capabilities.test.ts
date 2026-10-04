@@ -5,6 +5,7 @@ import {
   capabilitySchema,
   DESCRIBED_TOOLS,
   hasOwnWords,
+  groupIntegrationRows,
   humaniseCode,
   humaniseToolName,
   capabilityStance,
@@ -292,5 +293,25 @@ describe('★★ readableValues closes the spread, not the placeholder', () => {
 
   it('★ falls back when the resolver returns null for a key it does not know', () => {
     expect(readableValues({ channel: 'WHATSAPP' }, () => null)).toEqual({ channel: 'WhatsApp' });
+  });
+});
+
+describe('★ an integration’s rows by what they do (backend c37f1cf7)', () => {
+  it('riskier first; none, an unknown value or the old "meta" last, under no head; empty groups left out', () => {
+    const rows = ['READ', 'WRITE', null, 'ACTION', 'meta', 'READ'].map((category, i) =>
+      capabilitySchema.parse({ toolName: `shopify.t${i}`, integration: 'shopify', category }),
+    );
+    expect(
+      groupIntegrationRows(rows).map((g) => [g.category, g.capabilities.map((c) => c.toolName)]),
+    ).toEqual([
+      ['ACTION', ['shopify.t3']],
+      ['WRITE', ['shopify.t1']],
+      ['READ', ['shopify.t0', 'shopify.t5']],
+      [null, ['shopify.t2', 'shopify.t4']],
+    ]);
+  });
+
+  it('a null category parses as none, never a rejected list', () => {
+    expect(capabilitySchema.parse({ toolName: 'shopify.x', category: null }).category).toBe('');
   });
 });

@@ -105,7 +105,9 @@ describe('★★ the way back from a provider', () => {
     });
   });
 
-  it('no return: nothing said', async () => {
-    expect(find(await page({ system: 'shopify' }), OAuthLanding)).toBeNull();
+  it('no return: mounted with nothing to say (it holds a sentence across the URL tidy)', async () => {
+    expect(
+      find<{ outcome: string | null }>(await page({ system: 'shopify' }), OAuthLanding)?.outcome,
+    ).toBeNull();
   });
 });

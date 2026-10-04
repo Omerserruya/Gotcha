@@ -4,6 +4,7 @@ import {
   automationCeiling,
   capabilityStance,
   groupByCategory,
+  groupIntegrationRows,
   hasOwnWords,
   humaniseCode,
   humaniseToolName,
@@ -50,7 +51,22 @@ export async function CapabilityScreen({
 }) {
   const t = await getTranslations('capabilities');
 
-  const groups = groupByCategory(capabilities);
+  /*
+    Built-in rows group by their stored category; an integration's by what
+    the catalogue says each does (backend c37f1cf7), riskier first.
+  */
+  const groups =
+    integration === null
+      ? groupByCategory(capabilities).map((g) => ({
+          key: g.category,
+          heading: t(`category.${g.category}` as 'category.messaging') as string | null,
+          capabilities: g.capabilities,
+        }))
+      : groupIntegrationRows(capabilities).map((g) => ({
+          key: g.category ?? 'none',
+          heading: g.category === null ? null : t(`integrationCategory.${g.category}`),
+          capabilities: g.capabilities,
+        }));
 
   const allDefault = isUniform(capabilities, (c) => c.isDefault) && capabilities[0]?.isDefault;
   const noEditing =
@@ -75,21 +91,8 @@ export async function CapabilityScreen({
         </div>
       ) : null}
       {groups.map((group) => (
-        <section
-          key={group.category}
-          className={styles.group}
-          data-testid={`group-${group.category}`}
-        >
-          {/*
-            An integration's rows all arrive as category `meta` — the route
-            hardcodes it — so a head over them would call Shopify's orders
-            "WhatsApp and Instagram". They go under no head.
-          */}
-          {integration === null ? (
-            <h2 className={styles.groupHeading}>
-              {t(`category.${group.category}` as 'category.messaging')}
-            </h2>
-          ) : null}
+        <section key={group.key} className={styles.group} data-testid={`group-${group.key}`}>
+          {group.heading !== null ? <h2 className={styles.groupHeading}>{group.heading}</h2> : null}
 
           <ul className={styles.capabilities}>
             {group.capabilities.map((capability) => {

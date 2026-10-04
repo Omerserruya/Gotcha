@@ -224,7 +224,10 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
     inIntl(
       await PartDrawer({
         part: store,
-        capabilities: [row('process_refund'), row('get_order', { riskLevel: 'LOW' })],
+        capabilities: [
+          row('get_order', { riskLevel: 'LOW', category: 'READ' }),
+          row('process_refund', { category: 'WRITE' }),
+        ],
         integration: shopify as never,
       }),
     );
@@ -235,6 +238,10 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
     // `cancel_order` is in the catalogue and not in the rows.
     expect(screen.getByTestId('part-actions')).not.toHaveTextContent('Cancel an order');
     expect(screen.getByTestId('part-actions').querySelectorAll('li')).toHaveLength(2);
+    // The catalogue's category over each group (backend c37f1cf7).
+    expect(
+      [...screen.getByTestId('part-actions').querySelectorAll('h4')].map((h) => h.textContent),
+    ).toEqual(['Changing things', 'Looking things up']);
   });
 });
 

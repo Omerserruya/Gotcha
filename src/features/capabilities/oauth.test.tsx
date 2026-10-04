@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -73,5 +74,28 @@ describe('★★ the way back: said once, then the query is cleaned', () => {
     expect(oauthFailure('weird')).toBe('other');
     expect(oauthFailure('denied')).toBe('denied');
     expect(oauthFailure(undefined)).toBeNull();
+  });
+});
+
+describe('★★ the sentence outlives the tidied URL', () => {
+  const tree = (outcome: Parameters<typeof OAuthLanding>[0]['outcome']) => (
+    <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+      <OAuthLanding slug="hubspot" name="HubSpot" outcome={outcome} />
+    </NextIntlClientProvider>
+  );
+
+  it('after the replace re-renders without the query, it is still there — until closed', async () => {
+    const { rerender } = render(tree('denied'));
+    // What the page renders once the URL holds only ?system=hubspot.
+    rerender(tree(null));
+    expect(screen.getByTestId('oauth-landing')).toHaveTextContent('You cancelled at HubSpot');
+    await userEvent.click(screen.getByTestId('oauth-landing-close'));
+    expect(screen.queryByTestId('oauth-landing')).toBeNull();
+  });
+
+  it('no way back: nothing said, and the URL left alone', () => {
+    render(tree(null));
+    expect(screen.queryByTestId('oauth-landing')).toBeNull();
+    expect(replace).not.toHaveBeenCalled();
   });
 });

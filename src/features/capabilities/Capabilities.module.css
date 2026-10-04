@@ -182,6 +182,18 @@
     color: var(--action-text);
   }
 
+  /*
+   * Blocked by the platform: it must LOOK unpressable, or a click that does
+   * nothing reads as broken. The stored one stays marked, dimmed with the rest.
+   */
+  .choice[data-blocked='yes'] .choiceRow {
+    opacity: 0.5;
+  }
+
+  .choice[data-blocked='yes'] .choiceButton {
+    cursor: not-allowed;
+  }
+
   .choiceNote {
     margin: 0;
     max-inline-size: 260px;
@@ -573,6 +585,10 @@
 
   /* The way back from a provider: once, above the system's screen. */
   .landing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
     margin: 0 0 var(--space-12);
     padding: var(--space-10) var(--space-14);
     border-radius: var(--radius-item);
@@ -591,5 +607,15 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-12);
+  }
+
+  .landingClose {
+    display: grid;
+    place-items: center;
+    padding: 2px;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
   }
 }
