@@ -177,6 +177,21 @@ describe('★★ the dialer — a live search, and no call placed from here', ()
   });
 
   it.each([
+    ['noNumber', 'No phone number is connected yet.'],
+    ['off', "Phone calls aren't switched on for this workspace."],
+  ] as const)(
+    '★ no line (%s): said on the button before the click, and it cannot fire',
+    async (line, why) => {
+      await renderDialer({ query: 'dana', results: [dana], line });
+      const call = screen.getByTestId('dialer-call');
+      expect(call).toBeDisabled();
+      expect(call).toHaveAttribute('title', why);
+      await userEvent.click(call);
+      expect(startCall).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     ['+972501234567', '+972501234567'],
     ['+1 (415) 555-1234', '+14155551234'],
     ['0501234567', null],

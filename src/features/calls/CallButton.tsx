@@ -22,11 +22,14 @@ export function CallButton({
   to,
   label,
   conversationId,
+  blocked,
 }: {
   /** The number to call; `null` when the chosen person has none. */
   readonly to: string | null;
   readonly label: string;
   readonly conversationId?: string;
+  /** Why no call can go out from this workspace at all — said on the button, before the click. */
+  readonly blocked?: string;
 }) {
   const t = useTranslations('calls.dialer');
   const [result, setResult] = useState<StartCallResult | null>(null);
@@ -48,11 +51,11 @@ export function CallButton({
       <button
         type="button"
         className={styles.dialerCall}
-        disabled={to === null || isPending}
-        title={to === null ? t('noNumber') : undefined}
+        disabled={blocked !== undefined || to === null || isPending}
+        title={blocked ?? (to === null ? t('noNumber') : undefined)}
         data-testid="dialer-call"
         onClick={() => {
-          if (to === null) return;
+          if (blocked !== undefined || to === null) return;
           setResult(null);
           startTransition(async () => setResult(await startCall(to, conversationId)));
         }}

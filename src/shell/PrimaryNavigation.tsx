@@ -8,6 +8,7 @@ import { usePermissions } from '@/permissions/permissions-context';
 
 import styles from './AppShell.module.css';
 import {
+  isCurrentHrefChild,
   PRIMARY_NAVIGATION,
   SETTINGS_NAVIGATION,
   type NavigationChild,
@@ -50,7 +51,7 @@ export function PrimaryNavigation() {
     (settings && isCurrentDestination(settings) ? settings : undefined);
 
   function isCurrentChild(parent: NavigationItem, child: NavigationChild): boolean {
-    if (child.href) return pathname === child.href || pathname.startsWith(`${child.href}/`);
+    if (child.href) return isCurrentHrefChild(pathname, child, parent.children ?? []);
     if (!parent.viewParam) return false;
     const current = searchParams.get(parent.viewParam) ?? parent.defaultView;
     return current === child.view;

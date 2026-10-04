@@ -85,7 +85,11 @@ export default async function Page({
   return (
     <PageContainer layout="screen" flush title={t('title')} description={t('description')}>
       <div className={styles.screen} data-testid="calls-screen">
-        <DialerCard query={query} results={search === null ? (query ? null : []) : search.rows} />
+        <DialerCard
+          query={query}
+          results={search === null ? (query ? null : []) : search.rows}
+          line={voiceEnabled === false ? 'off' : hasNumber === false ? 'noNumber' : 'ok'}
+        />
         <div className={styles.column}>
           <CallStats week={voiceEnabled === true ? summary : null} />
           <RecentCalls calls={calls ?? []} state={state} filter={filter} />

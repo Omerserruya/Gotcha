@@ -66,6 +66,18 @@ describe('★★ 05d — one frame in every state', () => {
     },
   );
 
+  it.each([
+    [{ voiceEnabled: false, calls: null }, 'off'],
+    [{ hasNumber: false }, 'noNumber'],
+    // A number missing with calls on record still cannot place one.
+    [{ hasNumber: false, calls: [{ id: 'c1' }] }, 'noNumber'],
+    [{ hasNumber: null }, 'ok'],
+    [{}, 'ok'],
+  ] as const)('%o → the dialer is told the line is %s', async (over, line) => {
+    loadCalls.mockResolvedValue(reads(over));
+    expect(find<{ line: string }>(await page(), DialerCard)?.line).toBe(line);
+  });
+
   it('★ the summary is the WEEK’s — the strip says "this week"', async () => {
     await page();
     expect(loadCalls).toHaveBeenCalledWith({ summaryDays: 7 });

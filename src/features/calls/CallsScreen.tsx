@@ -55,8 +55,15 @@ export function callDuration(ms: number | null): string {
 export async function DialerCard({
   query,
   results,
+  line = 'ok',
 }: {
   readonly query: string;
+  /**
+   * Whether the workspace can place a call at all: voice off, or on with no
+   * number, is said on the Call button rather than refused after the click.
+   * Unknown is not a refusal — the route says.
+   */
+  readonly line?: 'ok' | 'off' | 'noNumber';
   /** `null` when the search failed; empty when nobody matched. */
   readonly results: readonly CustomerRow[] | null;
 }) {
@@ -141,6 +148,9 @@ export async function DialerCard({
         {/* 05d: live — the chosen person's phone, or a number pasted as it is. */}
         <CallButton
           to={chosen ? dialable(chosen.phone) : pastedNumber(query)}
+          blocked={
+            line === 'off' ? t('notEnabled') : line === 'noNumber' ? t('noNumber') : undefined
+          }
           label={
             chosenName
               ? t('dialer.call', { name: chosenName.split(/\s+/)[0]! })

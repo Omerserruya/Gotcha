@@ -63,6 +63,26 @@ export interface NavigationItem {
   readonly defaultView?: string;
 }
 
+const under = (pathname: string, href: string) =>
+  pathname === href || pathname.startsWith(`${href}/`);
+
+/**
+ * Whether an `href` child is the current one. Prefix match, so a campaign's
+ * own page keeps Campaigns current — but the most specific sibling wins:
+ * `/outreach/calls` sits under Campaigns' `/outreach` too, and marking both
+ * says you are in two places.
+ */
+export function isCurrentHrefChild(
+  pathname: string,
+  child: NavigationChild,
+  siblings: readonly NavigationChild[],
+): boolean {
+  if (!child.href || !under(pathname, child.href)) return false;
+  return !siblings.some(
+    (other) => other.href && other.href.length > child.href!.length && under(pathname, other.href),
+  );
+}
+
 /**
  * Inbox views.
  *
