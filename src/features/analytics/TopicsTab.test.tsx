@@ -99,8 +99,24 @@ describe('★★ 06e on screen', () => {
     const two = render(await TopicTable({ data: data({ week: [] }) }));
     expect(screen.getByTestId('topics-none')).toHaveTextContent('No topics this week.');
     two.unmount();
-    render(await TopicTable({ data: data({ week: [topic(null, 9, 'hi')] }) }));
+    const three = render(await TopicTable({ data: data({ week: [topic('unknown', 9)] }) }));
     expect(screen.getByTestId('topics-none')).toHaveTextContent("aren't grouped into topics");
+    three.unmount();
+    // ★ 06e (Omer): no topics this week → the questions as people asked them, counted.
+    render(
+      await TopicTable({
+        data: data({
+          week: [
+            topic(null, 9, 'Do you ship to Eilat?'),
+            topic(null, 4, 'Is the linen pre-washed?'),
+          ],
+        }),
+      }),
+    );
+    expect(screen.getByTestId('asked-0')).toHaveTextContent('Do you ship to Eilat?9');
+    expect(screen.getByTestId('asked-1')).toHaveTextContent('Is the linen pre-washed?4');
+    expect(screen.getByTestId('topics-table')).toHaveTextContent('What people asked');
+    expect(screen.queryByTestId('topics-none')).toBeNull();
   });
 
   it('★ the question it could not answer, and "Answer it once" goes to Knowledge', async () => {

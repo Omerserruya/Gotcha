@@ -2,6 +2,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { humanizeTag } from '@/api/contracts/approvals';
 import { isUnplaced, type AskedAbout } from '@/api/contracts/analytics';
+import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import type { TopicsData } from './load-analytics';
@@ -18,9 +19,10 @@ import styles from './Analytics.module.css';
  *                before — so "Change" is real, and a topic with none the week
  *                before is "new". Rows the route made from raw message
  *                bodies (no intents in range) are customers' words, not
- *                topics, and are not listed as topics. Nor is the
- *                classifier's "no result" (`unknown`, `general`): those are
- *                counted in the foot as questions GOTCHA couldn't place.
+ *                topics: listed as what people asked, in their words (Omer,
+ *                06e: no privacy problem), never as topics. The classifier's
+ *                "no result" (`unknown`, `general`) is counted in the foot as
+ *                questions GOTCHA couldn't place.
  *   what changed the biggest rise among topics asked at least 5 times the
  *                week before — a rise from 1 to 3 is not news
  *   the side     the question GOTCHA most often could not answer
@@ -69,6 +71,11 @@ export function topicRows(
               : Math.round(((row.count - was) / was) * 100),
       };
     });
+}
+
+/** The customers' own questions, when the route had no topics to group them by. */
+export function askedInTheirWords(week: readonly AskedAbout[]): readonly AskedAbout[] {
+  return week.filter((row) => !row.intent && (row.question ?? '').trim() !== '' && row.count > 0);
 }
 
 /** The biggest rise worth saying: on a base of at least `MIN_BASE`, and up. */
@@ -156,6 +163,7 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
   const t = await getTranslations('analytics');
   const format = await getFormatter();
   const rows = data.week ? topicRows(data.week, data.before) : [];
+  const asked = data.week ? askedInTheirWords(data.week) : [];
   const unplaced = (data.week ?? []).filter(isUnplaced).reduce((sum, row) => sum + row.count, 0);
   const ungrouped =
     data.week !== null &&
@@ -164,7 +172,11 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
   return (
     <section className={styles.tTable} data-testid="topics-table">
       <div className={styles.eHead} aria-hidden="true">
-        <span>{t('topics.table.topic')}</span>
+        <span>
+          {rows.length === 0 && asked.length > 0
+            ? t('topics.table.question')
+            : t('topics.table.topic')}
+        </span>
         <span>{t('topics.table.asked')}</span>
         <span>{t('topics.table.change')}</span>
         <span>{t('topics.table.alone')}</span>
@@ -175,6 +187,21 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
           <p className={styles.gNone} data-testid="topics-unavailable">
             {t('topics.table.unavailable')}
           </p>
+        ) : rows.length === 0 && asked.length > 0 ? (
+          // No topics this week: what people asked, in their own words, counted.
+          <ul className={styles.tList} data-testid="topics-asked">
+            {asked.map((row, i) => (
+              <li key={i} className={styles.eRow} data-testid={`asked-${i}`}>
+                <span className={styles.eTopic}>
+                  <UserText>{row.question!}</UserText>
+                </span>
+                <span className={styles.eCount}>{format.number(row.count)}</span>
+                <span className={styles.eMuted}>—</span>
+                <span className={styles.eMuted}>—</span>
+                <span className={styles.eMuted}>—</span>
+              </li>
+            ))}
+          </ul>
         ) : rows.length === 0 ? (
           <p className={styles.gNone} data-testid="topics-none">
             {ungrouped ? t('topics.table.ungrouped') : t('topics.table.none')}
@@ -215,7 +242,9 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
             {t('topics.table.unplaced', { count: unplaced, n: format.number(unplaced) })}{' '}
           </span>
         ) : null}
-        {t('topics.table.foot')}
+        {rows.length === 0 && asked.length > 0
+          ? t('topics.table.footAsked')
+          : t('topics.table.foot')}
       </p>
     </section>
   );

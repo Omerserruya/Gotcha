@@ -213,7 +213,9 @@
       "none": "No topics this week.",
       "ungrouped": "Questions aren't grouped into topics yet this week.",
       "unplaced": "{n} {count, plural, one {question} other {questions}} GOTCHA couldn't place this week.",
-      "foot": "GOTCHA groups questions itself. How each topic ends, and how much it handled alone, aren't counted yet."
+      "foot": "GOTCHA groups questions itself. How each topic ends, and how much it handled alone, aren't counted yet.",
+      "question": "What people asked",
+      "footAsked": "Not grouped into topics yet this week, so these are the questions as people asked them."
     },
     "byDay": {
       "title": "{topic}, by day",
