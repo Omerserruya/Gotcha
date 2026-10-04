@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import { agentLoadSchema, type AgentLoad } from '@/api/contracts/analytics';
+import { agentLoadListSchema, agentLoadSchema, type AgentLoad } from '@/api/contracts/analytics';
 import messages from '@/i18n/messages/en/analytics.json';
 
 import { TeamLoad } from './TeamLoad';
@@ -68,16 +68,10 @@ describe('★★ every number says which period it covers', () => {
 });
 
 describe('★★ the two absences a reader would otherwise infer', () => {
-  it('★★ says the table is the human team', async () => {
-    /*
-     * The design puts AI employees in this table as colleagues in the
-     * workload; `where: { role: "AGENT" }` is human users. Unstated, the
-     * first question is why they are missing and the second is whether
-     * their work is counted somewhere invisible.
-     */
+  it('★★ no longer says it is the human team: AI employees are in it (e188ce7c)', async () => {
     await show([agent()]);
-    expect(screen.getByTestId('team-humans-only').getAttribute('title')).toMatch(/human team/i);
-    expect(screen.getByTestId('team-humans-only')).toHaveTextContent(/people only/i);
+    expect(screen.queryByTestId('team-humans-only')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/people only|human team/i);
   });
 
   it('★★ ships no outcome column and no proxy for one', async () => {
@@ -173,10 +167,60 @@ describe('⚠ no team is one line, not four disclaimers', () => {
     const card = screen.getByTestId('team-load');
     expect(card.querySelectorAll('p')).toHaveLength(1);
     const none = screen.getByTestId('team-none');
-    // The read counts AGENT-role users only; an admin who answers is not in it,
-    // so "nobody takes conversations" would be false. Say what is counted.
-    expect(none).toHaveTextContent('Only people with the Agent role are counted here.');
-    expect(none).not.toHaveTextContent(/Nobody/);
+    // The read now counts admins and AI employees too: empty is truly no one.
+    expect(none).toHaveTextContent('No one on the team yet.');
+    expect(none).not.toHaveTextContent(/Agent role/);
     expect(none.getAttribute('title')).toMatch(/grows with how long/);
+  });
+});
+
+/** The wire as backend e188ce7c sends it. */
+const WIRE = [
+  {
+    agentId: 'm1',
+    name: 'matan',
+    email: 'matan@example.com',
+    kind: 'human',
+    activeConversations: 1,
+    claimedToday: 0,
+    avgResponseTimeMs: null,
+  },
+  {
+    agentId: 'a1',
+    name: 'Maya',
+    email: null,
+    kind: 'ai',
+    activeConversations: 13,
+    claimedToday: null,
+    avgResponseTimeMs: null,
+    nullReasons: { claimedToday: 'ai_does_not_claim', avgResponseTimeMs: 'not_measured_for_ai' },
+  },
+];
+
+describe('★★ 06 — people and AI employees, one table', () => {
+  it('the real shape parses — it failed the contract at 1.claimedToday', () => {
+    const parsed = agentLoadListSchema.parse(WIRE);
+    expect(parsed[1]).toMatchObject({ kind: 'ai', claimedToday: null });
+    expect(parsed[1]!.nullReasons.claimedToday).toBe('ai_does_not_claim');
+  });
+
+  it('Maya is marked, and her "taken today" is "—" with why — not 0', async () => {
+    render(await TeamLoad({ agents: agentLoadListSchema.parse(WIRE) }));
+    const maya = screen.getByTestId('agent-a1');
+    expect(maya).toHaveTextContent('AI employee');
+    const cells = maya.querySelectorAll('td');
+    expect(cells[0]).toHaveTextContent('13');
+    expect(cells[1]).toHaveTextContent(/^—$/);
+    expect(cells[1]).toHaveAttribute(
+      'title',
+      "AI employees don't take conversations; they're assigned.",
+    );
+    expect(screen.getByTestId('agent-m1').querySelectorAll('td')[1]).toHaveTextContent('0');
+  });
+
+  it('no claim about who is counted remains', async () => {
+    render(await TeamLoad({ agents: agentLoadListSchema.parse(WIRE) }));
+    expect(document.body.textContent).not.toMatch(/Agent role|People only, not GOTCHA/);
+    expect(screen.queryByTestId('team-humans-only')).toBeNull();
   });
 });

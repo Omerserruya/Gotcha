@@ -61,7 +61,7 @@ export async function TeamLoad({
         <p
           className={styles.note}
           data-testid="team-none"
-          title={[t('team.today'), t('team.noSpeed'), t('team.humansOnly')].join(' ')}
+          title={[t('team.today'), t('team.noSpeed')].join(' ')}
         >
           {t('teamShort.none')}
         </p>
@@ -103,10 +103,22 @@ export async function TeamLoad({
               something, and these numbers support neither claim.
             */}
             {byName(agents).map((agent) => (
-              <tr key={agent.agentId} data-testid={`agent-${agent.agentId}`}>
-                <th scope="row">{agent.name ?? t('team.unnamed')}</th>
+              <tr key={agent.agentId} data-testid={`agent-${agent.agentId}`} data-kind={agent.kind}>
+                {/*
+                  People and AI employees together — 02's colleagues in the
+                  workload. An AI employee is marked, and is assigned rather
+                  than claiming, so its "taken today" is "—" with why.
+                */}
+                <th scope="row">
+                  {agent.name ?? t('team.unnamed')}
+                  {agent.kind === 'ai' ? (
+                    <span className={styles.aiMark}>{t('team.aiEmployee')}</span>
+                  ) : null}
+                </th>
                 <td>{format.number(agent.activeConversations)}</td>
-                <td>{format.number(agent.claimedToday)}</td>
+                <td title={nullReason(agent, 'claimedToday', t)}>
+                  {agent.claimedToday === null ? '—' : format.number(agent.claimedToday)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -131,17 +143,19 @@ export async function TeamLoad({
       <p className={styles.note} data-testid="team-no-speed" title={t('team.noSpeed')}>
         {t('teamShort.noSpeed')}
       </p>
-
-      {/*
-        ★★ THE ABSENCE A READER WILL NOTICE FIRST.
-        The design puts AI employees in this table as colleagues in the
-        workload. `where: { role: "AGENT" }` is human users, so they are not
-        here — and unstated, the first question is why, and the second is
-        whether their work is being counted somewhere invisible.
-      */}
-      <p className={styles.note} data-testid="team-humans-only" title={t('team.humansOnly')}>
-        {t('teamShort.humansOnly')}
-      </p>
     </section>
   );
+}
+
+/** A null figure's reason, in words, for its title. */
+export function nullReason(
+  agent: AgentLoad,
+  field: 'claimedToday',
+  t: Awaited<ReturnType<typeof getTranslations<'analytics'>>>,
+): string | undefined {
+  const reason = agent[field] === null ? agent.nullReasons[field] : undefined;
+  if (!reason) return undefined;
+  return t.has(`team.nullReason.${reason}`)
+    ? t(`team.nullReason.${reason}` as 'team.nullReason.ai_does_not_claim')
+    : undefined;
 }

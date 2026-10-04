@@ -1,11 +1,12 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { busiestHour, byName, type AgentLoad } from '@/api/contracts/analytics';
+import { busiestHour, byName, humans, type AgentLoad } from '@/api/contracts/analytics';
 import type { AiEmployee } from '@/api/contracts/people';
 
 import { hadConversations } from './figures';
 import type { TeamData } from './load-analytics';
 import styles from './Analytics.module.css';
+import { nullReason } from './TeamLoad';
 
 /**
  * Screen 06c — how the team is doing, without a leaderboard. Measured.
@@ -75,11 +76,18 @@ export function queueState(agents: readonly AgentLoad[]): QueueState {
  * people, two teams". Teams are not modelled; people and AI employees are,
  * and a kind with none is left out rather than said as "0 people".
  */
+/** AI employees: the employee list when read, else the AI rows of the workload. */
+function aiCount(data: TeamData): number {
+  return data.aiEmployees?.length ?? data.agents?.filter((a) => a.kind === 'ai').length ?? 0;
+}
+
 export async function teamSubline(data: TeamData): Promise<string> {
   const t = await getTranslations('analytics');
   const parts = [
-    data.agents?.length ? t('teamTab.sublinePeople', { count: data.agents.length }) : null,
-    data.aiEmployees?.length ? t('teamTab.sublineAi', { count: data.aiEmployees.length }) : null,
+    data.agents && humans(data.agents).length
+      ? t('teamTab.sublinePeople', { count: humans(data.agents).length })
+      : null,
+    aiCount(data) ? t('teamTab.sublineAi', { count: aiCount(data) }) : null,
   ].filter((part): part is string => part !== null);
   return parts.length > 0
     ? t('teamTab.sublineCounted', { who: parts.join(', ') })
@@ -88,7 +96,8 @@ export async function teamSubline(data: TeamData): Promise<string> {
 
 export async function TeamHero({ agents }: { readonly agents: readonly AgentLoad[] | null }) {
   const t = await getTranslations('analytics');
-  const state = agents ? queueState(agents) : null;
+  // A queue is compared between PEOPLE; AI employees are assigned, not claiming.
+  const state = agents ? queueState(humans(agents)) : null;
   const nameOf = (agent: AgentLoad) => agent.name ?? t('team.unnamed');
   return (
     <section className={styles.gHero} data-testid="team-hero">
@@ -199,8 +208,18 @@ export async function TeamTable({
       ))}
     </span>
   );
+  /*
+    People and AI employees in one table (backend e188ce7c sends both). An
+    AI employee the read carries has its real open count; one only in the
+    employee list (none open, say) is drawn from it — never twice.
+  */
   const people = agents ? byName(agents) : [];
-  const ais = aiEmployees ? [...aiEmployees].sort((a, b) => a.name.localeCompare(b.name)) : [];
+  const counted = new Set(people.filter((a) => a.kind === 'ai').map((a) => a.agentId));
+  const ais = aiEmployees
+    ? [...aiEmployees]
+        .filter((ai) => !counted.has(ai.id))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
 
   return (
     <section className={styles.tTable} data-testid="team-table">
@@ -227,16 +246,30 @@ export async function TeamTable({
               <li
                 key={agent.agentId}
                 className={styles.tRow}
+                data-ai={agent.kind === 'ai' ? '' : undefined}
                 data-testid={`team-row-${agent.agentId}`}
               >
                 <span className={styles.tWho}>
-                  <span className={styles.tDisc} aria-hidden="true">
-                    {initials(agent.name)}
+                  <span
+                    className={styles.tDisc}
+                    data-ai={agent.kind === 'ai' ? '' : undefined}
+                    aria-hidden="true"
+                  >
+                    {agent.kind === 'ai' ? 'AI' : initials(agent.name)}
                   </span>
-                  <span className={styles.tName}>{agent.name ?? t('team.unnamed')}</span>
+                  {agent.kind === 'ai' ? (
+                    <span className={styles.tNameStack}>
+                      <span className={styles.tName}>{agent.name ?? t('team.unnamed')}</span>
+                      <span className={styles.tRole}>{t('teamTab.table.aiEmployee')}</span>
+                    </span>
+                  ) : (
+                    <span className={styles.tName}>{agent.name ?? t('team.unnamed')}</span>
+                  )}
                 </span>
                 <span>{format.number(agent.activeConversations)}</span>
-                <span>{format.number(agent.claimedToday)}</span>
+                <span title={nullReason(agent, 'claimedToday', t)}>
+                  {agent.claimedToday === null ? '—' : format.number(agent.claimedToday)}
+                </span>
                 <span>—</span>
                 <span>—</span>
                 {load}
@@ -265,9 +298,7 @@ export async function TeamTable({
         )}
       </div>
       <p className={styles.tFoot} data-testid="team-foot">
-        {t('teamTab.table.foot')}{' '}
-        {/* A real absence, stated: `getAgentStats` selects role AGENT. */}
-        {t('teamTab.table.agentsOnly')}
+        {t('teamTab.table.foot')}
       </p>
     </section>
   );

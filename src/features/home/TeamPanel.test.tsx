@@ -4,6 +4,7 @@ import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AgentPresence } from '@/api/contracts/presence';
+import { teamSchema } from '@/api/contracts/team';
 import en from '@/i18n/messages/en/home.json';
 import he from '@/i18n/messages/he/home.json';
 
@@ -64,7 +65,9 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-const team = [{ agentId: 'u1', name: 'Dana', activeConversations: 0, claimedToday: 0 }];
+const team = teamSchema.parse([
+  { agentId: 'u1', name: 'Dana', activeConversations: 0, claimedToday: 0 },
+]);
 
 /** 14:30 Jerusalem time, which is 02:30 PM on a 12-hour clock. */
 const AWAY_UNTIL = '2026-09-27T11:30:00.000Z';
@@ -115,7 +118,7 @@ describe('★★ the away time follows the page, not the process', () => {
 
 describe('★ 01 — the panel is always drawn: no team and no read are states', () => {
   it.each([
-    [[], /agent role/],
+    [[], /No one on the team yet/],
     [null, /couldn't read/],
   ] as const)('%j → its title and "—", and no count of nobody', async (value, reason) => {
     current = 'en';
@@ -124,5 +127,59 @@ describe('★ 01 — the panel is always drawn: no team and no read are states',
     expect(screen.getByTestId('team-none')).toHaveTextContent('—');
     expect(screen.getByTestId('team-none')).toHaveAttribute('title', expect.stringMatching(reason));
     expect(screen.getByTestId('team-panel')).not.toHaveTextContent(/online/i);
+  });
+});
+
+/** The wire as backend e188ce7c sends it: a person and an AI employee, with its nulls. */
+const WIRE = [
+  {
+    agentId: 'm1',
+    name: 'matan',
+    email: 'matan@example.com',
+    kind: 'human',
+    activeConversations: 1,
+    claimedToday: 0,
+    avgResponseTimeMs: null,
+  },
+  {
+    agentId: 'a1',
+    name: 'Maya',
+    email: null,
+    kind: 'ai',
+    activeConversations: 13,
+    claimedToday: null,
+    avgResponseTimeMs: null,
+    nullReasons: { claimedToday: 'ai_does_not_claim', avgResponseTimeMs: 'not_measured_for_ai' },
+  },
+];
+
+describe('★★ Home — "Your team right now" reads people and AI together', () => {
+  it('the real shape parses: email null, claimedToday null, kind', () => {
+    const parsed = teamSchema.parse(WIRE);
+    expect(parsed.map((m) => m.kind)).toEqual(['human', 'ai']);
+    expect(parsed[1]).toMatchObject({ email: null, claimedToday: null });
+  });
+
+  it('matan, 1 open; Maya, 13 open and marked as an AI employee', async () => {
+    current = 'en';
+    render(await TeamPanel({ team: teamSchema.parse(WIRE), presence: new Map() }));
+    const panel = screen.getByTestId('team-panel');
+    expect(panel).toHaveTextContent('matan');
+    expect(panel).toHaveTextContent('1 open');
+    expect(panel).toHaveTextContent('Maya');
+    expect(panel).toHaveTextContent('13 open · AI employee');
+    // No claim about who is counted.
+    expect(panel).not.toHaveTextContent(/agent role|counts agents only/i);
+  });
+
+  it('online counts people only: an AI employee is never "online"', async () => {
+    current = 'en';
+    render(
+      await TeamPanel({
+        team: teamSchema.parse(WIRE),
+        presence: new Map([['a1', { agentId: 'a1', status: 'ONLINE' } as AgentPresence]]),
+      }),
+    );
+    expect(screen.getByTestId('team-panel')).toHaveTextContent('Nobody online');
   });
 });

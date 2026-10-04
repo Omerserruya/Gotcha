@@ -15,11 +15,16 @@ import { z } from 'zod';
  */
 export const teamMemberSchema = z.looseObject({
   agentId: z.string().min(1),
-  name: z.string().optional(),
-  email: z.email().optional(),
+  name: z.string().nullable().optional(),
+  /** `null` on an AI row (backend e188ce7c). */
+  email: z.email().nullable().optional(),
+  /** People and AI employees, together. */
+  kind: z.enum(['human', 'ai']).catch('human').default('human'),
   activeConversations: z.number().default(0),
-  claimedToday: z.number().default(0),
+  /** `null` on an AI row: it is assigned, it does not claim. */
+  claimedToday: z.number().nullable().default(null),
   avgResponseTimeMs: z.number().nullable().optional(),
+  nullReasons: z.record(z.string(), z.string()).catch({}).default({}),
 });
 
 export const teamSchema = z.array(teamMemberSchema);

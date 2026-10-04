@@ -476,10 +476,20 @@ export function hasComparison(metric: HeadlineMetric): boolean {
 export const agentLoadSchema = z.object({
   agentId: z.string(),
   name: z.string().nullable().default(null),
+  /**
+   * Backend e188ce7c: people (ADMIN counted, SYSTEM_ADMIN not) AND AI
+   * employees, as colleagues in the workload.
+   */
+  kind: z.enum(['human', 'ai']).catch('human').default('human'),
   /** Open right now. A queue depth, not a throughput. */
   activeConversations: z.number().default(0),
-  /** Today only, from a Redis day-key. */
-  claimedToday: z.number().default(0),
+  /**
+   * Today only, from a Redis day-key. `null` on an AI row — an AI employee
+   * is assigned, it does not claim — and `nullReasons` says why.
+   */
+  claimedToday: z.number().nullable().default(null),
+  /** Why a figure is null (`ai_does_not_claim`, …). Read for titles only. */
+  nullReasons: z.record(z.string(), z.string()).catch({}).default({}),
   /*
    * ════════════════════════════════════════════════════════════════════════
    * ★★ `avgResponseTimeMs` IS DELIBERATELY NOT NAMED HERE. DO NOT ADD IT.
@@ -532,6 +542,11 @@ export const agentLoadListSchema = z.array(agentLoadSchema);
  * as the best or the worst of something, and this data cannot support either
  * claim. Alphabetical says only "here is the team".
  */
+/** The people in the workload — what a queue comparison is between. */
+export function humans(agents: readonly AgentLoad[]): readonly AgentLoad[] {
+  return agents.filter((agent) => agent.kind === 'human');
+}
+
 export function byName(agents: readonly AgentLoad[]): readonly AgentLoad[] {
   return [...agents].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
 }

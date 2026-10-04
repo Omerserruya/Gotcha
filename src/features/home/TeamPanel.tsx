@@ -59,8 +59,16 @@ export async function TeamPanel({
       </section>
     );
   }
-  const imbalance = findImbalance(team);
-  const online = team.filter((member) => presence.get(member.agentId)?.status === 'ONLINE').length;
+  /*
+    People and AI employees, together (backend e188ce7c). Presence and the
+    imbalance note are about PEOPLE: an AI employee is never "online", and a
+    queue is shared between those who claim it.
+  */
+  const people = team.filter((member) => member.kind === 'human');
+  const imbalance = findImbalance(people);
+  const online = people.filter(
+    (member) => presence.get(member.agentId)?.status === 'ONLINE',
+  ).length;
 
   return (
     <section className={styles.queueCard} data-testid="team-panel">
@@ -124,7 +132,7 @@ export async function TeamPanel({
  * enough to hide themselves. Silent unless the gap is real — an observation
  * that appears every day stops being read.
  */
-function findImbalance(team: Team): { name: string } | null {
+function findImbalance(team: readonly Team[number][]): { name: string } | null {
   if (team.length < 3) return null;
 
   const loads = team.map((member) => member.activeConversations).sort((a, b) => a - b);
@@ -150,6 +158,8 @@ function secondLine(
   member: Team[number],
   presence: AgentPresence | undefined,
 ): string {
+  // An AI employee: what it holds, and that it is one. No reply time is measured for it.
+  if (member.kind === 'ai') return t('loadAi', { open: member.activeConversations });
   if (presence?.status === 'AWAY' && presence.awayUntil) {
     const until = new Date(presence.awayUntil);
     if (!Number.isNaN(until.getTime())) {

@@ -737,6 +737,14 @@
     color: var(--text-primary);
   }
 
+  /* 06: an AI employee in the workload table, under its name. */
+  .aiMark {
+    display: block;
+    font-size: var(--font-size-micro);
+    font-weight: 400;
+    color: var(--text-subtle);
+  }
+
   .tRole {
     font-size: 11px;
     color: var(--text-subtle);

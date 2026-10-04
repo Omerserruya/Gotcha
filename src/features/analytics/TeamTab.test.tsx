@@ -2,7 +2,12 @@ import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import { agentLoadSchema, analyticsOverviewSchema, busiestHour } from '@/api/contracts/analytics';
+import {
+  agentLoadListSchema,
+  agentLoadSchema,
+  analyticsOverviewSchema,
+  busiestHour,
+} from '@/api/contracts/analytics';
 import { aiEmployeeSchema } from '@/api/contracts/people';
 import analytics from '@/i18n/messages/en/analytics.json';
 
@@ -17,6 +22,7 @@ import { HandoverCard, imbalance, TeamHero, TeamStrip, TeamTable, teamSubline } 
 
 const agent = (id: string, name: string, open: number, today = 0) =>
   agentLoadSchema.parse({ agentId: id, name, activeConversations: open, claimedToday: today });
+
 const ai = (id: string, name: string) => aiEmployeeSchema.parse({ id, name, status: 'ACTIVE' });
 
 describe('★ the imbalance is the queue’s', () => {
@@ -124,10 +130,8 @@ describe('★★ one table — people and AI employees, alphabetical, no ranking
     expect(screen.getByTestId('team-unavailable')).toBeInTheDocument();
     unmount();
     render(await TeamTable({ agents: [], aiEmployees: [] }));
-    // What is counted, never "nobody takes conversations": admins who answer are not in the read.
-    expect(screen.getByTestId('team-none')).toHaveTextContent(
-      'Only people with the Agent role are counted here.',
-    );
+    // The read counts admins and AI employees now: empty is truly no one.
+    expect(screen.getByTestId('team-none')).toHaveTextContent('No one on the team yet.');
   });
 
   it('the handover card keeps its place', async () => {
@@ -162,11 +166,9 @@ describe('★★ measured on dev: no Agent-role people — the card says what is
     }
   });
 
-  it('the table says who is not counted: admins who answer', async () => {
+  it('the foot no longer says admins are left out — they are counted (e188ce7c)', async () => {
     render(await TeamTable({ agents: [], aiEmployees: [ai('m', 'Maya')] }));
-    expect(screen.getByTestId('team-foot')).toHaveTextContent(
-      'Only people with the Agent role are counted here',
-    );
+    expect(screen.getByTestId('team-foot')).not.toHaveTextContent(/Agent role/);
   });
 });
 
@@ -190,5 +192,53 @@ describe('★ the header says what the table counts — 02\'s "three people, two
   it('nothing counted, or nothing read: the period alone — never "0 people"', async () => {
     expect(await teamSubline(team([], []))).toBe('Last 7 days');
     expect(await teamSubline(team(null, null))).toBe('Last 7 days');
+  });
+});
+
+/** The wire as backend e188ce7c sends it. */
+const WIRE = [
+  {
+    agentId: 'm1',
+    name: 'matan',
+    email: 'matan@example.com',
+    kind: 'human',
+    activeConversations: 1,
+    claimedToday: 0,
+  },
+  {
+    agentId: 'a1',
+    name: 'Maya',
+    email: null,
+    kind: 'ai',
+    activeConversations: 13,
+    claimedToday: null,
+    nullReasons: { claimedToday: 'ai_does_not_claim' },
+  },
+];
+
+describe('★★ 06c — people and AI employees, one table, never twice', () => {
+  it('Maya from the read: her open count, "—" today with why; not repeated from the employee list', async () => {
+    render(
+      await TeamTable({
+        agents: agentLoadListSchema.parse(WIRE),
+        aiEmployees: [{ id: 'a1', name: 'Maya' }] as never,
+      }),
+    );
+    const maya = screen.getAllByTestId('team-row-a1');
+    expect(maya).toHaveLength(1);
+    expect(maya[0]).toHaveTextContent('AI employee');
+    expect(maya[0]).toHaveTextContent('13');
+    expect(maya[0]!.querySelector('[title]')).toHaveAttribute(
+      'title',
+      "AI employees don't take conversations; they're assigned.",
+    );
+    expect(screen.getByTestId('team-foot')).not.toHaveTextContent(/Agent role/);
+  });
+
+  it('the queue is compared between PEOPLE: one person is "too few", whatever the AI holds', async () => {
+    render(await TeamHero({ agents: agentLoadListSchema.parse(WIRE) }));
+    expect(screen.getByTestId('team-hero')).toHaveTextContent(
+      "There aren't two people counted here",
+    );
   });
 });
