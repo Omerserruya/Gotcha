@@ -514,3 +514,25 @@ describe('★★ the narrower policy reaches the page that has a password on it'
     expect(first).not.toBe(second);
   });
 });
+
+describe('★★ 13c — which paths get Meta’s frames', () => {
+  it.each([
+    ['/en/settings/channels', true],
+    ['/he/settings/channels/whatsapp', true],
+    ['/en/settings/channelsx', false],
+    ['/en/sign-in', false],
+    ['/en/settings/workspace', false],
+  ])('%s → %s', async (path, framed) => {
+    const { META_SIGNUP_PATH } = await import('./proxy');
+    expect(META_SIGNUP_PATH.test(path)).toBe(framed);
+  });
+
+  it('the response for a channels page carries them; sign-in does not', async () => {
+    const csp = async (path: string) =>
+      (await proxy(new NextRequest(`https://dev.gotcha.co.il${path}`))).headers.get(
+        'content-security-policy',
+      ) ?? '';
+    expect(await csp('/en/settings/channels')).toContain('https://www.facebook.com');
+    expect(await csp('/en/sign-in')).not.toContain('facebook.com');
+  });
+});

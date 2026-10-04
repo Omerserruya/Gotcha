@@ -501,6 +501,12 @@ export const channelEndpoints = {
    * spends the single-use code and replaces the tenant's signup session.
    */
   whatsappInspect: () => endpoint('/api/channels/whatsapp/inspect'),
+  /**
+   * 13c's launch parameters for Meta's Embedded Signup — the server is the
+   * single source (app id, config id, response type, extras); a guessed
+   * config id is what once produced the wrong signup experience.
+   */
+  config: () => endpoint('/api/channels/config'),
   /** ★ WRITES at Meta — subscribeApp + register. Never fired automatically. */
   whatsappConnect: () => endpoint('/api/channels/whatsapp/connect'),
   /** Deliberate re-read from Meta. The list is built from stored state. */

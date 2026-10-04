@@ -3,6 +3,7 @@ import 'server-only';
 import { importListSchema, type ImportStatus } from '@/api/contracts/historical-import';
 import { candidateListSchema, type Candidate } from '@/api/contracts/knowledge-candidates';
 import { numbersResponseSchema, type NumbersResponse } from '@/api/contracts/whatsapp-numbers';
+import { channelsConfigSchema, type EmbeddedSignupLaunch } from '@/api/contracts/whatsapp-connect';
 import { channelEndpoints, knowledgeEndpoints } from '@/api/endpoints/registry';
 import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
@@ -15,6 +16,17 @@ import { logger } from '@/observability/logger';
  * about the workspace; a failed read is a statement about us. Conflating them
  * would tell somebody whose numbers are working that they have none.
  */
+/** 13c's launch parameters (`/api/channels/config`); `null` when unread. */
+export async function loadSignupLaunch(): Promise<EmbeddedSignupLaunch | null> {
+  return serverApi()
+    .get({ endpoint: channelEndpoints.config(), payload: channelsConfigSchema })
+    .then((config) => config.embeddedSignup)
+    .catch((cause: unknown) => {
+      logger.warn('whatsapp.signup_config_failed', { cause });
+      return null;
+    });
+}
+
 export async function loadWhatsAppNumbers(): Promise<NumbersResponse | null> {
   return serverApi()
     .get({

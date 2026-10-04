@@ -7,7 +7,11 @@ import { ChannelList } from '@/features/channels/ChannelList';
 import channelStyles from '@/features/channels/Channels.module.css';
 import { ImportPanel, LearningRow, ReportPanel } from '@/features/channels/LearnPanels';
 import { loadChannels } from '@/features/channels/load-channels';
-import { loadHistoryImport, loadWhatsAppNumbers } from '@/features/channels/load-whatsapp';
+import {
+  loadHistoryImport,
+  loadSignupLaunch,
+  loadWhatsAppNumbers,
+} from '@/features/channels/load-whatsapp';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -44,7 +48,7 @@ export default async function Page({
     loadChannels(),
     // 13b's reads only when its panel is open.
     panel
-      ? Promise.all([loadWhatsAppNumbers(), loadHistoryImport(params.import)])
+      ? Promise.all([loadWhatsAppNumbers(), loadHistoryImport(params.import), loadSignupLaunch()])
       : Promise.resolve(null),
   ]);
   const learn = whatsapp?.[1].status ?? null;
@@ -127,6 +131,7 @@ export default async function Page({
         >
           <WhatsAppNumbers
             numbers={whatsapp[0]}
+            launch={whatsapp[2]}
             responseModes={Object.fromEntries(
               (channels ?? [])
                 .filter((channel) => channel.channel === 'WHATSAPP')

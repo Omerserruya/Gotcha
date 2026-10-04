@@ -1,5 +1,6 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
+import type { EmbeddedSignupLaunch } from '@/api/contracts/whatsapp-connect';
 import { Link } from '@/i18n/navigation';
 
 import {
@@ -15,6 +16,7 @@ import {
   type WhatsAppNumber,
 } from '@/api/contracts/whatsapp-numbers';
 
+import { MetaLauncher } from './MetaLauncher';
 import styles from './Channels.module.css';
 
 /**
@@ -64,8 +66,11 @@ type T = Awaited<ReturnType<typeof getTranslations<'channels.whatsapp'>>>;
 export async function WhatsAppNumbers({
   numbers,
   responseModes = {},
+  launch = null,
 }: {
   readonly numbers: NumbersResponse | null;
+  /** 13c's Embedded Signup parameters, from the server; `null` when not read. */
+  readonly launch?: EmbeddedSignupLaunch | null;
   /** Who answers each channel account (13b's "AI mode"), from the channel list. */
   readonly responseModes?: Readonly<Record<string, string>>;
 }) {
@@ -90,7 +95,7 @@ export async function WhatsAppNumbers({
         <p className={styles.empty} data-testid="whatsapp-empty">
           {t('empty')}
         </p>
-        <AddNumber t={t} />
+        <MetaLauncher launch={launch} />
       </>
     );
   }
@@ -168,7 +173,7 @@ export async function WhatsAppNumbers({
           </li>
         ))}
         <li>
-          <AddNumber t={t} />
+          <MetaLauncher launch={launch} />
         </li>
       </ul>
     </>
@@ -383,25 +388,5 @@ function NumberRows({ t, mode }: { readonly t: T; readonly mode: string | null }
         </dd>
       </div>
     </dl>
-  );
-}
-
-/**
- * 02's dashed "Add another number" at the foot of the list — where 13c
- * starts. Drawn, not live: connecting a number begins with Meta's Embedded
- * Signup, whose launcher is not built here, and ends in `connect` against a
- * real business account, which nothing in this repo fires on its own (see
- * `ConnectNumbers`).
- */
-function AddNumber({ t }: { readonly t: T }) {
-  return (
-    <span
-      className={styles.addNumber}
-      aria-disabled="true"
-      title={t('addNumberNotYet')}
-      data-testid="whatsapp-add-number"
-    >
-      {t('addNumber')}
-    </span>
   );
 }

@@ -79,8 +79,20 @@ export function buildContentSecurityPolicy(options: {
    * ways the value leaves, which is the half that is achievable.
    */
   readonly credentialSurface?: boolean;
+  /**
+   * 13c's Meta launcher (Embedded Signup) lives here: Meta's SDK frames
+   * `www.facebook.com` / `web.facebook.com`, exactly what the old app's
+   * policy allows — and only on this surface, never app-wide.
+   */
+  readonly metaSignupSurface?: boolean;
 }): string {
-  const { nonce, realtimeUrl, isDevelopment, credentialSurface = false } = options;
+  const {
+    nonce,
+    realtimeUrl,
+    isDevelopment,
+    credentialSurface = false,
+    metaSignupSurface = false,
+  } = options;
 
   // The realtime gateway is a separate origin, and Socket.IO upgrades to a
   // websocket, so both the https and wss origins have to be allowed.
@@ -119,7 +131,11 @@ export function buildContentSecurityPolicy(options: {
     'form-action': ["'self'"],
     // The clickjacking control. Repeated as X-Frame-Options for old browsers.
     'frame-ancestors': ["'none'"],
-    'frame-src': credentialSurface ? ["'none'"] : ["'self'"],
+    'frame-src': credentialSurface
+      ? ["'none'"]
+      : metaSignupSurface
+        ? ["'self'", 'https://www.facebook.com', 'https://web.facebook.com']
+        : ["'self'"],
     ...(isDevelopment ? {} : { 'upgrade-insecure-requests': [] }),
   };
 

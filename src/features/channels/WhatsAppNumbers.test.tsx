@@ -28,6 +28,14 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
 }));
+/* The launcher is a client component with its own tests; here, where it stands and what it is given. */
+vi.mock('./MetaLauncher', () => ({
+  MetaLauncher: ({ launch }: { launch: unknown }) => (
+    <span data-testid="whatsapp-add-number" data-launch={launch === null ? 'none' : 'given'}>
+      + Add another number
+    </span>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
     createTranslator({ locale: 'en', messages: { channels: messages }, namespace }),
@@ -404,13 +412,12 @@ describe('★ 13b — what is configured on a number, in 02’s rows', () => {
   });
 });
 
-describe('★ 13c starts from 13b: "Add another number", drawn not live', () => {
+describe('★ 13c starts from 13b: "Add another number" — Meta’s launcher', () => {
   it('at the foot of the list, and under the empty state', async () => {
     const { unmount } = await renderNumbers({ data: [number()] });
     const add = screen.getByTestId('whatsapp-add-number');
     expect(add).toHaveTextContent('+ Add another number');
-    expect(add).toHaveAttribute('aria-disabled', 'true');
-    expect(add.closest('a,button')).toBeNull();
+    expect(add).toHaveAttribute('data-launch', 'none');
     unmount();
     await renderNumbers({ data: [] });
     expect(screen.getByTestId('whatsapp-empty')).toBeInTheDocument();

@@ -43,11 +43,19 @@ const ackSchema = z.object({}).loose();
 export type ConnectResult = { ok: true } | { ok: false; message: string };
 
 /** Read the numbers on the account the customer just authorised. */
-export async function inspectNumbers(code: string): Promise<InspectResponse | null> {
+export async function inspectNumbers(
+  code: string,
+  /** What the popup told us (business portfolio, WABA ids) — the server uses them. */
+  assets: { readonly businessPortfolioId?: string; readonly wabaIds?: readonly string[] } = {},
+): Promise<InspectResponse | null> {
   try {
     return await serverApi().post({
       endpoint: channelEndpoints.whatsappInspect(),
-      body: { code },
+      body: {
+        code,
+        ...(assets.businessPortfolioId ? { businessPortfolioId: assets.businessPortfolioId } : {}),
+        ...(assets.wabaIds?.length ? { wabaIds: [...assets.wabaIds] } : {}),
+      },
       payload: inspectResponseSchema,
       raw: true,
     });

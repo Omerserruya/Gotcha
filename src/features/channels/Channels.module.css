@@ -1278,4 +1278,17 @@
     background-color: var(--signal-done-surface);
     color: var(--signal-done-text);
   }
+
+  /* 13c: the launcher and what follows it, in the list's foot. */
+  .launcher {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .launcherProblem {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
 }

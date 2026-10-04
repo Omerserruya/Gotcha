@@ -132,3 +132,22 @@ export type BusinessAppOptions = z.infer<typeof businessAppOptionsSchema>;
 export function explainsCoexistence(candidate: Candidate): boolean {
   return candidate.usesBusinessApp || candidate.scenario === 'COEXISTENCE';
 }
+
+/**
+ * `GET /api/channels/config` → `data.embeddedSignup`: how to launch Meta's
+ * Embedded Signup, as the server says. Named fields only; `configured: false`
+ * (or no block at all) means the launcher is drawn, with why.
+ */
+export const embeddedSignupLaunchSchema = z.object({
+  appId: z.string().default(''),
+  configId: z.string().default(''),
+  responseType: z.literal('code').catch('code'),
+  overrideDefaultResponseType: z.boolean().default(true),
+  extras: z.record(z.string(), z.unknown()).default({}),
+  configured: z.boolean().default(false),
+});
+export type EmbeddedSignupLaunch = z.infer<typeof embeddedSignupLaunchSchema>;
+
+export const channelsConfigSchema = z.object({
+  embeddedSignup: embeddedSignupLaunchSchema.nullish().default(null),
+});

@@ -109,6 +109,8 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
      * one list too many, and the one that drifts would be this one.
      */
     credentialSurface: PUBLIC_PATH_PATTERN.test(pathname),
+    // 13c: Meta's Embedded Signup frames facebook.com — on the channels pages only.
+    metaSignupSurface: META_SIGNUP_PATH.test(pathname),
   });
 
   /*
@@ -397,6 +399,9 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
 
   return withSecurityHeaders(response);
 }
+
+/** Where 13c's Meta launcher runs: Settings · Channels, in any locale. */
+export const META_SIGNUP_PATH = /^\/[a-z]{2}\/settings\/channels(\/|$)/;
 
 /** next-intl's request header for the resolved locale. */
 const INTL_LOCALE_HEADER = 'x-next-intl-locale';

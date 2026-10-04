@@ -215,7 +215,6 @@
       }
     },
     "addNumber": "+ Add another number",
-    "addNumberNotYet": "Connecting a number goes through Meta's signup, which isn't wired from here yet.",
     "learn": {
       "rowImporting": "Learning in progress · importing {percent}%",
       "rowLearning": "Learning in progress · {percent}%",
@@ -272,6 +271,15 @@
       "readyCard": "{count, plural, one {# more is ready} other {# more are ready}} — high confidence, no conflicts",
       "addReady": "{count, plural, one {Add # ready answer} other {Add # ready answers}}",
       "later": "Finish later"
+    },
+    "launcher": {
+      "notConfigured": "Meta's sign-up isn't set up for this workspace yet.",
+      "unavailable": "Meta's sign-in couldn't load here — an ad blocker or a company network often blocks it.",
+      "cancelled": "You closed Meta’s window — nothing was connected.",
+      "noCode": "Meta didn't hand back a way to read your numbers. Nothing was connected — try again.",
+      "inspectFailed": "We couldn't read the numbers on that account. Nothing was connected — try again.",
+      "opening": "Opening Meta…",
+      "reading": "Reading your numbers…"
     }
   },
   "rowSettings": "Settings",

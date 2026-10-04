@@ -207,3 +207,22 @@ describe('★★ the policy stands on its own, because it is not the only one', 
     expect(csp).toContain("connect-src 'self'");
   });
 });
+
+describe('★★ 13c — Meta’s frames on the channels pages, and nowhere else', () => {
+  const frames = (options: { metaSignupSurface?: boolean; credentialSurface?: boolean }) =>
+    buildContentSecurityPolicy({ nonce: 'N', isDevelopment: false, ...options })
+      .split(';')
+      .map((d) => d.trim())
+      .find((d) => d.startsWith('frame-src'));
+
+  it('the channels surface frames www/web.facebook.com — not a wildcard', () => {
+    expect(frames({ metaSignupSurface: true })).toBe(
+      "frame-src 'self' https://www.facebook.com https://web.facebook.com",
+    );
+  });
+
+  it('elsewhere: self only; a password page: none, even if both were claimed', () => {
+    expect(frames({})).toBe("frame-src 'self'");
+    expect(frames({ metaSignupSurface: true, credentialSurface: true })).toBe("frame-src 'none'");
+  });
+});
