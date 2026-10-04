@@ -47,6 +47,11 @@ export const templateSchema = z.object({
   language: z.string().default('en'),
   /** `null` means every channel — which includes WhatsApp, so approval applies. */
   channel: z.string().nullable().default(null),
+  /**
+   * The WhatsApp number it belongs to; `null` for the tenant's own. Named for
+   * 05's campaign form, which offers a number only its own templates.
+   */
+  channelAccountId: z.string().nullable().catch(null).default(null),
   category: z.string().default('general'),
   body: z.string().default(''),
   footer: z.string().nullable().default(null),

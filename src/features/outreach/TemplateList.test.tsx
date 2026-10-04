@@ -13,6 +13,14 @@ vi.mock('next-intl/server', () => ({
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'UTC' }),
   getLocale: async () => 'en',
 }));
+/* The copy button is a client island; it gets its own test. */
+vi.mock('./DuplicateTemplate', () => ({
+  DuplicateTemplate: ({ id }: { id: string }) => (
+    <button type="button" data-testid="template-duplicate" data-id={id}>
+      Duplicate and edit
+    </button>
+  ),
+}));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({
     href,
@@ -156,11 +164,26 @@ describe('★★ the preview — the message as the customer sees it', () => {
     expect(screen.getByTestId('template-approved')).toHaveTextContent('now version 3');
   });
 
-  it('⚠ the actions are drawn and not live: nothing chooses a template for a campaign yet', async () => {
+  it('★ approved: "Use in a campaign" opens the draft drawer with it chosen; Duplicate is live', async () => {
     render(await TemplatePreview({ group: templateGroups([template()])[0]! }));
-    for (const label of ['Use in a campaign', 'Duplicate and edit']) {
-      expect(screen.getByText(label)).toHaveAttribute('aria-disabled', 'true');
-    }
+    expect(screen.getByTestId('template-use')).toHaveAttribute(
+      'href',
+      '/outreach?create=campaign&template=t1',
+    );
+    expect(screen.getByTestId('template-duplicate')).toHaveAttribute('data-id', 't1');
+    // Not a draft: nothing to submit.
+    expect(screen.queryByTestId('template-submit')).toBeNull();
+  });
+
+  it('★ a draft cannot be used yet, and "Submit to Meta" is drawn with why', async () => {
+    render(await TemplatePreview({ group: templateGroups([template({ status: 'DRAFT' })])[0]! }));
+    expect(screen.getByTestId('template-use')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('template-use')).not.toHaveAttribute('href');
+    expect(screen.getByTestId('template-submit')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('template-submit')).toHaveAttribute(
+      'title',
+      expect.stringMatching(/waiting for approval/),
+    );
   });
 
   it('no template: the card keeps its place', async () => {

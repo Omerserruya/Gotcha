@@ -23,6 +23,7 @@ const template = (over: Partial<Template> = {}): Template => ({
   name: 'Back in stock',
   language: 'en',
   channel: 'WHATSAPP',
+  channelAccountId: null,
   category: 'marketing',
   body: 'Hi {{1}} — the {{2}} is back.',
   footer: null,

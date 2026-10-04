@@ -41,5 +41,41 @@
   "worth": {
     "title": "Worth knowing",
     "none": "Nothing yet."
+  },
+  "newTemplate": "New template",
+  "useNeedsApproval": "Only an approved template can be sent.",
+  "submit": "Submit to Meta",
+  "submitNotYet": "Submitting for Meta's review is waiting for approval.",
+  "create": {
+    "title": "New template",
+    "line": "Saved as a draft. It reaches Meta only when submitted.",
+    "name": "Name",
+    "nameHint": "Lowercase letters, digits and underscores — Meta's rule.",
+    "language": "Language",
+    "lang": {
+      "he": "Hebrew",
+      "en": "English",
+      "ar": "Arabic"
+    },
+    "category": "Category",
+    "cat": {
+      "MARKETING": "Marketing",
+      "UTILITY": "Utility",
+      "AUTHENTICATION": "Authentication"
+    },
+    "number": "WhatsApp number",
+    "body": "Text",
+    "bodyHint": "Use '{{1}}', '{{2}}' for what changes per person.",
+    "footer": "Footer (optional)",
+    "save": "Save draft",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "draftNote": "A draft: not submitted to Meta.",
+    "error": {
+      "missing": "A name and the text are needed.",
+      "entitlement": "Templates aren't part of this plan.",
+      "forbidden": "Only an admin can create templates.",
+      "failed": "That didn't go through. Try again."
+    }
   }
 }

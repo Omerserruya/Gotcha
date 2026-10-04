@@ -700,7 +700,15 @@
   .tplRejectedSecondary {
     padding: 7px 13px;
     border-radius: var(--space-8);
+    font: inherit;
     font-size: 11.5px;
+    /* Links and buttons drawn as buttons. */
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  button.tplSecondary {
+    background: none;
   }
 
   .tplPrimary {
@@ -1140,5 +1148,81 @@
     .resStrip {
       grid-template-columns: repeat(3, 1fr);
     }
+  }
+
+  /* 05, measured: 02's four task cards, 192 wide, 10 apart. */
+  .tasks {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-10);
+  }
+
+  .task {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: 15px 17px;
+    border: 1px solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  a.task:hover {
+    border-color: var(--action-base);
+  }
+
+  .task[aria-disabled='true'] {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .taskName {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .taskText {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* The create drawers' save, problem and link. */
+  .formSave {
+    padding: 10px var(--space-18);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .formSave:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .formProblem {
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .formLink {
+    color: var(--text-primary);
+    text-decoration: underline;
+  }
+
+  .createButton {
+    padding: 9px var(--space-16);
+    border-radius: 9px;
+    background-color: var(--action-base);
+    font-size: 12.5px;
+    color: var(--action-text);
+    text-decoration: none;
   }
 }

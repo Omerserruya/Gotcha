@@ -842,6 +842,7 @@ export const identityEndpoints = {
  * own schema comment says it is exclusively the bot path.
  */
 export const outreachEndpoints = {
+  /** GET the list; POST creates a DRAFT (Omer, 2026-10-04: drafts only). */
   list: () => endpoint('/api/broadcasts'),
   detail: (id: string) => endpoint('/api/broadcasts/{id}', { id }),
   recipients: (id: string) => endpoint('/api/broadcasts/{id}/recipients', { id }),
@@ -862,6 +863,7 @@ export const outreachEndpoints = {
  * rate are unserved rather than impossible — the join exists on the model.
  */
 export const templateEndpoints = {
+  /** GET the list; POST creates a local template (a DRAFT; not sent to Meta). */
   list: () => endpoint('/api/templates'),
   detail: (id: string) => endpoint('/api/templates/{id}', { id }),
   duplicate: (id: string) => endpoint('/api/templates/{id}/duplicate', { id }),

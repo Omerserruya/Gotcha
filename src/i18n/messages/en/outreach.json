@@ -113,5 +113,53 @@
     "unavailable": "We couldn't read this campaign just now.",
     "missing": "There's no such campaign here.",
     "seeResults": "See what it did"
+  },
+  "createOutreach": "Create outreach",
+  "tasks": {
+    "message": {
+      "name": "Message",
+      "text": "One-off to a person or small list",
+      "none": "A one-off message is written from the conversation, in the Inbox."
+    },
+    "campaign": {
+      "name": "Campaign",
+      "text": "A group, on a schedule"
+    },
+    "email": {
+      "name": "Email",
+      "text": "Longer, with layout",
+      "none": "No email account is connected to send from."
+    },
+    "call": {
+      "name": "Phone call",
+      "text": "Call someone from the dialer"
+    }
+  },
+  "create": {
+    "title": "New campaign",
+    "line": "Saved as a draft. Nothing is sent until you send it.",
+    "from": "From",
+    "template": "Template",
+    "pickTemplate": "Choose an approved template",
+    "templateHint": "WhatsApp sends only templates it has approved.",
+    "noTemplate": "No approved template for this number yet.",
+    "newTemplate": "New template",
+    "message": "Message",
+    "name": "Name",
+    "namePlaceholder": "Autumn restock",
+    "when": "When",
+    "whenHint": "Leave empty to send it when you choose.",
+    "save": "Save draft",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "draftNote": "A draft: nothing goes out.",
+    "noAccount": "No connected account to send from.",
+    "connect": "Connect a channel",
+    "error": {
+      "missing": "Fill in where it goes from, what it says, and its name.",
+      "entitlement": "Campaigns aren't part of this plan.",
+      "forbidden": "You don't have permission to create campaigns.",
+      "failed": "The draft wasn't saved. Try again."
+    }
   }
 }

@@ -12,6 +12,7 @@ import {
 } from '@/api/contracts/templates';
 import { Link } from '@/i18n/navigation';
 
+import { DuplicateTemplate } from './DuplicateTemplate';
 import styles from './Outreach.module.css';
 
 /**
@@ -269,14 +270,41 @@ export async function TemplatePreview({ group }: { readonly group: TemplateGroup
         </div>
       </dl>
 
-      {/* Neither exists yet: choosing a template for a campaign, or editing a copy. */}
+      {/*
+        Live (Omer, 2026-10-04): an approved template opens the draft-campaign
+        drawer with it chosen; Duplicate makes a local DRAFT copy. Submitting
+        a draft to Meta is a separate write — drawn, with why.
+      */}
       <div className={styles.tplActions}>
-        <span className={styles.tplPrimary} aria-disabled="true">
-          {t('useInCampaign')}
-        </span>
-        <span className={styles.tplSecondary} aria-disabled="true">
-          {t('duplicate')}
-        </span>
+        {template.status === 'APPROVED' ? (
+          <Link
+            href={{ pathname: '/outreach', query: { create: 'campaign', template: template.id } }}
+            className={styles.tplPrimary}
+            data-testid="template-use"
+          >
+            {t('useInCampaign')}
+          </Link>
+        ) : (
+          <span
+            className={styles.tplPrimary}
+            aria-disabled="true"
+            title={t('useNeedsApproval')}
+            data-testid="template-use"
+          >
+            {t('useInCampaign')}
+          </span>
+        )}
+        <DuplicateTemplate id={template.id} />
+        {template.status === 'DRAFT' ? (
+          <span
+            className={styles.tplSecondary}
+            aria-disabled="true"
+            title={t('submitNotYet')}
+            data-testid="template-submit"
+          >
+            {t('submit')}
+          </span>
+        ) : null}
       </div>
     </section>
   );

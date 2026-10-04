@@ -1,6 +1,14 @@
 import { getTranslations } from 'next-intl/server';
 
+import { channelName } from '@/api/contracts/inbox';
+import { loadChannels } from '@/features/channels/load-channels';
+import { displayHandle } from '@/features/customers/phone';
 import { CampaignCard } from '@/features/outreach/CampaignCard';
+import { CampaignForm, type SendingAccount } from '@/features/outreach/CampaignForm';
+import { loadTemplates } from '@/features/outreach/load-templates';
+import { TaskCards } from '@/features/outreach/TaskCards';
+import { Link } from '@/i18n/navigation';
+import { Drawer } from '@/shell/Drawer';
 import { loadOutreach } from '@/features/outreach/load-outreach';
 import { InFlightList, MonthStrip } from '@/features/outreach/OutreachLists';
 import styles from '@/features/outreach/Outreach.module.css';
@@ -46,28 +54,107 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  /** `?campaign=<id>` — which campaign the right-hand column shows. */
-  readonly searchParams: Promise<{ readonly campaign?: string }>;
+  readonly searchParams: Promise<{
+    /** `?campaign=<id>` — which campaign the right-hand column shows. */
+    readonly campaign?: string;
+    /** `?create=campaign[&channel=EMAIL][&template=<id>]` — the draft drawer. */
+    readonly create?: string;
+    readonly channel?: string;
+    readonly template?: string;
+  }>;
 }) {
   const t = await getTranslations('outreach');
-  const { inFlight, finished, unavailable } = await loadOutreach();
-  const { campaign: wanted } = await searchParams;
+  const tch = await getTranslations('channels');
+  const params = await searchParams;
+  const creating = params.create === 'campaign';
+  const [{ inFlight, finished, unavailable }, channelData, templateData] = await Promise.all([
+    loadOutreach(),
+    loadChannels(),
+    // The drawer's templates, only when it is open.
+    creating ? loadTemplates() : Promise.resolve(null),
+  ]);
+  const wanted = params.campaign;
+
+  /*
+    05's "Create outreach" (Omer, 2026-10-04: drafts). The accounts a
+    campaign can go from are the connected ones, named as 13 names them.
+  */
+  const accounts: SendingAccount[] = (channelData.channels ?? [])
+    .filter((c) => c.connectionStatus === 'CONNECTED' && SENDABLE.has(c.channel))
+    .map((c) => ({
+      id: c.id,
+      channel: c.channel,
+      label: [
+        channelName(c.channel, tch) ?? c.channel,
+        c.displayName ?? (c.externalId ? displayHandle(c.channel, c.externalId) : null),
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    }));
+  const emailAccount = accounts.find((a) => EMAIL_CHANNELS.has(a.channel));
+  const createAction = (
+    <Link
+      href={{ pathname: '/outreach', query: { create: 'campaign' } }}
+      className={styles.createButton}
+      scroll={false}
+      data-testid="create-outreach"
+    >
+      {t('createOutreach')}
+    </Link>
+  );
+  const tasks = <TaskCards hasEmail={emailAccount !== undefined} />;
+  const drawer = creating ? (
+    <Drawer
+      title={t('create.title')}
+      line={t('create.line')}
+      closeHref="/outreach"
+      width={560}
+      testId="drawer-campaign"
+    >
+      <CampaignForm
+        accounts={accounts}
+        templates={(templateData?.templates ?? [])
+          .filter((tpl) => tpl.status === 'APPROVED')
+          .map((tpl) => ({
+            id: tpl.id,
+            name: tpl.name,
+            language: tpl.language,
+            channelAccountId: tpl.channelAccountId,
+          }))}
+        initialTemplateId={params.template}
+        initialChannel={params.channel === 'EMAIL' ? emailAccount?.channel : undefined}
+      />
+    </Drawer>
+  ) : null;
 
   if (unavailable || inFlight === null || finished === null) {
     return (
-      <PageContainer layout="screen" title={t('screenTitle')} description={t('description')}>
+      <PageContainer
+        layout="screen"
+        title={t('screenTitle')}
+        description={t('description')}
+        actions={createAction}
+      >
         <p data-testid="outreach-unavailable">{t('unavailable')}</p>
+        {drawer}
       </PageContainer>
     );
   }
 
   if (inFlight.length === 0 && finished.length === 0) {
     return (
-      <PageContainer layout="screen" title={t('screenTitle')} description={t('description')}>
+      <PageContainer
+        layout="screen"
+        title={t('screenTitle')}
+        description={t('description')}
+        actions={createAction}
+      >
+        {tasks}
         <div className={styles.empty} data-testid="outreach-empty">
           <p className={styles.emptyLead}>{t('none')}</p>
           <p className={styles.emptyBody}>{t('noneBody')}</p>
         </div>
+        {drawer}
       </PageContainer>
     );
   }
@@ -85,6 +172,7 @@ export default async function Page({
       /* Two columns to the panel's edges, each scrolling inside itself. */
       flush
       title={t('screenTitle')}
+      actions={createAction}
       /* 02's subline is a status sentence, counted from the campaigns. */
       description={t('statusLine', {
         running: inFlight.filter((campaign) => campaign.status === 'SENDING').length,
@@ -92,13 +180,9 @@ export default async function Page({
       })}
     >
       <div className={styles.screen} data-testid="outreach-screen">
-        {/*
-          02's main column: four "start from a task" cards, the list, the
-          month. The four cards are not drawn — there is no way to create
-          outreach from this app yet, and a card that opens nothing is worse
-          than its absence.
-        */}
+        {/* 02's main column: the four task cards, the list, the month. */}
         <div className={styles.main}>
+          {tasks}
           <InFlightList campaigns={campaigns} selectedId={selected.id} />
           <MonthStrip campaigns={campaigns} now={new Date()} />
         </div>
@@ -106,8 +190,13 @@ export default async function Page({
           <CampaignCard campaign={selected} detailed />
         </aside>
       </div>
+      {drawer}
     </PageContainer>
   );
 }
+
+/** The channels a campaign can go out on. */
+const EMAIL_CHANNELS = new Set(['EMAIL', 'GMAIL', 'OUTLOOK']);
+const SENDABLE = new Set(['WHATSAPP', ...EMAIL_CHANNELS]);
 
 export const generateMetadata = pageMetadata('primary.outreach');
