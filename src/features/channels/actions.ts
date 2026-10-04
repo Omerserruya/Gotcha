@@ -4,7 +4,15 @@ import { revalidatePath } from 'next/cache';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
-import { channelSchema, type Channel, type ResponseMode } from '@/api/contracts/channels';
+import { z } from 'zod';
+
+import {
+  channelSchema,
+  OAUTH_PLATFORMS,
+  type Channel,
+  type ChannelType,
+  type ResponseMode,
+} from '@/api/contracts/channels';
 import { channelEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
@@ -159,5 +167,36 @@ export async function setResponseMode(
     await signInIfSignedOut(cause);
     logger.warn('channels.response_mode_failed', { cause });
     return classify(cause);
+  }
+}
+
+export type ChannelConnectStart =
+  | { readonly ok: true; readonly url: string }
+  | { readonly ok: false; readonly reason: 'not_configured' | 'forbidden' | 'failed' };
+
+/**
+ * 13's Connect for an OAuth channel: the provider's page, asked for server
+ * side, then the browser goes there. Nothing is connected until the person
+ * approves at the provider and comes back.
+ */
+export async function startChannelConnect(channel: ChannelType): Promise<ChannelConnectStart> {
+  const platform = (OAUTH_PLATFORMS as Partial<Record<ChannelType, string>>)[channel];
+  if (!platform) return { ok: false, reason: 'failed' };
+  try {
+    const { url } = await serverApi().get({
+      endpoint: channelEndpoints.oauthInitUrl(platform),
+      payload: z.object({ url: z.string().url() }),
+      raw: true,
+    });
+    if (new URL(url).protocol !== 'https:') return { ok: false, reason: 'failed' };
+    return { ok: true, url };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('channels.connect_start_failed', { channel, cause });
+    if (isApiError(cause)) {
+      if (cause.status === 409) return { ok: false, reason: 'not_configured' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
   }
 }

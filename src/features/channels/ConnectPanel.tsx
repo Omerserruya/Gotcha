@@ -3,11 +3,23 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { RESPONSE_MODES, type ChannelType, type ResponseMode } from '@/api/contracts/channels';
+import {
+  OAUTH_PLATFORMS,
+  RESPONSE_MODES,
+  type ChannelType,
+  type ResponseMode,
+} from '@/api/contracts/channels';
+import { Link } from '@/i18n/navigation';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
 
-import { connectEmail, connectWebChat, setResponseMode, type ChannelWriteResult } from './actions';
+import {
+  connectEmail,
+  connectWebChat,
+  setResponseMode,
+  startChannelConnect,
+  type ChannelWriteResult,
+} from './actions';
 import styles from './Channels.module.css';
 import { channelName } from '@/api/contracts/inbox';
 
@@ -29,11 +41,15 @@ import { channelName } from '@/api/contracts/inbox';
  * component whose every branch is a different feature.
  */
 
-type ConnectShape = 'provisioned' | 'credentials' | 'unavailable';
+type ConnectShape = 'provisioned' | 'credentials' | 'oauth' | 'whatsapp' | 'unavailable';
 
 function shapeOf(channel: ChannelType): ConnectShape {
   if (channel === 'WEBCHAT') return 'provisioned';
   if (channel === 'EMAIL') return 'credentials';
+  // 13c: WhatsApp has its own sheet — the question, then Meta.
+  if (channel === 'WHATSAPP') return 'whatsapp';
+  // Live (backend ecd64c4d): the provider's page, and back to this list.
+  if (channel in OAUTH_PLATFORMS) return 'oauth';
   return 'unavailable';
 }
 
@@ -65,6 +81,16 @@ export function ConnectPanel({
 
       {shape === 'provisioned' ? <WebChatStep onClose={onClose} /> : null}
       {shape === 'credentials' ? <EmailStep onClose={onClose} /> : null}
+      {shape === 'oauth' ? <OAuthStep channel={channel} name={name} /> : null}
+      {shape === 'whatsapp' ? (
+        <Link
+          href="/settings/channels?panel=whatsapp&view=connect"
+          className={styles.connectOpen}
+          data-testid="connect-whatsapp-sheet"
+        >
+          {t('connect.connect')}
+        </Link>
+      ) : null}
       {shape === 'unavailable' ? (
         /*
          * Stated, not hidden and not faked.
@@ -303,5 +329,43 @@ function Problem({ result }: { readonly result: ChannelWriteResult<unknown> }) {
     <p className={styles.connectProblem} data-testid="connect-problem">
       {message}
     </p>
+  );
+}
+
+/** Instagram, Messenger, Gmail, Outlook, Slack: at the provider, and back to this list. */
+function OAuthStep({ channel, name }: { readonly channel: ChannelType; readonly name: string }) {
+  const t = useTranslations('channels.connect');
+  const [problem, setProblem] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  return (
+    <>
+      <p className={styles.connectNote}>{t('oauthLead', { channel: name })}</p>
+      <div className={styles.connectActions}>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={isPending}
+          data-testid={`connect-oauth-${channel}`}
+          onClick={() =>
+            startTransition(async () => {
+              setProblem(null);
+              const start = await startChannelConnect(channel);
+              if (start.ok) {
+                window.location.assign(start.url);
+                return;
+              }
+              setProblem(t(`start.${start.reason}`, { channel: name }));
+            })
+          }
+        >
+          {isPending ? t('opening') : t('continueTo', { channel: name })}
+        </Button>
+      </div>
+      {problem ? (
+        <p className={styles.connectProblem} role="alert" data-testid="connect-problem">
+          {problem}
+        </p>
+      ) : null}
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ImportPanel, ReportPanel } from '@/features/channels/LearnPanels';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
+import { ChannelLanding } from '@/features/channels/ChannelLanding';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import channels from '@/i18n/messages/en/channels.json';
@@ -91,6 +92,17 @@ describe('★ 13e / 13f are their own panels, replacing 13b while open', () => {
     expect(sheet).not.toBeNull();
     expect(sheet?.closeHref).toBe('/settings/channels?panel=whatsapp');
     expect(find(tree, WhatsAppPanel)).toBeNull();
+  });
+
+  it('★ the way back from a provider: said over the list', async () => {
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ platform: 'messenger', error: 'no_pages' }),
+    });
+    expect(find<{ landing: unknown }>(tree, ChannelLanding)?.landing).toEqual({
+      channel: 'MESSENGER',
+      outcome: 'no_pages',
+    });
   });
 
   it('?view=progress opens 13e and not 13b', async () => {

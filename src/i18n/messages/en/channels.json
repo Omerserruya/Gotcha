@@ -63,7 +63,15 @@
     "duplicate": "That channel is already connected.",
     "limit": "Your plan has no room for another channel.",
     "forbidden": "You don't have permission to do that.",
-    "failed": "That didn't connect. Try again."
+    "failed": "That didn't connect. Try again.",
+    "oauthLead": "You'll sign in to {channel} and approve GOTCHA there, then come back here.",
+    "continueTo": "Continue to {channel}",
+    "opening": "Opening…",
+    "start": {
+      "not_configured": "{channel} isn't set up on GOTCHA's side yet.",
+      "forbidden": "Only an admin can connect a channel.",
+      "failed": "{channel} couldn't be opened — try again."
+    }
   },
   "whatsapp": {
     "title": "WhatsApp numbers",
@@ -326,5 +334,26 @@
     "title": "{channel} needs attention",
     "more": "{count, plural, one {and one more channel} other {and # more channels}}"
   },
-  "chipTrouble": "Needs attention"
+  "chipTrouble": "Needs attention",
+  "landing": {
+    "connected": "{channel} connected.",
+    "connectedCount": "{count, plural, =0 {{channel} connected — no accounts came with it.} one {{channel} connected — 1 account.} other {{channel} connected — # accounts.}}",
+    "pending": "{channel} is connected, and Meta needs one more step — finish it in the number’s settings.",
+    "error": {
+      "denied": "You cancelled at {channel} — nothing was connected.",
+      "token_exchange_failed": "{channel} didn't confirm the connection. Nothing was connected — try again.",
+      "state_already_used": "That sign-in was already used. Start again from Connect.",
+      "invalid_state": "That sign-in couldn't be matched to this workspace. Start again from Connect.",
+      "not_configured": "{channel} isn't set up on GOTCHA's side yet.",
+      "already_connected": "{channel} is already connected to this workspace.",
+      "gmail_no_email": "Google didn't share an email address, so Gmail wasn't connected.",
+      "outlook_no_email": "Microsoft didn't share an email address, so Outlook wasn't connected.",
+      "no_pages": "No Facebook Page came with that sign-in — choose a Page you manage and try again.",
+      "no_instagram_account": "No Instagram business account is linked to that Page. Link one in Meta, then try again.",
+      "no_whatsapp_numbers": "Meta shared no WhatsApp numbers. Nothing was connected.",
+      "slack_no_team": "Slack didn't say which workspace — try again.",
+      "callback_error": "Something went wrong on the way back from {channel}. Nothing was connected — try again.",
+      "other": "{channel} didn't connect. Try again."
+    }
+  }
 }

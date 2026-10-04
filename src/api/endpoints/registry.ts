@@ -474,6 +474,16 @@ export const channelEndpoints = {
    */
   oauthInit: (platform: string) =>
     endpoint('/api/channels/oauth/init?platform={platform}', { platform }),
+  /**
+   * The callable variant (backend ecd64c4d): asked server side with our
+   * session, answers `200 { url }` — the provider's page — or `409
+   * { error: 'not_configured' }`, or 403 for a non-admin. The way back lands
+   * on `/v2/settings/channels?connected=<p>&count=N` or `?platform=<p>&error=<code>`.
+   */
+  oauthInitUrl: (platform: string) =>
+    endpoint('/api/channels/oauth/init-url?platform={platform}&flow=redesign_studio', {
+      platform,
+    }),
   /** Creates the widget as PENDING — a draft, not a connected channel. */
   createWebChat: () => endpoint('/api/channels/webchat/create'),
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */

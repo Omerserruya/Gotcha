@@ -63,7 +63,15 @@
     "duplicate": "הערוץ הזה כבר מחובר.",
     "limit": "אין מקום בתוכנית שלכם לערוץ נוסף.",
     "forbidden": "אין לכם הרשאה לפעולה הזו.",
-    "failed": "החיבור נכשל. נסו שוב."
+    "failed": "החיבור נכשל. נסו שוב.",
+    "oauthLead": "מתחברים ל-{channel}, מאשרים שם את GOTCHA, וחוזרים לכאן.",
+    "continueTo": "המשך ל-{channel}",
+    "opening": "פותח…",
+    "start": {
+      "not_configured": "{channel} עוד לא מוגדר בצד של GOTCHA.",
+      "forbidden": "רק מנהל יכול לחבר ערוץ.",
+      "failed": "לא הצלחנו לפתוח את {channel} — אפשר לנסות שוב."
+    }
   },
   "whatsapp": {
     "title": "מספרי וואטסאפ",
@@ -326,5 +334,26 @@
     "title": "{channel} צריך תשומת לב",
     "more": "{count, plural, one {ועוד ערוץ אחד} other {ועוד # ערוצים}}"
   },
-  "chipTrouble": "צריך תשומת לב"
+  "chipTrouble": "צריך תשומת לב",
+  "landing": {
+    "connected": "{channel} מחובר.",
+    "connectedCount": "{count, plural, =0 {{channel} מחובר — לא הגיעו חשבונות.} one {{channel} מחובר — חשבון אחד.} other {{channel} מחובר — # חשבונות.}}",
+    "pending": "{channel} מחובר, ו-Meta צריך עוד צעד — משלימים אותו בהגדרות המספר.",
+    "error": {
+      "denied": "ביטלת ב-{channel} — שום דבר לא חובר.",
+      "token_exchange_failed": "{channel} לא אישר את החיבור. שום דבר לא חובר — אפשר לנסות שוב.",
+      "state_already_used": "ההתחברות הזו כבר נוצלה. מתחילים שוב מ\"חיבור\".",
+      "invalid_state": "לא הצלחנו לשייך את ההתחברות לסביבת העבודה. מתחילים שוב מ\"חיבור\".",
+      "not_configured": "{channel} עוד לא מוגדר בצד של GOTCHA.",
+      "already_connected": "{channel} כבר מחובר לסביבת העבודה הזו.",
+      "gmail_no_email": "Google לא שיתף כתובת אימייל, ולכן Gmail לא חובר.",
+      "outlook_no_email": "Microsoft לא שיתף כתובת אימייל, ולכן Outlook לא חובר.",
+      "no_pages": "לא הגיע עמוד פייסבוק עם ההתחברות — בוחרים עמוד שמנהלים ומנסים שוב.",
+      "no_instagram_account": "אין חשבון Instagram עסקי שמקושר לעמוד הזה. מקשרים אחד ב-Meta ומנסים שוב.",
+      "no_whatsapp_numbers": "Meta לא שיתף מספרי WhatsApp. שום דבר לא חובר.",
+      "slack_no_team": "Slack לא ציין איזו סביבת עבודה — אפשר לנסות שוב.",
+      "callback_error": "משהו השתבש בדרך חזרה מ-{channel}. שום דבר לא חובר — אפשר לנסות שוב.",
+      "other": "{channel} לא חובר. אפשר לנסות שוב."
+    }
+  }
 }

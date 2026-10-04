@@ -12,7 +12,9 @@ import {
   loadSignupLaunch,
   loadWhatsAppNumbers,
 } from '@/features/channels/load-whatsapp';
+import { ChannelLanding } from '@/features/channels/ChannelLanding';
 import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
+import { channelLandingOf } from '@/features/channels/landing';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -38,12 +40,19 @@ export default async function Page({
     /** 13e / 13f: which import, and which view of it. */
     readonly import?: string;
     readonly view?: string;
+    /** The way back from a channel's provider (backend ecd64c4d). */
+    readonly connected?: string;
+    readonly count?: string;
+    readonly pending?: string;
+    readonly platform?: string;
+    readonly error?: string;
     readonly tab?: string;
   }>;
 } = {}) {
   const t = await getTranslations('channels');
   const tw = await getTranslations('channels.whatsapp');
   const params = (await searchParams) ?? {};
+  const landing = channelLandingOf(params);
   const panel = params.panel === 'whatsapp';
   const [{ channels, voice, voiceOffered, windowDays }, whatsapp] = await Promise.all([
     loadChannels(),
@@ -82,6 +91,8 @@ export default async function Page({
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
+      {/* Always mounted: after the URL is tidied its sentence must stay. */}
+      <ChannelLanding landing={landing} />
       {channels ? (
         <ChannelList
           channels={channels}
