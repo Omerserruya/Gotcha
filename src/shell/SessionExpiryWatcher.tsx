@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 
 import { SESSION_EXPIRED_EVENT } from '@/api/client/browser-api';
 import { startSignIn } from '@/auth/sign-out';
+import { BASE_PATH } from '@/lib/base-path';
 import { logger } from '@/observability/logger';
 
 /**
@@ -25,7 +26,11 @@ export function SessionExpiryWatcher() {
       if (handled) return;
       handled = true;
       logger.info('auth.session_expired');
-      startSignIn(`${window.location.pathname}${window.location.search}`);
+      // Without the mount: the login route puts `/v2` back itself.
+      const path = window.location.pathname;
+      const inApp =
+        BASE_PATH && path.startsWith(`${BASE_PATH}/`) ? path.slice(BASE_PATH.length) : path;
+      startSignIn(`${inApp}${window.location.search}`);
     }
 
     window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);

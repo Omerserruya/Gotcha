@@ -26,7 +26,7 @@ vi.mock('next-intl/middleware', async () => {
   return { default: () => () => Response.next() };
 });
 
-const { default: proxy } = await import('./proxy');
+const { gate: proxy } = await import('./proxy');
 
 const cspFor = (path: string): string => {
   const response = proxy(new NextRequest(`https://dev.gotcha.co.il${path}`));
@@ -176,7 +176,7 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
   ) => {
     vi.resetModules();
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
-    const { default: freshProxy } = await import('./proxy');
+    const { gate: freshProxy } = await import('./proxy');
     const response = freshProxy(
       new NextRequest(`https://${arrival.host ?? 'dev.gotcha.co.il'}${path}`, {
         headers: arrival.forwardedHost ? { 'x-forwarded-host': arrival.forwardedHost } : undefined,
@@ -358,7 +358,7 @@ describe('⚠⚠ on the auth origin, this build serves sign-in and nothing else'
   const stubbed = async (env: Record<string, string>, path: string, cookie?: string) => {
     vi.resetModules();
     for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
-    const { default: freshProxy } = await import('./proxy');
+    const { gate: freshProxy } = await import('./proxy');
     const response = freshProxy(
       new NextRequest(`https://auth-dev.gotcha.co.il${path}`, {
         headers: cookie ? { cookie } : undefined,

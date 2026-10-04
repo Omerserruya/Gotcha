@@ -11,7 +11,7 @@ import {
 } from './session';
 import { logger } from '@/observability/logger';
 
-import { oidcConfiguration, refreshTokenGrant } from './oidc';
+import { refreshSession } from './refresh';
 
 /**
  * Reads the session as it currently stands, without touching Authentik.
@@ -37,89 +37,38 @@ export async function clearSession(): Promise<void> {
 }
 
 /**
- * In-flight refreshes, keyed by the refresh token being spent.
+ * Returns a session whose access token is usable right now.
  *
- * A page that fires six parallel queries the moment the access token expires
- * must not spend the refresh token six times - with rotation enabled, five of
- * those would fail and take the session down. Coalescing them into one
- * request is the fix.
+ * ★★ IT REFRESHES ONLY WHERE THE RESULT CAN BE KEPT. With rotation, a refresh
+ * spends the refresh token; one done inside a Server Component render — where
+ * a cookie cannot be written — left the cookie holding the spent token, and
+ * the next refresh ended the session. So:
  *
- * This is per server instance, which is sufficient: it removes the common
- * self-inflicted case. Cross-instance races still rely on the identity
- * provider's own replay window.
- */
-const refreshesInFlight = new Map<string, Promise<Session | null>>();
-
-async function performRefresh(session: Session): Promise<Session | null> {
-  if (!session.rt) {
-    // No `offline_access` grant means the session simply ends when the access
-    // token does. Worth saying out loud: the symptom is a session that works
-    // for five minutes and then stops, which looks like anything but this.
-    logger.warn('auth.refresh.no_refresh_token', { sessionId: session.sid });
-    return null;
-  }
-  try {
-    const tokens = await refreshTokenGrant(await oidcConfiguration(), session.rt);
-    const expiresIn = tokens.expires_in ?? 300;
-    return {
-      ...session,
-      at: tokens.access_token,
-      // Authentik rotates refresh tokens; keep the new one when offered.
-      rt: tokens.refresh_token ?? session.rt,
-      exp: Math.floor(Date.now() / 1000) + expiresIn,
-    };
-  } catch (cause) {
-    // A refusal here means the session is genuinely over: revoked, rotated
-    // out, or the identity provider ended it. Treat it as signed out - but say
-    // so, because swallowing it makes an expired session indistinguishable
-    // from a backend that has stopped answering.
-    logger.warn('auth.refresh.failed', { sessionId: session.sid, cause });
-    return null;
-  }
-}
-
-/**
- * Returns a session whose access token is usable right now, refreshing first
- * if needed.
- *
- * Persisting the refreshed cookie is attempted but not required: Next.js
- * forbids writing cookies during a Server Component render. When that happens
- * the fresh token is still used for the current request and the cookie is
- * rewritten by the next route handler or server action that refreshes. The
- * alternative - failing the render - would be strictly worse for the user.
+ *   · the proxy refreshes ahead of expiry, before every page render, and
+ *     writes the cookie on the response and on the request (`src/proxy.ts`);
+ *   · here, an expired token is refreshed only when the cookie can be written
+ *     (a route handler, a server action). In a render it is not refreshed:
+ *     the session is reported over, and the layout sends the user to sign in.
  */
 export async function activeSession(): Promise<Session | null> {
   const session = await readSession();
   if (!session) return null;
   if (!isAccessTokenExpired(session)) return session;
 
-  const inFlight = refreshesInFlight.get(session.rt ?? session.sid);
-  const refreshed = await (inFlight ??
-    (() => {
-      const promise = performRefresh(session).finally(() => {
-        refreshesInFlight.delete(session.rt ?? session.sid);
-      });
-      refreshesInFlight.set(session.rt ?? session.sid, promise);
-      return promise;
-    })());
-
-  if (!refreshed) {
-    await tryClearSession();
+  // Can this context keep a cookie? Rewriting the same value answers it, and
+  // is harmless where it can.
+  try {
+    await writeSession(session);
+  } catch {
+    logger.warn('auth.refresh.not_in_render', { sessionId: session.sid });
     return null;
   }
 
-  try {
-    await writeSession(refreshed);
-  } catch {
-    // Read-only cookie context (Server Component render). See doc comment.
-  }
-  return refreshed;
-}
-
-async function tryClearSession(): Promise<void> {
-  try {
+  const refreshed = await refreshSession(session);
+  if (!refreshed) {
     await clearSession();
-  } catch {
-    // Same read-only-context caveat as above.
+    return null;
   }
+  await writeSession(refreshed);
+  return refreshed;
 }

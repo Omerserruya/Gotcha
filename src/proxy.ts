@@ -8,6 +8,10 @@ import {
   NONCE_HEADER,
 } from '@/observability/content-security-policy';
 
+import { refreshSession } from '@/auth/refresh';
+import { RETURN_TO_HEADER } from '@/auth/return-to';
+import { nowInSeconds, sealSession, sessionCookieOptions, unsealSession } from '@/auth/session';
+
 import { PUBLIC_PATH_PATTERN } from './auth-surface';
 
 const intlMiddleware = createIntlMiddleware(routing);
@@ -25,8 +29,68 @@ const intlMiddleware = createIntlMiddleware(routing);
  * route while the route itself trusts it.
  */
 
-export default function proxy(request: NextRequest): NextResponse {
+/**
+ * What the session renewal decided before the gate ran.
+ *
+ *   kept     nothing to do (no session cookie, a public path, or a token with
+ *            time left)
+ *   renewed  refreshed here: `sealed` replaces the cookie — on the response,
+ *            so the browser keeps the new refresh token, and on the forwarded
+ *            request, so this very render uses the new access token
+ *   ended    the identity provider refused the refresh: the cookie is cleared
+ *            and the visitor goes to sign-in, never to a screen of "couldn't
+ *            read" states
+ */
+type CookieAttributes = Omit<ReturnType<typeof sessionCookieOptions>, 'name'>;
+
+export type Renewal =
+  | { readonly kind: 'kept' }
+  | {
+      readonly kind: 'renewed';
+      readonly name: string;
+      readonly sealed: string;
+      readonly attributes: CookieAttributes;
+    }
+  | { readonly kind: 'ended'; readonly name: string; readonly attributes: CookieAttributes };
+
+/**
+ * Refresh this far ahead of expiry. Wider than `activeSession`'s 60 seconds
+ * on purpose: a page navigation renews before a route handler would, so the
+ * two rarely race for the same rotating refresh token.
+ */
+export const RENEW_AHEAD_SECONDS = 300;
+
+/**
+ * ★★ WHERE THE SESSION IS RENEWED, AND WHY HERE.
+ * Authentik rotates refresh tokens, so a refresh that is not persisted ends
+ * the session. A Server Component cannot write a cookie; the proxy can — on
+ * the response for the browser, and on the request for the render that
+ * follows. See `src/auth/refresh.ts`.
+ */
+export async function renew(request: NextRequest): Promise<Renewal> {
+  if (PUBLIC_PATH_PATTERN.test(request.nextUrl.pathname)) return { kind: 'kept' };
+  const { name, ...attributes } = sessionCookieOptions();
+  const session = await unsealSession(request.cookies.get(name)?.value);
+  if (!session || session.exp - RENEW_AHEAD_SECONDS > nowInSeconds()) return { kind: 'kept' };
+  const refreshed = await refreshSession(session);
+  if (!refreshed) return { kind: 'ended', name, attributes };
+  return { kind: 'renewed', name, sealed: await sealSession(refreshed), attributes };
+}
+
+export default async function proxy(request: NextRequest): Promise<NextResponse> {
+  return gate(request, await renew(request));
+}
+
+/** Locale, the coarse gate and the CSP — after `renew` has run. */
+export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }): NextResponse {
   const { pathname } = request.nextUrl;
+
+  /*
+    The render reads the session from the REQUEST's cookies: give it the
+    renewed one, or none — before anything copies the request's headers.
+  */
+  if (renewal.kind === 'renewed') request.cookies.set(renewal.name, renewal.sealed);
+  else if (renewal.kind === 'ended') request.cookies.delete(renewal.name);
 
   const nonce = generateNonce();
   const csp = buildContentSecurityPolicy({
@@ -56,10 +120,21 @@ export default function proxy(request: NextRequest): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(NONCE_HEADER, nonce);
   requestHeaders.set('content-security-policy', csp);
+  /*
+    Where the visitor is, without the mount (`nextUrl` has none) — so the
+    layout can send someone signed out back here after sign-in.
+  */
+  requestHeaders.set(RETURN_TO_HEADER, `${pathname}${request.nextUrl.search}`);
 
   const withSecurityHeaders = (response: NextResponse): NextResponse => {
     response.headers.set('content-security-policy', csp);
     response.headers.set(NONCE_HEADER, nonce);
+    // Every way out carries the renewal: the browser must keep the new token.
+    if (renewal.kind === 'renewed') {
+      response.cookies.set(renewal.name, renewal.sealed, renewal.attributes);
+    } else if (renewal.kind === 'ended') {
+      response.cookies.set(renewal.name, '', { ...renewal.attributes, maxAge: 0 });
+    }
     return response;
   };
 
@@ -166,6 +241,7 @@ export default function proxy(request: NextRequest): NextResponse {
      * happens where the data is.
      */
     const platformCookieName = process.env.PLATFORM_SESSION_COOKIE;
+    // An ended session's cookie was already taken off the request above.
     const hasSessionCookie = request.cookies
       .getAll()
       .some(
@@ -289,25 +365,31 @@ export default function proxy(request: NextRequest): NextResponse {
 
   const intlResponse = intlMiddleware(request);
 
-  // A redirect renders no HTML, so there is no nonce to propagate - the
-  // response headers are enough.
+  /*
+   * A redirect renders nothing: its own headers are enough. Otherwise next-intl
+   * either rewrites or passes through (`localePrefix: 'always'` passes through
+   * every already-prefixed path) — and BOTH carry the request headers it built
+   * from the original request. Re-issued here with ours, which carry the
+   * nonce, where the visitor is, and the renewed session cookie: forwarding
+   * next-intl's would hand the render the spent refresh token.
+   */
   const rewriteTarget = intlResponse.headers.get('x-middleware-rewrite');
-  if (!rewriteTarget) {
+  const passesThrough = intlResponse.headers.get('x-middleware-next') === '1';
+  if (!rewriteTarget && !passesThrough) {
     return withSecurityHeaders(intlResponse);
   }
 
-  /*
-   * next-intl decided to rewrite. Re-issuing that rewrite ourselves is the
-   * only way to attach the modified REQUEST headers, which is what carries the
-   * nonce into the render. next-intl's own headers and cookies are copied
-   * across so its locale negotiation is preserved intact.
-   */
-  const response = NextResponse.rewrite(new URL(rewriteTarget), {
-    request: { headers: requestHeaders },
-  });
+  // next-intl's own request header — the locale it resolved — rides along.
+  const locale = intlResponse.headers.get(`x-middleware-request-${INTL_LOCALE_HEADER}`);
+  if (locale) requestHeaders.set(INTL_LOCALE_HEADER, locale);
+
+  const response = rewriteTarget
+    ? NextResponse.rewrite(new URL(rewriteTarget), { request: { headers: requestHeaders } })
+    : NextResponse.next({ request: { headers: requestHeaders } });
 
   intlResponse.headers.forEach((value, key) => {
-    if (key !== 'x-middleware-rewrite') response.headers.set(key, value);
+    if (FORWARDING_HEADERS.test(key)) return;
+    response.headers.set(key, value);
   });
   for (const cookie of intlResponse.cookies.getAll()) {
     response.cookies.set(cookie);
@@ -315,6 +397,12 @@ export default function proxy(request: NextRequest): NextResponse {
 
   return withSecurityHeaders(response);
 }
+
+/** next-intl's request header for the resolved locale. */
+const INTL_LOCALE_HEADER = 'x-next-intl-locale';
+/** How a proxy response says what to forward — ours, never next-intl's copy. */
+const FORWARDING_HEADERS =
+  /^x-middleware-(rewrite|next|override-headers|request-.*)$|^set-cookie$/i;
 
 export const config = {
   /*

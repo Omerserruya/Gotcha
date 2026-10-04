@@ -1,10 +1,14 @@
 import { NextIntlClientProvider } from 'next-intl';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import type { Route } from 'next';
 import type { ReactNode } from 'react';
 
 import { permissionEndpoints } from '@/api/endpoints/registry';
+import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { effectivePermissionsSchema } from '@/api/contracts/identity';
+import { RETURN_TO_HEADER } from '@/auth/return-to';
 import { activeSession } from '@/auth/session-store';
 import { logger } from '@/observability/logger';
 import type { PermissionsStatus } from '@/permissions/permissions-context';
@@ -37,9 +41,17 @@ export default async function AuthenticatedLayout({
    * Everything below this line calls the platform API.
    */
   const session = await activeSession();
-  if (!session) redirect('/api/auth/login');
+  if (!session) redirect(await signInHere());
 
   const { permissions, roleKey, status } = await loadPermissions();
+  /*
+    ★★ A 401 IS "SIGN IN AGAIN", NEVER A SCREEN OF "COULDN'T READ" (Omer,
+    2026-10-04). Every page waits behind this layout, and its first read uses
+    the same token the page's reads do — so a token the platform refuses is
+    caught here, once, and the visitor goes to sign-in with the way back.
+    A 403 is not this: no permission is not signed out.
+  */
+  if (status === 'signed_out') redirect(await signInHere());
 
   /*
    * ★★ THE FULL CATALOGUE, AND ONLY BEHIND THE SESSION CHECK ABOVE.
@@ -77,10 +89,18 @@ export default async function AuthenticatedLayout({
  * worst case is a control that turns out to be refused, with an error that
  * says so.
  */
+/** `/api/auth/login`, with where they were — read from the proxy's header. */
+async function signInHere(): Promise<Route> {
+  const here = (await headers()).get(RETURN_TO_HEADER);
+  return (
+    here ? `/api/auth/login?returnTo=${encodeURIComponent(here)}` : '/api/auth/login'
+  ) as Route;
+}
+
 async function loadPermissions(): Promise<{
   permissions: readonly string[];
   roleKey?: string;
-  status: PermissionsStatus;
+  status: PermissionsStatus | 'signed_out';
 }> {
   try {
     const result = await serverApi().get({
@@ -95,6 +115,7 @@ async function loadPermissions(): Promise<{
       status: 'loaded',
     };
   } catch (cause) {
+    if (isApiError(cause) && cause.status === 401) return { permissions: [], status: 'signed_out' };
     logger.warn('permissions.load_failed', { cause });
     // Not an empty set. An empty set means "you hold nothing" and would hide
     // the entire product; `unavailable` means "we could not find out", and the
