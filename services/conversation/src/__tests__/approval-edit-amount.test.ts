@@ -157,6 +157,53 @@ describe("edit amount - refused, and nothing is decided or dispatched", () => {
     refused("shopify.process_refund", REFUND, { edits: { amount: 100 }, modifiedParams: { amount: 1 } }, "edit_not_allowed"));
 });
 
+describe("edit percentage - discounts and coupons", () => {
+  const DISCOUNT = { code: "SORRY20", percentage: 20, ends_at_iso: "2026-12-31T00:00:00Z" };
+
+  it("★ discount 20% → 10% runs with 10, and the row keeps both", async () => {
+    pending("shopify.create_discount_code", DISCOUNT);
+    const res = await approve({ edits: { percentage: 10 } });
+    expect(res.status).toBe(200);
+    expect(res.body.edit).toEqual({ field: "percentage", key: "percentage", from: 20, to: 10, unit: "percent" });
+    expect(S.dispatched[0].args).toEqual({ ...DISCOUNT, percentage: 10 });
+    expect(S.row.params.percentage).toBe(20);
+    expect(S.row.modifiedParams).toEqual({ ...DISCOUNT, percentage: 10 });
+  });
+
+  it.each(["shopify.create_one_time_coupon", "shopify.create_vip_coupon", "shopify.issue_compensation_coupon"])(
+    "%s is on the list", async (tool) => {
+      pending(tool, DISCOUNT);
+      expect((await approve({ edits: { percentage: 5 } })).status).toBe(200);
+    },
+  );
+
+  const refusedP = async (tool: string, params: any, body: any, error: string) => {
+    pending(tool, params);
+    const res = await approve(body);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(error);
+    expect(S.approveCalls).toHaveLength(0);
+    expect(S.dispatched).toHaveLength(0);
+  };
+
+  it("★ above the original → 400 percentage_above_original", () =>
+    refusedP("shopify.create_discount_code", DISCOUNT, { edits: { percentage: 25 } }, "percentage_above_original"));
+
+  it.each([[0], [-1], [101], [10.555], ["10"]])("percentage %s → 400 invalid_percentage", (percentage) =>
+    refusedP("shopify.create_discount_code", DISCOUNT, { edits: { percentage } }, "invalid_percentage"));
+
+  it("★ percentage on a refund, or amount on a discount → 400 edit_not_allowed", async () => {
+    await refusedP("shopify.process_refund", REFUND, { edits: { percentage: 10 } }, "edit_not_allowed");
+    await refusedP("shopify.create_discount_code", DISCOUNT, { edits: { amount: 10 } }, "edit_not_allowed");
+  });
+
+  it("both fields at once → 400 edit_not_allowed", () =>
+    refusedP("shopify.create_discount_code", DISCOUNT, { edits: { percentage: 10, amount: 5 } }, "edit_not_allowed"));
+
+  it("an original that is not a valid percentage cannot be edited", () =>
+    refusedP("shopify.create_discount_code", { code: "X", percentage: 150 }, { edits: { percentage: 10 } }, "edit_requires_original_percentage"));
+});
+
 describe("approving without edits is exactly what it was", () => {
   it("★ dispatches the original params and stores no modification", async () => {
     pending("shopify.process_refund", REFUND);

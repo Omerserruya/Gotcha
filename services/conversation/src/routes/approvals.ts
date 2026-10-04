@@ -1007,7 +1007,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 /**
  * POST /api/approvals/:id/approve
- * Body: { decisionReason?, modifiedParams?, edits?: { amount?: number } }
+ * Body: { decisionReason?, modifiedParams?, edits?: { amount?: number } | { percentage?: number } }
  *
  * Separation of duties: the approver MUST NOT be the same actor who
  * authored the originating bot action. For bot-initiated requests
