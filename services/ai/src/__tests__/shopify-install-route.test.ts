@@ -205,6 +205,10 @@ describe("GET /connectors/shopify/install/start", () => {
     H.intents.clear();
     await request(app()).get("/api/connectors/shopify/install/start?flow=https://evil.com");
     expect(H.intents.get(INTENT).flow).toBeUndefined();
+
+    // The redesigned app's flow, so its callback can land in /v2.
+    await request(app()).get("/api/connectors/shopify/install/start?flow=redesign_studio");
+    expect(H.intents.get(INTENT).flow).toBe("redesign_studio");
   });
 
   it("does NOT send the merchant to a listing that is not live yet", async () => {

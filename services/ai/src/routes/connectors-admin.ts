@@ -744,6 +744,14 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       res.clearCookie(INSTALL_INTENT_COOKIE, { path: "/" });
       let base = "";
       try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+      if (flow === "redesign_studio") {
+        // The redesigned studio asks the same question. The handle stays in
+        // the HttpOnly pending cookie - GET /install/pending and POST
+        // /install/claim both read it - so it is not put in the URL, where a
+        // referrer header or the history could carry the key to a parked token.
+        res.redirect(`${base}${REDESIGN_BASE_PATH}/studio/capabilities?system=shopify&pending=1&reason=replace_store`);
+        return;
+      }
       res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);
       return;
     }

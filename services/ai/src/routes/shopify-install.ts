@@ -76,7 +76,7 @@ const canConnectSystems = requirePermission(
 );
 
 /** Recognised `flow` values - the same allow-list the OAuth callback uses. */
-const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems"]);
+const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems", "redesign_studio"]);
 function parseFlow(raw: unknown): string | undefined {
   const v = singleValue(raw);
   return v && KNOWN_FLOWS.has(v) ? v : undefined;

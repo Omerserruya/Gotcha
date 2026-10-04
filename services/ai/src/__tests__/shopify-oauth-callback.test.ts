@@ -399,3 +399,46 @@ describe("GET /connectors/shopify/oauth/init - reauthorization only", () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ─── The redesigned app (flow=redesign_studio) ───────────────
+
+describe("redesign_studio flow", () => {
+  const REDESIGN = { ...WITH_INTENT, claims: { ...WITH_INTENT.claims, flow: "redesign_studio" } };
+  const V2 = "https://app.gotcha.co.il/v2/studio/capabilities";
+
+  it("★ a linked store lands on /v2/studio/capabilities?system=shopify&connected=1", async () => {
+    H.stateResult.current = REDESIGN;
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&connected=1`);
+  });
+
+  it("★ replacing a store parks it and lands pending=1 - the handle stays in the HttpOnly cookie, not the URL", async () => {
+    H.stateResult.current = REDESIGN;
+    H.replacing.current = "old-store.myshopify.com";
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&pending=1&reason=replace_store`);
+    expect(res.headers.location).not.toContain("p".repeat(64));
+    expect(String(res.headers["set-cookie"] || "")).toContain("gotcha_shopify_pending=");
+    expect(H.linkCalls).toHaveLength(0);
+  });
+
+  it("a store held by another workspace → error=shop_connected_elsewhere in v2", async () => {
+    H.stateResult.current = REDESIGN;
+    H.linkResult.current = { ok: false, reason: "shop_taken", conflictingTenantId: "tenant-Z" };
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&error=shop_connected_elsewhere`);
+  });
+
+  it("a failed token exchange → error=token_exchange_failed in v2", async () => {
+    H.stateResult.current = REDESIGN;
+    H.exchange.mockResolvedValue(null as any);
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&error=token_exchange_failed`);
+  });
+
+  it("without the flow, replacing still goes to the old finish screen with its handle", async () => {
+    H.replacing.current = "old-store.myshopify.com";
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toContain("/settings/business-systems/shopify/finish?handle=");
+  });
+});
