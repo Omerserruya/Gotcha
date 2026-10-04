@@ -51,7 +51,13 @@ export function isPlaceholderCaption(
   message: Pick<InboxMessage, 'body' | 'fileName' | 'mediaUrl' | 'messageType' | 'metadata'>,
 ): boolean {
   const body = message.body.trim();
-  if (message.messageType === 'contact' && message.metadata?.contacts?.length) return true;
+  // WhatsApp writes `contacts`; some adapters `contact`.
+  if (
+    /^contacts?$/.test(message.messageType.trim().toLowerCase()) &&
+    message.metadata?.contacts?.length
+  ) {
+    return true;
+  }
   if (!message.mediaUrl && !message.metadata?.mediaError) return false;
   return PLACEHOLDERS.has(body) || (!!message.fileName && body === message.fileName);
 }

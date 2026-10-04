@@ -285,6 +285,7 @@ export const KNOWN_MESSAGE_TYPES = [
   'voice',
   'sticker',
   'contact',
+  'contacts',
 ] as const;
 export type KnownMessageType = (typeof KNOWN_MESSAGE_TYPES)[number];
 

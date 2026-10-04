@@ -41,7 +41,9 @@
     "openPhoto": "Open the photo",
     "file": "Download the file",
     "contact": "A contact",
-    "call": "Call"
+    "call": "Call",
+    "play": "Play the voice note",
+    "pause": "Pause"
   },
   "queue": {
     "cap": "Showing the {count} most recent.",

@@ -1,8 +1,9 @@
-import { FileText, Play, TriangleAlert } from 'lucide-react';
+import { FileText, TriangleAlert } from 'lucide-react';
 
 import type { InboxMessage } from '@/api/contracts/inbox';
 
 import { mediaKind, safeMediaUrl } from './media';
+import { VoicePlayer } from './VoicePlayer';
 import styles from './Inbox.module.css';
 
 /**
@@ -20,6 +21,8 @@ type T = (
     | 'contact'
     | 'call'
     | 'voiceNoTranscript'
+    | 'play'
+    | 'pause'
     | 'media.image'
     | 'media.video'
     | 'media.document',
@@ -79,10 +82,7 @@ export function MessageMedia({ message, t }: { readonly message: InboxMessage; r
   if (kind === 'audio') {
     return (
       <>
-        <span className={styles.voice} data-testid={`audio-${message.id}`}>
-          <Play size={12} strokeWidth={2.5} aria-hidden="true" className={styles.voiceMark} />
-          <audio src={url} controls preload="metadata" />
-        </span>
+        <VoicePlayer src={url} id={message.id} playLabel={t('play')} pauseLabel={t('pause')} />
         <VoiceNote id={message.id} t={t} />
       </>
     );
@@ -116,9 +116,12 @@ export function ContactCards({ message, t }: { readonly message: InboxMessage; r
             p.number ? (
               <span key={j} className={styles.contactPhone}>
                 <bdi dir="ltr">{p.number}</bdi>
-                <a href={`tel:${p.number.replace(/[^\d+]/g, '')}`}>{t('call')}</a>
+                <a className={styles.contactLink} href={`tel:${p.number.replace(/[^\d+]/g, '')}`}>
+                  {t('call')}
+                </a>
                 {p.waId ? (
                   <a
+                    className={styles.contactLink}
                     href={`https://wa.me/${p.waId.replace(/\D/g, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"

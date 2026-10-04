@@ -1967,10 +1967,11 @@
     line-height: 0;
   }
 
+  /* One box for every photo, small or large: 240 × 180, filled. */
   .photo img {
     display: block;
-    max-inline-size: min(100%, 320px);
-    max-block-size: 240px;
+    inline-size: min(100%, 240px);
+    aspect-ratio: 4 / 3;
     object-fit: cover;
   }
 
@@ -1998,19 +1999,54 @@
   }
 
   .voiceMark {
+    display: flex;
     flex: none;
+    align-items: center;
+    justify-content: center;
     inline-size: 28px;
     block-size: 28px;
-    padding: 8px;
+    padding: 0;
+    border: 0;
     border-radius: 50%;
     background-color: var(--action-base);
     color: var(--action-text);
+    cursor: pointer;
   }
 
-  .voice audio {
+  /* 02's waveform: 2px bars, played ones darker. */
+  .wave {
+    display: flex;
     flex: 1;
-    min-inline-size: 0;
-    block-size: 32px;
+    align-items: center;
+    gap: 2px;
+    block-size: 22px;
+  }
+
+  .wave > span {
+    inline-size: 2px;
+    border-radius: 1px;
+    background-color: var(--border-strong);
+  }
+
+  .wave > span[data-played='yes'] {
+    background-color: var(--text-subtle);
+  }
+
+  .voiceTime {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  /* The contact card's ways to reach them: small bordered pills, not browser blue. */
+  .contactLink {
+    padding: 1px var(--space-8);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    font-size: var(--font-size-caption);
+    color: var(--text-primary);
+    text-decoration: none;
   }
 
   .file {

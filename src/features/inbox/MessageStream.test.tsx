@@ -448,3 +448,24 @@ describe('★★ media in the stream, as 02 draws it — never "A photo." when t
     );
   });
 });
+
+describe('★ media corrections (measured in a preview)', () => {
+  it('WhatsApp’s `contacts` (plural): the name is the card’s head, not printed again', async () => {
+    await show([
+      message({
+        messageType: 'contacts',
+        body: 'Dana Cohen',
+        metadata: { contacts: [{ name: 'Dana Cohen', phones: [{ number: '+972501234567' }] }] },
+      }),
+    ]);
+    expect(screen.getByTestId('message-m1').textContent?.match(/Dana Cohen/g)).toHaveLength(1);
+  });
+
+  it('a voice note is ONE control: the disc plays; no browser controls beside it', async () => {
+    await show([message({ messageType: 'audio', mediaUrl: '/api/uploads/v.ogg', body: '' })]);
+    const voice = screen.getByTestId('audio-m1');
+    expect(screen.getByTestId('voice-play-m1')).toHaveAccessibleName('Play the voice note');
+    expect(voice.querySelector('audio')).not.toHaveAttribute('controls');
+    expect(voice).toHaveTextContent('0:00');
+  });
+});
