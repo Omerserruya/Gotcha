@@ -10,6 +10,7 @@ import toolRoutes from "./routes/tools";
 import integrationRoutes from "./routes/integrations";
 import crmOauthRoutes from "./routes/crm-oauth";
 import calendarOauthRoutes from "./routes/calendar-oauth";
+import woocommerceOauthRoutes from "./routes/woocommerce-oauth";
 import schedulerAdminRoutes from "./routes/scheduler-admin";
 import funnelAdminRoutes from "./routes/funnel-admin";
 import stageAdminRoutes from "./routes/stage-admin";
@@ -120,6 +121,9 @@ app.use("/api/integrations", crmOauthRoutes);
 // Calendar OAuth - same rationale as crmOauthRoutes: callback runs without
 // the dashboard's bearer token, so it must mount before integrationRoutes.
 app.use("/api/integrations", calendarOauthRoutes);
+// WooCommerce key-generation flow - the store POSTs to an unauthenticated
+// callback, so it too must mount before integrationRoutes.
+app.use("/api/integrations", woocommerceOauthRoutes);
 app.use("/api/integrations", integrationRoutes);
 app.use("/api/scheduler", schedulerAdminRoutes);
 app.use("/api", funnelAdminRoutes);
