@@ -1744,9 +1744,17 @@
     cursor: pointer;
   }
 
-  /* The embed code under its row, full width. */
+  /* The row stays one line; its embed code takes a full line beneath it. */
+  .rowWithEmbed {
+    flex-wrap: wrap;
+  }
+
   .embedRow {
-    grid-column: 1 / -1;
-    padding-block: var(--space-12) var(--space-4);
+    flex-basis: 100%;
+    margin-block-start: var(--space-12);
+    padding: var(--space-14) var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-base);
   }
 }

@@ -131,7 +131,11 @@ export async function ChannelList({
           return (
             <li
               key={row.id}
-              className={styles.row}
+              className={
+                row.channel === 'WEBCHAT' && embed === row.id
+                  ? `${styles.row} ${styles.rowWithEmbed}`
+                  : styles.row
+              }
               data-testid={`channel-${row.id}`}
               data-kind="connected"
               data-troubled={troubled ? 'yes' : 'no'}

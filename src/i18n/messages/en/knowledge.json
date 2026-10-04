@@ -204,6 +204,8 @@
         "mixed": "Learn folders and files in separate rounds.",
         "failed": "That wasn't learned — try again."
       }
-    }
+    },
+    "connectedAlready": "Connected",
+    "addAnother": "Add another account"
   }
 }

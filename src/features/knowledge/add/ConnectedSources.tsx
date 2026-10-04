@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { Folder } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
 
 import {
@@ -24,7 +25,14 @@ import styles from './AddKnowledge.module.css';
  * the sheet's own shape: rows and checkboxes. Nothing is learned before
  * "Learn these".
  */
-export function ConnectedSources({ kbId }: { readonly kbId: string }) {
+export function ConnectedSources({
+  kbId,
+  onConnected,
+}: {
+  readonly kbId: string;
+  /** Which providers have an active connection — the rows above say "Connected". */
+  readonly onConnected?: (providers: ReadonlySet<string>) => void;
+}) {
   const t = useTranslations('knowledge.addSheet.sources');
   const [integrations, setIntegrations] = useState<
     readonly KnowledgeIntegration[] | null | 'loading'
@@ -33,12 +41,14 @@ export function ConnectedSources({ kbId }: { readonly kbId: string }) {
   useEffect(() => {
     let live = true;
     void readIntegrations(kbId).then((list) => {
-      if (live) setIntegrations(list);
+      if (!live) return;
+      setIntegrations(list);
+      onConnected?.(new Set((list ?? []).filter((i) => i.isActive).map((i) => i.provider)));
     });
     return () => {
       live = false;
     };
-  }, [kbId]);
+  }, [kbId, onConnected]);
 
   if (integrations === 'loading') return null;
   if (integrations === null) {
@@ -133,7 +143,7 @@ function DriveSourceCard({ integration }: { readonly integration: KnowledgeInteg
       {!browsing ? (
         <button
           type="button"
-          className={styles.small}
+          className={styles.sourceBtn}
           data-testid="drive-choose"
           onClick={() => {
             setSaid(null);
@@ -145,6 +155,9 @@ function DriveSourceCard({ integration }: { readonly integration: KnowledgeInteg
         </button>
       ) : (
         <>
+          <p className={styles.sourceSection} data-testid="drive-browsing">
+            {path.at(-1)?.name ?? t('choose')}
+          </p>
           {path.length > 0 ? (
             <button
               type="button"
@@ -182,7 +195,9 @@ function DriveSourceCard({ integration }: { readonly integration: KnowledgeInteg
                         data-testid={`drive-pick-${f.id}`}
                         onChange={() => toggle(f)}
                       />
-                      {folder ? '📁 ' : ''}
+                      {folder ? (
+                        <Folder size={14} aria-hidden="true" className={styles.folderMark} />
+                      ) : null}
                       {f.name}
                     </label>
                     {folder ? (
@@ -206,7 +221,7 @@ function DriveSourceCard({ integration }: { readonly integration: KnowledgeInteg
           <div className={styles.sourceActions}>
             <button
               type="button"
-              className={styles.primary}
+              className={styles.sourceBtnPrimary}
               disabled={isPending || picked.length === 0}
               data-testid="drive-learn"
               onClick={() =>
@@ -227,7 +242,7 @@ function DriveSourceCard({ integration }: { readonly integration: KnowledgeInteg
             </button>
             <button
               type="button"
-              className={styles.small}
+              className={styles.sourceBtn}
               onClick={() => {
                 setBrowsing(false);
                 setPicked([]);
@@ -302,7 +317,7 @@ function ConfluenceCard({ integration }: { readonly integration: KnowledgeIntegr
       <div className={styles.sourceActions}>
         <button
           type="button"
-          className={styles.primary}
+          className={styles.sourceBtnPrimary}
           disabled={isPending || picked.size === 0}
           data-testid="confluence-learn"
           onClick={() =>

@@ -75,6 +75,7 @@ export function AddKnowledge({
     }
   }, [arrived, router]);
   const [connecting, setConnecting] = useState<'google_drive' | 'confluence' | null>(null);
+  const [connectedProviders, setConnectedProviders] = useState<ReadonlySet<string>>(new Set());
   const [connectProblem, setConnectProblem] = useState<string | null>(null);
   function connect(connector: 'google_drive' | 'confluence') {
     setConnectProblem(null);
@@ -263,15 +264,31 @@ export function AddKnowledge({
                       <IntegrationLogo slug={c} size="rail" />
                       {t(`connector.${c}`)}
                     </span>
-                    <button
-                      type="button"
-                      className={styles.small}
-                      disabled={isPending}
-                      data-testid={`add-connect-${c}`}
-                      onClick={() => connect(c)}
-                    >
-                      {connecting === c ? t('opening') : t('connect')}
-                    </button>
+                    {connectedProviders.has(c) ? (
+                      // Connected already: said, and another account is a quiet link.
+                      <span className={styles.connectedMark} data-testid={`add-connected-${c}`}>
+                        {t('connectedAlready')} ·{' '}
+                        <button
+                          type="button"
+                          className={styles.linkish}
+                          disabled={isPending}
+                          data-testid={`add-connect-${c}`}
+                          onClick={() => connect(c)}
+                        >
+                          {t('addAnother')}
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.small}
+                        disabled={isPending}
+                        data-testid={`add-connect-${c}`}
+                        onClick={() => connect(c)}
+                      >
+                        {connecting === c ? t('opening') : t('connect')}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -281,7 +298,9 @@ export function AddKnowledge({
                 </p>
               ) : null}
               {/* After connecting: what each source holds, and choosing what to learn. */}
-              {typeof base === 'object' ? <ConnectedSources kbId={base.id} /> : null}
+              {typeof base === 'object' ? (
+                <ConnectedSources kbId={base.id} onConnected={setConnectedProviders} />
+              ) : null}
             </>
           ) : way === 'text' ? (
             <div className={styles.form}>

@@ -205,6 +205,8 @@ describe('★★ web chat’s Settings is its embed code — reachable any time 
       }),
     );
     expect(screen.getByTestId('embed-open')).toHaveTextContent('widget_64aba7ec');
+    // The row stays a row; the code wraps onto its own full line beneath it.
+    expect(screen.getByTestId('channel-wc1').className).toMatch(/rowWithEmbed/);
     expect(screen.getByTestId('channel-settings-wc1')).toHaveAttribute(
       'href',
       '/settings/channels',

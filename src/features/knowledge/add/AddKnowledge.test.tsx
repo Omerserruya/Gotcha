@@ -14,7 +14,16 @@ const addKnowledge = vi.hoisted(() => vi.fn());
 const startKnowledgeConnect = vi.hoisted(() => vi.fn());
 const replace = vi.hoisted(() => vi.fn());
 /* After-connect sources read the network; they have their own tests. */
-vi.mock('./ConnectedSources', () => ({ ConnectedSources: () => null }));
+const connected = vi.hoisted(() => ({ providers: new Set<string>() }));
+vi.mock('./ConnectedSources', async () => {
+  const { useEffect } = await import('react');
+  return {
+    ConnectedSources: ({ onConnected }: { onConnected?: (p: ReadonlySet<string>) => void }) => {
+      useEffect(() => onConnected?.(connected.providers), [onConnected]);
+      return null;
+    },
+  };
+});
 vi.mock('./add-knowledge', async (importOriginal) => ({
   ...(await importOriginal<typeof AddKnowledgeModule>()),
   addKnowledge,
@@ -258,5 +267,22 @@ describe('★★ Drive and Confluence — at the provider, and back here (backen
   ] as const)('%o → %s', (landing, words) => {
     render(drive(landing));
     expect(screen.getByTestId('add-landing')).toHaveTextContent(words);
+  });
+});
+
+describe('★ a connected source says so on its row — not a bare Connect', () => {
+  it('Drive connected: "Connected · Add another account"; Confluence still offers Connect', async () => {
+    connected.providers = new Set(['google_drive']);
+    render(
+      <NextIntlClientProvider locale="en" messages={{ knowledge }}>
+        <AddKnowledge initialWay="drive" base={{ id: 'kb1' }} />
+      </NextIntlClientProvider>,
+    );
+    expect(await screen.findByTestId('add-connected-google_drive')).toHaveTextContent(
+      'Connected · Add another account',
+    );
+    expect(screen.queryByTestId('add-connected-confluence')).toBeNull();
+    expect(screen.getByTestId('add-connect-confluence')).toHaveTextContent('Connect');
+    connected.providers = new Set();
   });
 });

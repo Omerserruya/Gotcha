@@ -388,4 +388,58 @@
     display: flex;
     gap: var(--space-8);
   }
+
+  /* The source cards' buttons: one size, a pair — the dark one to act. */
+  .sourceBtn,
+  .sourceBtnPrimary {
+    align-self: flex-start;
+    padding: 7px var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-body);
+    cursor: pointer;
+  }
+
+  .sourceBtnPrimary {
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .sourceBtnPrimary:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  /* Between what is synced and what can be chosen: a rule and a small head. */
+  .sourceSection {
+    margin: var(--space-4) 0 0;
+    padding-block-start: var(--space-8);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .folderMark {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .connectedMark {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .linkish {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
 }
