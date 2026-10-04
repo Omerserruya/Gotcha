@@ -139,11 +139,23 @@ export async function getDashboardStats(tenantId: string) {
   };
 }
 
+/**
+ * The team: people who handle conversations, then AI employees.
+ *
+ * People are ADMIN and AGENT. It used to be AGENT only, and no dev tenant has
+ * an AGENT, so the team was empty everywhere. SYSTEM_ADMIN is excluded: that
+ * is the platform operator, not the business's team.
+ *
+ * AI employees (ACTIVE or PAUSED; a DRAFT owns nothing) come with
+ * `kind: "ai"`. Their `claimedToday` and `avgResponseTimeMs` are null, not 0:
+ * an AI never claims, and the response time here is claim-to-first-reply, so
+ * both are undefined for it - a 0 would read as "did nothing today".
+ */
 export async function getAgentStats(tenantId: string) {
   const redis = getRedis();
   const today = new Date().toISOString().slice(0, 10);
   const agents = await prisma.user.findMany({
-    where: { tenantId, role: "AGENT", isActive: true },
+    where: { tenantId, role: { in: ["ADMIN", "AGENT"] }, isActive: true },
     select: { id: true, name: true, email: true, _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } } },
   });
   const stats = [];
@@ -154,11 +166,44 @@ export async function getAgentStats(tenantId: string) {
     ]);
     const avgResponseTimeMs = responseTimes.length ? responseTimes.reduce((sum, t) => sum + parseInt(t, 10), 0) / responseTimes.length : null;
     stats.push({
+      kind: "human" as const,
       agentId: agent.id, name: agent.name, email: agent.email,
       activeConversations: agent._count.conversations,
-      claimedToday: parseInt(agentData.claimed || "0", 10),
+      claimedToday: parseInt(agentData.claimed || "0", 10) as number | null,
       avgResponseTimeMs: avgResponseTimeMs ? Math.round(avgResponseTimeMs) : null,
     });
+  }
+
+  const aiAgents = await prisma.aIAgent.findMany({
+    where: { tenantId, status: { in: ["ACTIVE", "PAUSED"] } },
+    select: { id: true, name: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (aiAgents.length > 0) {
+    const owned = await prisma.conversation.groupBy({
+      by: ["assignedAiAgentId"],
+      where: {
+        tenantId,
+        isTest: false,
+        // Sandbox rehearsals carry isTest=false, and they are exactly the
+        // conversations an AI employee is tried out on.
+        NOT: { customerExternalId: { startsWith: "sandbox:" } },
+        status: { not: "CLOSED" },
+        assignedAiAgentId: { in: aiAgents.map((a) => a.id) },
+      },
+      _count: { _all: true },
+    });
+    const countByAi = new Map(owned.map((o: any) => [o.assignedAiAgentId, o._count._all]));
+    for (const ai of aiAgents) {
+      stats.push({
+        kind: "ai" as const,
+        agentId: ai.id, name: ai.name, email: null,
+        activeConversations: countByAi.get(ai.id) ?? 0,
+        claimedToday: null,
+        avgResponseTimeMs: null,
+        nullReasons: { claimedToday: "ai_does_not_claim", avgResponseTimeMs: "not_measured_for_ai" },
+      } as any);
+    }
   }
   return stats;
 }
