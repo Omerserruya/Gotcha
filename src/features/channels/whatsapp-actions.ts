@@ -40,7 +40,21 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  */
 const ackSchema = z.object({}).loose();
 
-export type ConnectResult = { ok: true } | { ok: false; message: string };
+export type ConnectResult =
+  | {
+      ok: true;
+      /** What Meta still needs from the customer, when anything (a PIN, a code…). */
+      pendingAction?: string | null;
+      message?: string | null;
+    }
+  | { ok: false; message: string };
+
+const connectedSchema = z
+  .object({
+    pendingAction: z.string().nullable().catch(null).default(null),
+    message: z.string().nullable().catch(null).default(null),
+  })
+  .loose();
 
 /** Read the numbers on the account the customer just authorised. */
 export async function inspectNumbers(
@@ -70,15 +84,19 @@ export async function inspectNumbers(
 export async function connectNumber(
   sessionId: string,
   phoneNumberId: string,
+  /** 13d: a number registered with two-step verification needs its 6-digit PIN. */
+  twoStepPin?: string,
 ): Promise<ConnectResult> {
+  if (twoStepPin !== undefined && !/^\d{6}$/.test(twoStepPin)) {
+    return { ok: false, message: 'pin' };
+  }
   try {
-    await serverApi().post({
+    const done = await serverApi().post({
       endpoint: channelEndpoints.whatsappConnect(),
-      body: { sessionId, phoneNumberId },
-      payload: ackSchema,
-      raw: true,
+      body: { sessionId, phoneNumberId, ...(twoStepPin ? { twoStepPin } : {}) },
+      payload: connectedSchema,
     });
-    return { ok: true };
+    return { ok: true, pendingAction: done.pendingAction, message: done.message };
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('whatsapp.connect_failed', { cause });
@@ -91,7 +109,8 @@ export async function resumeNumber(id: string, pin: string): Promise<ConnectResu
   try {
     await serverApi().post({
       endpoint: channelEndpoints.whatsappResume(id),
-      body: { pin },
+      // The route reads `twoStepPin` (resumeSchema); `pin` was silently stripped.
+      body: { twoStepPin: pin },
       payload: ackSchema,
       raw: true,
     });

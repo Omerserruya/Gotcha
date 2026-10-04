@@ -111,27 +111,6 @@
       "fixInMeta": "This is fixed in your Meta Business account, not here.",
       "badge": "Templates paused"
     },
-    "connect": {
-      "heading": "Numbers on your WhatsApp account",
-      "intro": "We looked at the numbers on the account you just authorised. Each one says what connecting it would do.",
-      "none": "No numbers were found on that account.",
-      "action": "Connect this number",
-      "resume": "Finish connecting",
-      "reconnect": "Reconnect",
-      "alreadyHere": "Already connected to this workspace.",
-      "pinWarning": "You will be asked for this number's two-step PIN. Have it ready — Meta will not let the connection finish without it.",
-      "blockedHeading": "This one cannot be connected",
-      "scenario": {
-        "NEW_NUMBER": "New number",
-        "COEXISTENCE": "Lives in the WhatsApp Business app",
-        "EXISTING_CLOUD_API": "Already on the Cloud API",
-        "RECONNECT": "Connected here before",
-        "MIGRATION": "Moves between accounts",
-        "BLOCKED": "Blocked"
-      },
-      "coexistHeading": "What happens to a Business app number",
-      "migrationNotPossible": "Moving it off the Business app entirely is not something anyone can do — it is not a step you have missed."
-    },
     "import": {
       "heading": "Learning from this number's history",
       "live": "The number is already live. Everything below happens alongside it and does not hold anything up.",
@@ -272,14 +251,73 @@
       "addReady": "{count, plural, one {Add # ready answer} other {Add # ready answers}}",
       "later": "Finish later"
     },
-    "launcher": {
-      "notConfigured": "Meta's sign-up isn't set up for this workspace yet.",
-      "unavailable": "Meta's sign-in couldn't load here — an ad blocker or a company network often blocks it.",
-      "cancelled": "You closed Meta’s window — nothing was connected.",
-      "noCode": "Meta didn't hand back a way to read your numbers. Nothing was connected — try again.",
-      "inspectFailed": "We couldn't read the numbers on that account. Nothing was connected — try again.",
-      "opening": "Opening Meta…",
-      "reading": "Reading your numbers…"
+    "wizard": {
+      "title": "Connect WhatsApp",
+      "line": "About three minutes.",
+      "cancel": "Cancel",
+      "steps": {
+        "where": "Where it lives",
+        "meta": "Meta",
+        "number": "Number",
+        "learn": "Learn"
+      },
+      "where": {
+        "question": "Where does this number live today?",
+        "mostCommon": "Most common",
+        "business_app": {
+          "title": "On the WhatsApp Business app",
+          "body": "Keep using the app on your phone — conversations show up in both places. GOTCHA can import up to 6 months of history to learn from."
+        },
+        "new": {
+          "title": "Not on WhatsApp yet, or with another provider",
+          "body": "The number moves fully to GOTCHA and can't be used in the app afterwards. There's no history to import."
+        },
+        "note": "A Meta window opens. Finish there and you'll land back here to pick the number.",
+        "continue": "Continue with Meta"
+      },
+      "needs": {
+        "title": "You'll need",
+        "login": "A Facebook login that's an admin of your business on Meta",
+        "phone": "The phone with this number nearby, for a code",
+        "payment": "A payment method on the WhatsApp account — you can add it later"
+      },
+      "meta": {
+        "waiting": "Finish in the Meta window — this sheet waits for you.",
+        "reading": "Reading your numbers…"
+      },
+      "number": {
+        "question": "Which number should GOTCHA answer?",
+        "lead": "{count, plural, one {Meta shared one number.} other {Meta shared # numbers. Connect one now — add the others later without signing in again.}}",
+        "none": "Meta didn't share any numbers. Nothing was connected.",
+        "flow": {
+          "businessApp": "On the WhatsApp Business app · history can be imported",
+          "pin": "Registered with two-step verification · needs its 6-digit PIN",
+          "new": "Not registered yet",
+          "connected": "Already connected to GOTCHA",
+          "blocked": "Can't be connected right now"
+        },
+        "pin": "Its 6-digit PIN",
+        "pinInvalid": "The PIN is six digits.",
+        "owner": "Who answers it",
+        "ownerNotYet": "Who answers is set on the number once it's connected.",
+        "import": "Import the last 6 months",
+        "importBody": "Meta sends this once, only during setup. GOTCHA learns your answers, tone and customers from it. Nothing is sent to anyone.",
+        "importWhy": "Meta sends the history on its own when a Business app number connects — there is nothing to switch.",
+        "contacts": "Family or friends on this number? Mark chats GOTCHA should ignore.",
+        "contactsNotYet": "Choosing contacts before the import comes next; private contacts can be added from the number's settings.",
+        "connect": "Connect",
+        "connectImport": "Connect and import",
+        "back": "Back",
+        "pending": "Meta needs one more step from you before this number works.",
+        "failed": "The number wasn't connected — try again."
+      },
+      "problem": {
+        "notConfigured": "Meta's sign-up isn't set up for this workspace yet.",
+        "unavailable": "Meta's sign-in couldn't load here — an ad blocker or a company network often blocks it.",
+        "cancelled": "You closed Meta’s window — nothing was connected.",
+        "noCode": "Meta didn't hand back a way to read your numbers. Nothing was connected — try again.",
+        "inspectFailed": "We couldn't read the numbers on that account. Nothing was connected — try again."
+      }
     }
   },
   "rowSettings": "Settings",

@@ -1,6 +1,5 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 
-import type { EmbeddedSignupLaunch } from '@/api/contracts/whatsapp-connect';
 import { Link } from '@/i18n/navigation';
 
 import {
@@ -16,7 +15,6 @@ import {
   type WhatsAppNumber,
 } from '@/api/contracts/whatsapp-numbers';
 
-import { MetaLauncher } from './MetaLauncher';
 import styles from './Channels.module.css';
 
 /**
@@ -66,11 +64,11 @@ type T = Awaited<ReturnType<typeof getTranslations<'channels.whatsapp'>>>;
 export async function WhatsAppNumbers({
   numbers,
   responseModes = {},
-  launch = null,
+  connectable = false,
 }: {
   readonly numbers: NumbersResponse | null;
-  /** 13c's Embedded Signup parameters, from the server; `null` when not read. */
-  readonly launch?: EmbeddedSignupLaunch | null;
+  /** The server can launch Meta's Embedded Signup (13c). */
+  readonly connectable?: boolean;
   /** Who answers each channel account (13b's "AI mode"), from the channel list. */
   readonly responseModes?: Readonly<Record<string, string>>;
 }) {
@@ -95,7 +93,7 @@ export async function WhatsAppNumbers({
         <p className={styles.empty} data-testid="whatsapp-empty">
           {t('empty')}
         </p>
-        <MetaLauncher launch={launch} />
+        <AddNumber t={t} connectable={connectable} />
       </>
     );
   }
@@ -173,7 +171,7 @@ export async function WhatsAppNumbers({
           </li>
         ))}
         <li>
-          <MetaLauncher launch={launch} />
+          <AddNumber t={t} connectable={connectable} />
         </li>
       </ul>
     </>
@@ -388,5 +386,31 @@ function NumberRows({ t, mode }: { readonly t: T; readonly mode: string | null }
         </dd>
       </div>
     </dl>
+  );
+}
+
+/**
+ * 02's dashed "Add another number" at the foot of the list — where 13c
+ * starts: it opens the Connect WhatsApp sheet. Only the sheet's "Continue
+ * with Meta" opens Meta. Not set up on the server: drawn, with why.
+ */
+function AddNumber({ t, connectable }: { readonly t: T; readonly connectable: boolean }) {
+  return connectable ? (
+    <Link
+      href="/settings/channels?panel=whatsapp&view=connect"
+      className={styles.addNumber}
+      data-testid="whatsapp-add-number"
+    >
+      {t('addNumber')}
+    </Link>
+  ) : (
+    <span
+      className={styles.addNumber}
+      aria-disabled="true"
+      title={t('wizard.problem.notConfigured')}
+      data-testid="whatsapp-add-number"
+    >
+      {t('addNumber')}
+    </span>
   );
 }

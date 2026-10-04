@@ -12,6 +12,7 @@ import {
   loadSignupLaunch,
   loadWhatsAppNumbers,
 } from '@/features/channels/load-whatsapp';
+import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -71,11 +72,13 @@ export default async function Page({
     own head. A view with no import to show falls back to 13b.
   */
   const view =
-    learn && params.view === 'report' && whatsapp?.[1].candidates
-      ? 'report'
-      : learn && params.view === 'progress'
-        ? 'progress'
-        : null;
+    params.view === 'connect' && whatsapp
+      ? 'connect'
+      : learn && params.view === 'report' && whatsapp?.[1].candidates
+        ? 'report'
+        : learn && params.view === 'progress'
+          ? 'progress'
+          : null;
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
@@ -94,7 +97,19 @@ export default async function Page({
         13b: WhatsApp's settings as a panel OVER this page (`?panel=whatsapp`),
         not a page of its own — reached from the WhatsApp row's "Settings".
       */}
-      {view === 'progress' && learn ? (
+      {view === 'connect' && whatsapp ? (
+        // 13c → 13d: Connect WhatsApp, one sheet, four steps.
+        <Drawer
+          title={tw('wizard.title')}
+          line={tw('wizard.line')}
+          lead={tile}
+          closeHref="/settings/channels?panel=whatsapp"
+          width={600}
+          testId="drawer-connect"
+        >
+          <ConnectWhatsApp launch={whatsapp[2]} closeHref="/settings/channels?panel=whatsapp" />
+        </Drawer>
+      ) : view === 'progress' && learn ? (
         <Drawer
           title={tw('learn.setting', { name })}
           line={learnLine}
@@ -131,7 +146,7 @@ export default async function Page({
         >
           <WhatsAppNumbers
             numbers={whatsapp[0]}
-            launch={whatsapp[2]}
+            connectable={whatsapp[2]?.configured === true}
             responseModes={Object.fromEntries(
               (channels ?? [])
                 .filter((channel) => channel.channel === 'WHATSAPP')

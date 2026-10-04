@@ -1279,16 +1279,255 @@
     color: var(--signal-done-text);
   }
 
-  /* 13c: the launcher and what follows it, in the list's foot. */
-  .launcher {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-10);
-  }
-
   .launcherProblem {
     margin: 0;
     font-size: var(--font-size-caption);
     color: var(--alert-text);
+  }
+
+  /* 13c's stepper under the head: 20px discs, the current one dark. */
+  .stepper {
+    display: flex;
+    gap: var(--space-8);
+    margin: 0;
+    padding: 0 var(--space-26) 18px;
+    list-style: none;
+    border-block-end: 1px solid var(--border-subtle);
+    line-height: normal;
+  }
+
+  .step {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .step:not(:last-child)::after {
+    content: '';
+    flex: 1;
+    block-size: 1px;
+    background-color: var(--border-default);
+  }
+
+  .stepDot {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    inline-size: 20px;
+    block-size: 20px;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .step[data-state='current'] {
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .step[data-state='current'] .stepDot,
+  .step[data-state='done'] .stepDot {
+    border-color: transparent;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .connectQuestion {
+    margin: 0;
+    font-size: 15px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .connectLead {
+    margin: -10px 0 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .paths {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* 02: radius 13, `16px 18px`; the chosen one outlined dark. */
+  .pathCard {
+    display: flex;
+    gap: var(--space-14);
+    padding: var(--space-16) 18px;
+    border: 1px solid var(--border-default);
+    border-radius: 13px;
+    background: none;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    line-height: normal;
+  }
+
+  .pathCard[aria-checked='true'] {
+    border-color: var(--text-primary);
+  }
+
+  .pathCard:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .pathRadio {
+    flex: none;
+    inline-size: 18px;
+    block-size: 18px;
+    margin-block-start: 2px;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+  }
+
+  .pathCard[aria-checked='true'] .pathRadio {
+    border: 5px solid var(--text-primary);
+  }
+
+  .pathBody {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .pathTitle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .pathName {
+    font-weight: var(--font-weight-regular);
+    color: var(--text-muted);
+  }
+
+  .pathBadge {
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--ai-avatar-surface);
+    font-size: 11px;
+    font-weight: var(--font-weight-regular);
+    color: var(--ai-avatar-text);
+  }
+
+  .pathText {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--intent-neutral-text);
+  }
+
+  /* 02's "You'll need": `#FAF8F4`, radius 12, `14px 16px`. */
+  .needs {
+    padding: var(--space-14) var(--space-16);
+    border-radius: 12px;
+    background-color: var(--panel-sunken);
+    line-height: normal;
+  }
+
+  .needs ul {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin: 9px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .needs li {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+  }
+
+  .needs li svg {
+    color: var(--signal-done-text);
+  }
+
+  .needsTitle {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .connectNote,
+  .connectWaiting {
+    display: flex;
+    gap: 10px;
+    margin: auto 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .connectWaiting {
+    margin: 0;
+    color: var(--text-muted);
+  }
+
+  .connectPrimary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+    padding: 10px 18px;
+    border: 0;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: 13px;
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .connectPrimary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .connectCancel {
+    padding: 0 6px;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-subtle);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .pinField {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .pinField input {
+    inline-size: 140px;
+    padding: var(--space-8) 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    font-family: var(--font-mono);
+    letter-spacing: 3px;
+  }
+
+  .drawnRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 }

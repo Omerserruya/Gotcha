@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ImportPanel, ReportPanel } from '@/features/channels/LearnPanels';
 import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
+import { ConnectWhatsApp } from '@/features/channels/ConnectWhatsApp';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import channels from '@/i18n/messages/en/channels.json';
 
@@ -80,6 +81,17 @@ describe('★★ 13b — the head counts what the card shows', () => {
 
 describe('★ 13e / 13f are their own panels, replacing 13b while open', () => {
   const STATUS = { id: 'i1', stage: 'analyzing', percent: 100, analysisPercent: 40 };
+
+  it('★ ?view=connect opens 13c’s sheet over Channels, with the server’s launch; not 13b', async () => {
+    const { default: Page } = await import('./page');
+    const tree = await Page({
+      searchParams: Promise.resolve({ panel: 'whatsapp', view: 'connect' }),
+    });
+    const sheet = find<{ launch: unknown; closeHref: string }>(tree, ConnectWhatsApp);
+    expect(sheet).not.toBeNull();
+    expect(sheet?.closeHref).toBe('/settings/channels?panel=whatsapp');
+    expect(find(tree, WhatsAppPanel)).toBeNull();
+  });
 
   it('?view=progress opens 13e and not 13b', async () => {
     history.value = { status: STATUS, candidates: [], bulkMinConfidence: 0.8 };

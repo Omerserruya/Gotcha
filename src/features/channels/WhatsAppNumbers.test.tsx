@@ -28,14 +28,6 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
 }));
-/* The launcher is a client component with its own tests; here, where it stands and what it is given. */
-vi.mock('./MetaLauncher', () => ({
-  MetaLauncher: ({ launch }: { launch: unknown }) => (
-    <span data-testid="whatsapp-add-number" data-launch={launch === null ? 'none' : 'given'}>
-      + Add another number
-    </span>
-  ),
-}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
     createTranslator({ locale: 'en', messages: { channels: messages }, namespace }),
@@ -417,10 +409,26 @@ describe('★ 13c starts from 13b: "Add another number" — Meta’s launcher', 
     const { unmount } = await renderNumbers({ data: [number()] });
     const add = screen.getByTestId('whatsapp-add-number');
     expect(add).toHaveTextContent('+ Add another number');
-    expect(add).toHaveAttribute('data-launch', 'none');
+    // Not set up on the server: drawn, with why.
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add.getAttribute('title')).toMatch(/isn't set up/);
     unmount();
     await renderNumbers({ data: [] });
     expect(screen.getByTestId('whatsapp-empty')).toBeInTheDocument();
     expect(screen.getByTestId('whatsapp-add-number')).toBeInTheDocument();
+  });
+});
+
+describe('★★ 13c — "Add another number" opens the Connect WhatsApp sheet, not Meta', () => {
+  it('set up: a link to the sheet — Meta opens only from the sheet’s Continue', async () => {
+    render(
+      await WhatsAppNumbers({
+        numbers: numbersResponseSchema.parse({ data: [number()] }),
+        connectable: true,
+      }),
+    );
+    const add = screen.getByTestId('whatsapp-add-number');
+    expect(add.tagName).toBe('A');
+    expect(add).toHaveAttribute('href', '/settings/channels?panel=whatsapp&view=connect');
   });
 });
