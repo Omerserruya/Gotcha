@@ -24,6 +24,7 @@ import {
   ZOHO_DEFAULT_SCOPES,
 } from "../services/zoho.service";
 
+import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, REDESIGN_FLOW } from "../services/redesign-return";
 const router = Router();
 
 
@@ -43,7 +44,7 @@ router.get(
       return;
     }
 
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const flow = parseConnectFlow(req.query.flow);
     // Single-use state. `integrationSlug` is kept alongside `provider` because
     // the callback uses it to look up the catalog row.
     const { state } = mintOAuthState({
@@ -68,9 +69,11 @@ router.get(
 
 router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
   const frontendUrl = resolveAppPublicUrl(process.env);
+  let flow: string | undefined;
   try {
     const { code, state, error: zohoError } = req.query;
 
+    if (await redirectRedesignDenied(req, res, "zoho_crm", "zoho_crm")) return;
     if (zohoError) {
       res.redirect(`${frontendUrl}/integrations?error=${encodeURIComponent(String(zohoError))}`);
       return;
@@ -89,6 +92,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
 
     const redirectUri = process.env.ZOHO_REDIRECT_URI!;
     const tokens = await exchangeZohoCode({ code: String(code), redirectUri });
@@ -100,7 +104,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
     });
     if (!catalog) {
       console.error("[Zoho OAuth] Catalog entry not found:", payload.integrationSlug);
-      res.redirect(`${frontendUrl}/integrations?error=catalog_missing`);
+      res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "catalog_missing" }) : `${frontendUrl}/integrations?error=catalog_missing`);
       return;
     }
 
@@ -190,9 +194,11 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
     // During onboarding, return to /setup so the boot logic detects the
     // connected core system and finishes activation; otherwise integrations.
     res.redirect(
-      payload.flow === "onboarding"
-        ? `${frontendUrl}/setup?connected=${payload.integrationSlug}`
-        : `${frontendUrl}/integrations?connected=${payload.integrationSlug}`,
+      payload.flow === REDESIGN_FLOW
+        ? redesignCapabilitiesUrl(payload.integrationSlug)
+        : payload.flow === "onboarding"
+          ? `${frontendUrl}/setup?connected=${payload.integrationSlug}`
+          : `${frontendUrl}/integrations?connected=${payload.integrationSlug}`,
     );
   } catch (err: any) {
     console.error("[Zoho OAuth] Callback error:", err?.message ?? err);
@@ -204,7 +210,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       cause: err,
       context: { stage: "callback" },
     });
-    res.redirect(`${frontendUrl}/integrations?error=oauth_callback_failed`);
+    res.redirect(flow === REDESIGN_FLOW ? redesignCapabilitiesUrl("zoho_crm", { error: "callback_error" }) : `${frontendUrl}/integrations?error=oauth_callback_failed`);
   }
 });
 

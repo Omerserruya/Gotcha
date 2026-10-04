@@ -143,6 +143,7 @@ const REDESIGN_BASE_PATH = "/v2";
  */
 const OAUTH_FAILURE_CODES = new Set([
   "denied",
+  "not_configured",
   "token_exchange_failed",
   "catalog_missing",
   "callback_error",
@@ -381,7 +382,10 @@ router.get(
     const clientId = process.env.STRIPE_CLIENT_ID;
     const redirect = process.env.STRIPE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "stripe_oauth_not_configured" }); return; }
-    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "stripe", userId: (req as any).user?.userId });
+    // Only the redesign flow changes where Stripe lands; every other caller
+    // keeps the marketplace landing it always had.
+    const flow = parseFlow(req.query.flow) === "redesign_studio" ? "redesign_studio" : undefined;
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "stripe", flow, userId: (req as any).user?.userId });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -394,7 +398,9 @@ router.get(
 );
 
 router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Response) => {
+  let flow: string | undefined;
   try {
+    if (await redirectIfProviderDenied(req, res, "stripe", "missing_code_or_state")) return;
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
     const consumed = await consumeOAuthState<any>(state as string, "stripe");
@@ -405,9 +411,10 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
       return;
     }
     const payload = consumed.claims;
+    flow = payload.flow;
 
     const secret = process.env.STRIPE_SECRET_KEY;
-    if (!secret) { res.status(500).send("stripe_secret_not_configured"); return; }
+    if (!secret) { oauthFail(res, "stripe", flow, 500, "not_configured", "stripe_secret_not_configured"); return; }
 
     const tokenRes = await fetch("https://connect.stripe.com/oauth/token", {
       method: "POST",
@@ -420,10 +427,10 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
         code: String(code),
       }).toString(),
     });
-    if (!tokenRes.ok) { res.status(400).send("token_exchange_failed"); return; }
+    if (!tokenRes.ok) { oauthFail(res, "stripe", flow, 400, "token_exchange_failed"); return; }
     const j: any = await tokenRes.json();
     const cat = await findCatalog("stripe");
-    if (!cat) { res.status(500).send("stripe_catalog_missing"); return; }
+    if (!cat) { oauthFail(res, "stripe", flow, 500, "catalog_missing", "stripe_catalog_missing"); return; }
     await upsertConnection({
       tenantId: payload.tenantId,
       catalogId: cat.id,
@@ -436,9 +443,9 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
         livemode: j.livemode,
       }),
     });
-    res.redirect(dashboardRedirect("stripe"));
+    res.redirect(flow === "redesign_studio" ? postOAuthRedirect("stripe", flow) : dashboardRedirect("stripe"));
   } catch (err: any) {
-    res.status(500).send(`stripe_callback_error:${err?.message || ""}`);
+    oauthFail(res, "stripe", flow, 500, "callback_error", `stripe_callback_error:${err?.message || ""}`);
   }
 });
 

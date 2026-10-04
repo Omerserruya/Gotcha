@@ -27,6 +27,9 @@ vi.hoisted(() => {
   process.env.HUBSPOT_CLIENT_ID = "hs-client";
   process.env.HUBSPOT_CLIENT_SECRET = "hs-secret";
   process.env.HUBSPOT_REDIRECT_URI = "https://app.gotcha.co.il/api/connectors/hubspot/oauth/callback";
+  process.env.STRIPE_CLIENT_ID = "ca_test";
+  process.env.STRIPE_REDIRECT_URI = "https://app.gotcha.co.il/api/connectors/stripe/oauth/callback";
+  process.env.STRIPE_SECRET_KEY = "sk_test_x";
   process.env.MONDAY_CLIENT_ID = "m-client";
   process.env.MONDAY_CLIENT_SECRET = "m-secret";
   process.env.MONDAY_REDIRECT_URI = "https://app.gotcha.co.il/api/connectors/monday/oauth/callback";
@@ -200,5 +203,36 @@ describe("the user pressed Cancel at the provider (?error=, no code)", () => {
     expect(replay.status).toBe(400);
     expect(replay.text).toBe("state_already_used");
     expect(C.upserts).toHaveLength(0);
+  });
+});
+
+describe("Stripe (it carried no flow and answered failures in plain text)", () => {
+  it("init carries redesign_studio only", async () => {
+    const r = await request(app).get("/api/connectors/stripe/oauth/init").query({ flow: "redesign_studio" });
+    expect(JSON.parse(Buffer.from(new URL(r.body.url).searchParams.get("state")!.split(".")[1], "base64url").toString()).flow).toBe("redesign_studio");
+  });
+
+  it("★ success → /v2/studio/capabilities?system=stripe&connected=1", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
+    const r = await callback("stripe", { code: "c", state: stateFor("stripe", "redesign_studio") });
+    expect(r.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=stripe&connected=1");
+  });
+
+  it("★ failures redirect with a closed code instead of plain text", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => tokenFail));
+    const r = await callback("stripe", { code: "c", state: stateFor("stripe", "redesign_studio") });
+    expect(r.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=stripe&error=token_exchange_failed");
+    const cancel = await callback("stripe", { error: "access_denied", state: stateFor("stripe", "redesign_studio") });
+    expect(cancel.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=stripe&error=denied");
+  });
+
+  it("without the flow Stripe answers exactly as before", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => tokenFail));
+    const r = await callback("stripe", { code: "c", state: stateFor("stripe") });
+    expect(r.status).toBe(400);
+    expect(r.text).toBe("token_exchange_failed");
+    vi.stubGlobal("fetch", vi.fn(async () => tokenOk));
+    const ok = await callback("stripe", { code: "c", state: stateFor("stripe") });
+    expect(ok.headers.location).toContain("/ai-studio/marketplace/stripe?status=connected");
   });
 });
