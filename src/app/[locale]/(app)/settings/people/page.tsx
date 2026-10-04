@@ -108,6 +108,8 @@ export default async function Page({
           ) : (
             <p>{members ? t('aiUnavailable') : t('membersUnavailable')}</p>
           )}
+          {/* 02: the team cards sit under the list, as well as on their own tab. */}
+          {teams ? <TeamCards teams={teams} /> : null}
         </>
       )}
 

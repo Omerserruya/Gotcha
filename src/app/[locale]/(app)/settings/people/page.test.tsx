@@ -96,3 +96,12 @@ describe('★ 12d over People, 12e over 12d', () => {
     expect(screen.queryByTestId('drawer-person')).toBeNull();
   });
 });
+
+describe('★ 12 — the team cards sit under the people list, as 02 draws them', () => {
+  it('People tab: the table, then the teams', async () => {
+    await open({});
+    const table = screen.getByTestId('table');
+    const teams = screen.getByTestId('teams');
+    expect(table.compareDocumentPosition(teams) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

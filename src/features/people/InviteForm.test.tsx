@@ -49,7 +49,7 @@ describe('★ 12 — the invite is one inline row, opened from the header', () =
   it('★ the role is the one the route gives — Agent, fixed — and says why', () => {
     show(true);
     const role = screen.getByTestId('invite-role');
-    expect(role).toBeDisabled();
+    expect(role).toHaveAttribute('aria-disabled', 'true');
     expect(role).toHaveTextContent('Agent');
     expect(role).toHaveAttribute('title', expect.stringMatching(/takes no role/i));
   });

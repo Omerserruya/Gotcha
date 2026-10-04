@@ -494,6 +494,8 @@
   }
 
   .inviteTeams > summary {
+    display: inline-flex;
+    align-items: center;
     list-style: none;
     cursor: pointer;
   }
@@ -524,5 +526,15 @@
     gap: var(--space-8);
     font-size: var(--font-size-label);
     white-space: nowrap;
+  }
+
+  /* The pills' chevron sits after their words. */
+  .inviteChevron {
+    order: 2;
+    margin-inline-start: var(--space-6);
+  }
+
+  span.inviteSelect[aria-disabled='true'] {
+    cursor: not-allowed;
   }
 }

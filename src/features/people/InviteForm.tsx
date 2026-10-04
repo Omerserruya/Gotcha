@@ -116,17 +116,21 @@ export function InviteForm({
         <label className="srOnly" htmlFor="invite-role">
           {t('invite.role')}
         </label>
-        <select
+        {/* 02's "Agent ▾" pill — fixed: the route invites every person as an agent. */}
+        <span
           id="invite-role"
           className={styles.inviteSelect}
-          disabled
+          aria-disabled="true"
           title={t('invite.roleFixed')}
           data-testid="invite-role"
         >
-          <option>{t('invite.roleAgent')}</option>
-        </select>
+          {t('invite.roleAgent')} <span aria-hidden="true">▾</span>
+        </span>
         <details className={styles.inviteTeams} data-testid="invite-team">
           <summary className={styles.inviteSelect} aria-label={t('invite.teams')}>
+            <span aria-hidden="true" className={styles.inviteChevron}>
+              ▾
+            </span>
             {teamIds.length === 0
               ? t('invite.noTeam')
               : teamIds.length === 1
