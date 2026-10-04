@@ -45,7 +45,8 @@ router.use(
 interface MergedToolRow {
   toolName: string;
   kind: "system" | "action" | "integration";
-  category: string;
+  /** Static tools: the registry category. Integration tools: the catalogue ToolCategory, or null. */
+  category: string | null;
   description: string;
   enabled: boolean;
   requiresApproval: boolean;
@@ -206,7 +207,11 @@ router.get("/", async (req: Request, res: Response) => {
       merged.push({
         toolName,
         kind: "integration",
-        category: "meta",
+        // The catalogue's own ToolCategory (READ | WRITE | DELETE | ACTION).
+        // This was a hard-coded "meta" on every integration row, which a screen
+        // grouping by category rendered under the wrong heading. Null when the
+        // catalogue row has none - not a borrowed label.
+        category: g.catalogCategory,
         description: g.description || g.displayName,
         // Effective state, not a placeholder: an unprovisioned action is off
         // until a policy is chosen for it.

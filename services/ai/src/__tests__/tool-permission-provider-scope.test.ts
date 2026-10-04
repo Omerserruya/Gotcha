@@ -218,6 +218,17 @@ describe("GET - every catalogue action, with its state", () => {
     expect(by["paypal.create_payment_link"].requiresApproval).toBe(false);
   });
 
+  it("★ integration rows carry the catalogue's category, never a hard-coded one", async () => {
+    governable.rows = [
+      g({ name: "shopify.get_order", slug: "get_order", catalogCategory: "READ" }),
+      g({ name: "shopify.process_refund", slug: "process_refund", catalogCategory: "ACTION" }),
+      g({ name: "shopify.add_tag", slug: "add_tag", catalogCategory: null }),
+    ];
+    const res = await request(app).get("/api/tool-permissions");
+    const by = Object.fromEntries(res.body.data.map((r: any) => [r.toolName, r.category]));
+    expect(by).toEqual({ "shopify.get_order": "READ", "shopify.process_refund": "ACTION", "shopify.add_tag": null });
+  });
+
   it("an unshared http slug keeps its integration.<slug> name", async () => {
     governable.rows = [g({ name: "integration.create_payment_link", integrationSlug: "stripe", slug: "create_payment_link", execution: "http" })];
     const res = await request(app).get("/api/tool-permissions");
