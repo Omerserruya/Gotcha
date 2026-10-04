@@ -167,6 +167,12 @@ export const analyticsEndpoints = {
    * does not need, so this can 403 on a screen that otherwise works.
    */
   toolUsage: () => endpoint('/api/analytics/tool-usage'),
+  /**
+   * People who wrote twice or more and then went quiet (60 days by default),
+   * oldest silence first, capped at 100. Keyed by the identity they wrote
+   * from, not by contact. `analytics:workspace:read`.
+   */
+  dormantCustomers: () => endpoint('/api/analytics/dormant-customers?limit=100'),
   /** The same, from an instant (ISO) to now — 03c's "today". */
   toolUsageFrom: (from: string) => endpoint('/api/analytics/tool-usage?from={from}', { from }),
 } as const;

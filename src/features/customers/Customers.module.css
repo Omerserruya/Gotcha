@@ -269,7 +269,20 @@
 
   /* 02's search: 260 wide, white, radius 9, `padding:8px 14px`, 12.5px. */
   .search {
+    display: flex;
+    gap: 10px;
     margin: 0;
+  }
+
+  /* 02: "Add a customer", outlined, radius 9, `8px 14px`. */
+  .addCustomer {
+    padding: var(--space-8) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: 9px;
+    font-size: 12.5px;
+    color: var(--intent-neutral-text);
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .searchInput {
@@ -2139,5 +2152,167 @@
 
   .moneyMoved > [data-attention] {
     color: var(--intent-blocked-text);
+  }
+
+  /* 02's chips over the list: Everyone dark, the rest `#F0EDE7`; sorted on the right. */
+  .segmentBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    margin-block-end: var(--space-16);
+    line-height: normal;
+  }
+
+  .segments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+
+  .segmentChip {
+    padding: var(--space-6) var(--space-12);
+    border-radius: var(--space-8);
+    background-color: var(--panel-well);
+    font-size: var(--font-size-caption);
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+  }
+
+  .segmentChip[aria-current='page'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .sorted {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* 02: worth at 13/500 over its note; the last contact in mono. */
+  .rowValue {
+    flex: none;
+    inline-size: 110px;
+    text-align: end;
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .rowWhen {
+    flex: none;
+    inline-size: 78px;
+    text-align: end;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  /* Waiting on you — 02's warm chip. */
+  .rowChip[data-tone='waiting'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* 02: someone quiet for months is drawn dimmer. */
+  .row[data-faded='yes'] .rowLink {
+    opacity: 0.6;
+  }
+
+  /* 02's dark card: `#171717`, radius 14, `18px 20px`. */
+  .reachCard {
+    padding: 18px var(--space-20);
+    border-radius: var(--radius-card);
+    background-color: var(--frame-raised);
+  }
+
+  .reachEyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 1.62px;
+    text-transform: uppercase;
+    color: var(--frame-text-eyebrow);
+  }
+
+  .reachBody {
+    margin: 11px 0 0;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--frame-text);
+  }
+
+  .reachActions {
+    display: flex;
+    gap: var(--space-8);
+    margin-block-start: var(--space-14);
+  }
+
+  .reachPrimary,
+  .reachSecondary {
+    padding: 7px 13px;
+    border-radius: var(--space-8);
+    font-size: var(--font-size-caption);
+    text-decoration: none;
+  }
+
+  .reachPrimary {
+    background-color: var(--frame-text);
+    color: var(--text-primary);
+  }
+
+  .reachSecondary {
+    border: 1px solid var(--frame-selected);
+    color: var(--frame-text-secondary);
+  }
+
+  .dupeNames {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: var(--space-10) 0 0;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+
+  .dupeActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .dupePrimary,
+  .dupeSecondary {
+    padding: var(--space-6) var(--space-12);
+    border-radius: var(--space-8);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    cursor: pointer;
+  }
+
+  .dupePrimary {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .dupeSecondary {
+    border: 1px solid var(--border-default);
+    background: none;
+    color: var(--intent-neutral-text);
+  }
+
+  .dupeSecondary[aria-disabled='true'] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .dupeProblem {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
   }
 }

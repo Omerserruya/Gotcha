@@ -15,6 +15,7 @@ vi.mock('next-intl/server', () => ({
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
+import { CustomerList, Segments } from '@/features/customers/CustomerList';
 import { PageContainer } from '@/shell/PageContainer';
 
 const propsOf = <T,>(tree: ReactNode, type: unknown): T | null => {
@@ -30,10 +31,17 @@ const propsOf = <T,>(tree: ReactNode, type: unknown): T | null => {
   return found;
 };
 
-const page = async (data: Record<string, unknown>) => {
-  loadCustomers.mockResolvedValue({ total: 0, truncated: false, searchedField: null, ...data });
+const page = async (data: Record<string, unknown>, params: Record<string, string> = {}) => {
+  loadCustomers.mockResolvedValue({
+    total: 0,
+    truncated: false,
+    searchedField: null,
+    conversations: null,
+    quiet: null,
+    ...data,
+  });
   const { default: Page } = await import('./page');
-  return Page({ searchParams: Promise.resolve({}) });
+  return Page({ searchParams: Promise.resolve(params) });
 };
 
 const rows = [
@@ -58,5 +66,48 @@ describe('★★ 04 — the count is the title', () => {
       PageContainer,
     );
     expect(props?.title).toBe('title');
+  });
+});
+
+describe('★★ 04 — the segment is in the URL, and the counts are live', () => {
+  const dana = { id: 'k1', externalId: 'wa-1', displayName: 'Dana', channel: 'WHATSAPP', tags: [] };
+  const rotem = {
+    id: 'k2',
+    externalId: 'wa-2',
+    displayName: 'Rotem',
+    channel: 'WHATSAPP',
+    tags: [],
+  };
+  const today = {
+    rows: [dana, rotem],
+    conversations: [
+      {
+        customerExternalId: 'wa-1',
+        status: 'OPEN',
+        lastMessageAt: '2026-10-04T10:00:00Z',
+        lastMessageBody: 'hi',
+        lastMessageDirection: 'INBOUND',
+      },
+    ],
+    quiet: { ids: new Set(['wa-2']), count: 1, capped: false },
+  };
+
+  it('asks for the day, and counts who is talking and who went quiet', async () => {
+    const tree = await page(today);
+    expect(loadCustomers).toHaveBeenLastCalledWith('', { today: true });
+    expect(propsOf<{ talking: number; quiet: unknown }>(tree, Segments)).toMatchObject({
+      talking: 1,
+      quiet: { count: 1, capped: false },
+    });
+  });
+
+  it.each([
+    ['talking', ['k1']],
+    ['quiet', ['k2']],
+    ['nonsense', ['k1', 'k2']],
+  ])('?segment=%s shows %j', async (segment, ids) => {
+    const tree = await page(today, { segment });
+    const people = propsOf<{ people: { primary: { id: string } }[] }>(tree, CustomerList)?.people;
+    expect(people?.map((p) => p.primary.id)).toEqual(ids);
   });
 });

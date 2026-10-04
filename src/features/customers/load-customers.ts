@@ -8,10 +8,13 @@ import {
   SEGMENT_PAGE_SIZE,
   type CustomerRow,
 } from '@/api/contracts/customers';
-import { customerEndpoints } from '@/api/endpoints/registry';
+import { z } from 'zod';
+
+import { analyticsEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { withCaptureFixtures } from './capture-fixtures';
+import type { ConversationFact } from './people-today';
 
 /**
  * The customer list.
@@ -53,6 +56,75 @@ export interface CustomersData {
   readonly truncated: boolean;
   /** Which single field the query was matched against, or null for no query. */
   readonly searchedField: 'name' | 'phone' | 'email' | null;
+  /**
+   * The newest conversations, every status — what makes a row "today": its
+   * last word, whether it is open, who spoke last. `null` when unread.
+   * The newest 100: a person whose last word is older than those is drawn
+   * without one, never as someone who never wrote.
+   */
+  readonly conversations: readonly ConversationFact[] | null;
+  /** Who went quiet (`dormant-customers`): their identities and how many. `null` when unread. */
+  readonly quiet: {
+    readonly ids: ReadonlySet<string>;
+    readonly count: number;
+    readonly capped: boolean;
+  } | null;
+}
+
+const CONVERSATIONS_READ = 100;
+const DORMANT_CAP = 100;
+
+const conversationsSchema = z.object({
+  data: z
+    .array(
+      z.object({
+        customerExternalId: z.string().nullable().catch(null).default(null),
+        status: z.enum(['OPEN', 'WAITING', 'CLOSED']).catch('CLOSED'),
+        lastMessageAt: z.string().nullable().catch(null).default(null),
+        lastMessageBody: z.string().nullable().catch(null).default(null),
+        lastMessageDirection: z.enum(['INBOUND', 'OUTBOUND']).nullable().catch(null).default(null),
+      }),
+    )
+    .default([]),
+});
+
+const dormantSchema = z.object({
+  data: z.array(z.object({ customerId: z.string().nullable().catch(null) })).default([]),
+});
+
+async function readToday(): Promise<Pick<CustomersData, 'conversations' | 'quiet'>> {
+  const api = serverApi();
+  const [conversations, dormant] = await Promise.all([
+    api
+      .get({
+        endpoint: inboxEndpoints.list(),
+        payload: conversationsSchema,
+        raw: true,
+        query: { limit: CONVERSATIONS_READ, cursor: '' },
+      })
+      .then((page) => page.data)
+      .catch((cause: unknown) => {
+        logger.warn('customers.conversations_failed', { cause });
+        return null;
+      }),
+    api
+      .get({ endpoint: analyticsEndpoints.dormantCustomers(), payload: dormantSchema, raw: true })
+      .catch((cause: unknown) => {
+        logger.warn('customers.dormant_failed', { cause });
+        return null;
+      }),
+  ]);
+  return {
+    conversations,
+    quiet:
+      dormant === null
+        ? null
+        : {
+            ids: new Set(dormant.data.map((d) => d.customerId).filter((id): id is string => !!id)),
+            count: dormant.data.length,
+            capped: dormant.data.length >= DORMANT_CAP,
+          },
+  };
 }
 
 /**
@@ -102,8 +174,18 @@ function rulesForQuery(query: string): {
   return field ? { rules: [{ field, operator: 'contains', value: query.trim() }] } : { rules: [] };
 }
 
-export async function loadCustomers(query = ''): Promise<CustomersData> {
+export async function loadCustomers(
+  query = '',
+  /** 04 reads the day too; the dialer's search does not need it. */
+  { today: withToday = false }: { readonly today?: boolean } = {},
+): Promise<CustomersData> {
   const q = query.trim();
+  const today = withToday
+    ? readToday()
+    : Promise.resolve({ conversations: null, quiet: null } as Pick<
+        CustomersData,
+        'conversations' | 'quiet'
+      >);
   try {
     const result = await serverApi().post({
       endpoint: customerEndpoints.list(),
@@ -128,10 +210,11 @@ export async function loadCustomers(query = ''): Promise<CustomersData> {
       total: listedCount(rows.length, result.total),
       truncated: isTruncated(rows.length),
       searchedField: fieldForQuery(q),
+      ...(await today),
     };
   } catch (cause) {
     logger.warn('customers.list_failed', { cause });
-    return { rows: null, total: 0, truncated: false, searchedField: null };
+    return { rows: null, total: 0, truncated: false, searchedField: null, ...(await today) };
   }
 }
 

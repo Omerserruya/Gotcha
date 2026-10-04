@@ -2,16 +2,12 @@ import { getTranslations } from 'next-intl/server';
 
 import { Link } from '@/i18n/navigation';
 
-import {
-  collapseToPeople,
-  customerLabel,
-  isKnownChannel,
-  type CustomerRow,
-} from '@/api/contracts/customers';
+import { customerLabel, isKnownChannel } from '@/api/contracts/customers';
 
 import fill from '@/design-system/styles/fill.module.css';
 import { channelMark } from '@/features/inbox/channel-marks';
 
+import { sinceWords, type PersonToday, type Segment } from './people-today';
 import styles from './Customers.module.css';
 
 /**
@@ -67,40 +63,31 @@ import styles from './Customers.module.css';
  * "most recent first" label would claim an order that is not there.
  */
 export async function CustomerList({
-  rows,
-  total,
-  truncated,
+  people,
+  shownOf,
+  rowsEmpty,
   searchedField,
   query,
+  now = new Date(),
 }: {
-  readonly rows: readonly CustomerRow[];
-  readonly total: number;
-  readonly truncated: boolean;
+  /** Today's people, filtered to the segment and sorted by last contact. */
+  readonly people: readonly PersonToday[];
+  /** "Showing N of M": everyone the list holds. */
+  readonly shownOf: number;
+  /** The read returned nobody (as opposed to a segment that holds nobody). */
+  readonly rowsEmpty: boolean;
   readonly searchedField: 'name' | 'phone' | 'email' | null;
   readonly query: string;
+  readonly now?: Date;
 }) {
   const t = await getTranslations('customers');
-  const people = collapseToPeople(rows);
 
-  if (rows.length === 0) {
+  if (rowsEmpty) {
     return (
       <div className={styles.empty} data-testid="customers-empty">
         {query ? (
           <>
             <p className={styles.emptyLead}>{t('search.noneLead', { query })}</p>
-            {/*
-              Which fields were actually searched, because the vocabulary has
-              no name case. Reporting a bare "no results" for a name query
-              would be telling someone their customer does not exist when the
-              truth is that we never looked at the field they typed into.
-            */}
-            {/*
-              What was searched, and what still cannot be. Name, phone and
-              email all work now; **order number does not and cannot** —
-              orders are not local to this platform. Saying so beats a bare
-              "no results", which would tell someone their customer does not
-              exist when we never looked at what they typed.
-            */}
             <p className={styles.emptyBody} data-testid="search-fields">
               {t(`search.lookedAt.${searchedField ?? 'name'}` as 'search.lookedAt.name')}
             </p>
@@ -114,44 +101,30 @@ export async function CustomerList({
 
   return (
     /*
-      ══════════════════════════════════════════════════════════════════════
-      ★★ 04's LIST CARD — a window, rows at 67, a footer at its base
-      ══════════════════════════════════════════════════════════════════════
-      White, `1px #E6E2DA`, radius 14 (`fillCard`). Rows at `13px 18px`,
-      `gap:14px`, `#F0EDE7` between them: a 40px initials disc with the
-      channel's badge, the name at 14px/600 with the person's first tag as a
-      chip, and under it a 12px line of how to reach them. The rows scroll
-      inside the card (`fillScroll`); the footer bar sits at its base.
-
-      Not drawn: 02's "what is true about them today" sentence, lifetime
-      value, order count and last contact. None is on the list: the route
-      returns contact fields only, and `lastInteractionAt` is never written.
+      04's list card: rows at 66, `13px 18px`, gap 14. Each leads with what
+      is true today — their last word, waiting on you or not — then, on the
+      right, what they are worth and when they last wrote. The handle moved
+      to the row's title: it is how to reach them, not what is true.
     */
     <section className={`${fill.fillCard} ${styles.listCard}`} data-testid="customer-list">
       <ul className={`${fill.fillScroll} ${styles.rows}`}>
-        {people.map(({ key, primary: row, channels }) => {
+        {people.map(({ key, primary: row, channels, lastContactAt, situation, waiting, faded }) => {
           const label = customerLabel(row);
           const mark = channelMark(channels[0] ?? row.channel ?? null);
-          /*
-            How to reach them, as one line: the handle we hold and every other
-            channel they use. A WhatsApp row's name IS its number, so the
-            number is not repeated under it.
-          */
           const handle = row.phone ?? row.email ?? row.externalId;
-          const reach = [
-            handle && handle !== label ? handle : null,
-            ...channels.map((channel) =>
-              isKnownChannel(channel) ? t(`channel.${channel}` as 'channel.WHATSAPP') : channel,
-            ),
-          ].filter(Boolean);
+          const since = lastContactAt ? sinceWords(lastContactAt, now) : null;
           return (
-            <li key={key} className={styles.row} data-testid={`customer-${row.id}`}>
-              {/*
-                ★ THE ROW IS A LINK. `row` is the PRIMARY contact of a person
-                group — the rows are collapsed by `personId` — so this opens
-                the person, not one of their channel identities.
-              */}
-              <Link className={styles.rowLink} href={`/customers/${row.id}`}>
+            <li
+              key={key}
+              className={styles.row}
+              data-testid={`customer-${row.id}`}
+              data-faded={faded ? 'yes' : undefined}
+            >
+              <Link
+                className={styles.rowLink}
+                href={`/customers/${row.id}`}
+                title={handle ? t('today.phone', { handle }) : undefined}
+              >
                 <span className={styles.avatarStack} aria-hidden="true">
                   <span className={styles.avatar}>{initialsOf(label)}</span>
                   <span className={styles.channelBadge} data-tone={mark.tone}>
@@ -161,9 +134,24 @@ export async function CustomerList({
                 <span className={styles.rowBody}>
                   <span className={styles.rowTop}>
                     <span className={styles.rowName}>{label ?? t('list.unnamed')}</span>
-                    {row.tags[0] ? <span className={styles.rowChip}>{row.tags[0]}</span> : null}
+                    {/*
+                      02's state chip: what is true of them today. Waiting on
+                      you is read; a mood is not recorded per person. A tag
+                      the merchant set ("Wholesale") is theirs to show.
+                    */}
+                    {waiting ? (
+                      <span
+                        className={styles.rowChip}
+                        data-tone="waiting"
+                        data-testid={`waiting-${row.id}`}
+                      >
+                        {t('today.waiting')}
+                      </span>
+                    ) : row.tags[0] ? (
+                      <span className={styles.rowChip}>{row.tags[0]}</span>
+                    ) : null}
                   </span>
-                  <span className={styles.rowLine}>
+                  <span className={styles.rowLine} data-testid={`situation-${row.id}`}>
                     {channels.map((channel) => (
                       <span
                         key={channel}
@@ -175,8 +163,22 @@ export async function CustomerList({
                           : channel}
                       </span>
                     ))}
-                    <span aria-hidden="true">{reach.join(' · ')}</span>
+                    {situation ?? (
+                      <span title={t('today.noWord')} aria-label={t('today.noWord')}>
+                        —
+                      </span>
+                    )}
                   </span>
+                </span>
+                <span
+                  className={styles.rowValue}
+                  title={t('today.valueWhy')}
+                  data-testid={`value-${row.id}`}
+                >
+                  {t('today.value')}
+                </span>
+                <span className={styles.rowWhen} data-testid={`since-${row.id}`}>
+                  {since ? t(`since.${since.key}` as 'since.days', { n: since.n ?? 0 }) : '—'}
                 </span>
               </Link>
             </li>
@@ -184,16 +186,9 @@ export async function CustomerList({
         })}
       </ul>
 
-      {/*
-        02's footer bar: how many, and — one line, with the reason as its
-        tooltip — the limit of the join. Two entries for one person are why
-        a reader needs it, so it is on the card and not under a link.
-      */}
       <p className={styles.listFooter}>
         <span data-testid="customer-count">
-          {truncated
-            ? t('list.footerTruncated', { shown: rows.length, total })
-            : t('list.footer', { count: people.length })}
+          {t('footerToday', { shown: people.length, total: shownOf })}
         </span>
         {' · '}
         <span data-testid="identity-limit" title={t('identityLimit')}>
@@ -204,7 +199,121 @@ export async function CustomerList({
   );
 }
 
-/** Up to two initials from the label's words; empty when there is none. */
+/** 02's three chips — everyone, talking now, gone quiet — each a live count, or none when unread. */
+export async function Segments({
+  segment,
+  everyone,
+  talking,
+  quiet,
+}: {
+  readonly segment: Segment;
+  readonly everyone: number;
+  /** `null` when the conversations were not read: no count, never zero. */
+  readonly talking: number | null;
+  readonly quiet: { readonly count: number; readonly capped: boolean } | null;
+}) {
+  const t = await getTranslations('customers.segments');
+  const chips: { key: Segment; label: string }[] = [
+    { key: 'everyone', label: t('everyone') },
+    {
+      key: 'talking',
+      label: talking === null ? t('talking') : t('count', { label: t('talking'), count: talking }),
+    },
+    {
+      key: 'quiet',
+      label:
+        quiet === null
+          ? t('quiet')
+          : t(quiet.capped ? 'countCapped' : 'count', { label: t('quiet'), count: quiet.count }),
+    },
+  ];
+  return (
+    <div className={styles.segmentBar}>
+      <nav className={styles.segments} aria-label={t('label')} data-testid="segments">
+        {chips.map((chip) => (
+          <Link
+            key={chip.key}
+            href={
+              chip.key === 'everyone'
+                ? '/customers'
+                : { pathname: '/customers', query: { segment: chip.key } }
+            }
+            className={styles.segmentChip}
+            aria-current={segment === chip.key ? 'page' : undefined}
+            data-testid={`segment-${chip.key}`}
+          >
+            {chip.label}
+          </Link>
+        ))}
+      </nav>
+      <span className={styles.sorted}>{t('sorted')}</span>
+      <span className="srOnly">{everyone}</span>
+    </div>
+  );
+}
+
+/** 02's dark card: who went quiet, and the way to them. */
+export async function ReachOut({
+  quiet,
+}: {
+  readonly quiet: { readonly count: number; readonly capped: boolean } | null;
+}) {
+  const t = await getTranslations('customers.reach');
+  return (
+    <section className={styles.reachCard} data-testid="reach-out">
+      <p className={styles.reachEyebrow}>{t('eyebrow')}</p>
+      <p className={styles.reachBody}>
+        {quiet === null
+          ? t('unread')
+          : quiet.count === 0
+            ? t('none')
+            : quiet.capped
+              ? t('bodyCapped', { count: quiet.count })
+              : t('body', { count: quiet.count })}
+      </p>
+      {quiet !== null && quiet.count > 0 ? (
+        <div className={styles.reachActions}>
+          <Link
+            href={{ pathname: '/outreach', query: { create: 'campaign' } }}
+            className={styles.reachPrimary}
+            data-testid="reach-write"
+          >
+            {t('write')}
+          </Link>
+          <Link
+            href={{ pathname: '/customers', query: { segment: 'quiet' } }}
+            className={styles.reachSecondary}
+            data-testid="reach-list"
+          >
+            {t('seeList')}
+          </Link>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** 02's "Who your customers are" — drawn in its shape: no read of order history for everyone. */
+export async function WhoTheyAre() {
+  const t = await getTranslations('customers.who');
+  return (
+    <section className={styles.sideCard} data-testid="who-they-are">
+      <h2 className={styles.sideTitle}>{t('title')}</h2>
+      <ul className={styles.bars}>
+        {(['bought', 'came', 'wholesale', 'never'] as const).map((key) => (
+          <li key={key} className={styles.bar}>
+            <span className={styles.barLabel}>{t(key)}</span>
+            <span className={styles.barTrack} aria-hidden="true" />
+            <span className={styles.barCount} title={t('unread')}>
+              —
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function initialsOf(label: string | null): string {
   if (!label) return '';
   return label
@@ -220,38 +329,3 @@ function initialsOf(label: string | null): string {
  * counted from the people on this list. Only when the list is whole: from a
  * truncated one it would describe the first 500, not the business.
  */
-export async function Composition({
-  rows,
-  truncated,
-}: {
-  readonly rows: readonly CustomerRow[] | null;
-  readonly truncated: boolean;
-}) {
-  if (rows === null || rows.length === 0 || truncated) return null;
-  const t = await getTranslations('customers');
-  const counts = new Map<string, number>();
-  for (const { channels } of collapseToPeople(rows)) {
-    for (const channel of channels) counts.set(channel, (counts.get(channel) ?? 0) + 1);
-  }
-  const max = Math.max(...counts.values());
-  const bars = [...counts.entries()].sort((x, y) => y[1] - x[1]);
-  return (
-    <section className={styles.sideCard} data-testid="customer-composition">
-      <h2 className={styles.sideTitle}>{t('composition.heading')}</h2>
-      <p className={styles.sideNote}>{t('composition.byChannel')}</p>
-      <ul className={styles.bars}>
-        {bars.map(([channel, count]) => (
-          <li key={channel} className={styles.bar} data-testid={`composition-${channel}`}>
-            <span className={styles.barLabel}>
-              {isKnownChannel(channel) ? t(`channel.${channel}` as 'channel.WHATSAPP') : channel}
-            </span>
-            <span className={styles.barTrack} aria-hidden="true">
-              <span className={styles.barFill} style={{ inlineSize: `${(count / max) * 100}%` }} />
-            </span>
-            <span className={styles.barCount}>{count}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}

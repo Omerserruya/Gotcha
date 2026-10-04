@@ -364,5 +364,72 @@
       "APPROVEDBy": "Approved by {name}",
       "REJECTEDBy": "Rejected by {name}"
     }
-  }
+  },
+  "segments": {
+    "label": "Who",
+    "everyone": "Everyone",
+    "talking": "Talking to you now",
+    "quiet": "Gone quiet",
+    "count": "{label} · {count}",
+    "countCapped": "{label} · {count}+",
+    "sorted": "Sorted by last contact"
+  },
+  "add": {
+    "label": "Add a customer",
+    "notYet": "Customers are added when they first write to you; adding one by hand comes next."
+  },
+  "today": {
+    "waiting": "Waiting on you",
+    "noWord": "No conversation read for them",
+    "value": "—",
+    "valueWhy": "Order totals come from the store, and there's no read of them for the whole list yet.",
+    "phone": "Reach: {handle}"
+  },
+  "since": {
+    "minutes": "{n}m ago",
+    "hours": "{n}h ago",
+    "yesterday": "Yesterday",
+    "days": "{n} days",
+    "months": "{n, plural, one {a month} other {# months}}"
+  },
+  "reach": {
+    "eyebrow": "Worth reaching out to",
+    "body": "{count, plural, one {# person wrote to you more than once, then went quiet.} other {# people wrote to you more than once, then went quiet.}}",
+    "bodyCapped": "At least {count} people wrote to you more than once, then went quiet.",
+    "none": "Nobody has gone quiet.",
+    "unread": "We couldn't read who has gone quiet.",
+    "write": "Write to them",
+    "seeList": "See the list"
+  },
+  "dupes": {
+    "title": "Two accounts look like one person",
+    "body": "They share a {match}. Merging keeps every message under one person.",
+    "match": {
+      "phone": "phone number",
+      "email": "email address"
+    },
+    "merge": "Merge them",
+    "confirm": "Merge these two into one person?",
+    "confirmYes": "Yes, merge",
+    "cancel": "Cancel",
+    "notSame": "Not the same",
+    "notSameNotYet": "Saying two accounts aren't one person comes next.",
+    "none": "No duplicates found.",
+    "done": "Merged.",
+    "failed": {
+      "gone": "One of them no longer exists.",
+      "conflict": "These two can't be merged — one was already merged elsewhere.",
+      "forbidden": "You don't have permission to merge customers.",
+      "failed": "They weren't merged — try again."
+    }
+  },
+  "who": {
+    "title": "Who your customers are",
+    "bought": "Bought once",
+    "came": "Came back",
+    "wholesale": "Wholesale",
+    "never": "Never bought",
+    "unread": "Order history comes from the store, and there is no read of it for everyone yet."
+  },
+  "footerToday": "Showing {shown} of {total}"
 }

@@ -1,7 +1,14 @@
 import { getTranslations } from 'next-intl/server';
 
 import { collapseToPeople } from '@/api/contracts/customers';
-import { Composition, CustomerList } from '@/features/customers/CustomerList';
+import { CustomerList, ReachOut, Segments, WhoTheyAre } from '@/features/customers/CustomerList';
+import { DuplicateCard } from '@/features/customers/DuplicateCard';
+import {
+  duplicateSuggestion,
+  inSegment,
+  peopleToday,
+  segmentOf,
+} from '@/features/customers/people-today';
 import styles from '@/features/customers/Customers.module.css';
 import { loadCustomers } from '@/features/customers/load-customers';
 import { PageContainer } from '@/shell/PageContainer';
@@ -42,12 +49,19 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams: Promise<{ readonly q?: string }>;
+  readonly searchParams: Promise<{ readonly q?: string; readonly segment?: string }>;
 }) {
   const t = await getTranslations('customers');
-  const { q } = await searchParams;
+  const { q, segment: rawSegment } = await searchParams;
   const query = q?.trim() ?? '';
-  const { rows, total, truncated, searchedField } = await loadCustomers(query);
+  const segment = segmentOf(rawSegment);
+  const { rows, total, truncated, searchedField, conversations, quiet } = await loadCustomers(
+    query,
+    { today: true },
+  );
+  const now = new Date();
+  const everyone = rows === null ? [] : peopleToday(rows, conversations, quiet?.ids ?? null, now);
+  const shown = everyone.filter((person) => inSegment(person, segment));
 
   /*
    * ★ 04: the count IS the title — "4,180 customers". People, counted from
@@ -85,6 +99,19 @@ export default async function Page({
             placeholder={t('search.placeholder')}
             data-testid="customer-search-input"
           />
+          {/*
+            02's "Add a customer". The create route needs the channel identity
+            a customer writes from — an id this screen would have to invent,
+            and a guessed one makes a duplicate. Drawn, with why.
+          */}
+          <span
+            className={styles.addCustomer}
+            aria-disabled="true"
+            title={t('add.notYet')}
+            data-testid="add-customer"
+          >
+            {t('add.label')}
+          </span>
         </form>
       }
     >
@@ -93,18 +120,31 @@ export default async function Page({
         // nobody has talked to you, the other means you do not know.
         <p data-testid="customers-unavailable">{t('unavailable')}</p>
       ) : (
-        <div className={styles.columns}>
-          <CustomerList
-            rows={rows}
-            total={total}
-            truncated={truncated}
-            searchedField={searchedField}
-            query={query}
+        <>
+          <Segments
+            segment={segment}
+            everyone={everyone.length}
+            talking={conversations === null ? null : everyone.filter((p) => p.talking).length}
+            quiet={quiet === null ? null : { count: quiet.count, capped: quiet.capped }}
           />
-          <aside className={styles.side}>
-            <Composition rows={rows} truncated={truncated} />
-          </aside>
-        </div>
+          <div className={styles.columns}>
+            <CustomerList
+              people={shown}
+              shownOf={truncated ? total : everyone.length}
+              rowsEmpty={rows.length === 0}
+              searchedField={searchedField}
+              query={query}
+              now={now}
+            />
+            <aside className={styles.side}>
+              <ReachOut
+                quiet={quiet === null ? null : { count: quiet.count, capped: quiet.capped }}
+              />
+              <DuplicateCard pair={duplicateSuggestion(rows)} />
+              <WhoTheyAre />
+            </aside>
+          </div>
+        </>
       )}
     </PageContainer>
   );

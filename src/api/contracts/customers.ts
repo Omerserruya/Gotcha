@@ -162,6 +162,8 @@ export function collapseToPeople(rows: readonly CustomerRow[]): readonly {
   readonly key: string;
   readonly primary: CustomerRow;
   readonly channels: readonly string[];
+  /** Every identity of the person — each one's conversations are theirs. */
+  readonly members: readonly CustomerRow[];
 }[] {
   const groups = new Map<string, CustomerRow[]>();
   for (const row of rows) {
@@ -174,6 +176,7 @@ export function collapseToPeople(rows: readonly CustomerRow[]): readonly {
     key,
     primary: members[0]!,
     channels: [...new Set(members.map((m) => m.channel).filter(Boolean))],
+    members,
   }));
 }
 
