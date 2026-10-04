@@ -224,9 +224,10 @@ function Row({
         {position}
       </span>
       <div
-        className={
-          TWO_LINES.has(step.id) ? styles.rowText : [styles.rowText, styles.rowLine].join(' ')
-        }
+        className={[
+          styles.rowText,
+          TWO_LINES.has(step.id) ? styles.rowTwoLine : styles.rowLine,
+        ].join(' ')}
       >
         <span className={styles.rowTitle}>{title}</span>
         <span className={styles.rowBody} title={blocker ? undefined : body}>
@@ -271,7 +272,8 @@ function StepAction({
     <span
       className={className}
       aria-disabled="true"
-      title={t('noScreen')}
+      // The test step: what to do meanwhile; any other: that no screen completes it yet.
+      title={id === 'test_conversation' ? t('testMessageNotYet') : t('noScreen')}
       data-testid={`step-action-${id}`}
     >
       {label}

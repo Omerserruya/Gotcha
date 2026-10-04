@@ -242,3 +242,22 @@ describe('★ 01c as measured', () => {
     expect(screen.getByTestId('test-message').getAttribute('title')).toBeTruthy();
   });
 });
+
+describe('★ 01c corrections (second measurement)', () => {
+  it('the store row: title and explanation as two lines, not glued', async () => {
+    await renderBlock();
+    const title = screen.getAllByText(/Connect your store/)[0]!;
+    expect(title.parentElement?.className).toMatch(/rowTwoLine/);
+  });
+
+  it('the test step with no screen: drawn, saying what to do meanwhile', async () => {
+    await renderBlock({
+      ...status,
+      steps: [step({ id: 'test_conversation', state: 'next', estimateMinutes: 3 })],
+    });
+    const action = screen.getByTestId('step-action-test_conversation');
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(action).not.toHaveAttribute('href');
+    expect(action.getAttribute('title')).toMatch(/your own phone/);
+  });
+});

@@ -408,4 +408,25 @@
     flex: none;
     color: var(--frame-text-muted);
   }
+
+  /* 02: the store and handover rows — the title, then its explanation beneath. */
+  .rowTwoLine {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .rowTwoLine .rowBody {
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  /* A step no screen completes yet: drawn, never a live-looking black button. */
+  .actionPrimary[aria-disabled='true'],
+  .actionSecondary[aria-disabled='true'] {
+    border-color: var(--border-default);
+    background-color: var(--panel-well);
+    color: var(--text-faint);
+    cursor: not-allowed;
+  }
 }
