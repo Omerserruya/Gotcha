@@ -50,6 +50,12 @@ export interface ApiErrorInit {
   readonly status?: number;
   /** Developer-facing text from the backend. Never rendered to end users. */
   readonly developerMessage?: string;
+  /**
+   * A sentence the backend wrote FOR the merchant (`{ message }`), rendered
+   * verbatim — and only where that route's contract says so (the key form's
+   * 422, backend 1aaaefe4). Anywhere else, ignore it.
+   */
+  readonly userMessage?: string;
   readonly fieldErrors?: readonly FieldError[];
   /** Correlation id, when the platform supplies one. */
   readonly requestId?: string;
@@ -98,6 +104,7 @@ export class ApiError extends Error {
   readonly kind: ApiErrorKind;
   readonly status?: number;
   readonly developerMessage?: string;
+  readonly userMessage?: string;
   readonly fieldErrors: readonly FieldError[];
   readonly requestId?: string;
   readonly method?: string;
@@ -120,6 +127,7 @@ export class ApiError extends Error {
     this.kind = init.kind;
     this.status = init.status;
     this.developerMessage = init.developerMessage;
+    this.userMessage = init.userMessage;
     this.fieldErrors = init.fieldErrors ?? [];
     this.requestId = init.requestId;
     this.method = init.method;

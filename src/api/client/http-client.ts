@@ -85,6 +85,7 @@ function composeSignals(
 
 async function readErrorBody(response: Response): Promise<{
   developerMessage?: string;
+  userMessage?: string;
   fieldErrors?: FieldError[];
   code?: string;
   failureCode?: string;
@@ -108,6 +109,7 @@ async function readErrorBody(response: Response): Promise<{
   if (!parsed.success) return {};
   return {
     developerMessage: parsed.data.error,
+    userMessage: parsed.data.message,
     fieldErrors: parsed.data.details,
     code: parsed.data.code,
     failureCode: parsed.data.failureCode,
@@ -182,6 +184,7 @@ export class HttpClient {
     if (!response.ok) {
       const {
         developerMessage,
+        userMessage,
         fieldErrors,
         code,
         failureCode,
@@ -207,6 +210,7 @@ export class HttpClient {
         kind: code?.startsWith('TENANT_') ? 'tenant_inactive' : kindFromStatus(response.status),
         status: response.status,
         developerMessage,
+        userMessage,
         fieldErrors,
         code,
         failureCode,

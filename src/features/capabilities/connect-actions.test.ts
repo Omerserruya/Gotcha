@@ -9,7 +9,8 @@ vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }))
 vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
-import { connectIntegration, startOAuth } from './connect-actions';
+import { connectIntegration, startOAuth, startWooOAuth } from './connect-actions';
+import { storeAddressOf } from './oauth';
 
 const catalogue = [
   {
@@ -141,8 +142,19 @@ describe('★★ OAuth start at the wire (backend 381a5d1b)', () => {
   });
 
   it('a system that does not come back here is never started', async () => {
-    expect(await startOAuth('stripe')).toEqual({ ok: false, reason: 'not_here' });
+    expect(await startOAuth('wix')).toEqual({ ok: false, reason: 'not_here' });
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['stripe', '/api/connectors/stripe/oauth/init?flow=redesign_studio'],
+    ['zoho_crm', '/api/integrations/oauth/zoho_crm/init?flow=redesign_studio'],
+    ['google_calendar', '/api/integrations/oauth/google_calendar/init?flow=redesign_studio'],
+    ['calendly', '/api/integrations/oauth/calendly/init?flow=redesign_studio'],
+  ])('★ %s starts at its own route (e7523379): %s', async (slug, path) => {
+    get.mockResolvedValue({ url: 'https://provider.example/authorize' });
+    expect(await startOAuth(slug)).toEqual({ ok: true, url: 'https://provider.example/authorize' });
+    expect((get.mock.calls.at(-1)![0] as { endpoint: { path: string } }).endpoint.path).toBe(path);
   });
 
   it('an address that is not https is not followed', async () => {
@@ -164,5 +176,73 @@ describe('★★ OAuth start at the wire (backend 381a5d1b)', () => {
       });
     });
     expect(await startOAuth('shopify')).toEqual({ ok: false, reason });
+  });
+});
+
+describe('★★ B — the store address, and the start at the wire', () => {
+  it.each([
+    ['shop.example.com', 'https://shop.example.com'],
+    ['https://shop.example.com/', 'https://shop.example.com'],
+    ['https://example.com/store/', 'https://example.com/store'],
+    ['http://shop.example.com', null],
+    ['https://user:pw@shop.example.com', null],
+    ['localhost', null],
+    ['', null],
+    ['javascript:alert(1)', null],
+  ])('production: %j → %j', (raw, address) => {
+    expect(storeAddressOf(raw, true)).toBe(address);
+  });
+
+  it('http only outside production', () => {
+    expect(storeAddressOf('http://shop.example.com', false)).toBe('http://shop.example.com');
+  });
+
+  it('asks for the redesign flow as JSON with the address; refusals are named', async () => {
+    get.mockResolvedValue({ url: 'https://shop.example.com/wc-auth/v1/authorize?a=1' });
+    expect(await startWooOAuth('shop.example.com')).toEqual({
+      ok: true,
+      url: 'https://shop.example.com/wc-auth/v1/authorize?a=1',
+    });
+    expect((get.mock.calls.at(-1)![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+      '/api/integrations/woocommerce/oauth/init?storeUrl=https%3A%2F%2Fshop.example.com&flow=redesign_studio&format=json',
+    );
+    get.mockClear();
+    expect(await startWooOAuth('not a store')).toEqual({ ok: false, reason: 'invalid_store' });
+    expect(get).not.toHaveBeenCalled();
+    get.mockImplementation(async () => {
+      throw new ApiError({
+        kind: 'validation',
+        status: 400,
+        developerMessage: 'invalid_store_url',
+      });
+    });
+    expect(await startWooOAuth('shop.example.com')).toEqual({ ok: false, reason: 'invalid_store' });
+  });
+});
+
+describe('★★ 1aaaefe4 — 422 from a key form', () => {
+  it('carries the backend’s merchant sentence', async () => {
+    get.mockResolvedValue([
+      {
+        id: 'i',
+        slug: 'airtable',
+        name: 'Airtable',
+        authType: 'API_KEY',
+        authSchema: { fields: [{ key: 'apiKey', type: 'password', label: 'Key', required: true }] },
+      },
+    ]);
+    post.mockImplementation(async () => {
+      throw new ApiError({
+        kind: 'validation',
+        status: 422,
+        developerMessage: 'validation_failed',
+        userMessage: ' That key was rejected. ',
+      });
+    });
+    expect(await connectIntegration('airtable', { apiKey: 'x' })).toEqual({
+      ok: false,
+      reason: 'validation',
+      message: 'That key was rejected.',
+    });
   });
 });

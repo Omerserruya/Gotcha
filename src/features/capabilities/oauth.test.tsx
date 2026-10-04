@@ -26,9 +26,14 @@ describe('★ which systems come back here (backend 381a5d1b)', () => {
     // Shopify re-authorises the store it has; a new one is installed from Shopify.
     ['shopify', true, true],
     ['shopify', false, false],
-    ['stripe', false, false],
-    ['zoho_crm', false, false],
-    ['google_calendar', true, false],
+    // Live since backend e7523379.
+    ['stripe', false, true],
+    ['zoho_crm', false, true],
+    ['google_calendar', true, true],
+    ['calendly', false, true],
+    // No redesign flow yet.
+    ['wix', false, false],
+    ['square', false, false],
   ] as const)('%s (connected: %s) → %s', (slug, connected, here) => {
     expect(oauthHere(slug, connected)).toBe(here);
   });

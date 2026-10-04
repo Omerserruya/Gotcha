@@ -10,7 +10,7 @@ import { integrationEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { credentialsFor } from './connect-form';
-import { OAUTH_HERE, SALESFORCE_HOSTS } from './oauth';
+import { OAUTH_HERE, SALESFORCE_HOSTS, storeAddressOf } from './oauth';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 export type ConnectResult =
@@ -23,7 +23,9 @@ export type ConnectResult =
        * form at all; `entitlement` · `forbidden` · `failed`.
        */
       readonly reason: 'missing' | 'not_here' | 'entitlement' | 'forbidden' | 'failed';
-    };
+    }
+  /** 422: the keys did not work; nothing was written. The sentence is the backend's, for the merchant. */
+  | { readonly ok: false; readonly reason: 'validation'; readonly message: string | null };
 
 /**
  * 10's Connect — live (Omer, 2026-10-04): `POST /api/integrations/:slug/connect`.
@@ -63,6 +65,9 @@ export async function connectIntegration(
     logger.warn('capabilities.connect_failed', { slug, cause });
     if (isApiError(cause)) {
       if (cause.status === 400) return { ok: false, reason: 'missing' };
+      if (cause.status === 422) {
+        return { ok: false, reason: 'validation', message: cause.userMessage?.trim() || null };
+      }
       if (cause.status === 402) return { ok: false, reason: 'entitlement' };
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
     }
@@ -113,6 +118,37 @@ export async function startOAuth(slug: string, loginHost?: string): Promise<OAut
       if (cause.status === 500 && /not_configured/.test(cause.developerMessage ?? '')) {
         return { ok: false, reason: 'not_configured' };
       }
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type WooStart =
+  | { readonly ok: true; readonly url: string }
+  | { readonly ok: false; readonly reason: 'invalid_store' | 'forbidden' | 'failed' };
+
+/** B: WooCommerce through the store's own approval page. Nothing is connected before it. */
+export async function startWooOAuth(raw: string): Promise<WooStart> {
+  const storeUrl = storeAddressOf(raw, process.env.NODE_ENV === 'production');
+  if (!storeUrl) return { ok: false, reason: 'invalid_store' };
+  try {
+    const { url } = await serverApi().get({
+      endpoint: integrationEndpoints.wooOAuthInit(storeUrl),
+      payload: z.object({ url: z.string().url() }),
+      raw: true,
+    });
+    // The store's own approval page: https, or the store's own scheme outside production.
+    const target = new URL(url);
+    if (target.protocol !== 'https:' && target.protocol !== new URL(storeUrl).protocol) {
+      return { ok: false, reason: 'failed' };
+    }
+    return { ok: true, url };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('capabilities.woo_start_failed', { cause });
+    if (isApiError(cause)) {
+      if (cause.status === 400) return { ok: false, reason: 'invalid_store' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
     }
     return { ok: false, reason: 'failed' };
   }

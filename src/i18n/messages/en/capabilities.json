@@ -130,7 +130,8 @@
       "not_here": "This one cannot be connected from here.",
       "entitlement": "Connecting systems isn't part of this plan.",
       "forbidden": "You don't have permission to connect systems.",
-      "failed": "It didn't connect. Nothing was saved — try again."
+      "failed": "It didn't connect. Nothing was saved — try again.",
+      "validation": "{name} didn't accept those details. Nothing was saved — check them and try again."
     }
   },
   "systemDown": "Hidden from GOTCHA while {name} needs fixing — reconnect it in Integrations.",
@@ -158,7 +159,11 @@
       "validation_failed": "{name} connected, but the first check against it failed.",
       "shop_connected_elsewhere": "That store is already connected to another workspace.",
       "link_failed": "{name} answered, but the store couldn't be linked to this workspace.",
-      "other": "{name} didn't connect. Try again."
+      "other": "{name} didn't connect. Try again.",
+      "not_configured": "{name} isn't set up on GOTCHA's side yet. Nothing was connected.",
+      "insufficient_permissions": "{name} was approved without the access GOTCHA needs. Approve again with read and write access.",
+      "callback_not_received": "{name} didn't send the keys back. Nothing was connected — try again.",
+      "invalid_state": "That approval couldn't be matched to this workspace. Start again from Connect."
     },
     "close": "Close"
   },
@@ -167,5 +172,16 @@
     "WRITE": "Changing things",
     "DELETE": "Removing things",
     "READ": "Looking things up"
+  },
+  "woo": {
+    "address": "Store address",
+    "start": "Approve at {name}",
+    "opening": "Opening your store…",
+    "note": "Your store asks you to approve GOTCHA, then brings you back here.",
+    "error": {
+      "invalid_store": "That doesn't look like a store address we can reach — try https://yourstore.com",
+      "forbidden": "You don't have permission to connect systems.",
+      "failed": "{name} couldn't be opened — try again."
+    }
   }
 }

@@ -13,7 +13,8 @@ vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
 /* Connecting stores real secrets: the action is a spy. */
 const connectIntegration = vi.hoisted(() => vi.fn());
 const startOAuth = vi.hoisted(() => vi.fn());
-vi.mock('./connect-actions', () => ({ connectIntegration, startOAuth }));
+const startWooOAuth = vi.hoisted(() => vi.fn());
+vi.mock('./connect-actions', () => ({ connectIntegration, startOAuth, startWooOAuth }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'capabilities') =>
     createTranslator({ locale: 'en', messages: { capabilities: messages }, namespace }),
@@ -204,7 +205,12 @@ describe('★★ 10 for a system that is not connected — its own screen', () =
   });
 
   it('★★ credentials: the form, and nothing is sent without the click', async () => {
-    inIntl(await AvailableSystem({ integration: woo }));
+    // Any key-form system (WooCommerce itself now connects by the store's approval).
+    inIntl(
+      await AvailableSystem({
+        integration: integrationSchema.parse({ ...woo, slug: 'bigcommerce', name: 'BigCommerce' }),
+      }),
+    );
     expect(screen.getByTestId('connect-consumerKey')).toHaveAttribute('type', 'password');
     expect(screen.getByTestId('connect-storeUrl')).toHaveAttribute('type', 'url');
     expect(screen.getByTestId('connect-submit')).toBeDisabled();
@@ -215,7 +221,7 @@ describe('★★ 10 for a system that is not connected — its own screen', () =
     connectIntegration.mockResolvedValue({ ok: true });
     await userEvent.click(screen.getByTestId('connect-submit'));
     expect(connectIntegration).toHaveBeenCalledTimes(1);
-    expect(connectIntegration).toHaveBeenCalledWith('woocommerce', {
+    expect(connectIntegration).toHaveBeenCalledWith('bigcommerce', {
       storeUrl: 'https://shop.example.com',
       consumerKey: 'ck_1',
       consumerSecret: 'cs_1',
@@ -262,17 +268,17 @@ describe('★★ 10 for a system that is not connected — its own screen', () =
   });
 
   it('★ OAuth whose way back is still the old app is drawn, with why; so is no form', async () => {
-    const stripe = integrationSchema.parse({
-      id: 'i-st',
-      slug: 'stripe',
-      name: 'Stripe',
+    const wix = integrationSchema.parse({
+      id: 'i-wx',
+      slug: 'wix',
+      name: 'Wix',
       authType: 'OAUTH2',
       authSchema: { oauth: true, fields: [] },
     });
-    const one = inIntl(await AvailableSystem({ integration: stripe }));
+    const one = inIntl(await AvailableSystem({ integration: wix }));
     expect(screen.queryByTestId('oauth-start')).toBeNull();
     expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(
-      /Stripe connects at its own site/,
+      /Wix connects at its own site/,
     );
     one.unmount();
     // A new Shopify store is installed from Shopify — not from here.
@@ -293,5 +299,57 @@ describe('★★ 10 for a system that is not connected — its own screen', () =
     inIntl(await AvailableSystem({ integration: custom }));
     expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(/set up with GOTCHA/);
     expect(screen.getByTestId('available-brings')).toHaveTextContent('—');
+  });
+});
+
+describe('★★ B — WooCommerce by the store’s approval (no keys typed here)', () => {
+  it('only the store address; the store’s page opens on the click', async () => {
+    startWooOAuth.mockResolvedValue({
+      ok: true,
+      url: 'https://shop.example.com/wc-auth/v1/authorize?x',
+    });
+    inIntl(await AvailableSystem({ integration: woo }));
+    expect(screen.queryByTestId('connect-consumerKey')).toBeNull();
+    expect(screen.getByTestId('woo-start')).toBeDisabled();
+    await userEvent.type(screen.getByTestId('woo-address'), 'shop.example.com');
+    expect(startWooOAuth).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('woo-start'));
+    expect(startWooOAuth).toHaveBeenCalledWith('shop.example.com');
+    expect(assign).toHaveBeenCalledWith('https://shop.example.com/wc-auth/v1/authorize?x');
+  });
+
+  it('an address the backend refuses is said; nothing opens', async () => {
+    startWooOAuth.mockResolvedValue({ ok: false, reason: 'invalid_store' });
+    inIntl(await AvailableSystem({ integration: woo }));
+    await userEvent.type(screen.getByTestId('woo-address'), 'nope');
+    await userEvent.click(screen.getByTestId('woo-start'));
+    expect(screen.getByTestId('woo-problem')).toHaveTextContent(
+      "That doesn't look like a store address we can reach — try https://yourstore.com",
+    );
+    expect(assign).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ 1aaaefe4 — keys that do not work: the backend’s sentence, verbatim', () => {
+  it('422 with a message shows it; without one, ours', async () => {
+    connectIntegration.mockResolvedValue({
+      ok: false,
+      reason: 'validation',
+      message: 'Airtable rejected that token — it needs data.records:read.',
+    });
+    const one = inIntl(await AvailableSystem({ integration: airtable }));
+    await userEvent.type(screen.getByTestId('connect-apiKey'), 'pat');
+    await userEvent.click(screen.getByTestId('connect-submit'));
+    expect(screen.getByTestId('connect-problem')).toHaveTextContent(
+      'Airtable rejected that token — it needs data.records:read.',
+    );
+    one.unmount();
+    connectIntegration.mockResolvedValue({ ok: false, reason: 'validation', message: null });
+    inIntl(await AvailableSystem({ integration: airtable }));
+    await userEvent.type(screen.getByTestId('connect-apiKey'), 'pat');
+    await userEvent.click(screen.getByTestId('connect-submit'));
+    expect(screen.getByTestId('connect-problem')).toHaveTextContent(
+      "Airtable didn't accept those details.",
+    );
   });
 });

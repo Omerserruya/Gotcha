@@ -172,3 +172,14 @@ describe('★★ the entitlement gate’s own fields survive the envelope', () =
     expect(api.currentPlan).toBeNull();
   });
 });
+
+describe('★★ 1aaaefe4 — a 422 key-form refusal keeps its merchant sentence', () => {
+  it('`{ error, message }` → developerMessage and userMessage, through the real client', async () => {
+    respond(422, { error: 'validation_failed', message: 'WooCommerce rejected those keys.' });
+    const caught = await buy().catch((e: unknown) => e);
+    expect(caught).toBeInstanceOf(ApiError);
+    expect((caught as ApiError).status).toBe(422);
+    expect((caught as ApiError).developerMessage).toBe('validation_failed');
+    expect((caught as ApiError).userMessage).toBe('WooCommerce rejected those keys.');
+  });
+});

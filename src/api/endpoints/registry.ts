@@ -570,6 +570,9 @@ export const voiceChannelEndpoints = {
  * list route excludes it with a comment saying no list view needs it. The
  * contract strips it either way; the screen reads the list.
  */
+/** Providers whose redesign flow starts at `/api/integrations/oauth/{slug}/init`. */
+const LEGACY_OAUTH_ROUTE = new Set(['zoho_crm', 'google_calendar', 'calendly']);
+
 export const integrationEndpoints = {
   list: () => endpoint('/api/integrations'),
   detail: (slug: string) => endpoint('/api/integrations/{slug}', { slug }),
@@ -593,7 +596,20 @@ export const integrationEndpoints = {
           slug,
           loginHost,
         })
-      : endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio', { slug }),
+      : LEGACY_OAUTH_ROUTE.has(slug)
+        ? // Zoho, Google Calendar and Calendly start from the older routes (backend e7523379).
+          endpoint('/api/integrations/oauth/{slug}/init?flow=redesign_studio', { slug })
+        : endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio', { slug }),
+  /**
+   * B: WooCommerce through the store's own approval — the store address only,
+   * answered `{ url }` (`format=json`); 400 `invalid_store_url`. Lands on
+   * `?system=woocommerce&connected=1|error=<code>`.
+   */
+  wooOAuthInit: (storeUrl: string) =>
+    endpoint(
+      '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow=redesign_studio&format=json',
+      { storeUrl },
+    ),
   /**
    * Screens 14b/14c — the use case, the parts, who CAN serve each and who
    * DOES. Never connects anything; connecting stays in the marketplace.

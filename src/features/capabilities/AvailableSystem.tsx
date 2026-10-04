@@ -6,6 +6,7 @@ import { sentenceCase, type Integration } from '@/api/contracts/integrations';
 import { ConnectForm } from './ConnectForm';
 import { IntegrationLogo } from './IntegrationLogo';
 import { OAuthButton } from './OAuthButton';
+import { WooConnect } from './WooConnect';
 import { oauthHere } from './oauth';
 import styles from './Capabilities.module.css';
 
@@ -55,7 +56,10 @@ export async function AvailableSystem({ integration }: { readonly integration: I
         <h2 className={styles.connectHeading}>
           {t('available.connectTitle', { name: integration.name })}
         </h2>
-        {!oauth && fields.length > 0 ? (
+        {integration.slug === 'woocommerce' ? (
+          // B: the store's own approval replaces the key form.
+          <WooConnect name={integration.name} />
+        ) : !oauth && fields.length > 0 ? (
           <ConnectForm slug={integration.slug} name={integration.name} fields={fields} />
         ) : oauth && oauthHere(integration.slug, false) ? (
           <OAuthButton slug={integration.slug} name={integration.name} mode="connect" />

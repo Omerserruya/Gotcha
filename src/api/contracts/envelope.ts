@@ -27,6 +27,11 @@ export const errorEnvelopeSchema = z.object({
    * remembered to send it. Losing the bet costs the whole envelope.
    */
   error: z.string().optional(),
+  /**
+   * A sentence written FOR the merchant — only where a route says so (backend
+   * 1aaaefe4: `422 { error: 'validation_failed', message }` from a key form).
+   */
+  message: z.string().optional(),
   details: z.array(z.object({ field: z.string(), message: z.string() })).optional(),
   /**
    * The commercial gate (402) adds these. `z.object` strips unknown keys, so
