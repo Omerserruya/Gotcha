@@ -252,13 +252,31 @@
         "low": "Low confidence"
       },
       "chats": "{count, plural, one {# chat} other {# chats}}",
-      "use": "Use “{answer}”",
+      "use": "Use {answer}",
       "edit": "Edit",
       "skip": "Skip",
       "notLive": "Deciding from here comes next — nothing is used until it does.",
       "readyCard": "{count, plural, one {# more is ready} other {# more are ready}} — high confidence, no conflicts",
       "addReady": "{count, plural, one {Add # ready answer} other {Add # ready answers}}",
-      "later": "Finish later"
+      "later": "Finish later",
+      "coexistence": "Coexistence · the app on your phone keeps working",
+      "closeAnytime": "You can close this — we'll email the workspace owners when the report is ready.",
+      "tab": {
+        "needs_a_look": "Needs a look",
+        "ready_to_add": "Ready to add",
+        "rejected": "Rejected",
+        "already_covered": "Already covered"
+      },
+      "qa": "Questions and answers",
+      "saidLead": "Your replies said",
+      "saidAnd": "and",
+      "saidIn": "in {count, plural, one {# chat} other {# chats}}",
+      "saidInShort": "in {count}",
+      "quoted": "“{answer}”",
+      "seeChats": "See the chats",
+      "seeChatsNotYet": "Opening the chats behind an answer comes next.",
+      "previewFive": "Preview five",
+      "previewNotYet": "Previewing customer profiles comes next."
     },
     "wizard": {
       "title": "Connect WhatsApp",

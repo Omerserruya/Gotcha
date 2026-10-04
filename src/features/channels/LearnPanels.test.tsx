@@ -123,11 +123,35 @@ describe('★ 13e — the platform’s two stages, drawn as 02’s timeline', ()
 
   it('running: closing is safe, and the email promise rides on it, with its condition', async () => {
     render(await ImportPanel({ status: status(), receiving: true }));
+    // 02's foot sentence, said — with no "minutes left": no estimate is reported.
+    expect(screen.getByTestId('import-foot')).toHaveTextContent(
+      "You can close this — we'll email the workspace owners when the report is ready.",
+    );
+    expect(screen.getByTestId('import-foot')).not.toHaveTextContent(/minutes/);
     expect(screen.getByTestId('import-close')).toHaveAttribute(
       'title',
-      expect.stringMatching(/Safe to close.*only goes to owners who have an email/),
+      expect.stringMatching(/only goes to owners who have an email/),
     );
     expect(screen.getByTestId('import-review')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('★ 13e corrections: the active step carries its %; coexistence is said under the number', async () => {
+    const one = render(
+      await ImportPanel({
+        status: status({ analysisPercent: 64 }),
+        receiving: true,
+        coexistence: true,
+      }),
+    );
+    expect(screen.getByTestId('learn-step-learning')).toHaveTextContent('64%');
+    expect(screen.getByTestId('learn-step-connected')).toHaveTextContent(
+      'Coexistence · the app on your phone keeps working',
+    );
+    one.unmount();
+    render(await ImportPanel({ status: status({ stage: 'ready' }), receiving: true }));
+    expect(screen.getByTestId('learn-step-connected')).not.toHaveTextContent('Coexistence');
+    expect(screen.getByTestId('learn-step-learning')).not.toHaveTextContent('%');
+    expect(screen.queryByTestId('import-foot')).toBeNull();
   });
 
   it('ready: Review report is live', async () => {
@@ -170,60 +194,62 @@ describe('★ 13f — the report, no paragraphs', () => {
       tab,
     });
 
-  it('tabs count each group; "already covered" never claims anything was turned down', async () => {
+  it('02’s tabs: needs a look · ready to add · rejected — already covered only when there is any', async () => {
     render(await report());
-    expect(screen.getByTestId('report-tab-needs_a_look')).toHaveTextContent('Needs a look 3');
-    expect(screen.getByTestId('report-tab-ready')).toHaveTextContent('Approved 1');
-    expect(screen.getByTestId('report-tab-rejected')).toHaveTextContent('Rejected 1');
-    expect(screen.getByTestId('report-tab-already_covered')).toHaveTextContent('Already covered 1');
+    // c2 conflicts, c3 is under the floor; c1 is high and clean — ready to add.
+    expect(screen.getByTestId('report-tab-needs_a_look')).toHaveTextContent('Needs a look2');
+    expect(screen.getByTestId('report-tab-ready_to_add')).toHaveTextContent('Ready to add1');
+    expect(screen.getByTestId('report-tab-rejected')).toHaveTextContent('Rejected1');
+    expect(screen.getByTestId('report-tab-already_covered')).toHaveTextContent('Already covered1');
+    // Approved is in use, not to review: no tab.
+    expect(screen.queryByTestId('report-tab-ready')).toBeNull();
   });
 
-  it('a conflict shows both answers and asks the reviewer to choose', async () => {
+  it('★ a high, clean answer is never twice: in the grey box on Needs a look, a card only on Ready to add', async () => {
+    const one = render(await report());
+    expect(screen.queryByTestId('candidate-c1')).toBeNull();
+    expect(screen.getByTestId('report-ready-card')).toHaveTextContent('Do you ship to Eilat?');
+    one.unmount();
+    render(await report('ready_to_add'));
+    expect(screen.getByTestId('candidate-c1')).toBeInTheDocument();
+    expect(screen.queryByTestId('report-ready-card')).toBeNull();
+  });
+
+  it('a conflict: one sentence of what was said, most-seen first; the decisions get them in that order', async () => {
     render(await report());
     const card = screen.getByTestId('candidate-c2');
-    expect(card).toHaveTextContent('Conflict');
-    expect(card).toHaveTextContent('14 days');
-    expect(card).toHaveTextContent('30 days');
+    expect(screen.getByTestId('said-c2')).toHaveTextContent(
+      'Your replies said 14 days in 40 chats and 30 days in 33.',
+    );
     expect(within(card).getByText('Conflict')).toHaveAttribute(
       'title',
       expect.stringMatching(/will not pick for you/),
     );
-    // Each observed answer goes to the decisions, to be used as it stands.
-    expect(within(card).getByTestId('decide-c2').getAttribute('data-variants')).toMatch(
-      /14 days.*\|.*30 days/,
-    );
-    expect(within(screen.getByTestId('candidate-c1')).getByTestId('decide-c1')).toHaveAttribute(
-      'data-variants',
-      '',
+    expect(within(card).getByTestId('decide-c2').getAttribute('data-variants')).toBe(
+      '14 days|30 days',
     );
   });
 
-  it('below the server’s floor is "Low confidence"; above it, the percentage', async () => {
-    render(await report());
-    expect(screen.getByTestId('candidate-c3')).toHaveTextContent('Low confidence');
-    expect(screen.getByTestId('candidate-c1')).toHaveTextContent('92%');
-  });
-
-  it('the bulk counts only what the server would take — and NOTHING with no floor', async () => {
-    const { unmount } = render(await report());
-    expect(screen.getByTestId('report-bulk')).toHaveTextContent('Add 1 ready answer');
-    unmount();
-    // Called directly: the helper's default would fill an `undefined` floor.
-    render(
-      await ReportPanel({
-        status: status({ stage: 'ready' }),
-        candidates: ALL,
-        bulkMinConfidence: undefined,
-        tab: undefined,
-      }),
-    );
-    expect(screen.getByTestId('report-bulk')).toHaveTextContent('Add 0 ready answers');
+  it('a chip only for a reason; the figure on the right — never both', async () => {
+    const one = render(await report());
+    const low = screen.getByTestId('candidate-c3');
+    expect(low).toHaveTextContent('Low confidence');
+    expect(within(low).getAllByText(/61%/)).toHaveLength(1);
+    one.unmount();
+    render(await report('ready_to_add'));
+    const high = screen.getByTestId('candidate-c1');
+    expect(within(high).getAllByText(/92%/)).toHaveLength(1);
+    expect(high).not.toHaveTextContent('Low confidence');
+    // The answer, quoted.
+    expect(high).toHaveTextContent('“Yes, two to three days.”');
   });
 
   it('★ a card’s decisions are live (Omer, decision 13); bulk and rerun stay drawn', async () => {
     render(await report());
-    expect(within(screen.getByTestId('candidate-c1')).getByTestId('decide-c1')).toBeInTheDocument();
+    expect(within(screen.getByTestId('candidate-c3')).getByTestId('decide-c3')).toBeInTheDocument();
     expect(screen.getByTestId('report-bulk')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('report-rerun')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('report-preview')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('the only sentence is the head’s; the body has no paragraph of prose', async () => {
@@ -233,17 +259,41 @@ describe('★ 13f — the report, no paragraphs', () => {
 });
 
 describe('★ 13f corrections (measurement of 9b474ed)', () => {
+  it('no already-covered tab when nothing is; most-seen leads whatever order the server sends', async () => {
+    render(
+      await ReportPanel({
+        status: status({ stage: 'ready' }),
+        candidates: [
+          candidate({
+            id: 'k',
+            conflict: true,
+            variants: [
+              { key: 'a', answer: '30 days', occurrenceCount: 12 },
+              { key: 'b', answer: '14 days', occurrenceCount: 61 },
+            ],
+          }),
+        ],
+        bulkMinConfidence: 0.8,
+        tab: undefined,
+      }),
+    );
+    expect(screen.queryByTestId('report-tab-already_covered')).toBeNull();
+    expect(screen.getByTestId('said-k')).toHaveTextContent(
+      'Your replies said 14 days in 61 chats and 30 days in 12.',
+    );
+    expect(screen.getByTestId('decide-k').getAttribute('data-variants')).toBe('14 days|30 days');
+  });
+
   it('no count of nothing: a candidate without chats shows only its confidence', async () => {
     render(
       await ReportPanel({
         status: status({ stage: 'ready' }),
         candidates: [candidate({ id: 'z', occurrenceCount: 0, confidence: 0.92 })],
         bulkMinConfidence: 0.8,
-        tab: undefined,
+        tab: 'ready_to_add',
       }),
     );
-    // The chip and the meta both say 92%; neither is a count of nothing.
-    expect(within(screen.getByTestId('candidate-z')).getAllByText('92%')).toHaveLength(2);
+    expect(within(screen.getByTestId('candidate-z')).getAllByText('92%')).toHaveLength(1);
     expect(screen.getByTestId('candidate-z')).not.toHaveTextContent(/chats?/);
   });
 });

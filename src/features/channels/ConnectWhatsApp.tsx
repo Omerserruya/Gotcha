@@ -90,7 +90,7 @@ export function ConnectWhatsApp({
 
   return (
     <>
-      <ol className={styles.stepper} data-testid="connect-steps">
+      <ol className={styles.wizardSteps} data-testid="connect-steps">
         {STEPS.map((key, i) => (
           <li
             key={key}

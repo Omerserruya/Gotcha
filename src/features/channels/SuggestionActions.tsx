@@ -17,11 +17,14 @@ export function SuggestionActions({
   id,
   answer,
   variants,
+  seeChats = null,
 }: {
   readonly id: string;
   readonly answer: string;
   /** The observed answers when they disagree; empty otherwise. */
   readonly variants: readonly string[];
+  /** 02's "See the chats" on the right of a conflict — drawn: the evidence has no screen yet. */
+  readonly seeChats?: string | null;
 }) {
   const t = useTranslations('channels.whatsapp');
   const router = useRouter();
@@ -106,7 +109,8 @@ export function SuggestionActions({
                   key={i}
                   type="button"
                   className={styles.reportAction}
-                  data-tone="primary"
+                  // 02: the most-seen answer leads (black); the others beside it.
+                  data-tone={i === 0 ? 'primary' : undefined}
                   disabled={isPending}
                   data-testid={`use-${id}-${i}`}
                   onClick={() => approve(v)}
@@ -144,6 +148,16 @@ export function SuggestionActions({
             >
               {conflict ? t('learn.skip') : t('review.reject')}
             </button>
+            {seeChats ? (
+              <span
+                className={styles.reportSeeChats}
+                aria-disabled="true"
+                title={t('learn.seeChatsNotYet')}
+                data-testid={`see-chats-${id}`}
+              >
+                {seeChats}
+              </span>
+            ) : null}
           </>
         )}
       </p>

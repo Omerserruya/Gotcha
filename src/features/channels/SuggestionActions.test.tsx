@@ -74,3 +74,22 @@ describe('★★ 13f — a suggestion decided only on a press', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 });
+
+describe('★ 02’s pills: the answer to use leads, black; the rest bordered', () => {
+  it('only the first variant is primary; "See the chats" is drawn, with why', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ channels: messages }}>
+        <SuggestionActions
+          id="c1"
+          answer="x"
+          variants={['14 days', '30 days']}
+          seeChats="See the chats"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('use-c1-0')).toHaveAttribute('data-tone', 'primary');
+    expect(screen.getByTestId('use-c1-0')).toHaveTextContent(/^Use 14 days$/);
+    expect(screen.getByTestId('use-c1-1')).not.toHaveAttribute('data-tone');
+    expect(screen.getByTestId('see-chats-c1')).toHaveAttribute('aria-disabled', 'true');
+  });
+});

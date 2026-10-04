@@ -135,7 +135,11 @@ export default async function Page({
           width={600}
           testId="drawer-import"
         >
-          <ImportPanel status={learn} receiving={first?.health?.receiving === true} />
+          <ImportPanel
+            status={learn}
+            receiving={first?.health?.receiving === true}
+            coexistence={first?.usesBusinessApp === true}
+          />
         </Drawer>
       ) : view === 'report' && learn && whatsapp?.[1].candidates ? (
         <Drawer

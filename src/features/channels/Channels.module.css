@@ -857,21 +857,26 @@
     list-style: none;
   }
 
-  /* Each step is joined to the next by a line. */
-  .stepperStep + .stepperStep::before {
+  /* 02: the four fill the row; a line stretches between each and the next. */
+  .stepperStep:not(:last-child)::after {
     content: '';
-    inline-size: 32px;
+    flex: 1;
     block-size: 1px;
-    margin-inline-end: var(--space-4);
+    margin-inline-start: var(--space-4);
     background-color: var(--border-strong);
   }
 
   .stepperStep {
+    flex: 1;
     display: flex;
     align-items: center;
     gap: 7px;
     font-size: var(--font-size-label);
     color: var(--text-secondary);
+  }
+
+  .stepperStep:last-child {
+    flex: none;
   }
 
   .stepperStep[data-state='current'] {
@@ -1024,13 +1029,15 @@
     color: var(--intent-urgent-text);
   }
 
+  /* 02: a white box with a border. */
   .soFar {
     display: flex;
     flex-direction: column;
     gap: var(--space-8);
     padding: var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
     border-radius: var(--radius-card);
-    background-color: var(--panel-footer);
+    background-color: var(--panel-field);
   }
 
   .soFarTitle {
@@ -1076,9 +1083,31 @@
     text-decoration: none;
   }
 
+  /* 02: waiting, the button is pale — light fill, light text — not a grey copy of itself. */
   .learnPrimary[aria-disabled='true'] {
-    opacity: 0.5;
+    background-color: var(--panel-well);
+    color: var(--text-faint);
     cursor: not-allowed;
+  }
+
+  /* The active step's own figure, on the right of its title. */
+  .timelineFigure {
+    margin-inline-start: auto;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .timelineHead {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-8);
+  }
+
+  .learnFoot {
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
   }
 
   /* ── 13f ──────────────────────────────────────────────────────────────── */
@@ -1133,12 +1162,13 @@
 
   .reportTabs {
     display: flex;
-    gap: var(--space-16);
+    gap: var(--space-4);
     border-block-end: var(--border-width-thin) solid var(--border-subtle);
   }
 
   .reportTab {
-    padding-block-end: var(--space-8);
+    padding-block: 0 var(--space-8);
+    padding-inline: var(--space-10);
     font-size: var(--font-size-meta);
     color: var(--text-secondary);
     text-decoration: none;
@@ -1218,22 +1248,6 @@
     color: var(--text-secondary);
   }
 
-  .reportVariants {
-    display: flex;
-    gap: var(--space-8);
-    margin: 0;
-  }
-
-  .reportVariant {
-    padding-block: var(--space-6);
-    padding-inline: var(--space-10);
-    border-radius: var(--radius-chip);
-    background-color: var(--panel-footer);
-    font-size: var(--font-size-meta);
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
   .reportActions {
     display: flex;
     flex-wrap: wrap;
@@ -1286,7 +1300,7 @@
   }
 
   /* 13c's stepper under the head: 20px discs, the current one dark. */
-  .stepper {
+  .wizardSteps {
     display: flex;
     gap: var(--space-8);
     margin: 0;
@@ -1571,17 +1585,72 @@
     white-space: nowrap;
   }
 
-  /* 13f's decisions on a suggestion. */
+  /* 13f's decisions: 02's pills, ~22 tall, radius 6 — bordered; the one to press black. */
   button.reportAction {
-    border: 0;
-    background: none;
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 22px;
+    padding-block: 3px;
+    padding-inline: var(--space-10);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 6px;
+    background-color: var(--panel-field);
     font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
     cursor: pointer;
   }
 
-  .reportAction[data-tone='primary'] {
+  button.reportAction[data-tone='primary'] {
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  button.reportAction:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .reportSeeChats {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    text-decoration: underline;
+    cursor: not-allowed;
+  }
+
+  .reportSaid {
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
+  }
+
+  /* 02's tab: padded, its count subtle after a gap, the current one underlined across. */
+  .reportTabCount {
+    margin-inline-start: 6px;
+    color: var(--text-subtle);
+    font-weight: var(--font-weight-regular);
+  }
+
+  .reportTabsLabel {
+    margin-inline-start: auto;
+    align-self: center;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .reportPreview {
+    display: inline-block;
+    margin-block-start: var(--space-8);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    text-decoration: underline;
+    cursor: not-allowed;
+  }
+
+  .rerunIcon {
+    margin-inline-end: 6px;
+    vertical-align: -2px;
   }
 
   .reportEdit {

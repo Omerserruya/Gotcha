@@ -8,6 +8,7 @@ import {
   groupOf,
   hasEvidence,
   inGroup,
+  readyToAdd,
 } from './knowledge-candidates';
 
 const candidate = (over: Record<string, unknown> = {}) =>
@@ -248,5 +249,34 @@ describe('the reviewer’s actual decision input', () => {
     // the degradation total and silent, which is worse than the parse error.
     expect(candidate({ curationVerdict: 'live_data' }).curationVerdict).toBe('live_data');
     expect(candidate({ curationVerdict: 'rewritten' }).curationVerdict).toBe('rewritten');
+  });
+});
+
+describe('★★ 13f “Ready to add” — the server’s verdict, then its floor', () => {
+  const c = (over: Record<string, unknown>) =>
+    candidateSchema.parse({
+      id: 'x',
+      question: 'q',
+      answer: 'a',
+      status: 'PENDING',
+      confidence: 0.9,
+      ...over,
+    });
+
+  it('the server’s bulkApprovable wins over any recomputation', () => {
+    expect(readyToAdd(c({ bulkApprovable: false, confidence: 0.99 }), 0.8)).toBe(false);
+    expect(readyToAdd(c({ bulkApprovable: true, confidence: 0.1 }), 0.8)).toBe(true);
+  });
+
+  it('without a verdict: clean and at the floor; no floor told — never', () => {
+    expect(readyToAdd(c({}), 0.8)).toBe(true);
+    expect(readyToAdd(c({ confidence: 0.7 }), 0.8)).toBe(false);
+    expect(readyToAdd(c({ conflict: true }), 0.8)).toBe(false);
+    expect(readyToAdd(c({}), undefined)).toBe(false);
+  });
+
+  it('a live lookup, or anything not waiting, is never ready to add', () => {
+    expect(readyToAdd(c({ requiresLiveLookup: true, bulkApprovable: true }), 0.8)).toBe(false);
+    expect(readyToAdd(c({ status: 'APPROVED' }), 0.8)).toBe(false);
   });
 });

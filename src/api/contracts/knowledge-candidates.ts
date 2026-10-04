@@ -297,6 +297,21 @@ export function bulkWouldTake(
   return candidates.filter((c) => approvableAsIs(c) && c.confidence >= minConfidence).length;
 }
 
+/**
+ * 13f's "Ready to add": waiting, and safe to add with one press — by the
+ * server's own verdict (`bulkApprovable`), or, from a service that predates
+ * it, by the floor it sent. A live lookup always needs a look.
+ */
+export function readyToAdd(candidate: Candidate, minConfidence: number | undefined): boolean {
+  if (groupOf(candidate) !== 'needs_a_look' || candidate.requiresLiveLookup) return false;
+  if (candidate.bulkApprovable !== undefined) return candidate.bulkApprovable;
+  return (
+    minConfidence !== undefined &&
+    approvableAsIs(candidate) &&
+    candidate.confidence >= minConfidence
+  );
+}
+
 /** Is there evidence worth showing beside a suggestion? */
 export function hasEvidence(candidate: Candidate): boolean {
   return candidate.occurrenceCount > 0 || candidate.customerCount > 0;

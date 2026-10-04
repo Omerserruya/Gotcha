@@ -252,13 +252,31 @@
         "low": "ביטחון נמוך"
       },
       "chats": "{count, plural, one {שיחה אחת} other {# שיחות}}",
-      "use": "להשתמש ב„{answer}”",
+      "use": "שימוש ב-{answer}",
       "edit": "עריכה",
       "skip": "דילוג",
       "notLive": "ההחלטה מכאן תגיע בהמשך — שום דבר לא בשימוש עד אז.",
       "readyCard": "{count, plural, one {עוד אחת מוכנה} other {עוד # מוכנות}} — ביטחון גבוה, בלי סתירות",
       "addReady": "{count, plural, one {להוסיף תשובה מוכנה אחת} other {להוסיף # תשובות מוכנות}}",
-      "later": "לסיים אחר כך"
+      "later": "לסיים אחר כך",
+      "coexistence": "שימוש משותף · האפליקציה בטלפון ממשיכה לעבוד",
+      "closeAnytime": "אפשר לסגור — נשלח אימייל לבעלי סביבת העבודה כשהדוח יהיה מוכן.",
+      "tab": {
+        "needs_a_look": "צריך מבט",
+        "ready_to_add": "מוכן להוספה",
+        "rejected": "נדחו",
+        "already_covered": "כבר מכוסה"
+      },
+      "qa": "שאלות ותשובות",
+      "saidLead": "בתשובות שלך נאמר",
+      "saidAnd": "ו",
+      "saidIn": "ב-{count, plural, one {צ׳אט אחד} other {# צ׳אטים}}",
+      "saidInShort": "ב-{count}",
+      "quoted": "״{answer}״",
+      "seeChats": "לצ׳אטים",
+      "seeChatsNotYet": "פתיחת הצ׳אטים שמאחורי תשובה תגיע בהמשך.",
+      "previewFive": "תצוגה של חמישה",
+      "previewNotYet": "תצוגה מקדימה של פרופילי לקוחות תגיע בהמשך."
     },
     "wizard": {
       "title": "חיבור WhatsApp",

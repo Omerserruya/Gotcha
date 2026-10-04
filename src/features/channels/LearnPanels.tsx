@@ -1,3 +1,4 @@
+import { RotateCw } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
@@ -6,9 +7,9 @@ import {
   bulkWouldTake,
   groupOf,
   inGroup,
+  readyToAdd,
   variantsOf,
   type Candidate,
-  type ReviewGroup,
 } from '@/api/contracts/knowledge-candidates';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
@@ -72,14 +73,21 @@ type StepState = 'done' | 'active' | 'waiting' | 'failed';
 export async function ImportPanel({
   status,
   receiving,
+  coexistence = false,
 }: {
   readonly status: ImportStatus;
   /** Does the number already receive? Only then is "Connected" said. */
   readonly receiving: boolean;
+  /** The number stays on the Business app (coexistence) — said under "Number connected". */
+  readonly coexistence?: boolean;
 }) {
   const t = await getTranslations('channels.whatsapp');
   const locale = await getLocale();
   const n = new Intl.NumberFormat(locale);
+  const pctOf = (value: number) =>
+    new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(
+      Math.max(0, Math.min(100, value)) / 100,
+    );
   const done = workDone(status);
   const failed = status.stage === 'failed';
   const failedAt = status.failedStage?.toLowerCase() ?? '';
@@ -107,6 +115,7 @@ export async function ImportPanel({
     title: string,
     sub: string | null,
     extra: React.ReactNode = null,
+    figure: string | null = null,
   ) => (
     <li
       key={key}
@@ -116,7 +125,10 @@ export async function ImportPanel({
     >
       <span className={styles.timelineDot} aria-hidden="true" />
       <span className={styles.timelineBody}>
-        <span className={styles.timelineTitle}>{title}</span>
+        <span className={styles.timelineHead}>
+          <span className={styles.timelineTitle}>{title}</span>
+          {figure ? <span className={styles.timelineFigure}>{figure}</span> : null}
+        </span>
         {sub ? <span className={styles.timelineSub}>{sub}</span> : null}
         {extra}
       </span>
@@ -173,7 +185,12 @@ export async function ImportPanel({
           </p>
         ) : (
           <ol className={styles.timeline} data-testid="learn-timeline">
-            {step('connected', 'done', t('learn.connectedStep'), null)}
+            {step(
+              'connected',
+              'done',
+              t('learn.connectedStep'),
+              coexistence ? t('learn.coexistence') : null,
+            )}
             {step(
               'imported',
               importState,
@@ -184,6 +201,7 @@ export async function ImportPanel({
                   ? t('learn.conversations', { count: n.format(done.conversationsTotal) })
                   : null,
               importState === 'active' ? bar(status.percent) : null,
+              importState === 'active' ? pctOf(status.percent) : null,
             )}
             <li className={styles.timelineGroup} title={t('import.noOrder')}>
               <ol className={styles.timeline}>
@@ -193,6 +211,7 @@ export async function ImportPanel({
                   t('learn.learning'),
                   t('learn.learningSub'),
                   learnState === 'active' ? bar(status.analysisPercent) : null,
+                  learnState === 'active' ? pctOf(status.analysisPercent) : null,
                 )}
                 {step(
                   'answers',
@@ -237,17 +256,20 @@ export async function ImportPanel({
             </p>
           </section>
         ) : null}
+
+        {isRunning(status) ? (
+          // 02's foot sentence. No estimate is reported, so no "N minutes left".
+          <p className={styles.learnFoot} data-testid="import-foot">
+            {t('learn.closeAnytime')}
+          </p>
+        ) : null}
       </div>
 
       <footer className={drawer.drawerFoot}>
         <Link
           href={{ pathname: '/settings/channels', query: { panel: 'whatsapp' } }}
           className={styles.learnSecondary}
-          title={
-            isRunning(status)
-              ? `${t('import.safeToClose')} ${t('import.emailOnDone')} ${t('import.emailNeedsAddress')}`
-              : undefined
-          }
+          title={isRunning(status) ? t('import.emailNeedsAddress') : undefined}
           data-testid="import-close"
           scroll={false}
         >
@@ -286,7 +308,19 @@ export async function ImportPanel({
   );
 }
 
-const TABS = ['needs_a_look', 'ready', 'rejected', 'already_covered'] as const;
+/**
+ * 02's tabs: Needs a look · Ready to add · Rejected — and Already covered
+ * only when there is any. What has been approved is in use, not to review.
+ */
+const TABS = ['needs_a_look', 'ready_to_add', 'rejected', 'already_covered'] as const;
+type ReportTab = (typeof TABS)[number];
+
+function tabOf(c: Candidate, floor: number | undefined): ReportTab | null {
+  const group = groupOf(c);
+  if (group === 'rejected' || group === 'already_covered') return group;
+  if (group !== 'needs_a_look') return null;
+  return readyToAdd(c, floor) ? 'ready_to_add' : 'needs_a_look';
+}
 
 /**
  * 13f, measured: "What GOTCHA learned from {number}" · "Nothing is used
@@ -312,24 +346,25 @@ export async function ReportPanel({
   const locale = await getLocale();
   const n = new Intl.NumberFormat(locale);
   const pct = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 });
-  const current: ReviewGroup = (TABS as readonly string[]).includes(tab ?? '')
-    ? (tab as ReviewGroup)
+  const inTab = (g: ReportTab) => candidates.filter((c) => tabOf(c, bulkMinConfidence) === g);
+  const tabs = TABS.filter((g) => g !== 'already_covered' || inTab(g).length > 0);
+  const current: ReportTab = (tabs as readonly string[]).includes(tab ?? '')
+    ? (tab as ReportTab)
     : 'needs_a_look';
-  const shown = inGroup(candidates, current);
+  const shown = inTab(current);
   const bulk = bulkWouldTake(inGroup(candidates, 'needs_a_look'), bulkMinConfidence);
-  const ready = inGroup(candidates, 'needs_a_look').filter(
-    (c) => !c.conflict && bulkMinConfidence !== undefined && c.confidence >= bulkMinConfidence,
-  );
+  const ready = inTab('ready_to_add');
   const notLive = t('learn.notLive');
 
-  const chipOf = (c: Candidate): { text: string; tone: string } =>
+  /* 02: a chip only for a reason to look — never a figure, which sits on the right. */
+  const chipOf = (c: Candidate): { text: string; tone: string } | null =>
     c.conflict
       ? { text: t('learn.chip.conflict'), tone: 'warn' }
       : c.requiresLiveLookup
         ? { text: t('learn.chip.live'), tone: 'quiet' }
         : bulkMinConfidence !== undefined && c.confidence < bulkMinConfidence
           ? { text: t('learn.chip.low'), tone: 'warn' }
-          : { text: pct.format(c.confidence), tone: 'good' };
+          : null;
 
   return (
     <>
@@ -367,11 +402,20 @@ export async function ReportPanel({
                 ? t('learn.customersRead', { count: n.format(status.customersAnalyzed) })
                 : '—'}
             </p>
+            {/* 02's "Preview five" — no route returns the profiles yet. */}
+            <span
+              className={styles.reportPreview}
+              aria-disabled="true"
+              title={t('learn.previewNotYet')}
+              data-testid="report-preview"
+            >
+              {t('learn.previewFive')}
+            </span>
           </section>
         </div>
 
         <nav className={styles.reportTabs} aria-label={t('review.heading')}>
-          {TABS.map((g) => (
+          {tabs.map((g) => (
             <Link
               key={g}
               href={href('report', status.id, g)}
@@ -380,9 +424,11 @@ export async function ReportPanel({
               data-testid={`report-tab-${g}`}
               scroll={false}
             >
-              {t(`review.group.${g}`)} {n.format(inGroup(candidates, g).length)}
+              {t(`learn.tab.${g}`)}
+              <span className={styles.reportTabCount}>{n.format(inTab(g).length)}</span>
             </Link>
           ))}
+          <span className={styles.reportTabsLabel}>{t('learn.qa')}</span>
         </nav>
 
         {shown.length === 0 ? (
@@ -393,23 +439,29 @@ export async function ReportPanel({
           <ul className={styles.reportGrid} title={t('review.evidenceNotTruth')}>
             {shown.map((c) => {
               const chip = chipOf(c);
-              const variants = variantsOf(c);
+              // Most-seen first: the first is the one to use, the rest beside it.
+              const variants = [...variantsOf(c)].sort(
+                (x, y) => y.occurrenceCount - x.occurrenceCount,
+              );
+              const split = c.conflict && variants.length > 1;
               return (
                 <li key={c.id} className={styles.reportItem} data-testid={`candidate-${c.id}`}>
                   <p className={styles.reportItemHead}>
-                    <span
-                      className={styles.reportChip}
-                      data-tone={chip.tone}
-                      title={
-                        c.conflict
-                          ? t('review.conflict')
-                          : c.requiresLiveLookup
-                            ? t('review.liveLookup')
-                            : undefined
-                      }
-                    >
-                      {chip.text}
-                    </span>
+                    {chip ? (
+                      <span
+                        className={styles.reportChip}
+                        data-tone={chip.tone}
+                        title={
+                          c.conflict
+                            ? t('review.conflict')
+                            : c.requiresLiveLookup
+                              ? t('review.liveLookup')
+                              : undefined
+                        }
+                      >
+                        {chip.text}
+                      </span>
+                    ) : null}
                     {/* A count of nothing is not drawn: no "0 chats". */}
                     <span className={styles.reportItemMeta}>
                       {[
@@ -423,25 +475,32 @@ export async function ReportPanel({
                     </span>
                   </p>
                   <p className={styles.reportQuestion}>{c.question}</p>
-                  {c.conflict && variants.length > 1 ? (
-                    <p className={styles.reportVariants}>
-                      {variants.map((v) => (
-                        <span key={v.key} className={styles.reportVariant}>
-                          {v.answer}
+                  {split ? (
+                    // 02: "Your replies said 14 days in 61 chats and 30 days in 12."
+                    <p className={styles.reportAnswer} data-testid={`said-${c.id}`}>
+                      {t('learn.saidLead')}{' '}
+                      {variants.map((v, i) => (
+                        <span key={v.key}>
+                          {i > 0 ? ` ${t('learn.saidAnd')} ` : null}
+                          <strong className={styles.reportSaid}>{v.answer}</strong>{' '}
+                          {i === 0
+                            ? t('learn.saidIn', { count: v.occurrenceCount })
+                            : t('learn.saidInShort', { count: v.occurrenceCount })}
                         </span>
                       ))}
+                      .
                     </p>
                   ) : (
-                    <p className={styles.reportAnswer}>{c.answer}</p>
+                    <p className={styles.reportAnswer}>{t('learn.quoted', { answer: c.answer })}</p>
                   )}
-                  {groupOf(c) === 'needs_a_look' ? (
+                  {tabOf(c, bulkMinConfidence) === 'needs_a_look' ||
+                  tabOf(c, bulkMinConfidence) === 'ready_to_add' ? (
                     // Live (Omer, decision 13): approve, use a variant, edit, reject.
                     <SuggestionActions
                       id={c.id}
                       answer={c.answer}
-                      variants={
-                        c.conflict && variants.length > 1 ? variants.map((v) => v.answer) : []
-                      }
+                      variants={split ? variants.map((v) => v.answer) : []}
+                      seeChats={split ? t('learn.seeChats') : null}
                     />
                   ) : null}
                 </li>
@@ -484,7 +543,9 @@ export async function ReportPanel({
           className={drawer.drawerFootNote}
           aria-disabled="true"
           title={`${t('review.rerunSafe')} ${notLive}`}
+          data-testid="report-rerun"
         >
+          <RotateCw size={13} aria-hidden="true" className={styles.rerunIcon} />
           {t('learn.rerun')}
         </span>
       </footer>
