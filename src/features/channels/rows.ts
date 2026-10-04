@@ -40,6 +40,8 @@ export interface ConnectedRow {
    * `null` = not served, never coerced to 0.
    */
   readonly windowConversations: number | null;
+  /** Web chat's widget id — what its embed code carries. `null` on the rest. */
+  readonly widgetId?: string | null;
 }
 
 export interface ConnectableRow {
@@ -84,6 +86,7 @@ export function buildChannelRows(
      */
     windowConversations:
       typeof channel.conversationsInWindow === 'number' ? channel.conversationsInWindow : null,
+    widgetId: channel.channel === 'WEBCHAT' ? (channel.externalId ?? null) : null,
   }));
 
   /*

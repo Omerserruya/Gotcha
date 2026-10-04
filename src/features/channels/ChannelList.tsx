@@ -11,6 +11,7 @@ import {
 import styles from './Channels.module.css';
 import { ChannelTile } from './ChannelTile';
 import { ConnectableRow } from './ConnectableRow';
+import { WebChatEmbed } from './WebChatEmbed';
 import { buildChannelRows, isTroubled, type ConnectedRow } from './rows';
 import { channelName } from '@/api/contracts/inbox';
 import { Link } from '@/i18n/navigation';
@@ -34,6 +35,7 @@ export async function ChannelList({
   voiceOffered,
   windowDays,
   providers = null,
+  embed = null,
 }: {
   readonly channels: readonly Channel[];
   readonly voice: readonly VoiceChannel[];
@@ -41,6 +43,8 @@ export async function ChannelList({
   readonly windowDays: number;
   /** Which OAuth providers are set up (`/api/channels/config`); `null` when unread. */
   readonly providers?: Readonly<Record<string, boolean>> | null;
+  /** The web chat whose embed code is open (`?embed=<id>`). */
+  readonly embed?: string | null;
 }) {
   const t = await getTranslations('channels');
   const locale = await getLocale();
@@ -162,7 +166,22 @@ export async function ChannelList({
               </span>
 
               {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
-              {row.channel === 'WHATSAPP' ? (
+              {row.channel === 'WEBCHAT' && row.widgetId ? (
+                // Web chat's settings are its embed code — reachable any time after Create.
+                <Link
+                  href={
+                    embed === row.id
+                      ? '/settings/channels'
+                      : { pathname: '/settings/channels', query: { embed: row.id } }
+                  }
+                  className={styles.settingsLink}
+                  aria-expanded={embed === row.id}
+                  data-testid={`channel-settings-${row.id}`}
+                  scroll={false}
+                >
+                  {t('rowSettings')}
+                </Link>
+              ) : row.channel === 'WHATSAPP' ? (
                 <Link
                   href={{ pathname: '/settings/channels', query: { panel: 'whatsapp' } }}
                   className={styles.settingsLink}
@@ -181,6 +200,11 @@ export async function ChannelList({
                   {t('rowSettings')}
                 </span>
               )}
+              {row.channel === 'WEBCHAT' && row.widgetId && embed === row.id ? (
+                <div className={styles.embedRow}>
+                  <WebChatEmbed widgetId={row.widgetId} />
+                </div>
+              ) : null}
             </li>
           );
         })}

@@ -32,6 +32,11 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
 }));
+vi.mock('./WebChatEmbed', () => ({
+  WebChatEmbed: ({ widgetId }: { widgetId: string }) => (
+    <pre data-testid="embed-open">{widgetId}</pre>
+  ),
+}));
 const rowProps = vi.hoisted(() => [] as { channel: string; notSetUp?: boolean }[]);
 vi.mock('./ConnectableRow', () => ({
   ConnectableRow: (props: { channel: string; notSetUp?: boolean }) => {
@@ -168,5 +173,41 @@ describe('★ a provider with no app on the server is said up front, not after a
     rowProps.length = 0;
     render(await ChannelList({ channels: [], voice: [], voiceOffered: false, windowDays: 30 }));
     expect(rowProps.every((p) => p.notSetUp === false)).toBe(true);
+  });
+});
+
+describe('★★ web chat’s Settings is its embed code — reachable any time after Create', () => {
+  const webchat = () =>
+    channelSchema.parse({
+      id: 'wc1',
+      channel: 'WEBCHAT',
+      connectionStatus: 'PENDING',
+      externalId: 'widget_64aba7ec',
+    });
+
+  it('Settings opens it on the row (?embed=); open, it closes it', async () => {
+    const one = render(
+      await ChannelList({ channels: [webchat()], voice: [], voiceOffered: false, windowDays: 30 }),
+    );
+    expect(screen.getByTestId('channel-settings-wc1')).toHaveAttribute(
+      'href',
+      '/settings/channels?embed=wc1',
+    );
+    expect(screen.queryByTestId('embed-open')).toBeNull();
+    one.unmount();
+    render(
+      await ChannelList({
+        channels: [webchat()],
+        voice: [],
+        voiceOffered: false,
+        windowDays: 30,
+        embed: 'wc1',
+      }),
+    );
+    expect(screen.getByTestId('embed-open')).toHaveTextContent('widget_64aba7ec');
+    expect(screen.getByTestId('channel-settings-wc1')).toHaveAttribute(
+      'href',
+      '/settings/channels',
+    );
   });
 });

@@ -47,6 +47,8 @@ export default async function Page({
     readonly platform?: string;
     readonly error?: string;
     readonly tab?: string;
+    /** The web chat whose embed code is open. */
+    readonly embed?: string;
   }>;
 } = {}) {
   const t = await getTranslations('channels');
@@ -102,6 +104,7 @@ export default async function Page({
           voiceOffered={voiceOffered}
           windowDays={windowDays}
           providers={config.providers}
+          embed={params.embed ?? null}
         />
       ) : (
         <p>{t('unavailable')}</p>

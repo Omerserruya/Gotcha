@@ -15,7 +15,9 @@ vi.mock('./actions', () => ({
   connectWebChat,
   setResponseMode,
 }));
+const replace = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ replace }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}
@@ -23,11 +25,12 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-import { ConnectPanel, embedCode } from './ConnectPanel';
+import { ConnectPanel, EmbedSnippet, embedCode } from './ConnectPanel';
 
 const assign = vi.fn();
 beforeEach(() => {
   startChannelConnect.mockReset();
+  replace.mockReset();
   assign.mockReset();
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -92,13 +95,22 @@ describe('★ the row itself: "Not set up yet" in place of Connect', () => {
 });
 
 describe('★★ web chat: after Create, the code to paste — in the same panel', () => {
-  it('created: the snippet with ITS widget id; Copy copies exactly that', async () => {
+  it('★ created: the code opens on the NEW row — held in the URL, so the refresh keeps it', async () => {
     connectWebChat.mockResolvedValue({ ok: true, data: { id: 'ch1', externalId: 'wc_123' } });
     setResponseMode.mockResolvedValue({ ok: true });
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     show('WEBCHAT');
     await userEvent.click(screen.getByTestId('connect-webchat-create'));
+    expect(replace).toHaveBeenCalledWith('/settings/channels?embed=ch1', { scroll: false });
+  });
+
+  it('the snippet: ITS widget id; Copy copies exactly that', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(
+      <NextIntlClientProvider locale="en" messages={{ channels: messages }}>
+        <EmbedSnippet widgetId="wc_123" onClose={() => undefined} />
+      </NextIntlClientProvider>,
+    );
     const code = screen.getByTestId('webchat-embed-code').textContent ?? '';
     expect(code).toContain('widgetId: "wc_123"');
     expect(code).toContain('/widget/chatcenter-widget.js');

@@ -9,7 +9,7 @@ import {
   type ChannelType,
   type ResponseMode,
 } from '@/api/contracts/channels';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Input } from '@/design-system/primitives/input/Input';
 
@@ -131,11 +131,8 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
   const [name, setName] = useState('');
   const [mode, setMode] = useState<ResponseMode>('HUMAN_WITH_COPILOT');
   const [result, setResult] = useState<ChannelWriteResult<unknown> | null>(null);
-  const [widgetId, setWidgetId] = useState<string | null>(null);
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
-
-  // Created: the code to paste on the site, in this same panel.
-  if (widgetId) return <EmbedSnippet widgetId={widgetId} onClose={onClose} />;
 
   return (
     <>
@@ -169,9 +166,16 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
                * emailed and no outside party has been told anything.
                */
               await setResponseMode(outcome.data.id, mode);
-              // The widget is known by its external id; without one there is no code to give.
-              if (outcome.data.externalId) setWidgetId(outcome.data.externalId);
-              else onClose();
+              /*
+               * Created: the row this panel lives in leaves the list (the
+               * channel is connected now), so the code opens on the NEW row —
+               * held in the URL, so the refresh keeps it, and Settings reopens it.
+               */
+              if (outcome.data.externalId) {
+                router.replace(`/settings/channels?embed=${encodeURIComponent(outcome.data.id)}`, {
+                  scroll: false,
+                });
+              } else onClose();
             })
           }
         >

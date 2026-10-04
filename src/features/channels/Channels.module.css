@@ -217,6 +217,7 @@
   }
 
   .connectLegend {
+    margin-block-end: var(--space-8);
     padding: 0;
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
@@ -1741,5 +1742,11 @@
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
     cursor: pointer;
+  }
+
+  /* The embed code under its row, full width. */
+  .embedRow {
+    grid-column: 1 / -1;
+    padding-block: var(--space-12) var(--space-4);
   }
 }
