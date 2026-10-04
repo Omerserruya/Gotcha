@@ -11,6 +11,7 @@ import {
 } from "@chatcenter/shared";
 import { CircuitBreakers, withRetry, pushToDlq } from "./runner";
 import { precheckAdapterAction } from "../connectors/integration-framework";
+import { withOrderCurrency } from "../approval-currency";
 import type {
   ExecutionResult,
   ProposedAction,
@@ -432,7 +433,11 @@ export class ActionOrchestrator {
         tenantId: action.tenantId,
         conversationId: action.conversationId || undefined,
         tool: action.tool,
-        params: action.args,
+        // The order's own currency, so "refund 179" says 179 of what. Absent
+        // when there is no order or it cannot be read - never a guess.
+        params: await withOrderCurrency(action.tenantId, action.tool, action.args as Record<string, unknown>, {
+          conversationId: action.conversationId || undefined,
+        }),
         // ★ NOT `action.rationale`. That is the CALLER's note to itself - the
         // inbox path passes the literal string "ai-bot inbox tool call" - and it
         // was landing in the one field an operator reads while deciding whether

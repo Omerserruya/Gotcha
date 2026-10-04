@@ -12,6 +12,7 @@
  * (the adapter enforces this; we also gate on it before calling).
  */
 
+import { withKnownOrderCurrency } from "./approval-currency";
 import {
   prisma,
   writeAudit,
@@ -430,7 +431,9 @@ export async function executeCommerceAction(opts: {
       tenantId,
       conversationId,
       tool,
-      params: args,
+      // From the order resolved above - `order.currency`, NOT the local
+      // `currency`, which defaults to "USD" for the policy engine's sake.
+      params: withKnownOrderCurrency(tool, args, order?.currency),
       summary: `${ACTION_LABEL[request.action as CommerceOrderActionKind] ?? request.action} order ${order?.name ?? orderRequest.orderId}`,
       reason: `Human agent requested ${request.action} (policy requires approval)`,
       riskLevel: "high",
