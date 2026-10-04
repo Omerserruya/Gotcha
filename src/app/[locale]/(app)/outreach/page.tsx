@@ -4,6 +4,7 @@ import { channelName } from '@/api/contracts/inbox';
 import { loadChannels } from '@/features/channels/load-channels';
 import { displayHandle } from '@/features/customers/phone';
 import { CampaignCard } from '@/features/outreach/CampaignCard';
+import { wabaConnected } from '@/features/outreach/waba';
 import { CampaignForm, type SendingAccount } from '@/features/outreach/CampaignForm';
 import { loadTemplates } from '@/features/outreach/load-templates';
 import { TaskCards } from '@/features/outreach/TaskCards';
@@ -187,7 +188,15 @@ export default async function Page({
           <MonthStrip campaigns={campaigns} now={new Date()} />
         </div>
         <aside className={styles.side} aria-label={selected.name}>
-          <CampaignCard campaign={selected} detailed />
+          <CampaignCard
+            campaign={selected}
+            detailed
+            waba={
+              selected.status === 'DRAFT' && selected.channel === 'WHATSAPP'
+                ? await wabaConnected()
+                : null
+            }
+          />
         </aside>
       </div>
       {drawer}

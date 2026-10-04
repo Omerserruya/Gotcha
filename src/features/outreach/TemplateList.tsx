@@ -13,6 +13,7 @@ import {
 import { Link } from '@/i18n/navigation';
 
 import { DuplicateTemplate } from './DuplicateTemplate';
+import { SubmitTemplate } from './SendButtons';
 import styles from './Outreach.module.css';
 
 /**
@@ -160,8 +161,16 @@ export async function TemplateTable({
 }
 
 /** 05c's preview card: the template as the customer will see it. */
-export async function TemplatePreview({ group }: { readonly group: TemplateGroup | null }) {
+export async function TemplatePreview({
+  group,
+  waba = null,
+}: {
+  readonly group: TemplateGroup | null;
+  /** A real WhatsApp Business account is connected; `null` when unread. */
+  readonly waba?: boolean | null;
+}) {
   const t = await getTranslations('templates');
+  const tGo = await getTranslations('outreach.go');
   const format = await getFormatter();
   const locale = await getLocale();
 
@@ -295,15 +304,26 @@ export async function TemplatePreview({ group }: { readonly group: TemplateGroup
           </span>
         )}
         <DuplicateTemplate id={template.id} />
-        {template.status === 'DRAFT' ? (
-          <span
-            className={styles.tplSecondary}
-            aria-disabled="true"
-            title={t('submitNotYet')}
-            data-testid="template-submit"
-          >
-            {t('submit')}
-          </span>
+        {/* Submit to Meta (Omer): live only through a real WhatsApp Business account. */}
+        {template.status === 'DRAFT' || template.status === 'REJECTED' ? (
+          waba === true && template.channel === 'WHATSAPP' ? (
+            <SubmitTemplate id={template.id} />
+          ) : (
+            <span
+              className={styles.tplSecondary}
+              aria-disabled="true"
+              title={
+                template.channel !== 'WHATSAPP'
+                  ? tGo('submit.whatsappOnly')
+                  : waba === null
+                    ? tGo('send.unknown')
+                    : tGo('submit.needsWaba')
+              }
+              data-testid="template-submit"
+            >
+              {t('submit')}
+            </span>
+          )
         ) : null}
       </div>
     </section>

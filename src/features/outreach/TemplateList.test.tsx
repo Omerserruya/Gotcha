@@ -5,11 +5,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { templateSchema, type Template } from '@/api/contracts/templates';
 import channels from '@/i18n/messages/en/channels.json';
+import outreach from '@/i18n/messages/en/outreach.json';
 import templates from '@/i18n/messages/en/templates.json';
 
+/* Send / Submit reach outside; they have their own tests. Here: whether each is offered. */
+vi.mock('./SendButtons', () => ({
+  SendCampaign: ({ id }: { id: string }) => <span data-testid={`send-${id}`} />,
+  SubmitTemplate: ({ id }: { id: string }) => <span data-testid={`submit-live-${id}`} />,
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'templates' | 'channels') =>
-    createTranslator({ locale: 'en', messages: { templates, channels }, namespace }),
+    createTranslator({ locale: 'en', messages: { templates, channels, outreach }, namespace }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'UTC' }),
   getLocale: async () => 'en',
 }));
@@ -175,14 +181,27 @@ describe('★★ the preview — the message as the customer sees it', () => {
     expect(screen.queryByTestId('template-submit')).toBeNull();
   });
 
-  it('★ a draft cannot be used yet, and "Submit to Meta" is drawn with why', async () => {
-    render(await TemplatePreview({ group: templateGroups([template({ status: 'DRAFT' })])[0]! }));
+  it('★ a draft cannot be used yet; with no WhatsApp Business account, Submit is drawn with why', async () => {
+    const draft = templateGroups([template({ status: 'DRAFT', channel: 'WHATSAPP' })])[0]!;
+    const one = render(await TemplatePreview({ group: draft, waba: false }));
     expect(screen.getByTestId('template-use')).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByTestId('template-use')).not.toHaveAttribute('href');
     expect(screen.getByTestId('template-submit')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByTestId('template-submit')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/waiting for approval/),
+    expect(screen.getByTestId('template-submit').getAttribute('title')).toMatch(
+      /WhatsApp Business account/,
+    );
+    one.unmount();
+    // Omer: with one, Submit is live.
+    render(await TemplatePreview({ group: draft, waba: true }));
+    expect(screen.queryByTestId('template-submit')).toBeNull();
+    expect(screen.getByTestId(`submit-live-${'t1'}`)).toBeInTheDocument();
+  });
+
+  it('a template for every channel never goes to WhatsApp for review — said', async () => {
+    const all = templateGroups([template({ status: 'DRAFT', channel: null })])[0]!;
+    render(await TemplatePreview({ group: all, waba: true }));
+    expect(screen.getByTestId('template-submit').getAttribute('title')).toMatch(
+      /Only a WhatsApp template/,
     );
   });
 

@@ -1225,4 +1225,60 @@
     color: var(--action-text);
     text-decoration: none;
   }
+
+  /* Send / Submit: asks, then acts. */
+  .goRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .goAsk {
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .goPrimary,
+  .goSecondary {
+    padding: 7px var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-body);
+    cursor: pointer;
+  }
+
+  .goPrimary {
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .goPrimary:disabled,
+  .goSecondary:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .goDone {
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--signal-done-text);
+  }
+
+  .goProblem {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+
+  .goDrawn {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    cursor: not-allowed;
+  }
 }

@@ -6,6 +6,7 @@ import { channelName } from '@/api/contracts/inbox';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Outreach.module.css';
+import { SendCampaign } from './SendButtons';
 import { StopCampaign } from './StopCampaign';
 import { campaignWhen } from './when';
 
@@ -45,10 +46,13 @@ import { campaignWhen } from './when';
 export async function CampaignCard({
   campaign,
   detailed,
+  waba = null,
 }: {
   readonly campaign: Campaign;
   /** 05b shows the rates; 05's in-flight list shows the headline only. */
   readonly detailed: boolean;
+  /** A real WhatsApp Business account is connected; `null` when unread. */
+  readonly waba?: boolean | null;
 }) {
   const t = await getTranslations('outreach');
   const channelNames = await getTranslations('channels');
@@ -178,6 +182,25 @@ export async function CampaignCard({
       ) : null}
 
       {isStoppable(campaign) ? <StopCampaign id={campaign.id} name={campaign.name} /> : null}
+
+      {/*
+        A draft's Send (Omer): a WhatsApp campaign only through a real WhatsApp
+        Business account; any other channel needs none. It asks before it sends.
+      */}
+      {detailed && campaign.status === 'DRAFT' ? (
+        campaign.channel !== 'WHATSAPP' || waba === true ? (
+          <SendCampaign id={campaign.id} count={campaign.totalRecipients} />
+        ) : (
+          <span
+            className={styles.goDrawn}
+            aria-disabled="true"
+            title={waba === null ? t('go.send.unknown') : t('go.send.needsWaba')}
+            data-testid={`send-drawn-${campaign.id}`}
+          >
+            {t('go.send.label')}
+          </span>
+        )
+      ) : null}
 
       {/* 05b: once it has gone out, what it did is a page of its own. */}
       {detailed && !isInFlight(campaign) && campaign.status !== 'DRAFT' ? (

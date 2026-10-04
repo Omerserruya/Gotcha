@@ -166,5 +166,36 @@
       "forbidden": "You don't have permission to create campaigns.",
       "failed": "The draft wasn't saved. Try again."
     }
+  },
+  "go": {
+    "cancel": "Not yet",
+    "send": {
+      "label": "Send now",
+      "ask": "{count, plural, =0 {This goes to everyone in the audience. Send it now?} one {This goes to 1 person. Send it now?} other {This goes to # people. Send it now?}}",
+      "yes": "Yes, send it",
+      "going": "Sending…",
+      "done": "Sending — it goes out over the next few minutes.",
+      "needsWaba": "A WhatsApp campaign sends only through a connected WhatsApp Business account — connect one in Settings · Channels.",
+      "unknown": "We couldn't check the WhatsApp account just now — try again in a moment.",
+      "failed": {
+        "refused": "It wasn't sent — check who it goes to and the message, then try again.",
+        "forbidden": "You don't have permission to send campaigns.",
+        "failed": "It wasn't sent — try again."
+      }
+    },
+    "submit": {
+      "label": "Submit to WhatsApp",
+      "ask": "WhatsApp reviews it, usually within a day. Submit it?",
+      "yes": "Yes, submit",
+      "going": "Submitting…",
+      "done": "Submitted — WhatsApp is reviewing it.",
+      "needsWaba": "Templates go to WhatsApp through a connected WhatsApp Business account — connect one in Settings · Channels.",
+      "failed": {
+        "refused": "WhatsApp didn't take it — check the template and try again.",
+        "forbidden": "You don't have permission to submit templates.",
+        "failed": "It wasn't submitted — try again."
+      },
+      "whatsappOnly": "Only a WhatsApp template goes to WhatsApp for review."
+    }
   }
 }

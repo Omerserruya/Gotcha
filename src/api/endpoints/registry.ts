@@ -951,6 +951,12 @@ export const outreachEndpoints = {
   /** TERMINAL. Drains the queue and skips everyone still pending. */
   cancel: (id: string) => endpoint('/api/broadcasts/{id}/cancel', { id }),
   resend: (id: string) => endpoint('/api/broadcasts/{id}/resend', { id }),
+  /**
+   * SENDS — to real people. Only a DRAFT or SCHEDULED one; 400 with why
+   * (no recipients, no channel…). A WhatsApp campaign only with a real WABA
+   * (Omer's ruling), which the screen checks before offering it.
+   */
+  send: (id: string) => endpoint('/api/broadcasts/{id}/send', { id }),
 } as const;
 
 /**

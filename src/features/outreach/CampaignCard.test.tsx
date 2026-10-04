@@ -18,6 +18,11 @@ import { CampaignCard } from './CampaignCard';
  */
 
 // 05b's link; the router is not in jsdom.
+/* Send / Submit reach outside; they have their own tests. Here: whether each is offered. */
+vi.mock('./SendButtons', () => ({
+  SendCampaign: ({ id }: { id: string }) => <span data-testid={`send-${id}`} />,
+  SubmitTemplate: ({ id }: { id: string }) => <span data-testid={`submit-live-${id}`} />,
+}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'outreach') =>
@@ -225,5 +230,32 @@ describe('★★ 02\'s "Who": who they are, then how many', () => {
 
   it('a value that is not even an object is "a saved audience" too', async () => {
     expect(await who('a string')).toHaveTextContent(/^A saved audience/);
+  });
+});
+
+describe('★★ a draft’s Send (Omer): WhatsApp only through a real WhatsApp Business account', () => {
+  const draft = (channel: string) => campaign({ id: 'd1', status: 'DRAFT', channel });
+
+  it('WhatsApp + a WABA: offered; without: drawn, saying why; unread: says it could not check', async () => {
+    const one = render(
+      await CampaignCard({ campaign: draft('WHATSAPP'), detailed: true, waba: true }),
+    );
+    expect(screen.getByTestId('send-d1')).toBeInTheDocument();
+    one.unmount();
+    const two = render(
+      await CampaignCard({ campaign: draft('WHATSAPP'), detailed: true, waba: false }),
+    );
+    expect(screen.queryByTestId('send-d1')).toBeNull();
+    expect(screen.getByTestId('send-drawn-d1').getAttribute('title')).toMatch(
+      /WhatsApp Business account/,
+    );
+    two.unmount();
+    render(await CampaignCard({ campaign: draft('WHATSAPP'), detailed: true, waba: null }));
+    expect(screen.getByTestId('send-drawn-d1').getAttribute('title')).toMatch(/couldn't check/);
+  });
+
+  it('another channel needs no WABA', async () => {
+    render(await CampaignCard({ campaign: draft('EMAIL'), detailed: true, waba: null }));
+    expect(screen.getByTestId('send-d1')).toBeInTheDocument();
   });
 });

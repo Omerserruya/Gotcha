@@ -1,11 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { campaignSchema } from '@/api/contracts/outreach';
-import { outreachEndpoints } from '@/api/endpoints/registry';
+import { outreachEndpoints, templateEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
@@ -64,6 +65,61 @@ export async function stopCampaign(id: string): Promise<OutreachWriteResult> {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
     }
     logger.warn('outreach.cancel_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type SendResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'refused'; readonly why: string | null }
+  | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
+
+/** Sends a DRAFT campaign — to real people, after the owner's second press. */
+export async function sendCampaign(id: string): Promise<SendResult> {
+  try {
+    await serverApi().post({
+      endpoint: outreachEndpoints.send(id),
+      payload: z.unknown(),
+      body: {},
+      raw: true,
+    });
+    revalidatePath('/[locale]/(app)/outreach', 'layout');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('outreach.send_failed', { status: isApiError(cause) ? cause.status : undefined });
+    if (isApiError(cause)) {
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      // The route's own reason ("No recipients to send to…") is the platform's
+      // words, kept for the title only — the sentence shown is ours.
+      if (cause.status === 400)
+        return { ok: false, reason: 'refused', why: cause.developerMessage ?? null };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/** Submits a DRAFT or REJECTED template to Meta for review. */
+export async function submitTemplate(id: string): Promise<SendResult> {
+  try {
+    await serverApi().post({
+      endpoint: templateEndpoints.submit(id),
+      payload: z.unknown(),
+      body: {},
+      raw: true,
+    });
+    revalidatePath('/[locale]/(app)/outreach/templates', 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('templates.submit_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause)) {
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.status === 400)
+        return { ok: false, reason: 'refused', why: cause.developerMessage ?? null };
+    }
     return { ok: false, reason: 'failed' };
   }
 }

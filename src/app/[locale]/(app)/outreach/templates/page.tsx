@@ -5,6 +5,7 @@ import { loadChannels } from '@/features/channels/load-channels';
 import { displayHandle } from '@/features/customers/phone';
 import type { SendingAccount } from '@/features/outreach/CampaignForm';
 import { loadTemplates } from '@/features/outreach/load-templates';
+import { wabaConnected } from '@/features/outreach/waba';
 import { TemplateForm } from '@/features/outreach/TemplateForm';
 import { Link } from '@/i18n/navigation';
 import { Drawer } from '@/shell/Drawer';
@@ -82,7 +83,7 @@ export default async function Page({
       <div className={styles.tplScreen} data-testid="templates-screen">
         <TemplateTable groups={groups} selectedId={selected?.primary.id ?? null} />
         <div className={styles.tplColumn}>
-          <TemplatePreview group={selected} />
+          <TemplatePreview group={selected} waba={await wabaConnected()} />
           {groups ? <RejectedCard groups={groups} /> : null}
           <WorthKnowing />
         </div>
