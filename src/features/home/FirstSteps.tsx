@@ -4,6 +4,7 @@ import type { KnowledgeIngest, SetupStatus, SetupStep } from '@/api/contracts/se
 import { Link } from '@/i18n/navigation';
 
 import styles from './FirstSteps.module.css';
+import { GoLiveButton } from './GoLiveButton';
 import { nextStep, setupProgress, stepCopyKey, stepDestination } from './first-steps';
 
 /**
@@ -83,30 +84,30 @@ export async function FirstSteps({
 
         {/*
         01c's Go live: locked, with what holds it, until the server says it is
-        eligible — and then drawn, not live: going live is a write that puts
-        GOTCHA in front of real customers.
+        eligible — then live (Omer, decision 01), asking once before the write
+        that puts GOTCHA in front of real customers.
       */}
         <div className={styles.goLive} data-testid="go-live">
           <div className={styles.goLiveText}>
             <span className={styles.goLiveTitle}>{t('goLive.title')}</span>
             <span className={styles.goLiveBody}>{t('goLive.body')}</span>
           </div>
-          <span
-            className={styles.goLiveButton}
-            aria-disabled="true"
-            data-testid="go-live-button"
-            title={
-              setup.goLive?.eligible
-                ? t('goLive.notYet')
-                : t('goLive.lockedBy', {
-                    steps:
-                      (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') ||
-                      '—',
-                  })
-            }
-          >
-            {setup.goLive?.eligible ? t('goLive.go') : t('goLive.locked')}
-          </span>
+          {setup.goLive?.eligible ? (
+            // Live (Omer, decision 01): asks once, then goes live.
+            <GoLiveButton />
+          ) : (
+            <span
+              className={styles.goLiveButton}
+              aria-disabled="true"
+              data-testid="go-live-button"
+              title={t('goLive.lockedBy', {
+                steps:
+                  (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') || '—',
+              })}
+            >
+              {t('goLive.locked')}
+            </span>
+          )}
         </div>
       </section>
       {/* True: once live, Home's face is the ordinary one (`homeFace`). */}

@@ -122,3 +122,16 @@ describe('★ 01c — the day-one status line', () => {
     expect(screen.queryByTestId('trial')).toBeNull();
   });
 });
+
+describe('★ 01c — "Book a setup call", only where it books', () => {
+  it('a URL: the link, in a new tab; none: no link', async () => {
+    const one = render(
+      await strip({ dayOne: { trialDays: 14, setupCallUrl: 'https://cal.example/setup' } }),
+    );
+    expect(screen.getByTestId('setup-call')).toHaveAttribute('href', 'https://cal.example/setup');
+    expect(screen.getByTestId('setup-call')).toHaveAttribute('rel', 'noopener noreferrer');
+    one.unmount();
+    render(await strip({ dayOne: { trialDays: 14, setupCallUrl: null } }));
+    expect(screen.queryByTestId('setup-call')).toBeNull();
+  });
+});

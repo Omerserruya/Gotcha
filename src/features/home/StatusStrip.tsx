@@ -32,7 +32,11 @@ export async function StatusStrip({
    * GOTCHA answers before going live, so 02's "replies only to your team" is
    * not said. The right side is the trial, when there is one.
    */
-  dayOne?: { readonly trialDays: number | null } | null;
+  dayOne?: {
+    readonly trialDays: number | null;
+    /** `SETUP_CALL_URL`; null when unset — then there is no link. */
+    readonly setupCallUrl?: string | null;
+  } | null;
 }) {
   const t = await getTranslations('home.status');
 
@@ -50,6 +54,17 @@ export async function StatusStrip({
           <span className={styles.statusMeta} data-testid="trial">
             {t('trial', { days: dayOne.trialDays })}
           </span>
+        ) : null}
+        {dayOne.setupCallUrl ? (
+          <a
+            className={styles.statusCall}
+            href={dayOne.setupCallUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="setup-call"
+          >
+            {t('setupCall')}
+          </a>
         ) : null}
       </div>
     );

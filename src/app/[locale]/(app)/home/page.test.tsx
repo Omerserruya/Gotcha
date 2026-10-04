@@ -8,6 +8,8 @@ import { NotificationsPanel } from '@/features/notifications/NotificationsPanel'
 vi.mock('@/features/home/HomeScreen', () => ({ HomeScreen: () => null }));
 vi.mock('@/features/notifications/NotificationsPanel', () => ({ NotificationsPanel: () => null }));
 vi.mock('server-only', () => ({}));
+const env = vi.hoisted(() => ({ SETUP_CALL_URL: undefined as string | undefined }));
+vi.mock('@/config/env.server', () => ({ serverEnv: () => env }));
 
 function find<P>(node: ReactNode, type: unknown): P | null {
   if (Array.isArray(node)) {
@@ -61,5 +63,17 @@ describe('★ 19 — ?ask= reaches the command box, capped', () => {
     expect(
       find<{ ask: string }>(await page({ ask: 'x'.repeat(900) }), HomeScreen)?.ask,
     ).toHaveLength(500);
+  });
+});
+
+describe('★ 01c — "Book a setup call" comes from SETUP_CALL_URL, server side', () => {
+  it('set: passed down; unset: null, so no link is drawn', async () => {
+    const { default: Page } = await import('./page');
+    env.SETUP_CALL_URL = 'https://cal.example/gotcha-setup';
+    const set = await Page({ searchParams: Promise.resolve({}) });
+    expect(JSON.stringify(set)).toContain('https://cal.example/gotcha-setup');
+    env.SETUP_CALL_URL = undefined;
+    const unset = await Page({ searchParams: Promise.resolve({}) });
+    expect(JSON.stringify(unset)).not.toContain('cal.example');
   });
 });

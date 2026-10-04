@@ -278,7 +278,8 @@
     "lastHandover": "Last handover",
     "lastHandoverNone": "Nothing records when a conversation was last handed to a person.",
     "notLive": "Setting up · not live yet",
-    "trial": "{days, plural, one {Trial · # day left} other {Trial · # days left}}"
+    "trial": "{days, plural, one {Trial · # day left} other {Trial · # days left}}",
+    "setupCall": "Book a setup call"
   },
   "insight": {
     "title": "Worth knowing",
@@ -373,7 +374,18 @@
       "locked": "Locked",
       "go": "Go live",
       "lockedBy": "Waiting on: {steps}",
-      "notYet": "Going live puts GOTCHA in front of real customers — waiting for approval."
+      "confirm": "GOTCHA starts answering real customers. Go live?",
+      "yes": "Yes, go live",
+      "going": "Going live…",
+      "cancel": "Not yet",
+      "connectStore": "Connect your store",
+      "failed": {
+        "store": "Connect your store first — GOTCHA needs it to act on orders.",
+        "profile": "Your business profile needs filling in first.",
+        "admin": "The workspace needs an active admin first.",
+        "forbidden": "Only an admin can take the workspace live.",
+        "failed": "That didn't go live — try again."
+      }
     },
     "foot": "Once you go live, today's numbers and the queue take this space.",
     "blockedBy": "Waiting on: {step}"

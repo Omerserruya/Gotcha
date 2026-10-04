@@ -49,6 +49,12 @@ const serverEnvSchema = z.object({
   PLATFORM_LOGIN_URL: z.url().optional(),
 
   /**
+   * 01c's "Book a setup call" (Omer, decision 01): where it books. Unset, the
+   * link is not drawn — never a call booked nowhere.
+   */
+  SETUP_CALL_URL: z.url().optional(),
+
+  /**
    * Where the sign-in panel hands over once the flow is complete, when that is
    * not this same deployment.
    *

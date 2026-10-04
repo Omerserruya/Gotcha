@@ -184,7 +184,7 @@ describe('★★ 01c — day one: the same Home, its own head', () => {
   it('the status line is "not live" and the trial — never "replies only to your team"', async () => {
     const tree = await screen({ setup, ingest, isQuiet: false });
     const [strip] = all<{ dayOne: unknown }>(tree, (e) => e.type === StatusStrip);
-    expect(strip?.props.dayOne).toEqual({ trialDays: 14 });
+    expect(strip?.props.dayOne).toEqual({ trialDays: 14, setupCallUrl: null });
   });
 
   it('the eyebrow, the heading and the line come from the setup and the scan', async () => {

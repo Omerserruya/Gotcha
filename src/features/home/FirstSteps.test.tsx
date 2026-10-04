@@ -18,6 +18,7 @@ import messages from '../../i18n/messages/en/home.json';
  * timestamp in the evening. Either way the test renders a date the product
  * never shows, and a date assertion can pass while the screen is a day out.
  */
+vi.mock('./GoLiveButton', () => ({ GoLiveButton: () => <span data-testid="go-live-live" /> }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
     createTranslator({
@@ -156,12 +157,10 @@ describe('FirstSteps', () => {
     );
   });
 
-  it('★ eligible, Go live is drawn — and still not live: it is a write', async () => {
+  it('★ eligible, Go live is live (Omer, decision 01) — its own control, which asks first', async () => {
     await renderBlock({ ...status, goLive: { eligible: true, blockedBy: [] }, trial: null });
-    const button = screen.getByTestId('go-live-button');
-    expect(button).toHaveTextContent('Go live');
-    expect(button).toHaveAttribute('aria-disabled', 'true');
-    expect(button).toHaveAttribute('title', expect.stringMatching(/waiting for approval/));
+    expect(screen.getByTestId('go-live-live')).toBeInTheDocument();
+    expect(screen.queryByTestId('go-live-button')).toBeNull();
   });
 
   it.each([

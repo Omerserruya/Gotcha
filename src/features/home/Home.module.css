@@ -851,4 +851,11 @@
       flex-direction: column;
     }
   }
+
+  /* 01c: "Book a setup call", quietly, at the strip's end. */
+  .statusCall {
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
 }

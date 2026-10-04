@@ -558,6 +558,17 @@ export const channelEndpoints = {
  * not a failure: it means "this does not exist for you", and the Channels
  * screen reads it as "do not offer a Phone calls row".
  */
+/**
+ * 01c's Go live (Omer, decision 01): the workspace leaves setup mode and
+ * GOTCHA answers real customers. `POST /api/onboarding/complete`, ADMIN.
+ * `{ skipEmployee: true }` — Go live opens only once an employee is hired,
+ * and without it the route hires ANOTHER. Refuses 400 for a missing profile,
+ * admin, or `core_system_required`.
+ */
+export const goLiveEndpoints = {
+  complete: () => endpoint('/api/onboarding/complete'),
+} as const;
+
 export const voiceChannelEndpoints = {
   list: () => endpoint('/api/voice-channels'),
   /**

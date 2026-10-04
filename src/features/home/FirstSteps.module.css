@@ -335,4 +335,53 @@
     color: var(--frame-text-muted);
     cursor: not-allowed;
   }
+
+  /* Eligible: the button is live — light on the dark card, ready to press. */
+  button.goLiveButton {
+    border-color: transparent;
+    background-color: var(--frame-text);
+    font: inherit;
+    font-size: var(--font-size-caption);
+    font-weight: var(--font-weight-medium);
+    color: var(--frame-raised);
+    cursor: pointer;
+  }
+
+  button.goLiveButton:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .goLiveConfirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-8);
+  }
+
+  .goLiveAsk {
+    font-size: var(--font-size-label);
+    color: var(--frame-text);
+  }
+
+  .goLiveCancel {
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--frame-text-muted);
+    cursor: pointer;
+  }
+
+  .goLiveProblem {
+    flex-basis: 100%;
+    text-align: end;
+    font-size: var(--font-size-caption);
+    color: var(--frame-text);
+  }
+
+  .goLiveProblem a {
+    color: inherit;
+  }
 }

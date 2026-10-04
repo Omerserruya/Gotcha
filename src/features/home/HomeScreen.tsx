@@ -33,7 +33,14 @@ import { WorthKnowing } from './WorthKnowing';
  * such rather than omitted or filled with plausible figures: the ranked queue,
  * GOTCHA's activity stream, and three of the four quiet-day cards.
  */
-export async function HomeScreen({ ask = '' }: { readonly ask?: string } = {}) {
+export async function HomeScreen({
+  ask = '',
+  setupCallUrl = null,
+}: {
+  readonly ask?: string;
+  /** `SETUP_CALL_URL`, read by the page; null when unset. */
+  readonly setupCallUrl?: string | null;
+} = {}) {
   const t = await getTranslations('home');
   const format = await getFormatter();
   const {
@@ -84,7 +91,14 @@ export async function HomeScreen({ ask = '' }: { readonly ask?: string } = {}) {
         waiting={queue?.waiting ?? null}
         signals={signals}
         isQuiet={isQuiet}
-        dayOne={isDayOne && setup ? { trialDays: setup.trial?.daysRemaining ?? null } : null}
+        dayOne={
+          isDayOne && setup
+            ? {
+                trialDays: setup.trial?.daysRemaining ?? null,
+                setupCallUrl: setupCallUrl ?? null,
+              }
+            : null
+        }
       />
 
       <header className={styles.greeting}>
