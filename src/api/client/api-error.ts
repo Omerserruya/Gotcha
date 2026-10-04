@@ -78,6 +78,8 @@ export interface ApiErrorInit {
   readonly failureCode?: string;
   /** Per-code payload for `failureCode`; shape depends on the code. */
   readonly failureDetail?: Readonly<Record<string, unknown>>;
+  /** A refusal's own `data` object, where a route sends one. */
+  readonly errorData?: Readonly<Record<string, unknown>>;
   /** Set only where a charge was actually attempted. */
   readonly invoiceId?: string | null;
   /** Tenant lifecycle status the gate reported (402). */
@@ -112,6 +114,8 @@ export class ApiError extends Error {
   readonly code?: string;
   readonly failureCode?: string;
   readonly failureDetail?: Readonly<Record<string, unknown>>;
+  /** A refusal's own `data` object, where a route sends one. */
+  readonly errorData?: Readonly<Record<string, unknown>>;
   readonly invoiceId?: string | null;
   readonly tenantStatus?: string;
   readonly checkoutPath?: string;
@@ -135,6 +139,7 @@ export class ApiError extends Error {
     this.code = init.code;
     this.failureCode = init.failureCode;
     this.failureDetail = init.failureDetail;
+    this.errorData = init.errorData;
     this.invoiceId = init.invoiceId;
     this.tenantStatus = init.tenantStatus;
     this.checkoutPath = init.checkoutPath;

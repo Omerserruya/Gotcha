@@ -605,6 +605,17 @@ export const integrationEndpoints = {
    * answered `{ url }` (`format=json`); 400 `invalid_store_url`. Lands on
    * `?system=woocommerce&connected=1|error=<code>`.
    */
+  /**
+   * Shopify, started from here (backend 98676242). No store is typed:
+   * Shopify picks it. `availability` is read-only (`{ mode, helpUrl }`);
+   * `start` mints an intent and answers it IN A COOKIE (`gotcha_shopify_intent`),
+   * which the server hands on to the browser; `pending`/`claim` read the
+   * pending install from the browser's `gotcha_shopify_pending` cookie.
+   */
+  shopifyAvailability: () => endpoint('/api/connectors/shopify/install/availability'),
+  shopifyStart: () => endpoint('/api/connectors/shopify/install/start?flow=redesign_studio'),
+  shopifyPending: () => endpoint('/api/connectors/shopify/install/pending'),
+  shopifyClaim: () => endpoint('/api/connectors/shopify/install/claim'),
   wooOAuthInit: (storeUrl: string) =>
     endpoint(
       '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow=redesign_studio&format=json',

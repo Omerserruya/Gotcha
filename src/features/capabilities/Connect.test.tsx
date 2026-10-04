@@ -292,9 +292,16 @@ describe('★★ 10 for a system that is not connected — its own screen', () =
         fields: [{ key: 'shop', type: 'text', label: 'Shop domain', required: true }],
       },
     });
-    const two = inIntl(await AvailableSystem({ integration: shop }));
+    const two = inIntl(
+      await AvailableSystem({
+        integration: shop,
+        shopify: { mode: 'not_published', helpUrl: null },
+      }),
+    );
     expect(screen.queryByTestId('oauth-start')).toBeNull();
     expect(screen.queryByTestId('connect-form')).toBeNull();
+    // 98676242: Shopify's own block — the listing isn't public, so a sentence.
+    expect(screen.getByTestId('shopify-not-published')).toBeInTheDocument();
     two.unmount();
     inIntl(await AvailableSystem({ integration: custom }));
     expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(/set up with GOTCHA/);

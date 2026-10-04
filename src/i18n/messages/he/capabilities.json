@@ -183,5 +183,32 @@
       "forbidden": "אין לך הרשאה לחבר מערכות.",
       "failed": "לא הצלחנו לפתוח את {name} — אפשר לנסות שוב."
     }
+  },
+  "shopify": {
+    "connect": "חיבור Shopify",
+    "opening": "פותח את Shopify…",
+    "note": "Shopify ישאל איזו חנות ויחזיר אותך לכאן.",
+    "startsInShopify": "ההתקנה מתחילה ב-Shopify: מוסיפים את GOTCHA מניהול החנות, והחנות מתחברת כאן.",
+    "help": "איך מתקינים",
+    "unread": "לא הצלחנו לבדוק כרגע איך לחבר את Shopify — אפשר לנסות שוב עוד רגע.",
+    "error": {
+      "forbidden": "אין לך הרשאה לחבר מערכות.",
+      "failed": "לא הצלחנו לפתוח את Shopify — אפשר לנסות שוב."
+    },
+    "pending": {
+      "replaceLead": "אישרת את {shop} ב-Shopify. חנות אחרת מחוברת כאן כרגע — החלפה תנתק אותה.",
+      "replace": "החלפה ל-{shop}",
+      "finishLead": "אישרת את {shop} ב-Shopify, והיא עוד לא מחוברת כאן.",
+      "finish": "חיבור {shop}",
+      "done": "{shop} מחוברת.",
+      "error": {
+        "another_store_connected": "חנות אחרת מחוברת לסביבת העבודה — צריך להחליף אותה כדי לחבר את {shop}.",
+        "anotherNamed": "{current} מחוברת לסביבת העבודה — צריך להחליף אותה כדי לחבר את {shop}.",
+        "shop_connected_to_another_workspace": "{shop} כבר מחוברת לסביבת עבודה אחרת ב-GOTCHA.",
+        "gone": "האישור פג או כבר נוצל — מחברים שוב מ-Shopify.",
+        "forbidden": "אין לך הרשאה לחבר מערכות.",
+        "failed": "{shop} לא חוברה — אפשר לנסות שוב."
+      }
+    }
   }
 }

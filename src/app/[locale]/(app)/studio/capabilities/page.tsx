@@ -4,12 +4,17 @@ import { isConnected } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { oauthFailure } from '@/features/capabilities/oauth';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
+import { ShopifyPending } from '@/features/capabilities/ShopifyConnect';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
 import { SystemHead } from '@/features/capabilities/SystemHead';
 import styles from '@/features/capabilities/Capabilities.module.css';
-import { loadCapabilities } from '@/features/capabilities/load-capabilities';
+import {
+  loadCapabilities,
+  loadShopifyAvailability,
+  loadShopifyPending,
+} from '@/features/capabilities/load-capabilities';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -48,6 +53,9 @@ export default async function Page({
     /** The way back from a provider (backend 381a5d1b). */
     readonly connected?: string;
     readonly error?: string;
+    /** Shopify's way back with a store to claim (98676242). */
+    readonly pending?: string;
+    readonly reason?: string;
   }>;
 } = {}) {
   const t = await getTranslations('capabilities');
@@ -58,6 +66,11 @@ export default async function Page({
     capabilities ?? [],
     integrations ?? [],
   );
+  const onShopify = integration?.slug === 'shopify';
+  const [shopifyAvailability, shopifyPending] = await Promise.all([
+    onShopify && !isConnected(integration) ? loadShopifyAvailability() : null,
+    onShopify && params.pending === '1' ? loadShopifyPending() : null,
+  ]);
 
   /*
     10, measured: 02's header — the title over a line that wraps at 720, no
@@ -98,8 +111,14 @@ export default async function Page({
                 outcome={params.connected === '1' ? 'connected' : oauthFailure(params.error)}
               />
             ) : null}
+            {shopifyPending ? (
+              <ShopifyPending
+                shopDomain={shopifyPending}
+                replace={params.reason === 'replace_store'}
+              />
+            ) : null}
             {integration !== null && !isConnected(integration) ? (
-              <AvailableSystem integration={integration} />
+              <AvailableSystem integration={integration} shopify={shopifyAvailability} />
             ) : capabilities === null ? (
               <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
             ) : capabilities.length === 0 ? (

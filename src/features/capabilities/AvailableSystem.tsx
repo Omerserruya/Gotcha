@@ -6,6 +6,7 @@ import { sentenceCase, type Integration } from '@/api/contracts/integrations';
 import { ConnectForm } from './ConnectForm';
 import { IntegrationLogo } from './IntegrationLogo';
 import { OAuthButton } from './OAuthButton';
+import { ShopifyConnect } from './ShopifyConnect';
 import { WooConnect } from './WooConnect';
 import { oauthHere } from './oauth';
 import styles from './Capabilities.module.css';
@@ -23,7 +24,14 @@ const RISK = new Set(['LOW', 'MEDIUM', 'HIGH']);
  *               why, where it still leads to the previous app.
  *   · neither — `custom_api`: set up with GOTCHA, not by a form; drawn.
  */
-export async function AvailableSystem({ integration }: { readonly integration: Integration }) {
+export async function AvailableSystem({
+  integration,
+  shopify = null,
+}: {
+  readonly integration: Integration;
+  /** Shopify's install availability, read before the button (98676242). */
+  readonly shopify?: { readonly mode: string; readonly helpUrl: string | null } | null;
+}) {
   const t = await getTranslations('capabilities');
   const { oauth, fields } = integration.authSchema;
   const line = [
@@ -56,7 +64,9 @@ export async function AvailableSystem({ integration }: { readonly integration: I
         <h2 className={styles.connectHeading}>
           {t('available.connectTitle', { name: integration.name })}
         </h2>
-        {integration.slug === 'woocommerce' ? (
+        {integration.slug === 'shopify' ? (
+          <ShopifyConnect mode={shopify?.mode ?? null} helpUrl={shopify?.helpUrl ?? null} />
+        ) : integration.slug === 'woocommerce' ? (
           // B: the store's own approval replaces the key form.
           <WooConnect name={integration.name} />
         ) : !oauth && fields.length > 0 ? (

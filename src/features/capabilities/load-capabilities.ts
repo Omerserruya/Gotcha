@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { cookies } from 'next/headers';
+import { z } from 'zod';
+
 import { serverApi } from '@/api/client/server-api';
 import {
   capabilityListSchema,
@@ -14,6 +17,8 @@ import {
   integrationEndpoints,
 } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+
+import { PENDING_COOKIE } from './shopify-cookies';
 
 /**
  * What GOTCHA is allowed to do.
@@ -86,4 +91,42 @@ export async function loadCapabilities(): Promise<CapabilityData> {
   ]);
 
   return { capabilities, usage, integrations };
+}
+
+export interface ShopifyAvailability {
+  readonly mode: 'listing' | 'not_published' | string;
+  readonly helpUrl: string | null;
+}
+
+/** Before the button (backend 98676242): read-only, no intent minted. `null` when unread. */
+export async function loadShopifyAvailability(): Promise<ShopifyAvailability | null> {
+  return serverApi()
+    .get({
+      endpoint: integrationEndpoints.shopifyAvailability(),
+      payload: z.object({
+        mode: z.string(),
+        helpUrl: z.string().url().nullable().catch(null).default(null),
+      }),
+    })
+    .catch((cause: unknown) => {
+      logger.warn('capabilities.shopify_availability_failed', { cause });
+      return null;
+    });
+}
+
+/** The store waiting to be claimed (the browser's pending cookie, sent on); `null` when none. */
+export async function loadShopifyPending(): Promise<string | null> {
+  const pending = (await cookies()).get(PENDING_COOKIE)?.value;
+  if (!pending) return null;
+  return serverApi()
+    .get({
+      endpoint: integrationEndpoints.shopifyPending(),
+      payload: z.object({ shopDomain: z.string() }),
+      headers: { cookie: `${PENDING_COOKIE}=${encodeURIComponent(pending)}` },
+    })
+    .then((p) => p.shopDomain)
+    .catch((cause: unknown) => {
+      logger.warn('capabilities.shopify_pending_failed', { cause });
+      return null;
+    });
 }

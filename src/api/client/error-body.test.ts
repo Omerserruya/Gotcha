@@ -183,3 +183,45 @@ describe('★★ 1aaaefe4 — a 422 key-form refusal keeps its merchant sentence
     expect((caught as ApiError).userMessage).toBe('WooCommerce rejected those keys.');
   });
 });
+
+describe('★★ a sentence in `detail` no longer costs the whole refusal', () => {
+  it('Shopify’s claim 409: `error` and `data` survive a string `detail`', async () => {
+    respond(409, {
+      error: 'another_store_connected',
+      detail: 'This workspace is connected to old.myshopify.com.',
+      data: { currentShopDomain: 'old.myshopify.com', incomingShopDomain: 'new.myshopify.com' },
+    });
+    const caught = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(caught.developerMessage).toBe('another_store_connected');
+    expect(caught.errorData).toEqual({
+      currentShopDomain: 'old.myshopify.com',
+      incomingShopDomain: 'new.myshopify.com',
+    });
+    expect(caught.failureDetail).toBeUndefined();
+  });
+});
+
+describe('★ a success hands its headers to who asked (Shopify’s intent cookie)', () => {
+  it('Set-Cookie reaches onResponseHeaders, before the body is parsed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(JSON.stringify({ url: 'https://apps.shopify.com/x' }), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+            'set-cookie': 'gotcha_shopify_intent=h; Path=/',
+          },
+        }),
+    );
+    let seen: string[] = [];
+    await client.get({
+      endpoint: billingEndpoints.creditsBuy(),
+      payload: z.unknown(),
+      onResponseHeaders: (h) => {
+        seen = h.getSetCookie();
+      },
+    });
+    expect(seen).toEqual(['gotcha_shopify_intent=h; Path=/']);
+  });
+});

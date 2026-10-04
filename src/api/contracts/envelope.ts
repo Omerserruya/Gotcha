@@ -79,7 +79,18 @@ export const errorEnvelopeSchema = z.object({
    * for `no_shortage` — so it is read through a narrow accessor at the point
    * of use and never rendered as it stands.
    */
-  detail: z.record(z.string(), z.unknown()).optional(),
+  /*
+   * ★ Some routes send `detail` as a SENTENCE (Shopify's claim: "This
+   * workspace is connected to …"). Typed as a record only, a string here
+   * failed the whole envelope — `error` and all. Kept as a record when it is
+   * one; a string reaches the screen as nothing rather than breaking the rest.
+   */
+  detail: z.record(z.string(), z.unknown()).optional().catch(undefined),
+  /**
+   * A refusal's own data, where a route sends one (Shopify's claim 409:
+   * `{ currentShopDomain, incomingShopDomain }`). Read through a narrow accessor.
+   */
+  data: z.record(z.string(), z.unknown()).optional().catch(undefined),
   /**
    * ★★ PRESENT ON A FAILURE ONLY WHEN THE CARD WAS ACTUALLY REACHED.
    *

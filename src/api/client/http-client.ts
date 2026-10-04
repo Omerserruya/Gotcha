@@ -20,6 +20,12 @@ export interface HttpRequest<TPayload extends z.ZodType> {
   readonly timeoutMs?: number;
   readonly headers?: Readonly<Record<string, string>>;
   /**
+   * Called with a successful response's headers, before its body is read.
+   * For the one route that answers in a cookie (Shopify's install intent,
+   * whose `Set-Cookie` the server must hand on to the browser).
+   */
+  readonly onResponseHeaders?: (headers: Headers) => void;
+  /**
    * Skips envelope unwrapping and parses the whole body.
    *
    * Needed where `data` is a sibling of other fields rather than the payload
@@ -90,6 +96,7 @@ async function readErrorBody(response: Response): Promise<{
   code?: string;
   failureCode?: string;
   failureDetail?: Readonly<Record<string, unknown>>;
+  errorData?: Readonly<Record<string, unknown>>;
   invoiceId?: string | null;
   tenantStatus?: string;
   checkoutPath?: string;
@@ -114,6 +121,7 @@ async function readErrorBody(response: Response): Promise<{
     code: parsed.data.code,
     failureCode: parsed.data.failureCode,
     failureDetail: parsed.data.detail,
+    errorData: parsed.data.data,
     invoiceId: parsed.data.invoiceId,
     tenantStatus: parsed.data.tenantStatus,
     checkoutPath: parsed.data.checkoutPath,
@@ -189,6 +197,7 @@ export class HttpClient {
         code,
         failureCode,
         failureDetail,
+        errorData,
         invoiceId,
         tenantStatus,
         checkoutPath,
@@ -215,6 +224,7 @@ export class HttpClient {
         code,
         failureCode,
         failureDetail,
+        errorData,
         invoiceId,
         tenantStatus,
         checkoutPath,
@@ -230,6 +240,8 @@ export class HttpClient {
       }
       throw error;
     }
+
+    request.onResponseHeaders?.(response.headers);
 
     if (response.status === 204) {
       const parsed = payload.safeParse(undefined);

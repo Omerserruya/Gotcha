@@ -183,5 +183,32 @@
       "forbidden": "You don't have permission to connect systems.",
       "failed": "{name} couldn't be opened — try again."
     }
+  },
+  "shopify": {
+    "connect": "Connect Shopify",
+    "opening": "Opening Shopify…",
+    "note": "Shopify asks which store, then brings you back here.",
+    "startsInShopify": "Installation starts in Shopify: add GOTCHA from your Shopify admin, and the store connects here.",
+    "help": "How to install",
+    "unread": "We couldn't check how Shopify can be connected right now — try again in a moment.",
+    "error": {
+      "forbidden": "You don't have permission to connect systems.",
+      "failed": "Shopify couldn't be opened — try again."
+    },
+    "pending": {
+      "replaceLead": "You approved {shop} in Shopify. Another store is connected here now — replacing it disconnects that one.",
+      "replace": "Replace with {shop}",
+      "finishLead": "You approved {shop} in Shopify, and it isn’t connected here yet.",
+      "finish": "Connect {shop}",
+      "done": "{shop} is connected.",
+      "error": {
+        "another_store_connected": "Another store is connected to this workspace — replace it to connect {shop}.",
+        "anotherNamed": "{current} is connected to this workspace — replace it to connect {shop}.",
+        "shop_connected_to_another_workspace": "{shop} is already connected to a different GOTCHA workspace.",
+        "gone": "That approval has expired or was already used — connect again from Shopify.",
+        "forbidden": "You don't have permission to connect systems.",
+        "failed": "{shop} wasn't connected — try again."
+      }
+    }
   }
 }
