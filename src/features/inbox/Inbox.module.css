@@ -2103,13 +2103,34 @@
   }
 
   /* Up to five held files, a picture as itself. */
+  /* The held files as a row of chips that wraps — the composer stays low. */
   .composerFiles {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
     margin: 0;
-    padding: 0 0 var(--space-8);
+    padding: 0 15px var(--space-8);
     list-style: none;
+  }
+
+  .composerFiles > .composerFile {
+    max-inline-size: 200px;
+    padding: var(--space-4) var(--space-4) var(--space-4) var(--space-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+  }
+
+  .composerFiles .composerFileName {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The count on its own line, at the composer's own padding. */
+  .composerFiles > .composerFileNote {
+    flex-basis: 100%;
   }
 
   .composerThumb {
