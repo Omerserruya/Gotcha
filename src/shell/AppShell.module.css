@@ -304,7 +304,13 @@
   }
 
   /* ── Work surface ──────────────────────────────────────────────────── */
+  /*
+   * Positioned: a drawer is `absolute; inset: 0` and must sit inside the
+   * frame — 12px in, with the frame's rounding — on a screen that does not
+   * position a wrapper of its own (05, 05c). Nearer positioned wrappers win.
+   */
   .surface {
+    position: relative;
     flex: 1;
     min-inline-size: 0;
     display: flex;

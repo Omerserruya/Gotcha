@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import outreach from '@/i18n/messages/en/outreach.json';
 import templates from '@/i18n/messages/en/templates.json';
@@ -77,6 +77,32 @@ describe('★★ 05 — a campaign, as a DRAFT', () => {
       templateId: 't1',
     });
     expect(push).toHaveBeenCalledWith({ pathname: '/outreach', query: { campaign: 'b9' } });
+  });
+
+  it('★ "When" is day-first and 24-hour; half of it saves nothing', async () => {
+    const tz = process.env.TZ;
+    process.env.TZ = 'Asia/Jerusalem';
+    onTestFinished(() => {
+      process.env.TZ = tz;
+    });
+    wrap(<CampaignForm accounts={ACCOUNTS} templates={TEMPLATES} initialTemplateId="t1" />);
+    await userEvent.type(screen.getByTestId('campaign-name'), 'Autumn');
+    await userEvent.type(screen.getByTestId('campaign-day'), '4/10/2026');
+    await userEvent.tab();
+    expect(screen.getByTestId('campaign-day')).toHaveValue('04/10/2026');
+    expect(screen.getByTestId('campaign-save')).toBeDisabled();
+    expect(screen.getByTestId('campaign-when-hint')).toHaveTextContent(
+      'Give both a day and a time',
+    );
+    await userEvent.type(screen.getByTestId('campaign-time'), '2130');
+    await userEvent.tab();
+    expect(screen.getByTestId('campaign-time')).toHaveValue('21:30');
+    actions.createCampaignDraft.mockResolvedValue({ ok: true, id: 'b2' });
+    await userEvent.click(screen.getByTestId('campaign-save'));
+    // 21:30 in Israel (UTC+3 in October) — in UTC, local and Z would agree.
+    expect(actions.createCampaignDraft.mock.calls[0]![0].scheduledAt).toBe(
+      '2026-10-04T18:30:00.000Z',
+    );
   });
 
   it('email: the message itself, no template', async () => {

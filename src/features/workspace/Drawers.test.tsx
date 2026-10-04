@@ -150,6 +150,23 @@ describe('★ 11c — the week, and what it cannot hold', () => {
     expect(saveWorkspaceFacts).not.toHaveBeenCalled();
   });
 
+  it('★ the clock is typed 24-hour: "1730" is 17:30, a miss puts the last good time back', async () => {
+    inIntl(<HoursDrawer workspace={ws()} />);
+    const [opens, closes] = screen.getAllByRole('textbox', { name: /^Sunday — / });
+    const before = (opens as HTMLInputElement).value;
+    await userEvent.clear(closes!);
+    await userEvent.type(closes!, '1730');
+    await userEvent.clear(opens!);
+    await userEvent.type(opens!, '9pm');
+    await userEvent.tab();
+    expect(closes).toHaveValue('17:30');
+    expect(opens).toHaveValue(before);
+    expect(saveWorkspaceFacts).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId('drawer-save-hours'));
+    const [patch] = saveWorkspaceFacts.mock.calls[0]!;
+    expect(JSON.stringify(patch.hours)).toContain('"17:30"');
+  });
+
   it('★ every save carries the outside-hours pair, so a silenced AI stays silent', async () => {
     inIntl(<HoursDrawer workspace={ws()} />);
     await userEvent.click(screen.getByTestId('drawer-save-hours'));

@@ -4,8 +4,10 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { DAY_KEYS, type DayKey, type Workspace } from '@/api/contracts/workspace';
-import { Link } from '@/i18n/navigation';
+import { EntryInput } from '@/design-system/primitives/input/EntryInput';
 import drawer from '@/design-system/styles/drawer.module.css';
+import { Link } from '@/i18n/navigation';
+import { parseClock } from '@/lib/clock-entry';
 
 import { saveWorkspaceFacts } from './actions';
 import { hoursPatch, weekOf, type DayHours } from './hours';
@@ -112,22 +114,24 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
               </label>
               {week[day].enabled ? (
                 <span className={styles.weekRange}>
-                  <input
+                  <EntryInput
                     className={styles.weekTime}
-                    type="time"
                     aria-label={`${t(`day.${day}`)} — ${t('hours.open')}`}
+                    placeholder="HH:mm"
                     value={week[day].open ?? ''}
-                    onChange={(e) => setDay(day, { open: e.target.value })}
+                    parse={parseClock}
+                    onCommit={(next) => setDay(day, { open: next })}
                   />
                   <span className={styles.weekDash} aria-hidden="true">
                     –
                   </span>
-                  <input
+                  <EntryInput
                     className={styles.weekTime}
-                    type="time"
                     aria-label={`${t(`day.${day}`)} — ${t('hours.close')}`}
+                    placeholder="HH:mm"
                     value={week[day].close ?? ''}
-                    onChange={(e) => setDay(day, { close: e.target.value })}
+                    parse={parseClock}
+                    onCommit={(next) => setDay(day, { close: next })}
                   />
                 </span>
               ) : stored.has(day) ? (

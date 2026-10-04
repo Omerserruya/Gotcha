@@ -3,8 +3,10 @@
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
+import { EntryInput } from '@/design-system/primitives/input/EntryInput';
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link, useRouter } from '@/i18n/navigation';
+import { localInstant, parseClock, parseDay, showDay } from '@/lib/clock-entry';
 
 import { createCampaignDraft } from './create-actions';
 import styles from './Outreach.module.css';
@@ -56,7 +58,9 @@ export function CampaignForm({
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState(initialTemplateId ?? '');
   const [body, setBody] = useState('');
-  const [when, setWhen] = useState('');
+  /* "When": a day and a clock, day-first and 24-hour — both, or neither. */
+  const [day, setDay] = useState('');
+  const [clock, setClock] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -65,8 +69,12 @@ export function CampaignForm({
   const forAccount = templates.filter(
     (tpl) => tpl.channelAccountId === null || tpl.channelAccountId === accountId,
   );
+  const halfWhen = (day === '') !== (clock === '');
   const ready =
-    account !== null && name.trim() !== '' && (isWhatsApp ? templateId !== '' : body.trim() !== '');
+    account !== null &&
+    name.trim() !== '' &&
+    !halfWhen &&
+    (isWhatsApp ? templateId !== '' : body.trim() !== '');
 
   function save() {
     if (!account) return;
@@ -77,7 +85,7 @@ export function CampaignForm({
         channelAccountId: account.id,
         channel: account.channel,
         ...(isWhatsApp ? { templateId } : { body }),
-        ...(when ? { scheduledAt: new Date(when).toISOString() } : {}),
+        ...(day && clock ? { scheduledAt: localInstant(day, clock) } : {}),
       });
       if (result.ok) router.push({ pathname: '/outreach', query: { campaign: result.id } });
       else setProblem(t(`error.${result.reason}`));
@@ -174,17 +182,35 @@ export function CampaignForm({
           />
         </label>
 
-        <label className={drawer.field}>
-          <span className={drawer.fieldLabel}>{t('when')}</span>
-          <input
-            className={drawer.box}
-            type="datetime-local"
-            value={when}
-            data-testid="campaign-when"
-            onChange={(e) => setWhen(e.target.value)}
-          />
-          <span className={drawer.hint}>{t('whenHint')}</span>
-        </label>
+        <div className={drawer.field} role="group" aria-labelledby="campaign-when-label">
+          <span className={drawer.fieldLabel} id="campaign-when-label">
+            {t('when')}
+          </span>
+          <div className={drawer.pair}>
+            <EntryInput
+              className={drawer.box}
+              value={day}
+              onCommit={setDay}
+              parse={parseDay}
+              show={showDay}
+              placeholder={t('dayFormat')}
+              aria-label={t('day')}
+              data-testid="campaign-day"
+            />
+            <EntryInput
+              className={drawer.box}
+              value={clock}
+              onCommit={setClock}
+              parse={parseClock}
+              placeholder={t('clockFormat')}
+              aria-label={t('time')}
+              data-testid="campaign-time"
+            />
+          </div>
+          <span className={drawer.hint} data-testid="campaign-when-hint">
+            {halfWhen ? t('whenBoth') : t('whenHint')}
+          </span>
+        </div>
       </div>
 
       <footer className={drawer.drawerFoot}>
