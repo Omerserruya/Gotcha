@@ -1066,6 +1066,27 @@ export const knowledgeEndpoints = {
    * `/v2/studio/knowledge?add=1&way=drive|confluence&connected=1|error=<code>`.
    * Answers `{ url }` (not enveloped). ADMIN only; `kbId` required.
    */
+  /** 08b after connecting: the base's Drive / Confluence connections. `{ data: [...] }`. */
+  integrations: (kbId: string) => endpoint('/api/knowledge/kb/{kbId}/integrations', { kbId }),
+  /** One level of a Drive, folders first. `folderId` absent: the root. */
+  driveFiles: (intId: string, folderId?: string) =>
+    folderId
+      ? endpoint('/api/knowledge/integrations/{intId}/drive/files?folderId={folderId}', {
+          intId,
+          folderId,
+        })
+      : endpoint('/api/knowledge/integrations/{intId}/drive/files', { intId }),
+  /** `{ sources: [{ id, kind, name, mimeType }] }` — folders and files not mixed. Learns them. */
+  driveSync: (intId: string) =>
+    endpoint('/api/knowledge/integrations/{intId}/drive/sync', { intId }),
+  /** What is kept in sync, with its state. */
+  driveSources: (intId: string) =>
+    endpoint('/api/knowledge/integrations/{intId}/drive/sources', { intId }),
+  confluenceSpaces: (intId: string) =>
+    endpoint('/api/knowledge/integrations/{intId}/confluence/spaces', { intId }),
+  /** `{ spaceKeys }` — learns those spaces' pages. */
+  confluenceSync: (intId: string) =>
+    endpoint('/api/knowledge/integrations/{intId}/confluence/sync', { intId }),
   oauthInit: (provider: 'google-drive' | 'confluence', kbId: string) =>
     endpoint('/api/knowledge/oauth/{provider}/init?kbId={kbId}&flow=redesign_studio', {
       provider,

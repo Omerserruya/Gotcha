@@ -310,4 +310,82 @@
     align-items: center;
     gap: var(--space-10);
   }
+
+  /* 08b after connecting: each source as a card of rows, in the sheet's shape. */
+  .sources {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin-block-start: var(--space-12);
+  }
+
+  .sourceCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-12) var(--space-14);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-item);
+  }
+
+  .sourceHead {
+    margin: 0;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .sourceList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    max-block-size: 240px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-y: auto;
+    font-size: var(--font-size-label);
+  }
+
+  .sourceList li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-10);
+  }
+
+  .sourceList label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .sourceMeta {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .sourceDone {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--signal-done-text);
+  }
+
+  .sourceBack,
+  .sourceOpen {
+    align-self: flex-start;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .sourceActions {
+    display: flex;
+    gap: var(--space-8);
+  }
 }

@@ -177,6 +177,33 @@
     "provider": {
       "google_drive": "Google",
       "confluence": "Atlassian"
+    },
+    "sources": {
+      "drive": "{name} · connected",
+      "driveName": "Google Drive",
+      "confluence": "{name} · connected",
+      "paused": "Paused",
+      "folderSynced": "Folder · new files learned automatically",
+      "fileSynced": "File · kept in sync",
+      "choose": "Choose what to learn",
+      "root": "My Drive",
+      "open": "Open",
+      "loading": "Reading…",
+      "empty": "Nothing here.",
+      "filesUnread": "We couldn't read this Drive — try again.",
+      "spacesUnread": "We couldn't read the Confluence spaces — try again.",
+      "unread": "We couldn't read what's connected — try again.",
+      "oneKind": "Learn folders and files in separate rounds.",
+      "learn": "{count, plural, =0 {Learn these} one {Learn 1 item} other {Learn # items}}",
+      "learning": "{count, plural, one {Learning 1 item — it answers once it’s read.} other {Learning # items — they answer once they’re read.}}",
+      "learnSpaces": "{count, plural, =0 {Learn these spaces} one {Learn 1 space} other {Learn # spaces}}",
+      "learnedSpaces": "{count, plural, one {The space is being read — it answers once it is.} other {# spaces are being read — they answer once they are.}}",
+      "cancel": "Cancel",
+      "refused": {
+        "busy": "A sync is already running for this source — try again when it finishes.",
+        "mixed": "Learn folders and files in separate rounds.",
+        "failed": "That wasn't learned — try again."
+      }
     }
   }
 }

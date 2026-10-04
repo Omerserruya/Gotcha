@@ -13,6 +13,8 @@ const refresh = vi.hoisted(() => vi.fn());
 const addKnowledge = vi.hoisted(() => vi.fn());
 const startKnowledgeConnect = vi.hoisted(() => vi.fn());
 const replace = vi.hoisted(() => vi.fn());
+/* After-connect sources read the network; they have their own tests. */
+vi.mock('./ConnectedSources', () => ({ ConnectedSources: () => null }));
 vi.mock('./add-knowledge', async (importOriginal) => ({
   ...(await importOriginal<typeof AddKnowledgeModule>()),
   addKnowledge,

@@ -19,6 +19,7 @@ import {
   type KnowledgeLanding,
 } from './add-knowledge';
 import { ADD_WAYS, EYEBROW, type AddWay, type KnowledgeBaseRef } from './add-way';
+import { ConnectedSources } from './ConnectedSources';
 import styles from './AddKnowledge.module.css';
 
 /**
@@ -279,6 +280,8 @@ export function AddKnowledge({
                   {connectProblem}
                 </p>
               ) : null}
+              {/* After connecting: what each source holds, and choosing what to learn. */}
+              {typeof base === 'object' ? <ConnectedSources kbId={base.id} /> : null}
             </>
           ) : way === 'text' ? (
             <div className={styles.form}>
