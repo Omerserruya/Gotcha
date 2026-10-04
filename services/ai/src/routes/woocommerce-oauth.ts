@@ -37,6 +37,9 @@ import {
   getRedis,
 } from "@chatcenter/shared";
 import { findCatalog, upsertConnection } from "../services/connector-connection.service";
+import { normalizeStoreUrl, validateWooKeys } from "../services/connectors/woocommerce.adapter";
+
+export { normalizeStoreUrl, validateWooKeys };
 
 const router = Router();
 
@@ -44,7 +47,6 @@ const PROVIDER = "woocommerce";
 /** The merchant may have to log into their store first; give the round-trip room. */
 const STATE_TTL_SECONDS = 1800;
 const RESULT_TTL_SECONDS = 1800;
-const VALIDATE_TIMEOUT_MS = 10_000;
 const resultKey = (jti: string) => `woo_oauth:result:${jti}`;
 
 const WOO_FLOWS = new Set(["redesign_studio"]);
@@ -64,26 +66,6 @@ export const WOO_ERROR_CODES = new Set([
 ]);
 
 const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
-
-/**
- * The store address, normalised: scheme + host (+ port) + a sub-directory
- * install path, no query, no fragment, no credentials. https only, except
- * http outside production (a local dev store). Returns null when unusable.
- */
-export function normalizeStoreUrl(raw: unknown, env: NodeJS.ProcessEnv = process.env): string | null {
-  if (typeof raw !== "string" || !raw.trim()) return null;
-  let u: URL;
-  try {
-    u = new URL(raw.trim());
-  } catch {
-    return null;
-  }
-  const allowHttp = env.NODE_ENV !== "production";
-  if (u.protocol !== "https:" && !(allowHttp && u.protocol === "http:")) return null;
-  if (u.username || u.password) return null;
-  const path = u.pathname.replace(/\/+$/, "");
-  return `${u.protocol}//${u.host}${path}`;
-}
 
 function publicApiBase(): string {
   return `${resolveAppPublicUrl(process.env)}/api/integrations/woocommerce/oauth`;
@@ -111,40 +93,6 @@ function readSignedState(raw: unknown): { jti?: string; flow?: string } | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Prove the keys work against THIS store before calling the connection
- * CONNECTED. system_status needs the manage_woocommerce capability the
- * read_write key of an administrator carries; orders is the fallback for a
- * shop manager. Either one answering 200 with JSON is proof.
- */
-export async function validateWooKeys(
-  storeUrl: string,
-  consumerKey: string,
-  consumerSecret: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const auth = `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`;
-  let lastReason = "no_response";
-  for (const path of ["/wp-json/wc/v3/system_status", "/wp-json/wc/v3/orders?per_page=1"]) {
-    const url = `${storeUrl}${path}`;
-    try {
-      await assertPublicUrl(url);
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), VALIDATE_TIMEOUT_MS);
-      const res = await fetchImpl(url, { headers: { Authorization: auth, Accept: "application/json" }, signal: ctrl.signal });
-      clearTimeout(t);
-      if (res.ok) {
-        await res.json();
-        return { ok: true };
-      }
-      lastReason = `http_${res.status}`;
-    } catch (err: any) {
-      lastReason = err?.name === "AbortError" ? "timeout" : String(err?.message || "fetch_failed").slice(0, 80);
-    }
-  }
-  return { ok: false, reason: lastReason };
 }
 
 // ─── Init ────────────────────────────────────────────────────

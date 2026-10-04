@@ -810,6 +810,22 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
       where: { tenantId: req.tenantId!, integrationId: entry.id },
       select: { id: true },
     });
+
+    // PROOF BEFORE "CONNECTED". This route stored whatever was pasted and
+    // called it connected; a wrong key surfaced only when a customer asked
+    // something. An adapter that can check a credential (validate) is asked
+    // first, and a refusal writes NOTHING - not even over an existing working
+    // connection.
+    const adapter = getAdapter(slug);
+    if (adapter && typeof adapter.validate === "function") {
+      const verdict = await adapter
+        .validate({ ctx: { tenantId: req.tenantId!, tenantIntegrationId: existing?.id ?? "" }, credentials, config: cfg })
+        .catch((err: any) => ({ ok: false, error: `The credentials could not be checked (${String(err?.message || "error").slice(0, 80)}).` }));
+      if (!verdict.ok) {
+        res.status(422).json({ error: "validation_failed", message: verdict.error ?? "The credentials were rejected." });
+        return;
+      }
+    }
     let tenantIntegration: any;
     if (existing) {
       tenantIntegration = await prisma.tenantIntegration.update({

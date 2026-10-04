@@ -133,9 +133,87 @@ const TOOLS: ToolDefinition[] = [
   },
 ];
 
+
+const VALIDATE_TIMEOUT_MS = 10_000;
+
+/**
+ * The store address, normalised: scheme + host (+ port) + a sub-directory
+ * install path, no query, no fragment, no credentials. https only, except
+ * http outside production (a local dev store). Returns null when unusable.
+ */
+export function normalizeStoreUrl(raw: unknown, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  const allowHttp = env.NODE_ENV !== "production";
+  if (u.protocol !== "https:" && !(allowHttp && u.protocol === "http:")) return null;
+  if (u.username || u.password) return null;
+  const path = u.pathname.replace(/\/+$/, "");
+  return `${u.protocol}//${u.host}${path}`;
+}
+
+/**
+ * Prove the keys work against THIS store before calling the connection
+ * CONNECTED. system_status needs the manage_woocommerce capability the
+ * read_write key of an administrator carries; orders is the fallback for a
+ * shop manager. Either one answering 200 with JSON is proof.
+ */
+export async function validateWooKeys(
+  storeUrl: string,
+  consumerKey: string,
+  consumerSecret: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const auth = `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`;
+  let lastReason = "no_response";
+  for (const path of ["/wp-json/wc/v3/system_status", "/wp-json/wc/v3/orders?per_page=1"]) {
+    const url = `${storeUrl}${path}`;
+    try {
+      await assertPublicUrl(url);
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), VALIDATE_TIMEOUT_MS);
+      const res = await fetchImpl(url, { headers: { Authorization: auth, Accept: "application/json" }, signal: ctrl.signal });
+      clearTimeout(t);
+      if (res.ok) {
+        await res.json();
+        return { ok: true };
+      }
+      lastReason = `http_${res.status}`;
+    } catch (err: any) {
+      lastReason = err?.name === "AbortError" ? "timeout" : String(err?.message || "fetch_failed").slice(0, 80);
+    }
+  }
+  return { ok: false, reason: lastReason };
+}
+
+
 const WooCommerceAdapter: ProviderAdapter = {
   slug: "woocommerce",
   tools: () => TOOLS,
+
+  /**
+   * Prove a key pair works against THIS store before anything calls the
+   * connection CONNECTED - the generic connect route and /test both run it.
+   * A pasted key that is wrong, read-only for orders, or for another store
+   * used to be stored as CONNECTED and fail on the first customer question.
+   */
+  async validate({ credentials, config }) {
+    const consumerKey = credentials.consumerKey || credentials.consumer_key;
+    const consumerSecret = credentials.consumerSecret || credentials.consumer_secret;
+    if (!consumerKey || !consumerSecret) return { ok: false, error: "Enter both the consumer key and the consumer secret." };
+    const storeUrl = normalizeStoreUrl(config.storeUrl || credentials.storeUrl || credentials.store_url);
+    if (!storeUrl) return { ok: false, error: "Enter the store's https:// address." };
+    const v = await validateWooKeys(storeUrl, String(consumerKey), String(consumerSecret));
+    return v.ok
+      ? { ok: true }
+      : { ok: false, error: v.reason === "http_401" || v.reason === "http_403"
+          ? "The store rejected these keys. Check that they are Read/Write keys for this store."
+          : `The store could not be reached to check the keys (${v.reason}).` };
+  },
 
   async execute({ toolName, args, credentials, config }) {
     const consumerKey = credentials.consumerKey || credentials.consumer_key;
