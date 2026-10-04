@@ -19,6 +19,7 @@ import {
   decryptCredentials,
   mintOAuthState,
   consumeOAuthState,
+  getOAuthStateSecret,
   resolvePrincipal, metaGraphBaseUrl, metaGraphVersion,
   buildEmbeddedSignupLaunch,
   embeddedSignupDialogUrl,
@@ -760,6 +761,198 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePer
 
 // ─── OAuth Init ──────────────────────────────────────────────
 
+const CHANNEL_PLATFORMS = ["messenger", "instagram", "whatsapp", "gmail", "outlook", "slack"] as const;
+
+/**
+ * Allow-listed `flow` values, signed into the state - never a return URL from
+ * the browser. `redesign_studio` lands in the redesigned app (/v2).
+ */
+const CHANNEL_FLOWS = new Set(["redesign_studio"]);
+function parseChannelFlow(raw: unknown): string | undefined {
+  return typeof raw === "string" && CHANNEL_FLOWS.has(raw) ? raw : undefined;
+}
+
+type ChannelInitOutcome =
+  | { kind: "url"; url: string }
+  | { kind: "not_configured"; platform: string }
+  | { kind: "bad_platform" };
+
+/**
+ * Everything both init entry points share: platform check, per-platform
+ * config check, the signed single-use state, and the provider URL. The two
+ * routes differ ONLY in how the caller is authenticated and how the answer is
+ * delivered (a redirect, or JSON for a BFF client).
+ */
+function buildChannelOAuth(opts: {
+  tenantId: string;
+  userId: string;
+  platform: unknown;
+  wabaId?: string;
+  phoneNumberId?: string;
+  flow?: string;
+}): ChannelInitOutcome {
+  const platform = String(opts.platform ?? "");
+  if (!(CHANNEL_PLATFORMS as readonly string[]).includes(platform)) return { kind: "bad_platform" };
+
+  // Validate platform-specific config. The platform named is the one asked
+  // for: WhatsApp used to be reported as "messenger".
+  if (["messenger", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+  if (platform === "instagram" && (!INSTAGRAM_APP_ID || !INSTAGRAM_OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+  if (platform === "gmail" && (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+  if (platform === "outlook" && (!MICROSOFT_CLIENT_ID || !MICROSOFT_OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+  if (platform === "slack" && (!SLACK_CLIENT_ID || !SLACK_OAUTH_REDIRECT_URI)) return { kind: "not_configured", platform };
+
+  // Session info from the Embedded Signup popup (WhatsApp)
+  const wabaId = opts.wabaId || "";
+  const phoneNumberId = opts.phoneNumberId || "";
+
+  // Single-use state (shared store). `provider` is the constant
+  // "meta_channels" because this ONE callback serves every channel platform;
+  // the specific `platform` (and the return `flow`) are their own claims, read
+  // from the verified payload, never from the query string.
+  const { state } = mintOAuthState({
+    tenantId: opts.tenantId,
+    provider: "meta_channels",
+    userId: opts.userId,
+    platform,
+    wabaId,        // From Embedded Signup popup session info
+    phoneNumberId, // From Embedded Signup popup session info
+    flow: opts.flow,
+  });
+
+  let oauthUrl: string;
+
+  if (platform === "whatsapp") {
+    // Built from the SAME object the browser's FB.login uses, so the two
+    // entry points cannot describe different Embedded Signup experiences.
+    // The old hand-rolled URL sent `setup: { channel: "WHATSAPP" }`, which is
+    // not a documented field, and no version at all.
+    oauthUrl = embeddedSignupDialogUrl({
+      launch: buildEmbeddedSignupLaunch(process.env),
+      redirectUri: OAUTH_REDIRECT_URI,
+      state,
+      // The DIALOG version, which is not the Graph API version. This used to
+      // pass metaGraphVersion() (v24.0 by default), so the redirect path and
+      // the popup path opened two different dialogs - and the older one does
+      // not offer the WhatsApp Business app choice at all.
+      dialogVersion: EMBEDDED_SIGNUP_DIALOG_VERSION,
+    });
+  } else if (platform === "gmail") {
+    // Google OAuth2 for Gmail API
+    // ONE scope. gmail.modify is listed as an accepted authorization scope by
+    // every Gmail endpoint this channel touches: users.getProfile,
+    // users.watch, users.stop, users.history.list, users.messages.get and
+    // users.messages.send. gmail.readonly and gmail.send were strict subsets
+    // of it, and userinfo.email was only ever used to learn the mailbox
+    // address, which getProfile returns itself. A scope we do not need is
+    // still a scope Google has to review and a user has to grant.
+    const googleScopes = "https://www.googleapis.com/auth/gmail.modify";
+    oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(GOOGLE_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(googleScopes)}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
+  } else if (platform === "outlook") {
+    // Microsoft OAuth2 for Outlook Mail (Microsoft Graph)
+    const msScopes = [
+      "https://graph.microsoft.com/Mail.ReadWrite",
+      "https://graph.microsoft.com/Mail.Send",
+      "https://graph.microsoft.com/User.Read",
+      "offline_access",
+    ].join(" ");
+    oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?client_id=${MICROSOFT_CLIENT_ID}&redirect_uri=${encodeURIComponent(MICROSOFT_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(msScopes)}&state=${encodeURIComponent(state)}`;
+  } else if (platform === "slack") {
+    // Slack OAuth2 with bot scopes for messaging
+    const slackScopes = [
+      "channels:history",
+      "channels:read",
+      "chat:write",
+      "groups:history",
+      "groups:read",
+      "im:history",
+      "im:read",
+      "im:write",
+      "mpim:history",
+      "mpim:read",
+      "users:read",
+    ].join(",");
+    oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(SLACK_OAUTH_REDIRECT_URI)}&scope=${encodeURIComponent(slackScopes)}&state=${encodeURIComponent(state)}`;
+  } else if (platform === "instagram") {
+    // Instagram API with Instagram Login - connects an Instagram professional
+    // (Business/Creator) account DIRECTLY. The consent screen is Instagram-only;
+    // there is no Facebook Page picker because no Page is involved. Scopes are
+    // comma-separated, business-prefixed.
+    const igScopes = [
+      "instagram_business_basic",
+      "instagram_business_manage_messages",
+      "instagram_business_manage_comments",
+    ].join(",");
+    oauthUrl = `https://www.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(igScopes)}&state=${encodeURIComponent(state)}`;
+  } else {
+    // Messenger (Facebook Login for Pages)
+    const scopes: Record<string, string> = {
+      messenger: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
+    };
+    oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&scope=${scopes[platform]}`;
+  }
+
+  return { kind: "url", url: oauthUrl };
+}
+
+/** Where a channel connect lands in the redesigned app. Fixed path, closed codes. */
+const REDESIGN_BASE_PATH = "/v2";
+const CHANNEL_ERROR_CODES = new Set([
+  "denied",
+  "token_exchange_failed",
+  "state_already_used",
+  "invalid_state",
+  "not_configured",
+  "already_connected",
+  "gmail_no_email",
+  "outlook_no_email",
+  "no_pages",
+  "no_instagram_account",
+  "no_whatsapp_numbers",
+  "slack_no_team",
+  "callback_error",
+]);
+/** The callback's existing codes, folded onto the closed list. */
+const CHANNEL_ERROR_ALIASES: Record<string, string> = {
+  gmail_already_connected: "already_connected",
+  outlook_already_connected: "already_connected",
+  slack_already_connected: "already_connected",
+  slack_token_failed: "token_exchange_failed",
+  connection_failed: "callback_error",
+  missing_params: "callback_error",
+};
+
+export function redesignChannelsUrl(origin: string, platform: string | undefined, legacyQuery: string): string {
+  const legacy = new URLSearchParams(legacyQuery);
+  const out = new URLSearchParams();
+  const err = legacy.get("error");
+  if (err) {
+    const code = CHANNEL_ERROR_ALIASES[err] ?? err;
+    if (platform) out.set("platform", platform);
+    out.set("error", CHANNEL_ERROR_CODES.has(code) ? code : "callback_error");
+  } else {
+    out.set("connected", legacy.get("connected") || platform || "");
+    if (legacy.get("count") != null) out.set("count", String(legacy.get("count")));
+    if (legacy.get("pending") === "true") out.set("pending", "1");
+  }
+  return `${origin}${REDESIGN_BASE_PATH}/settings/channels?${out.toString()}`;
+}
+
+/**
+ * The flow carried by a state whose SIGNATURE is ours, even when it can no
+ * longer be consumed (replayed or expired). Choosing a landing page needs only
+ * proof that we issued it; nothing is granted on this read.
+ */
+function signedFlowOf(state: unknown): { flow?: string; platform?: string } {
+  if (typeof state !== "string" || !state) return {};
+  try {
+    const c: any = jwt.verify(state, getOAuthStateSecret(), { ignoreExpiration: true });
+    return c?.provider === "meta_channels" ? { flow: c.flow, platform: c.platform } : {};
+  } catch {
+    return {};
+  }
+}
+
 router.get("/oauth/init", async (req: Request, res: Response) => {
   // Special handling: accept token from query param since this is a redirect from frontend
   // The authenticate middleware reads from Bearer header, so we manually verify here
@@ -793,128 +986,69 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
   }
 
   try {
-    const platform = req.query.platform as string;
-    if (!platform || !["messenger", "instagram", "whatsapp", "gmail", "outlook", "slack"].includes(platform)) {
+    const flow = parseChannelFlow(req.query.flow);
+    const outcome = buildChannelOAuth({
+      tenantId: req.tenantId!,
+      userId: principal.userId,
+      platform: req.query.platform,
+      wabaId: req.query.wabaId as string,
+      phoneNumberId: req.query.phoneNumberId as string,
+      flow,
+    });
+    if (outcome.kind === "bad_platform") {
       res.status(400).json({ error: "Invalid platform. Must be 'messenger', 'instagram', 'whatsapp', 'gmail', 'outlook', or 'slack'" });
       return;
     }
-
-    // Validate platform-specific config
-    if (["messenger", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=messenger`);
+    if (outcome.kind === "not_configured") {
+      res.redirect(
+        flow === "redesign_studio"
+          ? redesignChannelsUrl(FRONTEND_URL, outcome.platform, "error=not_configured")
+          : `${FRONTEND_URL}/settings/channels?error=not_configured&platform=${outcome.platform}`,
+      );
       return;
     }
-    if (platform === "instagram" && (!INSTAGRAM_APP_ID || !INSTAGRAM_OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=instagram`);
-      return;
-    }
-    if (platform === "gmail" && (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=gmail`);
-      return;
-    }
-    if (platform === "outlook" && (!MICROSOFT_CLIENT_ID || !MICROSOFT_OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=outlook`);
-      return;
-    }
-    if (platform === "slack" && (!SLACK_CLIENT_ID || !SLACK_OAUTH_REDIRECT_URI)) {
-      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=slack`);
-      return;
-    }
-
-    // Capture session info from popup (passed as query params for WhatsApp)
-    const wabaId = req.query.wabaId as string || "";
-    const phoneNumberId = req.query.phoneNumberId as string || "";
-
-    // Generate signed state JWT (anti-CSRF + tenant context + session info)
-    // Single-use state (shared store). `provider` is the constant
-    // "meta_channels" because this ONE callback serves whatsapp / instagram /
-    // messenger; the specific `platform` stays its own claim and is read from
-    // the verified payload, never from the query string. The jti replaces the
-    // old hand-rolled `nonce`, which was never checked against anything.
-    const { state } = mintOAuthState({
-      tenantId: req.tenantId!,
-      provider: "meta_channels",
-      userId: principal.userId,
-      platform,
-      wabaId,        // From Embedded Signup popup session info
-      phoneNumberId, // From Embedded Signup popup session info
-    });
-
-    let oauthUrl: string;
-
-    if (platform === "whatsapp") {
-      // Built from the SAME object the browser's FB.login uses, so the two
-      // entry points cannot describe different Embedded Signup experiences.
-      // The old hand-rolled URL sent `setup: { channel: "WHATSAPP" }`, which is
-      // not a documented field, and no version at all.
-      oauthUrl = embeddedSignupDialogUrl({
-        launch: buildEmbeddedSignupLaunch(process.env),
-        redirectUri: OAUTH_REDIRECT_URI,
-        state,
-        // The DIALOG version, which is not the Graph API version. This used to
-        // pass metaGraphVersion() (v24.0 by default), so the redirect path and
-        // the popup path opened two different dialogs - and the older one does
-        // not offer the WhatsApp Business app choice at all.
-        dialogVersion: EMBEDDED_SIGNUP_DIALOG_VERSION,
-      });
-    } else if (platform === "gmail") {
-      // Google OAuth2 for Gmail API
-      // ONE scope. gmail.modify is listed as an accepted authorization scope by
-      // every Gmail endpoint this channel touches: users.getProfile,
-      // users.watch, users.stop, users.history.list, users.messages.get and
-      // users.messages.send. gmail.readonly and gmail.send were strict subsets
-      // of it, and userinfo.email was only ever used to learn the mailbox
-      // address, which getProfile returns itself. A scope we do not need is
-      // still a scope Google has to review and a user has to grant.
-      const googleScopes = "https://www.googleapis.com/auth/gmail.modify";
-      oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(GOOGLE_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(googleScopes)}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
-    } else if (platform === "outlook") {
-      // Microsoft OAuth2 for Outlook Mail (Microsoft Graph)
-      const msScopes = [
-        "https://graph.microsoft.com/Mail.ReadWrite",
-        "https://graph.microsoft.com/Mail.Send",
-        "https://graph.microsoft.com/User.Read",
-        "offline_access",
-      ].join(" ");
-      oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?client_id=${MICROSOFT_CLIENT_ID}&redirect_uri=${encodeURIComponent(MICROSOFT_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(msScopes)}&state=${encodeURIComponent(state)}`;
-    } else if (platform === "slack") {
-      // Slack OAuth2 with bot scopes for messaging
-      const slackScopes = [
-        "channels:history",
-        "channels:read",
-        "chat:write",
-        "groups:history",
-        "groups:read",
-        "im:history",
-        "im:read",
-        "im:write",
-        "mpim:history",
-        "mpim:read",
-        "users:read",
-      ].join(",");
-      oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(SLACK_OAUTH_REDIRECT_URI)}&scope=${encodeURIComponent(slackScopes)}&state=${encodeURIComponent(state)}`;
-    } else if (platform === "instagram") {
-      // Instagram API with Instagram Login - connects an Instagram professional
-      // (Business/Creator) account DIRECTLY. The consent screen is Instagram-only;
-      // there is no Facebook Page picker because no Page is involved. Scopes are
-      // comma-separated, business-prefixed.
-      const igScopes = [
-        "instagram_business_basic",
-        "instagram_business_manage_messages",
-        "instagram_business_manage_comments",
-      ].join(",");
-      oauthUrl = `https://www.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(igScopes)}&state=${encodeURIComponent(state)}`;
-    } else {
-      // Messenger (Facebook Login for Pages)
-      const scopes: Record<string, string> = {
-        messenger: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
-      };
-      oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&scope=${scopes[platform]}`;
-    }
-
-    res.redirect(oauthUrl);
+    res.redirect(outcome.url);
   } catch (err) {
     console.error("OAuth init error:", err);
+    res.status(500).json({ error: "Failed to initialize OAuth" });
+  }
+});
+
+/**
+ * GET /oauth/init-url - the same init for a BFF client.
+ *
+ * The redirect variant above takes the user's token in the QUERY STRING,
+ * which a BFF browser does not have and which lands in logs and history. Here
+ * the caller authenticates the normal way (Authorization header or session
+ * cookie, through the one auth gate) and gets the provider URL back as JSON;
+ * the browser then navigates to it. Same platforms, same flows, same state.
+ */
+router.get("/oauth/init-url", authenticate, resolveTenant, async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  if (user?.role !== "ADMIN") {
+    res.status(403).json({ error: "Admin access required" });
+    return;
+  }
+  try {
+    const outcome = buildChannelOAuth({
+      tenantId: req.tenantId!,
+      userId: user.userId,
+      platform: req.query.platform,
+      wabaId: req.query.wabaId as string,
+      phoneNumberId: req.query.phoneNumberId as string,
+      flow: parseChannelFlow(req.query.flow),
+    });
+    if (outcome.kind === "bad_platform") {
+      res.status(400).json({ error: "invalid_platform", platforms: CHANNEL_PLATFORMS });
+      return;
+    }
+    if (outcome.kind === "not_configured") {
+      res.status(409).json({ error: "not_configured", platform: outcome.platform });
+      return;
+    }
+    res.json({ url: outcome.url });
+  } catch (err) {
+    console.error("OAuth init-url error:", err);
     res.status(500).json({ error: "Failed to initialize OAuth" });
   }
 });
@@ -924,11 +1058,28 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
 router.get("/oauth/callback", async (req: Request, res: Response) => {
   // Note: This endpoint does NOT use authenticate middleware since it's a redirect from Meta
   const frontendUrl = resolveAppPublicUrl(process.env);
+  // Known once the state verifies. Until then every answer is the legacy one.
+  let flow: string | undefined;
+  let platformForReturn: string | undefined;
+  const back = (legacyQuery: string) =>
+    flow === "redesign_studio"
+      ? redesignChannelsUrl(frontendUrl, platformForReturn, legacyQuery)
+      : `${frontendUrl}/channels?${legacyQuery}`;
 
   try {
     const { code, state, error: oauthError } = req.query;
 
     if (oauthError) {
+      // The user pressed Cancel at the provider. The state is still ours to
+      // spend: for the redesign flow it decides the landing (error=denied);
+      // every other flow gets exactly the answer it always had.
+      if (typeof state === "string" && state) {
+        const consumed = await consumeOAuthState<{ flow?: string; platform?: string }>(state, "meta_channels");
+        if (consumed.ok && consumed.claims.flow === "redesign_studio") {
+          res.redirect(redesignChannelsUrl(frontendUrl, consumed.claims.platform, "error=denied"));
+          return;
+        }
+      }
       res.redirect(`${frontendUrl}/channels?error=${encodeURIComponent(oauthError as string)}`);
       return;
     }
@@ -948,12 +1099,18 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
     );
     if (!consumedState.ok) {
       console.error(`[OAUTH-CALLBACK] state rejected: ${consumedState.reason}`);
-      res.redirect(`${frontendUrl}/channels?error=${consumedState.reason === "replayed" ? "state_already_used" : "invalid_state"}`);
+      // A replayed or expired state of ours still says which app to land in.
+      const signed = signedFlowOf(state);
+      flow = parseChannelFlow(signed.flow);
+      platformForReturn = signed.platform;
+      res.redirect(back(`error=${consumedState.reason === "replayed" ? "state_already_used" : "invalid_state"}`));
       return;
     }
     const statePayload: any = consumedState.claims;
 
     const { tenantId, userId, platform } = statePayload;
+    flow = parseChannelFlow(statePayload.flow);
+    platformForReturn = platform;
 
     let accessToken: string;
     let tokenExpiresAt: Date;
@@ -991,7 +1148,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       if (!token) {
-        res.redirect(`${frontendUrl}/channels?error=token_exchange_failed`);
+        res.redirect(back(`error=token_exchange_failed`));
         return;
       }
       accessToken = token;
@@ -1058,7 +1215,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       if (!shortLivedToken) {
-        res.redirect(`${frontendUrl}/channels?error=token_exchange_failed`);
+        res.redirect(back(`error=token_exchange_failed`));
         return;
       }
 
@@ -1118,7 +1275,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         // Store the token in Redis for later completion (when session info arrives from popup)
         console.log("[WA-CALLBACK] No WABA found. Storing token for session completion...");
         await redis.set(`wa_pending_token:${tenantId}`, accessToken, "EX", 300); // 5 min TTL
-        res.redirect(`${frontendUrl}/channels?connected=whatsapp&pending=true`);
+        res.redirect(back(`connected=whatsapp&pending=true`));
         return;
       }
 
@@ -1191,7 +1348,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       if (connectedAccounts.length === 0) {
-        res.redirect(`${frontendUrl}/channels?error=no_whatsapp_numbers`);
+        res.redirect(back(`error=no_whatsapp_numbers`));
         return;
       }
     } else if (platform === "messenger") {
@@ -1246,7 +1403,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
 
       if (pages.length === 0) {
         console.error("[MESSENGER-CALLBACK] No pages found via /me/accounts or debug_token");
-        res.redirect(`${frontendUrl}/channels?error=no_pages`);
+        res.redirect(back(`error=no_pages`));
         return;
       }
 
@@ -1351,7 +1508,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
 
       if (!igBusinessId) {
         console.error("[INSTAGRAM-CALLBACK] No IG account id resolved from token");
-        res.redirect(`${frontendUrl}/channels?error=no_instagram_account`);
+        res.redirect(back(`error=no_instagram_account`));
         return;
       }
 
@@ -1378,7 +1535,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
 
       if (existing && existing.tenantId !== tenantId) {
         console.warn(`Instagram account ${igBusinessId} already connected to another tenant`);
-        res.redirect(`${frontendUrl}/channels?error=already_connected`);
+        res.redirect(back(`error=already_connected`));
         return;
       }
 
@@ -1425,7 +1582,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       connectedAccounts.push(`@${igUsername}`);
 
       if (connectedAccounts.length === 0) {
-        res.redirect(`${frontendUrl}/channels?error=no_instagram_account`);
+        res.redirect(back(`error=no_instagram_account`));
         return;
       }
     } else if (platform === "gmail") {
@@ -1461,7 +1618,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       if (!emailAddress) {
-        res.redirect(`${frontendUrl}/channels?error=gmail_no_email`);
+        res.redirect(back(`error=gmail_no_email`));
         return;
       }
 
@@ -1498,7 +1655,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       });
 
       if (existing && existing.tenantId !== tenantId) {
-        res.redirect(`${frontendUrl}/channels?error=gmail_already_connected`);
+        res.redirect(back(`error=gmail_already_connected`));
         return;
       }
 
@@ -1583,7 +1740,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       const displayName = profileResponse.data.displayName || emailAddress;
 
       if (!emailAddress) {
-        res.redirect(`${frontendUrl}/channels?error=outlook_no_email`);
+        res.redirect(back(`error=outlook_no_email`));
         return;
       }
 
@@ -1617,7 +1774,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       });
 
       if (existing && existing.tenantId !== tenantId) {
-        res.redirect(`${frontendUrl}/channels?error=outlook_already_connected`);
+        res.redirect(back(`error=outlook_already_connected`));
         return;
       }
 
@@ -1688,7 +1845,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       const slackData = tokenResponse.data;
       if (!slackData.ok) {
         console.error("[SLACK-CALLBACK] Token exchange failed:", slackData.error);
-        res.redirect(`${frontendUrl}/channels?error=slack_token_failed`);
+        res.redirect(back(`error=slack_token_failed`));
         return;
       }
 
@@ -1700,7 +1857,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
       if (!teamId) {
-        res.redirect(`${frontendUrl}/channels?error=slack_no_team`);
+        res.redirect(back(`error=slack_no_team`));
         return;
       }
 
@@ -1710,7 +1867,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       });
 
       if (existing && existing.tenantId !== tenantId) {
-        res.redirect(`${frontendUrl}/channels?error=slack_already_connected`);
+        res.redirect(back(`error=slack_already_connected`));
         return;
       }
 
@@ -1758,10 +1915,10 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       connectedAccounts.push(teamName);
     }
 
-    res.redirect(`${frontendUrl}/channels?connected=${platform}&count=${connectedAccounts.length}`);
+    res.redirect(back(`connected=${platform}&count=${connectedAccounts.length}`));
   } catch (err: any) {
     console.error("OAuth callback error:", err.response?.data || err.message);
-    res.redirect(`${frontendUrl}/channels?error=connection_failed`);
+    res.redirect(back(`error=connection_failed`));
   }
 });
 
