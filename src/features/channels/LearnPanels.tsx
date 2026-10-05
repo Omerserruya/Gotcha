@@ -1,4 +1,4 @@
-import { Bell, RotateCw } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
@@ -14,6 +14,7 @@ import {
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
+import { AddReady, RunAgain } from './ReportFootActions';
 import { SuggestionActions } from './SuggestionActions';
 import styles from './Channels.module.css';
 
@@ -328,9 +329,9 @@ function tabOf(c: Candidate, floor: number | undefined): ReportTab | null {
  * until you approve it." — the strip of four, three cards, the tabs, the
  * candidates as cards in two columns, the ready-in-bulk card, the footer.
  *
- * Approve, a variant to use, Edit and Reject are live (Omer, decision 13) —
- * each a change to what the AI tells customers, made only on a press. Adding
- * in bulk and running again stay drawn until he rules on them.
+ * Approve, a variant to use, Edit and Reject are live (Omer, decision 13);
+ * adding the ready ones in bulk and running the analysis again too (Omer,
+ * 2026-10-05) — each asks before it acts.
  */
 export async function ReportPanel({
   status,
@@ -355,7 +356,6 @@ export async function ReportPanel({
   const shown = inTab(current);
   const bulk = bulkWouldTake(inGroup(candidates, 'needs_a_look'), bulkMinConfidence);
   const ready = inTab('ready_to_add');
-  const notLive = t('learn.notLive');
 
   /* 02: a chip only for a reason to look — never a figure, which sits on the right. */
   const chipOf = (c: Candidate): { text: string; tone: string } | null =>
@@ -525,14 +525,8 @@ export async function ReportPanel({
       </div>
 
       <footer className={drawer.drawerFoot}>
-        <span
-          className={`${styles.learnPrimary} ${styles.footStart}`}
-          aria-disabled="true"
-          title={`${t('review.bulkSafe')} ${notLive}`}
-          data-testid="report-bulk"
-        >
-          {t('learn.addReady', { count: bulk })}
-        </span>
+        {/* Live (Omer): asks, then adds every ready answer. */}
+        <AddReady importId={status.id} count={bulk} />
         <Link
           href={{ pathname: '/settings/channels', query: { panel: 'whatsapp' } }}
           className={drawer.drawerCancel}
@@ -540,14 +534,9 @@ export async function ReportPanel({
         >
           {t('learn.later')}
         </Link>
-        <span
-          className={`${drawer.drawerFootNote} ${styles.rerun}`}
-          aria-disabled="true"
-          title={`${t('review.rerunSafe')} ${notLive}`}
-          data-testid="report-rerun"
-        >
-          <RotateCw size={13} aria-hidden="true" />
-          {t('learn.rerun')}
+        {/* Live (Omer): asks — it clears this report first — then runs again. */}
+        <span className={drawer.drawerFootNote}>
+          <RunAgain importId={status.id} />
         </span>
       </footer>
     </>

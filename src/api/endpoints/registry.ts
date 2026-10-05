@@ -1163,6 +1163,20 @@ export const knowledgeEndpoints = {
    */
   approveCandidate: (candidateId: string) =>
     endpoint('/api/historical-imports/candidates/{candidateId}/approve', { candidateId }),
+  /**
+   * 13f's "Add the N ready ones" (Omer): every waiting, unconflicted answer at
+   * the server's floor, up to 100 — `{ approved, skipped }`.
+   */
+  bulkApprove: (importId: string) =>
+    endpoint('/api/historical-imports/{importId}/bulk-approve', { importId }),
+  /**
+   * 13f's "Run the analysis again" (Omer). ⚠ It DELETES this import's
+   * suggestions (decided ones too) and customer memories, then reads the
+   * imported conversations again. Approved answers already in Knowledge stay.
+   * 409 with why when the import has not settled.
+   */
+  rerun: (importId: string) =>
+    endpoint('/api/historical-imports/{importId}/rerun-intelligence', { importId }),
   /** 13f's Reject / Skip: `{ ok: true }`; 404 when gone or already decided. */
   rejectCandidate: (candidateId: string) =>
     endpoint('/api/historical-imports/candidates/{candidateId}/reject', { candidateId }),

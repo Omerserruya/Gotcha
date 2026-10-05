@@ -187,9 +187,25 @@
     "panelTitle": "WhatsApp",
     "footNotYet": "Not from here yet.",
     "foot": {
-      "refresh": "Refresh from Meta",
-      "activity": "Activity log",
-      "disconnect": "Disconnect this number"
+      "add": "{count, plural, =0 {No ready answers to add} one {Add 1 ready answer} other {Add # ready answers}}",
+      "addAsk": "{count, plural, one {GOTCHA starts answering with this one. Add it?} other {GOTCHA starts answering with these #. Add them?}}",
+      "addYes": "Yes, add them",
+      "adding": "Adding…",
+      "added": "{count, plural, one {1 answer added} other {# answers added}}{skipped, plural, =0 {.} other {; # were skipped — they stay to review.}}",
+      "refused": {
+        "forbidden": "You don't have permission to change what GOTCHA knows.",
+        "failed": "They weren't added — try again."
+      },
+      "rerun": "Run the analysis again",
+      "rerunAsk": "This clears this report — the suggestions, the ones you decided too, and what it remembered about customers — and reads the history again. Answers already in your knowledge stay. Run it again?",
+      "rerunYes": "Yes, run it again",
+      "rerunning": "Starting…",
+      "rerunRefused": {
+        "not_settled": "It's still running — run it again once it has finished.",
+        "forbidden": "You don't have permission to run it again.",
+        "failed": "It didn't start — try again."
+      },
+      "cancel": "Not now"
     },
     "rows": {
       "answeredBy": "Answered by",

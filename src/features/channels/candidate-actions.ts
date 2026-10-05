@@ -52,3 +52,58 @@ export async function rejectSuggestion(candidateId: string): Promise<RejectResul
     return { ok: false, reason: 'failed' };
   }
 }
+
+export type BulkResult =
+  | { readonly ok: true; readonly approved: number; readonly skipped: number }
+  | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
+
+/** Adds every ready answer at once — after the owner's second press. */
+export async function addReadyAnswers(importId: string): Promise<BulkResult> {
+  try {
+    const done = await serverApi().post({
+      endpoint: knowledgeEndpoints.bulkApprove(importId),
+      payload: z.object({
+        approved: z.number().catch(0).default(0),
+        skipped: z.number().catch(0).default(0),
+      }),
+      body: {},
+      raw: true,
+    });
+    revalidatePath(CHANNELS, 'page');
+    return { ok: true, approved: done.approved, skipped: done.skipped };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('channels.bulk_approve_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause) && cause.kind === 'authorization')
+      return { ok: false, reason: 'forbidden' };
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export type RerunResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'not_settled' | 'forbidden' | 'failed' };
+
+/** Runs the analysis again — it clears this report first. After the second press. */
+export async function rerunAnalysis(importId: string): Promise<RerunResult> {
+  try {
+    await serverApi().post({
+      endpoint: knowledgeEndpoints.rerun(importId),
+      payload: z.unknown(),
+      body: {},
+      raw: true,
+    });
+    revalidatePath(CHANNELS, 'page');
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('channels.rerun_failed', { status: isApiError(cause) ? cause.status : undefined });
+    if (isApiError(cause)) {
+      if (cause.status === 409) return { ok: false, reason: 'not_settled' };
+      if (cause.kind === 'authorization') return { ok: false, reason: 'forbidden' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}

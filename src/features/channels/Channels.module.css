@@ -1757,4 +1757,76 @@
     border-radius: var(--radius-card);
     background-color: var(--panel-base);
   }
+
+  /* 13f's foot actions, live: the dark one to add, a quiet one to run again. */
+  .learnPrimaryButton {
+    padding-block: var(--space-8);
+    padding-inline: var(--space-16);
+    border: 0;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .learnPrimaryButton:disabled {
+    background-color: var(--panel-well);
+    color: var(--text-faint);
+    cursor: default;
+  }
+
+  .rerunButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .footAsk {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .footCancel {
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .footDanger {
+    padding: var(--space-6) var(--space-12);
+    border: 0;
+    border-radius: var(--space-8);
+    background-color: var(--alert-text);
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--action-text);
+    cursor: pointer;
+  }
+
+  .footDone {
+    font-size: var(--font-size-label);
+    color: var(--signal-done-text);
+  }
+
+  .footProblem {
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
 }

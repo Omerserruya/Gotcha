@@ -13,6 +13,11 @@ vi.mock('./SuggestionActions', () => ({
     <span data-testid={`decide-${id}`} data-variants={variants.join('|')} />
   ),
 }));
+/* The foot's two actions reach the server; they have their own tests. */
+vi.mock('./ReportFootActions', () => ({
+  AddReady: ({ count }: { count: number }) => <span data-testid="report-bulk" data-count={count} />,
+  RunAgain: () => <span data-testid="report-rerun" />,
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
     createTranslator({ locale: 'en', messages: { channels: messages }, namespace }),
@@ -244,11 +249,11 @@ describe('★ 13f — the report, no paragraphs', () => {
     expect(high).toHaveTextContent('“Yes, two to three days.”');
   });
 
-  it('★ a card’s decisions are live (Omer, decision 13); bulk and rerun stay drawn', async () => {
+  it('★ a card’s decisions are live; so are adding the ready ones and running again (Omer)', async () => {
     render(await report());
     expect(within(screen.getByTestId('candidate-c3')).getByTestId('decide-c3')).toBeInTheDocument();
-    expect(screen.getByTestId('report-bulk')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByTestId('report-rerun')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('report-bulk')).toBeInTheDocument();
+    expect(screen.getByTestId('report-rerun')).toBeInTheDocument();
     expect(screen.getByTestId('report-preview')).toHaveAttribute('aria-disabled', 'true');
   });
 
