@@ -57,3 +57,40 @@ describe('★★ 04 reads the day; the dialer’s search does not', () => {
     expect(data.conversations).toBeNull();
   });
 });
+
+describe('★★ 04’s search: an order number finds its customer too — added, never instead', () => {
+  it('the phone match stays; the order’s customer joins it, once', async () => {
+    get.mockImplementation(
+      async ({
+        endpoint,
+        payload,
+      }: {
+        endpoint: { path: string };
+        payload: { parse: (v: unknown) => unknown };
+      }) => {
+        if (endpoint.path.includes('by-order')) {
+          return payload.parse({ source: 'woocommerce', contactId: 'k9' });
+        }
+        if (endpoint.path === '/api/contacts/k9') {
+          return payload.parse({ data: { id: 'k9', displayName: 'Dana' } });
+        }
+        return payload.parse({ data: [] });
+      },
+    );
+    post.mockImplementation(async ({ payload }: { payload: { parse: (v: unknown) => unknown } }) =>
+      payload.parse({ data: [{ id: 'k1', phone: '0501842' }], total: 1 }),
+    );
+    const data = await loadCustomers('1842', { today: true });
+    expect(data.rows?.map((r) => r.id)).toEqual(['k9', 'k1']);
+    expect(data.orderSearched).toBe(true);
+  });
+
+  it('the dialer’s search never asks the store', async () => {
+    get.mockImplementation(async () => {
+      throw new Error('asked');
+    });
+    const data = await loadCustomers('1842');
+    expect(data.orderSearched).toBe(false);
+    expect(get).not.toHaveBeenCalled();
+  });
+});

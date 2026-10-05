@@ -12,6 +12,7 @@ import {
   segmentOf,
 } from '@/features/customers/people-today';
 import styles from '@/features/customers/Customers.module.css';
+import { loadCommerce, loadInsights, loadSegments } from '@/features/customers/load-customer-facts';
 import { loadCustomers } from '@/features/customers/load-customers';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -31,10 +32,10 @@ import { pageMetadata } from '@/shell/page-metadata';
  * in whatever order Postgres returns for all-nulls. A control here would offer
  * an option the server ignores.
  *
- * **No lifetime value and no order count.** They are not on `Contact` at all —
- * they resolve to `shopify.get_customer` + `shopify.get_customer_orders`, two
- * live uncached vendor calls **per customer**. In a list of twenty that is
- * forty round trips, which is the approvals finding at list scale.
+ * **Value, orders, situation and mood are read in bulk** (backend 63985641,
+ * 01bb7b6e): one commerce read and one insights read per hundred people
+ * shown, never a vendor call per row. A store that is absent or unreachable
+ * is "—" with its reason, never "no orders yet".
  *
  * **No "GOTCHA remembers", no notes.** `AgentCustomerMemory` is per-agent,
  * last-turn-only and advisory by its own comment; there is no `Note` model at
@@ -43,10 +44,9 @@ import { pageMetadata } from '@/shell/page-metadata';
  * ── SEARCH ──
  * Name, phone and email all work (the `name` case landed 2026-09-20). Rules
  * are ANDed by the route, so one field is chosen from the shape of the query.
- * **Order number is still unsearchable and always will be** — orders are not
- * local to this platform — so the empty state names what was looked at rather
- * than reporting a bare "no results", which would tell someone their customer
- * does not exist when we never examined what they typed.
+ * A query shaped like an order number also asks the store (`by-order`), and
+ * the customer it finds is ADDED to the phone match, never instead of it. The
+ * empty state names what was looked at rather than a bare "no results".
  */
 export default async function Page({
   searchParams,
@@ -57,13 +57,14 @@ export default async function Page({
   const { q, segment: rawSegment } = await searchParams;
   const query = q?.trim() ?? '';
   const segment = segmentOf(rawSegment);
-  const { rows, total, truncated, searchedField, conversations, quiet } = await loadCustomers(
-    query,
-    { today: true },
-  );
+  const [{ rows, total, truncated, searchedField, orderSearched, conversations, quiet }, segments] =
+    await Promise.all([loadCustomers(query, { today: true }), loadSegments()]);
   const now = new Date();
   const everyone = rows === null ? [] : peopleToday(rows, conversations, quiet?.ids ?? null, now);
   const shown = everyone.filter((person) => inSegment(person, segment));
+  // What each shown person is worth and what is going on — every identity, in bulk.
+  const shownIds = shown.flatMap((person) => person.members.map((member) => member.id));
+  const [commerce, insights] = await Promise.all([loadCommerce(shownIds), loadInsights(shownIds)]);
 
   /*
    * ★ 04: the count IS the title — "4,180 customers". People, counted from
@@ -127,7 +128,10 @@ export default async function Page({
                 shownOf={truncated ? total : everyone.length}
                 rowsEmpty={rows.length === 0}
                 searchedField={searchedField}
+                orderSearched={orderSearched}
                 query={query}
+                commerce={commerce}
+                insights={insights}
                 now={now}
               />
             </CustomerSelection>
@@ -136,7 +140,7 @@ export default async function Page({
                 quiet={quiet === null ? null : { count: quiet.count, capped: quiet.capped }}
               />
               <DuplicateCard pair={duplicateSuggestion(rows)} />
-              <WhoTheyAre />
+              <WhoTheyAre segments={segments} />
             </aside>
           </div>
         </>

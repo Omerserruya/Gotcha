@@ -10,10 +10,13 @@ import {
 } from '@/api/contracts/customers';
 import { z } from 'zod';
 
+import { looksLikeOrderNumber } from '@/api/contracts/customer-facts';
+
 import { analyticsEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { withCaptureFixtures } from './capture-fixtures';
+import { customerByOrder } from './load-customer-facts';
 import type { ConversationFact } from './people-today';
 
 /**
@@ -56,6 +59,8 @@ export interface CustomersData {
   readonly truncated: boolean;
   /** Which single field the query was matched against, or null for no query. */
   readonly searchedField: 'name' | 'phone' | 'email' | null;
+  /** The query looked like an order number, so the store's orders were asked too (04). */
+  readonly orderSearched: boolean;
   /**
    * The newest conversations, every status — what makes a row "today": its
    * last word, whether it is open, who spoke last. `null` when unread.
@@ -186,6 +191,8 @@ export async function loadCustomers(
         CustomersData,
         'conversations' | 'quiet'
       >);
+  // 04's search: an order number finds its customer too — added, never instead.
+  const byOrder = withToday ? customerByOrder(q) : Promise.resolve(null);
   try {
     const result = await serverApi().post({
       endpoint: customerEndpoints.list(),
@@ -201,7 +208,10 @@ export async function loadCustomers(
      * read stays a failed read. See `capture-fixtures.ts`: gated on
      * `E2E_SECURITY_FIXTURES=1` AND a loopback origin, failing closed.
      */
-    const rows = withCaptureFixtures(result.data, q) ?? result.data;
+    const listed = withCaptureFixtures(result.data, q) ?? result.data;
+    const ordered = await byOrder;
+    const rows =
+      ordered && !listed.some((row) => row.id === ordered.id) ? [ordered, ...listed] : listed;
 
     return {
       rows,
@@ -210,11 +220,19 @@ export async function loadCustomers(
       total: listedCount(rows.length, result.total),
       truncated: isTruncated(rows.length),
       searchedField: fieldForQuery(q),
+      orderSearched: withToday && looksLikeOrderNumber(q),
       ...(await today),
     };
   } catch (cause) {
     logger.warn('customers.list_failed', { cause });
-    return { rows: null, total: 0, truncated: false, searchedField: null, ...(await today) };
+    return {
+      rows: null,
+      total: 0,
+      truncated: false,
+      searchedField: null,
+      orderSearched: false,
+      ...(await today),
+    };
   }
 }
 

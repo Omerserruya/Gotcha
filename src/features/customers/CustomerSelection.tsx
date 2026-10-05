@@ -1,10 +1,13 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useTransition, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Link } from '@/i18n/navigation';
+import { FACTS_BATCH, TAG_MAX } from '@/api/contracts/customer-facts';
+import { Link, useRouter } from '@/i18n/navigation';
+
+import { tagCustomers, type TagResult } from './tag-actions';
 
 import styles from './Customers.module.css';
 
@@ -12,7 +15,7 @@ import styles from './Customers.module.css';
  * 04's "shift-click to pick several, then message or tag them". A plain click
  * still opens the person; shift, ⌘ or Ctrl picks them instead. With a pick,
  * a bar: Message makes a campaign draft for exactly those people (nothing is
- * sent from here); Tag is drawn — no route writes a contact's tags yet.
+ * sent from here); Tag adds one tag to all of them (backend 01bb7b6e).
  */
 export function CustomerSelection({ children }: { readonly children: ReactNode }) {
   const t = useTranslations('customers.select');
@@ -73,14 +76,7 @@ export function CustomerSelection({ children }: { readonly children: ReactNode }
       >
         {t('message')}
       </Link>
-      <span
-        className={styles.selectDrawn}
-        aria-disabled="true"
-        title={t('tagNotYet')}
-        data-testid="select-tag"
-      >
-        {t('tag')}
-      </span>
+      <TagPicked contactIds={contactIds} onDone={() => setPicked(new Map())} />
       <button
         type="button"
         className={styles.selectClear}
@@ -96,5 +92,91 @@ export function CustomerSelection({ children }: { readonly children: ReactNode }
       {children}
       {picked.size > 0 ? (slot ? createPortal(bar, slot) : bar) : null}
     </div>
+  );
+}
+
+/** "Tag": a small field and Add — one tag on everyone picked, all or nothing. */
+function TagPicked({
+  contactIds,
+  onDone,
+}: {
+  readonly contactIds: readonly string[];
+  readonly onDone: () => void;
+}) {
+  const t = useTranslations('customers.select');
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [tag, setTag] = useState('');
+  const [result, setResult] = useState<TagResult | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const tooMany = new Set(contactIds).size > FACTS_BATCH;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className={styles.selectSecondary}
+        disabled={tooMany}
+        title={tooMany ? t('tagTooMany', { max: FACTS_BATCH }) : undefined}
+        data-testid="select-tag"
+        onClick={() => {
+          setResult(null);
+          setOpen(true);
+        }}
+      >
+        {t('tag')}
+      </button>
+    );
+  }
+  const name = tag.trim();
+  return (
+    <form
+      className={styles.selectTag}
+      data-testid="select-tag-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        startTransition(async () => {
+          const done = await tagCustomers(contactIds, name);
+          setResult(done);
+          if (done.ok) {
+            setTag('');
+            setOpen(false);
+            onDone();
+            router.refresh();
+          }
+        });
+      }}
+    >
+      <label className="srOnly" htmlFor="select-tag-name">
+        {t('tagLabel')}
+      </label>
+      <input
+        id="select-tag-name"
+        className={styles.selectTagInput}
+        value={tag}
+        maxLength={TAG_MAX}
+        autoFocus
+        dir="auto"
+        placeholder={t('tagPlaceholder')}
+        data-testid="select-tag-name"
+        onChange={(event) => setTag(event.target.value)}
+      />
+      <button
+        type="submit"
+        className={styles.selectPrimary}
+        disabled={isPending || name.length === 0}
+        data-testid="select-tag-add"
+      >
+        {isPending ? t('tagAdding') : t('tagAdd')}
+      </button>
+      <button type="button" className={styles.selectClear} onClick={() => setOpen(false)}>
+        {t('tagCancel')}
+      </button>
+      {result && !result.ok ? (
+        <span role="alert" data-testid="select-tag-problem">
+          {t(`tagRefused.${result.reason}`, { max: FACTS_BATCH })}
+        </span>
+      ) : null}
+    </form>
   );
 }

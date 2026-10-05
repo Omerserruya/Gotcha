@@ -794,6 +794,22 @@ export const customerEndpoints = {
    * overwritten. 04's Add looks the person up first.
    */
   create: () => endpoint('/api/contacts'),
+  /**
+   * 04's rows in bulk (backend 63985641 / 01bb7b6e). Each takes at most 100
+   * ids. The commerce three answer `source: null` + `reason` when there is no
+   * store to read — never zeros — and `data` sits BESIDE `source`, so they
+   * are read `raw`.
+   *   commerceSummary  ?contactIds= → { source, truncated, data: {[id]: summary} }
+   *   commerceSegments              → { source, truncated, total, counts }
+   *   byOrder          ?number=     → { source, contactId | null, orderNumber }
+   *   insights         ?ids=        → { data: {[id]: insight | null} }
+   *   tags  POST { contactIds, add?, remove? } → { data: {[id]: tags} }, all or nothing
+   */
+  commerceSummary: () => endpoint('/api/commerce-context/customers/commerce-summary'),
+  commerceSegments: () => endpoint('/api/commerce-context/customers/segments'),
+  byOrder: () => endpoint('/api/commerce-context/customers/by-order'),
+  insights: () => endpoint('/api/contacts/insights'),
+  tags: () => endpoint('/api/contacts/tags'),
   detail: (id: string) => endpoint('/api/contacts/{id}', { id }),
   /**
    * Screen 04b's timeline. CONTACT-keyed, and the only one of the three

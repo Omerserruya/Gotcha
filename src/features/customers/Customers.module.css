@@ -2251,14 +2251,25 @@
     color: var(--text-subtle);
   }
 
-  /* 02: worth at 13/500 over its note; the last contact in mono. */
+  /* 02: worth at 13/500 over its orders at 11 muted; the last contact in mono. */
   .rowValue {
     flex: none;
+    display: flex;
+    flex-direction: column;
     inline-size: 110px;
     text-align: end;
+    line-height: normal;
+  }
+
+  .rowAmount {
     font-size: 13px;
     font-weight: var(--font-weight-medium);
     color: var(--text-primary);
+  }
+
+  .rowOrders {
+    font-size: 11px;
+    color: var(--text-subtle);
   }
 
   .rowWhen {
@@ -2269,6 +2280,17 @@
     font-size: 11px;
     font-weight: var(--font-weight-medium);
     color: var(--text-subtle);
+  }
+
+  /* 02's "Frustrated today" and "About to buy". */
+  .rowChip[data-tone='frustrated'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .rowChip[data-tone='about_to_buy'] {
+    background-color: var(--intent-opportunity-surface);
+    color: var(--intent-opportunity-text);
   }
 
   /* Waiting on you — 02's warm chip. */
@@ -2405,10 +2427,27 @@
     color: var(--text-subtle);
   }
 
+  /* 02: a 5px track, the share filled — dark, wholesale violet, never-bought pale. */
   .whoTrack {
-    block-size: 4px;
-    border-radius: 2px;
-    background-color: var(--panel-well);
+    display: block;
+    block-size: 5px;
+    border-radius: 3px;
+    background-color: var(--border-subtle);
+  }
+
+  .whoFill {
+    display: block;
+    block-size: 5px;
+    border-radius: 3px;
+    background-color: var(--channel-1);
+  }
+
+  .whoFill[data-tone='wholesale'] {
+    background-color: var(--channel-2);
+  }
+
+  .whoFill[data-tone='never'] {
+    background-color: var(--channel-4);
   }
 
   /* 04's selection: a picked row, and the bar that acts on the pick. */
@@ -2447,9 +2486,35 @@
     text-decoration: none;
   }
 
-  .selectDrawn {
+  .selectSecondary {
+    padding: 5px var(--space-12);
+    border: 1px solid var(--frame-text-muted);
+    border-radius: var(--space-8);
+    background: none;
+    font: inherit;
+    color: var(--frame-text);
+    cursor: pointer;
+  }
+
+  .selectSecondary:disabled {
     color: var(--frame-text-muted);
     cursor: not-allowed;
+  }
+
+  .selectTag {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .selectTagInput {
+    inline-size: 140px;
+    padding: 4px var(--space-8);
+    border: 1px solid var(--frame-text-muted);
+    border-radius: var(--space-8);
+    background: none;
+    font: inherit;
+    color: var(--frame-text);
   }
 
   .selectClear {

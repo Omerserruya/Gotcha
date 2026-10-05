@@ -1,4 +1,4 @@
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 import { Link } from '@/i18n/navigation';
 
@@ -7,7 +7,11 @@ import { customerLabel, isKnownChannel } from '@/api/contracts/customers';
 import fill from '@/design-system/styles/fill.module.css';
 import { channelMark } from '@/features/inbox/channel-marks';
 
+import type { CommerceSegments, Insight } from '@/api/contracts/customer-facts';
+
+import type { CommerceFacts } from './load-customer-facts';
 import { sinceWords, type PersonToday, type Segment } from './people-today';
+import { chipOf, insightOf, money, reasonKey, situationLine, valueCell } from './row-facts';
 import styles from './Customers.module.css';
 
 /**
@@ -67,7 +71,10 @@ export async function CustomerList({
   shownOf,
   rowsEmpty,
   searchedField,
+  orderSearched = false,
   query,
+  commerce = null,
+  insights = null,
   now = new Date(),
 }: {
   /** Today's people, filtered to the segment and sorted by last contact. */
@@ -77,10 +84,17 @@ export async function CustomerList({
   /** The read returned nobody (as opposed to a segment that holds nobody). */
   readonly rowsEmpty: boolean;
   readonly searchedField: 'name' | 'phone' | 'email' | null;
+  /** The store's order numbers were searched too. */
+  readonly orderSearched?: boolean;
   readonly query: string;
+  /** What each is worth (04's right column); `null` when the read failed. */
+  readonly commerce?: CommerceFacts | null;
+  /** Each one's open conversation, said; `null` when unread. */
+  readonly insights?: ReadonlyMap<string, Insight | null> | null;
   readonly now?: Date;
 }) {
   const t = await getTranslations('customers');
+  const locale = await getLocale();
 
   if (rowsEmpty) {
     return (
@@ -89,7 +103,9 @@ export async function CustomerList({
           <>
             <p className={styles.emptyLead}>{t('search.noneLead', { query })}</p>
             <p className={styles.emptyBody} data-testid="search-fields">
-              {t(`search.lookedAt.${searchedField ?? 'name'}` as 'search.lookedAt.name')}
+              {orderSearched
+                ? t('search.lookedAt.order')
+                : t(`search.lookedAt.${searchedField ?? 'name'}` as 'search.lookedAt.name')}
             </p>
           </>
         ) : (
@@ -114,6 +130,11 @@ export async function CustomerList({
             const mark = channelMark(channels[0] ?? row.channel ?? null);
             const handle = row.phone ?? row.email ?? row.externalId;
             const since = lastContactAt ? sinceWords(lastContactAt, now) : null;
+            const person = { primary: row, members, waiting };
+            const insight = insightOf(person, insights);
+            const chip = chipOf(person, insight);
+            const said = situationLine(insight);
+            const value = valueCell(person, commerce);
             return (
               <li
                 key={key}
@@ -139,11 +160,19 @@ export async function CustomerList({
                     <span className={styles.rowTop}>
                       <span className={styles.rowName}>{label ?? t('list.unnamed')}</span>
                       {/*
-                      02's state chip: what is true of them today. Waiting on
-                      you is read; a mood is not recorded per person. A tag
-                      the merchant set ("Wholesale") is theirs to show.
-                    */}
-                      {waiting ? (
+                        02's state chip: a mood when the AI read one in their
+                        open conversation (01bb7b6e), else waiting on you,
+                        else a tag the merchant set ("Wholesale").
+                      */}
+                      {chip?.kind === 'frustrated' || chip?.kind === 'about_to_buy' ? (
+                        <span
+                          className={styles.rowChip}
+                          data-tone={chip.kind}
+                          data-testid={`mood-${row.id}`}
+                        >
+                          {t(`today.mood.${chip.kind}`)}
+                        </span>
+                      ) : chip?.kind === 'waiting' ? (
                         <span
                           className={styles.rowChip}
                           data-tone="waiting"
@@ -151,8 +180,10 @@ export async function CustomerList({
                         >
                           {t('today.waiting')}
                         </span>
-                      ) : row.tags[0] ? (
-                        <span className={styles.rowChip}>{row.tags[0]}</span>
+                      ) : chip?.kind === 'tag' ? (
+                        <span className={styles.rowChip} dir="auto">
+                          {chip.tag}
+                        </span>
                       ) : null}
                     </span>
                     <span className={styles.rowLine} data-testid={`situation-${row.id}`}>
@@ -167,19 +198,46 @@ export async function CustomerList({
                             : channel}
                         </span>
                       ))}
-                      {situation ?? (
+                      {said ? (
+                        <bdi>
+                          {said.wrote === null
+                            ? said.situation
+                            : t('today.situationWrote', {
+                                situation: said.situation,
+                                count: said.wrote,
+                              })}
+                        </bdi>
+                      ) : situation ? (
+                        <bdi>{situation}</bdi>
+                      ) : (
                         <span title={t('today.noWord')} aria-label={t('today.noWord')}>
                           —
                         </span>
                       )}
                     </span>
                   </span>
+                  {/* 02: the amount over how many orders — or "—" with why. */}
                   <span
                     className={styles.rowValue}
-                    title={t('today.valueWhy')}
+                    title={
+                      value.kind === 'unknown'
+                        ? t(`today.valueWhy.${value.why}`)
+                        : value.kind === 'mixed'
+                          ? t('today.valueWhy.mixed')
+                          : undefined
+                    }
                     data-testid={`value-${row.id}`}
                   >
-                    {t('today.value')}
+                    <span className={styles.rowAmount}>
+                      {value.kind === 'amount' ? money(value.amount, value.currency, locale) : '—'}
+                    </span>
+                    {value.kind === 'amount' || value.kind === 'mixed' ? (
+                      <span className={styles.rowOrders}>
+                        {t('today.orders', { count: value.orders })}
+                      </span>
+                    ) : value.kind === 'none' ? (
+                      <span className={styles.rowOrders}>{t('today.noOrders')}</span>
+                    ) : null}
                   </span>
                   <span className={styles.rowWhen} data-testid={`since-${row.id}`}>
                     {since ? t(`since.${since.key}` as 'since.days', { n: since.n ?? 0 }) : '—'}
@@ -296,25 +354,60 @@ export async function ReachOut({
   );
 }
 
-/** 02's "Who your customers are" — in its shape: no read of order history for everyone. */
-export async function WhoTheyAre() {
+const WHO = [
+  { key: 'bought', count: 'bought_once' },
+  { key: 'came', count: 'came_back' },
+  { key: 'wholesale', count: 'wholesale' },
+  { key: 'never', count: 'never_bought' },
+] as const;
+
+/**
+ * 02's "Who your customers are" (backend 63985641): four counts, each bar a
+ * share of everyone. No store, or a failed read: "—" with why, never zeros.
+ */
+export async function WhoTheyAre({
+  segments = null,
+}: {
+  readonly segments?: CommerceSegments | null;
+} = {}) {
   const t = await getTranslations('customers.who');
+  const locale = await getLocale();
+  const n = new Intl.NumberFormat(locale);
+  const counts = segments?.source ? segments.counts : null;
+  const why =
+    segments === null
+      ? t('reason.unread')
+      : counts === null
+        ? t(`reason.${reasonKey(segments.reason)}`)
+        : segments.truncated
+          ? t('capped')
+          : undefined;
   return (
-    <section className={styles.sideCard} data-testid="who-they-are">
+    <section className={styles.sideCard} data-testid="who-they-are" title={why}>
       <h2 className={styles.sideTitle}>{t('title')}</h2>
       <ul className={styles.whoRows}>
-        {(['bought', 'came', 'wholesale', 'never'] as const).map((key) => (
-          <li key={key} className={styles.whoRow}>
-            <span className={styles.whoTop}>
-              <span>{t(key)}</span>
-              <span className={styles.whoCount} title={t('unread')}>
-                —
+        {WHO.map(({ key, count }) => {
+          const value = counts?.[count] ?? null;
+          const share =
+            value === null || !segments?.total ? 0 : Math.min(100, (value / segments.total) * 100);
+          return (
+            <li key={key} className={styles.whoRow} data-testid={`who-${key}`}>
+              <span className={styles.whoTop}>
+                <span>{t(key)}</span>
+                <span className={styles.whoCount}>{value === null ? '—' : n.format(value)}</span>
               </span>
-            </span>
-            {/* Empty: nothing read to fill it. */}
-            <span className={styles.whoTrack} aria-hidden="true" />
-          </li>
-        ))}
+              <span className={styles.whoTrack} aria-hidden="true">
+                {value === null ? null : (
+                  <span
+                    className={styles.whoFill}
+                    data-tone={key}
+                    style={{ inlineSize: `${share}%` }}
+                  />
+                )}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

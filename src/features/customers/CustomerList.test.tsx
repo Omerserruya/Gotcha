@@ -3,6 +3,7 @@ import { createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { CommerceSummary, Insight } from '@/api/contracts/customer-facts';
 import { customerRowSchema, type CustomerRow } from '@/api/contracts/customers';
 import messages from '@/i18n/messages/en/customers.json';
 
@@ -13,6 +14,7 @@ vi.mock('next-intl/server', () => ({
       messages: { customers: messages },
       namespace: namespace as 'customers',
     }),
+  getLocale: async () => 'en',
 }));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
@@ -31,6 +33,7 @@ import {
   sinceWords,
   type ConversationFact,
 } from './people-today';
+import { reasonKey } from './row-facts';
 
 const NOW = new Date('2026-10-04T12:00:00.000Z');
 const row = (over: Record<string, unknown> = {}): CustomerRow =>
@@ -54,6 +57,7 @@ const conv = (over: Partial<ConversationFact> = {}): ConversationFact => ({
 const show = async (
   rows: readonly CustomerRow[],
   conversations: ConversationFact[] | null = [conv()],
+  facts: Pick<Parameters<typeof CustomerList>[0], 'commerce' | 'insights'> = {},
 ) =>
   render(
     await CustomerList({
@@ -63,6 +67,7 @@ const show = async (
       searchedField: null,
       query: '',
       now: NOW,
+      ...facts,
     }),
   );
 
@@ -93,11 +98,11 @@ describe('★★ 04’s rows — what is true about them today', () => {
     expect(screen.getByTestId('since-k1')).toHaveTextContent('—');
   });
 
-  it('worth: "—" with why — no figure nobody read', async () => {
+  it('worth unread: "—" with why — no figure nobody read, and no second line', async () => {
     await show([row()]);
-    expect(screen.getByTestId('value-k1')).toHaveTextContent('—');
-    expect(screen.getByTestId('value-k1').getAttribute('title')).toMatch(
-      /Order totals come from the store/,
+    expect(screen.getByTestId('value-k1').textContent).toBe('—');
+    expect(screen.getByTestId('value-k1').getAttribute('title')).toBe(
+      'The store’s orders couldn’t be read.',
     );
   });
 
@@ -177,7 +182,7 @@ describe('★★ the side column', () => {
     );
   });
 
-  it('who they are: label and "—" on a line, an empty bar under each', async () => {
+  it('who they are, unread: label and "—" on a line, an empty bar under each, why on the card', async () => {
     render(await WhoTheyAre());
     const card = screen.getByTestId('who-they-are');
     expect(card.textContent).not.toMatch(/\d/);
@@ -185,6 +190,48 @@ describe('★★ the side column', () => {
     expect(rows).toHaveLength(4);
     expect(rows[0]!.children[0]).toHaveTextContent('Bought once—');
     expect(rows[0]!.children[1]?.getAttribute('aria-hidden')).toBe('true');
+    expect(rows[0]!.children[1]?.children).toHaveLength(0);
+    expect(card.getAttribute('title')).toBe('The store’s orders couldn’t be read.');
+  });
+
+  it('★ who they are, read: four counts, each bar its share of everyone', async () => {
+    render(
+      await WhoTheyAre({
+        segments: {
+          source: 'woocommerce',
+          reason: null,
+          truncated: false,
+          total: 200,
+          counts: { bought_once: 100, came_back: 50, wholesale: 10, never_bought: 40 },
+        },
+      }),
+    );
+    expect(screen.getByTestId('who-bought')).toHaveTextContent('Bought once100');
+    const fill = (key: string) =>
+      screen.getByTestId(`who-${key}`).querySelector<HTMLElement>('[data-tone]')!;
+    expect(fill('bought').style.inlineSize).toBe('50%');
+    expect(fill('wholesale').style.inlineSize).toBe('5%');
+    expect(fill('wholesale')).toHaveAttribute('data-tone', 'wholesale');
+    expect(screen.getByTestId('who-they-are')).not.toHaveAttribute('title');
+  });
+
+  it('★ who they are, no store: "—" with the reason — never four zeros', async () => {
+    render(
+      await WhoTheyAre({
+        segments: {
+          source: null,
+          reason: 'no_store_connected',
+          truncated: false,
+          total: 0,
+          counts: null,
+        },
+      }),
+    );
+    const card = screen.getByTestId('who-they-are');
+    expect(card.textContent).not.toMatch(/\d/);
+    expect(card.getAttribute('title')).toBe(
+      'No store is connected, so there are no orders to count.',
+    );
   });
 });
 
@@ -298,5 +345,127 @@ describe('★★ the join that makes a row "today"', () => {
         row({ id: 'b', phone: null, email: 'yael@shop.com ' }),
       ]),
     ).not.toBeNull();
+  });
+});
+
+const read = (byId: Record<string, Partial<CommerceSummary>>, truncated = false) =>
+  ({
+    state: 'read',
+    truncated,
+    byId: new Map(
+      Object.entries(byId).map(([id, s]) => [
+        id,
+        { lifetimeValue: 0, currency: 'ILS', orderCount: 0, lastOrderAt: null, ...s },
+      ]),
+    ),
+  }) as const;
+const insight = (over: Partial<Insight> = {}): Insight => ({
+  conversationId: 'c1',
+  situation: null,
+  inboundCount: 1,
+  mood: null,
+  ...over,
+});
+
+describe('★★ 04’s value column — the amount over its orders, or "—" with why', () => {
+  const value = () => screen.getByTestId('value-k1');
+
+  it('read: "₪2,140" over "6 orders"', async () => {
+    await show([row()], undefined, {
+      commerce: read({ k1: { lifetimeValue: 2140, orderCount: 6 } }),
+    });
+    expect(value().textContent).toBe('₪2,1406 orders');
+    expect(value()).not.toHaveAttribute('title');
+  });
+
+  it('read, none: "—" over "no orders yet"', async () => {
+    await show([row()], undefined, { commerce: read({ k1: {} }) });
+    expect(value().textContent).toBe('—no orders yet');
+  });
+
+  it('★ capped and none: "—" with why — an older order may be past the cap', async () => {
+    await show([row()], undefined, { commerce: read({ k1: {} }, true) });
+    expect(value().textContent).toBe('—');
+    expect(value().getAttribute('title')).toMatch(/newest orders/);
+  });
+
+  it('★ no store: "—" with the reason — never "no orders yet"', async () => {
+    await show([row()], undefined, {
+      commerce: { state: 'none', reason: 'no_store_connected' },
+    });
+    expect(value().textContent).toBe('—');
+    expect(value()).not.toHaveTextContent('no orders yet');
+    expect(value().getAttribute('title')).toBe(
+      'No store is connected, so there are no orders to read.',
+    );
+  });
+
+  it('★ mixed currencies: the route withholds the sum (0) — "—" over the orders, not "0"', async () => {
+    await show([row()], undefined, {
+      commerce: read({ k1: { lifetimeValue: 0, currency: null, orderCount: 3 } }),
+    });
+    expect(value().textContent).toBe('—3 orders');
+    expect(value().getAttribute('title')).toMatch(/more than one currency/);
+  });
+
+  it('★ two identities: the one with most orders speaks — the same phone’s orders are never summed', async () => {
+    await show(
+      [row({ personId: 'p1' }), row({ id: 'k2', personId: 'p1', externalId: 'other' })],
+      undefined,
+      {
+        commerce: read({
+          k1: { lifetimeValue: 500, orderCount: 2 },
+          k2: { lifetimeValue: 900, orderCount: 3 },
+        }),
+      },
+    );
+    expect(screen.getByTestId(/^value-/).textContent).toBe('₪9003 orders');
+  });
+
+  it('a reason nobody wrote a sentence for reads as unread, not as a key', () => {
+    expect(reasonKey('something_new')).toBe('unread');
+    expect(reasonKey('store_unreachable')).toBe('store_unreachable');
+  });
+});
+
+describe('★★ 04’s second line and chip, from their open conversation', () => {
+  it('situation · "wrote 3 times"; a mood chip over "waiting on you"', async () => {
+    await show([row()], [conv({ lastMessageDirection: 'INBOUND' })], {
+      insights: new Map([
+        [
+          'k1',
+          insight({ situation: 'Waiting on order #1842', inboundCount: 3, mood: 'frustrated' }),
+        ],
+      ]),
+    });
+    expect(screen.getByTestId('situation-k1')).toHaveTextContent(
+      'Waiting on order #1842 · wrote 3 times',
+    );
+    expect(screen.getByTestId('mood-k1')).toHaveTextContent('Frustrated today');
+    expect(screen.getByTestId('mood-k1')).toHaveAttribute('data-tone', 'frustrated');
+    expect(screen.queryByTestId('waiting-k1')).toBeNull();
+  });
+
+  it('once: no "wrote"; about to buy is green; no situation: their last word, as before', async () => {
+    const one = await show([row()], undefined, {
+      insights: new Map([
+        ['k1', insight({ situation: 'Asking about the sand king', mood: 'about_to_buy' })],
+      ]),
+    });
+    // The line is the situation alone — no "wrote" for a first message.
+    expect(screen.getByTestId('situation-k1').querySelector('bdi')!.textContent).toBe(
+      'Asking about the sand king',
+    );
+    expect(screen.getByTestId('mood-k1')).toHaveTextContent('About to buy');
+    one.unmount();
+    await show([row()], undefined, { insights: new Map([['k1', insight()]]) });
+    expect(screen.getByTestId('situation-k1')).toHaveTextContent(conv().lastMessageBody!);
+  });
+
+  it('Hebrew sits in its own direction', async () => {
+    await show([row()], undefined, {
+      insights: new Map([['k1', insight({ situation: 'בקשה להחזר' })]]),
+    });
+    expect(screen.getByTestId('situation-k1').querySelector('bdi')).toHaveTextContent('בקשה להחזר');
   });
 });
