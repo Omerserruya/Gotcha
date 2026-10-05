@@ -398,7 +398,6 @@
       "frustrated": "מתוסכל/ת היום",
       "about_to_buy": "קרוב/ה לקנייה"
     },
-    "situationWrote": "{situation} · {count, plural, other {כתב/ה # פעמים}}",
     "orders": "{count, plural, one {הזמנה אחת} other {# הזמנות}}",
     "noOrders": "עדיין אין הזמנות",
     "valueWhy": {
@@ -408,7 +407,8 @@
       "provider_not_supported": "עדיין לא קוראים כאן הזמנות מהחנות הזו.",
       "capped": "נקראו רק ההזמנות האחרונות של החנות, אז ייתכן שחסרה הזמנה ישנה.",
       "mixed": "ההזמנות שלהם ביותר ממטבע אחד, אז הן לא מסוכמות."
-    }
+    },
+    "wrote": "{count, plural, other {כתב/ה # פעמים}}"
   },
   "since": {
     "minutes": "לפני {n} ד׳",

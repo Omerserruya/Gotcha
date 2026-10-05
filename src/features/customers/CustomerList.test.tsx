@@ -468,4 +468,16 @@ describe('★★ 04’s second line and chip, from their open conversation', () 
     });
     expect(screen.getByTestId('situation-k1').querySelector('bdi')).toHaveTextContent('בקשה להחזר');
   });
+
+  it('★ measured on dev: only the situation is in its own direction — "wrote N times" stays after it', async () => {
+    await show([row()], undefined, {
+      insights: new Map([
+        ['k1', insight({ situation: 'היי, מחפש מידע על מוצר', inboundCount: 2 })],
+      ]),
+    });
+    const bdi = screen.getByTestId('situation-k1').querySelector('bdi')!;
+    expect(bdi.textContent).toBe('היי, מחפש מידע על מוצר');
+    expect(bdi).toHaveAttribute('dir', 'auto');
+    expect(bdi.nextSibling?.textContent).toBe(' · wrote 2 times');
+  });
 });

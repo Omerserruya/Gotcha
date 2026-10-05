@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
 
@@ -153,12 +153,13 @@ export function ShopifyPending({
 export function ShopifyBillingVerify({
   shop,
   needsReconnect = false,
-  reconnect = null,
 }: {
   readonly shop: string | null;
-  /** The integration exists but is not working: "not connected" means "reconnect it". */
+  /**
+   * The integration exists but is not working: "not connected" means
+   * "reconnect it" — said here; the button is the card's, below (one per screen).
+   */
   readonly needsReconnect?: boolean;
-  readonly reconnect?: ReactNode;
 }) {
   const t = useTranslations('capabilities.shopify.billing');
   const router = useRouter();
@@ -191,7 +192,6 @@ export function ShopifyBillingVerify({
     return (
       <div className={styles.landing} data-outcome="problem" data-testid="shopify-billing">
         <span>{t('error.reconnect')}</span>
-        {reconnect}
       </div>
     );
   }

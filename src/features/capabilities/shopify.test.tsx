@@ -301,21 +301,15 @@ describe('★★ measured on dev: an arrival is always said', () => {
     expect(screen.queryByTestId('shopify-pending-help')).toBeNull();
   });
 
-  it('★ billing=verify on a store that needs fixing: "needs reconnecting" and the button — not "no store"', async () => {
+  it('★ billing=verify on a store that needs fixing: "needs reconnecting", not "no store" — and no second Reconnect', async () => {
     post.mockRejectedValue(
       new ApiError({ kind: 'conflict', status: 409, developerMessage: 'shopify_not_connected' }),
     );
-    intl(
-      <ShopifyBillingVerify
-        shop="urban.myshopify.com"
-        needsReconnect
-        reconnect={<button data-testid="reconnect">Reconnect Shopify</button>}
-      />,
-    );
+    intl(<ShopifyBillingVerify shop="urban.myshopify.com" needsReconnect />);
     expect(await screen.findByTestId('shopify-billing')).toHaveTextContent(
       'Shopify needs reconnecting before its plan can be checked.',
     );
-    expect(screen.getByTestId('reconnect')).toBeInTheDocument();
+    expect(screen.getByTestId('shopify-billing').querySelector('button')).toBeNull();
   });
 
   it('…and with no integration at all, "no store connected"', async () => {

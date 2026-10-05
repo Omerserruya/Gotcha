@@ -198,15 +198,18 @@ export async function CustomerList({
                             : channel}
                         </span>
                       ))}
+                      {/*
+                        Only the situation sits in its own direction: the
+                        whole line in a bdi turned RTL on a Hebrew first
+                        word and put "wrote 2 times" first (measured on dev).
+                      */}
                       {said ? (
-                        <bdi>
+                        <>
+                          <bdi dir="auto">{said.situation}</bdi>
                           {said.wrote === null
-                            ? said.situation
-                            : t('today.situationWrote', {
-                                situation: said.situation,
-                                count: said.wrote,
-                              })}
-                        </bdi>
+                            ? null
+                            : ` · ${t('today.wrote', { count: said.wrote })}`}
+                        </>
                       ) : situation ? (
                         <bdi>{situation}</bdi>
                       ) : (

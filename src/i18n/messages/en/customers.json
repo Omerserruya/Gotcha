@@ -398,7 +398,6 @@
       "frustrated": "Frustrated today",
       "about_to_buy": "About to buy"
     },
-    "situationWrote": "{situation} · {count, plural, other {wrote # times}}",
     "orders": "{count, plural, one {# order} other {# orders}}",
     "noOrders": "no orders yet",
     "valueWhy": {
@@ -408,7 +407,8 @@
       "provider_not_supported": "Orders from this store aren’t read here yet.",
       "capped": "Only the store’s newest orders were read, so an older one may be missing.",
       "mixed": "Their orders are in more than one currency, so they aren’t added up."
-    }
+    },
+    "wrote": "{count, plural, other {wrote # times}}"
   },
   "since": {
     "minutes": "{n}m ago",

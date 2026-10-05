@@ -4,8 +4,6 @@ import { isConnected } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { oauthFailure } from '@/features/capabilities/oauth';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
-import { OAuthButton } from '@/features/capabilities/OAuthButton';
-import { oauthHere } from '@/features/capabilities/oauth';
 import {
   ShopifyBillingVerify,
   ShopifyPending,
@@ -128,11 +126,6 @@ export default async function Page({
                 shop={params.shop ?? null}
                 // Connected but not working (ERROR): the plan can't be checked until it is fixed.
                 needsReconnect={isConnected(integration)}
-                reconnect={
-                  oauthHere(integration.slug, true) ? (
-                    <OAuthButton slug={integration.slug} name={integration.name} mode="reconnect" />
-                  ) : null
-                }
               />
             ) : null}
             {/* Back with `pending=1`, a banner whatever came of it. */}
