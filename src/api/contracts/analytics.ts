@@ -547,10 +547,6 @@ export function humans(agents: readonly AgentLoad[]): readonly AgentLoad[] {
   return agents.filter((agent) => agent.kind === 'human');
 }
 
-export function byName(agents: readonly AgentLoad[]): readonly AgentLoad[] {
-  return [...agents].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
-}
-
 /**
  * ★ REMOVED WITH THE COLUMN IT SUPPORTED.
  *
@@ -679,46 +675,6 @@ export const unansweredQuestionsSchema = z.looseObject({
 export type UnansweredQuestions = z.infer<typeof unansweredQuestionsSchema>;
 
 /**
- * `GET /api/analytics/hourly?date=YYYY-MM-DD` — one day's messages by hour.
- * ⚠ The hours are UTC: the worker keys them `timestamp.slice(0, 13)` of an
- * ISO string. Convert before saying "11:00" to anyone.
- */
-export const hourlySchema = z.array(
-  z.looseObject({
-    hour: z.string(),
-    inbound: z.number().default(0),
-    outbound: z.number().default(0),
-  }),
-);
-export type Hourly = z.infer<typeof hourlySchema>;
-
-/**
- * The busiest hour across days of `/hourly`, by inbound messages, as an
- * instant (UTC) — `null` when nothing came in. The caller formats it in the
- * reader's time zone.
- */
-export function busiestHour(
-  days: readonly { readonly date: string; readonly hours: Hourly }[],
-): Date | null {
-  const byLocal = new Map<string, { at: Date; inbound: number }>();
-  let best: { at: Date; inbound: number } | null = null;
-  for (const day of days) {
-    for (const slot of day.hours) {
-      if (slot.inbound <= 0) continue;
-      const at = new Date(`${day.date}T${slot.hour}:00Z`);
-      if (Number.isNaN(at.getTime())) continue;
-      // Summed by hour of day, across the days — the same hour on each.
-      const key = String(at.getUTCHours());
-      const entry = byLocal.get(key) ?? { at, inbound: 0 };
-      entry.inbound += slot.inbound;
-      byLocal.set(key, entry);
-      if (!best || entry.inbound > best.inbound) best = entry;
-    }
-  }
-  return best?.at ?? null;
-}
-
-/**
  * `GET /api/analytics/product-demand?limit` → `{ weekKey, data }`: what people
  * searched the catalogue for this ISO week and did not find.
  *
@@ -768,3 +724,56 @@ export const dailySeriesSchema = z.object({
 });
 export type DailySeries = z.infer<typeof dailySeriesSchema>;
 export type DayRow = DailySeries['series'][number];
+
+/**
+ * `GET /api/analytics/team?days=` (backend af4f0072) — 06c. People and AI
+ * employees, attributed by ownership; the cards are over every conversation
+ * a PERSON replied in. `resolvedRate` is a fraction (0.94), `null` with
+ * nothing handled; `firstReplyMedianMs` has no target for AI (decided).
+ */
+export const teamReportSchema = z.object({
+  members: z.array(
+    z.object({
+      kind: z.enum(['human', 'ai']).catch('human'),
+      id: z.string(),
+      name: z.string().nullable().catch(null),
+      handled: count,
+      firstReplyMedianMs: z.number().nonnegative().nullable().catch(null),
+      resolvedRate: z.number().min(0).max(1).nullable().catch(null),
+      loadByDay: z.array(count).catch([]),
+    }),
+  ),
+  cards: z.object({
+    handledByPeople: count,
+    firstReplyMedianMs: z.number().nonnegative().nullable().catch(null),
+    resolvedRate: z.number().min(0).max(1).nullable().catch(null),
+    handedBackToGotcha: count,
+    inboundByHourUtc: z.array(count).catch([]),
+  }),
+});
+export type TeamReport = z.infer<typeof teamReportSchema>;
+export type TeamMember = TeamReport['members'][number];
+
+/**
+ * The busiest hour in a time zone, from a 24-slot UTC histogram: each UTC
+ * hour moved to the zone's hour, then the most customer messages. `null`
+ * with none at all. Half-hour zones land on the hour they fall in.
+ *
+ * ⚠ The offset is TODAY's (`at`): Israel is UTC+3 in summer and +2 in
+ * winter, and a fixed reference day got the hour wrong for half the year.
+ */
+export function busiestLocalHour(
+  byHourUtc: readonly number[],
+  timeZone: string,
+  at: Date = new Date(),
+): number | null {
+  const local = new Array<number>(24).fill(0);
+  const hourIn = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' });
+  const day = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate());
+  byHourUtc.slice(0, 24).forEach((n, h) => {
+    const hour = Number(hourIn.format(new Date(day + h * 3_600_000)));
+    local[hour] = (local[hour] ?? 0) + n;
+  });
+  const peak = Math.max(...local);
+  return peak > 0 ? local.indexOf(peak) : null;
+}

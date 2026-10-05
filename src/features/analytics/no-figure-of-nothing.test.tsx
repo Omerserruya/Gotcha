@@ -7,6 +7,7 @@ import {
   aiPerformanceSchema,
   analyticsOverviewSchema,
   timeSavedSchema,
+  teamReportSchema,
 } from '@/api/contracts/analytics';
 import analytics from '@/i18n/messages/en/analytics.json';
 
@@ -14,6 +15,7 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'analytics') =>
     createTranslator({ locale: 'en', messages: { analytics }, namespace }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
+  getTimeZone: async () => 'Asia/Jerusalem',
 }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
@@ -77,7 +79,7 @@ const TABS: readonly [string, () => Promise<ReactElement>][] = [
     '06c strip',
     async () =>
       TeamStrip({
-        data: { agents: [], aiEmployees: [], overview: EMPTY_WEEK.overview, hourly: [] },
+        data: { agents: [], report: EMPTY_TEAM },
       }),
   ],
   ['06d dark card', async () => SalesHero()],
@@ -93,15 +95,27 @@ const TABS: readonly [string, () => Promise<ReactElement>][] = [
  * must read "—". A count after its label ("Answered first by people0") is
  * invisible to the text patterns above, so these are named.
  */
+/* The team report for a week nobody wrote in (backend af4f0072's shape). */
+const EMPTY_TEAM = teamReportSchema.parse({
+  members: [],
+  cards: {
+    handledByPeople: 0,
+    firstReplyMedianMs: null,
+    resolvedRate: null,
+    handedBackToGotcha: 0,
+    inboundByHourUtc: new Array(24).fill(0),
+  },
+});
+
 const DERIVED_CELLS: readonly [string, () => Promise<ReactElement>, readonly string[]][] = [
   ['06b strip', async () => GotchaStrip({ data: EMPTY_WEEK }), ['gotcha-alone', 'gotcha-saved']],
   [
     '06c strip',
     async () =>
       TeamStrip({
-        data: { agents: [], aiEmployees: [], overview: EMPTY_WEEK.overview, hourly: [] },
+        data: { agents: [], report: EMPTY_TEAM },
       }),
-    ['team-people', 'team-busiest'],
+    ['team-people', 'team-busiest', 'team-handedBack', 'team-firstReply', 'team-resolved'],
   ],
 ];
 

@@ -6,7 +6,6 @@ vi.mock('server-only', () => ({}));
 
 import {
   lastSevenDays,
-  lastSevenUtcDates,
   loadAnalytics,
   loadGotcha,
   loadSales,
@@ -97,42 +96,23 @@ describe('★ 06b’s reads', () => {
 });
 
 describe('★ 06c’s reads', () => {
-  it('seven UTC dates, oldest first, as /hourly keys them', () => {
-    expect(lastSevenUtcDates(new Date('2026-10-02T01:00:00.000Z'))).toEqual([
-      '2026-09-26',
-      '2026-09-27',
-      '2026-09-28',
-      '2026-09-29',
-      '2026-09-30',
-      '2026-10-01',
-      '2026-10-02',
-    ]);
-  });
-
-  it('★ /hourly once per day; a day that failed is dropped, the rest kept', async () => {
-    get.mockImplementation(async (r: { endpoint: { path: string }; query?: { date?: string } }) => {
-      if (r.endpoint.path === '/api/analytics/hourly') {
-        if (r.query?.date === lastSevenUtcDates()[0]) throw new Error('down');
-        return [{ hour: '09:00', inbound: 1, outbound: 0 }];
-      }
-      if (r.endpoint.path === '/api/analytics/overview') return {};
-      return [];
-    });
-    const data = await loadTeam();
-    const hourlyCalls = get.mock.calls.filter(
-      (c) => c[0].endpoint.path === '/api/analytics/hourly',
+  it('★ the team report for seven days, beside who holds what now', async () => {
+    get.mockImplementation(async (r: { endpoint: { path: string } }) =>
+      r.endpoint.path === '/api/analytics/team' ? { members: [], cards: {} } : [],
     );
-    expect(hourlyCalls).toHaveLength(7);
-    expect(data.hourly).toHaveLength(6);
+    const data = await loadTeam();
+    const call = get.mock.calls.find((c) => c[0].endpoint.path === '/api/analytics/team');
+    expect(call?.[0].query).toEqual({ days: 7 });
+    expect(data.report).toEqual({ members: [], cards: {} });
+    expect(data.agents).toEqual([]);
   });
 
-  it('⚠ every day failing is null, not an empty week', async () => {
+  it('⚠ a failed report is null — the table says it, not "no one on the team"', async () => {
     get.mockImplementation(async (r: { endpoint: { path: string } }) => {
-      if (r.endpoint.path === '/api/analytics/hourly') throw new Error('down');
-      if (r.endpoint.path === '/api/analytics/overview') return {};
+      if (r.endpoint.path === '/api/analytics/team') throw new Error('down');
       return [];
     });
-    expect((await loadTeam()).hourly).toBeNull();
+    expect((await loadTeam()).report).toBeNull();
   });
 });
 

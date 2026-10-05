@@ -137,13 +137,13 @@
     },
     "table": {
       "person": "Person",
-      "open": "Open now",
-      "today": "Taken today",
       "firstReply": "First reply",
       "resolved": "Resolved",
       "load": "Load through the week",
       "aiEmployee": "AI employee",
-      "foot": "Open now and taken today are today's numbers. Replies and outcomes aren't measured per person yet, so nobody here is ranked."
+      "foot": "Nobody is measured on volume alone. First reply is the median wait for a first answer; AI employees have no reply target.",
+      "handled": "Handled",
+      "loadLabel": "Each day this week: {days}"
     }
   },
   "sales": {

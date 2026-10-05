@@ -140,7 +140,7 @@ export default async function Page({
             <HandoverCard />
           </div>
           <TeamStrip data={data} />
-          <TeamTable agents={data.agents} aiEmployees={data.aiEmployees} />
+          <TeamTable report={data.report} />
         </div>
       </PageContainer>
     );

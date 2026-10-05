@@ -5,10 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   agentLoadListSchema,
   agentLoadSchema,
-  analyticsOverviewSchema,
-  busiestHour,
+  busiestLocalHour,
+  teamReportSchema,
 } from '@/api/contracts/analytics';
-import { aiEmployeeSchema } from '@/api/contracts/people';
 import analytics from '@/i18n/messages/en/analytics.json';
 
 vi.mock('next-intl/server', () => ({
@@ -16,6 +15,7 @@ vi.mock('next-intl/server', () => ({
     createTranslator({ locale: 'en', messages: { analytics }, namespace }),
   // The configured zone, as the app's formatter carries it.
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
+  getTimeZone: async () => 'Asia/Jerusalem',
 }));
 
 import { HandoverCard, imbalance, TeamHero, TeamStrip, TeamTable, teamSubline } from './TeamTab';
@@ -23,7 +23,29 @@ import { HandoverCard, imbalance, TeamHero, TeamStrip, TeamTable, teamSubline } 
 const agent = (id: string, name: string, open: number, today = 0) =>
   agentLoadSchema.parse({ agentId: id, name, activeConversations: open, claimedToday: today });
 
-const ai = (id: string, name: string) => aiEmployeeSchema.parse({ id, name, status: 'ACTIVE' });
+/* The route's shape (backend af4f0072). */
+const member = (over: Record<string, unknown>) => ({
+  kind: 'human',
+  id: 'x',
+  name: 'X',
+  handled: 0,
+  firstReplyMedianMs: null,
+  resolvedRate: null,
+  loadByDay: [0, 0, 0, 0, 0, 0, 0],
+  ...over,
+});
+const report = (members: Record<string, unknown>[], cards: Record<string, unknown> = {}) =>
+  teamReportSchema.parse({
+    members: members.map(member),
+    cards: {
+      handledByPeople: 0,
+      firstReplyMedianMs: null,
+      resolvedRate: null,
+      handedBackToGotcha: 0,
+      inboundByHourUtc: new Array(24).fill(0),
+      ...cards,
+    },
+  });
 
 describe('★ the imbalance is the queue’s', () => {
   it('heaviest against lightest of those holding any, at two to one or more', () => {
@@ -56,82 +78,134 @@ describe('★ the imbalance is the queue’s', () => {
   });
 });
 
-describe('★★ busiest hour — UTC keys, read in the reader’s zone', () => {
-  it('the hour with the most inbound across the days, as an instant', () => {
-    const peak = busiestHour([
-      {
-        date: '2026-09-30',
-        hours: [
-          { hour: '09:00', inbound: 5, outbound: 0 },
-          { hour: '13:00', inbound: 2, outbound: 0 },
-        ],
-      },
-      {
-        date: '2026-10-01',
-        hours: [
-          { hour: '09:00', inbound: 4, outbound: 0 },
-          { hour: '13:00', inbound: 6, outbound: 0 },
-        ],
-      },
-    ]);
-    // 09:00 → 9 inbound across the two days; 13:00 → 8.
-    expect(peak?.getUTCHours()).toBe(9);
-    expect(
-      busiestHour([{ date: '2026-10-01', hours: [{ hour: '09:00', inbound: 0, outbound: 3 }] }]),
-    ).toBeNull();
+describe('★★ the cards — the report’s, and the busiest hour in the workspace’s zone', () => {
+  it('★★ a UTC histogram moved to Israel before its peak is taken: 09Z is 12:00', () => {
+    const hours = new Array(24).fill(0);
+    hours[9] = 7;
+    hours[13] = 5;
+    const october = new Date('2026-10-05T12:00:00Z');
+    expect(busiestLocalHour(hours, 'Asia/Jerusalem', october)).toBe(12);
+    // ★ Winter: the same 09Z is 11:00 — the offset is the day's, not a constant.
+    expect(busiestLocalHour(hours, 'Asia/Jerusalem', new Date('2026-12-15T12:00:00Z'))).toBe(11);
+    expect(busiestLocalHour(new Array(24).fill(0), 'Asia/Jerusalem')).toBeNull();
   });
 
-  it('★★ 09:00Z is shown as 12:00 in Israel — never the UTC key', async () => {
+  it('the five, from the cards: counts, a median, a rate, and the hour', async () => {
+    const hours = new Array(24).fill(0);
+    hours[9] = 7;
     render(
       await TeamStrip({
         data: {
           agents: null,
-          aiEmployees: null,
-          overview: analyticsOverviewSchema.parse({
-            totalConversations: 400,
-            humanHandledCount: 350,
+          report: report([], {
+            handledByPeople: 350,
+            firstReplyMedianMs: 180_000,
+            resolvedRate: 0.94,
+            handedBackToGotcha: 4,
+            inboundByHourUtc: hours,
           }),
-          hourly: [{ date: '2026-10-01', hours: [{ hour: '09:00', inbound: 7, outbound: 0 }] }],
         },
       }),
     );
-    expect(screen.getByTestId('team-busiest')).toHaveTextContent('12:00');
     expect(screen.getByTestId('team-people')).toHaveTextContent('350');
-    for (const key of ['firstReply', 'resolved', 'handedBack']) {
+    expect(screen.getByTestId('team-firstReply')).toHaveTextContent('3m');
+    expect(screen.getByTestId('team-resolved')).toHaveTextContent('94%');
+    expect(screen.getByTestId('team-handedBack')).toHaveTextContent('4');
+    // Today's offset (12:00 in summer, 11:00 in winter) — the unit test above pins both.
+    const local = busiestLocalHour(hours, 'Asia/Jerusalem')!;
+    expect([11, 12]).toContain(local);
+    expect(screen.getByTestId('team-busiest')).toHaveTextContent(
+      `${String(local).padStart(2, '0')}:00`,
+    );
+  });
+
+  it('unread: "—" in every card, never zeros', async () => {
+    render(await TeamStrip({ data: { agents: null, report: null } }));
+    for (const key of ['people', 'firstReply', 'resolved', 'handedBack', 'busiest']) {
       expect(screen.getByTestId(`team-${key}`)).toHaveTextContent('—');
     }
   });
 });
 
-describe('★★ one table — people and AI employees, alphabetical, no ranking', () => {
-  it('★ people by name, not by load; then the AI employees, marked', async () => {
-    render(
-      await TeamTable({
-        agents: [agent('z', 'Shira', 12, 4), agent('y', 'Eitan', 1, 1), agent('x', 'Tomer', 6, 2)],
-        aiEmployees: [ai('s', 'Sales'), ai('c', 'Customer Support')],
-      }),
-    );
+describe('★★ 06c’s table — 02’s columns, people then AI employees, alphabetical', () => {
+  const REPORT = report([
+    {
+      id: 'z',
+      name: 'Shira',
+      handled: 196,
+      firstReplyMedianMs: 660_000,
+      resolvedRate: 0.94,
+      loadByDay: [19, 21, 17, 10, 25, 23, 22],
+    },
+    {
+      id: 'y',
+      name: 'Eitan',
+      handled: 36,
+      firstReplyMedianMs: 1_320_000,
+      resolvedRate: 0.97,
+      loadByDay: [4, 5, 3, 2, 5, 4, 4],
+    },
+    {
+      kind: 'ai',
+      id: 's',
+      name: 'Sales',
+      handled: 470,
+      firstReplyMedianMs: 21_000,
+      resolvedRate: 0.88,
+      loadByDay: [16, 19, 15, 10, 23, 21, 18],
+    },
+    {
+      kind: 'ai',
+      id: 'c',
+      name: 'Customer Support',
+      handled: 2020,
+      firstReplyMedianMs: 18_000,
+      resolvedRate: 0.91,
+      loadByDay: [18, 21, 17, 11, 24, 22, 20],
+    },
+  ]);
+
+  it('★ by name, not by load; Handled · First reply · Resolved for each', async () => {
+    render(await TeamTable({ report: REPORT }));
     const rows = [...screen.getByTestId('team-table').querySelectorAll('li')].map((li) =>
       li.getAttribute('data-testid'),
     );
-    expect(rows).toEqual(['team-row-y', 'team-row-z', 'team-row-x', 'team-row-c', 'team-row-s']);
-    expect(screen.getByTestId('team-row-z')).toHaveTextContent('Shira124——');
-    expect(screen.getByTestId('team-row-c')).toHaveTextContent('AI employee');
+    expect(rows).toEqual(['team-row-y', 'team-row-z', 'team-row-c', 'team-row-s']);
+    expect(screen.getByTestId('team-row-z')).toHaveTextContent('Shira19611m94%');
+    expect(screen.getByTestId('team-row-c')).toHaveTextContent('AI employee2,02018s91%');
   });
 
-  it('⚠ no reply time anywhere — the metric that ranks the hard cases slowest', async () => {
-    render(await TeamTable({ agents: [agent('a', 'A', 1)], aiEmployees: [] }));
-    expect(screen.getByTestId('team-table')).not.toHaveTextContent(/\d+m\b|\d+s\b/);
-    expect(screen.getByTestId('team-foot')).toHaveTextContent('nobody here is ranked');
+  it('★ the week’s bars scale within their kind — the AI’s thousands never flatten a person', async () => {
+    render(await TeamTable({ report: REPORT }));
+    const bars = (id: string) =>
+      [...screen.getByTestId(`team-row-${id}`).querySelectorAll<HTMLElement>('[data-ai], span')]
+        .filter((el) => el.parentElement?.getAttribute('role') === 'img')
+        .map((el) => el.style.blockSize);
+    // Shira's busiest day (25) is the people's busiest: full height.
+    expect(bars('z')[4]).toBe('26px');
+    expect(bars('c')[4]).toBe('26px');
+    expect(screen.getByTestId('team-row-c').querySelector('[data-ai]')).not.toBeNull();
   });
 
-  it('⚠ two failed reads are not an empty team', async () => {
-    const { unmount } = render(await TeamTable({ agents: null, aiEmployees: null }));
+  it('nothing handled: a rate of nothing is "—", and a quiet day has no bar', async () => {
+    render(await TeamTable({ report: report([{ id: 'q', name: 'Quiet' }]) }));
+    expect(screen.getByTestId('team-row-q')).toHaveTextContent('Quiet0——');
+    expect(screen.getByTestId('team-row-q').querySelectorAll('[style]')).toHaveLength(0);
+  });
+
+  it('⚠ a failed read is not an empty team', async () => {
+    const { unmount } = render(await TeamTable({ report: null }));
     expect(screen.getByTestId('team-unavailable')).toBeInTheDocument();
     unmount();
-    render(await TeamTable({ agents: [], aiEmployees: [] }));
-    // The read counts admins and AI employees now: empty is truly no one.
+    render(await TeamTable({ report: report([]) }));
     expect(screen.getByTestId('team-none')).toHaveTextContent('No one on the team yet.');
+  });
+
+  it('the foot says nobody is measured on volume alone', async () => {
+    render(await TeamTable({ report: REPORT }));
+    expect(screen.getByTestId('team-foot')).toHaveTextContent(
+      'Nobody is measured on volume alone.',
+    );
   });
 
   it('the handover card keeps its place', async () => {
@@ -165,26 +239,22 @@ describe('★★ measured on dev: no Agent-role people — the card says what is
       unmount();
     }
   });
-
-  it('the foot no longer says admins are left out — they are counted (e188ce7c)', async () => {
-    render(await TeamTable({ agents: [], aiEmployees: [ai('m', 'Maya')] }));
-    expect(screen.getByTestId('team-foot')).not.toHaveTextContent(/Agent role/);
-  });
 });
 
 describe('★ the header says what the table counts — 02\'s "three people, two teams"', () => {
-  const team = (agents: unknown, aiEmployees: unknown) =>
-    ({ agents, aiEmployees, overview: null, hourly: null }) as Parameters<typeof teamSubline>[0];
+  const team = (agents: unknown, ais: string[] | null) =>
+    ({
+      agents,
+      report: ais === null ? null : report(ais.map((id) => ({ kind: 'ai', id, name: id }))),
+    }) as Parameters<typeof teamSubline>[0];
 
   it("★ on dev's data: one AI employee and no Agent-role people", async () => {
-    expect(await teamSubline(team([], [ai('a1', 'Noa')]))).toBe('Last 7 days · 1 AI employee');
+    expect(await teamSubline(team([], ['a1']))).toBe('Last 7 days · 1 AI employee');
   });
 
   it('both kinds, each counted and pluralised', async () => {
     expect(
-      await teamSubline(
-        team([agent('p1', 'Dana', 1), agent('p2', 'Yossi', 0)], [ai('a1', 'Noa'), ai('a2', 'Ari')]),
-      ),
+      await teamSubline(team([agent('p1', 'Dana', 1), agent('p2', 'Yossi', 0)], ['a1', 'a2'])),
     ).toBe('Last 7 days · 2 people, 2 AI employees');
     expect(await teamSubline(team([agent('p1', 'Dana', 1)], []))).toBe('Last 7 days · 1 person');
   });
@@ -216,26 +286,8 @@ const WIRE = [
   },
 ];
 
-describe('★★ 06c — people and AI employees, one table, never twice', () => {
-  it('Maya from the read: her open count, "—" today with why; not repeated from the employee list', async () => {
-    render(
-      await TeamTable({
-        agents: agentLoadListSchema.parse(WIRE),
-        aiEmployees: [{ id: 'a1', name: 'Maya' }] as never,
-      }),
-    );
-    const maya = screen.getAllByTestId('team-row-a1');
-    expect(maya).toHaveLength(1);
-    expect(maya[0]).toHaveTextContent('AI employee');
-    expect(maya[0]).toHaveTextContent('13');
-    expect(maya[0]!.querySelector('[title]')).toHaveAttribute(
-      'title',
-      "AI employees don't take conversations; they're assigned.",
-    );
-    expect(screen.getByTestId('team-foot')).not.toHaveTextContent(/Agent role/);
-  });
-
-  it('the queue is compared between PEOPLE: one person is "too few", whatever the AI holds', async () => {
+describe('★★ 06c — the queue is compared between people', () => {
+  it('one person is "too few", whatever the AI holds', async () => {
     render(await TeamHero({ agents: agentLoadListSchema.parse(WIRE) }));
     expect(screen.getByTestId('team-hero')).toHaveTextContent(
       "There aren't two people counted here",

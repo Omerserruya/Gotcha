@@ -698,7 +698,8 @@
   .tHead,
   .tRow {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 105px 105px 105px 105px 170px;
+    /* 02: Person · Handled · First reply · Resolved at 130 · the week at 150. */
+    grid-template-columns: minmax(0, 1fr) 130px 130px 130px 150px;
     align-items: center;
   }
 
@@ -812,6 +813,15 @@
     block-size: 3px;
     border-radius: 2px;
     background-color: var(--border-emphasis);
+  }
+
+  /* 02: a person's week in green, an AI employee's in violet; a quiet day keeps the baseline. */
+  .tLoadDay[data-load] {
+    background-color: var(--channel-3);
+  }
+
+  .tLoadDay[data-load][data-ai] {
+    background-color: var(--signal-ai);
   }
 
   .tFoot {

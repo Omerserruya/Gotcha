@@ -1,9 +1,13 @@
-import { getFormatter, getTranslations } from 'next-intl/server';
+import { getFormatter, getTimeZone, getTranslations } from 'next-intl/server';
 
-import { busiestHour, byName, humans, type AgentLoad } from '@/api/contracts/analytics';
-import type { AiEmployee } from '@/api/contracts/people';
+import {
+  busiestLocalHour,
+  humans,
+  type AgentLoad,
+  type TeamMember,
+  type TeamReport,
+} from '@/api/contracts/analytics';
 
-import { hadConversations } from './figures';
 import type { TeamData } from './load-analytics';
 import styles from './Analytics.module.css';
 
@@ -75,9 +79,13 @@ export function queueState(agents: readonly AgentLoad[]): QueueState {
  * people, two teams". Teams are not modelled; people and AI employees are,
  * and a kind with none is left out rather than said as "0 people".
  */
-/** AI employees: the employee list when read, else the AI rows of the workload. */
+/** AI employees: the report's when read, else the AI rows of the workload. */
 function aiCount(data: TeamData): number {
-  return data.aiEmployees?.length ?? data.agents?.filter((a) => a.kind === 'ai').length ?? 0;
+  return (
+    data.report?.members.filter((m) => m.kind === 'ai').length ??
+    data.agents?.filter((a) => a.kind === 'ai').length ??
+    0
+  );
 }
 
 export async function teamSubline(data: TeamData): Promise<string> {
@@ -142,31 +150,27 @@ export async function HandoverCard() {
 }
 
 /**
- * ⚠ "Busiest hour" from `/hourly`, whose hours are UTC; the formatter carries
- * the configured time zone, so 09:00Z reads as 12:00 in Israel.
+ * 06c's five cards, from the team report: over every conversation a person
+ * replied in. The busiest hour arrives as a UTC histogram and is moved to the
+ * workspace's time zone before its peak is taken.
  */
 export async function TeamStrip({ data }: { readonly data: TeamData }) {
   const t = await getTranslations('analytics');
   const format = await getFormatter();
-  const peak = data.hourly ? busiestHour(data.hourly) : null;
+  const zone = await getTimeZone();
+  const cards = data.report?.cards ?? null;
+  const peak = cards ? busiestLocalHour(cards.inboundByHourUtc, zone) : null;
+  // A week nobody wrote in: its counts are counts of nothing — "—", as on every tab.
+  const quiet =
+    cards !== null && cards.handledByPeople === 0 && cards.inboundByHourUtc.every((n) => n === 0);
+  const count = (n: number | undefined) =>
+    cards === null || quiet || n === undefined ? '—' : format.number(n);
   const cells = [
-    {
-      key: 'people',
-      // No figure of nothing: with no conversations, "—" — see `hadConversations`.
-      value: hadConversations(data.overview)
-        ? format.number(data.overview!.humanHandledCount)
-        : '—',
-    },
-    // Not separable from GOTCHA's in what the platform measures.
-    { key: 'firstReply', value: '—' },
-    { key: 'resolved', value: '—' },
-    { key: 'handedBack', value: '—' },
-    {
-      key: 'busiest',
-      value: peak
-        ? format.dateTime(peak, { hour: '2-digit', minute: '2-digit', hour12: false })
-        : '—',
-    },
+    { key: 'people', value: count(cards?.handledByPeople) },
+    { key: 'firstReply', value: replyTime(cards?.firstReplyMedianMs ?? null, t) },
+    { key: 'resolved', value: rate(cards?.resolvedRate ?? null) },
+    { key: 'handedBack', value: count(cards?.handedBackToGotcha) },
+    { key: 'busiest', value: peak === null ? '—' : `${String(peak).padStart(2, '0')}:00` },
   ] as const;
   return (
     <dl className={styles.gStrip} data-testid="team-strip">
@@ -180,6 +184,25 @@ export async function TeamStrip({ data }: { readonly data: TeamData }) {
   );
 }
 
+/** "3m", "18s", "1h" — or "—" with nothing measured. */
+export function replyTime(
+  ms: number | null,
+  t: Awaited<ReturnType<typeof getTranslations<'analytics'>>>,
+): string {
+  if (ms === null) return '—';
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return t('kpi.seconds', { n: seconds });
+  const minutes = Math.round(seconds / 60);
+  return minutes < 60
+    ? t('kpi.minutes', { n: minutes })
+    : t('kpi.hours', { n: Math.round(minutes / 60) });
+}
+
+/** A fraction as 02 writes it: "94%"; `null` (nothing handled) is "—". */
+export function rate(fraction: number | null): string {
+  return fraction === null ? '—' : `${Math.round(fraction * 100)}%`;
+}
+
 function initials(name: string | null): string {
   return (name ?? '')
     .split(/\s+/)
@@ -189,49 +212,77 @@ function initials(name: string | null): string {
     .join('');
 }
 
-/** People and AI employees in one table, alphabetical within each. */
-export async function TeamTable({
-  agents,
-  aiEmployees,
-}: {
-  readonly agents: readonly AgentLoad[] | null;
-  readonly aiEmployees: readonly AiEmployee[] | null;
-}) {
+/**
+ * 06c's table, 02's columns: Person · Handled · First reply · Resolved · Load
+ * through the week. People first, then AI employees (violet, with no reply
+ * target — decided), each alphabetical. A week's bars are scaled within their
+ * kind: an AI employee's thousands would flatten every person's week.
+ */
+export async function TeamTable({ report }: { readonly report: TeamReport | null }) {
   const t = await getTranslations('analytics');
   const format = await getFormatter();
-  const week = Array.from({ length: 7 }, (_, index) => index);
-  const load = (
-    <span className={styles.tLoad} aria-hidden="true">
-      {week.map((day) => (
-        <span key={day} className={styles.tLoadDay} />
-      ))}
-    </span>
+  const people = report ? report.members.filter((m) => m.kind === 'human').sort(alphabetical) : [];
+  const ais = report ? report.members.filter((m) => m.kind === 'ai').sort(alphabetical) : [];
+  const peak = (members: readonly TeamMember[]) =>
+    Math.max(1, ...members.flatMap((m) => m.loadByDay));
+  const row = (member: TeamMember, busiest: number) => (
+    <li
+      key={member.id}
+      className={styles.tRow}
+      data-ai={member.kind === 'ai' ? '' : undefined}
+      data-testid={`team-row-${member.id}`}
+    >
+      <span className={styles.tWho}>
+        <span
+          className={styles.tDisc}
+          data-ai={member.kind === 'ai' ? '' : undefined}
+          aria-hidden="true"
+        >
+          {member.kind === 'ai' ? 'AI' : initials(member.name)}
+        </span>
+        {member.kind === 'ai' ? (
+          <span className={styles.tNameStack}>
+            <span className={styles.tName}>{member.name ?? t('team.unnamed')}</span>
+            <span className={styles.tRole}>{t('teamTab.table.aiEmployee')}</span>
+          </span>
+        ) : (
+          <span className={styles.tName}>{member.name ?? t('team.unnamed')}</span>
+        )}
+      </span>
+      <span>{format.number(member.handled)}</span>
+      <span>{replyTime(member.firstReplyMedianMs, t)}</span>
+      <span>{rate(member.resolvedRate)}</span>
+      <span
+        className={styles.tLoad}
+        role="img"
+        aria-label={t('teamTab.table.loadLabel', { days: member.loadByDay.join(', ') })}
+      >
+        {member.loadByDay.map((n, day) => (
+          <span
+            key={day}
+            className={styles.tLoadDay}
+            data-ai={member.kind === 'ai' ? '' : undefined}
+            data-load={n > 0 ? '' : undefined}
+            style={
+              n > 0 ? { blockSize: `${Math.max(2, Math.round((n / busiest) * 26))}px` } : undefined
+            }
+          />
+        ))}
+      </span>
+    </li>
   );
-  /*
-    People and AI employees in one table (backend e188ce7c sends both). An
-    AI employee the read carries has its real open count; one only in the
-    employee list (none open, say) is drawn from it — never twice.
-  */
-  const people = agents ? byName(agents) : [];
-  const counted = new Set(people.filter((a) => a.kind === 'ai').map((a) => a.agentId));
-  const ais = aiEmployees
-    ? [...aiEmployees]
-        .filter((ai) => !counted.has(ai.id))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : [];
 
   return (
     <section className={styles.tTable} data-testid="team-table">
       <div className={styles.tHead} aria-hidden="true">
         <span>{t('teamTab.table.person')}</span>
-        <span>{t('teamTab.table.open')}</span>
-        <span>{t('teamTab.table.today')}</span>
+        <span>{t('teamTab.table.handled')}</span>
         <span>{t('teamTab.table.firstReply')}</span>
         <span>{t('teamTab.table.resolved')}</span>
         <span>{t('teamTab.table.load')}</span>
       </div>
       <div className={styles.tRows}>
-        {agents === null && aiEmployees === null ? (
+        {report === null ? (
           <p className={styles.gNone} data-testid="team-unavailable">
             {t('team.unavailable')}
           </p>
@@ -241,58 +292,8 @@ export async function TeamTable({
           </p>
         ) : (
           <ul className={styles.tList}>
-            {people.map((agent) => (
-              <li
-                key={agent.agentId}
-                className={styles.tRow}
-                data-ai={agent.kind === 'ai' ? '' : undefined}
-                data-testid={`team-row-${agent.agentId}`}
-              >
-                <span className={styles.tWho}>
-                  <span
-                    className={styles.tDisc}
-                    data-ai={agent.kind === 'ai' ? '' : undefined}
-                    aria-hidden="true"
-                  >
-                    {agent.kind === 'ai' ? 'AI' : initials(agent.name)}
-                  </span>
-                  {agent.kind === 'ai' ? (
-                    <span className={styles.tNameStack}>
-                      <span className={styles.tName}>{agent.name ?? t('team.unnamed')}</span>
-                      <span className={styles.tRole}>{t('teamTab.table.aiEmployee')}</span>
-                    </span>
-                  ) : (
-                    <span className={styles.tName}>{agent.name ?? t('team.unnamed')}</span>
-                  )}
-                </span>
-                <span>{format.number(agent.activeConversations)}</span>
-                <span title={nullReason(agent, 'claimedToday', t)}>
-                  {agent.claimedToday === null ? '—' : format.number(agent.claimedToday)}
-                </span>
-                <span>—</span>
-                <span>—</span>
-                {load}
-              </li>
-            ))}
-            {ais.map((ai) => (
-              <li key={ai.id} className={styles.tRow} data-ai="" data-testid={`team-row-${ai.id}`}>
-                <span className={styles.tWho}>
-                  <span className={styles.tDisc} data-ai="" aria-hidden="true">
-                    AI
-                  </span>
-                  <span className={styles.tNameStack}>
-                    <span className={styles.tName}>{ai.name}</span>
-                    <span className={styles.tRole}>{t('teamTab.table.aiEmployee')}</span>
-                  </span>
-                </span>
-                {/* Nothing counts an AI employee's conversations per employee yet. */}
-                <span>—</span>
-                <span>—</span>
-                <span>—</span>
-                <span>—</span>
-                {load}
-              </li>
-            ))}
+            {people.map((m) => row(m, peak(people)))}
+            {ais.map((m) => row(m, peak(ais)))}
           </ul>
         )}
       </div>
@@ -301,6 +302,10 @@ export async function TeamTable({
       </p>
     </section>
   );
+}
+
+function alphabetical(a: TeamMember, b: TeamMember): number {
+  return (a.name ?? '').localeCompare(b.name ?? '');
 }
 
 /** A null figure's reason, in words, for its title. */
