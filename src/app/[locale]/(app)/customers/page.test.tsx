@@ -84,7 +84,8 @@ describe('★★ 04 — the segment is in the URL, and the counts are live', () 
       {
         customerExternalId: 'wa-1',
         status: 'OPEN',
-        lastMessageAt: '2026-10-04T10:00:00Z',
+        // An hour ago, always: "talking now" means the last 24 hours of the clock that runs the test.
+        lastMessageAt: new Date(Date.now() - 3_600_000).toISOString(),
         lastMessageBody: 'hi',
         lastMessageDirection: 'INBOUND',
       },
