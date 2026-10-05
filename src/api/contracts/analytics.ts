@@ -602,6 +602,14 @@ export const askedAboutSchema = z.object({
    * Those rows are customers' own words, not topics; 06e tells them apart.
    */
   intent: z.string().nullable().default(null),
+  /**
+   * Backend 8d9d09ec: for the classifier's `unknown` / `general`, what people
+   * actually wrote — up to five first messages, most common first.
+   */
+  examples: z
+    .array(z.object({ question: z.string(), count: z.number().catch(1).default(1) }))
+    .catch([])
+    .default([]),
 });
 export type AskedAbout = z.infer<typeof askedAboutSchema>;
 

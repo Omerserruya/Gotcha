@@ -74,8 +74,15 @@ export function topicRows(
 }
 
 /** The customers' own questions, when the route had no topics to group them by. */
-export function askedInTheirWords(week: readonly AskedAbout[]): readonly AskedAbout[] {
-  return week.filter((row) => !row.intent && (row.question ?? '').trim() !== '' && row.count > 0);
+export function askedInTheirWords(
+  week: readonly AskedAbout[],
+): readonly { readonly question: string; readonly count: number }[] {
+  // Raw bodies (no intents at all), or the examples the classifier could not place.
+  const raw = week
+    .filter((row) => !row.intent && (row.question ?? '').trim() !== '' && row.count > 0)
+    .map((row) => ({ question: row.question!, count: row.count }));
+  const unplaced = week.filter(isUnplaced).flatMap((row) => row.examples);
+  return [...raw, ...unplaced].sort((a, b) => b.count - a.count);
 }
 
 /** The biggest rise worth saying: on a base of at least `MIN_BASE`, and up. */
@@ -193,7 +200,7 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
             {asked.map((row, i) => (
               <li key={i} className={styles.eRow} data-testid={`asked-${i}`}>
                 <span className={styles.eTopic}>
-                  <UserText>{row.question!}</UserText>
+                  <UserText>{row.question}</UserText>
                 </span>
                 <span className={styles.eCount}>{format.number(row.count)}</span>
                 <span className={styles.eMuted}>—</span>

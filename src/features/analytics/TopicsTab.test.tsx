@@ -187,3 +187,23 @@ describe('★★ the classifier\'s "no result" is not a topic', () => {
     expect(namedTopics([topic(null, 2, 'general')])).toHaveLength(1);
   });
 });
+
+describe('★★ 06e — what the classifier could not place, in the customers’ words (backend 8d9d09ec)', () => {
+  it('the unknown group’s examples are what people asked; the label itself is never a topic', async () => {
+    const unknown = askedAboutSchema.parse({
+      intent: 'unknown',
+      question: 'unknown',
+      count: 5,
+      examples: [
+        { question: 'תבטלו לי בבקשה את הזמנה 1002', count: 2 },
+        { question: 'Where is my parcel?', count: 3 },
+      ],
+    });
+    render(await TopicTable({ data: data({ week: [unknown] }) }));
+    expect(screen.getByTestId('asked-0')).toHaveTextContent('Where is my parcel?3');
+    expect(screen.getByTestId('asked-1')).toHaveTextContent('תבטלו לי בבקשה את הזמנה 1002');
+    expect(screen.getByTestId('asked-1').querySelector('bdi')).toHaveAttribute('dir', 'auto');
+    expect(screen.getByTestId('topics-table')).not.toHaveTextContent(/^unknown$/m);
+    expect(screen.queryByTestId('topic-unknown')).toBeNull();
+  });
+});
