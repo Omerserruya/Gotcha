@@ -211,7 +211,10 @@
       },
       "conflict": "Another store is connected here. Replace it?",
       "conflictNamed": "Another store is connected here ({current}). Replace it?",
-      "replaceIt": "Replace it"
+      "replaceIt": "Replace it",
+      "gone": "That approval has expired or was already used — install GOTCHA again from Shopify.",
+      "unread": "We couldn’t check the approval from Shopify — open GOTCHA from Shopify again.",
+      "listing": "GOTCHA in the Shopify App Store"
     },
     "billing": {
       "checking": "Checking with Shopify…",
@@ -232,7 +235,8 @@
         "mismatch": "This confirmation belongs to a different store than the one connected here.",
         "not_connected": "There’s no Shopify store connected to this workspace.",
         "forbidden": "You don’t have permission to manage billing.",
-        "failed": "We couldn’t confirm the plan — try again."
+        "failed": "We couldn’t confirm the plan — try again.",
+        "reconnect": "Shopify needs reconnecting before its plan can be checked."
       }
     }
   }

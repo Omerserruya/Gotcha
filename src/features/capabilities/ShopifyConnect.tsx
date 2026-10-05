@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
 
@@ -150,7 +150,16 @@ export function ShopifyPending({
  * (Omer: "build something of your own for now"): 10's landing line. It says
  * nothing until the server has asked Shopify, because the URL proves nothing.
  */
-export function ShopifyBillingVerify({ shop }: { readonly shop: string | null }) {
+export function ShopifyBillingVerify({
+  shop,
+  needsReconnect = false,
+  reconnect = null,
+}: {
+  readonly shop: string | null;
+  /** The integration exists but is not working: "not connected" means "reconnect it". */
+  readonly needsReconnect?: boolean;
+  readonly reconnect?: ReactNode;
+}) {
   const t = useTranslations('capabilities.shopify.billing');
   const router = useRouter();
   const [check, setCheck] = useState<ShopifyBillingCheck | null>(null);
@@ -175,6 +184,15 @@ export function ShopifyBillingVerify({ shop }: { readonly shop: string | null })
       <p className={styles.landing} role="status" data-testid="shopify-billing-checking">
         {t('checking')}
       </p>
+    );
+  }
+  if (!check.ok && check.reason === 'not_connected' && needsReconnect) {
+    // Measured on dev: a store in ERROR answered "no store connected" beside a card that has one.
+    return (
+      <div className={styles.landing} data-outcome="problem" data-testid="shopify-billing">
+        <span>{t('error.reconnect')}</span>
+        {reconnect}
+      </div>
     );
   }
   if (!check.ok) {
@@ -234,4 +252,34 @@ function stateKey(state: string, declined: boolean) {
     default:
       return 'state.other';
   }
+}
+
+/**
+ * Back with `pending=1` and nothing to claim: the approval expired or was
+ * used (`read`), or it could not be checked. Said either way — an arrival
+ * that draws nothing looks like the install never happened.
+ */
+export function ShopifyPendingGone({
+  read,
+  helpUrl,
+}: {
+  readonly read: boolean;
+  readonly helpUrl: string | null;
+}) {
+  const t = useTranslations('capabilities.shopify.pending');
+  return (
+    <p className={styles.landing} data-outcome="problem" data-testid="shopify-pending-gone">
+      {read ? t('gone') : t('unread')}{' '}
+      {helpUrl ? (
+        <a
+          href={helpUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="shopify-pending-help"
+        >
+          {t('listing')}
+        </a>
+      ) : null}
+    </p>
+  );
 }

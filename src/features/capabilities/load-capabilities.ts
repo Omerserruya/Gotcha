@@ -3,6 +3,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 
+import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import {
   capabilityListSchema,
@@ -114,10 +115,14 @@ export async function loadShopifyAvailability(): Promise<ShopifyAvailability | n
     });
 }
 
-/** The store waiting to be claimed (the browser's pending cookie, sent on); `null` when none. */
-export async function loadShopifyPending(): Promise<string | null> {
+/**
+ * The store waiting to be claimed (the browser's pending cookie, sent on):
+ * its domain; `'gone'` when there is no approval to claim (no cookie, or the
+ * route has none — expired or used); `null` when the read itself failed.
+ */
+export async function loadShopifyPending(): Promise<string | 'gone' | null> {
   const pending = (await cookies()).get(PENDING_COOKIE)?.value;
-  if (!pending) return null;
+  if (!pending) return 'gone';
   return serverApi()
     .get({
       endpoint: integrationEndpoints.shopifyPending(),
@@ -126,6 +131,8 @@ export async function loadShopifyPending(): Promise<string | null> {
     })
     .then((p) => p.shopDomain)
     .catch((cause: unknown) => {
+      if (isApiError(cause) && (cause.status === 404 || cause.status === 410))
+        return 'gone' as const;
       logger.warn('capabilities.shopify_pending_failed', { cause });
       return null;
     });

@@ -17,8 +17,14 @@ vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }))
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
 
 import { claimShopifyInstall, startShopifyInstall, verifyShopifyBilling } from './shopify-actions';
-import { ShopifyBillingVerify, ShopifyConnect, ShopifyPending } from './ShopifyConnect';
+import {
+  ShopifyBillingVerify,
+  ShopifyConnect,
+  ShopifyPending,
+  ShopifyPendingGone,
+} from './ShopifyConnect';
 import { cookieFrom, INTENT_COOKIE } from './shopify-cookies';
+import { loadShopifyPending } from './load-capabilities';
 
 beforeEach(() => {
   get.mockReset();
@@ -274,5 +280,66 @@ describe('★★ billing=verify — only what the server read from Shopify', () 
     post.mockResolvedValueOnce(snapshot({ grantsAccess: true }));
     await userEvent.click(screen.getByTestId('shopify-billing-retry'));
     expect(await screen.findByText('Shopify is connected.')).toBeInTheDocument();
+  });
+});
+
+describe('★★ measured on dev: an arrival is always said', () => {
+  it('pending=1 with nothing to claim: expired, said — and the listing when there is one', () => {
+    intl(<ShopifyPendingGone read helpUrl="https://apps.shopify.com/gotcha" />);
+    expect(screen.getByTestId('shopify-pending-gone')).toHaveTextContent(
+      'That approval has expired or was already used — install GOTCHA again from Shopify.',
+    );
+    expect(screen.getByTestId('shopify-pending-help')).toHaveAttribute(
+      'href',
+      'https://apps.shopify.com/gotcha',
+    );
+  });
+
+  it('a failed check is not "expired"', () => {
+    intl(<ShopifyPendingGone read={false} helpUrl={null} />);
+    expect(screen.getByTestId('shopify-pending-gone')).not.toHaveTextContent('expired');
+    expect(screen.queryByTestId('shopify-pending-help')).toBeNull();
+  });
+
+  it('★ billing=verify on a store that needs fixing: "needs reconnecting" and the button — not "no store"', async () => {
+    post.mockRejectedValue(
+      new ApiError({ kind: 'conflict', status: 409, developerMessage: 'shopify_not_connected' }),
+    );
+    intl(
+      <ShopifyBillingVerify
+        shop="urban.myshopify.com"
+        needsReconnect
+        reconnect={<button data-testid="reconnect">Reconnect Shopify</button>}
+      />,
+    );
+    expect(await screen.findByTestId('shopify-billing')).toHaveTextContent(
+      'Shopify needs reconnecting before its plan can be checked.',
+    );
+    expect(screen.getByTestId('reconnect')).toBeInTheDocument();
+  });
+
+  it('…and with no integration at all, "no store connected"', async () => {
+    post.mockRejectedValue(
+      new ApiError({ kind: 'conflict', status: 409, developerMessage: 'shopify_not_connected' }),
+    );
+    intl(<ShopifyBillingVerify shop={null} />);
+    expect(await screen.findByTestId('shopify-billing')).toHaveTextContent(
+      'There’s no Shopify store connected to this workspace.',
+    );
+  });
+});
+
+describe('★★ the pending approval: a shop, gone, or unread — three different sentences', () => {
+  it('no cookie: gone, nothing asked; a 404: gone; a 500: unread', async () => {
+    jar.get.mockReturnValue(undefined);
+    expect(await loadShopifyPending()).toBe('gone');
+    expect(get).not.toHaveBeenCalled();
+    jar.get.mockReturnValue({ value: 'p1' });
+    get.mockRejectedValueOnce(new ApiError({ kind: 'not_found', status: 404 }));
+    expect(await loadShopifyPending()).toBe('gone');
+    get.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
+    expect(await loadShopifyPending()).toBeNull();
+    get.mockResolvedValueOnce({ shopDomain: 'new.myshopify.com' });
+    expect(await loadShopifyPending()).toBe('new.myshopify.com');
   });
 });

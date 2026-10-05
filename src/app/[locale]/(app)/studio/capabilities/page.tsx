@@ -4,7 +4,13 @@ import { isConnected } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { oauthFailure } from '@/features/capabilities/oauth';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
-import { ShopifyBillingVerify, ShopifyPending } from '@/features/capabilities/ShopifyConnect';
+import { OAuthButton } from '@/features/capabilities/OAuthButton';
+import { oauthHere } from '@/features/capabilities/oauth';
+import {
+  ShopifyBillingVerify,
+  ShopifyPending,
+  ShopifyPendingGone,
+} from '@/features/capabilities/ShopifyConnect';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
@@ -71,7 +77,10 @@ export default async function Page({
   );
   const onShopify = integration?.slug === 'shopify';
   const [shopifyAvailability, shopifyPending] = await Promise.all([
-    onShopify && !isConnected(integration) ? loadShopifyAvailability() : null,
+    // Unconnected — or back with an approval, whose banner may need the listing link.
+    onShopify && (!isConnected(integration) || params.pending === '1')
+      ? loadShopifyAvailability()
+      : null,
     onShopify && params.pending === '1' ? loadShopifyPending() : null,
   ]);
 
@@ -115,13 +124,30 @@ export default async function Page({
               />
             ) : null}
             {onShopify && params.billing === 'verify' ? (
-              <ShopifyBillingVerify shop={params.shop ?? null} />
-            ) : null}
-            {shopifyPending ? (
-              <ShopifyPending
-                shopDomain={shopifyPending}
-                replace={params.reason === 'replace_store'}
+              <ShopifyBillingVerify
+                shop={params.shop ?? null}
+                // Connected but not working (ERROR): the plan can't be checked until it is fixed.
+                needsReconnect={isConnected(integration)}
+                reconnect={
+                  oauthHere(integration.slug, true) ? (
+                    <OAuthButton slug={integration.slug} name={integration.name} mode="reconnect" />
+                  ) : null
+                }
               />
+            ) : null}
+            {/* Back with `pending=1`, a banner whatever came of it. */}
+            {onShopify && params.pending === '1' ? (
+              typeof shopifyPending === 'string' && shopifyPending !== 'gone' ? (
+                <ShopifyPending
+                  shopDomain={shopifyPending}
+                  replace={params.reason === 'replace_store'}
+                />
+              ) : (
+                <ShopifyPendingGone
+                  read={shopifyPending === 'gone'}
+                  helpUrl={shopifyAvailability?.helpUrl ?? null}
+                />
+              )
             ) : null}
             {integration !== null && !isConnected(integration) ? (
               <AvailableSystem integration={integration} shopify={shopifyAvailability} />
