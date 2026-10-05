@@ -12,6 +12,8 @@ import {
 } from '@/api/contracts/approvals';
 import { approvalEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+
+import { EDIT_REFUSALS, type EditRefusal } from './edit-refusals';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
@@ -99,18 +101,6 @@ export type ApprovalWriteResult =
   | { readonly ok: false; readonly reason: 'forbidden' }
   | { readonly ok: false; readonly reason: 'failed' }
   | { readonly ok: false; readonly reason: EditRefusal };
-
-/** Backend 05979604's refusals of an edited amount: nothing decided, nothing sent. */
-export const EDIT_REFUSALS = [
-  'edit_not_allowed',
-  'amount_above_original',
-  'invalid_amount',
-  'edit_requires_original_amount',
-  'percentage_above_original',
-  'invalid_percentage',
-  'edit_requires_original_percentage',
-] as const;
-export type EditRefusal = (typeof EDIT_REFUSALS)[number];
 
 function classify(cause: unknown, event: string): ApprovalWriteResult {
   if (isApiError(cause)) {
