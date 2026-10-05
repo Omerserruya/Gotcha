@@ -192,6 +192,17 @@ router.post("/:id/return-to-ai", async (req: Request, res: Response) => {
   }
 });
 
+// Stop the AI without assigning anyone: the conversation waits for a person.
+// The inverse of return-to-ai, with the same access.
+router.post("/:id/stop-ai", async (req: Request, res: Response) => {
+  try {
+    const conversation = await conversationService.stopAi(req.tenantId!, req.params.id as string, req.user?.userId);
+    res.json({ data: conversation });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to stop the AI" });
+  }
+});
+
 // Allow both ADMIN and the assigned agent to transfer/reassign
 /*
  * ARCHIVE AND MARK-UNREAD — the two context-menu actions the server could not do.

@@ -476,6 +476,36 @@ export async function returnToAi(tenantId: string, conversationId: string) {
   return updated;
 }
 
+/**
+ * Stop the AI on a conversation WITHOUT assigning it to anyone - the inverse of
+ * returnToAi. Sets the isHandedOver latch the bot already respects
+ * (ai-bot.service and the incoming worker skip a handed-over conversation), so
+ * the next inbound waits for a person instead of getting an AI reply. Nobody is
+ * assigned: the conversation stays in the shared queue for whoever picks it up.
+ * returnToAi undoes it.
+ */
+export async function stopAi(tenantId: string, conversationId: string, actorUserId?: string) {
+  const conversation = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
+  if (!conversation) throw Object.assign(new Error("Conversation not found"), { status: 404 });
+
+  await recordHandover({
+    tenantId,
+    conversationId,
+    to: "human",
+    actorUserId,
+    reason: "ai_stopped",
+    data: { isHandedOver: true },
+  });
+  const updated = await prisma.conversation.findUniqueOrThrow({
+    where: { id: conversationId },
+    include: { assignedAgent: { select: { id: true, name: true, email: true } } },
+  });
+
+  await createSystemMessage(tenantId, conversationId, "ai_stopped", {});
+  emitToTenant(tenantId, "conversation:updated", updated);
+  return updated;
+}
+
 export async function reassign(tenantId: string, conversationId: string, newAgentId: string) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },

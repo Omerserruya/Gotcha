@@ -19,7 +19,7 @@ export const CONVERSATION_HANDLERS = ["ai_agent", "flow", "human"] as const;
 export type ConversationHandler = (typeof CONVERSATION_HANDLERS)[number];
 
 /** Why the handler changed, as a code the frontend translates. */
-export type HandoverReason = "escalation" | "takeover" | "assignment" | "routing" | "return_to_ai";
+export type HandoverReason = "escalation" | "takeover" | "assignment" | "routing" | "return_to_ai" | "ai_stopped";
 
 export interface RecordHandoverInput {
   tenantId: string;
