@@ -103,6 +103,13 @@ describe("moodOf / situationOf", () => {
     expect(moodOf({ detectedIntent: "unknown", sentiment: "neutral" })).toBeNull();
     expect(moodOf(null)).toBeNull();
   });
+  it("★ a structured summary becomes one plain line; placeholders are null", () => {
+    expect(situationOf("• **למה פנה**: בקשה להחזר חלקי בסכום 50$ עבור הזמנה מס׳ 1011.  \n• **מה ביקש/ה**: \n  - האם ניתן")).toBe("בקשה להחזר חלקי בסכום 50$ עבור הזמנה מס׳ 1011.");
+    expect(situationOf("• **Why they reached out**: asked about #1842. Then more.")).toBe("asked about #1842.");
+    expect(situationOf("Failed to generate summary.")).toBeNull();
+    expect(situationOf("No messages to summarize.")).toBeNull();
+  });
+
   it("caps a long sentence", () => {
     expect(situationOf("x".repeat(300))!.length).toBeLessThanOrEqual(140);
     expect(situationOf("  ")).toBeNull();

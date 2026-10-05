@@ -48,9 +48,27 @@ export function moodOf(intel: { detectedIntent?: string | null; sentiment?: stri
   return normalizeConversationIntent(intel.detectedIntent, signals) === "HIGH_INTENT" ? "about_to_buy" : null;
 }
 
+/** Summarizer placeholders that are not a situation at all. */
+const NOT_A_SUMMARY = /^(failed to generate summary|no messages to summari[sz]e)\.?$/i;
+
+/**
+ * The customer's situation in one line, from the AI summary. Summaries are
+ * structured ("• **Why they reached out**: asked for a refund on #1016 ...
+ * • **What they asked**: ..."), so this takes the first non-empty line,
+ * drops the bullet, the markdown and the "label:" in front of it, then the
+ * first sentence. A summarizer placeholder is null, not a situation.
+ */
 export function situationOf(summary: string | null | undefined): string | null {
-  const s = String(summary ?? "").replace(/\s+/g, " ").trim();
-  if (!s) return null;
+  const line = String(summary ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+  if (!line) return null;
+  let s = line.replace(/^[•*\-–]+\s*/, "").replace(/\*\*|__|`/g, "").trim();
+  const colon = s.indexOf(":");
+  if (colon > 0 && colon <= 40 && s.length > colon + 1) s = s.slice(colon + 1).trim();
+  s = s.replace(/\s+/g, " ").trim();
+  if (!s || NOT_A_SUMMARY.test(s)) return null;
   const first = s.split(/(?<=[.!?])\s/)[0] ?? s;
   return first.length > SITUATION_MAX ? `${first.slice(0, SITUATION_MAX - 1).trimEnd()}…` : first;
 }
