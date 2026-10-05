@@ -2420,14 +2420,15 @@
     background-color: var(--ai-avatar-surface);
   }
 
-  /* Floats over the page's foot, so the columns stay two. */
+  /* The foot's sentence steps aside while the bar stands in its place. */
+  .listFooter[data-picking='yes'] .footText {
+    display: none;
+  }
+
+  /* In the list card's foot, never over it (measured on dev: it covered the sentence). */
   .selectBar {
-    position: fixed;
-    inset-block-end: var(--space-24);
-    inset-inline-start: 50%;
-    z-index: 20;
-    translate: -50% 0;
     display: flex;
+    inline-size: fit-content;
     align-items: center;
     gap: var(--space-12);
     padding: var(--space-8) var(--space-14);

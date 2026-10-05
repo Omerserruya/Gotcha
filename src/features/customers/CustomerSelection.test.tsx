@@ -33,6 +33,9 @@ const list = () =>
             </a>
           </li>
         </ul>
+        <div data-select-slot="" data-testid="foot">
+          <span>Showing 2 of 2</span>
+        </div>
       </CustomerSelection>
     </NextIntlClientProvider>,
   );
@@ -61,6 +64,19 @@ describe('★★ 04 — shift-click picks, a click still opens', () => {
       pathname: '/outreach',
       query: { create: 'campaign', contacts: 'k1,k2,k3' },
     });
+  });
+
+  it('the bar stands in the foot’s place, inside the card — never over it (measured on dev)', async () => {
+    const user = userEvent.setup();
+    list();
+    await user.keyboard('{Shift>}');
+    await user.click(screen.getByTestId('open-p1'));
+    await user.keyboard('{/Shift}');
+    const foot = screen.getByTestId('foot');
+    expect(foot).toContainElement(screen.getByTestId('select-bar'));
+    expect(foot).toHaveAttribute('data-picking', 'yes');
+    await user.click(screen.getByTestId('select-clear'));
+    expect(foot).not.toHaveAttribute('data-picking');
   });
 
   it('shift-click again unpicks; Clear empties; Tag is drawn with its reason', async () => {

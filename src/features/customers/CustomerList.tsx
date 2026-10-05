@@ -191,12 +191,13 @@ export async function CustomerList({
         )}
       </ul>
 
-      <p className={styles.listFooter}>
+      {/* With a pick, the selection bar takes this place (CustomerSelection). */}
+      <div className={styles.listFooter} data-select-slot="">
         {/* 02's foot; why one person can show twice rides on its title. */}
-        <span data-testid="customer-count" title={t('identityLimit')}>
+        <span className={styles.footText} data-testid="customer-count" title={t('identityLimit')}>
           {t('footerToday', { shown: people.length, total: shownOf })}
         </span>
-      </p>
+      </div>
     </section>
   );
 }
