@@ -375,6 +375,23 @@ export function normalizeQuestion(body: string | null | undefined): string {
 }
 
 /**
+ * A message that is only a greeting or filler: a closed list (Hebrew and
+ * English), anything of 3 characters or fewer, or emoji / punctuation alone.
+ * Trailing punctuation and repeated letters are tolerated ("היייי!", "hi!!").
+ */
+const GREETINGS = new Set([
+  "היי", "הי", "שלום", "אהלן", "הלו", "בוקר טוב", "ערב טוב", "צהריים טובים", "שלום רב",
+  "hi", "hey", "hello", "hiya", "yo", "good morning", "good evening",
+]);
+export function isGreetingOnly(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (t.length <= 3) return true;
+  if (!/[\p{L}\p{N}]/u.test(t)) return true; // emoji or punctuation only
+  const bare = t.replace(/[\s!?.,~\-:;)(]+$/u, "").replace(/(\p{L})\1{2,}/gu, "$1");
+  return GREETINGS.has(bare) || GREETINGS.has(bare.replace(/(\p{L})\1+$/u, "$1"));
+}
+
+/**
  * The most common FIRST inbound message of the conversations in each vague
  * intent group - the customer's opening question, in their words. Deduped
  * case-insensitively; the first spelling seen is the one shown. Up to 5 per
@@ -407,11 +424,24 @@ export async function customerQuestionExamples(
     orderBy: { createdAt: "asc" },
   });
 
+  // The first inbound message that SAYS something. A conversation that opens
+  // with "היי" asks its question in the next message; take that one. When
+  // there is no next message, the greeting is still shown rather than the
+  // conversation being dropped.
   const firstByConversation = new Map<string, string>();
+  const greetingFallback = new Map<string, string>();
   for (const m of messages as any[]) {
     if (firstByConversation.has(m.conversationId)) continue;
     const q = normalizeQuestion(m.body);
-    if (q.length >= 2) firstByConversation.set(m.conversationId, q);
+    if (q.length < 2) continue;
+    if (isGreetingOnly(q)) {
+      if (!greetingFallback.has(m.conversationId)) greetingFallback.set(m.conversationId, q);
+      continue;
+    }
+    firstByConversation.set(m.conversationId, q);
+  }
+  for (const [conversationId, greeting] of greetingFallback) {
+    if (!firstByConversation.has(conversationId)) firstByConversation.set(conversationId, greeting);
   }
 
   const tallies = new Map<string, Map<string, { question: string; count: number }>>();

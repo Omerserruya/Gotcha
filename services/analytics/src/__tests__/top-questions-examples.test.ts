@@ -55,7 +55,7 @@ vi.mock("@chatcenter/shared", () => ({
   },
 }));
 
-import { getTopQuestions, normalizeQuestion } from "../services/analytics.service";
+import { getTopQuestions, normalizeQuestion, isGreetingOnly } from "../services/analytics.service";
 
 const now = new Date();
 const at = (minAgo: number) => new Date(now.getTime() - minAgo * 60_000);
@@ -115,4 +115,30 @@ describe("normalizeQuestion", () => {
     expect(normalizeQuestion("x".repeat(300))).toHaveLength(200);
     expect(normalizeQuestion(null)).toBe("");
   });
+});
+
+describe("a greeting is not the question", () => {
+  it("★ 'היי' then a real question → the question is shown", async () => {
+    convo("unknown", ["היי", "אני מחפש סנובורד לילדים"]);
+    const [g]: any = await getTopQuestions("T");
+    expect(g.examples).toEqual([{ question: "אני מחפש סנובורד לילדים", count: 1 }]);
+  });
+
+  it("★ a greeting with nothing after it is still shown, not dropped", async () => {
+    convo("unknown", ["היי"]);
+    const [g]: any = await getTopQuestions("T");
+    expect(g.examples).toEqual([{ question: "היי", count: 1 }]);
+  });
+
+  it("a real first question is kept as is", async () => {
+    convo("unknown", ["אני מחפש סנובורד לילדים", "היי"]);
+    const [g]: any = await getTopQuestions("T");
+    expect(g.examples).toEqual([{ question: "אני מחפש סנובורד לילדים", count: 1 }]);
+  });
+
+  it.each(["היי", "הייי!", "שלום", "hi", "Hello!!", "hiii", "👋", "🙂🙂", "?!", "ok", "בוקר טוב", "אהלן"])(
+    "'%s' is a greeting", (t) => expect(isGreetingOnly(t)).toBe(true));
+
+  it.each(["היי אני רוצה לבטל את ההזמנה שלי 1006", "שלום, איפה ההזמנה?", "hi, where is my order", "יש קופון?", "1006"])(
+    "'%s' is not just a greeting", (t) => expect(isGreetingOnly(t)).toBe(false));
 });
