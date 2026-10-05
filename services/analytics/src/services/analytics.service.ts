@@ -1469,6 +1469,145 @@ export async function getDailySeries(tenantId: string, days = 7) {
   return { days: n, from: start.toISOString(), to: end.toISOString(), timezone: "UTC", series: [...rows.values()] };
 }
 
+// ─── Team report (06c) ────────────────────────────────────────
+
+interface TeamMemberRow {
+  kind: "human" | "ai";
+  id: string;
+  name: string;
+  handled: number;
+  firstReplyMedianMs: number | null;
+  resolvedRate: number | null;
+  loadByDay: number[];
+}
+
+/**
+ * 06c Team: per person (people + AI employees) and the cards above them.
+ *
+ * Window: the last `days` UTC days (default 7). Attribution is by ownership,
+ * because a reply carries no author id - only a display name:
+ *   a person handled the conversations ASSIGNED to them that had a reply in
+ *   the window; an AI employee handled the ones bound to it
+ *   (assignedAiAgentId) where the AI replied in the window.
+ * firstReplyMedianMs  median, over those conversations, of the gap from the
+ *   first customer message in the window to the first reply after it by that
+ *   kind of replier (a person's reply for people, the AI's for the AI).
+ *   No target or SLA for the AI (decided).
+ * resolvedRate  share of those conversations that are CLOSED now.
+ * loadByDay  conversations handled per day, oldest first.
+ * People are ADMIN + AGENT, active; SYSTEM_ADMIN is not the business's team.
+ * Test and sandbox conversations are excluded throughout.
+ *
+ * Cards: handledByPeople (conversations with a person's reply in the
+ * window), firstReplyMedianMs (people), resolvedRate (people),
+ * handedBackToGotcha (handovers back to the AI in the window - recorded
+ * from 2026-10 on), busiestHourUtc (the hour with the most customer
+ * messages, with the 24-hour histogram so a screen can shift time zones).
+ */
+export async function getTeamReport(tenantId: string, days = 7) {
+  const n = Math.min(Math.max(Math.floor(days) || 7, 1), 90);
+  const end = new Date();
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate() - (n - 1)));
+  const window = { gte: start, lte: end };
+  const dayIndex = (d: Date) => Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - start.getTime()) / 86_400_000);
+
+  const [people, ais, messages, handbacks] = await Promise.all([
+    prisma.user.findMany({
+      where: { tenantId, role: { in: ["ADMIN", "AGENT"] }, isActive: true },
+      select: { id: true, name: true, email: true },
+    }),
+    prisma.aIAgent.findMany({
+      where: { tenantId, status: { in: ["ACTIVE", "PAUSED"] } },
+      select: { id: true, name: true },
+    }),
+    prisma.message.findMany({
+      where: {
+        tenantId,
+        createdAt: window,
+        messageType: { not: "system" },
+        conversation: { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
+      },
+      select: {
+        conversationId: true, direction: true, createdAt: true, metadata: true, senderName: true,
+        conversation: { select: { status: true, assignedAgentId: true, assignedAiAgentId: true } },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 50_000,
+    }),
+    (prisma as any).conversationHandover.count({
+      where: { tenantId, toHandler: "ai_agent", reason: "return_to_ai", at: window },
+    }).catch(() => 0),
+  ]);
+
+  // Per conversation, in time order.
+  type Conv = { status: string; agent: string | null; ai: string | null; msgs: any[] };
+  const convs = new Map<string, Conv>();
+  const hourHistogram = new Array(24).fill(0);
+  for (const m of messages as any[]) {
+    const c: Conv = convs.get(m.conversationId) ?? {
+      status: m.conversation.status, agent: m.conversation.assignedAgentId, ai: m.conversation.assignedAiAgentId, msgs: [] as any[],
+    };
+    c.msgs.push(m);
+    convs.set(m.conversationId, c);
+    if (m.direction === "INBOUND") hourHistogram[m.createdAt.getUTCHours()]++;
+  }
+
+  const firstReplyGap = (msgs: any[], byAi: boolean): number | null => {
+    const firstIn = msgs.find((m) => m.direction === "INBOUND");
+    if (!firstIn) return null;
+    const reply = msgs.find((m) => m.direction === "OUTBOUND" && m.createdAt > firstIn.createdAt && isAiOutbound(m) === byAi);
+    return reply ? reply.createdAt.getTime() - firstIn.createdAt.getTime() : null;
+  };
+
+  const report = (kind: "human" | "ai", id: string, name: string): TeamMemberRow => {
+    const mine = [...convs.entries()].filter(([, c]) =>
+      kind === "human"
+        ? c.agent === id && c.msgs.some((m) => m.direction === "OUTBOUND")
+        : c.ai === id && c.msgs.some((m) => m.direction === "OUTBOUND" && isAiOutbound(m)),
+    );
+    const gaps = mine.map(([, c]) => firstReplyGap(c.msgs, kind === "ai")).filter((g): g is number => g != null);
+    const loadByDay = new Array(n).fill(0);
+    for (const [, c] of mine) {
+      const daysTouched = new Set(c.msgs.filter((m) => m.direction === "OUTBOUND").map((m) => dayIndex(m.createdAt)));
+      for (const d of daysTouched) if (d >= 0 && d < n) loadByDay[d]++;
+    }
+    return {
+      kind,
+      id,
+      name,
+      handled: mine.length,
+      firstReplyMedianMs: median(gaps),
+      resolvedRate: mine.length ? Math.round((mine.filter(([, c]) => c.status === "CLOSED").length / mine.length) * 100) / 100 : null,
+      loadByDay,
+    };
+  };
+
+  const members = [
+    ...people.map((u: any) => report("human", u.id, u.name || u.email)),
+    ...ais.map((a: any) => report("ai", a.id, a.name)),
+  ];
+
+  // Cards, over every conversation a PERSON replied in (assigned or not).
+  const humanConvs = [...convs.values()].filter((c) => c.msgs.some((m) => m.direction === "OUTBOUND" && !isAiOutbound(m)));
+  const humanGaps = humanConvs.map((c) => firstReplyGap(c.msgs, false)).filter((g): g is number => g != null);
+  const peak = Math.max(...hourHistogram);
+
+  return {
+    days: n,
+    from: start.toISOString(),
+    to: end.toISOString(),
+    members,
+    cards: {
+      handledByPeople: humanConvs.length,
+      firstReplyMedianMs: median(humanGaps),
+      resolvedRate: humanConvs.length ? Math.round((humanConvs.filter((c) => c.status === "CLOSED").length / humanConvs.length) * 100) / 100 : null,
+      handedBackToGotcha: handbacks,
+      busiestHourUtc: peak > 0 ? hourHistogram.indexOf(peak) : null,
+      inboundByHourUtc: hourHistogram,
+    },
+  };
+}
+
 // ─── The quiet-day sources ────────────────────────────────────
 
 /**
