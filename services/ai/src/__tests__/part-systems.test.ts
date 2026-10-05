@@ -157,7 +157,7 @@ describe("★ an inference never lands on a system that is not working", () => {
     const result = await getSystemForPart("t1", "returns");
 
     expect(result).toMatchObject({ slug: null, source: "unmapped" });
-    expect(result.reason).toMatch(/shopify would be inferred, but it is error/);
+    expect(result.reason).toMatch(/shopify would be inferred, but its connection status is ERROR/);
   });
 
   it("★ a CHOSEN returns provider in ERROR stays chosen - the screen says 'not working'", async () => {

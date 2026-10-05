@@ -123,7 +123,7 @@ function unmappedInference(part: BusinessRole, slug: string, status: string | un
     part,
     slug: null,
     source: "unmapped",
-    reason: `Nothing has been chosen for ${part}. ${slug} would be inferred, but it is ${status ? status.toLowerCase() : "not connected"}, so it does not serve this part.`,
+    reason: `Nothing has been chosen for ${part}. ${slug} would be inferred, but ${status ? `its connection status is ${status}` : "it is not connected"}, so it does not serve this part.`,
   };
 }
 
