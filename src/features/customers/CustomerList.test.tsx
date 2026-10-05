@@ -479,5 +479,7 @@ describe('★★ 04’s second line and chip, from their open conversation', () 
     expect(bdi.textContent).toBe('היי, מחפש מידע על מוצר');
     expect(bdi).toHaveAttribute('dir', 'auto');
     expect(bdi.nextSibling?.textContent).toBe(' · wrote 2 times');
+    // Its own element, so a long situation is cut and this is not.
+    expect(bdi.nextSibling?.nodeName).toBe('SPAN');
   });
 });

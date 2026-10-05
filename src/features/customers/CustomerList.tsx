@@ -205,13 +205,20 @@ export async function CustomerList({
                       */}
                       {said ? (
                         <>
-                          <bdi dir="auto">{said.situation}</bdi>
-                          {said.wrote === null
-                            ? null
-                            : ` · ${t('today.wrote', { count: said.wrote })}`}
+                          {/* Only the situation is cut; "wrote N times" always shows (measured on dev). */}
+                          <bdi dir="auto" className={styles.rowSituation}>
+                            {said.situation}
+                          </bdi>
+                          {said.wrote === null ? null : (
+                            <span className={styles.rowWrote}>
+                              {` · ${t('today.wrote', { count: said.wrote })}`}
+                            </span>
+                          )}
                         </>
                       ) : situation ? (
-                        <bdi>{situation}</bdi>
+                        <bdi dir="auto" className={styles.rowSituation}>
+                          {situation}
+                        </bdi>
                       ) : (
                         <span title={t('today.noWord')} aria-label={t('today.noWord')}>
                           —

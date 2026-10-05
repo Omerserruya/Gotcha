@@ -157,13 +157,25 @@
     color: var(--intent-neutral-text);
   }
 
-  /* 02: 12px `#6B6660`, one line. */
+  /* 02: 12px `#6B6660`, one line — the situation is cut, "wrote N times" never is. */
   .rowLine {
+    display: flex;
+    min-inline-size: 0;
     font-size: var(--font-size-label);
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
+  }
+
+  .rowSituation {
+    min-inline-size: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .rowWrote {
+    flex: none;
+    white-space: pre;
   }
 
   /* 02's footer bar: `#F5F2EC`, `padding:11px 18px`, `#F0EDE7` above. */
