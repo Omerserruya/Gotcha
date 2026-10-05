@@ -123,6 +123,18 @@ describe('★★ 01b — a quiet day', () => {
     expect(text).not.toContain('greeting.quiet.morning');
   });
 
+  it('★ 02: "Quiet evening, Maya" — the name on every face, from /api/auth/me', async () => {
+    firstName.value = 'Maya';
+    try {
+      const quiet = JSON.stringify(await screen());
+      expect(quiet).toContain('greeting.named.quiet.evening');
+      const busy = JSON.stringify(await screen({ isQuiet: false }));
+      expect(busy).toContain('greeting.named.evening');
+    } finally {
+      firstName.value = null;
+    }
+  });
+
   it('the chips get the open questions from the quiet-day read', async () => {
     const tree = await screen();
     const [box] = all<{ tone: string; openQuestions: number | null }>(

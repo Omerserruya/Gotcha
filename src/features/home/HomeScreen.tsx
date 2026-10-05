@@ -82,7 +82,8 @@ export async function HomeScreen({
   }
 
   const now = new Date();
-  const firstName = isDayOne ? await loadViewerFirstName() : null;
+  // 02: "Good morning, Maya" — the name on every face, not only day one's.
+  const firstName = await loadViewerFirstName();
   // From the viewer's clock: "good morning" at 9pm is worse than no greeting.
   const partOfDay = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
 
@@ -111,9 +112,13 @@ export async function HomeScreen({
             ? firstName
               ? t('dayOne.headingNamed', { name: firstName })
               : t('dayOne.heading')
-            : isQuiet
-              ? t(`greeting.quiet.${partOfDay}`)
-              : t(`greeting.${partOfDay}`)}
+            : firstName
+              ? isQuiet
+                ? t(`greeting.named.quiet.${partOfDay}`, { name: firstName })
+                : t(`greeting.named.${partOfDay}`, { name: firstName })
+              : isQuiet
+                ? t(`greeting.quiet.${partOfDay}`)
+                : t(`greeting.${partOfDay}`)}
         </Text>
         <Text role="body" tone="muted" className={styles.greetingSummary}>
           {/*

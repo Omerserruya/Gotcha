@@ -7,6 +7,16 @@
       "morning": "בוקר שקט",
       "afternoon": "צהריים שקטים",
       "evening": "ערב שקט"
+    },
+    "named": {
+      "morning": "בוקר טוב, {name}",
+      "afternoon": "צהריים טובים, {name}",
+      "evening": "ערב טוב, {name}",
+      "quiet": {
+        "morning": "בוקר שקט, {name}",
+        "afternoon": "צהריים שקטים, {name}",
+        "evening": "ערב שקט, {name}"
+      }
     }
   },
   "summary": "{total, plural, =0 {עדיין לא נכנס דבר היום.} one {שיחה אחת היום, {handled} טופלו בלעדיכם.} two {# שיחות היום, {handled} טופלו בלעדיכם.} many {# שיחות היום, {handled} טופלו בלעדיכם.} other {# שיחות היום, {handled} טופלו בלעדיכם.}}",

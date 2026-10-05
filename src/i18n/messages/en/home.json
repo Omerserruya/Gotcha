@@ -7,6 +7,16 @@
       "morning": "Quiet morning",
       "afternoon": "Quiet afternoon",
       "evening": "Quiet evening"
+    },
+    "named": {
+      "morning": "Good morning, {name}",
+      "afternoon": "Good afternoon, {name}",
+      "evening": "Good evening, {name}",
+      "quiet": {
+        "morning": "Quiet morning, {name}",
+        "afternoon": "Quiet afternoon, {name}",
+        "evening": "Quiet evening, {name}"
+      }
     }
   },
   "summary": "{total, plural, =0 {Nothing has come in yet today.} one {One conversation today, # handled without you.} other {# conversations today, {handled} handled without you.}}",
