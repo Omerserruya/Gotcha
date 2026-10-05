@@ -1395,6 +1395,80 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
   };
 }
 
+// ─── Per-day series (06 Overview, 06b) ────────────────────────
+
+/** An outbound message the AI wrote. The same marker getOverview counts by. */
+export function isAiOutbound(m: { metadata?: unknown; senderName?: string | null }): boolean {
+  const meta = (m.metadata && typeof m.metadata === "object" ? m.metadata : {}) as Record<string, unknown>;
+  return meta.source === "ai_bot" || meta.aiGenerated === true;
+}
+
+/** A conversation a person took over, judged from its current state. */
+export function wasPassedOver(c: { isHandedOver?: boolean | null; assignedAgentId?: string | null; handledBy?: string | null }): boolean {
+  return Boolean(c.isHandedOver || c.assignedAgentId || c.handledBy === "human");
+}
+
+const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * The last `days` days, one row each, oldest first (UTC days):
+ *   gotcha / team   conversations ANSWERED that day, split by who answered:
+ *                   "team" if a person sent any reply in it that day, else
+ *                   "gotcha" (only the AI replied).
+ *   alone / passedOver   conversations STARTED that day, split by whether a
+ *                   person has taken them over (handed over, assigned, or
+ *                   human-handled) - judged from their state now, since
+ *                   handover history is only recorded from 2026-10 on.
+ * Test and sandbox conversations are excluded from both.
+ */
+export async function getDailySeries(tenantId: string, days = 7) {
+  const n = Math.min(Math.max(Math.floor(days) || 7, 1), 90);
+  const end = new Date();
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate() - (n - 1)));
+
+  const [replies, started] = await Promise.all([
+    prisma.message.findMany({
+      where: {
+        tenantId,
+        direction: "OUTBOUND",
+        messageType: { not: "system" },
+        createdAt: { gte: start, lte: end },
+        conversation: { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
+      },
+      select: { conversationId: true, createdAt: true, metadata: true, senderName: true },
+      take: 50_000,
+    }),
+    prisma.conversation.findMany({
+      where: { tenantId, isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } }, createdAt: { gte: start, lte: end } },
+      select: { createdAt: true, isHandedOver: true, assignedAgentId: true, handledBy: true },
+      take: 50_000,
+    }),
+  ]);
+
+  const rows = new Map<string, { date: string; gotcha: number; team: number; alone: number; passedOver: number }>();
+  for (let i = 0; i < n; i++) {
+    const d = dayKey(new Date(start.getTime() + i * 86_400_000));
+    rows.set(d, { date: d, gotcha: 0, team: 0, alone: 0, passedOver: 0 });
+  }
+
+  // conversation x day -> did a person reply?
+  const byConvDay = new Map<string, boolean>();
+  for (const m of replies as any[]) {
+    const k = `${dayKey(m.createdAt)}|${m.conversationId}`;
+    byConvDay.set(k, (byConvDay.get(k) ?? false) || !isAiOutbound(m));
+  }
+  for (const [k, human] of byConvDay) {
+    const row = rows.get(k.slice(0, 10));
+    if (row) human ? row.team++ : row.gotcha++;
+  }
+  for (const c of started as any[]) {
+    const row = rows.get(dayKey(c.createdAt));
+    if (row) wasPassedOver(c) ? row.passedOver++ : row.alone++;
+  }
+
+  return { days: n, from: start.toISOString(), to: end.toISOString(), timezone: "UTC", series: [...rows.values()] };
+}
+
 // ─── The quiet-day sources ────────────────────────────────────
 
 /**

@@ -142,6 +142,17 @@ router.get("/time-saved", async (req: Request, res: Response) => {
   }
 });
 
+// Per-day series for the Overview chart (gotcha/team) and 06b (alone/passedOver).
+router.get("/daily", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+  try {
+    const days = Number(req.query.days ?? 7);
+    res.json({ data: await analyticsService.getDailySeries(req.tenantId!, days) });
+  } catch (err) {
+    console.error("Daily series error:", err);
+    res.status(500).json({ error: "Failed to get daily series" });
+  }
+});
+
 router.get("/overview", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const from = req.query.from as string | undefined;
