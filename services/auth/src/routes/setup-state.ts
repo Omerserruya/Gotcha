@@ -16,6 +16,7 @@ import {
   resolveTenant,
   requireOnboardingOrActiveTenant,
   computeSetupState,
+  riskGroupFor,
   type SetupFacts,
 } from "@chatcenter/shared";
 
@@ -87,7 +88,13 @@ router.get("/setup/state", async (req: Request, res: Response) => {
         // "Set or unset" is all the screen needs - it does not render the rules
         // themselves, so their content stays out of this response.
         handover_rules: hasHandoverRules(policyData) ? (policy?.updatedAt ?? null) : null,
-        approval_limits: hasApprovalLimits(policyData) ? (policy?.updatedAt ?? null) : null,
+        // Either the legacy policy fields, or - the redesign's way - the
+        // merchant putting at least one action behind "Ask me" on the tool
+        // permissions screen. The earlier of the two is when it was done.
+        approval_limits: earliest(
+          hasApprovalLimits(policyData) ? (policy?.updatedAt ?? null) : null,
+          await explicitApprovalChoiceAt(tenantId),
+        ),
         test_conversation: testConv?.createdAt ?? null,
         invite_team: teammate.length > 1 ? (teammate[1]?.createdAt ?? null) : null,
       },
@@ -118,6 +125,50 @@ function hasApprovalLimits(data: Record<string, unknown>): boolean {
     typeof data.maxDiscountPercent === "number" ||
     typeof data.refundRequiresApproval === "boolean" ||
     typeof data.maxRefundAmount === "number"
+  );
+}
+
+function earliest(...dates: Array<Date | null | undefined>): Date | null {
+  const ds = dates.filter((d): d is Date => d instanceof Date);
+  return ds.length ? new Date(Math.min(...ds.map((d) => d.getTime()))) : null;
+}
+
+/**
+ * When the merchant FIRST explicitly put an action behind approval ("Ask me"),
+ * or null if they never have.
+ *
+ * Explicit is the whole point - a step that closes by itself has told the
+ * merchant nothing. What makes a row explicit here, from how they are written:
+ *   - TenantToolPermission rows are only written by PUT /api/tool-permissions
+ *     (and the operator-run bulk migration). Nothing seeds them. A row that is
+ *     enabled, requiresApproval, on a tool that is not read-only, counts.
+ *   - TenantTool rows ARE seeded - on every connect, with configOverrides {}.
+ *     The catalogue's own "always" lives on CatalogTool.hitlPolicy, NOT on the
+ *     tenant row, so a seed never carries configOverrides.hitlPolicy. Only the
+ *     same PUT (or that migration) writes it. So a tenant tool counts when its
+ *     OVERRIDE says mode "always", it is enabled, and the catalogue calls it an
+ *     action (WRITE / DELETE / ACTION).
+ * Reads only; tenant-scoped like every other fact on this route.
+ */
+async function explicitApprovalChoiceAt(tenantId: string): Promise<Date | null> {
+  const [perms, tools] = await Promise.all([
+    prisma.tenantToolPermission.findMany({
+      where: { tenantId, enabled: true, requiresApproval: true },
+      select: { toolName: true, updatedAt: true },
+    }),
+    prisma.tenantTool.findMany({
+      where: {
+        tenantId,
+        isEnabled: true,
+        catalogTool: { category: { in: ["WRITE", "DELETE", "ACTION"] } },
+        configOverrides: { path: ["hitlPolicy", "mode"], equals: "always" },
+      },
+      select: { updatedAt: true },
+    }),
+  ]);
+  return earliest(
+    ...perms.filter((p) => riskGroupFor(p.toolName) !== "read_only").map((p) => p.updatedAt),
+    ...tools.map((t) => t.updatedAt),
   );
 }
 
