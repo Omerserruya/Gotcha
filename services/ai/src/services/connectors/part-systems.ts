@@ -42,6 +42,9 @@ import { BUSINESS_ROLES, type BusinessRole, roleAvailability } from "./business-
 import { resolveCrmVendor } from "./crm-adapter-resolver";
 import { getReturnProvider } from "../return-provider.service";
 
+/** The CRM resolver answers with a vendor; the catalogue and the screen use slugs. */
+const CRM_VENDOR_TO_SLUG: Record<string, string> = { zoho: "zoho_crm" };
+
 /** Parts whose election lives on `config.roles`, because nothing else elects them. */
 export const ROLES_BACKED_PARTS: readonly BusinessRole[] = ["ecommerce", "payments"];
 
@@ -79,6 +82,52 @@ async function rolesBackedElection(tenantId: string, part: BusinessRole): Promis
 }
 
 /**
+ * Status and config of every row a tenant has for these slugs, one query.
+ *
+ * Needed because the two delegated resolvers load ERROR rows on purpose (an
+ * expired OAuth token recovers on first use, and excluding ERROR deadlocked
+ * it), so their answer alone cannot say whether the system works right now.
+ */
+async function rowsBySlug(
+  tenantId: string,
+  slugs: string[],
+): Promise<Map<string, { status: string; config: Record<string, unknown> }>> {
+  const rows = await prisma.tenantIntegration.findMany({
+    where: { tenantId, integration: { slug: { in: slugs } } },
+    select: { status: true, config: true, integration: { select: { slug: true } } },
+  });
+  const out = new Map<string, { status: string; config: Record<string, unknown> }>();
+  for (const r of rows) {
+    const prev = out.get(r.integration.slug);
+    // A CONNECTED row wins over any other row for the same slug, matching the
+    // resolvers' own `orderBy status asc` preference.
+    if (prev && prev.status === "CONNECTED") continue;
+    out.set(r.integration.slug, {
+      status: String(r.status),
+      config: (r.config && typeof r.config === "object" ? r.config : {}) as Record<string, unknown>,
+    });
+  }
+  return out;
+}
+
+/**
+ * ★ AN INFERENCE MAY ONLY LAND ON A WORKING SYSTEM.
+ *
+ * Returns showed `shopify, inferred` while Shopify sat in ERROR: the screen
+ * named a system nobody chose AND that cannot act, as if it served the part.
+ * A merchant's explicit choice is different - it stays, and the screen says
+ * "chosen, not working". Only the guess is withdrawn.
+ */
+function unmappedInference(part: BusinessRole, slug: string, status: string | undefined): PartSystem {
+  return {
+    part,
+    slug: null,
+    source: "unmapped",
+    reason: `Nothing has been chosen for ${part}. ${slug} would be inferred, but it is ${status ? status.toLowerCase() : "not connected"}, so it does not serve this part.`,
+  };
+}
+
+/**
  * The system serving one part, as the AI should see it.
  *
  * Never throws: a resolution failure must degrade to `unmapped`, which a caller
@@ -95,9 +144,19 @@ export async function getSystemForPart(tenantId: string, part: BusinessRole): Pr
       // Delegated entirely. The CRM resolver owns absent-means-default and is
       // what every existing caller already uses, so this must not second-guess it.
       const vendor = await resolveCrmVendor(tenantId);
-      return vendor
-        ? { part, slug: vendor, source: "elected", reason: `${vendor} is the elected customer system of record.` }
-        : { part, slug: null, source: "unmapped", reason: "No customer system of record is configured." };
+      if (!vendor) {
+        return { part, slug: null, source: "unmapped", reason: "No customer system of record is configured." };
+      }
+      const slug = CRM_VENDOR_TO_SLUG[vendor] ?? vendor;
+      const row = (await rowsBySlug(tenantId, [slug])).get(slug);
+      // `useAsCrm: true` is the merchant's switch (PUT /:slug/crm-source). The
+      // resolver ALSO answers without it - first connected CRM, then Shopify by
+      // default - and that answer is a resolver's pick, not a choice.
+      if (row?.config.useAsCrm === true) {
+        return { part, slug, source: "elected", reason: `${slug} is the elected customer system of record.` };
+      }
+      if (row?.status !== "CONNECTED") return unmappedInference(part, slug, row?.status);
+      return { part, slug, source: "inferred", reason: `${slug} is used as the customer system of record by default; nobody chose it.` };
     }
 
     if (part === "returns") {
@@ -108,15 +167,21 @@ export async function getSystemForPart(tenantId: string, part: BusinessRole): Pr
       if (caps.provider === "none") {
         return { part, slug: null, source: "unmapped", reason: caps.reason };
       }
-      return {
-        part,
-        slug: caps.provider,
-        // Its own resolver decides which of these it was; `supportsCreateReturn`
-        // is not the question here, so the honest label is "inferred" unless the
-        // merchant's explicit switch is what produced it.
-        source: caps.reason.toLowerCase().includes("explicit") ? "elected" : "inferred",
-        reason: caps.reason,
-      };
+      // "Elected" means the merchant's switch, `config.returnProvider`, names
+      // this provider. This used to be read off the resolver's PROSE (does the
+      // reason contain "explicit"?), and the resolver never writes that word
+      // for a working choice - it returns the provider's own reason - so a real
+      // choice was always labelled "inferred". Read the switch itself.
+      const rows = await rowsBySlug(tenantId, ["shopify", "returngo"]);
+      const explicit = [...rows.values()]
+        .map((r) => String(r.config.returnProvider ?? "").toLowerCase().trim())
+        .find((v) => v === "shopify" || v === "returngo");
+      if (explicit === caps.provider) {
+        return { part, slug: caps.provider, source: "elected", reason: caps.reason };
+      }
+      const row = rows.get(caps.provider);
+      if (row?.status !== "CONNECTED") return unmappedInference(part, caps.provider, row?.status);
+      return { part, slug: caps.provider, source: "inferred", reason: caps.reason };
     }
 
     const elected = await rolesBackedElection(tenantId, part);

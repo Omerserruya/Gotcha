@@ -23,9 +23,27 @@ vi.mock("../services/return-provider.service", () => returnsMock);
 
 import { getSystemForPart, getBusinessCoreMap, renderBusinessCoreBlock } from "../services/connectors/part-systems";
 
+/**
+ * Rows the double serves, filtered by the REAL `where` - status and slug - so a
+ * query that forgets either is answered as the database would, not with the
+ * whole fixture. A row without `status` is CONNECTED.
+ */
+let ROWS: any[] = [];
+function servedBy(where: any) {
+  if (!where?.tenantId) throw new Error("tenant guard");
+  return ROWS.map((r) => ({ status: "CONNECTED", ...r })).filter((r) => {
+    const status = r.status;
+    if (typeof where.status === "string" && where.status !== status) return false;
+    const inSlugs = where.integration?.slug?.in;
+    if (inSlugs && !inSlugs.includes(r.integration.slug)) return false;
+    return true;
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  prismaMock.tenantIntegration.findMany.mockResolvedValue([]);
+  ROWS = [];
+  prismaMock.tenantIntegration.findMany.mockImplementation(async (a: any) => servedBy(a.where));
   crmMock.resolveCrmVendor.mockResolvedValue(null);
   returnsMock.getReturnProvider.mockResolvedValue({ provider: "none", reason: "nothing can create a return" });
 });
@@ -33,9 +51,7 @@ beforeEach(() => {
 describe("an unmapped part stays unmapped", () => {
   it("★ does NOT fall through to whatever is connected", async () => {
     // Shopify is connected and could serve ecommerce, but nobody chose it.
-    prismaMock.tenantIntegration.findMany.mockResolvedValue([
-      { config: {}, integration: { slug: "shopify" } },
-    ]);
+    ROWS = [{ config: {}, integration: { slug: "shopify" } }];
 
     const result = await getSystemForPart("t1", "ecommerce");
 
@@ -47,9 +63,7 @@ describe("an unmapped part stays unmapped", () => {
   });
 
   it("resolves a part that WAS chosen", async () => {
-    prismaMock.tenantIntegration.findMany.mockResolvedValue([
-      { config: { roles: ["ecommerce"] }, integration: { slug: "shopify" } },
-    ]);
+    ROWS = [{ config: { roles: ["ecommerce"] }, integration: { slug: "shopify" } }];
 
     const result = await getSystemForPart("t1", "ecommerce");
 
@@ -87,9 +101,10 @@ describe("an unmapped part stays unmapped", () => {
 describe("it delegates rather than deciding", () => {
   it("★ asks the CRM resolver for the crm part, and never config.roles", async () => {
     crmMock.resolveCrmVendor.mockResolvedValue("hubspot");
-    prismaMock.tenantIntegration.findMany.mockResolvedValue([
+    ROWS = [
       { config: { roles: ["crm"] }, integration: { slug: "shopify" } },
-    ]);
+      { config: {}, integration: { slug: "hubspot" } },
+    ];
 
     const result = await getSystemForPart("t1", "crm");
 
@@ -99,8 +114,12 @@ describe("it delegates rather than deciding", () => {
     expect(crmMock.resolveCrmVendor).toHaveBeenCalledWith("t1");
   });
 
-  it("★ asks the returns resolver for the returns part", async () => {
-    returnsMock.getReturnProvider.mockResolvedValue({ provider: "returngo", reason: "explicit selection" });
+  it("★ asks the returns resolver for the returns part, and a merchant's switch is ELECTED", async () => {
+    // The resolver's real reason for a working explicit choice is the
+    // provider's own sentence - it never says "explicit". The label must come
+    // from config.returnProvider, not from prose.
+    returnsMock.getReturnProvider.mockResolvedValue({ provider: "returngo", reason: "ReturnGO native." });
+    ROWS = [{ config: { returnProvider: "returngo" }, integration: { slug: "returngo" } }];
 
     const result = await getSystemForPart("t1", "returns");
 
@@ -110,6 +129,7 @@ describe("it delegates rather than deciding", () => {
 
   it("labels a capability-first returns answer as INFERRED, not chosen", async () => {
     returnsMock.getReturnProvider.mockResolvedValue({ provider: "shopify", reason: "capability-first precedence" });
+    ROWS = [{ config: {}, integration: { slug: "shopify" } }];
 
     const result = await getSystemForPart("t1", "returns");
 
@@ -123,6 +143,51 @@ describe("it delegates rather than deciding", () => {
 
     expect(result.slug).toBeNull();
     expect(result.source).toBe("unmapped");
+  });
+});
+
+describe("★ an inference never lands on a system that is not working", () => {
+  it("★ returns inferred from a Shopify in ERROR is UNMAPPED, not shopify", async () => {
+    // The live dev state that produced this: Shopify ERROR, no returnProvider
+    // switch, and the resolver (which loads ERROR rows on purpose, for token
+    // recovery) answering "shopify".
+    returnsMock.getReturnProvider.mockResolvedValue({ provider: "shopify", reason: "Shopify native returns: connected with write_returns." });
+    ROWS = [{ status: "ERROR", config: { useAsCrm: true }, integration: { slug: "shopify" } }];
+
+    const result = await getSystemForPart("t1", "returns");
+
+    expect(result).toMatchObject({ slug: null, source: "unmapped" });
+    expect(result.reason).toMatch(/shopify would be inferred, but it is error/);
+  });
+
+  it("★ a CHOSEN returns provider in ERROR stays chosen - the screen says 'not working'", async () => {
+    returnsMock.getReturnProvider.mockResolvedValue({ provider: "shopify", reason: "Shopify native returns: connected with write_returns." });
+    ROWS = [{ status: "ERROR", config: { returnProvider: "shopify" }, integration: { slug: "shopify" } }];
+
+    expect(await getSystemForPart("t1", "returns")).toMatchObject({ slug: "shopify", source: "elected" });
+  });
+
+  it("★ a CHOSEN crm (useAsCrm) in ERROR stays elected", async () => {
+    crmMock.resolveCrmVendor.mockResolvedValue("shopify");
+    ROWS = [{ status: "ERROR", config: { useAsCrm: true }, integration: { slug: "shopify" } }];
+
+    expect(await getSystemForPart("t1", "crm")).toMatchObject({ slug: "shopify", source: "elected" });
+  });
+
+  it("★ a DEFAULT crm (no useAsCrm) is inferred, and unmapped when it is in ERROR", async () => {
+    crmMock.resolveCrmVendor.mockResolvedValue("shopify");
+    ROWS = [{ status: "CONNECTED", config: {}, integration: { slug: "shopify" } }];
+    expect(await getSystemForPart("t1", "crm")).toMatchObject({ slug: "shopify", source: "inferred" });
+
+    ROWS = [{ status: "ERROR", config: {}, integration: { slug: "shopify" } }];
+    expect(await getSystemForPart("t1", "crm")).toMatchObject({ slug: null, source: "unmapped" });
+  });
+
+  it("maps the resolver's vendor to the catalogue slug (zoho -> zoho_crm)", async () => {
+    crmMock.resolveCrmVendor.mockResolvedValue("zoho");
+    ROWS = [{ config: { useAsCrm: true }, integration: { slug: "zoho_crm" } }];
+
+    expect(await getSystemForPart("t1", "crm")).toMatchObject({ slug: "zoho_crm", source: "elected" });
   });
 });
 
