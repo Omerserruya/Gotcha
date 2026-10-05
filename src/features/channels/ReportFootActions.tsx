@@ -2,7 +2,7 @@
 
 import { RotateCw } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
 
@@ -84,10 +84,47 @@ export function AddReady({
   );
 }
 
-export function RunAgain({ importId }: { readonly importId: string }) {
+/**
+ * The footer row. Run again's confirmation is a long sentence, and beside Add
+ * and Finish later it wrapped both onto several lines (measured on dev), so
+ * while it asks it IS the row; Not now gives the row back.
+ */
+export function ReportFoot({
+  importId,
+  count,
+  later,
+  noteClassName,
+}: {
+  readonly importId: string;
+  readonly count: number;
+  /** "Finish later" — a link the server renders. */
+  readonly later: ReactNode;
+  readonly noteClassName?: string;
+}) {
+  const [rerunAsking, setRerunAsking] = useState(false);
+  return (
+    <>
+      {/* Positions are fixed, so RunAgain keeps its state as the others leave. */}
+      {rerunAsking ? null : <AddReady importId={importId} count={count} />}
+      {rerunAsking ? null : later}
+      <span className={rerunAsking ? undefined : noteClassName}>
+        <RunAgain importId={importId} asking={rerunAsking} setAsking={setRerunAsking} />
+      </span>
+    </>
+  );
+}
+
+export function RunAgain({
+  importId,
+  asking,
+  setAsking,
+}: {
+  readonly importId: string;
+  readonly asking: boolean;
+  readonly setAsking: (asking: boolean) => void;
+}) {
   const t = useTranslations('channels.whatsapp.foot');
   const router = useRouter();
-  const [asking, setAsking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 

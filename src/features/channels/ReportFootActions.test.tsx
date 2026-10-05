@@ -12,7 +12,7 @@ vi.mock('./candidate-actions', () => ({ addReadyAnswers, rerunAnalysis }));
 const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }));
 
-import { AddReady, RunAgain } from './ReportFootActions';
+import { AddReady, ReportFoot } from './ReportFootActions';
 
 beforeEach(() => {
   addReadyAnswers.mockReset();
@@ -47,7 +47,14 @@ describe('★★ Add the ready ones — asks, then adds', () => {
 describe('★★ Run again — says it clears the report, then starts over', () => {
   it('the warning names what goes; yes starts it and opens 13e', async () => {
     rerunAnalysis.mockResolvedValue({ ok: true });
-    intl(<RunAgain importId="i1" />);
+    intl(
+      <ReportFoot
+        importId="i1"
+        count={3}
+        later={<a data-testid="later">Finish later</a>}
+        noteClassName="note"
+      />,
+    );
     await userEvent.click(screen.getByTestId('report-rerun'));
     expect(rerunAnalysis).not.toHaveBeenCalled();
     expect(screen.getByTestId('rerun-confirm')).toHaveTextContent('the ones you decided too');
@@ -61,10 +68,36 @@ describe('★★ Run again — says it clears the report, then starts over', () 
 
   it('still running: said, nothing cleared', async () => {
     rerunAnalysis.mockResolvedValue({ ok: false, reason: 'not_settled' });
-    intl(<RunAgain importId="i1" />);
+    intl(
+      <ReportFoot
+        importId="i1"
+        count={3}
+        later={<a data-testid="later">Finish later</a>}
+        noteClassName="note"
+      />,
+    );
     await userEvent.click(screen.getByTestId('report-rerun'));
     await userEvent.click(screen.getByTestId('rerun-yes'));
     expect(screen.getByTestId('rerun-problem')).toHaveTextContent("It's still running");
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('while it asks, the question is the row: Add and Finish later step aside, Not now brings them back', async () => {
+    intl(
+      <ReportFoot
+        importId="i1"
+        count={3}
+        later={<a data-testid="later">Finish later</a>}
+        noteClassName="note"
+      />,
+    );
+    expect(screen.getByTestId('report-bulk')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('report-rerun'));
+    expect(screen.getByTestId('rerun-confirm')).toBeInTheDocument();
+    expect(screen.queryByTestId('report-bulk')).toBeNull();
+    expect(screen.queryByTestId('later')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(screen.getByTestId('report-bulk')).toHaveTextContent('Add 3');
+    expect(screen.getByTestId('later')).toBeInTheDocument();
   });
 });

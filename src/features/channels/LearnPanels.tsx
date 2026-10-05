@@ -4,9 +4,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { humaniseCode } from '@/api/contracts/capabilities';
 import { isRunning, workDone, type ImportStatus } from '@/api/contracts/historical-import';
 import {
-  bulkWouldTake,
   groupOf,
-  inGroup,
   readyToAdd,
   variantsOf,
   type Candidate,
@@ -14,7 +12,7 @@ import {
 import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
-import { AddReady, RunAgain } from './ReportFootActions';
+import { ReportFoot } from './ReportFootActions';
 import { SuggestionActions } from './SuggestionActions';
 import styles from './Channels.module.css';
 
@@ -354,7 +352,6 @@ export async function ReportPanel({
     ? (tab as ReportTab)
     : 'needs_a_look';
   const shown = inTab(current);
-  const bulk = bulkWouldTake(inGroup(candidates, 'needs_a_look'), bulkMinConfidence);
   const ready = inTab('ready_to_add');
 
   /* 02: a chip only for a reason to look — never a figure, which sits on the right. */
@@ -525,19 +522,21 @@ export async function ReportPanel({
       </div>
 
       <footer className={drawer.drawerFoot}>
-        {/* Live (Omer): asks, then adds every ready answer. */}
-        <AddReady importId={status.id} count={bulk} />
-        <Link
-          href={{ pathname: '/settings/channels', query: { panel: 'whatsapp' } }}
-          className={drawer.drawerCancel}
-          scroll={false}
-        >
-          {t('learn.later')}
-        </Link>
-        {/* Live (Omer): asks — it clears this report first — then runs again. */}
-        <span className={drawer.drawerFootNote}>
-          <RunAgain importId={status.id} />
-        </span>
+        {/* Live (Omer): each asks first; Run again's question takes the whole row. */}
+        <ReportFoot
+          importId={status.id}
+          count={ready.length}
+          noteClassName={drawer.drawerFootNote}
+          later={
+            <Link
+              href={{ pathname: '/settings/channels', query: { panel: 'whatsapp' } }}
+              className={drawer.drawerCancel}
+              scroll={false}
+            >
+              {t('learn.later')}
+            </Link>
+          }
+        />
       </footer>
     </>
   );

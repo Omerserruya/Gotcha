@@ -300,10 +300,15 @@ export function bulkWouldTake(
 /**
  * 13f's "Ready to add": waiting, and safe to add with one press — by the
  * server's own verdict (`bulkApprovable`), or, from a service that predates
- * it, by the floor it sent. A live lookup always needs a look.
+ * it, by the floor it sent.
+ *
+ * A live lookup is ready too, because the route takes it: `bulk-approve` asks
+ * only for no conflict and the floor, and writes "check before promising" into
+ * the document itself. Holding it back here made the tab say 2 while the
+ * button — and the route — added 3. Its "live" chip still says so on the card.
  */
 export function readyToAdd(candidate: Candidate, minConfidence: number | undefined): boolean {
-  if (groupOf(candidate) !== 'needs_a_look' || candidate.requiresLiveLookup) return false;
+  if (groupOf(candidate) !== 'needs_a_look') return false;
   if (candidate.bulkApprovable !== undefined) return candidate.bulkApprovable;
   return (
     minConfidence !== undefined &&

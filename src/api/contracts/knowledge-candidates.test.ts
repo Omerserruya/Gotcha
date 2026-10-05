@@ -275,8 +275,9 @@ describe('★★ 13f “Ready to add” — the server’s verdict, then its flo
     expect(readyToAdd(c({}), undefined)).toBe(false);
   });
 
-  it('a live lookup, or anything not waiting, is never ready to add', () => {
-    expect(readyToAdd(c({ requiresLiveLookup: true, bulkApprovable: true }), 0.8)).toBe(false);
+  it('a live lookup is ready when the route takes it — the route writes the caveat in; anything not waiting never is', () => {
+    expect(readyToAdd(c({ requiresLiveLookup: true, bulkApprovable: true }), 0.8)).toBe(true);
+    expect(readyToAdd(c({ requiresLiveLookup: true }), 0.8)).toBe(true);
     expect(readyToAdd(c({ status: 'APPROVED' }), 0.8)).toBe(false);
   });
 });

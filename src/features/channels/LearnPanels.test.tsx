@@ -15,8 +15,13 @@ vi.mock('./SuggestionActions', () => ({
 }));
 /* The foot's two actions reach the server; they have their own tests. */
 vi.mock('./ReportFootActions', () => ({
-  AddReady: ({ count }: { count: number }) => <span data-testid="report-bulk" data-count={count} />,
-  RunAgain: () => <span data-testid="report-rerun" />,
+  ReportFoot: ({ count, later }: { count: number; later: ReactNode }) => (
+    <>
+      <span data-testid="report-bulk" data-count={count} />
+      {later}
+      <span data-testid="report-rerun" />
+    </>
+  ),
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
@@ -255,6 +260,26 @@ describe('★ 13f — the report, no paragraphs', () => {
     expect(screen.getByTestId('report-bulk')).toBeInTheDocument();
     expect(screen.getByTestId('report-rerun')).toBeInTheDocument();
     expect(screen.getByTestId('report-preview')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('★ the button counts what the tab shows — what the route takes, a live lookup included (measured on dev: 3 against 2)', async () => {
+    render(
+      await ReportPanel({
+        status: status({ stage: 'ready' }),
+        candidates: [
+          candidate({ id: 'r1', confidence: 0.88, bulkApprovable: true }),
+          candidate({ id: 'r3', confidence: 0.91, bulkApprovable: true }),
+          candidate({ id: 'r5', confidence: 0.85, requiresLiveLookup: true, bulkApprovable: true }),
+          candidate({ id: 'r6', confidence: 0.5, bulkApprovable: false }),
+        ],
+        bulkMinConfidence: 0.8,
+        tab: 'ready_to_add',
+      }),
+    );
+    expect(screen.getByTestId('report-tab-ready_to_add')).toHaveTextContent('Ready to add3');
+    expect(screen.getByTestId('report-bulk')).toHaveAttribute('data-count', '3');
+    // Still said on its card: it depends on something live.
+    expect(screen.getByTestId('candidate-r5')).toHaveTextContent('Needs a live check');
   });
 
   it('the only sentence is the head’s; the body has no paragraph of prose', async () => {
