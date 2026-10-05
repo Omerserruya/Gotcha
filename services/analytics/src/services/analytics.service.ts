@@ -364,6 +364,72 @@ export async function getOverview(tenantId: string, from?: string, to?: string) 
   };
 }
 
+const VAGUE_INTENTS = new Set(["unknown", "general"]);
+export function isVagueIntent(intent: string | null | undefined): boolean {
+  return intent == null || VAGUE_INTENTS.has(String(intent).trim().toLowerCase());
+}
+
+/** Trim, collapse whitespace, cap; "" when there is nothing a person wrote. */
+export function normalizeQuestion(body: string | null | undefined): string {
+  return String(body ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+/**
+ * The most common FIRST inbound message of the conversations in each vague
+ * intent group - the customer's opening question, in their words. Deduped
+ * case-insensitively; the first spelling seen is the one shown. Up to 5 per
+ * group. Test and sandbox conversations are excluded: a rehearsal is not
+ * something a customer asked.
+ */
+export async function customerQuestionExamples(
+  tenantId: string,
+  dateFilter: { gte: Date; lte: Date },
+  intents: string[],
+  perGroup = 5,
+): Promise<Map<string, Array<{ question: string; count: number }>>> {
+  const out = new Map<string, Array<{ question: string; count: number }>>();
+  const rows = await prisma.conversationIntelligence.findMany({
+    where: { tenantId, analyzedAt: dateFilter, detectedIntent: { in: intents } },
+    select: { conversationId: true, detectedIntent: true },
+    take: 2000,
+  });
+  if (rows.length === 0) return out;
+  const intentByConversation = new Map(rows.map((r: any) => [r.conversationId, r.detectedIntent as string]));
+
+  const messages = await prisma.message.findMany({
+    where: {
+      tenantId,
+      direction: "INBOUND",
+      conversationId: { in: [...intentByConversation.keys()] },
+      conversation: { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
+    },
+    select: { conversationId: true, body: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const firstByConversation = new Map<string, string>();
+  for (const m of messages as any[]) {
+    if (firstByConversation.has(m.conversationId)) continue;
+    const q = normalizeQuestion(m.body);
+    if (q.length >= 2) firstByConversation.set(m.conversationId, q);
+  }
+
+  const tallies = new Map<string, Map<string, { question: string; count: number }>>();
+  for (const [conversationId, question] of firstByConversation) {
+    const intent = intentByConversation.get(conversationId)!;
+    const byKey = tallies.get(intent) ?? new Map();
+    const key = question.toLowerCase();
+    const cur = byKey.get(key);
+    if (cur) cur.count++;
+    else byKey.set(key, { question, count: 1 });
+    tallies.set(intent, byKey);
+  }
+  for (const [intent, byKey] of tallies) {
+    out.set(intent, [...byKey.values()].sort((a, b) => b.count - a.count).slice(0, perGroup));
+  }
+  return out;
+}
+
 export async function getTopQuestions(tenantId: string, from?: string, to?: string, limit = 10) {
   const { fromDate, toDate } = parseDateRange(from, to);
   const dateFilter = { gte: fromDate, lte: toDate };
@@ -378,12 +444,19 @@ export async function getTopQuestions(tenantId: string, from?: string, to?: stri
   });
 
   if (intentGroups.length > 0) {
-    return intentGroups.map((g: { detectedIntent: string | null; _count: { detectedIntent: number } }) => ({
+    const groups = intentGroups.map((g: { detectedIntent: string | null; _count: { detectedIntent: number } }) => ({
       question: g.detectedIntent,
       intent: g.detectedIntent,
       count: g._count.detectedIntent,
       automatable: g._count.detectedIntent > 5,
     }));
+    // A group named "unknown" or "general" says nothing a person can read.
+    // For those, add what the customers actually wrote (additive: the fields
+    // above are unchanged).
+    const vague = groups.filter((g: any) => isVagueIntent(g.intent));
+    if (vague.length === 0) return groups;
+    const examplesByIntent = await customerQuestionExamples(tenantId, dateFilter, vague.map((g: any) => g.intent as string));
+    return groups.map((g: any) => (isVagueIntent(g.intent) ? { ...g, examples: examplesByIntent.get(g.intent) ?? [] } : g));
   }
 
   // Fallback: analyze inbound message bodies
