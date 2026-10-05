@@ -44,6 +44,19 @@
   }
 
   /* A mark inside its tile; the tile's own ground shows around it. */
+  /* 14's pill tile: 26px, white, a hairline — the mark at 14px. */
+  .pillTile {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    flex: none;
+    inline-size: 26px;
+    block-size: 26px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background-color: var(--panel-field);
+  }
+
   .logo {
     inline-size: 72%;
     block-size: 72%;

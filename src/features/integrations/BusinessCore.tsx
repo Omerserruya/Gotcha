@@ -8,12 +8,12 @@ import {
   electedElsewhere,
   isInferred,
   partState,
-  USE_CASES,
   type BusinessCore as Core,
   type RolePart,
 } from '@/api/contracts/business-core';
 
-import { ElectPart } from './ElectPart';
+import { ElectPart, SystemPill } from './ElectPart';
+import { UseCaseSwitch } from './UseCaseSwitch';
 import styles from './BusinessCore.module.css';
 
 /**
@@ -80,24 +80,8 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
       */}
       <section className={styles.useCaseRow} data-testid="core-use-case">
         <h2 className={styles.useCaseLabel}>{t('useCase.heading')}</h2>
-        {/* What the choice does rides on the control; unset says so below it. */}
-        <ul className={styles.useCases} title={t('useCase.hint')}>
-          {USE_CASES.map((useCase) => (
-            <li
-              key={useCase}
-              className={styles.useCase}
-              data-testid={`core-use-case-${useCase}`}
-              data-selected={core.useCase === useCase}
-            >
-              {t(`useCase.${useCase}`)}
-            </li>
-          ))}
-        </ul>
-        {core.useCase === null ? (
-          <p className={styles.hint} data-testid="core-use-case-unset">
-            {t('useCase.unset')}
-          </p>
-        ) : null}
+        {/* Live (backend PUT business-core/use-case): the chosen one dark. */}
+        <UseCaseSwitch current={core.useCase} />
       </section>
 
       {/*
@@ -485,14 +469,12 @@ function Part({
         {electable(part) ? (
           <ElectPart part={part} />
         ) : part.elected ? (
-          <span className={styles.system}>{part.elected.name}</span>
+          <SystemPill slug={part.elected.slug} name={part.elected.name} />
         ) : failing ? (
           // Broken, not absent: 02 names the system that is not responding.
-          <span className={styles.system} data-testid={`core-system-${part.role}`}>
-            {failing.name}
-          </span>
+          <SystemPill slug={failing.slug} name={failing.name} testId={`core-system-${part.role}`} />
         ) : (
-          <span className={styles.systemNone}>—</span>
+          <SystemPill slug={null} name={null} />
         )}
       </div>
 

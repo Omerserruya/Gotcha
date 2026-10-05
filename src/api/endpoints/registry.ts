@@ -676,6 +676,11 @@ export const integrationEndpoints = {
    * `CRM_ELECTED_ELSEWHERE` — that one is `PUT /:slug/crm-source`.
    */
   electRole: () => endpoint('/api/integrations/business-core/role'),
+  /**
+   * 14b: what the business runs on — `PUT { useCase }`, one of ecommerce /
+   * leads / both; 422 otherwise. Same permission as electing a part.
+   */
+  useCase: () => endpoint('/api/integrations/business-core/use-case'),
 } as const;
 
 /**

@@ -9,6 +9,7 @@ import messages from '@/i18n/messages/en/business-core.json';
 import { BusinessCore } from './BusinessCore';
 
 vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ refresh: () => undefined }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}
@@ -190,10 +191,9 @@ describe('the use case decides which parts are asked about', () => {
   it('explains why the question is asked at all', async () => {
     await render14();
     // S2: on the control it explains, not a sentence beside it.
-    expect(screen.getByTestId('core-use-case').querySelector('ul')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/never asked about shipping or returns/i),
-    );
+    expect(
+      screen.getByTestId('core-use-case').querySelector('[role="radiogroup"]'),
+    ).toHaveAttribute('title', expect.stringMatching(/never asked about shipping or returns/i));
   });
 });
 

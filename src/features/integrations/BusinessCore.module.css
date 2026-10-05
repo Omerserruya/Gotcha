@@ -58,9 +58,18 @@
 
   .useCase {
     padding: var(--space-6) 11px;
+    border: 0;
     border-radius: 7px;
+    background: none;
+    font: inherit;
     font-size: var(--font-size-label);
     color: var(--text-body);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .useCase:disabled {
+    cursor: progress;
   }
 
   .useCase[data-selected='true'] {
@@ -227,64 +236,118 @@
     color: var(--text-subtle);
   }
 
-  /* ── 14c · the election control ───────────────────────────────────────── */
+  /* ── 14 / 14c · the system pill and its menu ───────────────────────────── */
 
-  .elect {
-    margin-block-start: var(--space-8);
+  /* 02: 240 wide, a hairline, radius 10, `4px 10px 4px 4px` — the row's height. */
+  .pickBox {
+    position: relative;
+  }
+
+  .pill {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-8);
-  }
-
-  .electLabel {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-8);
-  }
-
-  .electLabelText {
-    font-size: var(--font-size-caption);
-    color: var(--text-subtle);
-  }
-
-  .electSelect {
-    font: inherit;
-    font-size: var(--font-size-meta);
-    padding: var(--space-4) var(--space-8);
+    gap: 9px;
+    inline-size: 240px;
+    padding: 4px var(--space-10) 4px 4px;
     border: 1px solid var(--border-default);
-    border-radius: var(--radius-control);
-    background: var(--panel-field);
+    border-radius: 10px;
+    background-color: var(--panel-field);
+    font: inherit;
+    text-align: start;
     color: var(--text-primary);
+    line-height: normal;
+    cursor: pointer;
   }
 
-  .electSave:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .pill[data-static] {
+    cursor: default;
   }
 
-  .electConnect {
-    font-size: var(--font-size-caption);
+  .pill[data-problem] {
+    border-color: var(--intent-blocked-text);
+  }
+
+  .pill:disabled {
+    cursor: progress;
+  }
+
+  .pillName {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    font-size: 12.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .pillChevron {
+    flex: none;
     color: var(--text-subtle);
   }
 
-  /* The displacement sentence. Full contrast: it names a change. */
-  .electOk {
-    flex-basis: 100%;
-    margin: 0;
-    font-size: var(--font-size-caption);
-    /* ★ The comment above asked for full contrast and the token that would
-       have given it does not exist, so this sentence has been inheriting
-       whatever its parent had — read as a caption, which is the one thing it
-       says it must not be. */
-    color: var(--text-primary);
+  /* 14c's menu: white, radius 13, a soft shadow, "Connected in Integrations". */
+  .pickMenu {
+    position: absolute;
+    inset-block-start: calc(100% + 6px);
+    inset-inline: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px;
+    border: 1px solid var(--border-default);
+    border-radius: 13px;
+    background-color: var(--panel-field);
+    box-shadow: 0 18px 44px rgb(18 18 18 / 16%);
+    line-height: normal;
   }
 
-  .electError {
-    flex-basis: 100%;
+  .pickEyebrow {
     margin: 0;
+    padding: var(--space-8) var(--space-10) 4px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .pickList {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .pickOption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    inline-size: 100%;
+    padding: var(--space-8) var(--space-10);
+    border: 0;
+    border-radius: 9px;
+    background: none;
+    font: inherit;
+    text-align: start;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .pickOption[aria-selected='true'],
+  .pickOption:hover {
+    background-color: var(--table-head-surface);
+  }
+
+  .pickFoot {
+    margin: 4px 0 0;
+    padding: var(--space-8) var(--space-10) 4px;
+    border-block-start: 1px solid var(--border-subtle);
     font-size: var(--font-size-caption);
-    color: var(--intent-blocked-text);
+    color: var(--text-subtle);
   }
 
   .partPurpose {
@@ -294,19 +357,11 @@
     color: var(--text-subtle);
   }
 
-  /* The system playing a part: a 240 tile, bordered, radius 10. */
-  .system,
+  /* Nobody plays the part: the pill holds "—". */
   .systemNone {
-    display: block;
-    padding: var(--space-8) var(--space-10);
-    border: 1px solid var(--border-default);
-    border-radius: 10px;
-    font-size: var(--font-size-meta);
-    color: var(--text-primary);
-  }
-
-  .systemNone {
-    border-style: dashed;
+    flex: 1;
+    padding-inline-start: 6px;
+    font-size: 12.5px;
     color: var(--text-faint);
   }
 

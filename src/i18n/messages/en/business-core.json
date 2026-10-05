@@ -8,7 +8,12 @@
     "ecommerce": "Online store",
     "leads": "Leads & sales",
     "both": "Both",
-    "unset": "Choose one to see the parts that apply to you."
+    "unset": "Choose one to see the parts that apply to you.",
+    "changes": "Changing it adds or hides parts below",
+    "error": {
+      "forbidden": "You don’t have permission to change this.",
+      "failed": "That didn’t save. Nothing was changed."
+    }
   },
   "part": {
     "ecommerce": "Store",
@@ -49,7 +54,6 @@
   "elect": {
     "label": "Which system does this",
     "none": "Not chosen",
-    "save": "Save",
     "saving": "Saving…",
     "saved": "Saved.",
     "replaced": "Saved. It was {name} before.",
@@ -57,7 +61,8 @@
     "error": {
       "notConnected": "That system stopped being connected while this page was open, so it can't be used here yet. Fix it in the marketplace and come back.",
       "failed": "That didn't save. Nothing was changed."
-    }
+    },
+    "connectedHeading": "Connected in Integrations"
   },
   "returns": {
     "elsewhere": "Returns are chosen on their own switch, not here — an explicit choice there wins over whatever GOTCHA would otherwise fall back to."

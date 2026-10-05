@@ -41,12 +41,15 @@ export function IntegrationLogo({
 }: {
   /** `null` for GOTCHA's own built-in actions. */
   readonly slug: string | null;
-  readonly size: 'rail' | 'head';
+  /** `pill`: 14's 26px tile inside a system pill. */
+  readonly size: 'rail' | 'head' | 'pill';
 }) {
   const file = slug ? INTEGRATION_LOGOS[slug] : undefined;
   return (
     <span
-      className={size === 'rail' ? styles.railTile : styles.systemTile}
+      className={
+        size === 'rail' ? styles.railTile : size === 'pill' ? styles.pillTile : styles.systemTile
+      }
       aria-hidden="true"
       data-logo={file ? slug : 'none'}
     >
@@ -55,7 +58,7 @@ export function IntegrationLogo({
         // eslint-disable-next-line @next/next/no-img-element
         <img className={styles.logo} src={appPath(`/integrations/${file}`)} alt="" />
       ) : (
-        <Plug className={styles.logoIcon} size={size === 'rail' ? 12 : 18} strokeWidth={1.8} />
+        <Plug className={styles.logoIcon} size={size === 'head' ? 18 : 12} strokeWidth={1.8} />
       )}
     </span>
   );

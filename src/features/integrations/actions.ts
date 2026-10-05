@@ -4,7 +4,13 @@ import { revalidatePath } from 'next/cache';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
-import { electionResultSchema, type ElectionResult } from '@/api/contracts/business-core';
+import { z } from 'zod';
+
+import {
+  electionResultSchema,
+  type ElectionResult,
+  type UseCase,
+} from '@/api/contracts/business-core';
 import { integrationEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
@@ -85,5 +91,30 @@ export async function electRole(role: string, slug: string): Promise<ElectResult
     await signInIfSignedOut(cause);
     logger.warn('business_core.elect_failed', { cause, role });
     return classify(cause);
+  }
+}
+
+export type UseCaseResult =
+  { readonly ok: true } | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
+
+/**
+ * 14b's switch — what the business runs on. It decides which parts are asked
+ * about at all, so the page is re-read after it lands.
+ */
+export async function setUseCase(useCase: UseCase): Promise<UseCaseResult> {
+  try {
+    await serverApi().put({
+      endpoint: integrationEndpoints.useCase(),
+      body: { useCase },
+      payload: z.unknown(),
+      raw: true,
+    });
+    revalidatePath('/[locale]/(app)/settings/systems', 'page');
+    return { ok: true };
+  } catch (cause: unknown) {
+    await signInIfSignedOut(cause);
+    logger.warn('business_core.use_case_failed', { cause, useCase });
+    if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
+    return { ok: false, reason: 'failed' };
   }
 }

@@ -10,6 +10,7 @@ import capabilities from '@/i18n/messages/en/capabilities.json';
 import messages from '@/i18n/messages/en/business-core.json';
 
 vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ refresh: () => undefined }),
   Link: ({
     href,
     children,
@@ -56,7 +57,10 @@ vi.mock('@/features/capabilities/PermissionChoice', () => ({
     />
   ),
 }));
-vi.mock('./ElectPart', () => ({ ElectPart: () => <div data-testid="elect" /> }));
+vi.mock('./ElectPart', () => ({
+  ElectPart: () => <div data-testid="elect" />,
+  SystemPill: () => <span />,
+}));
 
 import { AcrossDrawer } from './AcrossDrawer';
 import { BusinessCore } from './BusinessCore';
