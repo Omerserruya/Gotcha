@@ -1398,6 +1398,14 @@
     gap: 18px;
   }
 
+  /* Omer, 13c: one quiet line under the two — the subtle colour, 11.5px. */
+  .pathsAgain {
+    margin: 0;
+    color: var(--text-subtle);
+    font-size: var(--font-size-caption);
+    line-height: normal;
+  }
+
   /* 02: radius 13, `16px 18px`; the chosen one outlined dark. */
   .pathCard {
     display: flex;

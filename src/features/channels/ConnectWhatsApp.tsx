@@ -151,6 +151,10 @@ export function ConnectWhatsApp({
                 </button>
               ))}
             </div>
+            {/* Omer, 13c: Meta asks the same question in its window. */}
+            <p className={styles.pathsAgain} data-testid="paths-again">
+              {t('where.again')}
+            </p>
             <div className={styles.needs}>
               <p className={styles.needsTitle}>{t('needs.title')}</p>
               <ul>

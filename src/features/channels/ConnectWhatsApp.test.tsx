@@ -92,6 +92,10 @@ describe('★★ 13c — one question before Meta', () => {
       screen.getByTestId('connect-steps').querySelector('[aria-current="step"]'),
     ).toHaveTextContent('Where it lives');
     expect(screen.getByTestId('path-business_app')).toHaveAttribute('aria-checked', 'true');
+    // Omer: Meta asks the same thing again — said once, quietly, under the two.
+    expect(screen.getByTestId('paths-again')).toHaveTextContent(
+      'Meta asks this again in its window — pick the same answer there.',
+    );
     await userEvent.click(screen.getByTestId('path-new'));
     expect(screen.getByTestId('path-new')).toHaveAttribute('aria-checked', 'true');
     expect(login).not.toHaveBeenCalled();

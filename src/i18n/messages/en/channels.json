@@ -316,7 +316,8 @@
           "body": "The number moves fully to GOTCHA and can't be used in the app afterwards. There's no history to import."
         },
         "note": "A Meta window opens. Finish there and you'll land back here to pick the number.",
-        "continue": "Continue with Meta"
+        "continue": "Continue with Meta",
+        "again": "Meta asks this again in its window — pick the same answer there."
       },
       "needs": {
         "title": "You'll need",
