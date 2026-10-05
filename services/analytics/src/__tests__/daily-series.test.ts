@@ -39,7 +39,7 @@ vi.mock("@chatcenter/shared", () => ({
   },
 }));
 
-import { getDailySeries } from "../services/analytics.service";
+import { getDailySeries, isAiOutbound } from "../services/analytics.service";
 
 const today = new Date();
 const dayAgo = (n: number, h = 10) => new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - n, h));
@@ -78,5 +78,14 @@ describe("getDailySeries", () => {
   it("caps the window at 90 days and floors at 1", async () => {
     expect((await getDailySeries("T", 500)).series).toHaveLength(90);
     expect((await getDailySeries("T", 0)).series).toHaveLength(7);
+  });
+});
+
+describe("isAiOutbound - every marker the bot writes", () => {
+  it("★ an approval continuation and a plain 'AI Bot' message are the AI, not a person", () => {
+    expect(isAiOutbound({ metadata: { source: "approval_continuation" }, senderName: "AI Bot" })).toBe(true);
+    expect(isAiOutbound({ metadata: {}, senderName: "AI Bot" })).toBe(true);
+    expect(isAiOutbound({ metadata: { aiGenerated: true } })).toBe(true);
+    expect(isAiOutbound({ metadata: {}, senderName: "dana@shop" })).toBe(false);
   });
 });

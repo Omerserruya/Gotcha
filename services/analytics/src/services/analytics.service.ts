@@ -1397,10 +1397,20 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
 
 // ─── Per-day series (06 Overview, 06b) ────────────────────────
 
-/** An outbound message the AI wrote. The same marker getOverview counts by. */
+/**
+ * An outbound message the AI sent. Live data has three markers, and checking
+ * one of them counted the bot's own post-approval messages as a person's:
+ *   metadata.source "ai_bot"                 the bot's replies
+ *   metadata.source "approval_continuation"  the bot telling the customer the
+ *                                            outcome of an approved action
+ *   senderName "AI Bot"                      every bot path writes it
+ * (+ metadata.aiGenerated). Everything else outbound and not a system event
+ * is a person.
+ */
+const AI_SOURCES = new Set(["ai_bot", "approval_continuation"]);
 export function isAiOutbound(m: { metadata?: unknown; senderName?: string | null }): boolean {
   const meta = (m.metadata && typeof m.metadata === "object" ? m.metadata : {}) as Record<string, unknown>;
-  return meta.source === "ai_bot" || meta.aiGenerated === true;
+  return AI_SOURCES.has(String(meta.source ?? "")) || meta.aiGenerated === true || m.senderName === "AI Bot";
 }
 
 /** A conversation a person took over, judged from its current state. */
