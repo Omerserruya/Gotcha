@@ -89,7 +89,9 @@
       "confirm": "Delete",
       "cancel": "Keep it",
       "selected": "{count} selected — right-click for actions",
-      "clearSelection": "Clear the selection"
+      "clearSelection": "Clear the selection",
+      "stopAi": "Stop AI",
+      "backToAi": "Back to the AI"
     }
   },
   "identity": {

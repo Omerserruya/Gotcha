@@ -89,7 +89,9 @@
       "confirm": "מחיקה",
       "cancel": "השארה",
       "selected": "{count} נבחרו — קליק ימני לפעולות",
-      "clearSelection": "ניקוי הבחירה"
+      "clearSelection": "ניקוי הבחירה",
+      "stopAi": "עצירת ה-AI",
+      "backToAi": "החזרה ל-AI"
     }
   },
   "identity": {

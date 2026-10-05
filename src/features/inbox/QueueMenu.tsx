@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, CornerUpLeft, Trash2, UserPlus, Users } from 'lucide-react';
+import { Bot, Check, CornerUpLeft, Hand, Trash2, UserPlus, Users } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 
@@ -21,6 +21,7 @@ import {
   closeConversation,
   deleteConversation,
   releaseConversation,
+  returnToAi,
   transferConversation,
   type VerbResult,
 } from './conversation-actions';
@@ -124,7 +125,13 @@ export function QueueMenu({
   const removing = byId(plan.remove);
   const stillOpen = removing.filter((row) => row.status !== 'CLOSED').length;
 
-  const anyFirst = plan.assignToMe.length + plan.assignToSomeone.length + plan.release.length > 0;
+  const anyFirst =
+    plan.assignToMe.length +
+      plan.assignToSomeone.length +
+      plan.release.length +
+      plan.stopAi.length +
+      plan.backToAi.length >
+    0;
   const anySecond = plan.resolve.length > 0;
 
   return (
@@ -201,6 +208,29 @@ export function QueueMenu({
             >
               <CornerUpLeft size={13} aria-hidden="true" />
               {t('release')}
+            </ContextMenuItem>
+          ) : null}
+
+          {/* Omer: Stop AI on what the AI is driving; Back to the AI once taken. */}
+          {plan.stopAi.length > 0 ? (
+            <ContextMenuItem
+              data-testid="menu-stop-ai"
+              disabled={busy}
+              onSelect={() => void run(plan.stopAi, claimConversation)}
+            >
+              <Hand size={13} aria-hidden="true" />
+              {t('stopAi')}
+            </ContextMenuItem>
+          ) : null}
+
+          {plan.backToAi.length > 0 ? (
+            <ContextMenuItem
+              data-testid="menu-back-to-ai"
+              disabled={busy}
+              onSelect={() => void run(plan.backToAi, returnToAi)}
+            >
+              <Bot size={13} aria-hidden="true" />
+              {t('backToAi')}
             </ContextMenuItem>
           ) : null}
 

@@ -65,3 +65,36 @@ describe('★★ an item is offered only where its route will act', () => {
     expect(isAdmin('admin')).toBe(false);
   });
 });
+
+describe('★★ Omer: Stop AI where the AI is driving; Back to the AI once taken', () => {
+  const ai = (id: string, over: Partial<MenuRow> = {}) =>
+    row(id, { assignedAiAgentId: 'bot', isHandedOver: false, ...over });
+
+  it('the AI is driving: Stop AI — and not also "Assign to me", the same route twice', () => {
+    const plan = menuPlan([ai('a'), row('b')], agent);
+    expect(plan.stopAi).toEqual(['a']);
+    expect(plan.assignToMe).toEqual(['b']);
+  });
+
+  it('handed over with an AI to go back to: Back to the AI; no AI on it: nothing to go back to', () => {
+    const plan = menuPlan(
+      [ai('a', { isHandedOver: true }), row('b', { isHandedOver: true })],
+      agent,
+    );
+    expect(plan.backToAi).toEqual(['a']);
+    expect(plan.stopAi).toEqual([]);
+  });
+
+  it('a closed conversation offers neither', () => {
+    const plan = menuPlan(
+      [ai('a', { status: 'CLOSED' }), ai('b', { status: 'CLOSED', isHandedOver: true })],
+      agent,
+    );
+    expect(plan.stopAi).toEqual([]);
+    expect(plan.backToAi).toEqual([]);
+  });
+
+  it('handledBy ai_agent counts as the AI driving even without an assigned id', () => {
+    expect(menuPlan([row('a', { handledBy: 'ai_agent' })], agent).stopAi).toEqual(['a']);
+  });
+});

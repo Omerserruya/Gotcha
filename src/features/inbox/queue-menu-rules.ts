@@ -14,19 +14,26 @@
  *   Assign to someone ›   /reassign   an ADMIN, or the person holding it —
  *                                     the route 403s anyone else
  *   Put back in the queue /release    held by somebody; by them or an ADMIN
+ *   Stop AI               /claim      the AI is driving it (Omer) — on those
+ *                                     rows it stands in for "Assign to me":
+ *                                     the same route, said for what it does
+ *   Back to the AI        /return-to-ai  taken from an AI that is still on it
  *   Mark resolved         /close      anything not already CLOSED
  *   Delete                DELETE      ADMIN and SYSTEM_ADMIN only — the route
  *                                     403s everyone else
  *
- * Not here, and on purpose (Omer's rule, until Backend makes them live):
- * Pause the AI here (no backend), Mark as unread and Archive (routes written,
- * not deployed, and nothing reads `archivedAt`).
+ * Not here, and on purpose: Mark as unread and Archive — the routes exist,
+ * Omer did not ask for them (2026-10-05).
  */
 
 export interface MenuRow {
   readonly id: string;
   readonly status: string;
   readonly assignedAgentId: string | null;
+  /** The AI employee on it, and whether a person has taken it from the AI. */
+  readonly assignedAiAgentId?: string | null;
+  readonly isHandedOver?: boolean;
+  readonly handledBy?: string | null;
 }
 
 export interface MenuViewer {
@@ -40,6 +47,8 @@ export interface MenuPlan {
   readonly assignToMe: readonly string[];
   readonly assignToSomeone: readonly string[];
   readonly release: readonly string[];
+  readonly stopAi: readonly string[];
+  readonly backToAi: readonly string[];
   readonly resolve: readonly string[];
   readonly remove: readonly string[];
 }
@@ -58,8 +67,19 @@ export function menuPlan(targets: readonly MenuRow[], viewer: MenuViewer): MenuP
   const mine = (row: MenuRow) => viewer.meId !== null && row.assignedAgentId === viewer.meId;
   const ids = (keep: (row: MenuRow) => boolean) => targets.filter(keep).map((row) => row.id);
 
+  const open = (row: MenuRow) => row.status !== 'CLOSED';
+  // The AI is answering it right now: nobody has taken it from the AI.
+  const aiDriving = (row: MenuRow) =>
+    open(row) &&
+    row.isHandedOver !== true &&
+    (row.handledBy === 'ai_agent' || (row.assignedAiAgentId ?? null) !== null);
+
   return {
-    assignToMe: viewer.meId === null ? [] : ids((row) => !mine(row)),
+    assignToMe: viewer.meId === null ? [] : ids((row) => !mine(row) && !aiDriving(row)),
+    stopAi: viewer.meId === null ? [] : ids(aiDriving),
+    backToAi: ids(
+      (row) => open(row) && row.isHandedOver === true && (row.assignedAiAgentId ?? null) !== null,
+    ),
     assignToSomeone: viewer.hasColleagues ? ids((row) => admin || mine(row)) : [],
     release: ids((row) => row.assignedAgentId !== null && (admin || mine(row))),
     resolve: ids((row) => row.status !== 'CLOSED'),

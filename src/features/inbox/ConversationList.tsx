@@ -506,6 +506,9 @@ export async function ConversationList({
             id: it.id,
             status: it.status,
             assignedAgentId: it.assignedAgentId,
+            assignedAiAgentId: it.assignedAiAgentId,
+            isHandedOver: it.isHandedOver,
+            handledBy: it.handledBy,
           }))}
           meId={meId}
           role={role}

@@ -184,3 +184,53 @@ describe('★ 02’s item is 30 tall, and items stack at 1px', () => {
     expect(dark).toMatch(/gap:\s*1px/);
   });
 });
+
+describe('★★ Stop AI and Back to the AI, from the menu', () => {
+  const aiRows = [
+    {
+      id: 'a1',
+      status: 'OPEN',
+      assignedAgentId: null,
+      assignedAiAgentId: 'bot',
+      isHandedOver: false,
+    },
+    {
+      id: 'a2',
+      status: 'OPEN',
+      assignedAgentId: 'me',
+      assignedAiAgentId: 'bot',
+      isHandedOver: true,
+    },
+  ];
+  const showAi = () =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <QueueMenu rows={aiRows} meId="me" role="AGENT" colleagues={[]} greeting={true}>
+          <ol>
+            {aiRows.map((row) => (
+              <li key={row.id}>
+                <a href="#" data-conversation-id={row.id} data-testid={`row-${row.id}`}>
+                  {row.id}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </QueueMenu>
+      </NextIntlClientProvider>,
+    );
+
+  it('the AI’s conversation: Stop AI takes it (claim)', async () => {
+    showAi();
+    rightClick(screen.getByTestId('row-a1'));
+    expect(screen.queryByTestId('menu-assign-me')).toBeNull();
+    await userEvent.click(await screen.findByTestId('menu-stop-ai'));
+    expect(actions.claimConversation).toHaveBeenCalledWith('a1');
+  });
+
+  it('one already taken: Back to the AI hands it back (return-to-ai)', async () => {
+    showAi();
+    rightClick(screen.getByTestId('row-a2'));
+    await userEvent.click(await screen.findByTestId('menu-back-to-ai'));
+    expect(actions.returnToAi).toHaveBeenCalledWith('a2');
+  });
+});
