@@ -154,7 +154,9 @@ router.get("/team", requirePermission("analytics:workspace:read"), async (req: R
 });
 
 // Per-day series for the Overview chart (gotcha/team) and 06b (alone/passedOver).
-router.get("/daily", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
+// NOT "/daily": that path already serves getDailyVolume to the old app (above),
+// and Express answers the first registration - this one never ran there.
+router.get("/daily-series", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
     const days = Number(req.query.days ?? 7);
     res.json({ data: await analyticsService.getDailySeries(req.tenantId!, days) });
