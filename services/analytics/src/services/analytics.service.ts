@@ -1329,7 +1329,9 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
   const aiConversations = await prisma.message.findMany({
     where: {
       tenantId,
-      conversation: { isTest: false },
+      // Sandbox rehearsals carry isTest=false; the sandbox prefix is the marker
+      // (same exclusion as /daily and /team, so the three count the same set).
+      conversation: { isTest: false, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
       direction: "OUTBOUND",
       metadata: { path: ["source"], equals: "ai_bot" },
       createdAt: dateFilter,
@@ -1346,6 +1348,7 @@ export async function getTimeSaved(tenantId: string, from?: string, to?: string)
     where: {
       tenantId,
       isTest: false,
+      NOT: { customerExternalId: { startsWith: "sandbox:" } },
       createdAt: dateFilter,
       assignedAgentId: { not: null },
       OR: [{ handledBy: "human" }, { isHandedOver: true }],
