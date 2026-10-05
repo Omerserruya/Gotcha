@@ -22,9 +22,9 @@ import type { SetupStatus, SetupStep } from '@/api/contracts/setup';
  *   handover_rules   done when the policy has `escalationKeywords` or
  *                    `blockedTopics`. Only Workspace's "Never say" writes
  *                    the second, and that is not a handover rule.
- *   approval_limits  `maxDiscountPercent` / `refundRequiresApproval` /
- *                    `maxRefundAmount` — written by `PUT /api/ai-assist/policy`,
- *                    which no screen calls.
+ *   approval_limits  the policy's limits, OR — since backend b3411ed4 — an
+ *                    action tool the merchant set to Ask me on 10 (a seed
+ *                    does not count). So 10 completes it.
  *   test_conversation  a conversation marked `isTest` — no screen makes one.
  */
 const DESTINATIONS: Record<string, string | null> = {
@@ -33,7 +33,7 @@ const DESTINATIONS: Record<string, string | null> = {
   add_knowledge: '/studio/knowledge?add=1',
   hire_employee: '/studio/employees?hire=1',
   handover_rules: null,
-  approval_limits: null,
+  approval_limits: '/studio/capabilities',
   test_conversation: null,
   invite_team: '/settings/people',
 };

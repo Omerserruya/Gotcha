@@ -261,3 +261,16 @@ describe('★ 01c corrections (second measurement)', () => {
     expect(action.getAttribute('title')).toMatch(/your own phone/);
   });
 });
+
+describe('★ approval limits are completed on 10 (backend b3411ed4)', () => {
+  it('"Set limits" opens /studio/capabilities — Ask me on an action tool closes the step', async () => {
+    await renderBlock({
+      ...status,
+      steps: [step({ id: 'approval_limits', state: 'next', estimateMinutes: 3 })],
+    });
+    expect(screen.getByTestId('step-action-approval_limits')).toHaveAttribute(
+      'href',
+      '/studio/capabilities',
+    );
+  });
+});
