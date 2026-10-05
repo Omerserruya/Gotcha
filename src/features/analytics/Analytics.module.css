@@ -484,6 +484,55 @@
     border-radius: var(--radius-card);
   }
 
+  /* 06's "Conversations a day": a white card, seven stacked columns — team light over GOTCHA dark. */
+  .dChart {
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 18px var(--space-20);
+    background-color: var(--panel-field);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    line-height: normal;
+  }
+
+  .dBars {
+    flex: 1;
+    min-block-size: 140px;
+    display: flex;
+    gap: var(--space-12);
+    margin: 18px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dBar {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dStack {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 3px;
+  }
+
+  .dLight {
+    border-radius: 3px 3px 0 0;
+    background-color: var(--channel-4);
+  }
+
+  .dDark {
+    border-radius: 0 0 3px 3px;
+    background-color: var(--channel-1);
+  }
+
   .gChartHead {
     display: flex;
     align-items: baseline;

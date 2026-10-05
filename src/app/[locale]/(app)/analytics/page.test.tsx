@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AskedAbout } from '@/features/analytics/AskedAbout';
 import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
-import { TeamLoad } from '@/features/analytics/TeamLoad';
+import { ConversationsADay } from '@/features/analytics/ConversationsADay';
 
 /**
  * Screen 06, assembled — and the test that would have said it was not.
@@ -32,12 +32,14 @@ const loadGotcha = vi.hoisted(() => vi.fn());
 const loadTeam = vi.hoisted(() => vi.fn());
 const loadSales = vi.hoisted(() => vi.fn());
 const loadTopics = vi.hoisted(() => vi.fn());
+const loadDaily = vi.hoisted(() => vi.fn());
 vi.mock('@/features/analytics/load-analytics', () => ({
   loadAnalytics,
   loadGotcha,
   loadTeam,
   loadSales,
   loadTopics,
+  loadDaily,
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
@@ -46,7 +48,7 @@ vi.mock('next-intl/server', () => ({
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 
-const PANELS = new Set<unknown>([AskedAbout, TeamLoad]);
+const PANELS = new Set<unknown>([AskedAbout, ConversationsADay]);
 
 function walk(
   node: ReactNode,
@@ -79,13 +81,14 @@ const inspect = (tree: ReactNode) => {
 };
 
 const page = async (data: Record<string, unknown> = {}) => {
-  loadAnalytics.mockResolvedValue({ agents: [], topics: [], ...data });
+  loadAnalytics.mockResolvedValue({ topics: [], ...data });
   const { default: Page } = await import('./page');
   return Page();
 };
 
 beforeEach(() => {
   loadAnalytics.mockReset();
+  loadDaily.mockReset().mockResolvedValue(null);
 });
 
 describe('★★ the screen exists, which is what was missing', () => {
@@ -93,7 +96,7 @@ describe('★★ the screen exists, which is what was missing', () => {
     const { mounted } = inspect(await page());
 
     expect(mounted, 'AskedAbout is not on the page').toContain(AskedAbout);
-    expect(mounted, 'TeamLoad is not on the page').toContain(TeamLoad);
+    expect(mounted, '"Conversations a day" is not on the page').toContain(ConversationsADay);
   });
 
   it('★★ neither panel is inside the other', async () => {
@@ -109,7 +112,7 @@ describe('★★ the screen exists, which is what was missing', () => {
      * permission look like a screen that is still being built — which is
      * exactly what this screen looked like an hour ago.
      */
-    const { mounted } = inspect(await page({ agents: null, topics: null }));
+    const { mounted } = inspect(await page({ topics: null }));
     expect(mounted).toHaveLength(2);
   });
 });
@@ -164,8 +167,9 @@ describe('★★ 06’s summary gets the week the loader read', () => {
 
 describe('★★ 06b — ?tab=gotcha has its own reads and its own parts', () => {
   it('mounts the dark card, where it stopped, the strip, the chart and what it did — and not 06', async () => {
-    const { AloneChart, GotchaHero, GotchaStrip, WhatItDid, WhereStopped } =
+    const { GotchaHero, GotchaStrip, WhatItDid, WhereStopped } =
       await import('@/features/analytics/GotchaTab');
+    const { AloneChart } = await import('@/features/analytics/ConversationsADay');
     loadGotcha.mockResolvedValue({
       overview: null,
       timeSaved: null,
@@ -180,7 +184,7 @@ describe('★★ 06b — ?tab=gotcha has its own reads and its own parts', () =>
     for (const part of [GotchaHero, WhereStopped, GotchaStrip, AloneChart, WhatItDid]) {
       expect(types).toContain(part);
     }
-    expect(types).not.toContain(TeamLoad);
+    expect(types).not.toContain(ConversationsADay);
     expect(loadAnalytics).not.toHaveBeenCalled();
   });
 });
@@ -265,5 +269,19 @@ describe('★★ every tab is a window — the last row runs to the frame’s bo
       expect(tree.type, tab).toBe(PageContainer);
       expect(tree.props.fill, `?tab=${tab} is not fill`).toBe(true);
     }
+  });
+});
+
+describe('★ 06: "Conversations a day" in its place — the series read, handed to the chart', () => {
+  it('the daily series goes to the chart; who holds what is not on Overview', async () => {
+    const daily = { timezone: 'UTC', series: [] };
+    loadDaily.mockResolvedValue(daily);
+    const tree = await page();
+    let props: { daily: unknown } | null = null;
+    walk(tree, [], (element) => {
+      if (element.type === ConversationsADay) props = element.props as { daily: unknown };
+    });
+    expect(props!.daily).toBe(daily);
+    expect(loadDaily).toHaveBeenCalledWith(7);
   });
 });

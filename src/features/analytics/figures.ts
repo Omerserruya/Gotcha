@@ -18,3 +18,22 @@ export function hoursSaved(timeSaved: { readonly secondsSaved: number } | null):
   if (!timeSaved || timeSaved.secondsSaved <= 0) return null;
   return Math.round(timeSaved.secondsSaved / 3600);
 }
+
+/**
+ * Why a time-saved figure is an estimate, when it is: no measured handling
+ * time, so the platform's average per conversation stands in. `null` when
+ * measured (or unread).
+ */
+export function estimateBasis(
+  timeSaved: {
+    readonly basis?: {
+      readonly source: string;
+      readonly conversationsHandled: number;
+      readonly secondsPerConversation: number;
+    };
+  } | null,
+): { readonly conversations: number; readonly seconds: number } | null {
+  const basis = timeSaved?.basis;
+  if (!basis || basis.source !== 'platform_default') return null;
+  return { conversations: basis.conversationsHandled, seconds: basis.secondsPerConversation };
+}

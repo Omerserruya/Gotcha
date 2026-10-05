@@ -5,6 +5,7 @@ import { readableValues } from '@/api/contracts/capabilities';
 import { channelName } from '@/api/contracts/inbox';
 import { kindKey, rankInsights } from '@/features/home/WorthKnowing';
 
+import { estimateBasis } from './figures';
 import styles from './Analytics.module.css';
 
 /**
@@ -155,13 +156,20 @@ export async function KpiStrip({
       delta: null,
     },
   ] as const;
+  // Time saved, when it is the platform's average and not this workspace's own.
+  const estimate = estimateBasis(timeSaved);
   return (
     <dl className={styles.kpis} data-testid="kpi-strip">
       {cells.map((cell) => (
         <div key={cell.key} className={styles.kpi} data-testid={`kpi-${cell.key}`}>
           <dt>{t(`kpi.${cell.key}`)}</dt>
           <dd>
-            <span className={styles.kpiValue}>{cell.value}</span>
+            <span
+              className={styles.kpiValue}
+              title={cell.key === 'timeSaved' && estimate ? t('kpi.estimate', estimate) : undefined}
+            >
+              {cell.value}
+            </span>
             {cell.delta === null ? null : (
               <span className={styles.kpiDelta} data-direction={cell.delta < 0 ? 'down' : 'up'}>
                 {t('kpi.delta', {

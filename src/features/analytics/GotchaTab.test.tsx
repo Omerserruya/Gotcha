@@ -32,7 +32,6 @@ vi.mock('next-intl/server', () => ({
 }));
 
 import {
-  AloneChart,
   failedCount,
   failuresByDownConnection,
   GotchaHero,
@@ -181,13 +180,6 @@ describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
     unmount();
     render(await WhatItDid({ tools: [] }));
     expect(screen.getByTestId('gotcha-did')).toHaveTextContent("It didn't run anything this week.");
-  });
-
-  it('the chart: the seven days, and why the bars are empty', async () => {
-    render(await AloneChart({ days: lastSevenDayDates(new Date('2026-10-02T12:00:00')) }));
-    const chart = screen.getByTestId('gotcha-alone');
-    expect(chart.querySelectorAll('li')).toHaveLength(7);
-    expect(chart).toHaveTextContent("Nothing splits a day's conversations");
   });
 });
 

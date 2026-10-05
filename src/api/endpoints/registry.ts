@@ -117,6 +117,16 @@ export const analyticsEndpoints = {
    */
   languageShare: () => endpoint('/api/analytics/language-share'),
   overview: () => endpoint('/api/analytics/overview'),
+  /**
+   * The per-day series (backend c054c811): `?days=` 1–90, UTC days, oldest
+   * first — gotcha/team answered, alone/passedOver started. At its own path:
+   * it was first mounted on `/daily`, where the old app's Redis volumes route
+   * answers first; Backend moves it here. Until then this 404s and the
+   * charts say they couldn't read the days.
+   */
+  dailySeries: () => endpoint('/api/analytics/daily-series'),
+  /** 06c's report (backend af4f0072): members and the cards, `?days=`. */
+  teamReport: () => endpoint('/api/analytics/team'),
   channelPerformance: () => endpoint('/api/analytics/channel-performance'),
   /** Two scalars: `{ waiting, avgWaitTimeMs }`. Not the list. */
   queue: () => endpoint('/api/analytics/queue'),

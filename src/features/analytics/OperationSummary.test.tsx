@@ -2,7 +2,12 @@ import { render, screen } from '@testing-library/react';
 import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
-import { analyticsOverviewSchema, insightSchema, type Insight } from '@/api/contracts/analytics';
+import {
+  analyticsOverviewSchema,
+  insightSchema,
+  timeSavedSchema,
+  type Insight,
+} from '@/api/contracts/analytics';
 import analytics from '@/i18n/messages/en/analytics.json';
 import channels from '@/i18n/messages/en/channels.json';
 import home from '@/i18n/messages/en/home.json';
@@ -101,6 +106,29 @@ describe('★★ the strip — and a delta only where the platform computes one'
     expect(screen.getByTestId('kpi-resolved')).toHaveTextContent('94%');
     expect(screen.getByTestId('kpi-avgReply')).toHaveTextContent('42s');
     expect(screen.getByTestId('kpi-timeSaved')).toHaveTextContent('41h');
+  });
+
+  it('★ time saved from the platform’s average says it is an estimate; measured says nothing', async () => {
+    const saved = (source: string) =>
+      timeSavedSchema.parse({
+        secondsSaved: 41 * 3600,
+        basis: {
+          conversationsHandled: 2380,
+          secondsPerConversation: 62,
+          source,
+          sampleSize: 0,
+          method: 'x',
+        },
+      });
+    const one = render(await KpiStrip({ overview, timeSaved: saved('platform_default') }));
+    expect(
+      screen.getByTestId('kpi-timeSaved').querySelector('[title]')?.getAttribute('title'),
+    ).toBe(
+      'An estimate: 2,380 conversations × the platform’s average of 62s each — not measured in this workspace yet.',
+    );
+    one.unmount();
+    render(await KpiStrip({ overview, timeSaved: saved('measured') }));
+    expect(screen.getByTestId('kpi-timeSaved').querySelector('[title]')).toBeNull();
   });
 
   it('★★ +12% on conversations — the one delta `overview` returns', async () => {

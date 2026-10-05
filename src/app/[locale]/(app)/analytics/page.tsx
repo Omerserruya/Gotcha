@@ -4,7 +4,6 @@ import styles from '@/features/analytics/Analytics.module.css';
 import { AskedAbout } from '@/features/analytics/AskedAbout';
 import { AnalyticsTabs, parseAnalyticsTab } from '@/features/analytics/AnalyticsTabs';
 import {
-  AloneChart,
   GotchaHero,
   GotchaStrip,
   lastSevenDayDates,
@@ -13,6 +12,7 @@ import {
 } from '@/features/analytics/GotchaTab';
 import {
   loadAnalytics,
+  loadDaily,
   loadGotcha,
   loadSales,
   loadTeam,
@@ -40,7 +40,7 @@ import {
   teamSubline,
 } from '@/features/analytics/TeamTab';
 import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
-import { TeamLoad } from '@/features/analytics/TeamLoad';
+import { AloneChart, ConversationsADay } from '@/features/analytics/ConversationsADay';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -99,7 +99,7 @@ export default async function Page({
 
   /* 06b — what GOTCHA did, and where it stopped. Its own reads. */
   if (tab === 'gotcha') {
-    const data = await loadGotcha();
+    const [data, daily] = await Promise.all([loadGotcha(), loadDaily(7)]);
     return (
       <PageContainer
         layout="screen"
@@ -115,7 +115,7 @@ export default async function Page({
           </div>
           <GotchaStrip data={data} />
           <div className={styles.gBottom}>
-            <AloneChart days={lastSevenDayDates(new Date())} />
+            <AloneChart daily={daily} fallbackDays={lastSevenDayDates(new Date())} />
             <WhatItDid tools={data.tools} integrations={data.integrations} />
           </div>
         </div>
@@ -200,7 +200,10 @@ export default async function Page({
     );
   }
 
-  const { agents, topics, overview, timeSaved, insights } = await loadAnalytics();
+  const [{ topics, overview, timeSaved, insights }, daily] = await Promise.all([
+    loadAnalytics(),
+    loadDaily(7),
+  ]);
 
   return (
     /*
@@ -218,17 +221,15 @@ export default async function Page({
         <WhatChanged insights={insights} />
         <KpiStrip overview={overview} timeSaved={timeSaved} />
         {/*
-          02's bottom row: a wide card and a 330px one. The wide one is
-          "Conversations a day" in 02 — the platform counts MESSAGES a day and
-          does not split GOTCHA from the team, so that chart is not drawn, and
-          the team's load takes its place. "What people ask about" is 02's own
-          right-hand card.
+          02's bottom row: "Conversations a day" — a day's `overview`, so the
+          bars split as the strip above does — and "What people ask about".
+          Who holds what is the Team tab's (06c), not this one's.
 
           Siblings, not nested: the structural test cannot see inside a nested
           async component (it does not run one).
         */}
         <div className={styles.bottomRow}>
-          <TeamLoad agents={agents} />
+          <ConversationsADay daily={daily} fallbackDays={lastSevenDayDates(new Date())} />
           <AskedAbout topics={topics} />
         </div>
       </div>

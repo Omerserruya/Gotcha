@@ -6,7 +6,6 @@ import type { AiEmployee } from '@/api/contracts/people';
 import { hadConversations } from './figures';
 import type { TeamData } from './load-analytics';
 import styles from './Analytics.module.css';
-import { nullReason } from './TeamLoad';
 
 /**
  * Screen 06c — how the team is doing, without a leaderboard. Measured.
@@ -302,4 +301,17 @@ export async function TeamTable({
       </p>
     </section>
   );
+}
+
+/** A null figure's reason, in words, for its title. */
+export function nullReason(
+  agent: AgentLoad,
+  field: 'claimedToday',
+  t: Awaited<ReturnType<typeof getTranslations<'analytics'>>>,
+): string | undefined {
+  const reason = agent[field] === null ? agent.nullReasons[field] : undefined;
+  if (!reason) return undefined;
+  return t.has(`team.nullReason.${reason}`)
+    ? t(`team.nullReason.${reason}` as 'team.nullReason.ai_does_not_claim')
+    : undefined;
 }

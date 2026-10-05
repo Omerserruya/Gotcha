@@ -14,6 +14,8 @@ import {
   type UnansweredQuestions,
   agentLoadListSchema,
   analyticsOverviewSchema,
+  dailySeriesSchema,
+  type DailySeries,
   askedAboutListSchema,
   insightsSchema,
   timeSavedSchema,
@@ -56,7 +58,6 @@ import { logger } from '@/observability/logger';
  * **No sales section.** Cancelled.
  */
 export interface AnalyticsData {
-  readonly agents: readonly AgentLoad[] | null;
   readonly topics: readonly AskedAbout[] | null;
   /**
    * 06's figures for the last seven days. `overview` computes its own prior
@@ -81,13 +82,7 @@ export async function loadAnalytics(): Promise<AnalyticsData> {
   const api = serverApi();
 
   const week = lastSevenDays();
-  const [agents, topics, overview, timeSaved, insights] = await Promise.all([
-    api
-      .get({ endpoint: analyticsEndpoints.agents(), payload: agentLoadListSchema })
-      .catch((cause: unknown) => {
-        logger.warn('analytics.agents_failed', { cause });
-        return null;
-      }),
+  const [topics, overview, timeSaved, insights] = await Promise.all([
     api
       .get({ endpoint: analyticsEndpoints.topQuestions(), payload: askedAboutListSchema })
       .catch((cause: unknown) => {
@@ -118,7 +113,7 @@ export async function loadAnalytics(): Promise<AnalyticsData> {
       }),
   ]);
 
-  return { agents, topics, overview, timeSaved, insights };
+  return { topics, overview, timeSaved, insights };
 }
 
 /** What 06b reads: the week, from five routes. Each `null` when its read failed. */
@@ -288,4 +283,21 @@ export async function loadTopics(now: Date = new Date()): Promise<TopicsData> {
       .catch(failing<UnansweredQuestions>('analytics.unanswered_failed')),
   ]);
   return { week: thisWeek, before: weekBefore, unanswered };
+}
+
+/**
+ * The last `days` days, one row each (backend's series, UTC days). `null` when
+ * unread — including the older route answering in its place.
+ */
+export async function loadDaily(days = 7): Promise<DailySeries | null> {
+  return serverApi()
+    .get({
+      endpoint: analyticsEndpoints.dailySeries(),
+      payload: dailySeriesSchema,
+      query: { days },
+    })
+    .catch((cause: unknown) => {
+      logger.warn('analytics.daily_failed', { cause });
+      return null;
+    });
 }

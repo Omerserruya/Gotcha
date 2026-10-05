@@ -742,3 +742,29 @@ export const productDemandSchema = z.looseObject({
     .default([]),
 });
 export type ProductDemand = z.infer<typeof productDemandSchema>;
+
+const count = z.number().int().nonnegative().catch(0);
+
+/**
+ * `GET /api/analytics/daily?days=` — one row per UTC day, oldest first.
+ *   gotcha / team        conversations ANSWERED that day, by who answered
+ *   alone / passedOver   conversations STARTED that day, by whether a person
+ *                        took them over
+ * Strict on the envelope: the older Redis `/daily` on the same path answers an
+ * ARRAY of message volumes, and reading that as a series would draw bars of
+ * something else.
+ */
+export const dailySeriesSchema = z.object({
+  timezone: z.string().catch('UTC').default('UTC'),
+  series: z.array(
+    z.object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      gotcha: count,
+      team: count,
+      alone: count,
+      passedOver: count,
+    }),
+  ),
+});
+export type DailySeries = z.infer<typeof dailySeriesSchema>;
+export type DayRow = DailySeries['series'][number];

@@ -6,7 +6,7 @@ import { Link } from '@/i18n/navigation';
 import type { ToolUsage } from '@/api/contracts/capabilities';
 import { UNANSWERED_PAGE } from '@/api/contracts/analytics';
 
-import { hadConversations, hoursSaved } from './figures';
+import { estimateBasis, hadConversations, hoursSaved } from './figures';
 import type { GotchaData } from './load-analytics';
 import styles from './Analytics.module.css';
 
@@ -172,6 +172,7 @@ export async function GotchaStrip({ data }: { readonly data: GotchaData }) {
     : null;
   const failed = data.tools ? failedCount(data.tools) : null;
   const hours = hoursSaved(data.timeSaved);
+  const estimate = estimateBasis(data.timeSaved);
   const cells = [
     {
       key: 'alone',
@@ -193,33 +194,12 @@ export async function GotchaStrip({ data }: { readonly data: GotchaData }) {
       {cells.map((cell) => (
         <div key={cell.key} className={styles.gCell} data-testid={`gotcha-${cell.key}`}>
           <dt>{t(`gotcha.strip.${cell.key}`)}</dt>
-          <dd>{cell.value}</dd>
+          <dd title={cell.key === 'saved' && estimate ? t('kpi.estimate', estimate) : undefined}>
+            {cell.value}
+          </dd>
         </div>
       ))}
     </dl>
-  );
-}
-
-/** The seven days as the axis; the bars empty — nothing splits a day by who answered. */
-export async function AloneChart({ days }: { readonly days: readonly Date[] }) {
-  const t = await getTranslations('analytics');
-  const format = await getFormatter();
-  return (
-    <section className={styles.gChart} data-testid="gotcha-alone">
-      <header className={styles.gChartHead}>
-        <h2 className={styles.gCardTitle}>{t('gotcha.alone.title')}</h2>
-        <span className={styles.gCardMeta}>{t('gotcha.alone.legend')}</span>
-      </header>
-      <ol className={styles.gBars}>
-        {days.map((day) => (
-          <li key={day.toISOString()} className={styles.gBar}>
-            <span className={styles.gBarTrack} aria-hidden="true" />
-            <span className={styles.gBarLabel}>{format.dateTime(day, { weekday: 'short' })}</span>
-          </li>
-        ))}
-      </ol>
-      <p className={styles.gCardFoot}>{t('gotcha.alone.none')}</p>
-    </section>
   );
 }
 

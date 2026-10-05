@@ -44,7 +44,8 @@
     "minutes": "{n}m",
     "hours": "{n}h",
     "unknown": "—",
-    "unavailable": "We couldn't read this week's figures just now."
+    "unavailable": "We couldn't read this week's figures just now.",
+    "estimate": "An estimate: {conversations, number} conversations × the platform’s average of {seconds}s each — not measured in this workspace yet."
   },
   "teamShort": {
     "today": "Today's numbers — they reset at midnight.",
@@ -93,7 +94,7 @@
     "alone": {
       "title": "Alone, or with a person",
       "legend": "alone · passed over",
-      "none": "Nothing splits a day's conversations by who answered them yet."
+      "why": "Conversations started each day: GOTCHA alone, or passed over to a person. Days are UTC."
     },
     "did": {
       "title": "What it actually did",
@@ -229,5 +230,12 @@
       "angry": "Angry",
       "none": "Tone isn't counted yet."
     }
+  },
+  "daily": {
+    "title": "Conversations a day",
+    "legend": "GOTCHA · your team",
+    "why": "Conversations answered each day: by GOTCHA alone, or with a reply from someone on your team. Days are UTC.",
+    "dayLabel": "{day}: {dark} and {light}",
+    "unread": "The days couldn’t be read."
   }
 }
