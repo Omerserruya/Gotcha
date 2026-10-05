@@ -18,6 +18,7 @@ import {
   templateGroups,
   WorthKnowing,
 } from '@/features/outreach/TemplateList';
+import { OutreachTabs } from '@/features/outreach/OutreachTabs';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -70,14 +71,16 @@ export default async function Page({
       title={t('title')}
       description={t('description')}
       actions={
-        <Link
-          href={{ pathname: '/outreach/templates', query: { create: '1' } }}
-          className={styles.createButton}
-          scroll={false}
-          data-testid="new-template"
-        >
-          {t('newTemplate')}
-        </Link>
+        <OutreachTabs current="templates">
+          <Link
+            href={{ pathname: '/outreach/templates', query: { create: '1' } }}
+            className={styles.createButton}
+            scroll={false}
+            data-testid="new-template"
+          >
+            {t('newTemplate')}
+          </Link>
+        </OutreachTabs>
       }
     >
       <div className={styles.tplScreen} data-testid="templates-screen">

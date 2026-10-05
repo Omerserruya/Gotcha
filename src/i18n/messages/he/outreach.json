@@ -198,5 +198,13 @@
       },
       "whatsappOnly": "רק תבנית WhatsApp נשלחת ל-WhatsApp לאישור."
     }
+  },
+  "tabs": {
+    "label": "פניות יוצאות",
+    "inFlight": "בתהליך",
+    "templates": "תבניות",
+    "calls": "שיחות",
+    "finished": "הסתיימו",
+    "finishedWhere": "קמפיינים שהסתיימו מופיעים אחרי אלה שיוצאים עכשיו."
   }
 }

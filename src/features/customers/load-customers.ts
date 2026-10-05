@@ -139,6 +139,23 @@ async function readToday(): Promise<Pick<CustomersData, 'conversations' | 'quiet
  * ignored by the route and widens the result set. This turns that into a
  * compile error.
  */
+/** Who went quiet (`dormant-customers`), counted — for 05d's "call a list". `null` when unread. */
+export async function loadQuiet(): Promise<{
+  readonly count: number;
+  readonly capped: boolean;
+} | null> {
+  return serverApi()
+    .get({ endpoint: analyticsEndpoints.dormantCustomers(), payload: dormantSchema, raw: true })
+    .then((dormant) => ({
+      count: dormant.data.length,
+      capped: dormant.data.length >= DORMANT_CAP,
+    }))
+    .catch((cause: unknown) => {
+      logger.warn('customers.dormant_failed', { cause });
+      return null;
+    });
+}
+
 type SegmentField =
   | 'name'
   | 'phone'

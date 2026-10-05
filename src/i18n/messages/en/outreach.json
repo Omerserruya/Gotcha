@@ -198,5 +198,13 @@
       },
       "whatsappOnly": "Only a WhatsApp template goes to WhatsApp for review."
     }
+  },
+  "tabs": {
+    "label": "Outreach",
+    "inFlight": "In flight",
+    "templates": "Templates",
+    "calls": "Calls",
+    "finished": "Finished",
+    "finishedWhere": "Finished campaigns are listed after the ones going out."
   }
 }

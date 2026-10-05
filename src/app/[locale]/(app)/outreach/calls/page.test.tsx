@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CallStats, DialerCard, RecentCalls } from '@/features/calls/CallsScreen';
 import { LiveCall } from '@/features/calls/LiveCall';
+import { OutreachTabs } from '@/features/outreach/OutreachTabs';
 
 const loadCalls = vi.hoisted(() => vi.fn());
 const loadLiveCall = vi.hoisted(() => vi.fn());
 const loadCustomers = vi.hoisted(() => vi.fn());
+const loadQuiet = vi.hoisted(() => vi.fn());
 vi.mock('@/features/calls/load-calls', () => ({ loadCalls, loadLiveCall }));
-vi.mock('@/features/customers/load-customers', () => ({ loadCustomers }));
+vi.mock('@/features/customers/load-customers', () => ({ loadCustomers, loadQuiet }));
 vi.mock('next-intl/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
@@ -43,6 +45,7 @@ const reads = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   loadCalls.mockReset().mockResolvedValue(reads());
   loadLiveCall.mockReset().mockResolvedValue({ call: null, transcript: [], contactName: null });
+  loadQuiet.mockReset().mockResolvedValue({ count: 46, capped: false });
   loadCustomers
     .mockReset()
     .mockResolvedValue({ rows: [], total: 0, truncated: false, searchedField: null });
@@ -134,5 +137,21 @@ describe('★★ 05e — a call in progress is the page', () => {
     });
     expect(find(tree, DialerCard)).toBeNull();
     expect(find(tree, RecentCalls)).toBeNull();
+  });
+});
+
+describe('★ 05d’s header and its list (measured against 02)', () => {
+  it('the outreach pills with Calls open, and "Start a call" beside them', async () => {
+    const tree = (await page()) as ReactElement<{ actions: ReactNode }>;
+    const tabs = find<{ current: string; children: ReactNode }>(tree.props.actions, OutreachTabs);
+    expect(tabs?.current).toBe('calls');
+    expect(JSON.stringify(tabs?.children)).toContain('startCall');
+  });
+
+  it('who went quiet is handed to the dialer as its list', async () => {
+    expect(find<{ quiet: unknown }>(await page(), DialerCard)?.quiet).toEqual({
+      count: 46,
+      capped: false,
+    });
   });
 });

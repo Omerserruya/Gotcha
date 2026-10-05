@@ -10,7 +10,9 @@ import {
 import styles from '@/features/calls/Calls.module.css';
 import { loadCalls, loadLiveCall } from '@/features/calls/load-calls';
 import { LiveCall } from '@/features/calls/LiveCall';
-import { loadCustomers } from '@/features/customers/load-customers';
+import { loadCustomers, loadQuiet } from '@/features/customers/load-customers';
+import outreach from '@/features/outreach/Outreach.module.css';
+import { OutreachTabs } from '@/features/outreach/OutreachTabs';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -35,10 +37,11 @@ export default async function Page({
   const query = (params.q ?? '').trim();
   const filter = parseCallFilter(params.calls);
 
-  const [{ voiceEnabled, hasNumber, calls, summary, failed }, search] = await Promise.all([
+  const [{ voiceEnabled, hasNumber, calls, summary, failed }, search, quiet] = await Promise.all([
     // "This week": the last seven days, so Monday morning is not an empty week.
     loadCalls({ summaryDays: 7 }),
     query ? loadCustomers(query) : Promise.resolve(null),
+    loadQuiet(),
   ]);
   const {
     call: liveCall,
@@ -83,11 +86,25 @@ export default async function Page({
   }
 
   return (
-    <PageContainer layout="screen" flush title={t('title')} description={t('description')}>
+    <PageContainer
+      layout="screen"
+      flush
+      title={t('title')}
+      description={t('description')}
+      actions={
+        <OutreachTabs current="calls">
+          {/* 02's "Start a call": the dialer is on this page — it takes you to its field. */}
+          <a href="#dialer-q" className={outreach.createButton} data-testid="start-call">
+            {t('startCall')}
+          </a>
+        </OutreachTabs>
+      }
+    >
       <div className={styles.screen} data-testid="calls-screen">
         <DialerCard
           query={query}
           results={search === null ? (query ? null : []) : search.rows}
+          quiet={quiet}
           line={voiceEnabled === false ? 'off' : hasNumber === false ? 'noNumber' : 'ok'}
         />
         <div className={styles.column}>

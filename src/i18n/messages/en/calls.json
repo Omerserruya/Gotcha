@@ -76,7 +76,11 @@
       "caller_id_not_configured": "The line has no caller ID set, so nothing was dialled.",
       "forbidden": "You don't have permission to place calls.",
       "failed": "The call didn't start. Nothing was dialled — try again."
-    }
+    },
+    "listQuiet": "{count, plural, one {# person who went quiet} other {# people who went quiet}}",
+    "listQuietCapped": "{count}+ people who went quiet",
+    "listQuietLine": "See them on Customers",
+    "listNotYet": "GOTCHA can’t call a list yet — this opens the people."
   },
   "stats": {
     "week": "Calls this week",
@@ -123,5 +127,6 @@
       "forbidden": "Only the person on the call, or an admin, can do that.",
       "failed": "That didn't go through. The call is unchanged."
     }
-  }
+  },
+  "startCall": "Start a call"
 }

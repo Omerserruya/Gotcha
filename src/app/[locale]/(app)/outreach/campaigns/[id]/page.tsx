@@ -11,6 +11,8 @@ import {
 import { loadCampaign } from '@/features/outreach/load-outreach';
 import styles from '@/features/outreach/Outreach.module.css';
 import { Link } from '@/i18n/navigation';
+import { isInFlight } from '@/api/contracts/outreach';
+import { OutreachTabs } from '@/features/outreach/OutreachTabs';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -52,7 +54,8 @@ export default async function Page({
       flush
       title={campaign.name}
       description={await resultsLine(campaign, new Date())}
-      actions={back}
+      // 05b: the pills, "Finished" open once it went out; "In flight" is the way back.
+      actions={<OutreachTabs current={isInFlight(campaign) ? 'inFlight' : 'finished'} />}
     >
       <div className={styles.resScreen} data-testid="results-screen">
         <div className={styles.resTop}>

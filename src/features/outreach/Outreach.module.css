@@ -1217,6 +1217,33 @@
     text-decoration: underline;
   }
 
+  /* 05b–05d: the header pills, the open one dark, then the screen's button. */
+  .tabsRow {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .tab {
+    padding: 6px var(--space-12);
+    border-radius: 7px;
+    background-color: var(--panel-well);
+    font-size: var(--font-size-caption);
+    color: var(--intent-neutral-text);
+    text-decoration: none;
+    line-height: normal;
+  }
+
+  .tab[aria-current='page'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
   .createButton {
     padding: 9px var(--space-16);
     border-radius: 9px;

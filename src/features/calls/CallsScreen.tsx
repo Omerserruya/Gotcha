@@ -56,6 +56,7 @@ export async function DialerCard({
   query,
   results,
   line = 'ok',
+  quiet = null,
 }: {
   readonly query: string;
   /**
@@ -66,6 +67,8 @@ export async function DialerCard({
   readonly line?: 'ok' | 'off' | 'noNumber';
   /** `null` when the search failed; empty when nobody matched. */
   readonly results: readonly CustomerRow[] | null;
+  /** Who went quiet — 02's first list; `null` when unread. */
+  readonly quiet?: { readonly count: number; readonly capped: boolean } | null;
 }) {
   const t = await getTranslations('calls');
   const chosen = results?.[0] ?? null;
@@ -137,11 +140,40 @@ export async function DialerCard({
           </ul>
         )}
 
-        {/* 02's "Or have GOTCHA call a list": no calling campaigns exist yet. */}
+        {/*
+          02's "Or have GOTCHA call a list". The list is real — who went quiet
+          — and opens on Customers; GOTCHA calling it is not built, so the row
+          names the people and promises no call ("It asks one question…").
+        */}
         <p className={`${styles.dialerEyebrow} ${styles.dialerEyebrowRule}`}>{t('dialer.lists')}</p>
-        <p className={styles.dialerNone} data-testid="dialer-lists">
-          {t('dialer.listsNone')}
-        </p>
+        {quiet && quiet.count > 0 ? (
+          <ul className={styles.dialerList} data-testid="dialer-lists">
+            <li>
+              <Link
+                href={{ pathname: '/customers', query: { segment: 'quiet' } }}
+                className={styles.dialerListRow}
+                title={t('dialer.listNotYet')}
+                data-testid="dialer-list-quiet"
+              >
+                <span className={styles.dialerWho}>
+                  <span className={styles.dialerListName}>
+                    {t(quiet.capped ? 'dialer.listQuietCapped' : 'dialer.listQuiet', {
+                      count: quiet.count,
+                    })}
+                  </span>
+                  <span className={styles.dialerLine}>{t('dialer.listQuietLine')}</span>
+                </span>
+                <span className={styles.dialerChevron} aria-hidden="true">
+                  ›
+                </span>
+              </Link>
+            </li>
+          </ul>
+        ) : (
+          <p className={styles.dialerNone} data-testid="dialer-lists">
+            {t('dialer.listsNone')}
+          </p>
+        )}
       </div>
 
       <footer className={styles.dialerFoot}>

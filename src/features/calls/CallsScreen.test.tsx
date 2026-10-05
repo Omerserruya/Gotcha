@@ -228,9 +228,18 @@ describe('★★ the dialer — a live search, and no call placed from here', ()
     expect(screen.getByTestId('dialer-q')).toHaveValue('dana');
   });
 
-  it('"Or have GOTCHA call a list" keeps its place', async () => {
+  it('"Or have GOTCHA call a list": nobody quiet (or unread) — nothing yet', async () => {
     await renderDialer({ query: '', results: [] });
     expect(screen.getByTestId('dialer-lists')).toHaveTextContent('Nothing yet.');
+  });
+
+  it('★ who went quiet is a list: named, counted, opening on Customers — no promise of a call', async () => {
+    await renderDialer({ query: '', results: [], quiet: { count: 46, capped: false } });
+    const row = screen.getByTestId('dialer-list-quiet');
+    expect(row).toHaveTextContent('46 people who went quiet');
+    expect(row).toHaveTextContent('See them on Customers');
+    expect(row).toHaveAttribute('href', '/customers?segment=quiet');
+    expect(row).not.toHaveTextContent(/asks|call/i);
   });
 });
 

@@ -145,6 +145,26 @@
     gap: 2px;
   }
 
+  /* 02's list rows: 13px name, 11px line, a quiet chevron. */
+  .dialerListRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: 11px 18px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .dialerListName {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .dialerChevron {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
   .dialerName {
     font-size: 13px;
     font-weight: var(--font-weight-medium);
