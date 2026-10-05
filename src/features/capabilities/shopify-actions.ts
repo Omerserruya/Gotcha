@@ -56,7 +56,8 @@ export async function startShopifyInstall(): Promise<ShopifyStart> {
 }
 
 export type ShopifyClaim =
-  | { readonly ok: true }
+  /** `planSelectionUrl`: a plan is owed, and Shopify's page is where to choose it. */
+  | { readonly ok: true; readonly planSelectionUrl: string | null }
   | {
       readonly ok: false;
       readonly reason:
@@ -78,16 +79,16 @@ export async function claimShopifyInstall(replace: boolean): Promise<ShopifyClai
   const pending = store.get(PENDING_COOKIE)?.value;
   if (!pending) return { ok: false, reason: 'gone' };
   try {
-    await serverApi().post({
+    const answer = await serverApi().post({
       endpoint: integrationEndpoints.shopifyClaim(),
-      payload: z.unknown(),
+      payload: claimAnswer,
       body: { replace },
       headers: { cookie: `${PENDING_COOKIE}=${encodeURIComponent(pending)}` },
       raw: true,
     });
     store.delete(PENDING_COOKIE);
     revalidatePath('/[locale]/(app)/studio/capabilities', 'page');
-    return { ok: true };
+    return { ok: true, planSelectionUrl: answer.data.planSelectionUrl };
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('capabilities.shopify_claim_failed', { cause });
@@ -109,6 +110,80 @@ export async function claimShopifyInstall(replace: boolean): Promise<ShopifyClai
         return { ok: false, reason: 'shop_connected_to_another_workspace' };
       }
       if (cause.status === 409) return { ok: false, reason: 'gone' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/* Only an https page of Shopify's is somewhere to send a browser. */
+const shopifyPage = z
+  .string()
+  .url()
+  .refine((url) => new URL(url).protocol === 'https:')
+  .nullable()
+  .catch(null);
+
+const claimAnswer = z.object({
+  data: z.object({ planSelectionUrl: shopifyPage.optional().default(null) }).catch({
+    planSelectionUrl: null,
+  }),
+});
+
+const accessSnapshot = z.object({
+  grantsAccess: z.boolean().catch(false),
+  requiresPlanSelection: z.boolean().catch(false),
+  planSelectionUrl: shopifyPage.optional().default(null),
+  shopify: z
+    .object({ state: z.string().catch('ERROR'), declined: z.boolean().catch(false).optional() })
+    .catch({ state: 'ERROR' }),
+});
+
+export type ShopifyBillingCheck =
+  | {
+      readonly ok: true;
+      readonly grantsAccess: boolean;
+      readonly state: string;
+      readonly declined: boolean;
+      /** Set only when the SERVER says a plan is owed — never built here. */
+      readonly planSelectionUrl: string | null;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: 'unreachable' | 'mismatch' | 'not_connected' | 'forbidden' | 'failed';
+    };
+
+/**
+ * Back from Shopify's plan page: ask the server what the subscription IS.
+ * Arriving proves nothing — the URL is replayable — so the only outcome shown
+ * is the one the server read from Shopify.
+ */
+export async function verifyShopifyBilling(shop: string | null): Promise<ShopifyBillingCheck> {
+  try {
+    const snapshot = await serverApi().post({
+      endpoint: integrationEndpoints.shopifyBillingComplete(),
+      payload: accessSnapshot,
+      query: { shop: shop?.trim() || undefined },
+      body: {},
+    });
+    revalidatePath('/[locale]/(app)/studio/capabilities', 'page');
+    return {
+      ok: true,
+      grantsAccess: snapshot.grantsAccess,
+      state: snapshot.shopify.state,
+      declined: snapshot.shopify.declined ?? false,
+      planSelectionUrl: snapshot.requiresPlanSelection ? snapshot.planSelectionUrl : null,
+    };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('capabilities.shopify_billing_verify_failed', { cause });
+    if (isApiError(cause)) {
+      if (cause.status === 502) return { ok: false, reason: 'unreachable' };
+      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
+      if (cause.developerMessage === 'shopify_shop_mismatch')
+        return { ok: false, reason: 'mismatch' };
+      if (cause.developerMessage === 'shopify_not_connected') {
+        return { ok: false, reason: 'not_connected' };
+      }
     }
     return { ok: false, reason: 'failed' };
   }

@@ -16,8 +16,8 @@ vi.mock('next/headers', () => ({ cookies: async () => jar }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }));
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
 
-import { claimShopifyInstall, startShopifyInstall } from './shopify-actions';
-import { ShopifyConnect, ShopifyPending } from './ShopifyConnect';
+import { claimShopifyInstall, startShopifyInstall, verifyShopifyBilling } from './shopify-actions';
+import { ShopifyBillingVerify, ShopifyConnect, ShopifyPending } from './ShopifyConnect';
 import { cookieFrom, INTENT_COOKIE } from './shopify-cookies';
 
 beforeEach(() => {
@@ -81,8 +81,8 @@ describe('★★ start — the intent is handed on to the browser, or nothing op
 describe('★★ claim — the browser’s pending install, sent on', () => {
   it('replace: true with the cookie; the cookie cleared after', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
-    post.mockResolvedValue({});
-    expect(await claimShopifyInstall(true)).toEqual({ ok: true });
+    post.mockResolvedValue({ data: { planSelectionUrl: null } });
+    expect(await claimShopifyInstall(true)).toEqual({ ok: true, planSelectionUrl: null });
     const call = post.mock.calls[0]![0] as { body: unknown; headers: Record<string, string> };
     expect(call.body).toStrictEqual({ replace: true });
     expect(call.headers.cookie).toBe('gotcha_shopify_pending=p1');
@@ -140,7 +140,7 @@ describe('★★ 10 — Shopify before and after', () => {
 
   it('a pending replace: nothing replaced before the press; then claimed with replace', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
-    post.mockResolvedValue({});
+    post.mockResolvedValue({ data: { planSelectionUrl: null } });
     intl(<ShopifyPending shopDomain="new.myshopify.com" replace />);
     expect(post).not.toHaveBeenCalled();
     expect(screen.getByTestId('shopify-pending')).toHaveTextContent(
@@ -151,5 +151,128 @@ describe('★★ 10 — Shopify before and after', () => {
     expect(screen.getByTestId('shopify-claimed')).toHaveTextContent(
       'new.myshopify.com is connected.',
     );
+  });
+});
+
+const another = () =>
+  new ApiError({
+    kind: 'conflict',
+    status: 409,
+    developerMessage: 'another_store_connected',
+    errorData: { currentShopDomain: 'old.myshopify.com' },
+  });
+
+describe('★★ reason=claim — an App Store install, to this workspace', () => {
+  it('asks first; another store here → "Replace it?" naming it, and only then replace: true', async () => {
+    jar.get.mockReturnValue({ value: 'p1' });
+    intl(<ShopifyPending shopDomain="new.myshopify.com" replace={false} />);
+    expect(screen.getByTestId('shopify-pending-lead')).toHaveTextContent(
+      'You approved new.myshopify.com in Shopify. Connect it to this workspace?',
+    );
+    post.mockRejectedValueOnce(another());
+    await userEvent.click(screen.getByTestId('shopify-claim'));
+    expect((post.mock.calls[0]![0] as { body: unknown }).body).toStrictEqual({ replace: false });
+    expect(screen.getByTestId('shopify-pending-lead')).toHaveTextContent(
+      'Another store is connected here (old.myshopify.com). Replace it?',
+    );
+    expect(screen.queryByTestId('shopify-claim-problem')).toBeNull();
+    post.mockResolvedValueOnce({ data: { planSelectionUrl: null } });
+    await userEvent.click(screen.getByTestId('shopify-claim'));
+    expect((post.mock.calls[1]![0] as { body: unknown }).body).toStrictEqual({ replace: true });
+    expect(screen.getByTestId('shopify-claimed')).toBeInTheDocument();
+  });
+
+  it('a plan owed: straight to Shopify’s plan page', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    try {
+      jar.get.mockReturnValue({ value: 'p1' });
+      post.mockResolvedValue({ data: { planSelectionUrl: 'https://admin.shopify.com/charges/x' } });
+      intl(<ShopifyPending shopDomain="new.myshopify.com" replace={false} />);
+      await userEvent.click(screen.getByTestId('shopify-claim'));
+      expect(assign).toHaveBeenCalledWith('https://admin.shopify.com/charges/x');
+      expect(refresh).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('★★ billing=verify — only what the server read from Shopify', () => {
+  const snapshot = (over: Record<string, unknown> = {}) => ({
+    grantsAccess: false,
+    requiresPlanSelection: false,
+    planSelectionUrl: null,
+    shopify: { state: 'ACTIVE', declined: false },
+    ...over,
+  });
+
+  it('the shop goes as a query, compared not trusted; the outcome is the snapshot’s', async () => {
+    post.mockResolvedValue(snapshot({ grantsAccess: true }));
+    expect(await verifyShopifyBilling('urban.myshopify.com')).toMatchObject({
+      ok: true,
+      grantsAccess: true,
+      planSelectionUrl: null,
+    });
+    const call = post.mock.calls[0]![0] as { endpoint: { path: string }; query: unknown };
+    expect(call.endpoint.path).toBe('/api/billing/shopify/complete');
+    expect(call.query).toEqual({ shop: 'urban.myshopify.com' });
+  });
+
+  it('a plan URL only when the server says one is owed', async () => {
+    post.mockResolvedValue(snapshot({ planSelectionUrl: 'https://admin.shopify.com/p' }));
+    expect(await verifyShopifyBilling(null)).toMatchObject({ planSelectionUrl: null });
+  });
+
+  it('502 is "couldn’t reach", not "you didn’t pay"; a mismatch is its own', async () => {
+    post.mockRejectedValueOnce(
+      new ApiError({
+        kind: 'server',
+        status: 502,
+        developerMessage: 'shopify_verification_failed',
+      }),
+    );
+    expect(await verifyShopifyBilling('a')).toEqual({ ok: false, reason: 'unreachable' });
+    post.mockRejectedValueOnce(
+      new ApiError({ kind: 'conflict', status: 409, developerMessage: 'shopify_shop_mismatch' }),
+    );
+    expect(await verifyShopifyBilling('a')).toEqual({ ok: false, reason: 'mismatch' });
+  });
+
+  it('the screen: checking, then connected and refreshed — once, not per render', async () => {
+    post.mockResolvedValue(snapshot({ grantsAccess: true }));
+    intl(<ShopifyBillingVerify shop="urban.myshopify.com" />);
+    expect(screen.getByTestId('shopify-billing-checking')).toHaveTextContent(
+      'Checking with Shopify…',
+    );
+    expect(await screen.findByTestId('shopify-billing')).toHaveTextContent('Shopify is connected.');
+    expect(refresh).toHaveBeenCalled();
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('a plan needed: the sentence and Shopify’s page; unreachable: try again asks again', async () => {
+    post.mockResolvedValueOnce(
+      snapshot({
+        requiresPlanSelection: true,
+        planSelectionUrl: 'https://admin.shopify.com/p',
+        shopify: { state: 'PLAN_SELECTION_REQUIRED' },
+      }),
+    );
+    const one = intl(<ShopifyBillingVerify shop={null} />);
+    expect(await screen.findByTestId('shopify-billing-plan')).toHaveAttribute(
+      'href',
+      'https://admin.shopify.com/p',
+    );
+    expect(screen.getByTestId('shopify-billing')).toHaveTextContent('choose one');
+    one.unmount();
+
+    post.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 502 }));
+    intl(<ShopifyBillingVerify shop={null} />);
+    expect(await screen.findByTestId('shopify-billing')).toHaveTextContent(
+      'We couldn’t reach Shopify',
+    );
+    post.mockResolvedValueOnce(snapshot({ grantsAccess: true }));
+    await userEvent.click(screen.getByTestId('shopify-billing-retry'));
+    expect(await screen.findByText('Shopify is connected.')).toBeInTheDocument();
   });
 });

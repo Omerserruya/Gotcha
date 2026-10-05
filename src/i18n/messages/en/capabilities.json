@@ -198,7 +198,7 @@
     "pending": {
       "replaceLead": "You approved {shop} in Shopify. Another store is connected here now — replacing it disconnects that one.",
       "replace": "Replace with {shop}",
-      "finishLead": "You approved {shop} in Shopify, and it isn’t connected here yet.",
+      "finishLead": "You approved {shop} in Shopify. Connect it to this workspace?",
       "finish": "Connect {shop}",
       "done": "{shop} is connected.",
       "error": {
@@ -208,6 +208,31 @@
         "gone": "That approval has expired or was already used — connect again from Shopify.",
         "forbidden": "You don't have permission to connect systems.",
         "failed": "{shop} wasn't connected — try again."
+      },
+      "conflict": "Another store is connected here. Replace it?",
+      "conflictNamed": "Another store is connected here ({current}). Replace it?",
+      "replaceIt": "Replace it"
+    },
+    "billing": {
+      "checking": "Checking with Shopify…",
+      "connected": "Shopify is connected.",
+      "retry": "Try again",
+      "choosePlan": "Choose a plan in Shopify",
+      "state": {
+        "planNeeded": "Shopify has no plan for this store yet — choose one to switch the store features on.",
+        "declined": "No plan was approved. The store stays connected; its features stay off until a plan is.",
+        "approvalPending": "Shopify still shows the plan waiting for approval — finish approving it in Shopify.",
+        "pastDue": "Shopify reports a failed charge on this plan — settle it in Shopify to switch the store features back on.",
+        "frozen": "Shopify has frozen this store, so the plan is paused until it unfreezes.",
+        "cancelled": "The Shopify plan has ended. The store stays connected; its features are off.",
+        "other": "Shopify billing isn’t active for this workspace yet."
+      },
+      "error": {
+        "unreachable": "We couldn’t reach Shopify — nothing changed. Try again.",
+        "mismatch": "This confirmation belongs to a different store than the one connected here.",
+        "not_connected": "There’s no Shopify store connected to this workspace.",
+        "forbidden": "You don’t have permission to manage billing.",
+        "failed": "We couldn’t confirm the plan — try again."
       }
     }
   }

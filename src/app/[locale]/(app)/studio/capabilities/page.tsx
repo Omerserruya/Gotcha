@@ -4,7 +4,7 @@ import { isConnected } from '@/api/contracts/integrations';
 import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { oauthFailure } from '@/features/capabilities/oauth';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
-import { ShopifyPending } from '@/features/capabilities/ShopifyConnect';
+import { ShopifyBillingVerify, ShopifyPending } from '@/features/capabilities/ShopifyConnect';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
@@ -56,6 +56,9 @@ export default async function Page({
     /** Shopify's way back with a store to claim (98676242). */
     readonly pending?: string;
     readonly reason?: string;
+    /** Back from Shopify's plan page (backend bb4acc12): `billing=verify&shop=`. */
+    readonly billing?: string;
+    readonly shop?: string;
   }>;
 } = {}) {
   const t = await getTranslations('capabilities');
@@ -110,6 +113,9 @@ export default async function Page({
                 name={integration.name}
                 outcome={params.connected === '1' ? 'connected' : oauthFailure(params.error)}
               />
+            ) : null}
+            {onShopify && params.billing === 'verify' ? (
+              <ShopifyBillingVerify shop={params.shop ?? null} />
             ) : null}
             {shopifyPending ? (
               <ShopifyPending

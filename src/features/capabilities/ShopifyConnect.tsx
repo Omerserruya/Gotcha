@@ -1,11 +1,17 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
 
-import { claimShopifyInstall, startShopifyInstall, type ShopifyClaim } from './shopify-actions';
+import {
+  claimShopifyInstall,
+  startShopifyInstall,
+  verifyShopifyBilling,
+  type ShopifyBillingCheck,
+  type ShopifyClaim,
+} from './shopify-actions';
 import styles from './Capabilities.module.css';
 
 /**
@@ -83,6 +89,19 @@ export function ShopifyPending({
   const router = useRouter();
   const [result, setResult] = useState<ShopifyClaim | null>(null);
   const [isPending, startTransition] = useTransition();
+  /* `reason=claim` that met another store: the question becomes "replace it?". */
+  const conflict = result && !result.ok && result.reason === 'another_store_connected';
+  const replacing = replace || Boolean(conflict);
+
+  const claim = () =>
+    startTransition(async () => {
+      const done = await claimShopifyInstall(replacing);
+      setResult(done);
+      if (!done.ok) return;
+      // A plan is owed: Shopify's page is the next step, so go there.
+      if (done.planSelectionUrl) window.location.assign(done.planSelectionUrl);
+      else router.refresh();
+    });
 
   if (result?.ok) {
     return (
@@ -93,25 +112,29 @@ export function ShopifyPending({
   }
   return (
     <div className={styles.landing} data-outcome="problem" data-testid="shopify-pending">
-      <span>
-        {replace ? t('replaceLead', { shop: shopDomain }) : t('finishLead', { shop: shopDomain })}
+      <span data-testid="shopify-pending-lead">
+        {conflict
+          ? result.currentShop
+            ? t('conflictNamed', { current: result.currentShop })
+            : t('conflict')
+          : replace
+            ? t('replaceLead', { shop: shopDomain })
+            : t('finishLead', { shop: shopDomain })}
       </span>
       <button
         type="button"
         className={styles.connectButton}
         disabled={isPending}
         data-testid="shopify-claim"
-        onClick={() =>
-          startTransition(async () => {
-            const done = await claimShopifyInstall(replace);
-            setResult(done);
-            if (done.ok) router.refresh();
-          })
-        }
+        onClick={claim}
       >
-        {replace ? t('replace', { shop: shopDomain }) : t('finish', { shop: shopDomain })}
+        {conflict
+          ? t('replaceIt')
+          : replace
+            ? t('replace', { shop: shopDomain })
+            : t('finish', { shop: shopDomain })}
       </button>
-      {result && !result.ok ? (
+      {result && !result.ok && !conflict ? (
         <span className={styles.connectProblem} role="alert" data-testid="shopify-claim-problem">
           {result.reason === 'another_store_connected' && result.currentShop
             ? t('error.anotherNamed', { current: result.currentShop, shop: shopDomain })
@@ -120,4 +143,95 @@ export function ShopifyPending({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Back from Shopify's plan page (`?billing=verify&shop=`). No design yet
+ * (Omer: "build something of your own for now"): 10's landing line. It says
+ * nothing until the server has asked Shopify, because the URL proves nothing.
+ */
+export function ShopifyBillingVerify({ shop }: { readonly shop: string | null }) {
+  const t = useTranslations('capabilities.shopify.billing');
+  const router = useRouter();
+  const [check, setCheck] = useState<ShopifyBillingCheck | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const verify = () =>
+    startTransition(async () => {
+      const done = await verifyShopifyBilling(shop);
+      setCheck(done);
+      if (done.ok && done.grantsAccess) router.refresh();
+    });
+  // Once, on arrival — a development double-mount must not ask Shopify twice.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (asked.current) return;
+    asked.current = true;
+    verify();
+  });
+
+  if (check === null || (isPending && !check.ok)) {
+    return (
+      <p className={styles.landing} role="status" data-testid="shopify-billing-checking">
+        {t('checking')}
+      </p>
+    );
+  }
+  if (!check.ok) {
+    return (
+      <div className={styles.landing} data-outcome="problem" data-testid="shopify-billing">
+        <span>{t(`error.${check.reason}`)}</span>
+        {check.reason === 'unreachable' || check.reason === 'failed' ? (
+          <button
+            type="button"
+            className={styles.connectButton}
+            disabled={isPending}
+            data-testid="shopify-billing-retry"
+            onClick={verify}
+          >
+            {t('retry')}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+  if (check.grantsAccess) {
+    return (
+      <p className={styles.landing} data-outcome="ok" role="status" data-testid="shopify-billing">
+        {t('connected')}
+      </p>
+    );
+  }
+  return (
+    <div className={styles.landing} data-outcome="problem" data-testid="shopify-billing">
+      <span>{t(stateKey(check.state, check.declined))}</span>
+      {check.planSelectionUrl ? (
+        <a
+          href={check.planSelectionUrl}
+          className={styles.connectButton}
+          data-testid="shopify-billing-plan"
+        >
+          {t('choosePlan')}
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+/** A verified state without access, as a sentence; one we do not know is said as such. */
+function stateKey(state: string, declined: boolean) {
+  switch (state) {
+    case 'PLAN_SELECTION_REQUIRED':
+      return declined ? 'state.declined' : 'state.planNeeded';
+    case 'APPROVAL_PENDING':
+      return 'state.approvalPending';
+    case 'PAST_DUE':
+      return 'state.pastDue';
+    case 'FROZEN':
+      return 'state.frozen';
+    case 'CANCELLED':
+      return 'state.cancelled';
+    default:
+      return 'state.other';
+  }
 }

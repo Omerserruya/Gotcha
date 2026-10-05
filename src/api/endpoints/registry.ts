@@ -636,6 +636,14 @@ export const integrationEndpoints = {
   shopifyStart: () => endpoint('/api/connectors/shopify/install/start?flow=redesign_studio'),
   shopifyPending: () => endpoint('/api/connectors/shopify/install/pending'),
   shopifyClaim: () => endpoint('/api/connectors/shopify/install/claim'),
+  /**
+   * Back from Shopify's plan page (backend bb4acc12 lands it on 10 with
+   * `?billing=verify&shop=`). Re-reads the subscription from Shopify; `shop`
+   * goes as a query and is compared, never trusted. 409 `shopify_shop_mismatch`
+   * / `shopify_not_connected`, 502 `shopify_verification_failed` (nothing
+   * changed). Answers the access snapshot.
+   */
+  shopifyBillingComplete: () => endpoint('/api/billing/shopify/complete'),
   wooOAuthInit: (storeUrl: string) =>
     endpoint(
       '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow=redesign_studio&format=json',
