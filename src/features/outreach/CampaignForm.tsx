@@ -41,12 +41,15 @@ export function CampaignForm({
   templates,
   initialTemplateId,
   initialChannel,
+  contactIds = [],
 }: {
   readonly accounts: readonly SendingAccount[];
   /** APPROVED templates only — nothing else can be sent on WhatsApp. */
   readonly templates: readonly UsableTemplate[];
   readonly initialTemplateId?: string;
   readonly initialChannel?: string;
+  /** People picked on 04 — the draft goes to exactly them. */
+  readonly contactIds?: readonly string[];
 }) {
   const t = useTranslations('outreach.create');
   const router = useRouter();
@@ -86,6 +89,7 @@ export function CampaignForm({
         channel: account.channel,
         ...(isWhatsApp ? { templateId } : { body }),
         ...(day && clock ? { scheduledAt: localInstant(day, clock) } : {}),
+        ...(contactIds.length > 0 ? { contactIds } : {}),
       });
       if (result.ok) router.push({ pathname: '/outreach', query: { campaign: result.id } });
       else setProblem(t(`error.${result.reason}`));
@@ -108,6 +112,12 @@ export function CampaignForm({
   return (
     <>
       <div className={drawer.drawerBody} data-testid="campaign-form">
+        {/* Picked on 04: said here, or the draft's audience would be invisible. */}
+        {contactIds.length > 0 ? (
+          <p className={drawer.hint} data-testid="campaign-picked">
+            {t('picked', { count: contactIds.length })}
+          </p>
+        ) : null}
         <label className={drawer.field}>
           <span className={drawer.fieldLabel}>{t('from')}</span>
           <select

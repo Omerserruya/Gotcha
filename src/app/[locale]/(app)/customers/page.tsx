@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { collapseToPeople } from '@/api/contracts/customers';
 import { CustomerList, ReachOut, Segments, WhoTheyAre } from '@/features/customers/CustomerList';
 import { AddCustomer } from '@/features/customers/AddCustomer';
+import { CustomerSelection } from '@/features/customers/CustomerSelection';
 import { DuplicateCard } from '@/features/customers/DuplicateCard';
 import {
   duplicateSuggestion,
@@ -120,14 +121,16 @@ export default async function Page({
             quiet={quiet === null ? null : { count: quiet.count, capped: quiet.capped }}
           />
           <div className={styles.columns}>
-            <CustomerList
-              people={shown}
-              shownOf={truncated ? total : everyone.length}
-              rowsEmpty={rows.length === 0}
-              searchedField={searchedField}
-              query={query}
-              now={now}
-            />
+            <CustomerSelection>
+              <CustomerList
+                people={shown}
+                shownOf={truncated ? total : everyone.length}
+                rowsEmpty={rows.length === 0}
+                searchedField={searchedField}
+                query={query}
+                now={now}
+              />
+            </CustomerSelection>
             <aside className={styles.side}>
               <ReachOut
                 quiet={quiet === null ? null : { count: quiet.count, capped: quiet.capped }}

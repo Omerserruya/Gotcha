@@ -47,6 +47,8 @@ export interface CampaignDraft {
   readonly body?: string;
   /** ISO, or none for "when you send it". */
   readonly scheduledAt?: string;
+  /** Hand-picked people (04's selection): a manual audience of these contacts. */
+  readonly contactIds?: readonly string[];
 }
 
 /** POST /api/broadcasts — a DRAFT. Nothing is sent. */
@@ -64,6 +66,9 @@ export async function createCampaignDraft(draft: CampaignDraft): Promise<CreateR
         channelAccountId: draft.channelAccountId,
         ...(draft.templateId ? { templateId: draft.templateId } : { body: draft.body!.trim() }),
         ...(draft.scheduledAt ? { scheduledAt: draft.scheduledAt } : {}),
+        ...(draft.contactIds?.length
+          ? { audience: { type: 'manual', contactIds: [...draft.contactIds] } }
+          : {}),
       },
     });
     revalidatePath('/[locale]/(app)/outreach', 'page');

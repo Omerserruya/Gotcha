@@ -36,6 +36,24 @@ describe('★★ drafts at the wire', () => {
     });
   });
 
+  it('picked people: a manual audience of exactly them — the route reads audience.type manual', async () => {
+    post.mockResolvedValue({ id: 'b2' });
+    await createCampaignDraft({
+      name: 'Picked',
+      channelAccountId: 'wa1',
+      channel: 'WHATSAPP',
+      templateId: 't1',
+      contactIds: ['k1', 'k2'],
+    });
+    expect(call().body).toStrictEqual({
+      name: 'Picked',
+      channel: 'WHATSAPP',
+      channelAccountId: 'wa1',
+      templateId: 't1',
+      audience: { type: 'manual', contactIds: ['k1', 'k2'] },
+    });
+  });
+
   it('nothing is posted without what the route requires', async () => {
     expect(
       await createCampaignDraft({ name: 'x', channelAccountId: 'wa1', channel: 'WHATSAPP' }),

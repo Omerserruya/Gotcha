@@ -108,91 +108,93 @@ export async function CustomerList({
     */
     <section className={`${fill.fillCard} ${styles.listCard}`} data-testid="customer-list">
       <ul className={`${fill.fillScroll} ${styles.rows}`}>
-        {people.map(({ key, primary: row, channels, lastContactAt, situation, waiting, faded }) => {
-          const label = customerLabel(row);
-          const mark = channelMark(channels[0] ?? row.channel ?? null);
-          const handle = row.phone ?? row.email ?? row.externalId;
-          const since = lastContactAt ? sinceWords(lastContactAt, now) : null;
-          return (
-            <li
-              key={key}
-              className={styles.row}
-              data-testid={`customer-${row.id}`}
-              data-faded={faded ? 'yes' : undefined}
-            >
-              <Link
-                className={styles.rowLink}
-                href={`/customers/${row.id}`}
-                title={handle ? t('today.phone', { handle }) : undefined}
+        {people.map(
+          ({ key, primary: row, members, channels, lastContactAt, situation, waiting, faded }) => {
+            const label = customerLabel(row);
+            const mark = channelMark(channels[0] ?? row.channel ?? null);
+            const handle = row.phone ?? row.email ?? row.externalId;
+            const since = lastContactAt ? sinceWords(lastContactAt, now) : null;
+            return (
+              <li
+                key={key}
+                className={styles.row}
+                data-testid={`customer-${row.id}`}
+                data-faded={faded ? 'yes' : undefined}
+                // For the selection: the person, and every identity a message can reach.
+                data-person={key}
+                data-contacts={members.map((m) => m.id).join(',')}
               >
-                <span className={styles.avatarStack} aria-hidden="true">
-                  <span className={styles.avatar}>{initialsOf(label)}</span>
-                  <span className={styles.channelBadge} data-tone={mark.tone}>
-                    <mark.Icon size={9} strokeWidth={2.4} />
+                <Link
+                  className={styles.rowLink}
+                  href={`/customers/${row.id}`}
+                  title={handle ? t('today.phone', { handle }) : undefined}
+                >
+                  <span className={styles.avatarStack} aria-hidden="true">
+                    <span className={styles.avatar}>{initialsOf(label)}</span>
+                    <span className={styles.channelBadge} data-tone={mark.tone}>
+                      <mark.Icon size={9} strokeWidth={2.4} />
+                    </span>
                   </span>
-                </span>
-                <span className={styles.rowBody}>
-                  <span className={styles.rowTop}>
-                    <span className={styles.rowName}>{label ?? t('list.unnamed')}</span>
-                    {/*
+                  <span className={styles.rowBody}>
+                    <span className={styles.rowTop}>
+                      <span className={styles.rowName}>{label ?? t('list.unnamed')}</span>
+                      {/*
                       02's state chip: what is true of them today. Waiting on
                       you is read; a mood is not recorded per person. A tag
                       the merchant set ("Wholesale") is theirs to show.
                     */}
-                    {waiting ? (
-                      <span
-                        className={styles.rowChip}
-                        data-tone="waiting"
-                        data-testid={`waiting-${row.id}`}
-                      >
-                        {t('today.waiting')}
-                      </span>
-                    ) : row.tags[0] ? (
-                      <span className={styles.rowChip}>{row.tags[0]}</span>
-                    ) : null}
+                      {waiting ? (
+                        <span
+                          className={styles.rowChip}
+                          data-tone="waiting"
+                          data-testid={`waiting-${row.id}`}
+                        >
+                          {t('today.waiting')}
+                        </span>
+                      ) : row.tags[0] ? (
+                        <span className={styles.rowChip}>{row.tags[0]}</span>
+                      ) : null}
+                    </span>
+                    <span className={styles.rowLine} data-testid={`situation-${row.id}`}>
+                      {channels.map((channel) => (
+                        <span
+                          key={channel}
+                          className="srOnly"
+                          data-testid={`channel-${row.id}-${channel}`}
+                        >
+                          {isKnownChannel(channel)
+                            ? t(`channel.${channel}` as 'channel.WHATSAPP')
+                            : channel}
+                        </span>
+                      ))}
+                      {situation ?? (
+                        <span title={t('today.noWord')} aria-label={t('today.noWord')}>
+                          —
+                        </span>
+                      )}
+                    </span>
                   </span>
-                  <span className={styles.rowLine} data-testid={`situation-${row.id}`}>
-                    {channels.map((channel) => (
-                      <span
-                        key={channel}
-                        className="srOnly"
-                        data-testid={`channel-${row.id}-${channel}`}
-                      >
-                        {isKnownChannel(channel)
-                          ? t(`channel.${channel}` as 'channel.WHATSAPP')
-                          : channel}
-                      </span>
-                    ))}
-                    {situation ?? (
-                      <span title={t('today.noWord')} aria-label={t('today.noWord')}>
-                        —
-                      </span>
-                    )}
+                  <span
+                    className={styles.rowValue}
+                    title={t('today.valueWhy')}
+                    data-testid={`value-${row.id}`}
+                  >
+                    {t('today.value')}
                   </span>
-                </span>
-                <span
-                  className={styles.rowValue}
-                  title={t('today.valueWhy')}
-                  data-testid={`value-${row.id}`}
-                >
-                  {t('today.value')}
-                </span>
-                <span className={styles.rowWhen} data-testid={`since-${row.id}`}>
-                  {since ? t(`since.${since.key}` as 'since.days', { n: since.n ?? 0 }) : '—'}
-                </span>
-              </Link>
-            </li>
-          );
-        })}
+                  <span className={styles.rowWhen} data-testid={`since-${row.id}`}>
+                    {since ? t(`since.${since.key}` as 'since.days', { n: since.n ?? 0 }) : '—'}
+                  </span>
+                </Link>
+              </li>
+            );
+          },
+        )}
       </ul>
 
       <p className={styles.listFooter}>
-        <span data-testid="customer-count">
+        {/* 02's foot; why one person can show twice rides on its title. */}
+        <span data-testid="customer-count" title={t('identityLimit')}>
           {t('footerToday', { shown: people.length, total: shownOf })}
-        </span>
-        {' · '}
-        <span data-testid="identity-limit" title={t('identityLimit')}>
-          {t('identityShort')}
         </span>
       </p>
     </section>

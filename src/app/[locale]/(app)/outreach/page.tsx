@@ -62,6 +62,8 @@ export default async function Page({
     readonly create?: string;
     readonly channel?: string;
     readonly template?: string;
+    /** 04: the people picked there, comma-separated. */
+    readonly contacts?: string;
   }>;
 }) {
   const t = await getTranslations('outreach');
@@ -124,6 +126,7 @@ export default async function Page({
           }))}
         initialTemplateId={params.template}
         initialChannel={params.channel === 'EMAIL' ? emailAccount?.channel : undefined}
+        contactIds={contactsOf(params.contacts)}
       />
     </Drawer>
   ) : null;
@@ -209,3 +212,12 @@ const EMAIL_CHANNELS = new Set(['EMAIL', 'GMAIL', 'OUTLOOK']);
 const SENDABLE = new Set(['WHATSAPP', ...EMAIL_CHANNELS]);
 
 export const generateMetadata = pageMetadata('primary.outreach');
+
+/** `?contacts=a,b,c` from 04's selection — ids only, at most 200. */
+function contactsOf(raw: string | undefined): readonly string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => /^[A-Za-z0-9_-]{1,64}$/.test(id))
+    .slice(0, 200);
+}

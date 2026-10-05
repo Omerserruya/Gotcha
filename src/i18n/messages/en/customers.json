@@ -293,7 +293,6 @@
   },
   "titleCount": "{count, plural, =1 {One customer} other {# customers}}",
   "subline": "One person, however many channels they write from.",
-  "identityShort": "Someone writing on two channels may appear twice.",
   "composition": {
     "heading": "Who your customers are",
     "byChannel": "By the channel they write on"
@@ -443,5 +442,13 @@
     "never": "Never bought",
     "unread": "Order history comes from the store, and there is no read of it for everyone yet."
   },
-  "footerToday": "Showing {shown} of {total}"
+  "footerToday": "Showing {shown} of {total} · shift-click to pick several, then message or tag them",
+  "select": {
+    "label": "Picked customers",
+    "count": "{count, plural, one {1 selected} other {# selected}}",
+    "message": "Message",
+    "tag": "Tag",
+    "tagNotYet": "Tagging several people at once comes next — nothing writes a customer's tags from here yet.",
+    "clear": "Clear"
+  }
 }

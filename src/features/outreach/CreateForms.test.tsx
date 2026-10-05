@@ -57,6 +57,8 @@ beforeEach(() => {
 describe('★★ 05 — a campaign, as a DRAFT', () => {
   it('WhatsApp: only approved templates of this number or the tenant’s; nothing saved until the click', async () => {
     wrap(<CampaignForm accounts={ACCOUNTS} templates={TEMPLATES} />);
+    // No pick: no audience line, and no contactIds below.
+    expect(screen.queryByTestId('campaign-picked')).toBeNull();
     const options = [...screen.getByTestId('campaign-template').querySelectorAll('option')].map(
       (o) => o.value,
     );
@@ -77,6 +79,26 @@ describe('★★ 05 — a campaign, as a DRAFT', () => {
       templateId: 't1',
     });
     expect(push).toHaveBeenCalledWith({ pathname: '/outreach', query: { campaign: 'b9' } });
+  });
+
+  it('★ people picked on Customers: the form says so, and the draft goes to exactly them', async () => {
+    wrap(
+      <CampaignForm
+        accounts={ACCOUNTS}
+        templates={TEMPLATES}
+        initialTemplateId="t1"
+        contactIds={['k1', 'k2']}
+      />,
+    );
+    expect(screen.getByTestId('campaign-picked')).toHaveTextContent(
+      'To the 2 people you picked on Customers.',
+    );
+    await userEvent.type(screen.getByTestId('campaign-name'), 'Picked');
+    actions.createCampaignDraft.mockResolvedValue({ ok: true, id: 'b9' });
+    await userEvent.click(screen.getByTestId('campaign-save'));
+    expect(actions.createCampaignDraft.mock.calls[0]![0]).toMatchObject({
+      contactIds: ['k1', 'k2'],
+    });
   });
 
   it('★ "When" is day-first and 24-hour; half of it saves nothing', async () => {

@@ -2410,4 +2410,52 @@
     border-radius: 2px;
     background-color: var(--panel-well);
   }
+
+  /* 04's selection: a picked row, and the bar that acts on the pick. */
+  .selectArea {
+    display: contents;
+  }
+
+  .row[data-selected='yes'] .rowLink {
+    background-color: var(--ai-avatar-surface);
+  }
+
+  /* Floats over the page's foot, so the columns stay two. */
+  .selectBar {
+    position: fixed;
+    inset-block-end: var(--space-24);
+    inset-inline-start: 50%;
+    z-index: 20;
+    translate: -50% 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding: var(--space-8) var(--space-14);
+    border-radius: 12px;
+    background-color: var(--frame-raised);
+    font-size: var(--font-size-label);
+    color: var(--frame-text);
+    line-height: normal;
+  }
+
+  .selectPrimary {
+    padding: 5px var(--space-12);
+    border-radius: var(--space-8);
+    background-color: var(--frame-text);
+    color: var(--frame-raised);
+    text-decoration: none;
+  }
+
+  .selectDrawn {
+    color: var(--frame-text-muted);
+    cursor: not-allowed;
+  }
+
+  .selectClear {
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--frame-text-muted);
+    cursor: pointer;
+  }
 }

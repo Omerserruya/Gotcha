@@ -165,7 +165,8 @@
       "entitlement": "Campaigns aren't part of this plan.",
       "forbidden": "You don't have permission to create campaigns.",
       "failed": "The draft wasn't saved. Try again."
-    }
+    },
+    "picked": "{count, plural, one {To the 1 person you picked on Customers.} other {To the # people you picked on Customers.}}"
   },
   "go": {
     "cancel": "Not yet",

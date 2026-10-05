@@ -112,10 +112,12 @@ describe('★★ 04’s rows — what is true about them today', () => {
     expect(screen.getByTestId('since-k1')).toHaveTextContent(/^1 month$/);
   });
 
-  it('the footer: showing N of all, and the identity limit with its reason', async () => {
+  it('the footer: showing N of all, with the identity limit as its reason', async () => {
     await show([row()]);
-    expect(screen.getByTestId('customer-count')).toHaveTextContent('Showing 1 of 4180');
-    expect(screen.getByTestId('identity-limit').getAttribute('title')).toBeTruthy();
+    expect(screen.getByTestId('customer-count')).toHaveTextContent(
+      'Showing 1 of 4180 · shift-click to pick several, then message or tag them',
+    );
+    expect(screen.getByTestId('customer-count').getAttribute('title')).toBeTruthy();
   });
 });
 
