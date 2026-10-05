@@ -722,6 +722,14 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       // not turn a SUCCESSFUL authorization into a 500 that loses the token.
       let base = "";
       try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+      // An install that began on Shopify has no GOTCHA session, so no flow to
+      // read. Which app finishes it is a deployment decision: opt in with
+      // SHOPIFY_ANONYMOUS_INSTALL_LANDING=v2. Unset, it is the old finish
+      // screen, unchanged. The handle stays in the HttpOnly cookie either way.
+      if ((process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING || "").trim() === "v2") {
+        res.redirect(`${base}${REDESIGN_BASE_PATH}/studio/capabilities?system=shopify&pending=1&reason=claim`);
+        return;
+      }
       res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);
       return;
     }

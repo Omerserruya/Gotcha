@@ -442,3 +442,24 @@ describe("redesign_studio flow", () => {
     expect(res.headers.location).toContain("/settings/business-systems/shopify/finish?handle=");
   });
 });
+
+describe("an install that began on Shopify (no GOTCHA session)", () => {
+  it("lands on the old finish screen by default", async () => {
+    H.stateResult.current = WITHOUT_INTENT;
+    delete process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING;
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toContain("/settings/business-systems/shopify/finish?handle=");
+  });
+
+  it("★ with SHOPIFY_ANONYMOUS_INSTALL_LANDING=v2 it lands on v2 to claim, the handle only in the cookie", async () => {
+    H.stateResult.current = WITHOUT_INTENT;
+    process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING = "v2";
+    try {
+      const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+      expect(res.headers.location).toBe("https://app.gotcha.co.il/v2/studio/capabilities?system=shopify&pending=1&reason=claim");
+      expect(String(res.headers["set-cookie"] || "")).toContain("gotcha_shopify_pending=");
+    } finally {
+      delete process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING;
+    }
+  });
+});

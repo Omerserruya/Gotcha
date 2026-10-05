@@ -46,6 +46,10 @@ const H = vi.hoisted(() => {
     linkCalls: [] as any[],
     /** The store a connect would REPLACE. null = nothing to replace. */
     replacing: { current: null as string | null },
+    /** Durable per-tenant settings, keyed `${tenant}|${key}`. */
+    settings: new Map<string, string | null>(),
+    /** Which workspace holds a shop, for the billing return. */
+    owner: { current: null as { tenantId: string; connectionId: string; status: string } | null },
   };
 });
 
@@ -63,6 +67,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     requireOnboardingOrActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     requirePermission: () => (_req: any, res: any, next: any) =>
       H.permission.granted ? next() : res.status(403).json({ error: "forbidden" }),
+    readDurableSetting: async (t: string, k: string) => H.settings.get(`${t}|${k}`) ?? null,
+    writeDurableSetting: async (t: string, k: string, v: string | null) => { H.settings.set(`${t}|${k}`, v); },
   };
 });
 
@@ -117,7 +123,7 @@ vi.mock("../services/shopify-connection-link.service", () => ({
   // (nothing to replace) so existing cases keep the plain connect path; the
   // multiple-store cases override H.replacing.
   pendingStoreReplacement: vi.fn(async () => H.replacing.current),
-  findShopOwner: vi.fn(async () => null),
+  findShopOwner: vi.fn(async () => H.owner.current),
 }));
 
 import router from "../routes/shopify-install";
@@ -774,5 +780,39 @@ describe("shopify install claim", () => {
         .send({ handle });
       expect(res.status, String(handle)).toBe(404);
     }
+  });
+});
+
+
+// ─── The return from Shopify's plan page ─────────────────────
+
+describe("GET /connectors/shopify/billing/return", () => {
+  beforeEach(() => { H.settings.clear(); H.owner.current = null; });
+  const ret = (q: string) => request(app()).get(`/api/connectors/shopify/billing/return?${q}`);
+
+  it("★ install/start remembers which app the connect began in (and forgets on an old-app start)", async () => {
+    await request(app()).get("/api/connectors/shopify/install/start?flow=redesign_studio");
+    expect(H.settings.get("tenant-A|shopify.returnFlow")).toBe("redesign_studio");
+    await request(app()).get("/api/connectors/shopify/install/start");
+    expect(H.settings.get("tenant-A|shopify.returnFlow")).toBeNull();
+  });
+
+  it("★ a v2 workspace's return lands in /v2 to verify there", async () => {
+    H.owner.current = { tenantId: "tenant-A", connectionId: "c1", status: "CONNECTED" };
+    H.settings.set("tenant-A|shopify.returnFlow", "redesign_studio");
+    const r = await ret(`plan_handle=pro&shop=${SHOP}`);
+    expect(r.status).toBe(302);
+    expect(r.headers.location).toMatch(/\/v2\/studio\/capabilities\?system=shopify&billing=verify&shop=urban-supply-dev\.myshopify\.com$/);
+  });
+
+  it("★ everyone else gets today's page, with Shopify's query passed through untouched", async () => {
+    H.owner.current = { tenantId: "tenant-A", connectionId: "c1", status: "CONNECTED" };
+    const r = await ret(`plan_handle=pro&shop=${SHOP}`);
+    expect(r.headers.location).toMatch(new RegExp(`/integrations/shopify/billing/complete\\?plan_handle=pro&shop=${SHOP.replace(/\./g, "\\.")}$`));
+  });
+
+  it("an unknown shop, or no shop, gets today's page - never a guess", async () => {
+    expect((await ret(`plan_handle=pro&shop=nobody.myshopify.com`)).headers.location).toContain("/integrations/shopify/billing/complete?");
+    expect((await ret(`plan_handle=pro`)).headers.location).toContain("/integrations/shopify/billing/complete?plan_handle=pro");
   });
 });
