@@ -134,6 +134,11 @@ beforeEach(() => {
   capture.calls = [];
   BODIES = {
     '/api/identity/c1/timeline': TIMELINE,
+    // Unenveloped, as the route answers it.
+    '/api/identity/c1/insights': {
+      contact: null,
+      conversations: [{ id: 'conv-1', status: 'OPEN' }],
+    },
     '/api/approvals': { data: APPROVALS },
     '/api/business-policies': {
       data: {
@@ -377,5 +382,17 @@ describe('★★ 04f reads what 04e could not: the contact, with no conversation
 
     expect(detail.viewerUserId).toBeNull();
     expect(detail.readsFailed).toContain('viewer');
+  });
+});
+
+describe('★ 04b’s statuses', () => {
+  it('read raw from the person’s insights, by conversation; a failure is recorded, not orange', async () => {
+    const { loadCustomer } = await import('./load-customer');
+    const detail = await loadCustomer('c1');
+    expect(detail.conversationStatus?.get('conv-1')).toBe('OPEN');
+    BODIES['/api/identity/c1/insights'] = new Error('500');
+    const failed = await loadCustomer('c1');
+    expect(failed.conversationStatus).toBeNull();
+    expect(failed.readsFailed).toContain('statuses');
   });
 });

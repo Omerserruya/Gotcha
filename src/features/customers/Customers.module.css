@@ -1149,7 +1149,11 @@
     background-color: var(--channel-4);
   }
 
-  /* 02's dots: violet for what GOTCHA did, green for an order. */
+  /* 02's dots: orange when it needs you, violet for what GOTCHA did, green for an order; resolved stays grey. */
+  .timelineRow[data-tone='attention'] .timelineDot {
+    background-color: var(--intent-urgent-edge);
+  }
+
   .timelineRow[data-tone='action'] .timelineDot {
     background-color: var(--channel-2);
   }

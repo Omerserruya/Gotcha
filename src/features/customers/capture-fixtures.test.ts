@@ -127,6 +127,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
         displayName: 'A Real Person',
         externalId: '+972500000000',
         channel: 'WHATSAPP',
+        createdAt: null,
       },
       events: [
         {
@@ -157,6 +158,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     crm: null,
     orders: null,
     conversationId: null,
+    conversationStatus: null,
     noConversations: false,
     // A real person's page whose audit log we could not read.
     actions: { state: 'failed' },
@@ -208,6 +210,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       crm: null,
       orders: null,
       conversationId: null,
+      conversationStatus: null,
       noConversations: false,
       // The timeline failed, so 04e was never asked for.
       actions: { state: 'not_asked' },
@@ -245,6 +248,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
       crm: null,
       orders: null,
       conversationId: null,
+      conversationStatus: null,
       noConversations: false,
       // The timeline failed, so 04e was never asked for.
       actions: { state: 'not_asked' },

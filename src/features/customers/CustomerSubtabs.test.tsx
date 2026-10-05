@@ -108,6 +108,7 @@ describe('★★ 04c–04f’s compact header', () => {
         ...FIXTURE_DETAIL.timeline!,
         page: { ...FIXTURE_DETAIL.timeline!.page, hasMore: true },
         identityChannels: [],
+        contact: { ...FIXTURE_DETAIL.timeline!.contact!, createdAt: null },
       },
     };
     render(await CustomerTopBar({ detail: bare, contactId: 'k1' }));
@@ -115,12 +116,25 @@ describe('★★ 04c–04f’s compact header', () => {
     expect(screen.getByTestId('customer-top-bar')).not.toHaveTextContent('—');
   });
 
-  it('⚠ "with you since" only when the whole history is here', async () => {
+  it('★ "with you since" is when the contact was made — whatever part of the history is here', async () => {
     const partial: CustomerDetail = {
       ...FIXTURE_DETAIL,
       timeline: {
         ...FIXTURE_DETAIL.timeline!,
         page: { ...FIXTURE_DETAIL.timeline!.page, hasMore: true },
+      },
+    };
+    render(await CustomerTopBar({ detail: partial, contactId: 'k1' }));
+    expect(screen.getByTestId('customer-top-bar')).toHaveTextContent('with you since March 2024');
+  });
+
+  it('⚠ no created date and only part of the history: no "since" — the oldest word shown is not the first', async () => {
+    const partial: CustomerDetail = {
+      ...FIXTURE_DETAIL,
+      timeline: {
+        ...FIXTURE_DETAIL.timeline!,
+        page: { ...FIXTURE_DETAIL.timeline!.page, hasMore: true },
+        contact: { ...FIXTURE_DETAIL.timeline!.contact!, createdAt: null },
       },
     };
     render(await CustomerTopBar({ detail: partial, contactId: 'k1' }));

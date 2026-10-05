@@ -37,6 +37,7 @@ import {
   CustomerTimelineList,
   parseCustomerTab,
   shortDate,
+  conversationTone,
 } from './CustomerScreen';
 import type { CustomerDetail } from './load-customer';
 
@@ -105,7 +106,26 @@ describe('★★ the timeline: one stream, conversations, orders, actions and no
     const tones = [...screen.getByTestId('customer-timeline').querySelectorAll('li')].map((li) =>
       li.getAttribute('data-tone'),
     );
-    expect(new Set(tones)).toEqual(new Set(['conversation']));
+    // Conversations only — whatever their dot: open-and-theirs, resolved, or plain.
+    expect(tones.every((tone) => ['attention', 'resolved', 'conversation'].includes(tone!))).toBe(
+      true,
+    );
+  });
+
+  it('★ 04b’s dots: open with their word last is orange; closed is resolved; unread is never orange', () => {
+    expect(conversationTone('OPEN', 'INBOUND')).toBe('attention');
+    expect(conversationTone('WAITING', 'INBOUND')).toBe('attention');
+    expect(conversationTone('OPEN', 'OUTBOUND')).toBe('conversation');
+    expect(conversationTone('CLOSED', 'INBOUND')).toBe('resolved');
+    expect(conversationTone(undefined, 'INBOUND')).toBe('conversation');
+  });
+
+  it('★ the fixture: its open conversation was answered last (plain), the closed one resolved', async () => {
+    render(await CustomerTimelineList({ detail: detail(), only: 'conversations' }));
+    const tones = [...screen.getByTestId('customer-timeline').querySelectorAll('li')].map((li) =>
+      li.getAttribute('data-tone'),
+    );
+    expect(tones).toEqual(['conversation', 'resolved']);
   });
 
   it('★★ GOTCHA’s actions are rows: the approvals it asked for, in violet, with their outcome', async () => {

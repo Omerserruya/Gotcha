@@ -162,6 +162,8 @@ export const timelineSchema = z.object({
       displayName: z.string().nullable().default(null),
       externalId: z.string().default(''),
       channel: z.string().default(''),
+      /** When the contact was made — 04b's "with you since". */
+      createdAt: z.string().nullable().catch(null).default(null),
     })
     .nullable()
     .default(null),

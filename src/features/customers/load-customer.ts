@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { z } from 'zod';
+
 import { serverApi } from '@/api/client/server-api';
 import {
   briefSchema,
@@ -58,6 +60,13 @@ import { logger } from '@/observability/logger';
  * result, which means there is nothing to show. The screen says different
  * sentences for those.
  */
+const conversationStatusSchema = z.object({
+  conversations: z
+    .array(z.object({ id: z.string(), status: z.string().catch('') }))
+    .catch([])
+    .default([]),
+});
+
 export interface CustomerDetail {
   readonly timeline: CustomerTimeline | null;
   readonly brief: CustomerBrief | null;
@@ -77,6 +86,8 @@ export interface CustomerDetail {
    * helper exists to prevent.
    */
   readonly conversationId: string | null;
+  /** Each conversation's status, for 04b's dots; `null` when unread. */
+  readonly conversationStatus: ReadonlyMap<string, string> | null;
   /**
    * True when the person has no conversations at all, so the brief was never
    * requested rather than requested and missing.
@@ -244,6 +255,7 @@ export async function loadCustomer(
         crm: null,
         orders: null,
         conversationId: null,
+        conversationStatus: null,
         noConversations: false,
         // Not asked for: without a timeline there is no page to put it on,
         // and `failed` would report a read we never made.
@@ -325,96 +337,111 @@ export async function loadCustomer(
       return null;
     });
 
-  const [brief, memory, crm, orders, notes, viewerUserId, approvals, policies] = await Promise.all([
-    /*
-     * ★ BY CONTACT, NOT BY CONVERSATION — Backend added the entry point
-     * after this screen reported the door problem.
-     *
-     * It resolves the person internally, follows the soft-merge pointer, and
-     * answers `reason: "no_conversations"` for somebody who has never
-     * written rather than erroring. So the brief is no longer one of the
-     * conversation-keyed reads, and this page no longer has to choose a
-     * conversation on its behalf.
-     *
-     * ⚠ STILL NO `refresh`. The route falls back to inline generation when
-     * that flag is set, which is a live model call on a page load — on a
-     * screen somebody opens to read, not to regenerate.
-     */
-    api
-      .post({
-        endpoint: customerEndpoints.summary(),
-        body: { contactId },
-        payload: briefSchema,
-      })
-      .catch(failing<CustomerBrief>('brief', 'customer.brief_failed')),
-    externalId
-      ? api
-          .get({ endpoint: customerEndpoints.memory(externalId), payload: memorySchema })
-          .catch(failing<CustomerMemory>('memory', 'customer.memory_failed'))
-      : Promise.resolve(null),
-    conversationId
-      ? api
-          .get({
-            endpoint: customerEndpoints.crmContext(conversationId),
-            payload: crmContextSchema,
-          })
-          .catch(failing<CrmContext>('crm', 'customer.crm_failed'))
-      : Promise.resolve(null),
-    conversationId
-      ? api
-          .get({
-            endpoint: customerEndpoints.orders(conversationId),
-            payload: commerceContextSchema,
-            /*
-             * ════════════════════════════════════════════════════════════
-             * ★★ FOUND BY SWEEPING THE NAME, AND IT WAS DORMANT FOR THE
-             *    SAME REASON THE VOICE COLLAPSE WAS
-             * ════════════════════════════════════════════════════════════
-             * The route answers the union UNENVELOPED — `res.json(result)`
-             * where `result` is `{ state, data }` for `ok`. The client sees
-             * a top-level `data` key, unwraps it, and hands the bare
-             * `CommerceContext` to a schema that requires `state`. The
-             * parse fails, and 04d renders "we couldn't read your orders".
-             *
-             * ★ IT HAS NEVER FIRED, BECAUSE THE ONLY STATE THIS TENANT CAN
-             * PRODUCE HAS NO `data` KEY. Shopify is in ERROR here, so the
-             * answer is `{ state: "connection_unhealthy" }`, nothing is
-             * unwrapped, and every test and capture has passed over a
-             * screen whose success path could not work. Connect a store and
-             * 04d breaks on the spot.
-             *
-             * And it cascades: `shopifyCustomerIdIn` reads `data.customer`,
-             * so 04e would never send `?shopifyCustomerId=` and would print
-             * the "pass it" gap for good.
-             */
-            raw: true,
-          })
-          .catch(failing<CommerceContextResponse>('orders', 'customer.orders_failed'))
-      : Promise.resolve(null),
-    /*
-     * ★ 04f JOINS THE FAN-OUT, AND 04e COULD NOT.
-     *
-     * Notes are CONTACT-keyed — the stub they replaced was conversation-keyed
-     * and that was the defect. So this needs nothing from the other three
-     * answers and costs no extra round trip, unlike the audit read, which
-     * waits on the commerce read for `shopifyCustomerId`.
-     */
-    api
-      .get({ endpoint: customerEndpoints.notes(contactId), payload: noteListSchema })
-      .then((page) => page.notes)
-      .catch(failing<readonly Note[]>('notes', 'customer.notes_failed')),
-    /*
-     * Who is reading, so the edit control appears for the author and nobody
-     * else. A failure leaves it `null` and hides the control — safe, and
-     * recorded as a failed read so the capture fixture cannot mask it.
-     */
-    api
-      .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
-      .then((me) => me.user.id)
-      .catch(failing<string>('viewer', 'customer.viewer_failed')),
-    approvalsRead,
-    policiesRead,
-  ]);
+  /* 04b's dots: which conversations are still open. A failure greys them, never oranges them. */
+  const statusRead = api
+    .get({
+      endpoint: customerEndpoints.identityInsights(contactId),
+      payload: conversationStatusSchema,
+      raw: true,
+    })
+    .then(
+      (answer): ReadonlyMap<string, string> =>
+        new Map(answer.conversations.map((c) => [c.id, c.status])),
+    )
+    .catch(failing<ReadonlyMap<string, string>>('statuses', 'customer.statuses_failed'));
+
+  const [brief, memory, crm, orders, notes, viewerUserId, approvals, policies, conversationStatus] =
+    await Promise.all([
+      /*
+       * ★ BY CONTACT, NOT BY CONVERSATION — Backend added the entry point
+       * after this screen reported the door problem.
+       *
+       * It resolves the person internally, follows the soft-merge pointer, and
+       * answers `reason: "no_conversations"` for somebody who has never
+       * written rather than erroring. So the brief is no longer one of the
+       * conversation-keyed reads, and this page no longer has to choose a
+       * conversation on its behalf.
+       *
+       * ⚠ STILL NO `refresh`. The route falls back to inline generation when
+       * that flag is set, which is a live model call on a page load — on a
+       * screen somebody opens to read, not to regenerate.
+       */
+      api
+        .post({
+          endpoint: customerEndpoints.summary(),
+          body: { contactId },
+          payload: briefSchema,
+        })
+        .catch(failing<CustomerBrief>('brief', 'customer.brief_failed')),
+      externalId
+        ? api
+            .get({ endpoint: customerEndpoints.memory(externalId), payload: memorySchema })
+            .catch(failing<CustomerMemory>('memory', 'customer.memory_failed'))
+        : Promise.resolve(null),
+      conversationId
+        ? api
+            .get({
+              endpoint: customerEndpoints.crmContext(conversationId),
+              payload: crmContextSchema,
+            })
+            .catch(failing<CrmContext>('crm', 'customer.crm_failed'))
+        : Promise.resolve(null),
+      conversationId
+        ? api
+            .get({
+              endpoint: customerEndpoints.orders(conversationId),
+              payload: commerceContextSchema,
+              /*
+               * ════════════════════════════════════════════════════════════
+               * ★★ FOUND BY SWEEPING THE NAME, AND IT WAS DORMANT FOR THE
+               *    SAME REASON THE VOICE COLLAPSE WAS
+               * ════════════════════════════════════════════════════════════
+               * The route answers the union UNENVELOPED — `res.json(result)`
+               * where `result` is `{ state, data }` for `ok`. The client sees
+               * a top-level `data` key, unwraps it, and hands the bare
+               * `CommerceContext` to a schema that requires `state`. The
+               * parse fails, and 04d renders "we couldn't read your orders".
+               *
+               * ★ IT HAS NEVER FIRED, BECAUSE THE ONLY STATE THIS TENANT CAN
+               * PRODUCE HAS NO `data` KEY. Shopify is in ERROR here, so the
+               * answer is `{ state: "connection_unhealthy" }`, nothing is
+               * unwrapped, and every test and capture has passed over a
+               * screen whose success path could not work. Connect a store and
+               * 04d breaks on the spot.
+               *
+               * And it cascades: `shopifyCustomerIdIn` reads `data.customer`,
+               * so 04e would never send `?shopifyCustomerId=` and would print
+               * the "pass it" gap for good.
+               */
+              raw: true,
+            })
+            .catch(failing<CommerceContextResponse>('orders', 'customer.orders_failed'))
+        : Promise.resolve(null),
+      /*
+       * ★ 04f JOINS THE FAN-OUT, AND 04e COULD NOT.
+       *
+       * Notes are CONTACT-keyed — the stub they replaced was conversation-keyed
+       * and that was the defect. So this needs nothing from the other three
+       * answers and costs no extra round trip, unlike the audit read, which
+       * waits on the commerce read for `shopifyCustomerId`.
+       */
+      api
+        .get({ endpoint: customerEndpoints.notes(contactId), payload: noteListSchema })
+        .then((page) => page.notes)
+        .catch(failing<readonly Note[]>('notes', 'customer.notes_failed')),
+      /*
+       * Who is reading, so the edit control appears for the author and nobody
+       * else. A failure leaves it `null` and hides the control — safe, and
+       * recorded as a failed read so the capture fixture cannot mask it.
+       */
+      api
+        .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
+        .then((me) => me.user.id)
+        .catch(failing<string>('viewer', 'customer.viewer_failed')),
+      approvalsRead,
+      policiesRead,
+      statusRead,
+    ]);
 
   /*
    * ════════════════════════════════════════════════════════════════════════
@@ -488,6 +515,7 @@ export async function loadCustomer(
       crm,
       orders,
       conversationId,
+      conversationStatus,
       noConversations: conversationId === null,
       actions,
       notes,

@@ -223,6 +223,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
       displayName: 'Avery Stone',
       externalId: '+447700900123',
       channel: 'WHATSAPP',
+      createdAt: '2024-03-12T09:00:00.000Z',
     },
     /*
      * ★ THE JOIN THAT EXISTS, FROM THE ROUTE'S OWN PROJECTION.
@@ -596,6 +597,11 @@ export const FIXTURE_DETAIL: CustomerDetail = {
     },
   }),
   conversationId: 'fixture-conv-1',
+  // What the insights route answers for these two: one still open, one closed.
+  conversationStatus: new Map([
+    ['fixture-conv-1', 'OPEN'],
+    ['fixture-conv-2', 'CLOSED'],
+  ]),
   noConversations: false,
   /*
    * ════════════════════════════════════════════════════════════════════════

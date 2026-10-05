@@ -72,10 +72,13 @@ export async function customerFacts(detail: CustomerDetail): Promise<readonly st
     detail.timeline && !detail.timeline.page.hasMore && events.length > 0
       ? events.reduce((min, e) => (e.createdAt < min ? e.createdAt : min), events[0]!.createdAt)
       : null;
+  // "With you since": when the contact was made — or an older word we hold (imported history).
+  const created = detail.timeline?.contact?.createdAt ?? null;
+  const since = created && oldest ? (oldest < created ? oldest : created) : (created ?? oldest);
   return [
-    oldest
+    since
       ? t('card.since', {
-          when: format.dateTime(new Date(oldest), { month: 'long', year: 'numeric' }),
+          when: format.dateTime(new Date(since), { month: 'long', year: 'numeric' }),
         })
       : null,
     reaches.length > 0 ? t('card.reaches', { channels: format.list(reaches) }) : null,
@@ -195,10 +198,27 @@ export async function CustomerTabs({
   );
 }
 
+/** 04b's conversation dots: orange when it needs you, grey otherwise. */
+export type ConversationTone = 'attention' | 'resolved' | 'conversation';
+
+/**
+ * Open with the customer's word last: it needs attention. Closed: resolved.
+ * A status we could not read is plain grey — an unread status never turns a
+ * dot orange.
+ */
+export function conversationTone(
+  status: string | undefined,
+  lastDirection: 'INBOUND' | 'OUTBOUND' | null | undefined,
+): ConversationTone {
+  if (!status) return 'conversation';
+  if (status === 'CLOSED') return 'resolved';
+  return lastDirection === 'INBOUND' ? 'attention' : 'conversation';
+}
+
 interface Row {
   readonly key: string;
   readonly at: string;
-  readonly tone: 'conversation' | 'action' | 'order' | 'note' | 'handover';
+  readonly tone: ConversationTone | 'action' | 'order' | 'note' | 'handover';
   readonly title: string;
   readonly line: string | null;
 }
@@ -239,7 +259,10 @@ export async function CustomerTimelineList({
     rows.push({
       key: `c-${conversationId}`,
       at: sorted[0]!.createdAt,
-      tone: 'conversation',
+      tone: conversationTone(
+        detail.conversationStatus?.get(conversationId),
+        sorted.find((m) => m.direction !== null)?.direction,
+      ),
       title: said?.body?.trim().slice(0, 90) ?? t('card.messages', { count: messages.length }),
       line: [
         channelName(sorted[0]!.channel, channels),

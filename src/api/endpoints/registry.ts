@@ -823,6 +823,13 @@ export const customerEndpoints = {
    */
   timeline: (id: string) => endpoint('/api/identity/{id}/timeline', { id }),
   /**
+   * The person's conversations with their status (and much else, unread
+   * here) — UNENVELOPED: `{ contact, conversations, … }`. 04b colours its
+   * timeline by it: open and theirs last is "needs attention", closed is
+   * resolved.
+   */
+  identityInsights: (id: string) => endpoint('/api/identity/{id}/insights', { id }),
+  /**
    * The written character summary. A **POST**, and it requires a
    * `conversationId` — customer-level intelligence behind a
    * conversation-shaped door, so 04b passes this person's most recent
