@@ -219,8 +219,9 @@ export type PartState =
 export function partState(part: RolePart): PartState {
   if (!part.available) return 'impossible';
   if (part.elected) {
+    // Backend's rule (fbec66a9): elected, and its candidate is not CONNECTED.
     const playing = part.candidates.find((c) => c.slug === part.elected!.slug);
-    return playing && connectedButFailing(playing) ? 'chosen_failing' : 'chosen';
+    return playing && playing.status !== 'CONNECTED' ? 'chosen_failing' : 'chosen';
   }
   if (part.candidates.some((c) => c.connected)) return 'connected_none_chosen';
   // Checked AFTER connected, so one healthy system is not hidden by one

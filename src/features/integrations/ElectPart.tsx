@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 
 import { connectedButFailing, type RolePart } from '@/api/contracts/business-core';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
-import { useRouter } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import { electRole, type ElectResult } from './actions';
 import styles from './BusinessCore.module.css';
@@ -127,23 +127,27 @@ export function ElectPart({ part }: { readonly part: RolePart }) {
               </li>
             ))}
             {broken.map((candidate) => (
-              <li key={candidate.slug}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={false}
-                  aria-disabled="true"
-                  disabled
-                  className={styles.pickOption}
-                  title={t('elect.notWorking')}
-                  data-testid={`core-elect-option-${part.role}-${candidate.slug}`}
-                >
-                  <IntegrationLogo slug={candidate.slug} size="pill" />
-                  <span className={styles.pickWho}>
-                    <span className={styles.pillName}>{candidate.name}</span>
-                    <span className={styles.pickWhy}>{t('elect.notWorking')}</span>
-                  </span>
-                </button>
+              <li
+                key={candidate.slug}
+                role="option"
+                aria-selected={false}
+                aria-disabled="true"
+                className={styles.pickOption}
+                data-disabled=""
+                data-testid={`core-elect-option-${part.role}-${candidate.slug}`}
+              >
+                <IntegrationLogo slug={candidate.slug} size="pill" />
+                <span className={styles.pickWho}>
+                  <span className={styles.pillName}>{candidate.name}</span>
+                  {/* Why it can't be chosen, and where it is fixed: 10. */}
+                  <Link
+                    href={{ pathname: '/studio/capabilities', query: { system: candidate.slug } }}
+                    className={styles.pickWhy}
+                    data-testid={`core-elect-reconnect-${candidate.slug}`}
+                  >
+                    {t('elect.notWorking')}
+                  </Link>
+                </span>
               </li>
             ))}
           </ul>

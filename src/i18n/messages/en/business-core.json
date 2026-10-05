@@ -64,7 +64,7 @@
       "failed": "That didn't save. Nothing was changed."
     },
     "connectedHeading": "Connected in Integrations",
-    "notWorking": "Not working — fix it in Integrations first"
+    "notWorking": "Needs reconnecting"
   },
   "returns": {
     "elsewhere": "Returns are chosen on their own switch, not here — an explicit choice there wins over whatever GOTCHA would otherwise fall back to."

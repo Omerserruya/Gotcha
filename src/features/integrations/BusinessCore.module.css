@@ -348,11 +348,11 @@
     background-color: var(--table-head-surface);
   }
 
-  .pickOption:disabled {
-    cursor: not-allowed;
+  .pickOption[data-disabled] {
+    cursor: default;
   }
 
-  .pickOption:disabled:hover {
+  .pickOption[data-disabled]:hover {
     background: none;
   }
 

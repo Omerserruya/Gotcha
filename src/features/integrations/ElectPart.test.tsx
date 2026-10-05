@@ -26,7 +26,14 @@ import { ElectPart } from './ElectPart';
 const electRole = vi.hoisted(() => vi.fn());
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock('./actions', () => ({ electRole }));
-vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ refresh }),
+  Link: ({ href, children, ...rest }: { href: unknown; children: React.ReactNode }) => (
+    <a href={JSON.stringify(href)} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 beforeEach(() => {
   // Reset, not just clear: a mock left resolving the previous test's value is
@@ -77,8 +84,11 @@ describe('what is offered — 02’s pill, "the dropdown, never a connect form"'
     expect(screen.getByRole('option', { name: 'WooCommerce' })).toBeInTheDocument();
     // Listed, never choosable: the write would refuse it, and why is said beside it.
     const broken = screen.getByTestId('core-elect-option-ecommerce-broken');
-    expect(broken).toBeDisabled();
-    expect(broken).toHaveTextContent('Not working — fix it in Integrations first');
+    expect(broken).toHaveAttribute('aria-disabled', 'true');
+    expect(broken.tagName).not.toBe('BUTTON');
+    expect(screen.getByTestId('core-elect-reconnect-broken')).toHaveTextContent(
+      'Needs reconnecting',
+    );
     expect(screen.getByTestId('core-elect-menu-ecommerce')).toHaveTextContent(
       'Connected in Integrations',
     );
@@ -179,5 +189,20 @@ describe('the three failures are three sentences', () => {
     expect(screen.getByTestId('core-elect-said-ecommerce')).toHaveTextContent(words);
     expect(screen.getByTestId('core-elect-open-ecommerce')).toHaveAttribute('data-problem');
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('★ measured on dev: Shopify in ERROR is in the Store menu, and says where it is fixed', () => {
+  it('"Needs reconnecting" leads to 10, on that system', async () => {
+    const user = userEvent.setup();
+    show(part());
+    await open(user);
+    expect(screen.getByTestId('core-elect-reconnect-broken')).toHaveAttribute(
+      'href',
+      JSON.stringify({ pathname: '/studio/capabilities', query: { system: 'broken' } }),
+    );
+    // Not choosable: clicking it writes nothing.
+    await user.click(screen.getByTestId('core-elect-option-ecommerce-broken'));
+    expect(electRole).not.toHaveBeenCalled();
   });
 });

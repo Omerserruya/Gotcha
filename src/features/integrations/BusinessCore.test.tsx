@@ -476,4 +476,20 @@ describe('★★ measured on dev (business-core read): Woo works, Shopify is in 
     expect(chip.textContent).not.toBe('Working');
     expect(screen.getByTestId('core-part-crm')).toHaveTextContent('Shopify');
   });
+
+  it('★ unmapped with a reason (d569e0de): the reason rides on the chip', async () => {
+    await render14({
+      roles: [
+        {
+          role: 'returns',
+          source: 'unmapped',
+          reason: 'returngo would be inferred, but its connection status is ERROR.',
+          candidates: [{ slug: 'returngo', name: 'ReturnGO', connected: false, status: 'ERROR' }],
+        },
+      ],
+    });
+    expect(screen.getByTestId('core-chip-returns').getAttribute('title')).toContain(
+      'its connection status is ERROR',
+    );
+  });
 });

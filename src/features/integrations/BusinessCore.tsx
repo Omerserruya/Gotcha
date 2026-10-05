@@ -411,6 +411,9 @@ function Part({
   const state = partState(part);
   const failing = part.candidates.find((c) => connectedButFailing(c));
   const elsewhere = electedElsewhere(part);
+  // Backend d569e0de: nothing could be inferred, and says why (e.g. Shopify is in ERROR).
+  const unmappedWhy =
+    part.available && part.source === 'unmapped' && part.reason ? part.reason : null;
 
   /*
     The three-state sentence — what the state IS and where its repair lives —
@@ -485,7 +488,7 @@ function Part({
       <span
         className={styles.chip}
         data-tone={CHIP_TONE[state]}
-        title={where ? `${explain} ${where}` : explain}
+        title={[explain, unmappedWhy, where].filter(Boolean).join(' ')}
         data-testid={`core-chip-${part.role}`}
       >
         {t(`chip.${isInferred(part) && state === 'chosen' ? 'inferred' : state}`)}
