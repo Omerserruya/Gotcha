@@ -18,6 +18,7 @@ import { Dialog, DialogClose, DialogContent } from '@/design-system/primitives/o
 
 import {
   claimConversation,
+  stopAi,
   closeConversation,
   deleteConversation,
   releaseConversation,
@@ -216,7 +217,7 @@ export function QueueMenu({
             <ContextMenuItem
               data-testid="menu-stop-ai"
               disabled={busy}
-              onSelect={() => void run(plan.stopAi, claimConversation)}
+              onSelect={() => void run(plan.stopAi, stopAi)}
             >
               <Hand size={13} aria-hidden="true" />
               {t('stopAi')}

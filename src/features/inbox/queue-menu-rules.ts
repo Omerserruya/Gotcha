@@ -76,7 +76,8 @@ export function menuPlan(targets: readonly MenuRow[], viewer: MenuViewer): MenuP
 
   return {
     assignToMe: viewer.meId === null ? [] : ids((row) => !mine(row) && !aiDriving(row)),
-    stopAi: viewer.meId === null ? [] : ids(aiDriving),
+    // stop-ai assigns nobody, so it needs no "me".
+    stopAi: ids(aiDriving),
     backToAi: ids(
       (row) => open(row) && row.isHandedOver === true && (row.assignedAiAgentId ?? null) !== null,
     ),

@@ -119,6 +119,16 @@ describe('★ and the three verbs that were already here, now tested directly', 
     expect(returned).toEqual({ ok: false, reason: 'no_ai_employee' });
   });
 
+  it('★ Stop AI posts to stop-ai, never to claim; a 404 is "not found"', async () => {
+    const { stopAi } = await actions();
+    await expect(stopAi('c1')).resolves.toEqual({ ok: true });
+    const sent = post.mock.calls.at(-1)?.[0] as { endpoint: { path: string }; body: unknown };
+    expect(sent.endpoint.path).toBe('/api/conversations/c1/stop-ai');
+    expect(sent.body).toEqual({});
+    post.mockRejectedValue(new ApiError({ kind: 'server', status: 404 }));
+    await expect(stopAi('c1')).resolves.toEqual({ ok: false, reason: 'not_found' });
+  });
+
   it('⚠ a transfer with a blank agent never reaches the network', async () => {
     const { transferConversation } = await actions();
     await expect(transferConversation('c1', '   ')).resolves.toEqual({

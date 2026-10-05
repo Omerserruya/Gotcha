@@ -18,6 +18,7 @@ const actions = vi.hoisted(() => ({
   closeConversation: vi.fn(),
   deleteConversation: vi.fn(),
   returnToAi: vi.fn(),
+  stopAi: vi.fn(),
 }));
 vi.mock('./conversation-actions', () => actions);
 
@@ -219,12 +220,13 @@ describe('★★ Stop AI and Back to the AI, from the menu', () => {
       </NextIntlClientProvider>,
     );
 
-  it('the AI’s conversation: Stop AI takes it (claim)', async () => {
+  it('the AI’s conversation: Stop AI stops it (stop-ai) — not claim, which assigns and greets', async () => {
     showAi();
     rightClick(screen.getByTestId('row-a1'));
     expect(screen.queryByTestId('menu-assign-me')).toBeNull();
     await userEvent.click(await screen.findByTestId('menu-stop-ai'));
-    expect(actions.claimConversation).toHaveBeenCalledWith('a1');
+    expect(actions.stopAi).toHaveBeenCalledWith('a1');
+    expect(actions.claimConversation).not.toHaveBeenCalled();
   });
 
   it('one already taken: Back to the AI hands it back (return-to-ai)', async () => {

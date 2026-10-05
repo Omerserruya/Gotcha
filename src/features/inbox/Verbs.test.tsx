@@ -242,6 +242,13 @@ describe('★★ a colleague’s action is not a message from the customer', () 
     expect(screen.queryByTestId('unknown-m-agent_claimed')).toBeNull();
   });
 
+  it('★ Stop AI’s divider: the route writes no name, so none is said — and it is not "can’t show"', async () => {
+    await stream([systemMessage('ai_stopped')]);
+    const divider = screen.getByTestId('system-m-ai_stopped');
+    expect(divider.textContent).toBe('AI stopped');
+    expect(screen.queryByTestId('unknown-m-ai_stopped')).toBeNull();
+  });
+
   it('★★ names both people on a transfer', async () => {
     await stream([
       systemMessage('agent_transferred', { fromAgentName: 'Dana', toAgentName: 'Yossi' }),

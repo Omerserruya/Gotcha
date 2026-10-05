@@ -18,7 +18,8 @@
       "agent_claimed": "{name} took control",
       "agent_transferred": "{from} transferred this to {to}",
       "department_transferred": "This was transferred to another team",
-      "returned_to_ai": "Handed back to the AI"
+      "returned_to_ai": "Handed back to the AI",
+      "ai_stopped": "AI stopped"
     },
     "reaction": {
       "toMessage": "They reacted {emoji} to “{preview}”",

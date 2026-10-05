@@ -1341,6 +1341,15 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/return-to-ai', { conversationId }),
 
   /**
+   * Stop the AI without assigning anyone (backend 3e7bae17) — the right-click's
+   * "Stop AI". Sets `isHandedOver`, assigns nobody, records an `ai_stopped`
+   * handover and writes an `ai_stopped` system message with no name in it.
+   * Unlike `claim`, it greets nobody. 404 when there is no such conversation.
+   */
+  stopAi: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/stop-ai', { conversationId }),
+
+  /**
    * Put a conversation back in the queue — the design's *"requeue"*.
    *
    * ★★ ADDED FOR THE RIGHT-CLICK MENU, AND MEASURED RATHER THAN ASSUMED.

@@ -94,6 +94,12 @@ describe('★★ Omer: Stop AI where the AI is driving; Back to the AI once take
     expect(plan.backToAi).toEqual([]);
   });
 
+  it('Stop AI assigns nobody, so it needs no "me" — offered even when we could not read who is looking', () => {
+    expect(
+      menuPlan([row('a', { handledBy: 'ai_agent' })], { ...agent, meId: null }).stopAi,
+    ).toEqual(['a']);
+  });
+
   it('handledBy ai_agent counts as the AI driving even without an assigned id', () => {
     expect(menuPlan([row('a', { handledBy: 'ai_agent' })], agent).stopAi).toEqual(['a']);
   });

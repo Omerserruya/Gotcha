@@ -18,7 +18,8 @@
       "agent_claimed": "{name} קיבל שליטה",
       "agent_transferred": "{from} העביר את השיחה אל {to}",
       "department_transferred": "השיחה הועברה לצוות אחר",
-      "returned_to_ai": "הוחזר ל-AI"
+      "returned_to_ai": "הוחזר ל-AI",
+      "ai_stopped": "ה-AI הופסק"
     },
     "reaction": {
       "toMessage": "הם הגיבו {emoji} ל״{preview}״",

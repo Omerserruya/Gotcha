@@ -94,6 +94,27 @@ export async function claimConversation(conversationId: string): Promise<VerbRes
 }
 
 /**
+ * Stop the AI on a conversation, assigning nobody. `returnToAi` undoes it.
+ */
+export async function stopAi(conversationId: string): Promise<VerbResult> {
+  try {
+    await serverApi().post({
+      endpoint: inboxEndpoints.stopAi(conversationId),
+      body: {},
+      payload: unchecked,
+      raw: true,
+    });
+    refresh();
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.status === 404) return { ok: false, reason: 'not_found' };
+    logger.warn('inbox.stop_ai_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/**
  * Hand it back to the AI employee.
  *
  * The only call that clears `isHandedOver`, so it is the only way a

@@ -647,6 +647,8 @@ export const SYSTEM_EVENTS = [
   'agent_transferred',
   'department_transferred',
   'returned_to_ai',
+  // stop-ai (3e7bae17): written with no name — nothing says who stopped it.
+  'ai_stopped',
 ] as const;
 export type SystemEvent = (typeof SYSTEM_EVENTS)[number];
 
