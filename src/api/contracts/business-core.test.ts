@@ -61,6 +61,19 @@ describe('★ impossible is not the same as nothing connected', () => {
     expect(partState(chosen)).toBe('chosen');
   });
 
+  it('★ measured on dev: chosen, and the chosen system is in ERROR — "chosen_failing", never "Working"', () => {
+    // crm elected=shopify, shopify connected:false status:ERROR.
+    const crm = part({
+      role: 'crm',
+      elected: { slug: 'shopify', name: 'Shopify' },
+      candidates: [
+        { slug: 'woocommerce', name: 'WooCommerce', connected: true, status: 'CONNECTED' },
+        { slug: 'shopify', name: 'Shopify', connected: false, status: 'ERROR' },
+      ],
+    });
+    expect(partState(crm)).toBe('chosen_failing');
+  });
+
   it('★ never calls an impossible part merely unconnected', () => {
     // The distinction the whole screen turns on: one is the tenant's to fix
     // and the other is not.

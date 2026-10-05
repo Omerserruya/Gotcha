@@ -141,6 +141,12 @@
     color: var(--signal-done-text);
   }
 
+  /* Chosen and not working: 02's orange. */
+  .chip[data-tone='bad'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
   .chip[data-tone='warn'] {
     background-color: var(--intent-blocked-surface);
     color: var(--intent-blocked-text);
@@ -340,6 +346,26 @@
   .pickOption[aria-selected='true'],
   .pickOption:hover {
     background-color: var(--table-head-surface);
+  }
+
+  .pickOption:disabled {
+    cursor: not-allowed;
+  }
+
+  .pickOption:disabled:hover {
+    background: none;
+  }
+
+  .pickWho {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+
+  .pickWhy {
+    font-size: 11px;
+    color: var(--intent-urgent-text);
   }
 
   .pickFoot {

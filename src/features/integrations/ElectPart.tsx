@@ -4,7 +4,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, useTransition } from 'react';
 
-import type { RolePart } from '@/api/contracts/business-core';
+import { connectedButFailing, type RolePart } from '@/api/contracts/business-core';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import { useRouter } from '@/i18n/navigation';
 
@@ -28,6 +28,9 @@ export function ElectPart({ part }: { readonly part: RolePart }) {
   const t = useTranslations('business-core');
   const router = useRouter();
   const connected = part.candidates.filter((c) => c.connected);
+  // Connected once and not working now: listed, not choosable — the write
+  // would refuse it — with why (measured on dev: Shopify in ERROR).
+  const broken = part.candidates.filter((c) => connectedButFailing(c));
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ElectResult | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -120,6 +123,26 @@ export function ElectPart({ part }: { readonly part: RolePart }) {
                   <IntegrationLogo slug={candidate.slug} size="pill" />
                   <span className={styles.pillName}>{candidate.name}</span>
                   {candidate.slug === current?.slug ? <Check size={14} aria-hidden="true" /> : null}
+                </button>
+              </li>
+            ))}
+            {broken.map((candidate) => (
+              <li key={candidate.slug}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  aria-disabled="true"
+                  disabled
+                  className={styles.pickOption}
+                  title={t('elect.notWorking')}
+                  data-testid={`core-elect-option-${part.role}-${candidate.slug}`}
+                >
+                  <IntegrationLogo slug={candidate.slug} size="pill" />
+                  <span className={styles.pickWho}>
+                    <span className={styles.pillName}>{candidate.name}</span>
+                    <span className={styles.pickWhy}>{t('elect.notWorking')}</span>
+                  </span>
                 </button>
               </li>
             ))}

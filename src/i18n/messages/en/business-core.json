@@ -28,7 +28,8 @@
     "connected_but_failing": "{name} is connected and not working, so it cannot be used here yet. Fix it in the marketplace rather than connecting it again.",
     "connected_none_chosen": "Connected and not chosen yet.",
     "chosen": "{name} does this.",
-    "inferred": "{name} is what GOTCHA falls back to here, because it can do the job — nobody chose it. Choosing one properly is done on the returns screen."
+    "inferred": "{name} is what GOTCHA falls back to here, because it can do the job — nobody chose it. Choosing one properly is done on the returns screen.",
+    "chosen_failing": "{name} is chosen here and isn’t working — fix it in Integrations; the choice stays."
   },
   "crm": {
     "elsewhere": "Customer records are chosen on the Integrations screen, not here — there is one place for it so this screen can never disagree with the system the AI actually calls."
@@ -62,7 +63,8 @@
       "notConnected": "That system stopped being connected while this page was open, so it can't be used here yet. Fix it in the marketplace and come back.",
       "failed": "That didn't save. Nothing was changed."
     },
-    "connectedHeading": "Connected in Integrations"
+    "connectedHeading": "Connected in Integrations",
+    "notWorking": "Not working — fix it in Integrations first"
   },
   "returns": {
     "elsewhere": "Returns are chosen on their own switch, not here — an explicit choice there wins over whatever GOTCHA would otherwise fall back to."
@@ -80,7 +82,8 @@
     "connected_none_chosen": "Choose one",
     "connected_but_failing": "Needs fixing",
     "nothing_connected": "Not connected",
-    "impossible": "Not available"
+    "impossible": "Not available",
+    "chosen_failing": "Not working"
   },
   "purpose": {
     "ecommerce": "the catalogue and orders",

@@ -441,3 +441,39 @@ describe('★ 14 corrections (measurement of 204d715)', () => {
     expect(within(screen.getByTestId('core-part-payments')).getByText('—')).toBeInTheDocument();
   });
 });
+
+describe('★★ measured on dev (business-core read): Woo works, Shopify is in ERROR, the CRM chose Shopify', () => {
+  const DEV = {
+    useCase: null,
+    roles: [
+      {
+        role: 'ecommerce',
+        source: 'unmapped',
+        candidates: [
+          { slug: 'woocommerce', name: 'WooCommerce', connected: true, status: 'CONNECTED' },
+          { slug: 'shopify', name: 'Shopify', connected: false, status: 'ERROR' },
+        ],
+      },
+      {
+        role: 'crm',
+        elected: { slug: 'shopify', name: 'Shopify' },
+        candidates: [{ slug: 'shopify', name: 'Shopify', connected: false, status: 'ERROR' }],
+      },
+    ],
+  };
+
+  it('the Store row is a choice: "Not chosen" on the pill, WooCommerce in its menu', async () => {
+    await render14(DEV);
+    expect(screen.getByTestId('core-elect-open-ecommerce')).toHaveTextContent('Not chosen');
+    expect(screen.getByTestId('core-chip-ecommerce')).toHaveTextContent('Choose one');
+  });
+
+  it('★ the CRM chose a system that is not working: the choice stands, the chip is orange "Not working"', async () => {
+    await render14(DEV);
+    const chip = screen.getByTestId('core-chip-crm');
+    expect(chip).toHaveTextContent('Not working');
+    expect(chip).toHaveAttribute('data-tone', 'bad');
+    expect(chip.textContent).not.toBe('Working');
+    expect(screen.getByTestId('core-part-crm')).toHaveTextContent('Shopify');
+  });
+});

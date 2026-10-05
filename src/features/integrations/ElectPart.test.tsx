@@ -63,7 +63,7 @@ const choose = async (user: ReturnType<typeof userEvent.setup>, slug: string) =>
 };
 
 describe('what is offered — 02’s pill, "the dropdown, never a connect form"', () => {
-  it('★ offers the connected systems, each with its mark, and NOT the broken one', async () => {
+  it('★ offers the connected systems, each with its mark; the broken one disabled, with why', async () => {
     /*
      * The write refuses a system that is not CONNECTED. A broken system in
      * this list is a choice the server rejects on save, and the merchant
@@ -75,7 +75,10 @@ describe('what is offered — 02’s pill, "the dropdown, never a connect form"'
     await open(user);
     expect(screen.getByRole('option', { name: 'Shopify' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'WooCommerce' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'BigCommerce' })).toBeNull();
+    // Listed, never choosable: the write would refuse it, and why is said beside it.
+    const broken = screen.getByTestId('core-elect-option-ecommerce-broken');
+    expect(broken).toBeDisabled();
+    expect(broken).toHaveTextContent('Not working — fix it in Integrations first');
     expect(screen.getByTestId('core-elect-menu-ecommerce')).toHaveTextContent(
       'Connected in Integrations',
     );

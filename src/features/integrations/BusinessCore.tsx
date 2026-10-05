@@ -47,6 +47,7 @@ import styles from './BusinessCore.module.css';
 /** The chip's tone for each state: working, needs a hand, or nothing to do. */
 export const CHIP_TONE = {
   chosen: 'good',
+  chosen_failing: 'bad',
   connected_none_chosen: 'warn',
   connected_but_failing: 'warn',
   nothing_connected: 'quiet',
@@ -419,20 +420,22 @@ function Part({
   const [explain, testid] =
     state === 'impossible'
       ? [t('state.impossible'), 'core-part-impossible']
-      : state === 'connected_but_failing' && failing
-        ? [t('state.connected_but_failing', { name: failing.name }), 'core-part-failing']
-        : state === 'nothing_connected'
-          ? [
-              t('state.nothing_connected', {
-                systems: part.candidates.map((c) => c.name).join(', '),
-              }),
-              'core-part-nothing',
-            ]
-          : isInferred(part)
-            ? [t('state.inferred', { name: part.elected!.name }), 'core-part-inferred']
-            : state === 'chosen'
-              ? [t('state.chosen', { name: part.elected!.name }), 'core-part-chosen']
-              : [t('state.connected_none_chosen'), 'core-part-unchosen'];
+      : state === 'chosen_failing' && !isInferred(part)
+        ? [t('state.chosen_failing', { name: part.elected!.name }), 'core-part-chosen-failing']
+        : state === 'connected_but_failing' && failing
+          ? [t('state.connected_but_failing', { name: failing.name }), 'core-part-failing']
+          : state === 'nothing_connected'
+            ? [
+                t('state.nothing_connected', {
+                  systems: part.candidates.map((c) => c.name).join(', '),
+                }),
+                'core-part-nothing',
+              ]
+            : isInferred(part)
+              ? [t('state.inferred', { name: part.elected!.name }), 'core-part-inferred']
+              : state === 'chosen'
+                ? [t('state.chosen', { name: part.elected!.name }), 'core-part-chosen']
+                : [t('state.connected_none_chosen'), 'core-part-unchosen'];
   const where = elsewhere
     ? elsewhere === 'crm'
       ? t('crm.elsewhere')

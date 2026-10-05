@@ -209,11 +209,19 @@ export type PartState =
   /** Something is connected and nothing is chosen. */
   | 'connected_none_chosen'
   /** A system serves it today. */
-  | 'chosen';
+  | 'chosen'
+  /**
+   * A system was chosen and it is not working (measured on dev: the CRM is
+   * Shopify, in ERROR). The choice stands — it is not "Working".
+   */
+  | 'chosen_failing';
 
 export function partState(part: RolePart): PartState {
   if (!part.available) return 'impossible';
-  if (part.elected) return 'chosen';
+  if (part.elected) {
+    const playing = part.candidates.find((c) => c.slug === part.elected!.slug);
+    return playing && connectedButFailing(playing) ? 'chosen_failing' : 'chosen';
+  }
   if (part.candidates.some((c) => c.connected)) return 'connected_none_chosen';
   // Checked AFTER connected, so one healthy system is not hidden by one
   // broken one. Only when nothing usable is behind the part does the failure
