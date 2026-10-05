@@ -9,6 +9,7 @@ import templateRoutes from "./routes/templates";
 import broadcastRoutes from "./routes/broadcasts";
 import scheduledMessageRoutes from "./routes/scheduled-messages";
 import contactRoutes from "./routes/contacts";
+import contactInsightsRoutes from "./routes/contact-insights";
 import gdprContactsRoutes from "./routes/gdpr-contacts";
 import identityRoutes from "./routes/identity";
 import customerNotesRoutes from "./routes/customer-notes";
@@ -122,6 +123,8 @@ app.use("/api/conversations", messageRoutes);
 app.use("/api/templates", templateRoutes);
 app.use("/api/broadcasts", broadcastRoutes);
 app.use("/api/scheduled-messages", scheduledMessageRoutes);
+// Before the contacts router: its "/:id" must not shadow /insights and /tags.
+app.use("/api/contacts", contactInsightsRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/gdpr/contacts", gdprContactsRoutes);
 app.use("/api/identity", customerNotesRoutes);
