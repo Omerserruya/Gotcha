@@ -49,6 +49,7 @@ import customerSnapshotRoutes from "./routes/customer-snapshot";
 import crmAutoLinkRoutes from "./routes/crm-auto-link";
 import customerSummaryRoutes from "./routes/customer-summary";
 import commerceContextRoutes from "./routes/commerce-context";
+import customerCommerceRoutes from "./routes/customer-commerce";
 import copilotOutcomesRoutes from "./routes/copilot-outcomes";
 import reasonerShadowRoutes from "./routes/reasoner-shadow";
 import decisionTimelineRoutes from "./routes/decision-timeline";
@@ -174,6 +175,8 @@ app.use("/api/historical-imports", historicalImportRoutes);
 app.use("/api/customer-snapshot", customerSnapshotRoutes);
 app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
+// Before commerce-context: its "/:conversationId" must not shadow /customers/*.
+app.use("/api/commerce-context/customers", customerCommerceRoutes);
 app.use("/api/commerce-context", commerceContextRoutes);
 app.use("/api/reasoner-shadow", reasonerShadowRoutes);
 app.use("/api/decision-timeline", decisionTimelineRoutes);
