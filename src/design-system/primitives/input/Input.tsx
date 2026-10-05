@@ -51,16 +51,34 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       <label className={labelHidden ? 'srOnly' : styles.label} htmlFor={id}>
         {label}
       </label>
-      <input
-        ref={ref}
-        id={id}
-        className={styles.input}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={
-          [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
-        }
-        {...rest}
-      />
+      {trailing ? (
+        // A trailing control sits INSIDE the field at its end (a "Show" beside a
+        // password), the input padded so its text never runs under it.
+        <span className={styles.control}>
+          <input
+            ref={ref}
+            id={id}
+            className={`${styles.input} ${styles.inputWithTrailing}`}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={
+              [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
+            }
+            {...rest}
+          />
+          <span className={styles.trailing}>{trailing}</span>
+        </span>
+      ) : (
+        <input
+          ref={ref}
+          id={id}
+          className={styles.input}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={
+            [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
+          }
+          {...rest}
+        />
+      )}
       {hint && !error ? (
         <span id={hintId} className={styles.hint}>
           {hint}
@@ -73,7 +91,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           {error}
         </span>
       ) : null}
-      {trailing}
     </div>
   );
 });

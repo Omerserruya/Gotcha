@@ -29,3 +29,26 @@ describe('Input', () => {
     expect(screen.queryByText('Optional')).not.toBeInTheDocument();
   });
 });
+
+describe('★ a trailing control sits inside the field, at its end', () => {
+  it('beside the input in one box — not floating under the hint', () => {
+    render(
+      <Input
+        label="Token"
+        hint="From the console"
+        trailing={<button type="button">Show</button>}
+      />,
+    );
+    const input = screen.getByLabelText('Token');
+    const show = screen.getByRole('button', { name: 'Show' });
+    expect(input.parentElement).toBe(show.parentElement?.parentElement);
+    expect(input.className).toMatch(/inputWithTrailing/);
+    // The hint comes after the box, not between the input and its control.
+    expect(screen.getByText('From the console').previousElementSibling).toBe(input.parentElement);
+  });
+
+  it('without one, the input stands alone as before', () => {
+    render(<Input label="Name" />);
+    expect(screen.getByLabelText('Name').className).not.toMatch(/inputWithTrailing/);
+  });
+});
