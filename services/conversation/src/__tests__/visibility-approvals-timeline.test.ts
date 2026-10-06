@@ -38,7 +38,11 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     withHistoricalRecords: (fn: any) => fn(),
     findSiblingContacts: async () => [{ id: "k1", channel: "WHATSAPP", externalId: "9725", displayName: null }],
     prisma: {
-      approvalRequest: { findFirst: async (a: any) => H.approvals.find((r) => matches(r, a.where)) ?? null },
+      approvalRequest: {
+        findFirst: async (a: any) => H.approvals.find((r) => matches(r, a.where)) ?? null,
+        findMany: async () => H.approvals.map((r) => ({ ...r })),
+      },
+      user: { findMany: async () => [] },
       conversation: {
         findFirst: async (a: any) => H.convs.find((c) => matches(c, a.where)) ?? null,
         findMany: async (a: any) => { H.seenConvWhere = a.where; return H.convs.filter((c) => matches(c, a.where)).slice(0, a.take ?? 1e9); },
@@ -67,8 +71,8 @@ beforeEach(() => {
     { id: "c_support", tenantId: "T", departmentId: "support", assignedAgentId: null, channel: "WHATSAPP", customerExternalId: "9725", origin: "LIVE" },
   ];
   H.approvals = [
-    { id: "a_support", tenantId: "T", conversationId: "c_support", contactId: null },
-    { id: "a_system", tenantId: "T", conversationId: null, contactId: null },
+    { id: "a_support", tenantId: "T", conversationId: "c_support", contactId: null, tool: "shopify.process_refund" },
+    { id: "a_system", tenantId: "T", conversationId: null, contactId: null, tool: "create_broadcast" },
   ];
 });
 const agentOfSales = () => { H.viewer = { userId: "agent1", role: "AGENT", departmentId: "sales" }; };
@@ -92,6 +96,15 @@ describe("approval by id", () => {
     const r = await request(app).get("/api/approvals/a_support");
     expect(r.status).toBe(200);
     expect(r.body.approval.id).toBe("a_support");
+    // The same key as the inbox's live line, from the shared map.
+    expect(r.body.approval.labelKey).toBe("processing_refund");
+  });
+
+  it("★ the approvals list carries labelKey per row", async () => {
+    const r = await request(app).get("/api/approvals");
+    expect(r.status).toBe(200);
+    const by = Object.fromEntries(r.body.data.map((a: any) => [a.id, a.labelKey]));
+    expect(by).toMatchObject({ a_support: "processing_refund", a_system: "working" });
   });
 });
 

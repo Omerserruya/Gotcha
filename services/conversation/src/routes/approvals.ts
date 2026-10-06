@@ -38,6 +38,7 @@ import {
   evaluateToolGate,
 } from "@chatcenter/shared";
 import { canViewConversation, visibilityClause } from "../lib/conversation-visibility";
+import { activityLabelKey } from "@chatcenter/shared/src/lib/ai-activity-labels";
 import { applyApprovalEdits } from "../lib/approval-edits";
 
 /**
@@ -970,6 +971,8 @@ router.get("/", async (req: Request, res: Response) => {
     }
     const enriched = rows.map((r: any) => ({
       ...r,
+      // The same key the inbox's live line and the timeline use for this tool.
+      labelKey: activityLabelKey(String(r.tool ?? "")),
       decidedByName: r.decidedBy ? userMap.get(r.decidedBy as string) ?? null : null,
       requestedByName:
         r.requestedBy && !String(r.requestedBy).includes(":") && r.requestedBy !== "bot"
@@ -1030,7 +1033,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     ]);
 
     return res.json({
-      approval: row,
+      approval: { ...row, labelKey: activityLabelKey(String(row.tool ?? "")) },
       conversation,
       contact,
       recentMessages: recentMessages.reverse(),

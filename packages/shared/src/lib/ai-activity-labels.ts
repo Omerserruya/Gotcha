@@ -58,3 +58,25 @@ export function activityLabelKey(tool: string): string {
   for (const [re, key] of ACTIVITY_LABEL_RULES) if (re.test(name)) return key;
   return "working";
 }
+
+/**
+ * The tool an audit row records a call to, or null for any other row.
+ *
+ *   ai.tool_call.<tool>           the bot's tool call (ai-bot.service)
+ *   adapter.ok.<tool> / adapter.err.<tool>   an adapter execution (integration-framework)
+ */
+export function toolFromAuditAction(action: string | null | undefined): string | null {
+  const a = String(action ?? "");
+  const m = /^ai\.tool_call\.(.+)$/.exec(a) ?? /^adapter\.(?:ok|err)\.(.+)$/.exec(a);
+  return m ? m[1] : null;
+}
+
+/**
+ * `{ labelKey }` for an audit row that is a tool call, `{}` otherwise - spread
+ * into a response row so a non-tool row carries NO labelKey key at all, rather
+ * than `labelKey: null` a screen might render.
+ */
+export function auditLabelFields(action: string | null | undefined): { labelKey?: string } {
+  const tool = toolFromAuditAction(action);
+  return tool ? { labelKey: activityLabelKey(tool) } : {};
+}

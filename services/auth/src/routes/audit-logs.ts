@@ -38,6 +38,8 @@ import {
   assertTenantId,
   findSiblingContacts,
 } from "@chatcenter/shared";
+// Deep import: the shared, import-free label map (see ai-activity-labels.ts).
+import { auditLabelFields } from "@chatcenter/shared/src/lib/ai-activity-labels";
 
 const router = Router();
 
@@ -343,6 +345,8 @@ router.get("/audit-logs/customer/:contactId", CAN_READ_CUSTOMER, async (req: Req
         targetId: r.targetId,
         createdAt: r.createdAt,
         ...outcomeOf(r.action, r.metadata),
+        // A tool-call row carries the same labelKey as the inbox's live line.
+        ...auditLabelFields(r.action),
       })),
       nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
       coverage: CUSTOMER_AUDIT_COVERAGE,
@@ -414,6 +418,8 @@ router.get("/audit-logs", CAN_READ, async (req: Request, res: Response): Promise
           // null when the emitter recorded no verdict, which is different from
           // false: "we did not record whether this worked" is not "it failed".
           succeeded: meta && typeof meta.ok === "boolean" ? meta.ok : null,
+          // A tool-call row carries the same labelKey as the inbox's live line.
+          ...auditLabelFields(r.action),
         };
       }),
       nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,

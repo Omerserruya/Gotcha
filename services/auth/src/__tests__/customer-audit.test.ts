@@ -363,3 +363,34 @@ describe("the wider gate is on ONE route", () => {
     expect((await request(app).get("/api/audit-logs/export")).status).not.toBe(403);
   });
 });
+
+/**
+ * A tool-call row carries the same labelKey as the inbox's live line and the
+ * timeline (one shared map), so the screen keeps no copy of it. Any other row
+ * carries no labelKey key at all.
+ */
+describe("labelKey on tool-call rows", () => {
+  const rows = () => [
+    row({ id: "t1", action: "ai.tool_call.shopify.get_customer_orders" }),
+    row({ id: "t2", action: "adapter.err.shopify.process_refund", metadata: { ok: false } }),
+    row({ id: "n1", action: "conversation.updated" }),
+  ];
+
+  it("★ the customer log: tool rows labelled, other rows without the key", async () => {
+    state.rows = rows();
+    const res = await get();
+    const by = Object.fromEntries(res.body.data.map((r: any) => [r.id, r]));
+    expect(by.t1.labelKey).toBe("looking_up_order");
+    expect(by.t2.labelKey).toBe("processing_refund");
+    expect(by.n1).not.toHaveProperty("labelKey");
+  });
+
+  it("★ the workspace log does the same", async () => {
+    state.rows = rows();
+    const res = await request(app).get("/api/audit-logs");
+    expect(res.status).toBe(200);
+    const by = Object.fromEntries(res.body.data.map((r: any) => [r.id, r]));
+    expect(by.t1.labelKey).toBe("looking_up_order");
+    expect(by.n1).not.toHaveProperty("labelKey");
+  });
+});

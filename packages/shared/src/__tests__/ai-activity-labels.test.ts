@@ -46,3 +46,19 @@ describe("activityLabelKey", () => {
     expect(ACTIVITY_LABEL_KEYS).toContain("working");
   });
 });
+
+import { toolFromAuditAction, auditLabelFields } from "../lib/ai-activity-labels";
+
+describe("audit rows", () => {
+  it("reads the tool out of both tool-call action shapes", () => {
+    expect(toolFromAuditAction("ai.tool_call.shopify.get_customer_orders")).toBe("shopify.get_customer_orders");
+    expect(toolFromAuditAction("adapter.ok.woocommerce.get_order")).toBe("woocommerce.get_order");
+    expect(toolFromAuditAction("adapter.err.shopify.process_refund")).toBe("shopify.process_refund");
+  });
+
+  it("★ a non-tool row has no labelKey key at all", () => {
+    expect(auditLabelFields("conversation.updated")).toEqual({});
+    expect(auditLabelFields(null)).toEqual({});
+    expect(auditLabelFields("ai.tool_call.escalate_to_human")).toEqual({ labelKey: "handing_to_team" });
+  });
+});
