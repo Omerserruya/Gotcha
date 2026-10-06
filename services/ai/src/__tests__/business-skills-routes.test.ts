@@ -34,6 +34,7 @@ function m(row: any, where: any): boolean {
       if ("notIn" in v) return !v.notIn.includes(row[k]);
       if ("not" in v) return row[k] !== v.not;
       if ("gte" in v) return row[k] >= v.gte;
+      if ("startsWith" in v) return String(row[k] ?? "").startsWith(v.startsWith);
       return true; // relation filters are not modelled
     }
     return (row[k] ?? null) === v;
@@ -162,8 +163,9 @@ beforeEach(() => {
       { id: "x_agent", tenantId: "X", name: "Other" },
     ],
     conversation: [
-      { id: "c_sales", tenantId: "T", departmentId: "sales", assignedAgentId: null },
-      { id: "c_support", tenantId: "T", departmentId: "support", assignedAgentId: null },
+      { id: "c_sales", tenantId: "T", departmentId: "sales", assignedAgentId: null, customerExternalId: "9725" },
+      { id: "c_support", tenantId: "T", departmentId: "support", assignedAgentId: null, customerExternalId: "9726" },
+      { id: "c_sandbox", tenantId: "T", departmentId: null, assignedAgentId: null, customerExternalId: "sandbox:maya" },
     ],
     agentToolPermission: [],
   };
@@ -232,6 +234,8 @@ describe("the library", () => {
     run({ mode: "on", status: "handed_over", stopReason: "tool_missing" });
     run({ mode: "on", status: "completed", trace: [{ outcome: "approval_requested" }] });
     run({ mode: "watch", status: "completed" });
+    // A rehearsal in the employee's test chat is not a real run.
+    run({ mode: "on", status: "completed", conversationId: "c_sandbox" });
     const s = (await request(app).get("/api/business-skills/stats")).body.data[0];
     expect(s).toMatchObject({ runs: 3, watchRuns: 1, askedYou: 2, stopReasons: [{ reason: "tool_missing", count: 1 }] });
     expect(s.aloneShare).toBeCloseTo(2 / 3);

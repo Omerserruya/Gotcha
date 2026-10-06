@@ -226,6 +226,8 @@ export interface BuildPromptOpts {
    */
   businessSkills?: {
     names: string[];
+    /** The live skill's name when one owns this turn (pauses the plan's drive). */
+    activeName?: string | null;
     activeBlock: string | null;
     noSkillBlock: string | null;
     requiredInfo: KnowledgeField[];
@@ -869,7 +871,11 @@ function buildCurrentPlanBlock(opts: BuildPromptOpts): string | null {
   // the Employee in act mode - same computeCurrentPlan, same facts.
   const plan = computeCurrentPlanForOpts(opts);
   if (!plan) return null;
-  return renderCurrentPlan(plan, { advisory: opts.behaviorState.mode === "copilot" });
+  return renderCurrentPlan(plan, {
+    advisory: opts.behaviorState.mode === "copilot",
+    // A live business skill owns the turn (agent mode only).
+    skillActive: opts.behaviorState.mode === "agent" ? opts.businessSkills?.activeName ?? null : null,
+  });
 }
 
 /**

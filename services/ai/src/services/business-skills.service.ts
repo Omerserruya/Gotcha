@@ -218,16 +218,26 @@ export async function skillStats(tenantId: string, from: Date, skillIds?: string
   });
   const ids = skills.map((s) => s.id);
   if (!ids.length) return [];
-  const [runs, assigns] = await Promise.all([
+  const [allRuns, assigns] = await Promise.all([
     prisma.skillRun.findMany({
       where: { tenantId, skillId: { in: ids }, startedAt: { gte: from } },
-      select: { skillId: true, mode: true, status: true, stopReason: true, trace: true },
+      select: { skillId: true, mode: true, status: true, stopReason: true, trace: true, conversationId: true },
     }),
     prisma.agentSkill.findMany({
       where: { tenantId, skillId: { in: ids } },
       select: { skillId: true, mode: true, order: true, aiAgent: { select: { id: true, name: true } } },
     }),
   ]);
+  // Rehearsals (the employee's test chat) are not real runs: excluded, the same
+  // rule analytics applies to sandbox conversations.
+  const convIds = [...new Set(allRuns.map((r) => r.conversationId))];
+  const sandbox = convIds.length
+    ? new Set((await prisma.conversation.findMany({
+        where: { tenantId, id: { in: convIds }, customerExternalId: { startsWith: "sandbox:" } },
+        select: { id: true },
+      })).map((c) => c.id))
+    : new Set<string>();
+  const runs = allRuns.filter((r) => !sandbox.has(r.conversationId));
   return ids.map((skillId) => {
     const mine = runs.filter((r) => r.skillId === skillId);
     const live = mine.filter((r) => r.mode === "on");

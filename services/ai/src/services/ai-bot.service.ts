@@ -104,6 +104,7 @@ import {
   decideSkillTurn,
   applySkillDecision,
   loadRunRequests,
+  traceAsRequests,
   businessSkillsForPrompt,
   skillLedgerFields,
   skillApprovalReason,
@@ -2508,8 +2509,13 @@ async function generateAIBotReplyInner(
 
   // Business skills for the prompt (undefined → the prompt is exactly what it
   // was before skills existed). Watch runs never reach the prompt.
+  // Step state = the open run's own trace (what the bot did, incl. reused
+  // results) merged with the request rows (what changed since, e.g. an approval).
   const skillRequests = activeOnSkill && !skillDecision.starts && skillCtx.openRun
-    ? await loadRunRequests(opts.tenantId, opts.conversationId, skillCtx.openRun.startedAt).catch(() => [])
+    ? [
+        ...(await loadRunRequests(opts.tenantId, opts.conversationId, skillCtx.openRun.startedAt).catch(() => [])),
+        ...traceAsRequests(skillCtx.openRun.trace),
+      ]
     : [];
   const businessSkills = businessSkillsForPrompt({
     ctx: skillCtx,
@@ -4516,9 +4522,11 @@ async function generateAIBotReplyInner(
   // Business skill: move the run to where this turn's tool requests put it
   // (step, completion, hand-over). Fail-soft, like every skill path.
   if (skillRunId && activeSkill) {
+    // An escalation is logged with decision "escalate", not "executed".
     const escalatedThisTurn =
       !!pendingEscalation ||
-      toolCallLog.some((t) => t.tool === "escalate_to_human" && (t.decision === "executed" || t.decision === "executed_on_retry"));
+      // "simulated": the sandbox's rehearsal of a hand-over is a hand-over for the run.
+      toolCallLog.some((t) => t.tool === "escalate_to_human" && ["escalate", "executed", "executed_on_retry", "simulated"].includes(String(t.decision)));
     await settleSkillRun({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
@@ -4527,6 +4535,8 @@ async function generateAIBotReplyInner(
       skill: activeSkill,
       surface: toolFunctionNames,
       escalatedThisTurn,
+      // What the bot did this turn, with ok by the same rule the turn uses.
+      turnCalls: toolCallLog.map((t) => ({ tool: t.tool, decision: String(t.decision ?? ""), ok: TOOL_OK_RE.test(String(t.result ?? "")) })),
     }).catch((err: any) => console.warn("[ai-bot] skill run settle failed:", err?.message));
   }
 

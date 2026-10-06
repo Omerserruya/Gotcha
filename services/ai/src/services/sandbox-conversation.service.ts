@@ -117,6 +117,10 @@ export async function isSandboxConversation(conversationId: string): Promise<boo
 /** Wipe the transcript without losing the conversation row (and its id). */
 export async function resetSandboxConversation(tenantId: string, conversationId: string): Promise<void> {
   await prisma.message.deleteMany({ where: { tenantId, conversationId } });
+  // A reset is a fresh rehearsal: its business-skill runs go with the
+  // transcript, so an old open run is not continued and an old completed run
+  // does not mark a skill "done" in the new conversation.
+  await prisma.skillRun.deleteMany({ where: { tenantId, conversationId } }).catch(() => {});
   await prisma.conversation.update({
     where: { id: conversationId },
     data: { aiSummary: null, chatbotFlowId: null, chatbotNodeId: null, flowVariables: undefined, detectedLocale: null },

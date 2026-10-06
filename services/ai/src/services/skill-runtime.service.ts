@@ -56,13 +56,27 @@ export interface OpenSkillRun {
   currentStepId: string | null;
   missedTurns: number;
   startedAt: Date;
+  /** What the bot did in this run so far (see settleSkillRun). */
+  trace?: Array<{ step: string | null; tool: string; outcome: string; at: string }>;
 }
 
 export interface SkillContext {
   candidates: SkillCandidate[];
   openRun: OpenSkillRun | null;
   noSkillPolicy: string;
+  /** Skills that already finished in this conversation (so "thanks" does not restart one). */
+  doneSkillIds?: string[];
+  /** Finished within RESTART_COOLDOWN_MS: not restarted, whatever the judgement says. */
+  recentlyDoneSkillIds?: string[];
 }
+
+/**
+ * A skill that just finished is not restarted by the next message ("thanks",
+ * "ok great"). Live check: the judgement re-chose a just-completed skill for a
+ * thank-you despite being told it was done. The employee still answers that
+ * message normally; it only does not open a second run of the same case.
+ */
+export const RESTART_COOLDOWN_MS = 5 * 60_000;
 
 /** What the wizard-binding judgement is shown: enough to choose, nothing more. */
 export interface SkillSelectionCandidate {
@@ -72,6 +86,10 @@ export interface SkillSelectionCandidate {
   situation: string | null;
   examples: string[];
   exclusions: Array<{ text: string; useSkillInstead: string | null }>;
+  /** Finished (completed / handed over) earlier in this conversation. */
+  doneInConversation?: boolean;
+  /** For the OPEN skill: what it is still gathering (so a detail it asked for keeps it). */
+  gathering?: string[];
 }
 
 export type SkillTurnDecision = {
@@ -97,6 +115,8 @@ export function selectionCandidates(ctx: SkillContext): SkillSelectionCandidate[
       situation: c.situation,
       examples: c.examples.slice(0, 8),
       exclusions: c.exclusions.map((e) => ({ text: e.text, useSkillInstead: e.skillId ? nameById.get(e.skillId) ?? null : null })),
+      doneInConversation: (ctx.doneSkillIds ?? []).includes(c.id) && ctx.openRun?.skillId !== c.id,
+      ...(ctx.openRun?.skillId === c.id && c.requiredInfo.length ? { gathering: c.requiredInfo.map((r) => r.label) } : {}),
     }));
 }
 
@@ -109,7 +129,8 @@ export function selectionCandidates(ctx: SkillContext): SkillSelectionCandidate[
  */
 export function decideSkillTurn(ctx: SkillContext, matched: string | null | undefined): SkillTurnDecision {
   const byId = new Map(ctx.candidates.map((c) => [c.id, c]));
-  const pick = matched && byId.has(matched) ? byId.get(matched)! : null;
+  const justDone = new Set(ctx.recentlyDoneSkillIds ?? []);
+  const pick = matched && byId.has(matched) && !(justDone.has(matched) && ctx.openRun?.skillId !== matched) ? byId.get(matched)! : null;
   let open = ctx.openRun;
   let close: SkillTurnDecision["close"] = null;
 
@@ -153,6 +174,39 @@ export function sameTool(a: string, b: string): boolean {
 }
 
 export interface ToolRequestRow { tool: string; status: string; proposedAt: Date }
+
+/** A trace outcome as a request status, so trace and requests merge into one state. */
+const OUTCOME_TO_STATUS: Record<string, string> = {
+  completed: "completed", simulated: "completed", approval_requested: "proposed",
+  failed: "failed", denied: "denied", escalated: "completed",
+};
+
+/**
+ * The run's own trace as request rows. The trace is what the bot did each
+ * turn, INCLUDING a result reused from the idempotency window and a write the
+ * sandbox simulated - neither of which writes a ToolExecutionRequest row.
+ */
+export function traceAsRequests(trace: Array<{ tool: string; outcome: string; at: string }> | undefined): ToolRequestRow[] {
+  return (trace ?? [])
+    .filter((t) => OUTCOME_TO_STATUS[t.outcome])
+    .map((t) => ({ tool: t.tool, status: OUTCOME_TO_STATUS[t.outcome], proposedAt: new Date(t.at) }));
+}
+
+/** One turn's tool call, as the bot logged it. */
+export interface TurnToolCall { tool: string; decision: string; ok: boolean }
+
+/** The outcome a turn's tool call records in the trace (null = nothing happened). */
+export function outcomeOfCall(c: TurnToolCall): string | null {
+  switch (c.decision) {
+    case "awaiting_approval": return "approval_requested";
+    case "denied": return "denied";
+    case "escalate": return "escalated";
+    case "simulated": return "simulated";
+    case "executed":
+    case "executed_on_retry": return c.ok ? "completed" : "failed";
+    default: return null; // refused before dispatch (missing inputs, gates): no step progress
+  }
+}
 
 /**
  * Each step's state: from the newest request for any of its tools since the
@@ -269,7 +323,7 @@ export function businessSkillsForPrompt(opts: {
   requests: ToolRequestRow[];
   surface: string[];
   factText: string;
-}): { names: string[]; activeBlock: string | null; noSkillBlock: string | null; requiredInfo: KnowledgeField[] } | undefined {
+}): { names: string[]; activeName: string | null; activeBlock: string | null; noSkillBlock: string | null; requiredInfo: KnowledgeField[] } | undefined {
   const { ctx, activeOnSkill } = opts;
   if (!ctx.candidates.length && ctx.noSkillPolicy === "answer_from_knowledge") return undefined;
   let activeBlock: string | null = null;
@@ -282,6 +336,7 @@ export function businessSkillsForPrompt(opts: {
   }
   return {
     names: ctx.candidates.filter((c) => c.mode === "on").sort((a, b) => a.order - b.order).map((c) => c.name),
+    activeName: activeBlock && activeOnSkill ? activeOnSkill.name : null,
     activeBlock,
     noSkillBlock: activeBlock ? null : renderNoSkillBlock(ctx.noSkillPolicy),
     requiredInfo,
@@ -315,7 +370,7 @@ const asArr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
 /** The employee's usable skills (on/watch, status active) and this conversation's open run. */
 export async function loadSkillContext(tenantId: string, aiAgentId: string, conversationId: string): Promise<SkillContext> {
-  const [agent, assigns, open] = await Promise.all([
+  const [agent, assigns, open, done] = await Promise.all([
     prisma.aIAgent.findFirst({ where: { id: aiAgentId, tenantId }, select: { noSkillPolicy: true } }),
     prisma.agentSkill.findMany({
       where: { tenantId, aiAgentId, mode: { in: ["on", "watch"] }, skill: { status: "active" } },
@@ -328,12 +383,20 @@ export async function loadSkillContext(tenantId: string, aiAgentId: string, conv
     prisma.skillRun.findFirst({
       where: { tenantId, conversationId, aiAgentId, status: "active" },
       orderBy: { startedAt: "desc" },
-      select: { id: true, skillId: true, skillVersion: true, mode: true, currentStepId: true, missedTurns: true, startedAt: true },
+      select: { id: true, skillId: true, skillVersion: true, mode: true, currentStepId: true, missedTurns: true, startedAt: true, trace: true },
+    }),
+    prisma.skillRun.findMany({
+      where: { tenantId, conversationId, aiAgentId, status: { in: ["completed", "handed_over"] } },
+      select: { skillId: true, endedAt: true },
     }),
   ]);
   return {
     noSkillPolicy: agent?.noSkillPolicy ?? "answer_from_knowledge",
-    openRun: open ? { ...open, mode: open.mode === "on" ? "on" : "watch" } : null,
+    doneSkillIds: [...new Set(done.map((d: any) => d.skillId as string))],
+    recentlyDoneSkillIds: [...new Set(
+      done.filter((d: any) => d.endedAt && Date.now() - new Date(d.endedAt).getTime() < RESTART_COOLDOWN_MS).map((d: any) => d.skillId as string),
+    )],
+    openRun: open ? { ...open, mode: open.mode === "on" ? "on" : "watch", trace: asArr(open.trace) } : null,
     candidates: assigns.map((a: any) => ({
       id: a.skill.id, name: a.skill.name, situation: a.skill.situation ?? null, whenToUse: a.skill.whenToUse ?? null,
       examples: asArr(a.skill.examples), exclusions: asArr(a.skill.exclusions), steps: asArr(a.skill.steps),
@@ -380,9 +443,16 @@ export async function applySkillDecision(
 export async function loadRunRequests(tenantId: string, conversationId: string, since: Date): Promise<ToolRequestRow[]> {
   const rows = await (prisma as any).toolExecutionRequest.findMany({
     where: { tenantId, conversationId, proposedAt: { gte: since } },
-    select: { tool: true, status: true, proposedAt: true },
+    select: { tool: true, status: true, proposedAt: true, decidedAt: true, startedAt: true, completedAt: true },
   });
-  return rows as ToolRequestRow[];
+  // Timed by the LATEST thing that happened to the request, so an approval
+  // that completed after the turn that asked for it wins over that turn's
+  // "approval requested" trace entry.
+  return (rows as any[]).map((r) => ({
+    tool: r.tool,
+    status: r.status,
+    proposedAt: new Date(Math.max(+new Date(r.proposedAt), +(r.decidedAt ? new Date(r.decidedAt) : 0), +(r.startedAt ? new Date(r.startedAt) : 0), +(r.completedAt ? new Date(r.completedAt) : 0))),
+  }));
 }
 
 /**
@@ -398,24 +468,28 @@ export async function settleSkillRun(opts: {
   skill: SkillCandidate;
   surface: string[];
   escalatedThisTurn: boolean;
+  /** This turn's tool calls (from the bot's own log). */
+  turnCalls: TurnToolCall[];
 }): Promise<{ status: string; currentStepId: string | null }> {
   const run = await prisma.skillRun.findFirst({
     where: { tenantId: opts.tenantId, id: opts.runId },
     select: { startedAt: true, trace: true, currentStepId: true, status: true },
   });
   if (!run || run.status !== "active") return { status: run?.status ?? "missing", currentStepId: run?.currentStepId ?? null };
-  const requests = await loadRunRequests(opts.tenantId, opts.conversationId, run.startedAt);
-  const states = computeStepStates(opts.skill.steps, requests, opts.surface);
-  const current = currentStepOf(states);
+  // The trace records what the bot did THIS turn (including reused results and
+  // simulated writes); the request rows add what changed since (an approval
+  // decided, a run that finished after the turn).
   const trace = asArr(run.trace);
-  const seen = new Set(trace.map((t: any) => `${t.tool}|${t.outcome}|${t.at}`));
-  for (const r of requests) {
-    const step = opts.skill.steps.find((s) => (s.tools ?? []).some((t) => sameTool(t, r.tool)));
-    const outcome = r.status === "proposed" ? "approval_requested" : r.status;
-    const entry = { step: step?.id ?? null, tool: r.tool, outcome, at: new Date(r.proposedAt).toISOString() };
-    const k = `${entry.tool}|${entry.outcome}|${entry.at}`;
-    if (!seen.has(k)) { trace.push(entry); seen.add(k); }
+  const at = new Date().toISOString();
+  for (const c of opts.turnCalls) {
+    const outcome = outcomeOfCall(c);
+    if (!outcome) continue;
+    const step = opts.skill.steps.find((s) => (s.tools ?? []).some((t) => sameTool(t, c.tool)));
+    trace.push({ step: step?.id ?? null, tool: c.tool, outcome, at });
   }
+  const requests = await loadRunRequests(opts.tenantId, opts.conversationId, run.startedAt);
+  const states = computeStepStates(opts.skill.steps, [...requests, ...traceAsRequests(trace)], opts.surface);
+  const current = currentStepOf(states);
   const complete = isSkillComplete(states);
   const status = complete ? "completed" : opts.escalatedThisTurn ? "handed_over" : "active";
   const ended = status !== "active";

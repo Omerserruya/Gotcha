@@ -73,7 +73,10 @@ export async function evaluateWizardBinding(opts: {
     // byte-identical to what it was before skills existed.
     ...(skills.length
       ? [
-          '- "skillId": the id of the ONE business skill (listed below) that fits what the customer wants RIGHT NOW, or null if none clearly fits. Choose only from the listed ids. If an exclusion of a skill describes the request, do not choose that skill (choose the skill it names instead, if listed). If several fit, choose the one listed first. If a skill is marked OPEN and the customer is still on that subject (including a short reply like "ok" or a requested detail), choose it again.',
+          '- "skillId": the id of the ONE business skill (listed below) that fits the customer\'s LATEST message, or null. Decide from the LATEST CUSTOMER MESSAGE (shown last below); the earlier transcript is only context. Choose only from the listed ids.',
+          '  * A skill marked OPEN is in progress. Choose it again ONLY when the latest message continues that case: a short reply ("ok", "thanks"), an answer to a question you asked, or a detail that case needed. A NEW request that matches another skill\'s "when to use" means the customer changed subject: choose THAT skill.',
+          '  * A skill marked DONE already finished in this conversation. Choose it again ONLY for a genuinely new request of that kind, never for a thank-you or a reply to what was just done.',
+          '  * If an exclusion of a skill describes the request, do not choose that skill (choose the skill it names instead, if listed). If several fit equally, choose the one listed first. If none clearly fits, null.'
         ]
       : []),
   ].join("\n");
@@ -88,6 +91,9 @@ export async function evaluateWizardBinding(opts: {
     "CONVERSATION (resolved facts + recent transcript):",
     opts.transcript.slice(0, 4000),
     "",
+    // The message the skill choice is about, separated so a long transcript
+    // about an earlier case does not outweigh it.
+    ...(skills.length ? [`LATEST CUSTOMER MESSAGE: ${latestCustomerLine(opts.transcript)}`, ""] : []),
     "Return the JSON verdict now.",
   ].join("\n");
 
@@ -148,7 +154,9 @@ function normalize(
 function renderSkillChoices(skills: SkillSelectionCandidate[], openSkillId: string | null): string {
   const lines = ["BUSINESS SKILLS (choose at most one, by id):"];
   for (const k of skills) {
-    lines.push(`- id "${k.id}": ${k.name}${k.id === openSkillId ? " (OPEN in this conversation)" : ""}`);
+    const tag = k.id === openSkillId ? " (OPEN in this conversation)" : k.doneInConversation ? " (DONE earlier in this conversation)" : "";
+    lines.push(`- id "${k.id}": ${k.name}${tag}`);
+    if (k.gathering?.length) lines.push(`  it is gathering: ${k.gathering.join(", ")} (a message giving one of these continues it)`);
     if (k.situation) lines.push(`  situation: ${k.situation.slice(0, 300)}`);
     if (k.whenToUse) lines.push(`  when to use: ${k.whenToUse.slice(0, 500)}`);
     if (k.examples.length) lines.push(`  examples: ${k.examples.map((e) => `"${e.slice(0, 120)}"`).join("; ")}`);
@@ -157,4 +165,10 @@ function renderSkillChoices(skills: SkillSelectionCandidate[], openSkillId: stri
     }
   }
   return lines.join("\n");
+}
+
+/** The last customer line of the transcript (the turn being answered). */
+function latestCustomerLine(transcript: string): string {
+  const lines = transcript.split("\n").filter((l) => l.startsWith("Customer:"));
+  return (lines[lines.length - 1] ?? "").replace(/^Customer:\s*/, "").slice(0, 600) || "(none)";
 }

@@ -24,6 +24,8 @@ import {
   businessSkillsForPrompt,
   skillApprovalReason,
   selectionCandidates,
+  traceAsRequests,
+  outcomeOfCall,
   type SkillCandidate,
   type SkillContext,
 } from "../services/skill-runtime.service";
@@ -142,12 +144,13 @@ describe("★ the prompt", () => {
     expect(out.activeBlock).toContain("Still needed from the customer: Order number");
     expect(out.requiredInfo).toEqual([{ key: "order_number", label: "Order number", importance: "required", priority: 1 }]);
     expect(out.noSkillBlock).toBeNull();
+    expect(out.activeName).toBe("Delivery status");
   });
 
   it("★ watch mode never reaches the prompt (no block, not in the names, no ledger fields)", () => {
     const watchCtx = ctx({ candidates: [skill({ mode: "watch" })] });
     const out = businessSkillsForPrompt({ ...base, ctx: watchCtx, activeOnSkill: skill({ mode: "watch" }) })!;
-    expect(out).toEqual({ names: [], activeBlock: null, noSkillBlock: null, requiredInfo: [] });
+    expect(out).toEqual({ names: [], activeName: null, activeBlock: null, noSkillBlock: null, requiredInfo: [] });
   });
 
   it("no skill fits + a non-default policy → the policy block", () => {
@@ -207,5 +210,42 @@ describe("★ selection rides the existing judgement call", () => {
   it("the open run is marked so the judgement can keep it", async () => {
     await evaluateWizardBinding({ tenantId: "T", conversationId: "c", role: "sales", transcript: "Customer: ok", skills: sel, openSkillId: "sk_delivery" });
     expect(H.calls[0].messages[1].content).toContain('id "sk_delivery": Delivery status (OPEN in this conversation)');
+  });
+});
+
+
+describe("★ found in the live check: the trace, not only request rows", () => {
+  const surface = ["shopify.order_lookup", "shopify.track_shipment"];
+
+  it("a result reused from the idempotency window (no request row) still completes its step", () => {
+    const trace = [{ step: "s1", tool: "shopify.order_lookup", outcome: "completed", at: new Date(5).toISOString() }];
+    expect(computeStepStates(skill().steps, traceAsRequests(trace), surface)[0].state).toBe("done");
+  });
+
+  it("an approval completed AFTER the turn that asked wins over that turn's 'approval requested'", () => {
+    const trace = [{ step: "s2", tool: "shopify.track_shipment", outcome: "approval_requested", at: new Date(10).toISOString() }];
+    const requestCompletedLater = [{ tool: "shopify.track_shipment", status: "completed", proposedAt: new Date(20) }];
+    const st = computeStepStates(skill().steps, [...requestCompletedLater, ...traceAsRequests(trace)], surface);
+    expect(st[1].state).toBe("done");
+  });
+
+  it("decisions map to outcomes; an escalation is logged as 'escalate', a refused call records nothing", () => {
+    expect(outcomeOfCall({ tool: "escalate_to_human", decision: "escalate", ok: false })).toBe("escalated");
+    expect(outcomeOfCall({ tool: "x", decision: "executed", ok: true })).toBe("completed");
+    expect(outcomeOfCall({ tool: "x", decision: "executed_on_retry", ok: false })).toBe("failed");
+    expect(outcomeOfCall({ tool: "x", decision: "awaiting_approval", ok: false })).toBe("approval_requested");
+    expect(outcomeOfCall({ tool: "x", decision: "simulated", ok: true })).toBe("simulated");
+    expect(outcomeOfCall({ tool: "x", decision: "missing_required_inputs", ok: false })).toBeNull();
+  });
+});
+
+
+describe("★ found in the live check: a just-finished skill is not restarted", () => {
+  it("a match on a skill that finished within the cooldown starts nothing", () => {
+    expect(decideSkillTurn(ctx({ recentlyDoneSkillIds: ["sk_delivery"] }), "sk_delivery")).toEqual({ active: null, close: null, starts: false });
+  });
+  it("another skill still starts; an older finished one can start again", () => {
+    expect(decideSkillTurn(ctx({ recentlyDoneSkillIds: ["sk_delivery"] }), "sk_exchange").starts).toBe(true);
+    expect(decideSkillTurn(ctx({ doneSkillIds: ["sk_delivery"], recentlyDoneSkillIds: [] }), "sk_delivery").starts).toBe(true);
   });
 });

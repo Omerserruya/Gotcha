@@ -60,6 +60,17 @@ describe("★ the prompt", () => {
     expect(p).toMatch(/order_number|Order number/);
   });
 
+  it("★ a live skill pauses the Current Plan's drive (capabilities stay); without one the plan drives as before", () => {
+    const withSkill = buildAgentPrompt({
+      ...base, businessSkills: { names: ["Delivery status"], activeName: "Delivery status", activeBlock: "# Active Skill: Delivery status", noSkillBlock: null, requiredInfo: [] },
+    } as any);
+    expect(withSkill).toContain("# Current Plan (paused this turn)");
+    expect(withSkill).not.toContain("# Current Plan (decide and ACT this turn)");
+    const without = buildAgentPrompt(base as any);
+    expect(without).toContain("# Current Plan (decide and ACT this turn)");
+    expect(without).not.toContain("paused this turn");
+  });
+
   it("the cached prefix does not change with the active skill (cache-stable)", () => {
     const mk = (active: string | null) => stablePrefixOf(buildAgentPrompt({
       ...base, businessSkills: { names: ["Delivery status"], activeBlock: active, noSkillBlock: null, requiredInfo: [] },
