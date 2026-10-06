@@ -201,7 +201,10 @@ import { startVoicePostCallWorker } from "./workers/voice-postcall";
 import { startPostChatSubscriber } from "./workers/post-chat/subscriber";
 import { startIntelligenceLiveSubscriber } from "./workers/intelligence-live/subscriber";
 import { startCommerceCacheSubscriber } from "./services/commerce-cache-subscriber";
+// Chat copilot suggestions are generated on a customer message, never on open.
+import { startCopilotSuggestionsSubscriber } from "./workers/copilot-suggestions/subscriber";
 startVoiceCopilotSubscriber();
+startCopilotSuggestionsSubscriber();
 startVoicePostCallWorker();
 startPostChatSubscriber();
 startIntelligenceLiveSubscriber();

@@ -10,9 +10,16 @@ import {
   resolveConversationLocale,
   resolveEffectiveLocale,
   requireEntitlement,
+  getRedis,
 } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
 import { runDeduped } from "../services/copilot-dedup.service";
+import {
+  generateAndStore,
+  readStoredSuggestions,
+  latestInboundId,
+  isGenerating,
+} from "../services/copilot-suggestions.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
@@ -362,134 +369,160 @@ router.post("/compose", async (req: Request, res: Response) => {
 });
 
 // Chat Copilot is sold separately from the core inbox, so the suggestion
-// endpoint is gated rather than merely hidden in the UI.
+// endpoints are gated rather than merely hidden in the UI.
+//
+// ★ READING SUGGESTIONS NEVER CALLS THE MODEL. They are generated when a
+// customer message arrives in a conversation a person answers (debounced), or
+// when an agent presses "Try again" (POST .../refresh below), and stored. This
+// GET used to run the model on every open - old app and v2 alike - which was a
+// usage_logs row and metered AI units per open for an unchanged transcript.
+// See services/copilot-suggestions.service.ts.
+
+/**
+ * The read shape. `{data, copilotMode}` is the old app's contract and is
+ * unchanged; the rest is additive.
+ *   stale       a customer message exists that these suggestions do not
+ *               answer yet (a generation is running, or none ever ran)
+ *   generating  a generation is scheduled or running now; the screen will
+ *               get `copilot.suggestions.updated` when it lands
+ */
+async function readSuggestionsPayload(tenantId: string, convId: string): Promise<{ status: number; body: any }> {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: convId, tenantId },
+    select: { id: true, departmentId: true },
+  });
+  if (!conversation) return { status: 404, body: { error: "Conversation not found" } };
+
+  const [stored, latest] = await Promise.all([
+    readStoredSuggestions(tenantId, convId),
+    latestInboundId(tenantId, convId),
+  ]);
+  const generating = isGenerating(tenantId, convId);
+
+  if (!stored) {
+    // A DB read, not a model call: the "not configured" stub the panel has
+    // always shown when there is no AI Employee.
+    const copilotConfig = await aiService.getEffectiveCopilotConfig(tenantId, (conversation as any).departmentId);
+    if (!copilotConfig) {
+      return {
+        status: 200,
+        body: { data: [{ id: "no-config", text: "No AI Employee configured.", confidence: 0, type: "info" }], copilotMode: "READY_MESSAGE" },
+      };
+    }
+    return {
+      status: 200,
+      body: {
+        data: [],
+        copilotMode: copilotConfig.copilotMode || "READY_MESSAGE",
+        basedOnMessageId: null,
+        generatedAt: null,
+        stale: latest !== null,
+        generating,
+      },
+    };
+  }
+  return {
+    status: 200,
+    body: {
+      data: stored.suggestions,
+      copilotMode: stored.copilotMode,
+      basedOnMessageId: stored.basedOnMessageId,
+      generatedAt: stored.generatedAt,
+      stale: latest !== null && latest !== stored.basedOnMessageId,
+      generating,
+    },
+  };
+}
+
 router.get("/:conversationId/suggestions", requireEntitlement("ai.copilot"), async (req: Request, res: Response) => {
-  // Request-instance ID - accepted from the client to dedup retries and
-  // double-fires. Falls back to a server-generated id so legacy clients
-  // (no header / no query param) still get concurrency dedup, just not
-  // idempotency dedup.
+  const convId = req.params.conversationId as string;
+  const tenantId = req.tenantId!;
+  try {
+    const out = await readSuggestionsPayload(tenantId, convId);
+    console.log(JSON.stringify({
+      tag: "copilot.suggestions.read", tenantId, conversationId: convId, status: out.status,
+      stale: out.body?.stale ?? null, generating: out.body?.generating ?? null,
+    }));
+    res.status(out.status).json(out.body);
+  } catch (err: any) {
+    console.error("AI suggestions read error:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to get suggestions" });
+  }
+});
+
+/** Per-conversation cooldown and per-agent budget for "Try again". */
+const REFRESH_COOLDOWN_SECONDS = Number(process.env.COPILOT_REFRESH_COOLDOWN_SECONDS || 15);
+const REFRESH_PER_USER_LIMIT = Number(process.env.COPILOT_REFRESH_PER_USER_LIMIT || 20);
+const REFRESH_PER_USER_WINDOW_SECONDS = 600;
+
+/**
+ * Returns null when allowed, or the seconds to wait. Redis, so the limit holds
+ * across restarts and is the same for every tab. Fails OPEN on a Redis error:
+ * the alternative blocks an agent's explicit request over an infrastructure
+ * hiccup, and the per-request cost is bounded by runDeduped either way.
+ */
+async function refreshRateLimit(tenantId: string, convId: string, userId: string | undefined): Promise<number | null> {
+  try {
+    const redis = getRedis();
+    const convKey = `copilot:refresh:conv:${tenantId}:${convId}`;
+    const ok = await redis.set(convKey, "1", "EX", REFRESH_COOLDOWN_SECONDS, "NX");
+    if (ok !== "OK") {
+      const ttl = await redis.ttl(convKey);
+      return ttl > 0 ? ttl : REFRESH_COOLDOWN_SECONDS;
+    }
+    if (userId) {
+      const userKey = `copilot:refresh:user:${tenantId}:${userId}`;
+      const n = await redis.incr(userKey);
+      if (n === 1) await redis.expire(userKey, REFRESH_PER_USER_WINDOW_SECONDS);
+      if (n > REFRESH_PER_USER_LIMIT) {
+        const ttl = await redis.ttl(userKey);
+        return ttl > 0 ? ttl : REFRESH_PER_USER_WINDOW_SECONDS;
+      }
+    }
+    return null;
+  } catch (err: any) {
+    console.warn("[copilot-suggestions] rate limit check failed (allowing):", err?.message ?? err);
+    return null;
+  }
+}
+
+// The agent's explicit "Try again". The only on-demand way to spend tokens on
+// suggestions. Answers with the same shape as the GET, after generating.
+router.post("/:conversationId/suggestions/refresh", requireEntitlement("ai.copilot"), async (req: Request, res: Response) => {
   const requestInstanceId =
-    (req.header("x-request-instance-id") || (req.query.ri as string) || crypto.randomBytes(12).toString("hex")).slice(0, 64);
+    (req.header("x-request-instance-id") || crypto.randomBytes(12).toString("hex")).slice(0, 64);
   const convId = req.params.conversationId as string;
   const tenantId = req.tenantId!;
   const startedAt = Date.now();
-
   try {
+    const exists = await prisma.conversation.findFirst({ where: { id: convId, tenantId }, select: { id: true } });
+    if (!exists) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    const wait = await refreshRateLimit(tenantId, convId, req.user?.userId);
+    if (wait !== null) {
+      res.setHeader("Retry-After", String(wait));
+      res.status(429).json({ error: "Suggestions were just refreshed. Try again in a moment.", code: "REFRESH_RATE_LIMITED", retryAfterSeconds: wait });
+      return;
+    }
+
+    const localeOverride = (req.body?.locale as string) || (req.query.locale as string) || undefined;
     const outcome = await runDeduped({
       key: `${tenantId}:${convId}`,
       requestInstanceId,
       fn: async () => {
-        const conversation = await prisma.conversation.findFirst({ where: { id: convId, tenantId } });
-        if (!conversation) return { status: 404, body: { error: "Conversation not found" } };
-
-        const messages = await prisma.message.findMany({
-          where: { conversationId: convId, tenantId },
-          orderBy: { createdAt: "desc" }, take: 20,
-          select: { direction: true, body: true, senderName: true, createdAt: true },
-        });
-
-        const copilotConfig = await aiService.getEffectiveCopilotConfig(tenantId, (conversation as any).departmentId);
-
-        // No AI Employee configured - return stub so frontend shows "not configured"
-        if (!copilotConfig) {
-          return {
-            status: 200,
-            body: { data: [{ id: "no-config", text: "No AI Employee configured.", confidence: 0, type: "info" }], copilotMode: "READY_MESSAGE" },
-          };
-        }
-
-        // Resolve department + assigned-agent names for the copilot's
-        // "Customer & Conversation Info" block. Best-effort - copilot still
-        // works without these.
-        let departmentName: string | undefined;
-        let assignedAgentName: string | undefined;
-        try {
-          if ((conversation as any).departmentId) {
-            const dept = await prisma.department.findUnique({
-              where: { id: (conversation as any).departmentId },
-              select: { name: true },
-            });
-            departmentName = dept?.name || undefined;
-          }
-          if ((conversation as any).assignedAgentId) {
-            const agent = await prisma.user.findUnique({
-              where: { id: (conversation as any).assignedAgentId },
-              select: { name: true, email: true },
-            });
-            if (agent) {
-              assignedAgentName = agent.name?.trim() || agent.email || undefined;
-            }
-          }
-        } catch (err: any) {
-          console.warn("[suggestions] meta lookup failed:", err.message);
-        }
-
-        // Suggested replies should track the CUSTOMER's language -
-        // resolveConversationLocale returns Conversation.detectedLocale if
-        // present, else falls back to the system effective locale. An
-        // explicit `?locale=` query string overrides for ad-hoc preview.
-        const localeOverride = (req.query.locale as string) || undefined;
-        const locale = localeOverride ?? await resolveConversationLocale({
-          tenantId,
-          conversationId: conversation.id,
-          fallbackUserId: req.user?.userId,
-        }).catch(() => undefined);
-        const context: aiService.ConversationContext = {
-          tenantId, conversationId: conversation.id,
-          customerName: conversation.customerName || undefined,
-          messages: messages.reverse().map((m: any) => ({
-            direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
-          })),
-          copilotConfig,
-          locale,
-          conversationMeta: {
-            channel: conversation.channel,
-            status: (conversation as any).status,
-            departmentName,
-            assignedAgentName,
-            isHandedOver: (conversation as any).isHandedOver,
-            createdAt: conversation.createdAt?.toISOString(),
-            lastMessageAt: (conversation as any).lastMessageAt?.toISOString(),
-            customerExternalId: conversation.customerExternalId,
-            aiAgentId: (conversation as any).assignedAiAgentId || undefined,
-          },
-        };
-        const suggestions = await aiService.getSuggestions(context);
-        return {
-          status: 200,
-          body: { data: suggestions, copilotMode: copilotConfig.copilotMode || "READY_MESSAGE" },
-        };
+        await generateAndStore(tenantId, convId, "refresh", { localeOverride, fallbackUserId: req.user?.userId });
+        return readSuggestionsPayload(tenantId, convId);
       },
     });
-
-    // Structured log line - required by Fix #5 (observability). One
-    // line per request so log-grepping by conversationId works.
     console.log(JSON.stringify({
-      tag: "copilot.suggestions",
-      tenantId,
-      conversationId: convId,
-      requestInstanceId,
-      dedupReason: outcome.reason,           // primary | attached | idempotent
-      waitedMs: outcome.waitedMs,
-      totalMs: Date.now() - startedAt,
-      status: outcome.result.status,
-      aborted: !!(req as any).aborted,
+      tag: "copilot.suggestions.refresh", tenantId, conversationId: convId, requestInstanceId,
+      dedupReason: outcome.reason, totalMs: Date.now() - startedAt, status: outcome.result.status,
     }));
-
-    if ((req as any).aborted || res.headersSent) return; // client gave up
+    if ((req as any).aborted || res.headersSent) return;
     res.status(outcome.result.status).json(outcome.result.body);
   } catch (err: any) {
-    console.error("AI suggestions error:", err);
-    console.log(JSON.stringify({
-      tag: "copilot.suggestions",
-      tenantId,
-      conversationId: convId,
-      requestInstanceId,
-      dedupReason: "error",
-      totalMs: Date.now() - startedAt,
-      error: err?.message || String(err),
-    }));
-    if (!res.headersSent) res.status(500).json({ error: "Failed to get suggestions" });
+    console.error("AI suggestions refresh error:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to refresh suggestions" });
   }
 });
 
