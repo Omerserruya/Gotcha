@@ -119,7 +119,7 @@
     "notSetUpShort": "לא הוגדר",
     "checked": "נבדק {date}",
     "newRecord": "כל השאר — נוצרת רשומה חדשה",
-    "summaryIn": "סיכום AI, ב{language}",
+    "summaryIn": "סיכום AI, ב־{language}",
     "summary": "סיכום AI"
   },
   "open": "פתיחת {part}",

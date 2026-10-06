@@ -61,7 +61,7 @@
     "noMatch": "אין התאמות.",
     "lists": "או שGOTCHA יתקשר לרשימה",
     "listsNone": "עדיין כלום.",
-    "call": "להתקשר ל{name}",
+    "call": "להתקשר ל־{name}",
     "callSomeone": "להתקשר",
     "letGotcha": "שGOTCHA יתקשר",
     "notYet": "התקשרות מכאן עדיין לא זמינה.",

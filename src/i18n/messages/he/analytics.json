@@ -158,7 +158,7 @@
     },
     "lost": {
       "title": "מה הפסדת",
-      "body": "{asks} {asks, plural, one {בקשה} other {בקשות}} השבוע ל{terms, plural, one {משהו} other {# דברים}} שאין לך במלאי.",
+      "body": "{asks} {asks, plural, one {בקשה} other {בקשות}} השבוע ל־{terms, plural, one {משהו} other {# דברים}} שאין לך במלאי.",
       "none": "אף אחד לא ביקש השבוע משהו שאין לך במלאי.",
       "write": "לכתוב להם עכשיו"
     },

@@ -107,19 +107,19 @@
       "packages": "חבילות קרדיטים",
       "change": "שינוי תוכנית"
     },
-    "listPrice": "{price} ל{interval}",
+    "listPrice": "{price} ל־{interval}",
     "interval": {
       "MONTH": "חודש",
       "YEAR": "שנה"
     },
     "netOfTax": "המחירים אינם כוללים מע\"מ.",
     "netOfTaxRate": "המחירים אינם כוללים מע\"מ ({rate}%).",
-    "converted": "מוצג ב{display}. החיוב מתבצע ב{charged}.",
-    "convertedFallback": "מוצג ב{display}, בהמרה לפי שער גיבוי. החיוב מתבצע ב{charged}, וזה הסכום שיופיע בדף החשבון שלכם.",
+    "converted": "מוצג ב־{display}. החיוב מתבצע ב־{charged}.",
+    "convertedFallback": "מוצג ב־{display}, בהמרה לפי שער גיבוי. החיוב מתבצע ב־{charged}, וזה הסכום שיופיע בדף החשבון שלכם.",
     "discount": "{label}: אתם משלמים {payable} כל עוד ההנחה בתוקף. מחיר התוכנית הוא {list}.",
     "pending": {
-      "DOWNGRADE": "התוכנית משתנה ל{plan} בתאריך {date}.",
-      "UPGRADE": "התוכנית משתנה ל{plan} בתאריך {date}.",
+      "DOWNGRADE": "התוכנית משתנה ל־{plan} בתאריך {date}.",
+      "UPGRADE": "התוכנית משתנה ל־{plan} בתאריך {date}.",
       "VOLUME_CHANGE": "נפח השימוש שלכם משתנה בתאריך {date}.",
       "CANCEL": "המנוי שלכם מסתיים בתאריך {date}.",
       "nothingChangesYet": "עד אז התוכנית שלכם, היכולות שלה, המגבלות שלה והקרדיטים שלה נשארים בדיוק כפי שהם."

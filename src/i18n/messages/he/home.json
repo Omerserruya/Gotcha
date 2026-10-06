@@ -91,104 +91,104 @@
     "title": "GOTCHA עובד",
     "event": {
       "refund": {
-        "completed": "בוצע החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "החזר נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "בוצע החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "החזר נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "refund_check": {
-        "completed": "נבדק החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "בדיקת החזר נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: בדיקת החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "נבדק החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "בדיקת החזר נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: בדיקת החזר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "order_cancel": {
-        "completed": "בוטלה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "ביטול ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: ביטול הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "בוטלה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "ביטול ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: ביטול הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "order_edit": {
-        "completed": "עודכנה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "עדכון ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: עדכון הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "עודכנה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "עדכון ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: עדכון הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "order_note": {
-        "completed": "נוספה הערה להזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "הוספת ההערה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: הערה להזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "נוספה הערה להזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "הוספת ההערה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: הערה להזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "order_exchange": {
-        "completed": "בוצעה החלפה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "ההחלפה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: החלפה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "בוצעה החלפה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "ההחלפה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: החלפה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "order_lookup": {
-        "completed": "אותרה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "איתור ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: איתור הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "אותרה הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "איתור ההזמנה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: איתור הזמנה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "return": {
-        "completed": "נפתחה החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "פתיחת ההחזרה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: פתיחת החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "נפתחה החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "פתיחת ההחזרה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: פתיחת החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "return_check": {
-        "completed": "נבדקה החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "בדיקת ההחזרה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: בדיקת החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "נבדקה החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "בדיקת ההחזרה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: בדיקת החזרה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "tracking": {
-        "completed": "נשלח מעקב{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "שליחת המעקב נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: מעקב{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "נשלח מעקב{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "שליחת המעקב נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: מעקב{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "contact": {
-        "completed": "עודכן איש קשר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "עדכון איש הקשר נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: עדכון איש קשר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "עודכן איש קשר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "עדכון איש הקשר נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: עדכון איש קשר{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "customer": {
-        "completed": "עודכן לקוח{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "עדכון הלקוח נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: עדכון לקוח{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "עודכן לקוח{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "עדכון הלקוח נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: עדכון לקוח{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "lead": {
-        "completed": "נוצר ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "יצירת הליד נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "נוצר ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "יצירת הליד נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "lead_convert": {
-        "completed": "הומר ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "המרת הליד נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: המרת ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "הומר ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "המרת הליד נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: המרת ליד{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "deal": {
-        "completed": "עודכנה עסקה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "עדכון העסקה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: עדכון עסקה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "עודכנה עסקה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "עדכון העסקה נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: עדכון עסקה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "discount": {
-        "completed": "הוחל הנחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "החלת ההנחה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: הנחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "הוחל הנחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "החלת ההנחה נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: הנחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "invoice": {
-        "completed": "הופקה חשבונית{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "הפקת החשבונית נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: חשבונית{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "הופקה חשבונית{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "הפקת החשבונית נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: חשבונית{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "payment_link": {
-        "completed": "נשלח קישור לתשלום{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "שליחת הקישור נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: קישור לתשלום{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "נשלח קישור לתשלום{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "שליחת הקישור נכשלה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: קישור לתשלום{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "tag": {
-        "completed": "סומנה שיחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "הסימון נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: סימון{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "סומנה שיחה{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "הסימון נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: סימון{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       },
       "fallback": {
-        "completed": "{action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "{action} — נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}",
-        "awaiting_approval": "ממתין: {action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל{customer}}}{subject, select, none {} other { · {subject}}}"
+        "completed": "{action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "{action} — נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "awaiting_approval": "ממתין: {action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       }
     },
     "empty": "GOTCHA עוד לא ביצעה שום פעולה היום.",

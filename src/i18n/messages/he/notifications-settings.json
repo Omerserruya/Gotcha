@@ -71,7 +71,7 @@
     }
   },
   "rule": {
-    "tell": "להודיע ל{who} ב{channels}."
+    "tell": "להודיע ל־{who} ב־{channels}."
   },
   "recipient": {
     "tenant_owner": "בעל החשבון",

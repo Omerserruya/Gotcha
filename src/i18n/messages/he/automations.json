@@ -9,7 +9,7 @@
     "off": "כבויה"
   },
   "where": {
-    "one": "רצה ב{channel}",
+    "one": "רצה ב־{channel}",
     "all": "רצה בכל הערוצים"
   },
   "runs": {

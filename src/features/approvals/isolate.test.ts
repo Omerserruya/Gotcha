@@ -25,7 +25,8 @@ describe('★★ Hebrew: a name and an order number keep their own direction (me
       namespace: 'approvals',
     });
     const said = t('decided.sentence.refunded', isolated({ amount: '50 ₪', name: 'Matan Amran' }));
-    expect(said).toContain('ל⁨Matan Amran⁩');
+    // A maqaf, then the isolated name.
+    expect(said).toContain('ל־⁨Matan Amran⁩');
     expect(said).toContain('⁨50 ₪⁩');
   });
 });
@@ -38,5 +39,20 @@ describe('★ a rejection reason in the reader’s language — when it was one 
     expect(reasonKeyOf('Too generous')).toBe('tooGenerous');
     // Measured on dev: the platform's own words stay as written.
     expect(reasonKeyOf('not eligible under policy')).toBeNull();
+  });
+});
+
+describe('★ Hebrew catalogues: a prefix letter never glued to a placeholder', () => {
+  it('ל ב מ ש כ before {…} take a maqaf — "ל־{name}", never "ל{name}"', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const dir = 'src/i18n/messages/he';
+    const glued = readdirSync(dir)
+      .filter((f) => f.endsWith('.json'))
+      .flatMap((f) =>
+        (readFileSync(`${dir}/${f}`, 'utf8').match(/(^|[ "(])[לבמשכ]\{[a-zA-Z]+/g) ?? []).map(
+          (hit) => `${f}: ${hit.trim()}`,
+        ),
+      );
+    expect(glued).toEqual([]);
   });
 });

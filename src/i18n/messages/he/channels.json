@@ -157,8 +157,8 @@
       },
       "alreadyCoveredBody": "כבר יש לכם תשובה לאלה, ולכן הן לא נוספו פעם שנייה. שום דבר לא נדחה.",
       "empty": "אין כלום בקבוצה הזו.",
-      "evidence": "נאמר {occurrences, plural, one {פעם אחת} other {# פעמים}} ל{customers, plural, one {לקוח אחד} other {# לקוחות}}, מ‑{from} עד {to}.",
-      "evidenceNoDates": "נאמר {occurrences, plural, one {פעם אחת} other {# פעמים}} ל{customers, plural, one {לקוח אחד} other {# לקוחות}}.",
+      "evidence": "נאמר {occurrences, plural, one {פעם אחת} other {# פעמים}} ל־{customers, plural, one {לקוח אחד} other {# לקוחות}}, מ‑{from} עד {to}.",
+      "evidenceNoDates": "נאמר {occurrences, plural, one {פעם אחת} other {# פעמים}} ל־{customers, plural, one {לקוח אחד} other {# לקוחות}}.",
       "liveLookup": "אל תיתנו ל‑AI לומר את זה כעובדה. זה נכון באופן כללי ותלוי במשהו שמשתנה — מלאי, יומן, מחיר — ולכן ה‑AI מונחה לבדוק לפני שהוא עונה במקום להבטיח.",
       "curation": {
         "kept": "נשמר כפי שהצוות שלכם כתב.",

@@ -9,7 +9,7 @@
     "PAUSED": "מושהה",
     "DRAFT": "עוד לא התחיל"
   },
-  "onChannels": "עונה ב{channels}",
+  "onChannels": "עונה ב־{channels}",
   "noChannels": "לא מחובר לשום ערוץ, ולכן שום דבר לא מגיע אליו.",
   "count": {
     "open": "פתוחות כרגע",

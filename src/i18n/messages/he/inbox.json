@@ -164,7 +164,7 @@
   },
   "composer": {
     "label": "התשובה שלכם",
-    "labelOn": "התשובה שלכם, ב{channel}",
+    "labelOn": "התשובה שלכם, ב־{channel}",
     "placeholder": "כתבו את התשובה. Enter יוצר שורה חדשה.",
     "send": "שליחה ללקוח",
     "sending": "שולח…",
@@ -194,7 +194,7 @@
       "unitsExhausted": "נגמרו יחידות ה-AI של סביבת העבודה, ולכן GOTCHA לא יכול לעבד טיוטות עד שיוטענו יחידות. הטקסט שלך לא השתנה.",
       "unitsLink": "שימוש וחיוב"
     },
-    "replyingTo": "תשובה ל{who}",
+    "replyingTo": "תשובה ל־{who}",
     "cancelReply": "ביטול התשובה להודעה הזו",
     "noFileOnReply": "אי אפשר לשלוח קובץ כתשובה להודעה",
     "attachedCount": "{count} מתוך {max} · נשלחים כשלוחצים על שליחה"

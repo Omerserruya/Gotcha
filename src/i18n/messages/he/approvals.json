@@ -106,11 +106,11 @@
       "web": "האפליקציה"
     },
     "sentence": {
-      "refunded": "הוחזרו {amount} ל{name}",
+      "refunded": "הוחזרו {amount} ל־{name}",
       "refundedOn": "הוחזרו {amount} על הזמנה {order}",
       "refundedOrder": "הוחזרה הזמנה {order}",
       "refundedOrderFor": "הוחזרה הזמנה {order} של {name}",
-      "refundAsked": "החזר של {amount} ל{name}",
+      "refundAsked": "החזר של {amount} ל־{name}",
       "refundAskedOn": "החזר של {amount} על הזמנה {order}",
       "refundAskedOrder": "החזר על הזמנה {order}",
       "refundAskedOrderFor": "החזר על הזמנה {order} של {name}",
@@ -244,7 +244,7 @@
     "queueRefund": "החזר {amount}",
     "queueRefundOrder": "החזר על הזמנה {order}",
     "queueCancel": "ביטול הזמנה {order}",
-    "refundTo": "החזר {amount} ל{name}",
+    "refundTo": "החזר {amount} ל־{name}",
     "refundOn": "החזר {amount} על הזמנה {order}",
     "refundOrderFor": "החזר על הזמנה {order} של {name}",
     "cancelFor": "ביטול הזמנה {order} של {name}",
