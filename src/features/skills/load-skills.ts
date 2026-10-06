@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { getLocale } from 'next-intl/server';
+
 import { serverApi } from '@/api/client/server-api';
 import { isApiError } from '@/api/client/api-error';
 import {
@@ -13,8 +15,8 @@ import {
   type Skill,
   type ToolChoice,
 } from '@/api/contracts/skills';
-import { aiEmployeesSchema, isBuilderDraft } from '@/api/contracts/people';
-import { aiEmployeeEndpoints, skillEndpoints } from '@/api/endpoints/registry';
+import { employeeListSchema, responsibilityOf } from '@/api/contracts/employees';
+import { employeeEndpoints, skillEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /** 09's "This week": the last seven days, as Backend's stats default. */
@@ -45,7 +47,13 @@ export async function loadSkillsLibrary(now = new Date()): Promise<SkillsLibrary
         return null;
       }),
     api
-      .get({ endpoint: skillEndpoints.tools(), payload: toolChoicesSchema, raw: true })
+      .get({
+        endpoint: skillEndpoints.tools(),
+        // GOTCHA's own tools come translated ("העברה לנציג אנושי").
+        query: { locale: await getLocale() },
+        payload: toolChoicesSchema,
+        raw: true,
+      })
       .then((r) => new Map(r.data.map((t) => [t.name, t])))
       .catch((cause: unknown) => {
         logger.warn('skills.tools_failed', { cause });
@@ -64,12 +72,13 @@ export async function loadSkillEmployees(): Promise<
 > {
   try {
     const list = await serverApi().get({
-      endpoint: aiEmployeeEndpoints.list(),
-      payload: aiEmployeesSchema,
+      endpoint: employeeEndpoints.list(),
+      payload: employeeListSchema,
     });
+    // The line under 07's name ("Sales and product advice"), not the role key.
     return list
-      .filter((ai) => !isBuilderDraft(ai))
-      .map((ai) => ({ id: ai.id, name: ai.name, role: ai.role }));
+      .filter((e) => e.status !== 'DRAFT')
+      .map((e) => ({ id: e.id, name: e.name, role: responsibilityOf(e) }));
   } catch (cause) {
     logger.warn('skills.employees_failed', { cause });
     return null;

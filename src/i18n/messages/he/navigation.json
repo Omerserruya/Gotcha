@@ -12,7 +12,8 @@
   "workspace": {
     "label": "סביבת עבודה",
     "switch": "החלפת סביבת עבודה",
-    "noneSelected": "בחרו סביבת עבודה"
+    "noneSelected": "בחרו סביבת עבודה",
+    "unnamed": "סביבת העבודה שלכם"
   },
   "account": {
     "label": "חשבון",

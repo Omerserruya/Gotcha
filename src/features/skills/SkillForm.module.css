@@ -356,4 +356,33 @@
     background-color: var(--rule-handover-surface);
     color: var(--signal-info-text);
   }
+
+  /*
+   * 09b shows a step as its number, title and tools, and a drag handle.
+   * The kind and the ↑ ↓ × are there on hover - and on focus, so the
+   * keyboard still reaches them (measured on dev: too heavy at all times).
+   */
+  .step .kind,
+  .step .iconButton {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--easing-standard);
+  }
+
+  .step:is(:hover, :focus-within) .kind,
+  .step:is(:hover, :focus-within) .iconButton {
+    opacity: 1;
+  }
+
+  /* An empty field reads as empty: the placeholder colour, never the value's. */
+  .input::placeholder,
+  .inlineInput::placeholder,
+  .lead::placeholder,
+  .guidance::placeholder,
+  .elseNote::placeholder,
+  .stepTitle::placeholder,
+  .chipInput::placeholder,
+  .amount::placeholder {
+    color: var(--text-faint);
+    opacity: 1;
+  }
 }

@@ -44,9 +44,9 @@
   "form": {
     "when": "When to use it",
     "name": "Name",
-    "namePlaceholder": "Exchange a product",
+    "namePlaceholder": "Name it the way your team would",
     "situation": "In the customer’s words",
-    "situationPlaceholder": "The customer wants another size or colour",
+    "situationPlaceholder": "What the customer says, in a few words",
     "category": "Category",
     "categories": {
       "orders": "Orders",
@@ -55,7 +55,7 @@
       "other": "Other"
     },
     "whenLabel": "When to use it",
-    "whenPlaceholder": "The customer wants the same item in a different size or colour",
+    "whenPlaceholder": "When should an employee use this? One sentence.",
     "soundsLike": "Sounds like",
     "examplePlaceholder": "A phrase a customer used, then Enter",
     "meaningNotKeywords": "GOTCHA matches the meaning, not the words.",
@@ -67,7 +67,7 @@
     "steps": "Steps",
     "toolsUnread": "The tool list couldn’t be read just now, so tools can’t be added. The ones already on a step are kept.",
     "stepTitle": "Step {n}",
-    "stepTitlePlaceholder": "Find the order",
+    "stepTitlePlaceholder": "What this step does",
     "stepKind": "What step {n} does",
     "kinds": {
       "find": "find",
@@ -252,5 +252,6 @@
     },
     "unread": "This employee’s skills couldn’t be read just now.",
     "noEmployee": "This employee isn’t here."
-  }
+  },
+  "notRunYet": "Not run yet"
 }

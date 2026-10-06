@@ -135,7 +135,7 @@ export function EmployeeSkills({
       step: fit.handsOverAtStep,
       why: blocked?.reason
         ? t(`fit.reasons.${blocked.reason}`, {
-            tool: humanizeTag(blocked.name.split('.').pop() ?? blocked.name),
+            tool: blocked.actionLabel ?? humanizeTag(blocked.name.split('.').pop() ?? blocked.name),
           })
         : (fit.reason ?? ''),
     });

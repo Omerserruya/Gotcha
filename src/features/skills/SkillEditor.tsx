@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { humanizeTag } from '@/api/contracts/approvals';
-import { skillStanding, type Skill, type SkillRun, type ToolChoice } from '@/api/contracts/skills';
+import { skillStatus, type Skill, type SkillRun, type ToolChoice } from '@/api/contracts/skills';
 import { Link } from '@/i18n/navigation';
 
 import { giveSkill, readRuns, saveSkill, type SaveResult } from './skill-actions';
@@ -73,7 +73,7 @@ export function SkillEditor({
     errors.set(result.field, result.error || t('new.failed.invalid'));
   }
   const dirty = JSON.stringify(bodyOf(draft)) !== JSON.stringify(bodyOf(draftOf(skill)));
-  const standing = skillStanding({
+  const status = skillStatus({
     ...skill,
     stats: skill.stats
       ? {
@@ -156,11 +156,9 @@ export function SkillEditor({
           <h1 className={styles.name}>
             <bdi dir="auto">{skill.name}</bdi>
           </h1>
-          <span className={styles.chip} data-standing={standing.kind} data-testid="skill-standing">
-            {standing.kind === 'live' ? <span className={styles.dot} aria-hidden="true" /> : null}
-            {standing.kind === 'approval'
-              ? t('standing.approval', { amount: format.number(standing.amount) })
-              : t(`standing.${standing.kind}`)}
+          <span className={styles.chip} data-standing={status} data-testid="skill-standing">
+            {status === 'live' ? <span className={styles.dot} aria-hidden="true" /> : null}
+            {t(`standing.${status}`)}
           </span>
           <span className={styles.version} data-testid="skill-version">
             {t('editor.version', { version: skill.version })}
@@ -226,13 +224,16 @@ export function SkillEditor({
                         {employeeInitials(employee.name)}
                       </span>
                       <span className={styles.personText}>
-                        <span>{employee.name}</span>
+                        <span className={styles.personName}>
+                          {employee.name}
+                          {mode === 'watch' ? (
+                            <span className={styles.watchTag}>{t('editor.mode.watch')}</span>
+                          ) : null}
+                        </span>
                         <span className={styles.quiet}>
                           {giveFailed === employee.id
                             ? t('editor.giveFailed')
-                            : on
-                              ? t(`editor.mode.${mode as 'on' | 'watch'}`)
-                              : (employee.role ?? '')}
+                            : (employee.role ?? '')}
                         </span>
                       </span>
                       <input

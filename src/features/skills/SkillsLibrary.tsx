@@ -11,6 +11,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { avatarTone, employeeInitials, skillSystems } from './skill-words';
+import { ToolMark } from './ToolChip';
 import styles from './Skills.module.css';
 
 /**
@@ -109,8 +110,9 @@ export async function SkillsLibrary({
                       {t('steps', { count: skill.steps.length })}
                     </span>
                     {skillSystems(skill, tools).map((system) => (
-                      <span key={system} className={styles.toolChip}>
-                        {system}
+                      <span key={system.label} className={styles.toolChip}>
+                        <ToolMark name={system.tool} slug={system.slug} />
+                        {system.label}
                       </span>
                     ))}
                   </span>
@@ -143,11 +145,13 @@ export async function SkillsLibrary({
                         <span className={styles.muted}>
                           {watchingOnly
                             ? t('watching')
-                            : stats.aloneShare === null
-                              ? '-'
-                              : t('alone', {
-                                  share: format.number(stats.aloneShare, { style: 'percent' }),
-                                })}
+                            : stats.runs === 0
+                              ? t('notRunYet')
+                              : stats.aloneShare === null
+                                ? '-'
+                                : t('alone', {
+                                    share: format.number(stats.aloneShare, { style: 'percent' }),
+                                  })}
                         </span>
                       </>
                     )}

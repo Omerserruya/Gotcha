@@ -44,9 +44,9 @@
   "form": {
     "when": "מתי להשתמש בה",
     "name": "שם",
-    "namePlaceholder": "החלפת מוצר",
+    "namePlaceholder": "תנו לה שם כמו שהצוות שלכם היה קורא לה",
     "situation": "במילים של הלקוח",
-    "situationPlaceholder": "הלקוח רוצה מידה או צבע אחרים",
+    "situationPlaceholder": "מה הלקוח אומר, בכמה מילים",
     "category": "קטגוריה",
     "categories": {
       "orders": "הזמנות",
@@ -55,7 +55,7 @@
       "other": "אחר"
     },
     "whenLabel": "מתי להשתמש בה",
-    "whenPlaceholder": "הלקוח רוצה את אותו פריט במידה או בצבע אחרים",
+    "whenPlaceholder": "מתי עובד צריך להשתמש בה? משפט אחד.",
     "soundsLike": "נשמע כמו",
     "examplePlaceholder": "משפט שלקוח אמר, ואז Enter",
     "meaningNotKeywords": "GOTCHA מזהה את המשמעות, לא את המילים.",
@@ -67,7 +67,7 @@
     "steps": "שלבים",
     "toolsUnread": "לא הצלחנו לקרוא כרגע את רשימת הכלים, ולכן אי אפשר להוסיף כלים. אלה שכבר בשלבים נשמרים.",
     "stepTitle": "שלב {n}",
-    "stepTitlePlaceholder": "מציאת ההזמנה",
+    "stepTitlePlaceholder": "מה השלב הזה עושה",
     "stepKind": "מה שלב {n} עושה",
     "kinds": {
       "find": "מציאה",
@@ -252,5 +252,6 @@
     },
     "unread": "לא הצלחנו לקרוא כרגע את המיומנויות של העובד הזה.",
     "noEmployee": "העובד הזה לא כאן."
-  }
+  },
+  "notRunYet": "עוד לא הופעלה"
 }

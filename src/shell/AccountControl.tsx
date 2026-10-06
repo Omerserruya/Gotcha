@@ -24,22 +24,38 @@ import { LocaleMenuItems } from './LocaleMenuItems';
  * Initials rather than a photo: the platform exposes no avatar contract, and
  * a broken image is worse than none. See docs/api-gaps.md.
  */
-export function AccountControl() {
+export function AccountControl({
+  name,
+  workspace,
+}: {
+  /** The person, from `/auth/me`; `null` when unread. */
+  readonly name: string | null;
+  /** The business's own name. */
+  readonly workspace: string | null;
+}) {
   const t = useTranslations('navigation');
   const { tenantId } = useTenant();
+  const initials = name
+    ? name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w[0]!.toUpperCase())
+        .join('')
+    : null;
 
   return (
     <Menu>
       <MenuTrigger asChild>
         <button type="button" className={styles.account}>
           <span className={styles.avatar} aria-hidden="true">
-            {/* Placeholder until `/api/auth/me` has a confirmed contract. */}
-            ··
+            {initials ?? '··'}
           </span>
           <span className={styles.accountText}>
-            <span className={styles.accountName}>{t('account.label')}</span>
+            <span className={styles.accountName}>{name ?? t('account.label')}</span>
             <span className={styles.accountWorkspace}>
-              {tenantId ?? t('workspace.noneSelected')}
+              {/* The business's name; never its id - an id is not a name anybody knows. */}
+              {workspace ?? (tenantId ? t('workspace.unnamed') : t('workspace.noneSelected'))}
             </span>
           </span>
         </button>

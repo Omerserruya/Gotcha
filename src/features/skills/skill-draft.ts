@@ -20,6 +20,8 @@ export interface DraftStep {
   /** As typed; '' is "no threshold". */
   readonly approvalOver: string;
   readonly elseNote: string;
+  /** Backend's labels for the tools it was read with - shown, never sent. */
+  readonly toolDetails: Skill['steps'][number]['toolDetails'];
 }
 
 export interface SkillDraft {
@@ -64,6 +66,7 @@ export function draftOf(skill: Skill): SkillDraft {
       tools: s.tools,
       approvalOver: s.approvalOverAmount === null ? '' : String(s.approvalOverAmount),
       elseNote: s.elseNote ?? '',
+      toolDetails: s.toolDetails,
     })),
     rules: skill.rules,
     requiredInfo: skill.requiredInfo,
@@ -72,7 +75,16 @@ export function draftOf(skill: Skill): SkillDraft {
 
 /** A new step of a kind, its id minted by the caller (in a handler, never in render). */
 export function newStep(kind: StepKind, id: string): DraftStep {
-  return { id, kind, title: '', guidance: '', tools: [], approvalOver: '', elseNote: '' };
+  return {
+    id,
+    kind,
+    title: '',
+    guidance: '',
+    tools: [],
+    approvalOver: '',
+    elseNote: '',
+    toolDetails: [],
+  };
 }
 
 /** Move the step at `from` to `to`, keeping every id. */

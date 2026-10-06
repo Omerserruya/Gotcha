@@ -121,6 +121,9 @@
   }
 
   .toolChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     padding: 3px 8px;
     border-radius: 6px;
     background-color: var(--panel-inset);
@@ -322,5 +325,13 @@
   .headerActions {
     display: flex;
     gap: 8px;
+  }
+
+  .toolMark {
+    flex: none;
+    inline-size: 11px;
+    block-size: 11px;
+    object-fit: contain;
+    color: var(--text-muted);
   }
 }

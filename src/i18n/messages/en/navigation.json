@@ -12,7 +12,8 @@
   "workspace": {
     "label": "Workspace",
     "switch": "Switch workspace",
-    "noneSelected": "Choose a workspace"
+    "noneSelected": "Choose a workspace",
+    "unnamed": "Your workspace"
   },
   "account": {
     "label": "Account",

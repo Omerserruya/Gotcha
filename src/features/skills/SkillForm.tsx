@@ -14,6 +14,7 @@ import {
 } from '@/api/contracts/skills';
 
 import { moveStep, newStep, type DraftStep, type SkillDraft } from './skill-draft';
+import { ToolMark, toolLabel } from './ToolChip';
 import styles from './SkillForm.module.css';
 
 /**
@@ -60,7 +61,12 @@ export function SkillForm({
       'steps',
       draft.steps.map((s, i) => (i === index ? { ...s, ...step } : s)),
     );
-  const toolName = (name: string) => tools?.find((x) => x.name === name)?.displayName || name;
+  /* "Shopify · Find order" - the brand's spelling, the action in sentence case (`toolLabel`). */
+  const toolName = (name: string, step?: DraftStep) => {
+    const detail = step?.toolDetails.find((d) => d.name === name) ?? null;
+    const { provider, action } = toolLabel(name, tools, detail);
+    return provider ? `${provider} · ${action}` : action;
+  };
 
   const addExample = () => {
     const words = example.trim();
@@ -296,7 +302,17 @@ export function SkillForm({
                 <ul className={styles.chips}>
                   {step.tools.map((name) => (
                     <li key={name} className={styles.tool}>
-                      {toolName(name)}
+                      <ToolMark
+                        name={name}
+                        slug={
+                          toolLabel(
+                            name,
+                            tools,
+                            step.toolDetails.find((d) => d.name === name),
+                          ).slug
+                        }
+                      />
+                      {toolName(name, step)}
                       <button
                         type="button"
                         className={styles.chipRemove}
@@ -328,7 +344,7 @@ export function SkillForm({
                               value={tool.name}
                               disabled={!tool.connected || tool.allowedForAgent === false}
                             >
-                              {tool.displayName || tool.name}
+                              {toolName(tool.name)}
                               {tool.reason ? ` - ${t(`toolReasons.${tool.reason}`)}` : ''}
                             </option>
                           ))}

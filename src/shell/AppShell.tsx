@@ -9,6 +9,10 @@ import { AccountControl } from './AccountControl';
 import { CommandHint } from './CommandHint';
 import { CommandPalette } from './CommandPalette';
 import { PrimaryNavigation, SettingsNavigation } from './PrimaryNavigation';
+import { serverApi } from '@/api/client/server-api';
+import { currentUserSchema } from '@/api/contracts/identity';
+import { authEndpoints } from '@/api/endpoints/registry';
+import { logger } from '@/observability/logger';
 
 /**
  * The application frame.
@@ -23,6 +27,7 @@ import { PrimaryNavigation, SettingsNavigation } from './PrimaryNavigation';
  */
 export async function AppShell({ children }: { children: ReactNode }) {
   const t = await getTranslations('navigation');
+  const me = await whoIsHere();
 
   return (
     <div className={styles.frame}>
@@ -50,7 +55,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
         <div className={styles.railBottom}>
           <CommandHint />
           <SettingsNavigation />
-          <AccountControl />
+          <AccountControl name={me?.name ?? null} workspace={me?.workspace ?? null} />
         </div>
       </div>
 
@@ -65,4 +70,22 @@ export async function AppShell({ children }: { children: ReactNode }) {
       </div>
     </div>
   );
+}
+
+/**
+ * The rail's foot: the person and the business, as 02 shows them ("Maya
+ * Levi / Aviv & Co."). From `/auth/me`, which already names both; `null`
+ * when it could not be read - the control then says so in its own words.
+ */
+async function whoIsHere(): Promise<{ name: string | null; workspace: string | null } | null> {
+  try {
+    const me = await serverApi().get({ endpoint: authEndpoints.me(), payload: currentUserSchema });
+    return {
+      name: me.user.name?.trim() || me.user.email || null,
+      workspace: me.tenantName ?? null,
+    };
+  } catch (cause) {
+    logger.warn('shell.me_failed', { cause });
+    return null;
+  }
 }

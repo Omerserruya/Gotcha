@@ -56,6 +56,21 @@ export const skillStepSchema = z.object({
   /** Only tightens approval: "Asks you first over X". */
   approvalOverAmount: z.number().nonnegative().nullable().catch(null).default(null),
   elseNote: nullableText,
+  /**
+   * Read-only labels for `tools`, in the same order (Backend ab173090): the
+   * chip is `providerLabel · actionLabel`. Ignored by the PUT, never sent.
+   */
+  toolDetails: z
+    .array(
+      z.object({
+        name: z.string(),
+        provider: nullableText,
+        providerLabel: nullableText,
+        actionLabel: nullableText,
+      }),
+    )
+    .catch([])
+    .default([]),
 });
 export type SkillStep = z.infer<typeof skillStepSchema>;
 
@@ -130,7 +145,8 @@ export const skillRunSchema = z.object({
   trace: z
     .array(
       z.object({
-        step: z.string(),
+        /** `null`: a hand-over outside the steps. */
+        step: z.string().nullable().catch(null).default(null),
         tool: z.string().nullable().catch(null).default(null),
         outcome: z.string().catch(''),
         at: nullableText,
@@ -158,6 +174,10 @@ export type ToolBlockReason = (typeof TOOL_BLOCK_REASONS)[number];
 export const toolChoiceSchema = z.object({
   name: z.string().min(1),
   displayName: z.string().catch(''),
+  /** Backend ab173090: the provider's slug (its mark) and labels; `null` provider: GOTCHA's own. */
+  provider: nullableText,
+  providerLabel: nullableText,
+  actionLabel: nullableText,
   source: z.enum(['system', 'integration']).catch('system'),
   integrationSlug: nullableText,
   category: nullableText,
@@ -206,6 +226,9 @@ export const skillFitSchema = z.object({
               name: z.string(),
               allowed: z.boolean().catch(false),
               connected: z.boolean().catch(false),
+              provider: nullableText,
+              providerLabel: nullableText,
+              actionLabel: nullableText,
               reason: z.enum(TOOL_BLOCK_REASONS).nullable().catch(null).default(null),
             }),
           ),
@@ -239,4 +262,16 @@ export function skillStanding(skill: Pick<Skill, 'steps' | 'status' | 'stats'>):
     .filter((a): a is number => a !== null);
   if (amounts.length > 0) return { kind: 'approval', amount: Math.max(...amounts) };
   return modes.includes('on') ? { kind: 'live' } : { kind: 'watch' };
+}
+
+/**
+ * 09b's header badge: the skill's status alone - Live / Watch only / Draft /
+ * Not in use. An approval threshold is a step's ("Asks you first over ₪500"),
+ * not the skill's (measured on dev: the header said "Asks you over 200").
+ */
+export function skillStatus(
+  skill: Pick<Skill, 'status' | 'stats'>,
+): 'draft' | 'live' | 'watch' | 'unused' {
+  const standing = skillStanding({ ...skill, steps: [] });
+  return standing.kind === 'approval' ? 'live' : standing.kind;
 }

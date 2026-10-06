@@ -100,15 +100,18 @@ export function NewSkill({
     <Dialog open onOpenChange={(open) => (open ? null : close())}>
       <DialogContent
         title={t('new.title')}
-        description={t('new.description')}
         hideTitle
+        // The visible subtitle is the description (one, not a second unstyled copy).
+        aria-describedby="new-skill-subtitle"
         className={styles.sheet}
         data-testid="new-skill"
       >
         <header className={styles.head} aria-hidden="true">
           <span>
             <span className={styles.title}>{t('new.title')}</span>
-            <span className={styles.subtitle}>{t('new.description')}</span>
+            <span className={styles.subtitle} id="new-skill-subtitle">
+              {t('new.description')}
+            </span>
           </span>
         </header>
         <button

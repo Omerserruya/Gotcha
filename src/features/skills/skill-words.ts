@@ -1,24 +1,26 @@
-import { humanizeTag } from '@/api/contracts/approvals';
 import type { Skill, ToolChoice } from '@/api/contracts/skills';
+
+import { toolLabel } from './ToolChip';
 
 /**
  * The systems a skill's steps use, in step order and once each - 09's chips
- * ("Shopify", "Knowledge", "Customer card"). An integration tool is its
- * integration; a system tool is its own name. With the catalogue unread, the
- * tool name's prefix, made legible.
+ * ("Shopify", "Knowledge"). A provider is its brand-spelled name; one of
+ * GOTCHA's own tools is its own name. Each with the tool it came from, for
+ * the chip's mark.
  */
 export function skillSystems(
-  skill: Pick<Skill, 'steps'>,
+  skill: { readonly steps: readonly Pick<Skill['steps'][number], 'tools' | 'toolDetails'>[] },
   tools: ReadonlyMap<string, ToolChoice> | null,
-): string[] {
-  const systemOf = (name: string): string => {
-    const tool = tools?.get(name);
-    if (tool?.source === 'integration' && tool.integrationSlug)
-      return humanizeTag(tool.integrationSlug);
-    if (tool?.displayName) return tool.displayName;
-    return humanizeTag(name.includes('.') ? name.split('.')[0]! : name);
-  };
-  return [...new Set(skill.steps.flatMap((s) => s.tools.map(systemOf)))];
+): { readonly label: string; readonly tool: string; readonly slug: string | null }[] {
+  const seen = new Map<string, { label: string; tool: string; slug: string | null }>();
+  for (const step of skill.steps)
+    for (const name of step.tools) {
+      const detail = step.toolDetails.find((d) => d.name === name) ?? null;
+      const { provider, action, slug } = toolLabel(name, tools, detail);
+      const label = provider ?? action;
+      if (!seen.has(label)) seen.set(label, { label, tool: name, slug });
+    }
+  return [...seen.values()];
 }
 
 /** Two letters for an employee's avatar: "Shira" → "SH", "Noa Cohen" → "NC". */

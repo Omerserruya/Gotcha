@@ -365,4 +365,18 @@
     font-size: 13px;
     color: var(--text-muted);
   }
+
+  .personName {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .watchTag {
+    padding: 1px 6px;
+    border-radius: 5px;
+    background-color: var(--ai-avatar-surface);
+    font-size: 10.5px;
+    color: var(--ai-avatar-text);
+  }
 }

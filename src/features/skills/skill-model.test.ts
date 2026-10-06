@@ -10,8 +10,9 @@ import {
 
 import { blankDraft, bodyOf, draftOf, draftProblems, moveStep, newStep } from './skill-draft';
 import { avatarTone, employeeInitials, skillSystems } from './skill-words';
+import { toolLabel } from './ToolChip';
 
-const skill = (over: Partial<Skill> = {}): Skill =>
+const skill = (over: Record<string, unknown> = {}): Skill =>
   skillOneSchema.parse({
     data: {
       id: 'k1',
@@ -100,6 +101,7 @@ describe('★★ strict envelopes - an undeployed route is unread, never "no ski
             tools: [],
             approvalOverAmount: null,
             elseNote: null,
+            toolDetails: [],
           },
         ],
       }),
@@ -178,6 +180,9 @@ describe('skillSystems - 09’s chips', () => {
         connected: true,
         allowedForAgent: null,
         reason: null,
+        provider: null,
+        providerLabel: null,
+        actionLabel: null,
       },
     ],
     [
@@ -192,6 +197,9 @@ describe('skillSystems - 09’s chips', () => {
         connected: true,
         allowedForAgent: null,
         reason: null,
+        provider: null,
+        providerLabel: null,
+        actionLabel: null,
       },
     ],
   ]);
@@ -219,8 +227,52 @@ describe('skillSystems - 09’s chips', () => {
         },
       ],
     });
-    expect(skillSystems(s, tools)).toEqual(['Shopify', 'Knowledge', 'Courier']);
-    expect(skillSystems(s, null)).toEqual(['Shopify', 'Knowledge', 'Courier']);
+    const labels = (x: ReturnType<typeof skillSystems>) => x.map((y) => y.label);
+    expect(labels(skillSystems(s, tools))).toEqual(['Shopify', 'Knowledge', 'Courier']);
+    expect(labels(skillSystems(s, null))).toEqual(['Shopify', 'Knowledge', 'Courier']);
+    // The mark comes from the integration's slug; GOTCHA's own tool has none.
+    expect(skillSystems(s, tools).map((y) => y.slug)).toEqual(['shopify', null, 'courier']);
+  });
+
+  it('★ a brand is spelled as the brand: WooCommerce, never Woocommerce (dev)', () => {
+    const woo = new Map<string, ToolChoice>([
+      [
+        'woocommerce.get_order',
+        {
+          name: 'woocommerce.get_order',
+          displayName: 'Get Order',
+          source: 'integration',
+          integrationSlug: 'woocommerce',
+          category: null,
+          riskLevel: null,
+          connected: true,
+          allowedForAgent: null,
+          reason: null,
+          provider: null,
+          providerLabel: null,
+          actionLabel: null,
+        },
+      ],
+    ]);
+    const s = skill({
+      steps: [
+        {
+          id: 'a',
+          kind: 'find',
+          title: 'a',
+          guidance: '',
+          tools: ['woocommerce.get_order'],
+          approvalOverAmount: null,
+          elseNote: null,
+        },
+      ],
+    });
+    expect(skillSystems(s, woo)[0]!.label).toBe('WooCommerce');
+    expect(toolLabel('woocommerce.get_order', woo)).toEqual({
+      provider: 'WooCommerce',
+      action: 'Get order',
+      slug: 'woocommerce',
+    });
   });
 });
 
@@ -229,5 +281,54 @@ describe('avatars', () => {
     expect(employeeInitials('Shira')).toBe('SH');
     expect(employeeInitials('Noa Cohen')).toBe('NC');
     expect(avatarTone('a1')).toBe(avatarTone('a1'));
+  });
+});
+
+describe('★★ Backend’s labels win (ab173090) - one source, no hand mapping', () => {
+  it('the step’s own toolDetails: "WooCommerce · Get order", its slug for the mark', () => {
+    expect(
+      toolLabel('woocommerce.get_order', null, {
+        provider: 'woocommerce',
+        providerLabel: 'WooCommerce',
+        actionLabel: 'Get order',
+      }),
+    ).toEqual({ provider: 'WooCommerce', action: 'Get order', slug: 'woocommerce' });
+  });
+
+  it('GOTCHA’s own tool: the action alone, in the reader’s language', () => {
+    expect(
+      toolLabel('escalate_to_human', null, {
+        provider: null,
+        providerLabel: null,
+        actionLabel: 'העברה לנציג אנושי',
+      }),
+    ).toEqual({ provider: null, action: 'העברה לנציג אנושי', slug: null });
+  });
+
+  it('then the tool list’s labels, before any guess', () => {
+    const tools = new Map<string, ToolChoice>([
+      [
+        'shopify.get_order',
+        {
+          name: 'shopify.get_order',
+          displayName: 'GET ORDER',
+          source: 'integration',
+          integrationSlug: 'shopify',
+          category: null,
+          riskLevel: null,
+          connected: true,
+          allowedForAgent: null,
+          reason: null,
+          provider: 'shopify',
+          providerLabel: 'Shopify',
+          actionLabel: 'Get order',
+        },
+      ],
+    ]);
+    expect(toolLabel('shopify.get_order', tools)).toEqual({
+      provider: 'Shopify',
+      action: 'Get order',
+      slug: 'shopify',
+    });
   });
 });

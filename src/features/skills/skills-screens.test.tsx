@@ -93,6 +93,9 @@ const tool = (name: string, over: Partial<ToolChoice> = {}): ToolChoice => ({
   connected: true,
   allowedForAgent: null,
   reason: null,
+  provider: null,
+  providerLabel: null,
+  actionLabel: null,
   ...over,
 });
 
@@ -387,5 +390,66 @@ describe('★★ 09b - edit a skill', () => {
       fireEvent.click(screen.getByTestId('skill-log-more'));
     });
     expect(actions.readRuns).toHaveBeenLastCalledWith('k1', 'n');
+  });
+});
+
+describe('★★ the dev measurement (c1ddc98)', () => {
+  it('21: one description - the visible subtitle - not a second, unstyled copy', () => {
+    wrap(<NewSkill employees={employees} tools={[]} otherSkills={[]} />);
+    const dialog = screen.getByTestId('new-skill');
+    expect(dialog).toHaveAttribute('aria-describedby', 'new-skill-subtitle');
+    expect(
+      screen.getAllByText('Describe what the employee should do. GOTCHA writes the steps'),
+    ).toHaveLength(1);
+  });
+
+  it('★ 09b: the header badge is the status, the threshold stays on its step', () => {
+    const asks = skill({
+      steps: [
+        {
+          id: 's1',
+          kind: 'change',
+          title: 'Refund',
+          guidance: '',
+          tools: [],
+          approvalOverAmount: 200,
+          elseNote: null,
+        },
+      ],
+    });
+    wrap(<SkillEditor skill={asks} employees={employees} tools={[]} otherSkills={[]} />);
+    expect(screen.getByTestId('skill-standing')).toHaveTextContent('Live');
+    expect(screen.getByTestId('skill-step-amount-0')).toHaveValue('200');
+  });
+
+  it('09b: Used by says the employee’s line, and a small Watching tag', () => {
+    const watched = skill({
+      stats: {
+        ...skill().stats!,
+        usedBy: [{ aiAgentId: 'a1', name: 'Shira', mode: 'watch', order: 0 }],
+      },
+    });
+    wrap(
+      <SkillEditor
+        skill={watched}
+        employees={[{ id: 'a1', name: 'Shira', role: 'Sales and product advice' }]}
+        tools={[]}
+        otherSkills={[]}
+      />,
+    );
+    const used = screen.getByTestId('skill-used-by');
+    expect(used).toHaveTextContent('Sales and product advice');
+    expect(used).toHaveTextContent('Watching');
+  });
+
+  it('09: a skill that never ran says so, not "-"', async () => {
+    wrap(
+      await SkillsLibrary({
+        skills: [skill({ stats: { ...skill().stats!, runs: 0, aloneShare: null } })],
+        tools: null,
+        category: null,
+      }),
+    );
+    expect(screen.getByTestId('skill-week-k1')).toHaveTextContent('0 runsNot run yet');
   });
 });
