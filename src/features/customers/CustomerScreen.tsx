@@ -282,7 +282,7 @@ export async function CustomerTimelineList({
           key: `a-${event.id}`,
           at: event.createdAt,
           tone: 'action',
-          title: toolWords(event.action.tool),
+          title: toolWords(event.action.tool, event.action.labelKey),
           line: t(`card.aiAction.${actionOutcome(event.action)}`),
         });
       }

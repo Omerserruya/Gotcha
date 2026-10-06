@@ -265,7 +265,12 @@
         "tagging_customer": "Customer tag",
         "scheduling_followup": "Follow-up",
         "handing_to_team": "Handover to the team",
-        "working": "A step"
+        "working": "A step",
+        "checking_refund": "Refund check",
+        "checking_payment": "Payment check",
+        "sending_payment_link": "Payment link",
+        "checking_discount": "Discount check",
+        "creating_task": "Task"
       },
       "status": {
         "proposed": "waiting for approval",

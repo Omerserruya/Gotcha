@@ -327,6 +327,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
           tool: 'shopify.get_customer_orders',
           success: true,
           status: 'completed',
+          labelKey: 'looking_up_order',
           triggeredBy: 'ai',
           durationMs: 412,
           approvedBy: null,

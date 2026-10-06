@@ -112,6 +112,8 @@ export const timelineEventSchema = z.object({
        * `success`.
        */
       status: z.enum(ACTIVITY_STATUSES).nullable().catch(null).default(null),
+      /** The tool in a stable key to translate (a9c79156, Backend's one map). `null`: an older service. */
+      labelKey: z.string().nullable().catch(null).default(null),
       triggeredBy: z.string().nullable().default(null),
       durationMs: z.number().nullable().default(null),
       approvedBy: z.string().nullable().default(null),

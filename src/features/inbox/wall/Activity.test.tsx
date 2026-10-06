@@ -178,6 +178,10 @@ describe('★★ "stop" is Stop AI - only while it works, only where the AI answ
 });
 
 describe('★ every label Backend can send has words, in both languages', () => {
+  it('all 23 of them (a9c79156 added five)', () => {
+    expect(ACTIVITY_LABELS).toHaveLength(23);
+  });
+
   it.each(ACTIVITY_LABELS)('%s', (key) => {
     expect(en.wall.activity.label[key]).toBeTruthy();
     expect(he.wall.activity.label[key]).toBeTruthy();

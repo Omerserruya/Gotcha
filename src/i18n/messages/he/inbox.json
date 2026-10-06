@@ -265,7 +265,12 @@
         "tagging_customer": "תיוג הלקוח",
         "scheduling_followup": "תזמון מעקב",
         "handing_to_team": "העברה לצוות",
-        "working": "צעד"
+        "working": "צעד",
+        "checking_refund": "בדיקת החזר",
+        "checking_payment": "בדיקת תשלום",
+        "sending_payment_link": "קישור לתשלום",
+        "checking_discount": "בדיקת הנחה",
+        "creating_task": "משימה"
       },
       "status": {
         "proposed": "ממתין לאישור",

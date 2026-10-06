@@ -1,18 +1,24 @@
 import { getTranslations } from 'next-intl/server';
 
-import { labelForTool } from '@/api/contracts/ai-activity';
+import { ACTIVITY_LABELS, labelForTool, type ActivityLabel } from '@/api/contracts/ai-activity';
 import { humanizeTag } from '@/api/contracts/approvals';
 
 /**
- * A tool in the reader's words: the inbox panel's label for it (Backend's own
- * LABEL_RULES, mirrored in `labelForTool`), else its name made legible.
- * "Escalate to human" inside a Hebrew sentence was the raw tool, translated
- * by nobody (measured on dev, 04e).
+ * A tool in the reader's words, as the inbox panel says it.
+ *
+ *   labelKey given   the server's key (a9c79156, Backend's one map). `null` -
+ *                    an older service - or "working", or a key this screen
+ *                    has no words for: the tool's own name made legible.
+ *   labelKey absent  a row that never carries one (04e's audit events and
+ *                    approvals): `labelForTool`, the copy of that map.
  */
-export async function toolWords(): Promise<(tool: string) => string> {
+export async function toolWords(): Promise<(tool: string, labelKey?: string | null) => string> {
   const steps = await getTranslations('inbox.wall.activity');
-  return (tool) => {
-    const known = labelForTool(tool);
-    return known ? steps(`label.${known}`) : humanizeTag(tool.split('.').pop() ?? tool);
-  };
+  const legible = (tool: string) => humanizeTag(tool.split('.').pop() ?? tool);
+  const words = (key: string | null): string | null =>
+    key && key !== 'working' && (ACTIVITY_LABELS as readonly string[]).includes(key)
+      ? steps(`label.${key as ActivityLabel}`)
+      : null;
+  return (tool, labelKey) =>
+    (labelKey === undefined ? words(labelForTool(tool)) : words(labelKey)) ?? legible(tool);
 }

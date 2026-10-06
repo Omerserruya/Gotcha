@@ -321,7 +321,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
                   >
                     {/* By status (4b7c2e1b): a refund waiting for approval is not a failure. */}
                     {t(`detail.timeline.action.${actionOutcome(event.action)}`, {
-                      tool: toolWords(event.action.tool),
+                      tool: toolWords(event.action.tool, event.action.labelKey),
                     })}
                   </span>
                 ) : (

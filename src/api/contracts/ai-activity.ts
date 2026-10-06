@@ -36,6 +36,12 @@ export const ACTIVITY_LABELS = [
   'tagging_customer',
   'scheduling_followup',
   'handing_to_team',
+  // a9c79156
+  'checking_refund',
+  'checking_payment',
+  'sending_payment_link',
+  'checking_discount',
+  'creating_task',
   'working',
 ] as const;
 export type ActivityLabel = (typeof ACTIVITY_LABELS)[number];
@@ -64,47 +70,57 @@ export type ActivityStep = z.infer<typeof activityStepSchema>;
 export const activityResponseSchema = z.object({ data: z.array(activityStepSchema) });
 
 /**
- * Backend's `LABEL_RULES` (ai-activity.service.ts), mirrored for the places
- * that carry a bare `tool` and no `labelKey` (04e's approvals, the timeline's
- * `ai_action`). Ordered: the first match on the bare name wins. `null` when
- * nothing matches - the caller shows the tool's own name rather than the
- * service's "working".
+ * ⚠ ONLY FOR ROWS THE SERVER SENDS NO `labelKey` FOR: 04e's audit events and
+ *   approvals. The inbox panel and the customer timeline carry `labelKey`
+ *   from Backend's one shared map (a9c79156) and never come here.
+ *
+ * A copy of that map, `@chatcenter/shared` `ACTIVITY_LABEL_RULES`, in its
+ * order (specific before general: `get_customer_orders` is an order lookup).
+ * Delete this the day the audit log and approvals send `labelKey` too.
  */
 const LABEL_RULES: readonly (readonly [RegExp, ActivityLabel])[] = [
   [/^escalate_to_human$/, 'handing_to_team'],
-  [/refund/, 'processing_refund'],
-  [/cancel_order/, 'cancelling_order'],
-  [/(create|get)_returns?$|exchange_order_item/, 'handling_return'],
+  [/^(process|issue)_refund$|^refund_(capture|payment)$/, 'processing_refund'],
+  [/refund/, 'checking_refund'],
+  [/^cancel_order$/, 'cancelling_order'],
   [
-    /track_shipment|shipment_status|tracking_url|delivery_eta|fulfillment_status/,
+    /(^|_)(create|get)_returns?$|return_status|return_reason|exchange_order_item/,
+    'handling_return',
+  ],
+  [
+    /track_shipment|shipment_status|tracking_(url|number)|delivery_eta|fulfillment_(status|events)|delayed_order|pickup_point/,
     'checking_delivery',
   ],
+  [/^update_order_|^edit_order$/, 'updating_order'],
+  [/payment_link/, 'sending_payment_link'],
+  [/payment_status|financial_status|^(get|list)_transactions$/, 'checking_payment'],
+  [/send_invoice|create_invoice|resend_confirmation/, 'sending_order_email'],
   [
-    /update_order_shipping_address|edit_order|update_order_fulfillment|update_order_status/,
-    'updating_order',
-  ],
-  [
-    /order_lookup|find_latest_order|get_order|reconcile_order_items|list_orders/,
+    /order_lookup|find_latest_order|(^|_)get_orders?$|customer_orders|order_items|(list|search)_orders/,
     'looking_up_order',
   ],
-  [/search_products|variant_information|list_products|get_product/, 'checking_products'],
-  [/coupon|discount/, 'creating_discount'],
-  [/send_invoice|resend_confirmation/, 'sending_order_email'],
-  [/add_order_note|create_note/, 'adding_note'],
+  [
+    /search_products|variant_information|list_products|get_product|inventory_status/,
+    'checking_products',
+  ],
+  [/^(create|issue)_\w*(coupon|discount)/, 'creating_discount'],
+  [/^(validate|list)_discounts?$|customer_discounts/, 'checking_discount'],
+  [/^(add|create)_(\w+_)?note$/, 'adding_note'],
+  [/(^|_)(create|log)_task$/, 'creating_task'],
   [/check_availability/, 'checking_calendar'],
   [/schedule_meeting/, 'booking_meeting'],
+  [/schedule_followup/, 'scheduling_followup'],
+  [/^(add|remove)_(\w+_)?tag$|^tag_contact$/, 'tagging_customer'],
+  [/^(create|update)_(lead|contact|customer|deal)$|update_crm|convert_lead/, 'saving_customer'],
   [
-    /link_customer_identifier|resolve_identity|get_customer|search_customers|get_contact|update_my_profile/,
+    /link_customer_identifier|resolve_identity|get_customer|summarize_customer|update_my_profile|^(search|get)_(contacts?|customers?|leads?|deals?)$|^(contact|lead|deal)_search$|^get_(contact|lead)_notes$/,
     'identifying_customer',
   ],
-  [/create_lead|create_contact|update_contact|update_crm/, 'saving_customer'],
-  [/tag_contact/, 'tagging_customer'],
-  [/schedule_followup/, 'scheduling_followup'],
 ];
 
 /** "shopify.order_lookup" / "integration_order_lookup" → its label, or `null`. */
 export function labelForTool(tool: string): ActivityLabel | null {
   const afterDot = tool.includes('.') ? tool.slice(tool.lastIndexOf('.') + 1) : tool;
-  const name = afterDot.replace(/^integration_/, '').toLowerCase();
+  const name = afterDot.replace(/^integration_/, '');
   return LABEL_RULES.find(([pattern]) => pattern.test(name))?.[1] ?? null;
 }

@@ -665,3 +665,60 @@ describe('★ the brief has three states, not two', () => {
     expect(screen.getByTestId('brief-none')).toBeInTheDocument();
   });
 });
+
+describe('★★ the timeline’s tool words are the server’s labelKey (a9c79156)', () => {
+  const withAction = (action: Record<string, unknown>) =>
+    detail({
+      timeline: {
+        contact: null,
+        identityChannels: [],
+        events: [message({ type: 'ai_action', body: null, direction: null, action })],
+        page: { limit: 50, types: ['ai_action'], nextCursor: null, hasMore: false },
+        coverage: {},
+        totals: {
+          conversations: 1,
+          messages: 0,
+          handovers: 0,
+          aiActions: 1,
+          conversationScanTruncated: false,
+        },
+      },
+    });
+  const base = {
+    success: true,
+    status: 'completed',
+    triggeredBy: 'ai',
+    durationMs: 5,
+    approvedBy: null,
+  };
+
+  it.each([
+    [
+      'the server’s key wins over the tool’s name',
+      'escalate_to_human',
+      'checking_refund',
+      /^Refund check - done$/,
+    ],
+    [
+      'no key (an older service): the tool’s legible name, not a guess',
+      'shopify.get_customer_orders',
+      null,
+      /^Get customer orders - done$/,
+    ],
+    [
+      '"working": the tool’s own name',
+      'shopify.reindex_widgets',
+      'working',
+      /^Reindex widgets - done$/,
+    ],
+    [
+      'a key we have no words for: the tool’s own name',
+      'shopify.reindex_widgets',
+      'brand_new_key',
+      /^Reindex widgets - done$/,
+    ],
+  ])('%s', async (_, tool, labelKey, words) => {
+    await show(withAction({ ...base, tool, labelKey }));
+    expect(screen.getByTestId('event-action')).toHaveTextContent(words);
+  });
+});

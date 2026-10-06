@@ -84,7 +84,7 @@ describe('the capture fixture agrees with the capture spec', () => {
     await show();
     expect(screen.getByTestId('event-imported')).toHaveTextContent(/imported/i);
     expect(screen.getByTestId('event-handover')).toHaveTextContent(/Handed to Dana/);
-    expect(screen.getByTestId('event-action')).toHaveTextContent(/Customer identification - done/);
+    expect(screen.getByTestId('event-action')).toHaveTextContent(/Order lookup - done/);
   });
 
   it('renders the notes section in its linked state, with the anonymity sentence', async () => {
