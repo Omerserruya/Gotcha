@@ -233,7 +233,7 @@ router.get("/users/:userId", ...ADMIN_ONLY, async (req: Request, res: Response):
       email: true,
       name: true,
       roleAssignments: { select: { roleId: true, scope: true } },
-      featureGrants: { select: { feature: true, granted: true, reason: true } },
+      featureGrants: { select: { feature: true, granted: true, reason: true, expiresAt: true } },
     },
   });
   if (!user) {
@@ -253,7 +253,7 @@ router.get("/users/:userId", ...ADMIN_ONLY, async (req: Request, res: Response):
     data: {
       user: { id: user.id, role: user.role, email: user.email, name: user.name },
       roles: user.roleAssignments,
-      grants: user.featureGrants,
+      grants: user.featureGrants.map((g) => withActive(g)),
       permissions: access.permissions,
       scope: access.scope,
       features, // legacy
@@ -270,13 +270,24 @@ router.get("/users/:userId/grants", ...ADMIN_ONLY, async (req: Request, res: Res
     return;
   }
   const grants = await prisma.userFeatureGrant.findMany({ where: { userId } });
-  res.json({ data: grants });
+  // `active: false` = expired. Kept in the list rather than hidden so the
+  // screen can say "ended on 12 Oct" - the resolver already ignores it.
+  res.json({ data: grants.map((g) => withActive(g)) });
 });
 
 const upsertGrantSchema = z.object({
   granted: z.boolean(),
   reason: z.string().max(500).optional(),
+  // When the override stops applying. Absent or null = no end date. The PUT
+  // replaces the whole override, so re-saving without it CLEARS an end date -
+  // the screen's "No end date" option is exactly that.
+  expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
+
+/** The grant as the screen reads it: the row plus whether it applies right now. */
+function withActive<T extends { expiresAt: Date | null }>(g: T, now = Date.now()) {
+  return { ...g, active: g.expiresAt === null || g.expiresAt.getTime() > now };
+}
 
 router.put(
   "/users/:userId/grants/:feature",
@@ -295,16 +306,28 @@ router.put(
       return;
     }
     const { granted, reason } = req.body as { granted: boolean; reason?: string };
+    const rawExpiry = (req.body as { expiresAt?: string | null }).expiresAt ?? null;
+    const expiresAt = rawExpiry === null ? null : new Date(rawExpiry);
+    // A date already in the past would store an override that never applied -
+    // a save that "worked" and did nothing. Refused instead.
+    if (expiresAt && expiresAt.getTime() <= Date.now()) {
+      res.status(422).json({ error: "expiresAt must be in the future", code: "EXPIRES_IN_PAST" });
+      return;
+    }
     const _auditTenantId = assertTenantId(req);
     const row = await prisma.userFeatureGrant.upsert({
       where: { userId_feature: { userId, feature: feature as Feature } },
-      create: { userId, feature, granted, reason, updatedBy: req.user?.userId },
-      update: { granted, reason, updatedBy: req.user?.userId },
+      create: { userId, feature, granted, reason, expiresAt, updatedBy: req.user?.userId },
+      update: { granted, reason, expiresAt, updatedBy: req.user?.userId },
     });
     invalidatePermissionsCache({ userId });
+    // Expiry itself writes no audit record: it is enforced at read time and
+    // nothing runs when it passes. The end date is recorded HERE, so the trail
+    // says when the access was set to end.
     void writeAudit({ tenantId: _auditTenantId, actorType: "user", actorId: req.user?.userId,
-      action: AuditAction.FEATURE_GRANT_CHANGED, targetType: "user", targetId: userId, metadata: { feature } });
-    res.json({ data: row });
+      action: AuditAction.FEATURE_GRANT_CHANGED, targetType: "user", targetId: userId,
+      metadata: { feature, granted, expiresAt: expiresAt ? expiresAt.toISOString() : null } });
+    res.json({ data: withActive(row) });
   },
 );
 

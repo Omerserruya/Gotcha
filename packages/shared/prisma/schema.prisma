@@ -6208,9 +6208,13 @@ model UserFeatureGrant {
   // false = explicit revoke (overrides "role grants this")
   granted   Boolean
   reason    String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedBy String?  @map("updated_by")
+  // When this override stops applying. null = no end date. Enforced at READ
+  // time by the permission resolver (loadUserGrants), so an expired row needs
+  // no cleanup job to stop granting.
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

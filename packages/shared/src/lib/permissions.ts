@@ -48,7 +48,13 @@ interface CacheEntry<T> {
 }
 
 const tenantFeatureCache = new Map<string, CacheEntry<Map<string, boolean>>>();
-const userGrantCache = new Map<string, CacheEntry<Map<string, boolean>>>();
+/** A grant row as cached: the expiry travels with it so the CHECK, not the cache, decides. */
+interface CachedGrant {
+  granted: boolean;
+  /** Epoch ms, or null for a grant with no end date. */
+  expiresAt: number | null;
+}
+const userGrantCache = new Map<string, CacheEntry<Map<string, CachedGrant>>>();
 const userRoleFeatureCache = new Map<string, CacheEntry<Set<string>>>();
 
 // New hierarchical-permission caches (permission-catalog driven).
@@ -138,17 +144,44 @@ async function loadTenantFeatures(tenantId: string): Promise<Map<string, boolean
   return map;
 }
 
-async function loadUserGrants(userId: string): Promise<Map<string, boolean>> {
-  const cached = getCached(userGrantCache, userId);
-  if (cached) return cached;
+/**
+ * A user's per-feature overrides that are IN FORCE right now.
+ *
+ * ★ AN EXPIRED GRANT IS NOT A GRANT. `expiresAt` is checked here, at read
+ * time, on every call - not by a sweeper and not by the cache TTL - so a
+ * "7 days" grant stops granting the moment it ends, in every service that
+ * resolves permissions, with nothing that has to run on time. The cache holds
+ * the rows WITH their expiry and is filtered per call, so a grant cached one
+ * second before it ends cannot outlive it by the cache's 30 seconds.
+ *
+ * An expired row is simply absent from the answer: the user falls back to
+ * what their role gives them, exactly as if the override had been deleted.
+ * That holds for both directions - an expired revoke (`granted: false`)
+ * restores the role's access.
+ */
+async function loadUserGrants(userId: string, now: number = Date.now()): Promise<Map<string, boolean>> {
+  let rows = getCached(userGrantCache, userId);
+  if (!rows) {
+    const grants = await prisma.userFeatureGrant.findMany({
+      where: { userId },
+      select: { feature: true, granted: true, expiresAt: true },
+    });
+    rows = new Map<string, CachedGrant>();
+    for (const g of grants) {
+      rows.set(g.feature, { granted: g.granted, expiresAt: g.expiresAt ? g.expiresAt.getTime() : null });
+    }
+    setCached(userGrantCache, userId, rows, USER_CACHE_TTL_MS);
+  }
+  return grantsInForce(rows, now);
+}
 
-  const grants = await prisma.userFeatureGrant.findMany({
-    where: { userId },
-    select: { feature: true, granted: true },
-  });
+/** Pure: the overrides from `rows` still in force at `now`. Exported for tests. */
+export function grantsInForce(rows: Map<string, CachedGrant>, now: number): Map<string, boolean> {
   const map = new Map<string, boolean>();
-  for (const g of grants) map.set(g.feature, g.granted);
-  setCached(userGrantCache, userId, map, USER_CACHE_TTL_MS);
+  for (const [feature, g] of rows) {
+    if (g.expiresAt !== null && g.expiresAt <= now) continue;
+    map.set(feature, g.granted);
+  }
   return map;
 }
 
