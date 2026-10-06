@@ -1297,21 +1297,36 @@ export const knowledgeEndpoints = {
 } as const;
 
 /**
- * Automations - Studio, screen 09. Served by `chatbot_service`.
+ * Automations - Studio, 09c / 09d / 09e (design 6). `/api/automations`
+ * (chatbot service; Backend 87456663, contract v1). Reads: any member.
+ * Writes `ai:workflows:update`; activate / pause `ai:workflows:publish`.
  *
- * **`list` answers a BARE ARRAY** - the fourth response shape on this
- * platform, so it is read with `raw`.
+ *   list       ?status=live|paused|draft      `{ data }`, `path` per row
+ *   one        GET · PUT (`expectedUpdatedAt`; 409 stale; 422 if live and
+ *              it would not validate - nothing stored) · DELETE
+ *   activate   `{ data, warnings }` or 422 `{ error, errors, warnings }`
+ *   pause      `{ data }` with pausedAt / pausedBy
+ *   validate   `{ errors, warnings }` for an unsaved canvas
+ *   catalog    ?channel=&after=&automationId=  (09e)
+ *   runs       ?limit=&cursor=&status=   `{ data, nextCursor }`
+ *   run        one run with its steps
+ *   nodeStats  ?days=   `{ data: { [nodeId] }, days }`
  *
- * `validate` is a real pre-flight check, the same shape that replaced the
- * fictional approval state on screen 05. Twice now the honest answer to
- * *"review before it happens"* has been a validate route the design did not
- * know about.
+ * `/api/chatbot-flows` answers 409 for an automation: never written here.
  */
 export const automationEndpoints = {
-  list: () => endpoint('/api/chatbot-flows'),
-  detail: (id: string) => endpoint('/api/chatbot-flows/{id}', { id }),
-  validate: (id: string) => endpoint('/api/chatbot-flows/{id}/validate', { id }),
-  activate: (id: string) => endpoint('/api/chatbot-flows/{id}/activate', { id }),
+  list: () => endpoint('/api/automations'),
+  create: () => endpoint('/api/automations'),
+  one: (id: string) => endpoint('/api/automations/{id}', { id }),
+  validate: (id: string) => endpoint('/api/automations/{id}/validate', { id }),
+  activate: (id: string) => endpoint('/api/automations/{id}/activate', { id }),
+  pause: (id: string) => endpoint('/api/automations/{id}/pause', { id }),
+  catalog: () => endpoint('/api/automations/catalog'),
+  runs: (id: string) => endpoint('/api/automations/{id}/runs', { id }),
+  run: (runId: string) => endpoint('/api/automations/runs/{runId}', { runId }),
+  nodeStats: (id: string) => endpoint('/api/automations/{id}/node-stats', { id }),
+  /** GET `?workflowId=` → `{ data | null }`; POST `{ workflowId }` (ADMIN), idempotent. */
+  webhookTriggers: () => endpoint('/api/webhook-triggers'),
 } as const;
 
 /**

@@ -69,6 +69,13 @@ export const errorEnvelopeSchema = z.object({
   /** A 422's field path, where the route names one (`steps[0].kind`, skills' `INVALID_SKILL`). */
   field: z.string().optional().catch(undefined),
   /**
+   * A validator's refusal (`422 { error: 'validation_failed', errors,
+   * warnings }` - automations' activate and live save): the issues, read by
+   * the screen's own contract. Declared, or `z.object` strips them.
+   */
+  errors: z.array(z.unknown()).optional().catch(undefined),
+  warnings: z.array(z.unknown()).optional().catch(undefined),
+  /**
    * The billing services' machine-readable reason, which is **not** `code`.
    *
    * `purchase.service.ts` returns `failureCode` on every refusal -

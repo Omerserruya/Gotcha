@@ -1,0 +1,351 @@
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { NextIntlClientProvider } from 'next-intl';
+import type { ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  automationSchema,
+  catalogSchema,
+  issueSchema,
+  type Automation,
+  type Catalog,
+} from '@/api/contracts/automations';
+import automationsMessages from '@/i18n/messages/en/automations.json';
+
+const push = vi.hoisted(() => vi.fn());
+const replace = vi.hoisted(() => vi.fn());
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
+    <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
+      {children}
+    </a>
+  ),
+  useRouter: () => ({ push, replace }),
+}));
+const actions = vi.hoisted(() => ({
+  setLive: vi.fn(),
+  readCatalog: vi.fn(),
+  createAutomation: vi.fn(),
+  publishAutomation: vi.fn(),
+  readRuns: vi.fn(),
+  readRun: vi.fn(),
+  provisionWebhook: vi.fn(),
+}));
+vi.mock('./automation-actions', () => actions);
+
+import { AutomationsList } from './AutomationsList';
+import { Builder } from './Builder';
+import { NewAutomation } from './NewAutomation';
+import { StepSheet } from './StepSheet';
+
+const NOW = new Date('2026-10-06T10:00:00Z');
+const wrap = (node: ReactNode) =>
+  render(
+    <NextIntlClientProvider
+      locale="en"
+      timeZone="Asia/Jerusalem"
+      now={NOW}
+      messages={{ automations: automationsMessages }}
+    >
+      {node}
+    </NextIntlClientProvider>,
+  );
+
+const automation = (over: Record<string, unknown> = {}): Automation =>
+  automationSchema.parse({
+    id: 'a1',
+    name: 'A call is missed',
+    description: null,
+    trigger: { type: 'call_missed', config: {} },
+    status: 'live',
+    path: [
+      { nodeId: 't', type: 'automation_trigger', label: 'Call missed' },
+      { nodeId: 'h', type: 'opening_hours', label: 'Open now?' },
+      { nodeId: 'b', type: 'send_buttons', label: 'Buttons' },
+    ],
+    stats: { runsThisWeek: 86, lastRunAt: '2026-10-06T09:58:00Z', lastRunStatus: 'completed' },
+    updatedAt: '2026-10-06T09:00:00Z',
+    ...over,
+  });
+
+const item = (type: string, over: Record<string, unknown> = {}) => ({
+  type,
+  label: type,
+  description: '',
+  channels: [],
+  outputs: ['next'],
+  synonyms: [],
+  available: true,
+  reason: null,
+  ...over,
+});
+const catalog = (firstStep: boolean): Catalog =>
+  catalogSchema.parse({
+    data: {
+      context: { channel: null, firstStep, hasCustomer: true, afterNodeType: null },
+      groups: [
+        {
+          key: 'trigger',
+          items: [
+            item('trigger:schedule', {
+              available: firstStep,
+              reason: firstStep ? null : 'first_step_only',
+            }),
+            item('trigger:order_event', { available: false, reason: 'no_event_source' }),
+          ],
+        },
+        {
+          key: 'logic',
+          items: [
+            item('wait', { available: !firstStep, reason: firstStep ? 'first_step_only' : null }),
+          ],
+        },
+        {
+          key: 'send',
+          items: [
+            item('send_buttons', {
+              synonyms: ['quick reply', 'options'],
+              channels: ['WHATSAPP', 'INSTAGRAM'],
+              available: !firstStep,
+              reason: firstStep ? 'first_step_only' : null,
+            }),
+            item('send_location', { available: false, reason: 'coming_later' }),
+          ],
+        },
+        {
+          key: 'do',
+          items: [
+            item('add_tag', {
+              available: !firstStep,
+              reason: firstStep ? 'first_step_only' : null,
+            }),
+          ],
+        },
+      ],
+      variables: ['first_name', 'business_name'],
+    },
+  }).data;
+
+beforeEach(() => {
+  for (const fn of Object.values(actions)) fn.mockReset();
+  push.mockReset();
+  replace.mockReset();
+});
+
+describe("★★ 09c - the table is the route's", () => {
+  it("a catalogue-named step in our words; an author's own label as written", () => {
+    wrap(<AutomationsList automations={[automation()]} />);
+    const path = screen.getByTestId('automation-path-a1');
+    expect(path).toHaveTextContent('Call missed');
+    expect(path).toHaveTextContent('Open now?');
+    expect(path).toHaveTextContent('Buttons');
+    expect(screen.getByTestId('automation-week-a1')).toHaveTextContent('86 runs');
+    expect(screen.getByTestId('automation-open-a1')).toHaveAttribute(
+      'href',
+      '/studio/automations/a1',
+    );
+  });
+
+  it('never run: "No runs yet", and no number for the week', () => {
+    wrap(
+      <AutomationsList
+        automations={[
+          automation({ stats: { runsThisWeek: 0, lastRunAt: null, lastRunStatus: null } }),
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('automation-last-a1')).toHaveTextContent('No runs yet');
+    expect(screen.getByTestId('automation-week-a1').textContent).toBe('');
+  });
+
+  it('paused: when, and by whom', () => {
+    wrap(
+      <AutomationsList
+        automations={[
+          automation({
+            status: 'paused',
+            pausedAt: '2026-08-12T10:00:00Z',
+            pausedBy: { id: 'u1', name: 'Omer' },
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('automation-last-a1')).toHaveTextContent('Paused Aug 12 by Omer');
+    expect(screen.getByTestId('automation-switch-a1')).not.toBeChecked();
+  });
+
+  it("on: refused with the validator's code, said in our words, with the way in", async () => {
+    actions.setLive.mockResolvedValue({
+      ok: false,
+      reason: 'invalid',
+      errors: [
+        issueSchema.parse({
+          severity: 'error',
+          code: 'no_steps',
+          message: 'Add a step after the trigger.',
+        }),
+      ],
+    });
+    wrap(<AutomationsList automations={[automation({ status: 'draft' })]} />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('automation-switch-a1'));
+    });
+    expect(actions.setLive).toHaveBeenCalledWith('a1', true);
+    expect(screen.getByTestId('automation-refused-a1')).toHaveTextContent(
+      "It can't go live yet: it has no steps after the trigger",
+    );
+    expect(screen.getByTestId('automation-switch-a1')).not.toBeChecked();
+  });
+
+  it('off: pauses, and the row says so', async () => {
+    actions.setLive.mockResolvedValue({
+      ok: true,
+      warnings: [],
+      automation: automation({
+        status: 'paused',
+        pausedAt: '2026-10-06T10:00:00Z',
+        pausedBy: { id: 'u1', name: 'Omer' },
+      }),
+    });
+    wrap(<AutomationsList automations={[automation()]} />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('automation-switch-a1'));
+    });
+    expect(actions.setLive).toHaveBeenCalledWith('a1', false);
+    expect(screen.getByTestId('automation-last-a1')).toHaveTextContent('Paused Oct 6 by Omer');
+  });
+});
+
+describe('★★ 09e - every step, dimmed where it cannot run, with why', () => {
+  it('mid-path: triggers keep their line under "first step only"; another reason replaces the line', () => {
+    wrap(
+      <StepSheet catalog={catalog(false)} context="After x" onPick={vi.fn()} onClose={vi.fn()} />,
+    );
+    expect(screen.getByTestId('step-trigger:schedule')).toBeDisabled();
+    expect(screen.getByTestId('step-trigger:schedule')).toHaveTextContent('Daily, weekly, a date');
+    expect(screen.getByTestId('step-send_location')).toHaveTextContent('Coming later');
+    expect(screen.getByTestId('step-send_buttons')).toBeEnabled();
+  });
+
+  it('search matches what people say, not ids', () => {
+    wrap(
+      <StepSheet catalog={catalog(false)} context="After x" onPick={vi.fn()} onClose={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByTestId('step-search'), { target: { value: 'quick reply' } });
+    expect(screen.getByTestId('step-send_buttons')).toBeInTheDocument();
+    expect(screen.queryByTestId('step-add_tag')).toBeNull();
+  });
+
+  it('unread is said, not an empty sheet', () => {
+    wrap(<StepSheet catalog={null} context="After x" onPick={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByTestId('step-sheet-unread')).toBeInTheDocument();
+  });
+});
+
+describe('★★ New automation - a trigger, what it cannot go without, then the builder', () => {
+  it('On a schedule asks the time; creates a draft with it; opens the builder', async () => {
+    actions.createAutomation.mockResolvedValue({
+      ok: true,
+      automation: automation({ id: 'new1', status: 'draft' }),
+    });
+    wrap(<NewAutomation catalog={catalog(true)} />);
+    expect(screen.getByTestId('step-add_tag')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('step-trigger:schedule'));
+    expect(screen.getByTestId('new-automation-name')).toHaveValue('On a schedule');
+    fireEvent.change(screen.getByTestId('new-automation-at'), { target: { value: '08:30' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('new-automation-create'));
+    });
+    expect(actions.createAutomation).toHaveBeenCalledWith({
+      name: 'On a schedule',
+      trigger: { type: 'schedule', config: { at: '08:30' } },
+    });
+    expect(push).toHaveBeenCalledWith('/studio/automations/new1');
+  });
+
+  it('refused: says why, stays', async () => {
+    actions.createAutomation.mockResolvedValue({ ok: false, reason: 'limit' });
+    wrap(<NewAutomation catalog={catalog(true)} />);
+    fireEvent.click(screen.getByTestId('step-trigger:schedule'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('new-automation-create'));
+    });
+    expect(screen.getByTestId('new-automation-failed')).toHaveTextContent('no room');
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ 09d - the builder', () => {
+  const draft = () =>
+    automation({
+      status: 'draft',
+      stats: { runsThisWeek: 0, lastRunAt: null, lastRunStatus: null },
+      nodes: [{ id: 't', type: 'automation_trigger', data: {} }],
+      edges: [],
+    });
+  const show = (a = draft()) =>
+    wrap(
+      <Builder
+        automation={a}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [], teams: [], members: [], skills: [] }}
+      />,
+    );
+
+  it('a "+" on the free output opens 09e for that spot; a step chosen goes there', async () => {
+    actions.readCatalog.mockResolvedValue(catalog(false));
+    show();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('add-t-next'));
+    });
+    expect(actions.readCatalog).toHaveBeenCalledWith({ automationId: 'a1', after: 't' });
+    fireEvent.click(screen.getByTestId('step-add_tag'));
+    expect(screen.getByTestId('inspector-tag')).toBeInTheDocument();
+    expect(screen.getByTestId('builder-unsaved')).toBeInTheDocument();
+  });
+
+  it('Publish: a draft saved but not live says why, and marks the step', async () => {
+    actions.publishAutomation.mockResolvedValue({
+      ok: true,
+      live: false,
+      warnings: [],
+      blocked: [
+        issueSchema.parse({ severity: 'error', code: 'no_steps', nodeId: 't', message: 'x' }),
+      ],
+      automation: draft(),
+    });
+    show();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('builder-publish'));
+    });
+    expect(actions.publishAutomation).toHaveBeenCalledWith(
+      'a1',
+      expect.objectContaining({
+        expectedUpdatedAt: '2026-10-06T09:00:00Z',
+        name: 'A call is missed',
+      }),
+    );
+    expect(screen.getByTestId('builder-outcome')).toHaveTextContent('Saved as a draft');
+    expect(screen.getByTestId('builder-outcome')).toHaveTextContent(
+      'it has no steps after the trigger',
+    );
+    expect(screen.getByTestId('node-t')).toHaveAttribute('data-marked');
+  });
+
+  it('Test is drawn, off, saying why; never run says so', () => {
+    show();
+    expect(screen.getByTestId('builder-test')).toBeDisabled();
+    expect(screen.getByTestId('inspector-stats')).toHaveTextContent('No runs yet');
+  });
+
+  it('Run log: nothing has run - "No runs yet", never a number', async () => {
+    actions.readRuns.mockResolvedValue({ runs: [], nextCursor: null });
+    show();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('builder-run-log'));
+    });
+    expect(screen.getByTestId('run-log-empty')).toHaveTextContent('No runs yet');
+  });
+});

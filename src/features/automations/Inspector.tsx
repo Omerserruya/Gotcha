@@ -1,0 +1,790 @@
+'use client';
+
+import { Trash2, X } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import { useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from 'react';
+
+import type {
+  AutomationNode,
+  NodeStats,
+  Trigger,
+  WebhookTrigger,
+} from '@/api/contracts/automations';
+
+import { provisionWebhook } from './automation-actions';
+import { TRIGGER_NODE, onlyThrough, removeStep, type Graph } from './graph';
+import styles from './Builder.module.css';
+
+/** The route's limits (`LIMITS`): enforced here, where they are typed. */
+const LIMITS = { buttons: 3, buttonTitle: 20, listOptions: 10, listTitle: 24 } as const;
+const TRIGGER_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'MESSENGER', 'EMAIL', 'WEBCHAT'] as const;
+const LANGUAGES = ['he', 'en', 'ar', 'ru', 'fr', 'es'] as const;
+const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+const UNITS = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 } as const;
+/** Steps whose settings are "the existing shape" in the contract: not editable here yet. */
+const NOT_HERE = new Set([
+  'condition_group',
+  'update_customer',
+  'http_request',
+  'send_message_template',
+]);
+
+type Named = { readonly id: string; readonly name: string };
+export interface Choices {
+  readonly employees: readonly Named[] | null;
+  readonly teams: readonly Named[] | null;
+  readonly members: readonly Named[] | null;
+  readonly skills: readonly Named[] | null;
+}
+
+const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const strs = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+const noSubscription = () => () => {};
+
+/**
+ * 09d's right pane: the chosen step's settings, written into the canvas's
+ * graph (published with it). Only what the contract stores is a field; a
+ * step whose settings are "the existing shape" (conditions, HTTP, update a
+ * field, templates) says it cannot be edited here yet.
+ */
+export function Inspector({
+  node,
+  graph,
+  trigger,
+  automationId,
+  webhook,
+  stats,
+  statsRead,
+  variables,
+  choices,
+  onNode,
+  onGraph,
+  onTrigger,
+}: {
+  readonly node: AutomationNode;
+  readonly graph: Graph;
+  readonly trigger: Trigger;
+  readonly automationId: string;
+  readonly webhook: WebhookTrigger | null;
+  readonly stats: NodeStats[string] | null;
+  readonly statsRead: boolean;
+  readonly variables: readonly string[];
+  readonly choices: Choices;
+  readonly onNode: (node: AutomationNode) => void;
+  readonly onGraph: (graph: Graph) => void;
+  readonly onTrigger: (trigger: Trigger) => void;
+}) {
+  const t = useTranslations('automations');
+  const [removing, setRemoving] = useState(false);
+  const d = node.data;
+  const set = (patch: Record<string, unknown>) => onNode({ ...node, data: { ...d, ...patch } });
+  const name =
+    node.type === TRIGGER_NODE
+      ? t(`nodes.trigger.${trigger.type ?? 'unknown'}` as 'nodes.trigger.webhook')
+      : t(`nodes.${node.type}` as 'nodes.wait');
+  const after = onlyThrough(graph, node.id).length - 1;
+
+  return (
+    <div className={styles.inspector} data-testid="inspector">
+      <h2 className={styles.inspectorTitle}>{name}</h2>
+      <Field label={t('inspector.label')}>
+        <input
+          value={str(d.label)}
+          maxLength={60}
+          placeholder={name}
+          onChange={(e) => set({ label: e.target.value })}
+          dir="auto"
+          data-testid="inspector-label"
+        />
+      </Field>
+
+      {node.type === TRIGGER_NODE ? (
+        <TriggerFields
+          trigger={trigger}
+          automationId={automationId}
+          webhook={webhook}
+          onTrigger={onTrigger}
+        />
+      ) : NOT_HERE.has(node.type) ? (
+        <p className={styles.why} data-testid="inspector-not-here">
+          {t('inspector.notHere')}
+        </p>
+      ) : (
+        <StepFields node={node} set={set} variables={variables} choices={choices} />
+      )}
+
+      <p className={styles.quiet} data-testid="inspector-stats">
+        {!statsRead
+          ? t('inspector.statsUnread')
+          : stats && stats.reached > 0
+            ? stats.failed > 0
+              ? t('inspector.statsFailed', { reached: stats.reached, failed: stats.failed })
+              : t('inspector.stats', { reached: stats.reached })
+            : t('noRuns')}
+      </p>
+
+      {node.type === TRIGGER_NODE ? null : removing ? (
+        <div className={styles.confirm} role="alert">
+          <p>
+            {after > 0
+              ? t('inspector.removeWithAfter', { count: after })
+              : t('inspector.removeOne')}
+          </p>
+          <span className={styles.confirmActions}>
+            <button type="button" className={styles.secondary} onClick={() => setRemoving(false)}>
+              {t('inspector.keep')}
+            </button>
+            <button
+              type="button"
+              className={styles.danger}
+              onClick={() => onGraph(removeStep(graph, node.id))}
+              data-testid="inspector-remove-yes"
+            >
+              {t('inspector.remove')}
+            </button>
+          </span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className={styles.textButton}
+          onClick={() => setRemoving(true)}
+          data-testid="inspector-remove"
+        >
+          <Trash2 size={12} aria-hidden="true" />
+          {t('inspector.remove')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, children }: { readonly label: string; readonly children: ReactNode }) {
+  return (
+    <label className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Pick({
+  label,
+  value,
+  options,
+  onChange,
+  testid,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly options: readonly Named[] | null;
+  readonly onChange: (id: string) => void;
+  readonly testid: string;
+}) {
+  const t = useTranslations('automations');
+  return (
+    <Field label={label}>
+      {options === null ? (
+        <span className={styles.quiet}>{t('inspector.unread')}</span>
+      ) : (
+        <select value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid}>
+          <option value="">{t('inspector.choose')}</option>
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  );
+}
+
+/** A duration in a unit people use; stored in ms. */
+function Duration({
+  label,
+  ms,
+  onChange,
+  testid,
+}: {
+  readonly label: string;
+  readonly ms: unknown;
+  readonly onChange: (ms: number) => void;
+  readonly testid: string;
+}) {
+  const t = useTranslations('automations');
+  const value = typeof ms === 'number' && ms > 0 ? ms : 0;
+  const unit =
+    (['days', 'hours', 'minutes'] as const).find((u) => value > 0 && value % UNITS[u] === 0) ??
+    'minutes';
+  return (
+    <Field label={label}>
+      <span className={styles.duration}>
+        <input
+          type="number"
+          min={1}
+          value={value === 0 ? '' : value / UNITS[unit]}
+          onChange={(e) => onChange(Math.max(0, Number(e.target.value)) * UNITS[unit])}
+          data-testid={testid}
+        />
+        <select
+          value={unit}
+          onChange={(e) =>
+            onChange((value / UNITS[unit] || 1) * UNITS[e.target.value as keyof typeof UNITS])
+          }
+          aria-label={t('inspector.unit')}
+        >
+          {(['minutes', 'hours', 'days'] as const).map((u) => (
+            <option key={u} value={u}>
+              {t(`inspector.units.${u}`)}
+            </option>
+          ))}
+        </select>
+      </span>
+    </Field>
+  );
+}
+
+/** Message text; variables go in as chips' words, at the cursor. */
+function Message({
+  value,
+  onChange,
+  variables,
+}: {
+  readonly value: string;
+  readonly onChange: (text: string) => void;
+  readonly variables: readonly string[];
+}) {
+  const t = useTranslations('automations');
+  const box = useRef<HTMLTextAreaElement>(null);
+  const insert = (name: string) => {
+    const el = box.current;
+    const token = `{{${name}}}`;
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    onChange(value.slice(0, start) + token + value.slice(end));
+  };
+  return (
+    <Field label={t('inspector.message')}>
+      <textarea
+        ref={box}
+        value={value}
+        rows={4}
+        maxLength={4096}
+        onChange={(e) => onChange(e.target.value)}
+        dir="auto"
+        data-testid="inspector-text"
+      />
+      {variables.length > 0 ? (
+        <span className={styles.variables}>
+          {variables
+            .filter((v) => !v.includes('<'))
+            .map((v) => (
+              <button key={v} type="button" className={styles.variable} onClick={() => insert(v)}>
+                {t(`variables.${v}` as 'variables.first_name')}
+              </button>
+            ))}
+        </span>
+      ) : null}
+    </Field>
+  );
+}
+
+function StepFields({
+  node,
+  set,
+  variables,
+  choices,
+}: {
+  readonly node: AutomationNode;
+  readonly set: (patch: Record<string, unknown>) => void;
+  readonly variables: readonly string[];
+  readonly choices: Choices;
+}) {
+  const t = useTranslations('automations');
+  const locale = useLocale();
+  const d = node.data;
+  switch (node.type) {
+    case 'send_message_text':
+      return (
+        <Message value={str(d.text)} onChange={(text) => set({ text })} variables={variables} />
+      );
+    case 'send_buttons':
+    case 'send_list': {
+      const isList = node.type === 'send_list';
+      const key = isList ? 'options' : 'buttons';
+      const rows = Array.isArray(d[key])
+        ? (d[key] as { id: string; title?: string; description?: string }[])
+        : [];
+      const max = isList ? LIMITS.listOptions : LIMITS.buttons;
+      const titleMax = isList ? LIMITS.listTitle : LIMITS.buttonTitle;
+      return (
+        <>
+          <Message value={str(d.text)} onChange={(text) => set({ text })} variables={variables} />
+          {isList ? (
+            <Field label={t('inspector.listButton')}>
+              <input
+                value={str(d.buttonText)}
+                maxLength={20}
+                onChange={(e) => set({ buttonText: e.target.value })}
+                dir="auto"
+              />
+            </Field>
+          ) : null}
+          <span className={styles.fieldLabel}>
+            {t(isList ? 'inspector.options' : 'inspector.buttons', { max })}
+          </span>
+          {rows.map((row, i) => (
+            <span key={row.id} className={styles.option}>
+              <input
+                value={row.title ?? ''}
+                maxLength={titleMax}
+                aria-label={t('inspector.optionTitle', { n: i + 1 })}
+                onChange={(e) =>
+                  set({
+                    [key]: rows.map((r) => (r.id === row.id ? { ...r, title: e.target.value } : r)),
+                  })
+                }
+                dir="auto"
+                data-testid={`inspector-option-${i}`}
+              />
+              <span className={styles.quiet}>{t('inspector.newBranch')}</span>
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => set({ [key]: rows.filter((r) => r.id !== row.id) })}
+                aria-label={t('inspector.removeOption', { n: i + 1 })}
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            className={styles.textButton}
+            disabled={rows.length >= max}
+            title={rows.length >= max ? t('inspector.atMost', { max }) : undefined}
+            onClick={() => set({ [key]: [...rows, { id: crypto.randomUUID(), title: '' }] })}
+            data-testid="inspector-add-option"
+          >
+            {t(isList ? 'inspector.addOption' : 'inspector.addButton')}
+          </button>
+          {isList ? null : (
+            <>
+              <Off label={t('inspector.smsFallback')} />
+              <Off label={t('inspector.headerImage')} />
+            </>
+          )}
+        </>
+      );
+    }
+    case 'send_message_file':
+      return (
+        <>
+          <Field label={t('inspector.fileUrl')}>
+            <input
+              value={str(d.url)}
+              onChange={(e) => set({ url: e.target.value })}
+              placeholder="https://"
+              dir="ltr"
+            />
+          </Field>
+          <Field label={t('inspector.fileName')}>
+            <input
+              value={str(d.fileName)}
+              onChange={(e) => set({ fileName: e.target.value })}
+              dir="auto"
+            />
+          </Field>
+          <Field label={t('inspector.caption')}>
+            <input
+              value={str(d.caption)}
+              onChange={(e) => set({ caption: e.target.value })}
+              dir="auto"
+            />
+          </Field>
+        </>
+      );
+    case 'wait':
+      return (
+        <Duration
+          label={t('inspector.waitFor')}
+          ms={d.durationMs}
+          onChange={(durationMs) => set({ durationMs })}
+          testid="inspector-duration"
+        />
+      );
+    case 'wait_for_reply':
+      return (
+        <Duration
+          label={t('inspector.timeout')}
+          ms={d.timeoutMs}
+          onChange={(timeoutMs) => set({ timeoutMs })}
+          testid="inspector-duration"
+        />
+      );
+    case 'ab_split':
+      return (
+        <Field label={t('inspector.percentA')}>
+          <input
+            type="number"
+            min={1}
+            max={99}
+            value={typeof d.percentA === 'number' ? d.percentA : ''}
+            onChange={(e) => set({ percentA: Math.min(99, Math.max(1, Number(e.target.value))) })}
+          />
+        </Field>
+      );
+    case 'language': {
+      const on = strs(d.languages);
+      return (
+        <div className={styles.checks} role="group" aria-label={t('inspector.languages')}>
+          <span className={styles.fieldLabel}>{t('inspector.languages')}</span>
+          {LANGUAGES.map((lang) => (
+            <label key={lang} className={styles.check}>
+              <input
+                type="checkbox"
+                checked={on.includes(lang)}
+                onChange={(e) =>
+                  set({
+                    languages: e.target.checked ? [...on, lang] : on.filter((l) => l !== lang),
+                  })
+                }
+              />
+              {new Intl.DisplayNames([locale], { type: 'language' }).of(lang)}
+            </label>
+          ))}
+        </div>
+      );
+    }
+    case 'opening_hours':
+    case 'segment':
+    case 'split_channel':
+      return <p className={styles.quiet}>{t(`inspector.about.${node.type}`)}</p>;
+    case 'assign':
+      return (
+        <>
+          <div className={styles.checks} role="radiogroup" aria-label={t('inspector.assignTo')}>
+            {(['team', 'person'] as const).map((to) => (
+              <label key={to} className={styles.check}>
+                <input type="radio" checked={d.to === to} onChange={() => set({ to })} />
+                {t(`inspector.to.${to}`)}
+              </label>
+            ))}
+          </div>
+          {d.to === 'person' ? (
+            <Pick
+              label={t('inspector.person')}
+              value={str(d.userId)}
+              options={choices.members}
+              onChange={(userId) => set({ userId })}
+              testid="inspector-person"
+            />
+          ) : (
+            <Pick
+              label={t('inspector.team')}
+              value={str(d.departmentId)}
+              options={choices.teams}
+              onChange={(departmentId) => set({ departmentId })}
+              testid="inspector-team"
+            />
+          )}
+        </>
+      );
+    case 'hand_to_ai':
+      return (
+        <Pick
+          label={t('inspector.employee')}
+          value={str(d.aiAgentId)}
+          options={choices.employees}
+          onChange={(aiAgentId) => set({ aiAgentId })}
+          testid="inspector-employee"
+        />
+      );
+    case 'run_skill':
+      return (
+        <>
+          <Pick
+            label={t('inspector.skill')}
+            value={str(d.skillId)}
+            options={choices.skills}
+            onChange={(skillId) => set({ skillId })}
+            testid="inspector-skill"
+          />
+          <Pick
+            label={t('inspector.employee')}
+            value={str(d.aiAgentId)}
+            options={choices.employees}
+            onChange={(aiAgentId) => set({ aiAgentId })}
+            testid="inspector-employee"
+          />
+        </>
+      );
+    case 'add_tag':
+      return (
+        <Field label={t('inspector.tag')}>
+          <input
+            value={str(d.tag)}
+            maxLength={60}
+            onChange={(e) => set({ tag: e.target.value })}
+            dir="auto"
+            data-testid="inspector-tag"
+          />
+        </Field>
+      );
+    case 'create_task':
+      return (
+        <>
+          <Field label={t('inspector.taskTitle')}>
+            <input
+              value={str(d.title)}
+              onChange={(e) => set({ title: e.target.value })}
+              dir="auto"
+              data-testid="inspector-task"
+            />
+          </Field>
+          <Field label={t('inspector.taskBody')}>
+            <textarea
+              value={str(d.body)}
+              rows={3}
+              onChange={(e) => set({ body: e.target.value })}
+              dir="auto"
+            />
+          </Field>
+          <Duration
+            label={t('inspector.due')}
+            ms={typeof d.dueInMinutes === 'number' ? d.dueInMinutes * 60_000 : undefined}
+            onChange={(ms) => set({ dueInMinutes: Math.round(ms / 60_000) })}
+            testid="inspector-due"
+          />
+          <p className={styles.quiet}>{t('inspector.taskWhere')}</p>
+        </>
+      );
+    case 'notify_team':
+      return (
+        <>
+          <Field label={t('inspector.notification')}>
+            <textarea
+              value={str(d.message)}
+              rows={3}
+              onChange={(e) => set({ message: e.target.value })}
+              dir="auto"
+              data-testid="inspector-notify"
+            />
+          </Field>
+          <Pick
+            label={t('inspector.team')}
+            value={str(d.departmentId)}
+            options={choices.teams}
+            onChange={(departmentId) => set({ departmentId: departmentId || undefined })}
+            testid="inspector-notify-team"
+          />
+        </>
+      );
+    case 'close_conversation':
+      return (
+        <Field label={t('inspector.closingMessage')}>
+          <textarea
+            value={str(d.message)}
+            rows={3}
+            onChange={(e) => set({ message: e.target.value })}
+            dir="auto"
+          />
+        </Field>
+      );
+    default:
+      return <p className={styles.why}>{t('inspector.notHere')}</p>;
+  }
+}
+
+/** A setting the design draws and the route does not store: off, saying so. */
+function Off({ label }: { readonly label: string }) {
+  const t = useTranslations('automations');
+  return (
+    <label className={styles.offRow}>
+      <span>
+        {label}
+        <span className={styles.quiet}>{t('inspector.notYet')}</span>
+      </span>
+      <input
+        type="checkbox"
+        role="switch"
+        className={styles.switch}
+        disabled
+        checked={false}
+        readOnly
+      />
+    </label>
+  );
+}
+
+function TriggerFields({
+  trigger,
+  automationId,
+  webhook: initialWebhook,
+  onTrigger,
+}: {
+  readonly trigger: Trigger;
+  readonly automationId: string;
+  readonly webhook: WebhookTrigger | null;
+  readonly onTrigger: (trigger: Trigger) => void;
+}) {
+  const t = useTranslations('automations');
+  const c = trigger.config;
+  const set = (patch: Record<string, unknown>) =>
+    onTrigger({ ...trigger, config: { ...c, ...patch } });
+  const channels = strs(c.channels);
+  const [keywords, setKeywords] = useState(strs(c.keywords).join(', '));
+  const [tags, setTags] = useState(strs(c.tags).join(', '));
+  const [webhook, setWebhook] = useState(initialWebhook);
+  const [failed, setFailed] = useState(false);
+  const [isMaking, start] = useTransition();
+  const origin = useSyncExternalStore(
+    noSubscription,
+    () => window.location.origin,
+    () => '',
+  );
+  const split = (v: string) =>
+    v
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+  switch (trigger.type) {
+    case 'message_received':
+    case 'new_customer':
+      return (
+        <>
+          <div className={styles.checks} role="group" aria-label={t('inspector.channels')}>
+            <span className={styles.fieldLabel}>{t('inspector.channels')}</span>
+            {TRIGGER_CHANNELS.map((ch) => (
+              <label key={ch} className={styles.check}>
+                <input
+                  type="checkbox"
+                  checked={channels.includes(ch)}
+                  onChange={(e) =>
+                    set({
+                      channels: e.target.checked
+                        ? [...channels, ch]
+                        : channels.filter((x) => x !== ch),
+                    })
+                  }
+                />
+                {t(`channels.${ch}`)}
+              </label>
+            ))}
+            <span className={styles.quiet}>{t('inspector.anyChannel')}</span>
+          </div>
+          {trigger.type === 'message_received' ? (
+            <>
+              <Field label={t('inspector.keywords')}>
+                <input
+                  value={keywords}
+                  onChange={(e) => {
+                    setKeywords(e.target.value);
+                    set({ keywords: split(e.target.value) });
+                  }}
+                  placeholder={t('inspector.keywordsHint')}
+                  dir="auto"
+                  data-testid="inspector-keywords"
+                />
+              </Field>
+              {split(keywords).length > 0 ? (
+                <Field label={t('inspector.match')}>
+                  <select
+                    value={str(c.match) || 'contains'}
+                    onChange={(e) => set({ match: e.target.value })}
+                  >
+                    {(['contains', 'exact', 'any_word'] as const).map((m) => (
+                      <option key={m} value={m}>
+                        {t(`inspector.matches.${m}`)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      );
+    case 'tag_added':
+      return (
+        <Field label={t('new.tags')}>
+          <input
+            value={tags}
+            onChange={(e) => {
+              setTags(e.target.value);
+              set({ tags: split(e.target.value) });
+            }}
+            dir="auto"
+          />
+        </Field>
+      );
+    case 'schedule': {
+      const days = strs(c.days);
+      return (
+        <>
+          <Field label={t('new.at')}>
+            <input type="time" value={str(c.at)} onChange={(e) => set({ at: e.target.value })} />
+          </Field>
+          <div className={styles.checks} role="group" aria-label={t('new.days')}>
+            <span className={styles.fieldLabel}>{t('new.days')}</span>
+            {DAYS.map((day) => (
+              <label key={day} className={styles.check}>
+                <input
+                  type="checkbox"
+                  checked={days.includes(day)}
+                  onChange={(e) =>
+                    set({ days: e.target.checked ? [...days, day] : days.filter((x) => x !== day) })
+                  }
+                />
+                {t(`days.${day}`)}
+              </label>
+            ))}
+            <span className={styles.quiet}>{t('new.everyDay')}</span>
+          </div>
+        </>
+      );
+    }
+    case 'webhook':
+      return webhook ? (
+        <>
+          <Field label={t('inspector.webhookUrl')}>
+            <input
+              readOnly
+              value={origin ? `${origin}${webhook.path}` : webhook.path}
+              dir="ltr"
+              data-testid="inspector-webhook-url"
+            />
+          </Field>
+          <Field label={t('inspector.webhookSecret')}>
+            <input readOnly value={webhook.secret} dir="ltr" type="password" />
+          </Field>
+          <p className={styles.quiet}>{t('inspector.webhookHow')}</p>
+        </>
+      ) : (
+        <>
+          <p className={styles.quiet}>{t('inspector.webhookNone')}</p>
+          <button
+            type="button"
+            className={styles.secondary}
+            disabled={isMaking}
+            onClick={() =>
+              start(async () => {
+                const made = await provisionWebhook(automationId);
+                setFailed(made === null);
+                if (made) setWebhook(made);
+              })
+            }
+            data-testid="inspector-webhook-make"
+          >
+            {t('inspector.webhookMake')}
+          </button>
+          {failed ? <p className={styles.problem}>{t('inspector.webhookFailed')}</p> : null}
+        </>
+      );
+    default:
+      return <p className={styles.quiet}>{t('inspector.triggerAsIs')}</p>;
+  }
+}

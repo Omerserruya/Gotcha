@@ -103,6 +103,8 @@ export interface ApiErrorInit {
   readonly retryAfterSeconds?: number;
   /** A 422's field path, where the route names one. */
   readonly field?: string;
+  /** A validator's refusal: its `errors` and `warnings`, unparsed. */
+  readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
   readonly cause?: unknown;
 }
 
@@ -132,6 +134,8 @@ export class ApiError extends Error {
   readonly retryAfterSeconds?: number;
   /** A 422's field path, where the route names one. */
   readonly field?: string;
+  /** A validator's refusal: its `errors` and `warnings`, unparsed - the screen's contract reads them. */
+  readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
 
   constructor(init: ApiErrorInit) {
     super(init.developerMessage ?? init.kind, { cause: init.cause });
@@ -158,6 +162,7 @@ export class ApiError extends Error {
     this.current = init.current;
     this.retryAfterSeconds = init.retryAfterSeconds;
     this.field = init.field;
+    this.issues = init.issues;
   }
 
   /**
