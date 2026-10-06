@@ -1192,10 +1192,8 @@
     pointer-events: none;
   }
 
-  /* 12c's bar at the form's end: in view while the grid scrolls. */
+  /* 12c's bar at the form's end — after the grid, never over it. */
   .formBar {
-    position: sticky;
-    inset-block-end: 0;
     display: flex;
     align-items: center;
     gap: var(--space-12);

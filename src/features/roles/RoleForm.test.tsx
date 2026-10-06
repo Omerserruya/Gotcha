@@ -178,7 +178,8 @@ describe('the two refusals need different actions', () => {
 
 describe('★ 12c — 02 starts from Agent, and says what differs from the start', () => {
   const withAgent: readonly Role[] = [
-    { ...role('ra', 'Agent', ['conversation:messages:read']), builtinKey: 'AGENT' },
+    // The platform's own key, lowercase (invite-role.service.ts: builtinKey "agent").
+    { ...role('ra', 'Agent', ['conversation:messages:read']), builtinKey: 'agent' },
     role('r2', 'Owner', ['*']),
   ];
   it('no ?from=: Agent is chosen and seeded, and "Compared with Agent" is there', () => {

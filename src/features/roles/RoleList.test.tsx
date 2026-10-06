@@ -67,7 +67,7 @@ describe('★ 12b’s PEOPLE — 02’s faces, from the roster', () => {
     id: 'owner',
     name: 'Owner',
     isSystem: true,
-    builtinKey: 'OWNER',
+    builtinKey: 'owner',
     memberCount: 1,
   });
 
@@ -76,7 +76,7 @@ describe('★ 12b’s PEOPLE — 02’s faces, from the roster', () => {
       await RoleList({
         roles: [owner],
         members: [
-          memberSchema.parse({ id: 'u1', name: 'Maya Levi', roleBuiltinKey: 'OWNER' }),
+          memberSchema.parse({ id: 'u1', name: 'Maya Levi', roleBuiltinKey: 'owner' }),
           memberSchema.parse({ id: 'u2', name: 'Tomer Adler', roleId: 'other' }),
         ],
       }),

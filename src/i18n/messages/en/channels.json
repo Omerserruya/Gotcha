@@ -205,7 +205,10 @@
         "forbidden": "You don't have permission to run it again.",
         "failed": "It didn't start — try again."
       },
-      "cancel": "Not now"
+      "cancel": "Not now",
+      "refresh": "Refresh from Meta",
+      "activity": "Activity log",
+      "disconnect": "Disconnect this number"
     },
     "rows": {
       "answeredBy": "Answered by",

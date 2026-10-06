@@ -47,7 +47,9 @@ export function RoleForm({
    * what's different" — so the Compared card is there from the first look.
    * 12b's Duplicate (`?from=`) wins; no Agent role, nothing.
    */
-  const startId = initialSourceId || (roles.find((r) => r.builtinKey === 'AGENT')?.id ?? '');
+  // The platform's key is lowercase (`invite-role.service`: builtinKey "agent").
+  const startId =
+    initialSourceId || (roles.find((r) => r.builtinKey?.toLowerCase() === 'agent')?.id ?? '');
   const [sourceId, setSourceId] = useState(startId);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
