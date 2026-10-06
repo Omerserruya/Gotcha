@@ -116,6 +116,14 @@ async function shouldDeliver(tenantId: string, eventType: string, data: Record<s
 // ── Main entry ────────────────────────────────────────────
 
 export async function processEvent(event: SystemEvent): Promise<void> {
+  // An automation's "Notify team" names its own recipients: it is a message
+  // the automation's author wrote to chosen people, not an event an admin
+  // routes with preferences.
+  if ((event.type as string) === AUTOMATION_NOTICE) {
+    await deliverAutomationNotice(event);
+    return;
+  }
+
   // 1. Load matching preferences. We OR (departmentId = event.departmentId)
   //    OR (departmentId = NULL) and post-filter to prefer department-scoped
   //    rows. If departmentId is undefined we only match tenant-default rows.
@@ -183,6 +191,40 @@ export async function processEvent(event: SystemEvent): Promise<void> {
       }
     }
   }
+}
+
+export const AUTOMATION_NOTICE = "automation.notify_team";
+
+/**
+ * In-app delivery of an automation's "Notify team": the chosen people, else
+ * everyone in the chosen department, else the workspace admins. Every lookup
+ * is tenant-scoped, so an id from another tenant reaches no one.
+ */
+export async function deliverAutomationNotice(event: SystemEvent): Promise<number> {
+  const d = (event.data ?? {}) as Record<string, any>;
+  const message = typeof d.message === "string" ? d.message.trim().slice(0, 1000) : "";
+  if (!message) return 0;
+  const userIds: string[] = Array.isArray(d.userIds) ? d.userIds.map(String).filter(Boolean) : [];
+  const departmentId = typeof d.departmentId === "string" && d.departmentId ? d.departmentId : null;
+  const users = new Map<string, ResolvedUser>();
+  if (userIds.length) {
+    for (const u of await resolveRecipients({ tenantId: event.tenantId, spec: { type: "users", userIds } as RecipientSpec })) users.set(u.id, u);
+  }
+  if (departmentId) {
+    const members = await (prisma as any).departmentMember.findMany({
+      where: { tenantId: event.tenantId, departmentId },
+      include: { user: { select: { id: true, tenantId: true, email: true, name: true, notificationSoundEnabled: true, isActive: true } } },
+    });
+    for (const m of members) if (m.user?.isActive) users.set(m.user.id, m.user);
+  }
+  if (!userIds.length && !departmentId) {
+    for (const u of await resolveRecipients({ tenantId: event.tenantId, spec: { type: "tenant_owner" } as RecipientSpec })) users.set(u.id, u);
+  }
+  const link = typeof d.conversationId === "string" && d.conversationId ? `/inbox?conversation=${d.conversationId}` : undefined;
+  for (const user of users.values()) {
+    await deliverChannel({ channel: "in_app", user, event, tpl: { title: "Automation", body: message, ...(link ? { link } : {}) }, priority: "MEDIUM" });
+  }
+  return users.size;
 }
 
 /**

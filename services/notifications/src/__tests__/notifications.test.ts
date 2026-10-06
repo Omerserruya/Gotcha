@@ -50,7 +50,11 @@ const { prismaMock, redisMock, emailQueueMock, publishEventMock } = vi.hoisted((
   };
 });
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async () => ({
+  // The real (pure, import-free) category/target rules: an exhaustive mock that
+  // omitted them made every in-app delivery throw inside deliverChannel's
+  // catch, so these tests failed while the code worked.
+  ...(await import("@chatcenter/shared/src/lib/notification-category")),
   prisma: prismaMock,
   publishEvent: publishEventMock,
   getRedis: () => redisMock,
@@ -274,5 +278,46 @@ describe("processEvent", () => {
     expect(prismaMock.inAppNotification.create).toHaveBeenCalledTimes(1);
     const createCall2 = (prismaMock.inAppNotification.create.mock.calls as any[])[0] as any[];
     expect(createCall2[0].data.userId).toBe("user-dept");
+  });
+});
+
+// ─── An automation's "Notify team" (direct-addressed, no preferences) ──
+
+describe("★ automation.notify_team", () => {
+  const ev = (data: any) => ({ id: `evt-auto-${Math.random()}`, type: "automation.notify_team", tenantId: "tenant-A", data, metadata: { timestamp: new Date().toISOString() } }) as any;
+  const user = (id: string) => ({ id, tenantId: "tenant-A", email: `${id}@x.test`, name: id, notificationSoundEnabled: true });
+
+  beforeEach(() => {
+    prismaMock.inAppNotification.create.mockClear();
+    prismaMock.notificationPreference.findMany.mockClear();
+    prismaMock.user.findMany.mockReset();
+    prismaMock.departmentMember.findMany.mockReset();
+  });
+
+  it("reaches the chosen people in-app, tenant-scoped, without consulting preferences", async () => {
+    prismaMock.user.findMany.mockResolvedValueOnce([user("u1")]);
+    await processEvent(ev({ message: "Call back Dana", userIds: ["u1", "foreign"], conversationId: "c1" }));
+    expect(prismaMock.notificationPreference.findMany).not.toHaveBeenCalled();
+    expect((prismaMock.user.findMany.mock.calls as any[])[0][0].where).toMatchObject({ tenantId: "tenant-A", id: { in: ["u1", "foreign"] }, isActive: true });
+    const rows = (prismaMock.inAppNotification.create.mock.calls as any[]).map((c) => c[0].data);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: "u1", title: "Automation", body: "Call back Dana", link: "/inbox?conversation=c1" });
+  });
+
+  it("a department reaches its active members; nobody chosen reaches the admins", async () => {
+    prismaMock.departmentMember.findMany.mockResolvedValueOnce([{ user: { ...user("d1"), isActive: true } }, { user: { ...user("d2"), isActive: false } }]);
+    await processEvent(ev({ message: "New lead", departmentId: "sales" }));
+    expect((prismaMock.inAppNotification.create.mock.calls as any[]).map((c) => c[0].data.userId)).toEqual(["d1"]);
+
+    prismaMock.inAppNotification.create.mockClear();
+    prismaMock.user.findMany.mockResolvedValueOnce([user("admin")]);
+    await processEvent(ev({ message: "Daily report" }));
+    expect((prismaMock.user.findMany.mock.calls as any[]).at(-1)[0].where).toMatchObject({ role: "ADMIN" });
+    expect((prismaMock.inAppNotification.create.mock.calls as any[]).map((c) => c[0].data.userId)).toEqual(["admin"]);
+  });
+
+  it("an empty message notifies no one", async () => {
+    await processEvent(ev({ message: "  ", userIds: ["u1"] }));
+    expect(prismaMock.inAppNotification.create).not.toHaveBeenCalled();
   });
 });
