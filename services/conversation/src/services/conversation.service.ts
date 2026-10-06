@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import { visibilityClause } from "../lib/conversation-visibility";
+import { contactIdsFor, contactIdOf } from "../lib/conversation-contact";
 import * as messageService from "./message.service";
 
 /**
@@ -278,11 +279,19 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   const hasMore = keyset && conversations.length > limit;
   const pageRows = hasMore ? conversations.slice(0, limit) : conversations;
 
-  // Flatten last message info
-  const data = (keyset ? pageRows : conversations).map((c) => {
+  // Flatten last message info, and the contact behind each row (one batched,
+  // read-only lookup for the page - see lib/conversation-contact.ts).
+  const rows = keyset ? pageRows : conversations;
+  const contactMap = await contactIdsFor(tenantId, rows as any[]);
+  const data = rows.map((c) => {
     const lastMsg = c.messages[0] || null;
     const { messages, ...rest } = c;
-    return { ...rest, lastMessageDirection: lastMsg?.direction || null, lastMessageBody: lastMsg?.body || null };
+    return {
+      ...rest,
+      contactId: contactIdOf(contactMap, c as any),
+      lastMessageDirection: lastMsg?.direction || null,
+      lastMessageBody: lastMsg?.body || null,
+    };
   });
 
   if (keyset) {
@@ -304,7 +313,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
 }
 
 export async function getById(tenantId: string, id: string) {
-  return prisma.conversation.findFirst({
+  const conversation = await prisma.conversation.findFirst({
     where: { id, tenantId },
     include: {
       assignedAgent: { select: { id: true, name: true, email: true } },
@@ -313,6 +322,9 @@ export async function getById(tenantId: string, id: string) {
       messages: { orderBy: { createdAt: "asc" } },
     },
   });
+  if (!conversation) return null;
+  const contactMap = await contactIdsFor(tenantId, [conversation as any]);
+  return { ...conversation, contactId: contactIdOf(contactMap, conversation as any) };
 }
 
 export async function transferToDepartment(tenantId: string, conversationId: string, departmentId: string) {
