@@ -470,6 +470,18 @@ describe('★★ 04e’s side - counts of what was read, "-" for what was not', 
     expect(screen.getByTestId('promise-card')).toBeInTheDocument();
   });
 
+  it('★★ "by GOTCHA" is the orchestrator’s count when the timeline was read (4b7c2e1b)', async () => {
+    // The audit log never saw a Shopify store's lookups and refunds: 14 against 116.
+    render(
+      await ActionsSide({
+        actions: ok([event({ id: 'a', actorType: 'ai' })]),
+        approvals: [],
+        aiActions: 116,
+      }),
+    );
+    expect(screen.getByTestId('actions-who')).toHaveTextContent('by GOTCHA116');
+  });
+
   it('⚠ unread records are "-", never 0', async () => {
     render(await ActionsSide({ actions: { state: 'failed' }, approvals: null }));
     expect(screen.getByTestId('actions-who').textContent?.match(/-/g)).toHaveLength(3);

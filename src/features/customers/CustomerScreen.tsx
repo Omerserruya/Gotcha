@@ -1,6 +1,6 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { channelHandles, type TimelineEvent } from '@/api/contracts/customer-detail';
+import { channelHandles, type TimelineEvent, actionOutcome } from '@/api/contracts/customer-detail';
 import { ordersIn } from '@/api/contracts/customer-orders';
 import { channelName } from '@/api/contracts/inbox';
 import { humanizeTag } from '@/api/contracts/approvals';
@@ -281,7 +281,7 @@ export async function CustomerTimelineList({
           at: event.createdAt,
           tone: 'action',
           title: humanizeTag(event.action.tool.split('.').pop() ?? event.action.tool),
-          line: event.action.success ? t('card.aiActionDone') : t('card.aiActionFailed'),
+          line: t(`card.aiAction.${actionOutcome(event.action)}`),
         });
       }
       if (event.type === 'handover' && event.handover) {

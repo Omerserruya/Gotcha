@@ -175,6 +175,7 @@ export default async function Page({
                 actions={detail.actions}
                 approvals={detail.approvals}
                 policies={detail.policies}
+                aiActions={detail.timeline?.totals.aiActions ?? null}
                 currency={
                   detail.orders?.state === 'ok'
                     ? (detail.orders.data?.summary?.currency ?? null)

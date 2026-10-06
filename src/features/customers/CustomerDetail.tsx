@@ -8,6 +8,7 @@ import {
   isPartialHistory,
   notesBlockedBy,
   shownOfTotal,
+  actionOutcome,
 } from '@/api/contracts/customer-detail';
 import type { CustomerDetail as Detail } from './load-customer';
 
@@ -310,13 +311,15 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
                       : t('detail.timeline.handover', { to: event.handover.to })}
                   </span>
                 ) : event.type === 'ai_action' && event.action ? (
-                  <span className={styles.eventBody} data-testid="event-action">
-                    {t(
-                      event.action.success
-                        ? 'detail.timeline.actionDone'
-                        : 'detail.timeline.actionFailed',
-                      { tool: event.action.tool },
-                    )}
+                  <span
+                    className={styles.eventBody}
+                    data-testid="event-action"
+                    data-status={actionOutcome(event.action)}
+                  >
+                    {/* By status (4b7c2e1b): a refund waiting for approval is not a failure. */}
+                    {t(`detail.timeline.action.${actionOutcome(event.action)}`, {
+                      tool: event.action.tool,
+                    })}
                   </span>
                 ) : (
                   <span className={styles.eventBody}>

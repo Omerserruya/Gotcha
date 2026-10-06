@@ -61,12 +61,18 @@
       "scanTruncated": "This person has more conversations than we scan in one go, so the oldest may not be represented here.",
       "handover": "Handed to {to}.",
       "handoverWithReason": "Handed to {to} - {reason}.",
-      "actionDone": "GOTCHA ran {tool}.",
-      "actionFailed": "GOTCHA tried {tool} and it failed.",
       "kind": {
         "handover": "handover",
         "ai_action": "action",
         "message": "message"
+      },
+      "action": {
+        "proposed": "GOTCHA asked to run {tool}, waiting for approval.",
+        "approved": "{tool} was approved.",
+        "running": "GOTCHA is running {tool}.",
+        "completed": "GOTCHA ran {tool}.",
+        "failed": "GOTCHA tried {tool} and it failed.",
+        "denied": "GOTCHA asked to run {tool} and it was declined."
       }
     },
     "absent": {
@@ -332,8 +338,6 @@
     "allChannels": "All channels",
     "today": "Today",
     "messages": "{count, plural, one {# message} other {# messages}}",
-    "aiActionDone": "GOTCHA · done",
-    "aiActionFailed": "GOTCHA · didn’t go through",
     "handedTo": "Handed to {to}",
     "handover": "Handed over",
     "order": "Order {number}",
@@ -381,6 +385,14 @@
       "CANCELLED": "Cancelled",
       "APPROVEDBy": "Approved by {name}",
       "REJECTEDBy": "Rejected by {name}"
+    },
+    "aiAction": {
+      "proposed": "GOTCHA · waiting for approval",
+      "approved": "GOTCHA · approved",
+      "running": "GOTCHA · running",
+      "completed": "GOTCHA · done",
+      "failed": "GOTCHA · didn’t go through",
+      "denied": "GOTCHA · declined"
     }
   },
   "segments": {

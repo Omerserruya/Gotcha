@@ -596,9 +596,16 @@ export async function ActionsSide({
   approvals,
   policies = null,
   currency = null,
+  aiActions = null,
 }: {
   readonly actions: AuditRead;
   readonly approvals: readonly Approval[] | null;
+  /**
+   * Every action the AI took for this person (the timeline's
+   * `totals.aiActions`, Backend 4b7c2e1b: the orchestrator's row per call,
+   * adapter tools included). `null` when the timeline was not read.
+   */
+  readonly aiActions?: number | null;
   /** The tenant's business rules; `null` when unread or not readable by this viewer. */
   readonly policies?: BusinessPolicies | null;
   /** The shop's currency, for the rules' amounts - which carry none of their own. */
@@ -648,10 +655,18 @@ export async function ActionsSide({
   const asked = approvals ?? [];
   const count = (n: number | null) => (n === null ? '-' : format.number(n));
   const read = events !== null && approvals !== null;
-  const byGotcha = read
-    ? events.filter((e) => e.actorType === 'ai').length +
-      asked.filter((a) => whoAsked(a) === 'ai').length
-    : null;
+  /*
+   * The orchestrator's own count when the timeline was read: the audit log
+   * only holds what changed the account, and a Shopify store's lookups and
+   * refunds never reached it - which is how a person with 116 AI actions read
+   * "14 by GOTCHA". Otherwise the audit and approvals, as before.
+   */
+  const byGotcha =
+    aiActions ??
+    (read
+      ? events.filter((e) => e.actorType === 'ai').length +
+        asked.filter((a) => whoAsked(a) === 'ai').length
+      : null);
   const byTeam = events ? events.filter((e) => e.actorType === 'user').length : null;
   const byAutomations = read
     ? events.filter((e) => e.actorType === 'system').length +

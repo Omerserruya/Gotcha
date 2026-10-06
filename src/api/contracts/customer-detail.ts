@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { ACTIVITY_STATUSES, type ActivityStatus } from '@/lib/ai-activity-status';
 import { plainDashes } from '@/lib/plain-dashes';
 
 /**
@@ -102,7 +103,15 @@ export const timelineEventSchema = z.object({
   action: z
     .object({
       tool: z.string(),
+      /** `true` only when `status` is `completed` (Backend 4b7c2e1b). */
       success: z.boolean().default(false),
+      /**
+       * Where the step is (4b7c2e1b): proposed, approved, running,
+       * completed, failed, denied. `null` from a service older than it, or a
+       * status this screen does not know: `actionOutcome` falls back to
+       * `success`.
+       */
+      status: z.enum(ACTIVITY_STATUSES).nullable().catch(null).default(null),
       triggeredBy: z.string().nullable().default(null),
       durationMs: z.number().nullable().default(null),
       approvedBy: z.string().nullable().default(null),
@@ -566,4 +575,17 @@ export function channelHandles(timeline: CustomerTimeline | null): readonly Chan
   return (timeline?.identityChannels ?? [])
     .filter((c) => c.channel.trim() !== '' && c.externalId.trim() !== '')
     .map((c) => ({ channel: c.channel, externalId: c.externalId }));
+}
+
+/**
+ * What happened to one AI action, for a line or a chip. The status when the
+ * service sends one; otherwise the old two-way `success`, which said
+ * "failed" about everything not completed - including a refund still
+ * waiting for somebody's approval.
+ */
+export function actionOutcome(action: {
+  readonly success: boolean;
+  readonly status: ActivityStatus | null;
+}): ActivityStatus {
+  return action.status ?? (action.success ? 'completed' : 'failed');
 }

@@ -308,6 +308,53 @@ describe('★★ the timeline must never claim to be a history', () => {
     expect(action).not.toHaveTextContent(/^GOTCHA ran/);
   });
 
+  it.each([
+    ['proposed', false, /asked to run process_refund, waiting for approval/],
+    ['denied', false, /asked to run process_refund and it was declined/],
+    ['running', false, /is running process_refund/],
+    ['completed', true, /^GOTCHA ran process_refund/],
+  ] as const)(
+    '★★ by its status (4b7c2e1b): %s is not "it failed"',
+    async (status, success, words) => {
+      await show(
+        detail({
+          timeline: {
+            contact: null,
+            identityChannels: [],
+            events: [
+              message({
+                type: 'ai_action',
+                body: null,
+                direction: null,
+                action: {
+                  tool: 'process_refund',
+                  success,
+                  status,
+                  triggeredBy: 'ai',
+                  durationMs: null,
+                  approvedBy: null,
+                },
+              }),
+            ],
+            page: { limit: 50, types: ['ai_action'], nextCursor: null, hasMore: false },
+            coverage: {},
+            totals: {
+              conversations: 1,
+              messages: 0,
+              handovers: 0,
+              aiActions: 1,
+              conversationScanTruncated: false,
+            },
+          },
+        }),
+      );
+      const action = screen.getByTestId('event-action');
+      expect(action).toHaveAttribute('data-status', status);
+      expect(action).toHaveTextContent(words);
+      if (status !== 'completed') expect(action).not.toHaveTextContent(/failed/);
+    },
+  );
+
   it('still says the cross-channel part IS real, because it is', async () => {
     // The route follows `mergedIntoId`, gathers sibling contacts and includes
     // aliases preserved from prior merges. That is the hard part and it is

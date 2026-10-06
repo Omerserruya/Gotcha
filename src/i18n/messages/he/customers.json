@@ -61,12 +61,18 @@
       "scanTruncated": "לאדם הזה יש יותר שיחות ממה שאנחנו סורקים בפעם אחת, ולכן ייתכן שהישנות ביותר לא מיוצגות כאן.",
       "handover": "הועבר ל‑{to}.",
       "handoverWithReason": "הועבר ל‑{to} - {reason}.",
-      "actionDone": "GOTCHA הריצה {tool}.",
-      "actionFailed": "GOTCHA ניסתה {tool} וזה נכשל.",
       "kind": {
         "handover": "העברה",
         "ai_action": "פעולה",
         "message": "הודעה"
+      },
+      "action": {
+        "proposed": "GOTCHA ביקש להריץ {tool}, ממתין לאישור.",
+        "approved": "{tool} אושר.",
+        "running": "GOTCHA מריץ {tool}.",
+        "completed": "GOTCHA הריצה {tool}.",
+        "failed": "GOTCHA ניסתה {tool} וזה נכשל.",
+        "denied": "GOTCHA ביקש להריץ {tool} והבקשה נדחתה."
       }
     },
     "absent": {
@@ -332,8 +338,6 @@
     "allChannels": "כל הערוצים",
     "today": "היום",
     "messages": "{count, plural, one {הודעה אחת} other {# הודעות}}",
-    "aiActionDone": "GOTCHA · בוצע",
-    "aiActionFailed": "GOTCHA · לא עבר",
     "handedTo": "הועבר ל־{to}",
     "handover": "הועבר",
     "order": "הזמנה {number}",
@@ -381,6 +385,14 @@
       "CANCELLED": "בוטל",
       "APPROVEDBy": "אושר על ידי {name}",
       "REJECTEDBy": "נדחה על ידי {name}"
+    },
+    "aiAction": {
+      "proposed": "GOTCHA · ממתין לאישור",
+      "approved": "GOTCHA · אושר",
+      "running": "GOTCHA · רץ",
+      "completed": "GOTCHA · בוצע",
+      "failed": "GOTCHA · לא עבר",
+      "denied": "GOTCHA · נדחה"
     }
   },
   "segments": {
