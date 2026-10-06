@@ -120,7 +120,10 @@
     "checked": "נבדק {date}",
     "newRecord": "כל השאר — נוצרת רשומה חדשה",
     "summaryIn": "סיכום AI, ב־{language}",
-    "summary": "סיכום AI"
+    "summary": "סיכום AI",
+    "save": "שמירה",
+    "cancel": "ביטול",
+    "nothingToSave": "אין כאן הגדרה לשמור: הסדר הוא מי שמחזיק את רשומות הלקוחות ואז GOTCHA, והכתיבה חזרה נקבעת לפי סוג הפעולה."
   },
   "open": "פתיחת {part}",
   "openAcross": "פתיחת משותף לשניהם"

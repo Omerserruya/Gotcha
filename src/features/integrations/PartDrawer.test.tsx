@@ -151,6 +151,18 @@ describe('★ 14e — across both', () => {
       /^1ShopifyAsked first2GOTCHAAnyone else — a new record is made$/,
     );
   });
+
+  it('★ 02’s marks and bar: the CRM’s logo, GOTCHA’s tile; Save drawn with why, Cancel', async () => {
+    inIntl(await AcrossDrawer({ crm: core.roles[1]! }));
+    expect(screen.getByTestId('across-order').querySelector('[data-logo]')).toHaveAttribute(
+      'data-logo',
+      'shopify',
+    );
+    const save = screen.getByTestId('across-save');
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save.getAttribute('title')).toMatch(/Nothing here is a setting/);
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+  });
 });
 
 describe('★ 14d corrections (measurement of 052d0c2)', () => {

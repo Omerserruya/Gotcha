@@ -546,6 +546,40 @@
     border-radius: var(--radius-step);
   }
 
+  /* 14e: the system's mark beside its name; GOTCHA's own tile. */
+  .acrossWho {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .gotchaTile {
+    display: grid;
+    place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 8px;
+    background-color: var(--action-base);
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--action-text);
+  }
+
+  /* Decoration: the mark is drawn, not read. */
+  .gotchaTile::before {
+    content: 'G';
+  }
+
+  .acrossSave {
+    padding: 9px var(--space-16);
+    border-radius: 9px;
+    background-color: var(--action-base);
+    font-size: var(--font-size-label);
+    color: var(--action-text);
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
   .acrossNumber {
     font-family: var(--font-mono);
     font-size: var(--font-size-micro);

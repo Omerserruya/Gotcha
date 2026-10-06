@@ -2,6 +2,8 @@ import { getTranslations } from 'next-intl/server';
 
 import type { RolePart } from '@/api/contracts/business-core';
 import drawer from '@/design-system/styles/drawer.module.css';
+import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
+import { Link } from '@/i18n/navigation';
 
 import styles from './BusinessCore.module.css';
 
@@ -30,40 +32,64 @@ export async function AcrossDrawer({
   /*
     02: cards and rows, no paragraphs. Every sentence this screen holds as
     true rides on the title of the thing it explains. The order is numbered;
-    no drag handle, because nothing reorders it from here.
+    no drag handle and no per-rule switch: nothing reorders the chain, and
+    write-back follows the kind of action — a handle or a toggle would move
+    nothing.
   */
   return (
-    <div className={drawer.drawerBody} data-testid="across-drawer">
-      <h3 className={drawer.sectionTitle}>{t('both.identity')}</h3>
-      <ol className={styles.acrossChain} data-testid="across-order">
-        <li className={styles.acrossStep}>
-          <span className={styles.acrossNumber}>1</span>
-          <span className={styles.acrossName}>{first ?? '—'}</span>
-          <span className={styles.acrossSub}>{t('drawer.askedFirst')}</span>
-        </li>
-        <li
-          className={styles.acrossStep}
-          title={`${t('writeback.identityOneMatch')} ${t('writeback.identityManyMatches')}`}
-          data-testid="across-gotcha"
-        >
-          <span className={styles.acrossNumber}>2</span>
-          <span className={styles.acrossName}>GOTCHA</span>
-          <span className={styles.acrossSub}>{t('drawer.newRecord')}</span>
-        </li>
-      </ol>
+    <>
+      <div className={drawer.drawerBody} data-testid="across-drawer">
+        <h3 className={drawer.sectionTitle}>{t('both.identity')}</h3>
+        <ol className={styles.acrossChain} data-testid="across-order">
+          <li className={styles.acrossStep}>
+            <span className={styles.acrossNumber}>1</span>
+            <span className={styles.acrossWho}>
+              {first ? <IntegrationLogo slug={crm?.elected?.slug ?? null} size="pill" /> : null}
+              <span className={styles.acrossName}>{first ?? '—'}</span>
+            </span>
+            <span className={styles.acrossSub}>{t('drawer.askedFirst')}</span>
+          </li>
+          <li
+            className={styles.acrossStep}
+            title={`${t('writeback.identityOneMatch')} ${t('writeback.identityManyMatches')}`}
+            data-testid="across-gotcha"
+          >
+            <span className={styles.acrossNumber}>2</span>
+            <span className={styles.acrossWho}>
+              <span className={styles.gotchaTile} aria-hidden="true" />
+              <span className={styles.acrossName}>GOTCHA</span>
+            </span>
+            <span className={styles.acrossSub}>{t('drawer.newRecord')}</span>
+          </li>
+        </ol>
 
-      <h3 className={drawer.sectionTitle}>{t('drawer.whatWhere')}</h3>
-      <div
-        className={styles.acrossRow}
-        title={`${t('writeback.perRule')} ${t('writeback.oneBoard')}`}
-        data-testid="across-writeback"
-      >
-        <span className={styles.acrossEvent}>{t('both.writeback')}</span>
-        <span className={styles.acrossName}>{first ?? '—'}</span>
-        <span className={styles.acrossSub} title={t('writeback.language')}>
-          {language ? t('drawer.summaryIn', { language }) : t('drawer.summary')}
-        </span>
+        <h3 className={drawer.sectionTitle}>{t('drawer.whatWhere')}</h3>
+        <div
+          className={styles.acrossRow}
+          title={`${t('writeback.perRule')} ${t('writeback.oneBoard')}`}
+          data-testid="across-writeback"
+        >
+          <span className={styles.acrossEvent}>{t('both.writeback')}</span>
+          <span className={styles.acrossName}>{first ?? '—'}</span>
+          <span className={styles.acrossSub} title={t('writeback.language')}>
+            {language ? t('drawer.summaryIn', { language }) : t('drawer.summary')}
+          </span>
+        </div>
       </div>
-    </div>
+      {/* 02's bar. Nothing here is a setting, so Save is drawn and says why. */}
+      <footer className={drawer.drawerFoot}>
+        <span
+          className={styles.acrossSave}
+          aria-disabled="true"
+          title={t('drawer.nothingToSave')}
+          data-testid="across-save"
+        >
+          {t('drawer.save')}
+        </span>
+        <Link href="/settings/systems" className={drawer.drawerCancel} scroll={false}>
+          {t('drawer.cancel')}
+        </Link>
+      </footer>
+    </>
   );
 }

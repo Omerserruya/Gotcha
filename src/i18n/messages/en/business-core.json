@@ -120,7 +120,10 @@
     "checked": "checked {date}",
     "newRecord": "Anyone else — a new record is made",
     "summaryIn": "AI summary, in {language}",
-    "summary": "AI summary"
+    "summary": "AI summary",
+    "save": "Save",
+    "cancel": "Cancel",
+    "nothingToSave": "Nothing here is a setting: the order is who holds customer records, then GOTCHA, and write-back follows the kind of action."
   },
   "open": "Open {part}",
   "openAcross": "Open across both"
