@@ -265,15 +265,17 @@ export function SkillEditor({
               <p className={styles.testStats} data-testid="skill-week-stats">
                 {stats === null
                   ? t('editor.statsUnread')
-                  : t('editor.stats', {
-                      runs: stats.runs,
-                      // A share of FINISHED runs: multiplied by all runs it would invent a count.
-                      alone:
-                        stats.aloneShare === null
-                          ? '-'
-                          : format.number(stats.aloneShare, { style: 'percent' }),
-                      asked: stats.askedYou,
-                    })}
+                  : stats.runs === 0
+                    ? t('editor.statsNone')
+                    : t('editor.stats', {
+                        runs: stats.runs,
+                        // A share of FINISHED runs: multiplied by all runs it would invent a count.
+                        alone:
+                          stats.aloneShare === null
+                            ? '-'
+                            : format.number(stats.aloneShare, { style: 'percent' }),
+                        asked: stats.askedYou,
+                      })}
               </p>
             </section>
           ) : (

@@ -84,11 +84,6 @@
     color: var(--signal-done-text);
   }
 
-  .line {
-    font-size: 12.5px;
-    color: var(--text-muted);
-  }
-
   .said {
     margin: 0;
     font-size: 12px;
@@ -281,7 +276,7 @@
   }
 
   .fallbackTitle {
-    padding: 0;
+    margin: 0;
     font-size: 13px;
     font-weight: 600;
   }
@@ -404,6 +399,39 @@
     margin: 0;
     padding: 24px 32px;
     font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* The handle always; the arrows on hover and on focus, so the keyboard still has them (dev). */
+  .row .order {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--easing-standard);
+  }
+
+  .row:is(:hover, :focus-within) .order {
+    opacity: 1;
+  }
+
+  /* 07g's line under the name: one line, the channels beside it. */
+  .line {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-inline-size: 640px;
+  }
+
+  .lineText {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .channelIcons {
+    display: inline-flex;
+    flex: none;
+    gap: 4px;
     color: var(--text-muted);
   }
 }

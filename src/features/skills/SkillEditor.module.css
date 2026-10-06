@@ -208,6 +208,7 @@
   }
 
   .personText {
+    min-inline-size: 0;
     display: flex;
     flex: 1;
     flex-direction: column;
@@ -378,5 +379,12 @@
     background-color: var(--ai-avatar-surface);
     font-size: 10.5px;
     color: var(--ai-avatar-text);
+  }
+
+  /* Used by: the employee's line on one line (dev: three). */
+  .personText .quiet {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 }

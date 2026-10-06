@@ -121,7 +121,8 @@
       "too_many_tools": "עד 10 כלים בשלב.",
       "too_many_items": "עד 20.",
       "amount_invalid": "סכום, במספרים."
-    }
+    },
+    "addAmount": "+ אישור מעל סכום"
   },
   "new": {
     "title": "מיומנות חדשה",
@@ -187,7 +188,8 @@
       "abandoned": "נעצרה"
     },
     "runSteps": "{count, plural, =1 {שלב אחד} other {# שלבים}} · גרסה {version}",
-    "openConversation": "לפתיחת השיחה"
+    "openConversation": "לפתיחת השיחה",
+    "statsNone": "7 הימים האחרונים · עוד לא הופעלה"
   },
   "notFound": "המיומנות הזו לא כאן - ייתכן שהועברה לארכיון, או שהיא שייכת לסביבת עבודה אחרת.",
   "employee": {
@@ -251,7 +253,8 @@
       }
     },
     "unread": "לא הצלחנו לקרוא כרגע את המיומנויות של העובד הזה.",
-    "noEmployee": "העובד הזה לא כאן."
+    "noEmployee": "העובד הזה לא כאן.",
+    "channelsLabel": "ערוצים"
   },
   "notRunYet": "עוד לא הופעלה"
 }

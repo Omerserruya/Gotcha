@@ -257,11 +257,13 @@ export function skillStanding(skill: Pick<Skill, 'steps' | 'status' | 'stats'>):
   if (skill.status !== 'active') return { kind: 'draft' };
   const modes = (skill.stats?.usedBy ?? []).map((u) => u.mode);
   if (!modes.includes('on') && !modes.includes('watch')) return { kind: 'unused' };
+  // Watching only says so before any threshold: nobody is asked while it only watches (dev).
+  if (!modes.includes('on')) return { kind: 'watch' };
   const amounts = skill.steps
     .map((s) => s.approvalOverAmount)
     .filter((a): a is number => a !== null);
   if (amounts.length > 0) return { kind: 'approval', amount: Math.max(...amounts) };
-  return modes.includes('on') ? { kind: 'live' } : { kind: 'watch' };
+  return { kind: 'live' };
 }
 
 /**

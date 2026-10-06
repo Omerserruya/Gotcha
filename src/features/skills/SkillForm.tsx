@@ -54,6 +54,8 @@ export function SkillForm({
   const t = useTranslations('skills.form');
   const [example, setExample] = useState('');
   const [dragging, setDragging] = useState<number | null>(null);
+  /** Steps whose "Asks you first over" field was opened by its link. */
+  const [amountOpen, setAmountOpen] = useState<ReadonlySet<string>>(new Set());
   const set = <K extends keyof SkillDraft>(key: K, value: SkillDraft[K]) =>
     onChange({ ...draft, [key]: value });
   const setStep = (index: number, step: Partial<DraftStep>) =>
@@ -365,17 +367,34 @@ export function SkillForm({
                   aria-label={t('guidance', { n: i + 1 })}
                 />
                 <div className={styles.stepExtras}>
-                  <label className={styles.approval}>
-                    <span>{t('asksOver')}</span>
-                    <input
-                      className={styles.amount}
-                      inputMode="decimal"
-                      value={step.approvalOver}
-                      onChange={(e) => setStep(i, { approvalOver: e.target.value })}
-                      placeholder={t('asksOverNone')}
-                      data-testid={`skill-step-amount-${i}`}
-                    />
-                  </label>
+                  {/*
+                    A chip when there is a threshold ("Asks you first over 200"); a
+                    small link to add one when there is not (dev: an empty field on
+                    every step was weight).
+                  */}
+                  {step.approvalOver.trim() || amountOpen.has(step.id) ? (
+                    <label className={styles.approval}>
+                      <span>{t('asksOver')}</span>
+                      <input
+                        className={styles.amount}
+                        inputMode="decimal"
+                        value={step.approvalOver}
+                        onChange={(e) => setStep(i, { approvalOver: e.target.value })}
+                        // Opened by its link: the cursor goes straight in.
+                        autoFocus={amountOpen.has(step.id) && !step.approvalOver}
+                        data-testid={`skill-step-amount-${i}`}
+                      />
+                    </label>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.add}
+                      onClick={() => setAmountOpen(new Set(amountOpen).add(step.id))}
+                      data-testid={`skill-step-add-amount-${i}`}
+                    >
+                      {t('addAmount')}
+                    </button>
+                  )}
                   <input
                     className={styles.elseNote}
                     value={step.elseNote}

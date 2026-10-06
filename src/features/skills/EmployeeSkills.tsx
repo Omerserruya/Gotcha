@@ -266,8 +266,15 @@ export function EmployeeSkills({
             </ol>
           )}
 
-          <fieldset className={styles.fallback} data-testid="employee-no-skill">
-            <legend className={styles.fallbackTitle}>{t('fallback.title')}</legend>
+          <section
+            className={styles.fallback}
+            role="radiogroup"
+            aria-labelledby="employee-no-skill-title"
+            data-testid="employee-no-skill"
+          >
+            <h2 className={styles.fallbackTitle} id="employee-no-skill-title">
+              {t('fallback.title')}
+            </h2>
             {NO_SKILL_POLICIES.map((p) => (
               <label key={p} className={styles.radio}>
                 <input
@@ -281,7 +288,7 @@ export function EmployeeSkills({
                 {t(`fallback.${p}`)}
               </label>
             ))}
-          </fieldset>
+          </section>
         </div>
 
         <aside className={styles.add} data-testid="employee-add-skill">

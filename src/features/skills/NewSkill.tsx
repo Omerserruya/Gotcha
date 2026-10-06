@@ -189,8 +189,16 @@ export function NewSkill({
                 )}
               </section>
 
-              <fieldset className={styles.card} data-testid="new-skill-start">
-                <legend className={styles.eyebrow}>{t('new.start.title')}</legend>
+              {/* A titled group inside the card, as "Give it to" - not a legend on its border (dev). */}
+              <section
+                className={styles.card}
+                role="radiogroup"
+                aria-labelledby="new-skill-start-title"
+                data-testid="new-skill-start"
+              >
+                <h3 className={styles.eyebrow} id="new-skill-start-title">
+                  {t('new.start.title')}
+                </h3>
                 {(['watch', 'on'] as const).map((mode) => (
                   <label key={mode} className={styles.radio}>
                     <input
@@ -204,7 +212,7 @@ export function NewSkill({
                     {t(`new.start.${mode}`)}
                   </label>
                 ))}
-              </fieldset>
+              </section>
             </div>
           </div>
         </div>

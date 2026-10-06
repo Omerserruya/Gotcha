@@ -453,3 +453,22 @@ describe('★★ the dev measurement (c1ddc98)', () => {
     expect(screen.getByTestId('skill-week-k1')).toHaveTextContent('0 runsNot run yet');
   });
 });
+
+describe('★ the step’s threshold: a chip when set, a link when not (dev)', () => {
+  it('no threshold: a small link that opens the field', () => {
+    wrap(<NewSkill employees={[]} tools={[]} otherSkills={[]} />);
+    fireEvent.click(screen.getByTestId('skill-add-step-change'));
+    expect(screen.queryByTestId('skill-step-amount-0')).toBeNull();
+    fireEvent.click(screen.getByTestId('skill-step-add-amount-0'));
+    fireEvent.change(screen.getByTestId('skill-step-amount-0'), { target: { value: '500' } });
+    expect(screen.getByTestId('skill-step-amount-0')).toHaveValue('500');
+  });
+
+  it('★ "Start it" is a titled group inside its card, not a legend on the border', () => {
+    wrap(<NewSkill employees={[]} tools={[]} otherSkills={[]} />);
+    const group = screen.getByTestId('new-skill-start');
+    expect(group.tagName).not.toBe('FIELDSET');
+    expect(group).toHaveAttribute('role', 'radiogroup');
+    expect(screen.getByRole('radiogroup', { name: 'Start it' })).toBe(group);
+  });
+});

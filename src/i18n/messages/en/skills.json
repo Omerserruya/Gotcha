@@ -121,7 +121,8 @@
       "too_many_tools": "Up to 10 tools on a step.",
       "too_many_items": "Up to 20.",
       "amount_invalid": "An amount, in numbers."
-    }
+    },
+    "addAmount": "+ Approval over an amount"
   },
   "new": {
     "title": "New skill",
@@ -187,7 +188,8 @@
       "abandoned": "Stopped"
     },
     "runSteps": "{count, plural, =1 {1 step} other {# steps}} · version {version}",
-    "openConversation": "Open the conversation"
+    "openConversation": "Open the conversation",
+    "statsNone": "Last 7 days · it hasn’t run yet"
   },
   "notFound": "This skill isn’t here - it may have been archived, or it belongs to another workspace.",
   "employee": {
@@ -251,7 +253,8 @@
       }
     },
     "unread": "This employee’s skills couldn’t be read just now.",
-    "noEmployee": "This employee isn’t here."
+    "noEmployee": "This employee isn’t here.",
+    "channelsLabel": "Channels"
   },
   "notRunYet": "Not run yet"
 }

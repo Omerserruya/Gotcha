@@ -332,3 +332,9 @@ describe('★★ Backend’s labels win (ab173090) - one source, no hand mapping
     });
   });
 });
+
+describe('★ 09’s column, in the 09b header’s order (dev)', () => {
+  it('★★ watched by everyone: "Watch only", even with a threshold on a step', () => {
+    expect(skillStanding(skill({ stats: used('watch') }))).toEqual({ kind: 'watch' });
+  });
+});
