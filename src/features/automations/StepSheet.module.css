@@ -207,6 +207,48 @@
     color: var(--text-muted);
   }
 
+  /* Each channel in its own colour (02's marks); grey only where the step cannot run. */
+  .channel {
+    display: inline-flex;
+    color: var(--channel-web-mark);
+  }
+
+  .channel[data-tone='whatsapp'] {
+    color: var(--channel-whatsapp-mark);
+  }
+
+  .channel[data-tone='instagram'] {
+    color: var(--channel-instagram-mark);
+  }
+
+  .channel[data-tone='email'] {
+    color: var(--channel-email-mark);
+  }
+
+  .channel[data-tone='messenger'] {
+    color: var(--channel-messenger-mark);
+  }
+
+  .item:disabled .channel {
+    color: var(--text-faint);
+  }
+
+  .dangerButton {
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--intent-urgent-text);
+    color: var(--frame-text);
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+
+  .dangerButton:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
   /* New automation: the trigger chosen, then what it cannot go without. */
   .setup {
     display: flex;

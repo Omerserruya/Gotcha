@@ -179,9 +179,12 @@ function Channels({ channels }: { readonly channels: readonly string[] }) {
       aria-label={shown.map((c) => t(`channels.${c}` as 'channels.WHATSAPP')).join(', ')}
     >
       {shown.slice(0, 5).map((channel) => {
-        if (channel === 'VOICE') return <Phone key={channel} size={11} aria-hidden="true" />;
-        const { Icon } = channelMark(channel);
-        return <Icon key={channel} size={11} strokeWidth={1.75} />;
+        const { Icon, tone } = channelMark(channel);
+        return (
+          <span key={channel} className={styles.channel} data-tone={tone} aria-hidden="true">
+            {channel === 'VOICE' ? <Phone size={11} /> : <Icon size={11} strokeWidth={1.75} />}
+          </span>
+        );
       })}
     </span>
   );

@@ -260,6 +260,13 @@
       "wait": "{minutes, plural, =1 {1 minute} other {# minutes}}",
       "upTo": "Up to {minutes, plural, =1 {1 minute} other {# minutes}}",
       "split": "{a}% / {b}%"
+    },
+    "more": "More",
+    "publishOn": "Publish and turn on",
+    "turnOn": {
+      "title": "Turn it on?",
+      "what": "From now on, every time {when}, this runs.",
+      "cancel": "Not yet"
     }
   },
   "branches": {
@@ -381,5 +388,36 @@
       "waiting": "Waiting"
     },
     "openConversation": "Open the conversation"
+  },
+  "eyebrow": {
+    "trigger": "Trigger",
+    "logic": "Logic",
+    "send": "Send",
+    "do": "Do"
+  },
+  "rowMore": "More for {name}",
+  "delete": {
+    "item": "Delete automation",
+    "title": "Delete “{name}”?",
+    "what": "It stops running and is deleted, together with its run history. A conversation waiting on it carries on as usual.",
+    "yes": "Delete",
+    "deleting": "Deleting…",
+    "cancel": "Cancel",
+    "failed": "It wasn't deleted. Try again in a moment.",
+    "done": "Automation deleted."
+  },
+  "when": {
+    "message_received": "a message comes in",
+    "new_customer": "a new customer writes for the first time",
+    "tag_added": "one of its tags is added",
+    "schedule": "its time comes round",
+    "webhook": "its address is called",
+    "call_missed": "a call is missed",
+    "call_answered": "a call ends",
+    "order_event": "an order event happens",
+    "cart_abandoned": "a cart is left behind",
+    "form_submitted": "a form is sent",
+    "story_mention": "a story mentions you",
+    "unknown": "its trigger happens"
   }
 }

@@ -5,6 +5,7 @@ import {
   Clock,
   FileText,
   MessageSquare,
+  MoreHorizontal,
   PhoneIncoming,
   PhoneMissed,
   Receipt,
@@ -26,9 +27,11 @@ import {
   type TriggerType,
 } from '@/api/contracts/automations';
 import { channelMark } from '@/features/inbox/channel-marks';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
 import { Link } from '@/i18n/navigation';
 
 import { setLive } from './automation-actions';
+import { DeleteAutomation } from './DeleteAutomation';
 import styles from './Automations.module.css';
 
 const TRIGGER_ICON: Readonly<Record<TriggerType, LucideIcon>> = {
@@ -84,6 +87,8 @@ function Row({ initial }: { readonly initial: Automation }) {
     { readonly errors: readonly Issue[] } | 'forbidden' | 'failed' | null
   >(null);
   const [isPending, start] = useTransition();
+  const [deleting, setDeleting] = useState(false);
+  const [gone, setGone] = useState(false);
   const trigger = automation.trigger.type;
   const live = automation.status === 'live';
   const channels = triggerChannels(automation.trigger);
@@ -106,6 +111,8 @@ function Row({ initial }: { readonly initial: Automation }) {
 
   const href = `/studio/automations/${automation.id}`;
   const lastRun = automation.stats.lastRunAt;
+
+  if (gone) return null;
 
   return (
     <div
@@ -179,7 +186,36 @@ function Row({ initial }: { readonly initial: Automation }) {
           onChange={(e) => toggle(e.target.checked)}
           data-testid={`automation-switch-${automation.id}`}
         />
+        <Menu>
+          <MenuTrigger asChild>
+            <button
+              type="button"
+              className={styles.more}
+              aria-label={t('rowMore', { name: automation.name })}
+              data-testid={`automation-more-${automation.id}`}
+            >
+              <MoreHorizontal size={14} aria-hidden="true" />
+            </button>
+          </MenuTrigger>
+          <MenuContent align="end">
+            <MenuItem
+              tone="danger"
+              onSelect={() => setDeleting(true)}
+              data-testid={`automation-delete-${automation.id}`}
+            >
+              {t('delete.item')}
+            </MenuItem>
+          </MenuContent>
+        </Menu>
       </span>
+      {deleting ? (
+        <DeleteAutomation
+          id={automation.id}
+          name={automation.name}
+          onClose={() => setDeleting(false)}
+          onDeleted={() => setGone(true)}
+        />
+      ) : null}
       {refused ? (
         <p
           className={styles.refused}

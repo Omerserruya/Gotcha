@@ -83,7 +83,7 @@
   .head,
   .row {
     display: grid;
-    grid-template-columns: minmax(220px, 1.4fr) minmax(0, 2fr) 96px 120px 44px;
+    grid-template-columns: minmax(220px, 1.4fr) minmax(0, 2fr) 96px 120px 72px;
     gap: 16px;
     align-items: center;
     padding: 0 18px;
@@ -186,7 +186,34 @@
 
   .on {
     display: flex;
+    gap: 6px;
     justify-content: flex-end;
+    align-items: center;
+  }
+
+  .more {
+    display: grid;
+    place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .more:hover {
+    background-color: var(--panel-inset);
+  }
+
+  .deletedNote {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background-color: var(--signal-done-surface);
+    font-size: 12.5px;
+    color: var(--signal-done-text);
   }
 
   .switch {

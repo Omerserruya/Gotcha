@@ -294,6 +294,9 @@
   }
 
   .libItem {
+    display: flex;
+    gap: 8px;
+    align-items: center;
     inline-size: 100%;
     padding: 5px 6px;
     border: 0;
@@ -313,6 +316,11 @@
   .libItem:disabled {
     color: var(--text-faint);
     cursor: default;
+  }
+
+  .libItem svg {
+    flex: none;
+    color: var(--text-subtle);
   }
 
   .canvasWrap {

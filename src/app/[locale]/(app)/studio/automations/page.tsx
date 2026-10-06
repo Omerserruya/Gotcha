@@ -28,10 +28,11 @@ const TEMPLATES = [
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly new?: string }>;
+  readonly searchParams?: Promise<{ readonly new?: string; readonly deleted?: string }>;
 } = {}) {
   const t = await getTranslations('automations');
-  const creating = (await searchParams)?.new === '1';
+  const params = (await searchParams) ?? {};
+  const creating = params.new === '1';
   // The first step's catalogue - triggers - only when the sheet is open.
   const [automations, catalog] = await Promise.all([
     loadAutomations(),
@@ -67,6 +68,11 @@ export default async function Page({
       }
     >
       <div className={styles.page}>
+        {params.deleted === '1' ? (
+          <p className={styles.deletedNote} role="status" data-testid="automations-deleted">
+            {t('delete.done')}
+          </p>
+        ) : null}
         {automations === null ? (
           <p className={styles.quiet} role="status" data-testid="automations-unread">
             {t('unavailable')}

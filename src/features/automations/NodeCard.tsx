@@ -70,7 +70,7 @@ export function NodeCard({
       data-testid={`node-${node.id}`}
     >
       <span className={styles.eyebrow}>
-        {node.type === TRIGGER_NODE ? t('groups.trigger') : t(`groups.${groupOf(node.type)}`)}
+        {t(`eyebrow.${groupOf(node.type)}`)}
         {' · '}
         {kind}
       </span>

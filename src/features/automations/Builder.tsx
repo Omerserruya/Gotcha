@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronRight, Maximize, Minus, Plus, Search } from 'lucide-react';
+import { ChevronRight, Maximize, Minus, MoreHorizontal, Plus, Search } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useState, useTransition } from 'react';
 
@@ -15,7 +15,9 @@ import {
   type Trigger,
   type WebhookTrigger,
 } from '@/api/contracts/automations';
-import { Link } from '@/i18n/navigation';
+import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import { publishAutomation, readCatalog } from './automation-actions';
 import {
@@ -27,7 +29,9 @@ import {
   layout,
   type Graph,
 } from './graph';
+import { DeleteAutomation } from './DeleteAutomation';
 import { Inspector, type Choices } from './Inspector';
+import { nodeIcon } from './node-icons';
 import { NodeCard } from './NodeCard';
 import { RunLog } from './RunLog';
 import { StepSheet, nodeKey } from './StepSheet';
@@ -67,6 +71,10 @@ export function Builder({
 }) {
   const t = useTranslations('automations');
   const locale = useLocale();
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  /** Turning on is said first, by what starts it: a draft's publish makes it live. */
+  const [confirming, setConfirming] = useState(false);
   const [automation, setAutomation] = useState(initial);
   const [graph, setGraph] = useState<Graph>({
     nodes: initial.nodes ?? [],
@@ -217,10 +225,31 @@ export function Builder({
           >
             {t('builder.test')}
           </button>
+          <Menu>
+            <MenuTrigger asChild>
+              <button
+                type="button"
+                className={styles.secondary}
+                aria-label={t('builder.more')}
+                data-testid="builder-more"
+              >
+                <MoreHorizontal size={14} aria-hidden="true" />
+              </button>
+            </MenuTrigger>
+            <MenuContent align="end">
+              <MenuItem
+                tone="danger"
+                onSelect={() => setDeleting(true)}
+                data-testid="builder-delete"
+              >
+                {t('delete.item')}
+              </MenuItem>
+            </MenuContent>
+          </Menu>
           <button
             type="button"
             className={styles.primary}
-            onClick={publish}
+            onClick={() => (automation.status === 'live' ? publish() : setConfirming(true))}
             disabled={
               isPublishing || name.trim() === '' || (!dirty && automation.status === 'live')
             }
@@ -229,7 +258,11 @@ export function Builder({
             }
             data-testid="builder-publish"
           >
-            {isPublishing ? t('builder.publishing') : t('builder.publish')}
+            {isPublishing
+              ? t('builder.publishing')
+              : automation.status === 'live'
+                ? t('builder.publish')
+                : t('builder.publishOn')}
           </button>
         </span>
       </header>
@@ -308,6 +341,7 @@ export function Builder({
                       })
                       .map((item) => {
                         const can = item.available && chosen !== null && chosenFree.length > 0;
+                        const Icon = nodeIcon(item.type);
                         return (
                           <li key={item.type}>
                             <button
@@ -324,6 +358,7 @@ export function Builder({
                               onClick={() => chosen && add(chosen.id, chosenFree[0]!, item)}
                               data-testid={`library-${item.type}`}
                             >
+                              <Icon size={13} strokeWidth={1.75} aria-hidden="true" />
                               {t(`nodes.${nodeKey(item.type)}` as 'nodes.wait')}
                             </button>
                           </li>
@@ -508,6 +543,48 @@ export function Builder({
           )}
         </aside>
       </div>
+
+      {deleting ? (
+        <DeleteAutomation
+          id={automation.id}
+          name={automation.name}
+          onClose={() => setDeleting(false)}
+          onDeleted={() => router.push('/studio/automations?deleted=1')}
+        />
+      ) : null}
+
+      {confirming ? (
+        <Dialog open onOpenChange={(open) => (open ? null : setConfirming(false))}>
+          <DialogContent
+            title={t('builder.turnOn.title')}
+            description={t('builder.turnOn.what', {
+              when: t(`when.${trigger.type ?? 'unknown'}` as 'when.webhook'),
+            })}
+            data-testid="builder-turn-on"
+          >
+            <span className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.secondary}
+                onClick={() => setConfirming(false)}
+              >
+                {t('builder.turnOn.cancel')}
+              </button>
+              <button
+                type="button"
+                className={styles.primary}
+                onClick={() => {
+                  setConfirming(false);
+                  publish();
+                }}
+                data-testid="builder-turn-on-yes"
+              >
+                {t('builder.publishOn')}
+              </button>
+            </span>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       {sheet ? (
         sheet.catalog === 'reading' ? null : (

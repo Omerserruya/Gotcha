@@ -30,12 +30,14 @@ const actions = vi.hoisted(() => ({
   readRuns: vi.fn(),
   readRun: vi.fn(),
   provisionWebhook: vi.fn(),
+  deleteAutomation: vi.fn(),
 }));
 vi.mock('./automation-actions', () => actions);
 
 import { AutomationsList } from './AutomationsList';
 import { Builder } from './Builder';
 import { NewAutomation } from './NewAutomation';
+import { NodeCard } from './NodeCard';
 import { StepSheet } from './StepSheet';
 
 const NOW = new Date('2026-10-06T10:00:00Z');
@@ -317,8 +319,15 @@ describe('★★ 09d - the builder', () => {
       automation: draft(),
     });
     show();
+    // A draft's publish turns it on: said first, by what starts it.
+    expect(screen.getByTestId('builder-publish')).toHaveTextContent('Publish and turn on');
+    fireEvent.click(screen.getByTestId('builder-publish'));
+    expect(actions.publishAutomation).not.toHaveBeenCalled();
+    expect(screen.getByTestId('builder-turn-on')).toHaveTextContent(
+      'From now on, every time a call is missed, this runs.',
+    );
     await act(async () => {
-      fireEvent.click(screen.getByTestId('builder-publish'));
+      fireEvent.click(screen.getByTestId('builder-turn-on-yes'));
     });
     expect(actions.publishAutomation).toHaveBeenCalledWith(
       'a1',
@@ -347,5 +356,90 @@ describe('★★ 09d - the builder', () => {
       fireEvent.click(screen.getByTestId('builder-run-log'));
     });
     expect(screen.getByTestId('run-log-empty')).toHaveTextContent('No runs yet');
+  });
+});
+
+describe('★ measured on dev (e6785c4)', () => {
+  const live = () =>
+    automation({ nodes: [{ id: 't', type: 'automation_trigger', data: {} }], edges: [] });
+  const showBuilder = (a: Automation) =>
+    wrap(
+      <Builder
+        automation={a}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [], teams: [], members: [], skills: [] }}
+      />,
+    );
+
+  it('live: "Publish changes", no confirmation', async () => {
+    actions.publishAutomation.mockResolvedValue({ ok: false, reason: 'failed' });
+    showBuilder(live());
+    fireEvent.change(screen.getByTestId('builder-name'), { target: { value: 'Renamed' } });
+    expect(screen.getByTestId('builder-publish')).toHaveTextContent('Publish changes');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('builder-publish'));
+    });
+    expect(screen.queryByTestId('builder-turn-on')).toBeNull();
+    expect(actions.publishAutomation).toHaveBeenCalled();
+  });
+
+  it('09d: Delete, confirmed, saying the run history goes too; then back to 09c', async () => {
+    actions.deleteAutomation.mockResolvedValue(true);
+    showBuilder(live());
+    fireEvent.keyDown(screen.getByTestId('builder-more'), { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('builder-delete'));
+    expect(screen.getByTestId('delete-automation')).toHaveTextContent(
+      'together with its run history',
+    );
+    expect(actions.deleteAutomation).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('delete-automation-yes'));
+    });
+    expect(actions.deleteAutomation).toHaveBeenCalledWith('a1');
+    expect(push).toHaveBeenCalledWith('/studio/automations?deleted=1');
+  });
+
+  it('09c: Delete from the row; the row goes; refused, it stays and says so', async () => {
+    actions.deleteAutomation.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    wrap(<AutomationsList automations={[automation()]} />);
+    fireEvent.keyDown(screen.getByTestId('automation-more-a1'), { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('automation-delete-a1'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('delete-automation-yes'));
+    });
+    expect(screen.getByTestId('delete-automation-failed')).toBeInTheDocument();
+    expect(screen.getByTestId('automation-a1')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('delete-automation-yes'));
+    });
+    expect(screen.queryByTestId('automation-a1')).toBeNull();
+  });
+
+  it('a trigger step reads TRIGGER, singular', () => {
+    wrap(
+      <NodeCard
+        node={live().nodes![0]!}
+        trigger={live().trigger}
+        selected={false}
+        marked={false}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('node-t')).toHaveTextContent(/^Trigger · Call missed/);
+  });
+
+  it('channel marks wear their channel; library steps carry a mark', () => {
+    wrap(<StepSheet catalog={catalog(false)} context="x" onPick={vi.fn()} onClose={vi.fn()} />);
+    const tones = [...screen.getByTestId('step-send_buttons').querySelectorAll('[data-tone]')].map(
+      (el) => el.getAttribute('data-tone'),
+    );
+    expect(tones).toEqual(['whatsapp', 'instagram']);
+  });
+
+  it('the builder library: an icon per step', () => {
+    showBuilder(live());
+    expect(screen.getByTestId('library-send_buttons').querySelector('svg')).not.toBeNull();
   });
 });

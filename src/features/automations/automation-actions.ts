@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
@@ -262,5 +263,28 @@ export async function provisionWebhook(automationId: string): Promise<WebhookTri
       status: isApiError(cause) ? cause.status : undefined,
     });
     return null;
+  }
+}
+
+/**
+ * Delete (DELETE /api/automations/:id). The route deletes the automation and,
+ * by cascade, its runs; a conversation parked on one of its runs is released.
+ * `false`: it was not deleted.
+ */
+export async function deleteAutomation(id: string): Promise<boolean> {
+  try {
+    await serverApi().delete({
+      endpoint: automationEndpoints.one(id),
+      payload: z.unknown(),
+      raw: true,
+    });
+    revalidatePath('/[locale]/studio/automations', 'layout');
+    return true;
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('automations.delete_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return false;
   }
 }
