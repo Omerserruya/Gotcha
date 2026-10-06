@@ -20,6 +20,7 @@ import {
   latestInboundId,
   isGenerating,
 } from "../services/copilot-suggestions.service";
+import { getCustomerMemory } from "../services/customer-memory.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
@@ -523,6 +524,22 @@ router.post("/:conversationId/suggestions/refresh", requireEntitlement("ai.copil
   } catch (err: any) {
     console.error("AI suggestions refresh error:", err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to refresh suggestions" });
+  }
+});
+
+/**
+ * GET /:conversationId/customer-memory - what GOTCHA remembers about this
+ * customer, exactly as the AI is given it (services/customer-memory.service.ts:
+ * the prompt renders from the same loaders). A read; never calls a model.
+ */
+router.get("/:conversationId/customer-memory", async (req: Request, res: Response) => {
+  try {
+    const memory = await getCustomerMemory(req.tenantId!, req.params.conversationId as string);
+    if (!memory) { res.status(404).json({ error: "Conversation not found" }); return; }
+    res.json({ data: memory });
+  } catch (err: any) {
+    console.error("customer-memory read error:", err?.message ?? err);
+    res.status(500).json({ error: "Failed to read customer memory" });
   }
 });
 

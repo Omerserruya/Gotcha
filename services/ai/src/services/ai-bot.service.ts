@@ -97,6 +97,7 @@ import {
   buildDocumentDirective,
 } from "./document-request.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
+import { loadProfileFactsForPrompt } from "./customer-memory.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
 import { isAgentArchitectureEnabled } from "@chatcenter/shared";
@@ -116,7 +117,6 @@ import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.servi
 import { prefetchCrmContext, renderCrmContextBlock, invalidateCrmPrefetch } from "./crm-prefetch.service";
 import { getCrmAdapter } from "./connectors/crm-adapter-resolver";
 import type { CrmVendor } from "./connectors/crm-adapter.types";
-import { resolveIdentity } from "./intelligence-ingest.service";
 import { resolveActiveStage } from "./intelligence/stage-resolver.service";
 import type { StageContextForPrompt } from "./intelligence/prompts/blocks/copilot-config-block";
 import {
@@ -1166,24 +1166,15 @@ async function buildSessionFactsBlock(opts: {
 
   // (1) Structured facts already extracted/persisted for this person.
   try {
-    const identity = await resolveIdentity(opts.tenantId, opts.conversationId);
-    if (identity) {
-      const profile = await (prisma as any).customerProfile
-        .findUnique({
-          where: { tenantId_identityKey: { tenantId: opts.tenantId, identityKey: identity.identityKey } },
-          select: { facts: true },
-        })
-        .catch(() => null);
-      const facts = (profile?.facts ?? {}) as Record<string, { value?: unknown }>;
-      const lines = Object.entries(facts)
-        .filter(([, v]) => v && v.value != null && String(v.value).trim() !== "")
-        .map(([k, v]) => `- ${k}: ${String(v.value).slice(0, 120)}`);
-      if (lines.length) {
-        parts.push(
-          "## Facts already known about this customer (treat as established - do NOT re-ask)\n" +
-            lines.join("\n"),
-        );
-      }
+    // The same loader GET /api/customer-memory returns, so the screen's
+    // "GOTCHA remembers" is exactly this list.
+    const known = await loadProfileFactsForPrompt(opts.tenantId, opts.conversationId);
+    const lines = known.map((f) => `- ${f.key}: ${f.value}`);
+    if (lines.length) {
+      parts.push(
+        "## Facts already known about this customer (treat as established - do NOT re-ask)\n" +
+          lines.join("\n"),
+      );
     }
   } catch {
     /* non-fatal - fall through to transcript layer */
