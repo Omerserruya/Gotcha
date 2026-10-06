@@ -22,6 +22,7 @@ import automations from '@/i18n/messages/en/automations.json';
 import capabilities from '@/i18n/messages/en/capabilities.json';
 import employees from '@/i18n/messages/en/employees.json';
 import knowledge from '@/i18n/messages/en/knowledge.json';
+import skills from '@/i18n/messages/en/skills.json';
 import studio from '@/i18n/messages/en/studio.json';
 import { StudioIndex } from './StudioIndex';
 
@@ -47,6 +48,7 @@ import { StudioIndex } from './StudioIndex';
 const STUDIO_SECTIONS = [
   { id: 'employees', href: '/studio/employees', permission: 'ai:employees:read' },
   { id: 'knowledge', href: '/studio/knowledge', permission: 'ai:knowledge:read' },
+  { id: 'skills', href: '/studio/skills', permission: 'ai:employees:read' },
   { id: 'automations', href: '/studio/automations', permission: 'ai:workflows:read' },
   { id: 'capabilities', href: '/studio/capabilities', permission: 'ai:tools:read' },
 ] as const;
@@ -62,7 +64,7 @@ const show = (permissions: readonly string[], status: 'loaded' | 'unavailable' =
   render(
     <NextIntlClientProvider
       locale="en"
-      messages={{ studio, employees, knowledge, automations, capabilities }}
+      messages={{ studio, employees, knowledge, skills, automations, capabilities }}
     >
       <PermissionsProvider permissions={permissions as never} status={status} tenantId="t1">
         <StudioIndex areas={STUDIO_SECTIONS} />

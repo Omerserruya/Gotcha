@@ -1,0 +1,193 @@
+{
+  "title": "Skills",
+  "description": "What an AI employee does in a specific case. Write it once, give it to any employee",
+  "fromTemplate": "From a template",
+  "fromTemplateWhy": "Templates come with the next phase of skills. For now, describe one.",
+  "describe": "Describe a new skill",
+  "filter": {
+    "all": "All · {count}",
+    "orders": "Orders · {count}",
+    "products": "Products · {count}",
+    "bookings": "Bookings · {count}",
+    "other": "Other · {count}"
+  },
+  "columns": {
+    "skill": "Skill",
+    "steps": "Steps and tools",
+    "usedBy": "Used by",
+    "week": "This week"
+  },
+  "steps": "{count, plural, =1 {1 step} other {# steps}}",
+  "runs": "{count, plural, =1 {1 run} other {# runs}}",
+  "alone": "{share} alone",
+  "watching": "watching",
+  "noOne": "Nobody",
+  "standing": {
+    "live": "Live",
+    "watch": "Watch only",
+    "approval": "Asks you over {amount}",
+    "unused": "Not in use"
+  },
+  "statsUnread": "This week’s runs couldn’t be read just now.",
+  "unread": "The skills couldn’t be read just now. This is our side, not yours.",
+  "empty": "No skills yet. Describe one: when it applies, the steps, and where it must stop.",
+  "emptyFilter": "No skills in this category yet.",
+  "missing": {
+    "title": "Missing skills",
+    "why": "GOTCHA will suggest skills from conversations no skill handled, with how often they came up. That comes with the next phase of skills."
+  },
+  "explainer": {
+    "title": "Skills or automations?",
+    "body": "A skill needs judgement: understand, check, decide, explain. An automation is fixed: when this happens, always do that.",
+    "link": "Open Automations"
+  },
+  "form": {
+    "when": "When to use it",
+    "name": "Name",
+    "namePlaceholder": "Exchange a product",
+    "situation": "In the customer’s words",
+    "situationPlaceholder": "The customer wants another size or colour",
+    "category": "Category",
+    "categories": {
+      "orders": "Orders",
+      "products": "Products",
+      "bookings": "Bookings",
+      "other": "Other"
+    },
+    "whenLabel": "When to use it",
+    "whenPlaceholder": "The customer wants the same item in a different size or colour",
+    "soundsLike": "Sounds like",
+    "examplePlaceholder": "A phrase a customer used, then Enter",
+    "meaningNotKeywords": "GOTCHA matches the meaning, not the words.",
+    "notFor": "Not for",
+    "notForPlaceholder": "Damaged or faulty items",
+    "notForSkill": "The skill that handles it instead",
+    "notForNoSkill": "No skill - just not this one",
+    "addNotFor": "+ Not for…",
+    "steps": "Steps",
+    "toolsUnread": "The tool list couldn’t be read just now, so tools can’t be added. The ones already on a step are kept.",
+    "stepTitle": "Step {n}",
+    "stepTitlePlaceholder": "Find the order",
+    "stepKind": "What step {n} does",
+    "kinds": {
+      "find": "find",
+      "check": "check",
+      "change": "change",
+      "document": "document",
+      "message": "message",
+      "approval": "ask for approval",
+      "handover": "hand over"
+    },
+    "addTool": "Add a tool to step {n}",
+    "addToolOption": "+ Tool",
+    "toolReasons": {
+      "integration_not_connected": "not connected",
+      "tool_disabled_for_workspace": "switched off for the workspace",
+      "not_allowed_for_employee": "not allowed for this employee",
+      "no_calendar_connected": "no calendar connected"
+    },
+    "guidance": "How to do step {n}",
+    "guidancePlaceholder": "How to do it - e.g. by phone number first, ask for the order number only if nothing matches",
+    "asksOver": "Asks you first over",
+    "asksOverNone": "never",
+    "elseLabel": "Otherwise, at step {n}",
+    "elsePlaceholder": "Otherwise… (if it already shipped, apologise and offer…)",
+    "drag": "Drag to reorder",
+    "moveUp": "Move step {n} up",
+    "moveDown": "Move step {n} down",
+    "removeStep": "Remove step {n}",
+    "addStep": "+ Add a step ·",
+    "rules": "Rules",
+    "ruleType": "Rule {n}",
+    "ruleText": "What rule {n} says",
+    "ruleTypes": {
+      "never": "Never",
+      "handover": "Hand over"
+    },
+    "rulePlaceholders": {
+      "never": "Offer a cash refund in an exchange",
+      "handover": "If the customer is upset twice, or asks for a person"
+    },
+    "addRule": {
+      "never": "+ Never…",
+      "handover": "+ Hand over when…"
+    },
+    "rulesOverride": "Rules override the steps.",
+    "remove": "Remove {what}",
+    "problems": {
+      "name_required": "Give the skill a name.",
+      "step_title_required": "Say what this step does.",
+      "too_many_steps": "Up to 20 steps.",
+      "too_many_tools": "Up to 10 tools on a step.",
+      "too_many_items": "Up to 20.",
+      "amount_invalid": "An amount, in numbers."
+    }
+  },
+  "new": {
+    "title": "New skill",
+    "description": "Describe what the employee should do. GOTCHA writes the steps",
+    "close": "Close",
+    "prompt": "When someone wants gift wrapping on an order, check it hasn’t shipped, add the wrap and send them a payment link",
+    "writeIt": "Write it",
+    "writeItWhy": "Writing a skill from a sentence comes later. For now, write it below - the same fields GOTCHA would fill.",
+    "backtest": {
+      "title": "If it had been running",
+      "why": "How many past conversations this would have caught, with an example, comes with the next phase of skills."
+    },
+    "giveTo": "Give it to",
+    "noEmployees": "There are no AI employees to give it to yet.",
+    "employeesUnread": "The employees couldn’t be read just now.",
+    "start": {
+      "title": "Start it",
+      "watch": "Watch for a week, tell me what it would do",
+      "on": "Turn it on now"
+    },
+    "save": "Save skill",
+    "saving": "Saving…",
+    "test": "Test on a past conversation",
+    "testWhy": "Testing a skill on a past conversation comes with the next phase of skills.",
+    "cancel": "Cancel",
+    "failed": {
+      "invalid": "Something on the skill isn’t right - see the field marked.",
+      "forbidden": "Your role can’t create skills. Someone with an admin role can.",
+      "not_found": "That skill is gone.",
+      "failed": "The skill couldn’t be saved just now. Nothing was changed."
+    },
+    "partly": "The skill is saved as a draft, but it couldn’t be started for {names}. Start it from each employee’s Skills tab.",
+    "open": "Open the skill"
+  },
+  "editor": {
+    "crumbs": "Where you are",
+    "version": "Version {version}",
+    "runLog": "Run log",
+    "save": "Save",
+    "nothingToSave": "Nothing has changed since it was saved.",
+    "saved": "Saved - version {version}. It applies from the next conversation; one in progress finishes on the version it started.",
+    "usedBy": "Used by",
+    "mode": {
+      "on": "On",
+      "watch": "Watching"
+    },
+    "startsWatching": "Given here, it starts in Watch. Turn it On from the employee’s Skills tab.",
+    "giveFailed": "Couldn’t change this just now.",
+    "test": "Test on a past conversation",
+    "sandbox": "sandbox",
+    "testWhy": "Running the steps against a real past conversation, check by check, comes with the next phase of skills.",
+    "stats": "Last 7 days · {runs} runs · {alone} alone · {asked} asked you",
+    "statsUnread": "The last 7 days couldn’t be read just now.",
+    "logReading": "Reading the runs…",
+    "logFailed": "The runs couldn’t be read just now.",
+    "logEmpty": "It hasn’t run yet.",
+    "logMore": "Older runs",
+    "runStatus": {
+      "active": "Running",
+      "completed": "Done",
+      "handed_over": "Handed over",
+      "failed": "Failed",
+      "abandoned": "Stopped"
+    },
+    "runSteps": "{count, plural, =1 {1 step} other {# steps}} · version {version}",
+    "openConversation": "Open the conversation"
+  },
+  "notFound": "This skill isn’t here - it may have been archived, or it belongs to another workspace."
+}

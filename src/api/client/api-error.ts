@@ -101,6 +101,8 @@ export interface ApiErrorInit {
   readonly current?: number;
   /** A 429's own wait, where the route sends one (`REFRESH_RATE_LIMITED`). */
   readonly retryAfterSeconds?: number;
+  /** A 422's field path, where the route names one. */
+  readonly field?: string;
   readonly cause?: unknown;
 }
 
@@ -128,6 +130,8 @@ export class ApiError extends Error {
   readonly current?: number;
   /** A 429's own wait, where the route sends one (`REFRESH_RATE_LIMITED`). */
   readonly retryAfterSeconds?: number;
+  /** A 422's field path, where the route names one. */
+  readonly field?: string;
 
   constructor(init: ApiErrorInit) {
     super(init.developerMessage ?? init.kind, { cause: init.cause });
@@ -153,6 +157,7 @@ export class ApiError extends Error {
     this.limit = init.limit;
     this.current = init.current;
     this.retryAfterSeconds = init.retryAfterSeconds;
+    this.field = init.field;
   }
 
   /**

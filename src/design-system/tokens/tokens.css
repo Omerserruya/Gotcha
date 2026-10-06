@@ -539,6 +539,18 @@
      */
     --ai-avatar-surface: #eae4fb;
     --ai-avatar-text: #4b3e8e;
+    /* 09's "Used by": an employee's initials on one of three fills, by employee. */
+    --employee-avatar-1: #c9bcf7;
+    --employee-avatar-2: #e8d5a8;
+    --employee-avatar-3: #bfd9c8;
+    /* 09's "Asks you over ₪300": amber, a step quieter than --intent-blocked-surface. */
+    --approval-chip-surface: #f6edd3;
+    /* 09's table: the rule under its column heads. */
+    --table-head-rule: #f2efe9;
+    /* 09b's rule chips: Never (red) and Hand over (blue). */
+    --rule-never-surface: #fbeee8;
+    --rule-never-text: #8e3418;
+    --rule-handover-surface: #eef1f6;
     /* 02's AI link ("Summarise all of it"): the violet text over this underline. */
     --ai-link-underline: #cfc6f0;
     /*

@@ -156,6 +156,16 @@ export const STUDIO_SECTIONS: readonly NavigationChild[] = [
     permission: PERMISSIONS.ai.knowledge.read,
   },
   {
+    /*
+     * Design 6: what an employee does in a specific case. Read through the
+     * employees permission until Backend names a skills one (assumed).
+     */
+    id: 'skills',
+    labelKey: 'studio.skills',
+    href: '/studio/skills',
+    permission: PERMISSIONS.ai.employees.read,
+  },
+  {
     id: 'automations',
     labelKey: 'studio.automations',
     href: '/studio/automations',

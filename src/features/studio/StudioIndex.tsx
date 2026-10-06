@@ -50,9 +50,13 @@ import styles from './Studio.module.css';
  * today, and a mapping that works by coincidence breaks silently the first time
  * somebody names a section differently from its catalogue.
  */
-const NAMESPACE: Record<string, 'employees' | 'knowledge' | 'automations' | 'capabilities'> = {
+const NAMESPACE: Record<
+  string,
+  'employees' | 'knowledge' | 'skills' | 'automations' | 'capabilities'
+> = {
   employees: 'employees',
   knowledge: 'knowledge',
+  skills: 'skills',
   automations: 'automations',
   capabilities: 'capabilities',
 };
@@ -74,9 +78,10 @@ export function StudioIndex({ areas }: { readonly areas: readonly StudioArea[] }
   const { canSee } = usePermissions();
   const employees = useTranslations('employees');
   const knowledge = useTranslations('knowledge');
+  const skills = useTranslations('skills');
   const automations = useTranslations('automations');
   const capabilities = useTranslations('capabilities');
-  const words = { employees, knowledge, automations, capabilities };
+  const words = { employees, knowledge, skills, automations, capabilities };
 
   /*
    * `href` is optional on a navigation child, so a section without one is not a

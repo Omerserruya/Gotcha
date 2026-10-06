@@ -1,0 +1,359 @@
+@layer features {
+  /*
+   * 09b's blocks (design 6): white cards, radius 14, padding 13px 18px; a
+   * 9.5px mono eyebrow at .18em; steps at 10px 18px with a 22px ink number;
+   * tool chips #F3F0EA radius 6; "Sounds like" phrases as speech bubbles
+   * (10 10 10 3). Inputs are drawn as the text they hold, so the editor
+   * reads like 09b's page and is still every field.
+   */
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    min-inline-size: 0;
+    line-height: normal;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 13px 18px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .eyebrow {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .identity {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 0.8fr);
+    gap: 10px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-inline-size: 0;
+  }
+
+  .fieldLabel {
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .input,
+  .inlineInput,
+  .inlineSelect,
+  .lead,
+  .guidance,
+  .elseNote,
+  .stepTitle,
+  .chipInput,
+  .amount,
+  .kind,
+  .addTool,
+  .ruleType {
+    min-inline-size: 0;
+    padding: 5px 8px;
+    border: var(--border-width-thin) solid transparent;
+    border-radius: 7px;
+    background-color: transparent;
+    font: inherit;
+    color: inherit;
+  }
+
+  .input,
+  .inlineSelect,
+  .kind,
+  .addTool,
+  .amount {
+    border-color: var(--border-default);
+    background-color: var(--panel-field);
+    font-size: 12.5px;
+  }
+
+  :is(.inlineInput, .lead, .guidance, .elseNote, .stepTitle, .chipInput):is(:hover, :focus) {
+    border-color: var(--border-default);
+  }
+
+  .lead {
+    resize: block;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .line {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .lineLabel {
+    flex: none;
+    padding-block-start: 6px;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .chips,
+  .exclusions,
+  .rules {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .exclusions,
+  .rules {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .example {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 6px 5px 10px;
+    border-radius: 10px 10px 10px 3px;
+    background-color: var(--panel-inset);
+    font-size: 12px;
+  }
+
+  .tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 4px 3px 8px;
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 11px;
+    color: var(--text-body);
+    white-space: nowrap;
+  }
+
+  .chipInput {
+    inline-size: 200px;
+    font-size: 12px;
+  }
+
+  .chipRemove,
+  .iconButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .iconButton {
+    inline-size: 22px;
+    block-size: 22px;
+    font-size: 12px;
+  }
+
+  .iconButton:disabled {
+    color: var(--text-disabled);
+    cursor: default;
+  }
+
+  .exclusion,
+  .rule {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+  }
+
+  .exclusion .inlineInput,
+  .rule .inlineInput {
+    flex: 1;
+  }
+
+  .add {
+    padding: 2px 6px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .add:hover {
+    color: var(--text-primary);
+  }
+
+  .add:disabled {
+    color: var(--text-disabled);
+    cursor: default;
+  }
+
+  .hint {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--text-subtle);
+  }
+
+  .error {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--intent-urgent-text);
+  }
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    margin: 0 -18px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 10px 18px;
+  }
+
+  .step[data-dragging] {
+    opacity: 0.5;
+  }
+
+  .number {
+    flex: none;
+    inline-size: 22px;
+    block-size: 22px;
+    margin-block-start: 3px;
+    border-radius: 50%;
+    background-color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 22px;
+    text-align: center;
+    color: var(--frame-text);
+  }
+
+  .stepBody {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 5px;
+    min-inline-size: 0;
+  }
+
+  .stepTop {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stepTitle {
+    flex: 1;
+    font-size: 13.5px;
+    font-weight: 500;
+  }
+
+  .kind,
+  .addTool,
+  .ruleType {
+    font-size: 11px;
+  }
+
+  .guidance {
+    resize: block;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .stepExtras {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .approval {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px 2px 8px;
+    border-radius: 6px;
+    background-color: var(--approval-chip-surface);
+    font-size: 11px;
+    color: var(--intent-blocked-text);
+  }
+
+  .amount {
+    inline-size: 72px;
+    padding: 2px 6px;
+    font-size: 11px;
+  }
+
+  .elseNote {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .stepControls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .grip {
+    display: inline-flex;
+    padding: 2px;
+    color: var(--text-faint);
+    cursor: grab;
+  }
+
+  .addStep {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    margin: 0;
+    padding-inline-start: 36px;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .ruleType {
+    padding: 3px 8px;
+    border: 0;
+    border-radius: 6px;
+  }
+
+  .ruleType[data-type='never'] {
+    background-color: var(--rule-never-surface);
+    color: var(--rule-never-text);
+  }
+
+  .ruleType[data-type='handover'] {
+    background-color: var(--rule-handover-surface);
+    color: var(--signal-info-text);
+  }
+}

@@ -431,6 +431,31 @@ export const agentEndpoints = {
  * contract narrows it deliberately rather than passing it through. See
  * `aiEmployeeSchema`.
  */
+/**
+ * Business skills (Backend b9278d7e; plan §3.1). Read with
+ * `ai:employees:read`, written with `ai:employees:update`. Not
+ * `/api/ai-skills`, which is the SYSTEM catalogue.
+ *
+ *   list    ?includeArchived=&from=   each skill with its `stats`
+ *   one     GET ?from= · PUT (only what is sent, version++) · DELETE (archive)
+ *   create  POST → 201, `status: draft, version: 1`
+ *   runs    ?limit=&cursor=           the viewer's visible conversations only
+ *   tools   ?agentId=                 the step editor's tool choices
+ *   422     `{ error, field, code: INVALID_SKILL }` - shown at the field
+ */
+export const skillEndpoints = {
+  list: () => endpoint('/api/business-skills'),
+  one: (id: string) => endpoint('/api/business-skills/{id}', { id }),
+  stats: () => endpoint('/api/business-skills/stats'),
+  runs: (id: string) => endpoint('/api/business-skills/{id}/runs', { id }),
+  tools: () => endpoint('/api/business-skills/tools'),
+  /** GET, and PUT the FULL list `[{skillId, mode?, order?}]` - a missing one is removed. */
+  forEmployee: (id: string) => endpoint('/api/ai-agents/{id}/skills', { id }),
+  fit: (id: string) => endpoint('/api/ai-agents/{id}/skills/fit', { id }),
+  /** PATCH `{ noSkillPolicy }` - not PUT. */
+  employee: (id: string) => endpoint('/api/ai-agents/{id}', { id }),
+} as const;
+
 export const aiEmployeeEndpoints = {
   list: () => endpoint('/api/ai-agents'),
   effectivePermissions: (id: string) =>

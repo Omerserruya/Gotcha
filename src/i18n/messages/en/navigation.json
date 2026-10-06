@@ -33,6 +33,7 @@
   "studio": {
     "employees": "Employees",
     "knowledge": "Knowledge",
+    "skills": "Skills",
     "automations": "Automations",
     "capabilities": "Integrations"
   },

@@ -45,6 +45,8 @@ const EXCEPTIONS: Record<string, string> = {
   'features/auth/SecondFactor.module.css .box': 'digit tiles',
   // 09's automation name: 02's only 24px heading, at −0.025em (`ls:-0.6px`).
   'features/automations/Automations.module.css .name': '09 heading',
+  // 21's sheet title (design 6): "New skill" at 18px/600, `letter-spacing:-0.015em`.
+  'features/skills/NewSkill.module.css .title': '21 sheet title',
 };
 
 function files(dir: string): string[] {

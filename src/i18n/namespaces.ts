@@ -89,7 +89,9 @@ export const NAMESPACES = [
   'employees',
   /** Studio · knowledge - screen 08. */
   'knowledge',
-  /** Studio · automations - screen 09. */
+  /** Studio · skills - screens 09, 09b, 21 (design 6). */
+  'skills',
+  /** Studio · automations - screen 09c (design 6; 09 before it). */
   'automations',
   /** Studio · capabilities - screen 10. */
   'capabilities',
