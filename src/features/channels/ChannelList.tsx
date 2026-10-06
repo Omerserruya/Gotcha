@@ -170,18 +170,12 @@ export async function ChannelList({
               </span>
 
               {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
-              {row.channel === 'WEBCHAT' && row.widgetId ? (
-                // Web chat's settings are its embed code - reachable any time after Create.
+              {row.channel === 'WEBCHAT' ? (
+                // 13g-13j: the widget's own settings - appearance to install (the code is its last tab).
                 <Link
-                  href={
-                    embed === row.id
-                      ? '/settings/channels'
-                      : { pathname: '/settings/channels', query: { embed: row.id } }
-                  }
+                  href={`/settings/channels/webchat/${row.id}`}
                   className={styles.settingsLink}
-                  aria-expanded={embed === row.id}
                   data-testid={`channel-settings-${row.id}`}
-                  scroll={false}
                 >
                   {t('rowSettings')}
                 </Link>

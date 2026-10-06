@@ -16,8 +16,9 @@ vi.mock('./actions', () => ({
   setResponseMode,
 }));
 const replace = vi.hoisted(() => vi.fn());
+const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
-  useRouter: () => ({ replace }),
+  useRouter: () => ({ replace, push }),
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}
@@ -31,6 +32,7 @@ const assign = vi.fn();
 beforeEach(() => {
   startChannelConnect.mockReset();
   replace.mockReset();
+  push.mockReset();
   assign.mockReset();
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -95,12 +97,12 @@ describe('★ the row itself: "Not set up yet" in place of Connect', () => {
 });
 
 describe('★★ web chat: after Create, the code to paste - in the same panel', () => {
-  it('★ created: the code opens on the NEW row - held in the URL, so the refresh keeps it', async () => {
+  it("★ created: 13g, the screen after Connect - the NEW widget's own settings", async () => {
     connectWebChat.mockResolvedValue({ ok: true, data: { id: 'ch1', externalId: 'wc_123' } });
     setResponseMode.mockResolvedValue({ ok: true });
     show('WEBCHAT');
     await userEvent.click(screen.getByTestId('connect-webchat-create'));
-    expect(replace).toHaveBeenCalledWith('/settings/channels?embed=ch1', { scroll: false });
+    expect(push).toHaveBeenCalledWith('/settings/channels/webchat/ch1');
   });
 
   it('the snippet: ITS widget id; Copy copies exactly that', async () => {

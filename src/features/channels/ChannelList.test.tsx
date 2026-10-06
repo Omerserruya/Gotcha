@@ -176,7 +176,7 @@ describe('★ a provider with no app on the server is said up front, not after a
   });
 });
 
-describe('★★ web chat’s Settings is its embed code - reachable any time after Create', () => {
+describe('★★ web chat’s Settings is its own page (13g-13j) - reachable any time after Create', () => {
   const webchat = () =>
     channelSchema.parse({
       id: 'wc1',
@@ -185,13 +185,13 @@ describe('★★ web chat’s Settings is its embed code - reachable any time af
       externalId: 'widget_64aba7ec',
     });
 
-  it('Settings opens it on the row (?embed=); open, it closes it', async () => {
+  it("Settings opens the widget's settings; an old ?embed= link still shows the code on the row", async () => {
     const one = render(
       await ChannelList({ channels: [webchat()], voice: [], voiceOffered: false, windowDays: 30 }),
     );
     expect(screen.getByTestId('channel-settings-wc1')).toHaveAttribute(
       'href',
-      '/settings/channels?embed=wc1',
+      '/settings/channels/webchat/wc1',
     );
     expect(screen.queryByTestId('embed-open')).toBeNull();
     one.unmount();
@@ -205,11 +205,6 @@ describe('★★ web chat’s Settings is its embed code - reachable any time af
       }),
     );
     expect(screen.getByTestId('embed-open')).toHaveTextContent('widget_64aba7ec');
-    // The row stays a row; the code wraps onto its own full line beneath it.
     expect(screen.getByTestId('channel-wc1').className).toMatch(/rowWithEmbed/);
-    expect(screen.getByTestId('channel-settings-wc1')).toHaveAttribute(
-      'href',
-      '/settings/channels',
-    );
   });
 });

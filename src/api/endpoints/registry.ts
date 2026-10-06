@@ -527,6 +527,8 @@ export const channelEndpoints = {
     }),
   /** Creates the widget as PENDING - a draft, not a connected channel. */
   createWebChat: () => endpoint('/api/channels/webchat/create'),
+  /** GET / PUT - the widget's config (13g-13j); a PUT merges into what is stored. */
+  webchatSettings: (id: string) => endpoint('/api/channels/webchat/{id}/settings', { id }),
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
   connectEmail: () => endpoint('/api/channels/connect/email'),
   responseMode: (id: string) => endpoint('/api/channels/{id}/response-mode', { id }),

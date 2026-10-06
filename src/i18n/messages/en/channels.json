@@ -449,5 +449,117 @@
     "copied": "Copied",
     "copyFailed": "The code couldn't be copied - select it and copy it by hand.",
     "done": "Done"
+  },
+  "webchat": {
+    "crumbs": "Breadcrumbs",
+    "channels": "Channels",
+    "title": "Web chat",
+    "subtitle": "The chat on your website. Set it up, preview it on the right, then install",
+    "live": "Live",
+    "notLive": "Not live yet",
+    "goLive": "Go live",
+    "tabsLabel": "Web chat settings",
+    "tabs": {
+      "appearance": "Appearance",
+      "conversation": "Conversation",
+      "behaviour": "Behaviour",
+      "install": "Install"
+    },
+    "saving": {
+      "saving": "Saving…",
+      "saved": "Saved",
+      "failed": "Not saved. Change it again to retry"
+    },
+    "notFound": "There is no web chat with this address in this workspace.",
+    "unread": "Couldn't read this web chat's settings. Try again in a moment.",
+    "appearance": {
+      "colour": "Main colour",
+      "custom": "Your own colour",
+      "hue": "Hue",
+      "code": "Colour code",
+      "codeHint": "Paste any hex code",
+      "codeBad": "A hex code looks like #C96A4B",
+      "logo": "Logo",
+      "logoHint": "Shown at the top of the chat",
+      "cover": "Cover image",
+      "coverHint": "Shown at the top of the widget",
+      "position": "Position",
+      "side": {
+        "right": "Right",
+        "left": "Left"
+      },
+      "replace": "Replace",
+      "addressHint": "The image's https address. Uploading from your computer isn't available yet",
+      "addressBad": "Use an address that starts with https://"
+    },
+    "conversation": {
+      "name": "Assistant name",
+      "popup": "Pop-up message",
+      "questions": "Opening questions",
+      "question": "Opening question {n}",
+      "questionsHint": "Your three most common questions. One tap and the customer gets an answer",
+      "employee": "Assigned AI employee",
+      "required": "Required",
+      "employeeHint": "What it knows, how it sounds and when it hands over are set on the employee in Studio",
+      "employeeWhy": "Choosing who answers the web chat isn't available here yet. It will be decided in one place with the rest of your routing",
+      "employeesUnread": "Couldn't read your AI employees.",
+      "paused": "paused",
+      "language": "Language",
+      "languages": {
+        "auto": "In the customer's language",
+        "he": "Always Hebrew",
+        "en": "Always English"
+      }
+    },
+    "behaviour": {
+      "popup": "Pop-up message",
+      "popupHint": "A small bubble above the button, once per visit",
+      "when": "When to show",
+      "rightAway": "Right away",
+      "seconds": "{s}s",
+      "whatsapp": "Continue on WhatsApp",
+      "whatsappHint": "A button that continues the same conversation on your WhatsApp",
+      "whatsappWhy": "Not available yet: the widget can't hand a conversation to WhatsApp",
+      "poweredBy": "Powered by GOTCHA",
+      "poweredByHint": "A small line at the bottom of the widget",
+      "products": {
+        "label": "Recommend products",
+        "hint": "Product cards from your catalogue, in stock only"
+      },
+      "cart": {
+        "label": "Add to cart from the chat",
+        "hint": "Customers add to cart without leaving the chat"
+      },
+      "deals": {
+        "label": "Show active deals",
+        "hint": "Only deals set up in your store"
+      },
+      "noCatalogue": "Not available yet: the web chat isn't connected to a store catalogue"
+    },
+    "install": {
+      "shopify": "Shopify",
+      "shopifyHint": "One click, reads stock and orders",
+      "shopifyWhy": "Not available yet. Use the line of code below on your Shopify theme",
+      "shopifyButton": "Install on Shopify",
+      "woo": "WooCommerce",
+      "wooHint": "One plugin, no code",
+      "wooWhy": "There is no plugin yet. Use the line of code below",
+      "wooButton": "Get the plugin",
+      "other": "Any other site · one line of code",
+      "otherHint": "Paste it before </body>. Changes in these settings reach the site without touching the code again",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Couldn't copy. Select the code and copy it",
+      "reading": "Preparing the code…",
+      "noWidget": "This web chat has no widget id yet, so there is no code to install.",
+      "liveNow": "Live. Visitors to your site can chat now",
+      "waiting": "Waiting for the first visit from your site. The status changes to Live on its own"
+    },
+    "preview": {
+      "label": "Preview",
+      "assistant": "Assistant",
+      "type": "Type a message",
+      "powered": "Powered by GOTCHA"
+    }
   }
 }

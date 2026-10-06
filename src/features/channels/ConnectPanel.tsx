@@ -167,15 +167,11 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
                */
               await setResponseMode(outcome.data.id, mode);
               /*
-               * Created: the row this panel lives in leaves the list (the
-               * channel is connected now), so the code opens on the NEW row -
-               * held in the URL, so the refresh keeps it, and Settings reopens it.
+               * Created: 13g is "the screen after Connect" - the widget's own
+               * settings, its code on the Install tab. The row's Settings
+               * reopens it any time.
                */
-              if (outcome.data.externalId) {
-                router.replace(`/settings/channels?embed=${encodeURIComponent(outcome.data.id)}`, {
-                  scroll: false,
-                });
-              } else onClose();
+              router.push(`/settings/channels/webchat/${encodeURIComponent(outcome.data.id)}`);
             })
           }
         >
