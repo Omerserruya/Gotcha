@@ -4,6 +4,7 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { knowledgeListSchema } from '@/api/contracts/knowledge';
+import { workspaceVoiceSchema, type WorkspaceVoice } from '@/api/contracts/workspace';
 import {
   discoveryReadSchema,
   scannedFacts,
@@ -13,7 +14,12 @@ import {
   type Discovery,
   type ScannedFact,
 } from '@/api/contracts/onboarding';
-import { authEndpoints, knowledgeEndpoints, onboardingEndpoints } from '@/api/endpoints/registry';
+import {
+  authEndpoints,
+  knowledgeEndpoints,
+  onboardingEndpoints,
+  workspaceEndpoints,
+} from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /** Where 00d's guess came from - its line under the title says so. */
@@ -125,4 +131,28 @@ export async function loadScannedFacts(): Promise<readonly ScannedFact[] | null>
     });
     return null;
   }
+}
+
+export interface LearnedRead {
+  readonly discovery: Discovery | null;
+  readonly facts: readonly ScannedFact[] | null;
+  /** `null`: unread. */
+  readonly voice: WorkspaceVoice | null;
+}
+
+/** 00f: what the read put in Knowledge, what it heard of the brand, the stored voice. */
+export async function loadLearned(): Promise<LearnedRead> {
+  const [discovery, facts, voice] = await Promise.all([
+    loadDiscovery(),
+    loadScannedFacts(),
+    serverApi()
+      .get({ endpoint: workspaceEndpoints.voice(), payload: workspaceVoiceSchema })
+      .catch((cause: unknown) => {
+        logger.warn('onboarding.voice_failed', {
+          status: isApiError(cause) ? cause.status : undefined,
+        });
+        return null;
+      }),
+  ]);
+  return { discovery, facts, voice };
 }

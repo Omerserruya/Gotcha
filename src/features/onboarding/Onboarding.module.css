@@ -145,7 +145,7 @@
     flex-direction: column;
     justify-content: center;
     inline-size: 100%;
-    max-inline-size: 700px;
+    max-inline-size: 860px;
     margin: auto;
     padding: 48px 56px;
   }
@@ -224,6 +224,12 @@
   .consent a {
     color: inherit;
     text-decoration: underline;
+  }
+
+  /* 00d and 00e are the design's narrower column; 00f's facts and voice use the width. */
+  .website,
+  .reading {
+    max-inline-size: 640px;
   }
 
   .website {
@@ -542,6 +548,196 @@
     text-decoration: none;
   }
 
+  /* 00f */
+  .learned {
+    display: grid;
+    grid-template-columns: 1fr 330px;
+    gap: 22px;
+    align-items: start;
+  }
+
+  .learnedMain {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-inline-size: 0;
+  }
+
+  .learnedMain > .subtitle {
+    margin: 0;
+  }
+
+  .facts {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 12px;
+    background-color: var(--panel-field);
+    list-style: none;
+  }
+
+  .fact {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 16px;
+    font-size: 13px;
+  }
+
+  .fact + .fact {
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .factText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .factPath {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+
+  .factReady {
+    flex: none;
+    color: var(--signal-done-text);
+  }
+
+  .inlineLink {
+    color: var(--text-secondary);
+  }
+
+  .notYet {
+    margin: 0;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background-color: var(--panel-inset);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .voice {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .voiceTitle {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .traits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .trait {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background-color: var(--ai-avatar-surface);
+    font-size: 11px;
+    color: var(--ai-avatar-text);
+  }
+
+  .scale {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .scale input {
+    margin: 0;
+  }
+
+  .scaleEnds {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-subtle);
+  }
+
+  .saysNever {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .saysNever > span {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .said {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .voiceEdit {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .voiceText {
+    padding: 10px 12px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 10px;
+    font: inherit;
+    font-size: 12.5px;
+    resize: block;
+  }
+
+  .guidance {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  .sample {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background-color: var(--panel-inset);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .textButton {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 12px;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .textButton:disabled {
+    color: var(--text-faint);
+    cursor: default;
+  }
+
   @media (width <= 1000px) {
     .frame {
       grid-template-columns: 1fr;
@@ -569,6 +765,10 @@
 
     .tracks {
       grid-template-columns: repeat(2, 1fr);
+    }
+
+    .learned {
+      grid-template-columns: 1fr;
     }
   }
 }
