@@ -20,6 +20,8 @@ import customDbAdminRoutes from "./routes/custom-db-admin";
 import connectorsAdminRoutes from "./routes/connectors-admin";
 import agentScoreRoutes from "./routes/agent-scores";
 import aiAgentRoutes from "./routes/ai-agents";
+import agentSkillRoutes from "./routes/agent-skills";
+import businessSkillRoutes from "./routes/business-skills";
 import aiAgentBuilderRoutes from "./routes/ai-agent-builder";
 import aiSkillsRoutes from "./routes/ai-skills";
 import routerRuleRoutes from "./routes/router-rules";
@@ -141,6 +143,10 @@ app.use("/api/agent-scores", agentScoreRoutes);
 // Mount the builder BEFORE ai-agents so its routes (/builder/*) resolve
 // before ai-agents' `GET /:id` could shadow them.
 app.use("/api/ai-agents/builder", aiAgentBuilderRoutes);
+// Business skills (AI Studio, design 6). agent-skills sits beside ai-agents
+// under the same prefix: /:id/skills has more segments than its /:id.
+app.use("/api/ai-agents", agentSkillRoutes);
+app.use("/api/business-skills", businessSkillRoutes);
 app.use("/api/ai-agents", aiAgentRoutes);
 app.use("/api/ai-skills", aiSkillsRoutes);
 app.use("/api/router-rules", routerRuleRoutes);

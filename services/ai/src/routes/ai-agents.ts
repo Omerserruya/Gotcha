@@ -614,12 +614,20 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       "salesContext", "goal", "successCriteria", "maxAutonomousMessages",
       "maxAutonomousMinutes", "confidenceThreshold", "escalationMessage",
       "conversationFlow", "customGuardrails", "capabilities",
-      "behavioralAnchors", "departmentId", "funnelId",
+      "behavioralAnchors", "departmentId", "funnelId", "noSkillPolicy",
     ] as const;
     const bodySrc = (req.body ?? {}) as Record<string, unknown>;
     const updateData: Record<string, any> = {};
     for (const k of AGENT_EDITABLE_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(bodySrc, k)) updateData[k] = bodySrc[k];
+    }
+
+    // What the employee does when no business skill fits. A closed list: an
+    // unknown value is refused, not stored (it would change nothing at runtime).
+    if (Object.prototype.hasOwnProperty.call(updateData, "noSkillPolicy") &&
+        !["answer_from_knowledge", "always_handover", "knowledge_only"].includes(updateData.noSkillPolicy)) {
+      res.status(422).json({ error: "noSkillPolicy must be answer_from_knowledge, always_handover or knowledge_only", field: "noSkillPolicy" });
+      return;
     }
 
     // Empty strings from the dropdowns mean "no binding" - coerce to NULL
