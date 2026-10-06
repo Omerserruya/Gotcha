@@ -23,6 +23,7 @@
 import { Router, Request, Response } from "express";
 import {
   prisma,
+  emitTagsAdded,
   authenticate,
   resolveTenant,
   requireActiveTenant,
@@ -120,6 +121,7 @@ router.post("/tags", requirePermissionOrRole("crm:contacts:update", "ADMIN"), as
     const contacts = await prisma.contact.findMany({ where: { tenantId, id: { in: ids } }, select: { id: true, tags: true } });
     if (contacts.length !== ids.length) { res.status(404).json({ error: "contact_not_found" }); return; }
     const next = new Map<string, string[]>();
+    const before = new Map(contacts.map((c) => [c.id, c.tags]));
     for (const c of contacts) {
       const current = Array.isArray(c.tags) ? (c.tags as unknown[]).map(String) : [];
       const after = [...new Set([...current.filter((t) => !remove.includes(t)), ...(add as string[])])];
@@ -134,6 +136,8 @@ router.post("/tags", requirePermissionOrRole("crm:contacts:update", "ADMIN"), as
     await prisma.$transaction(
       [...next].map(([id, tags]) => prisma.contact.updateMany({ where: { id, tenantId }, data: { tags } })),
     );
+    // Tag-added automations, once the write is in.
+    for (const [id, tags] of next) await emitTagsAdded(tenantId, id, before.get(id), tags);
     res.json({ data: Object.fromEntries(next) });
   } catch (err: any) {
     console.error("[contact-insights] tags failed:", err?.message);

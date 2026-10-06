@@ -1,4 +1,4 @@
-import { prisma, evaluateToolGate } from "@chatcenter/shared";
+import { prisma, evaluateToolGate, emitTagsAdded } from "@chatcenter/shared";
 import type { ToolGateResult, ScheduleMeetingArgs } from "@chatcenter/shared";
 import { getPolicy, validateAgainstPolicy } from "./policy.service";
 import { getCrmConnector, getMessagingConnector } from "./connectors/types";
@@ -228,6 +228,9 @@ export async function executeAction(
           data: { tags: merged as any },
           select: { id: true, tags: true },
         });
+        // Tag-added automations (the AI employee's tag counts; an
+        // automation's own add_tag never comes through here).
+        await emitTagsAdded(tenantId, contactId, existing.tags, merged);
         break;
       }
       case "noop":

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const DB = vi.hoisted(() => ({ contacts: [] as any[], convs: [] as any[], intel: [] as any[], messages: [] as any[] }));
+const DB = vi.hoisted(() => ({ contacts: [] as any[], convs: [] as any[], intel: [] as any[], messages: [] as any[], emitted: [] as any[] }));
 const guard = (m: string, w: any) => { if (!w?.tenantId) throw new Error(`tenant guard: ${m}`); };
 
 vi.mock("@chatcenter/shared", async () => {
@@ -38,6 +38,10 @@ vi.mock("@chatcenter/shared", async () => {
   return {
     ...actual,
     prisma,
+    // The real "which tags are new" rule; the queue write is recorded instead.
+    emitTagsAdded: async (_t: string, id: string, before: unknown, after: unknown) => {
+      for (const tag of actual.tagsAdded(before, after)) DB.emitted.push({ id, tag });
+    },
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: "ADMIN" }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
@@ -52,6 +56,7 @@ app.use(express.json());
 app.use("/api/contacts", router);
 
 beforeEach(() => {
+  DB.emitted = [];
   DB.contacts = [
     { id: "c1", tenantId: "T", externalId: "972501", channel: "WHATSAPP", tags: ["VIP"] },
     { id: "c2", tenantId: "T", externalId: "972502", channel: "WHATSAPP", tags: [] },
@@ -128,6 +133,14 @@ describe("POST /tags", () => {
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual({ c1: ["uitest"], c2: ["uitest"] });
     expect(DB.contacts.find((c) => c.id === "c1").tags).toEqual(["uitest"]);
+    // Tag-added automations hear each NEW tag once per contact.
+    expect(DB.emitted).toEqual([{ id: "c1", tag: "uitest" }, { id: "c2", tag: "uitest" }]);
+  });
+
+  it("re-adding a tag the contact has, or only removing, fires no tag-added event", async () => {
+    await request(app).post("/api/contacts/tags").send({ contactIds: ["c1"], add: ["VIP"] });
+    await request(app).post("/api/contacts/tags").send({ contactIds: ["c1"], remove: ["VIP"] });
+    expect(DB.emitted).toEqual([]);
   });
 
   it("★ 'vip' is not 'VIP' - removing the wrong case removes nothing", async () => {
@@ -138,6 +151,7 @@ describe("POST /tags", () => {
   it("★ a contact of another tenant in the list → 404 and nothing written", async () => {
     const r = await request(app).post("/api/contacts/tags").send({ contactIds: ["c1", "cX"], add: ["x"] });
     expect(r.status).toBe(404);
+    expect(DB.emitted).toEqual([]);
     expect(DB.contacts.find((c) => c.id === "c1").tags).toEqual(["VIP"]);
   });
 

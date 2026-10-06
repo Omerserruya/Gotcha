@@ -16,6 +16,7 @@ export type {
   HistoricalImportChunkJob,
   HistoricalIntelligenceJob,
 } from "./lib/queue";
+export { tagsAdded, emitTagsAdded } from "./lib/automation-events";
 
 // Historical import: the one mapping between the pipeline's thirteen states and
 // the four the customer actually sees.
