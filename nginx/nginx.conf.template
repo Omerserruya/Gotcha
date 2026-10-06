@@ -136,7 +136,7 @@ http {
     # Authentik gets its own zone so app traffic can never throttle a login.
     limit_req_zone $binary_remote_addr zone=authentik:10m rate=20r/s;
 
-    # ★★ EVERY VHOST, NOT ONE — THIS BIT US TWICE IN ONE DAY.
+    # ★★ EVERY VHOST, NOT ONE - THIS BIT US TWICE IN ONE DAY.
     #
     # nginx's default `proxy_buffer_size` is one page (4k), and that is the
     # buffer an upstream's RESPONSE HEADER BLOCK must fit in. Two upstreams
@@ -148,7 +148,7 @@ http {
     #                          502s through the gateway while answering 200
     #                          directly on :9000
     #
-    # ⚠ The failure is `upstream sent too big header` and a 502 — the service
+    # ⚠ The failure is `upstream sent too big header` and a 502 - the service
     #   is fine and only the proxy fails, which is why it reads as an outage
     #   with no error in the application's own logs.
     #
@@ -929,6 +929,17 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # AI Studio business skills (design 6) - ai service.
+        location /api/business-skills {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/router-rules {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
@@ -1574,6 +1585,15 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
 
+        location ~ ^/t/([^/]+)/api/business-skills(.*)$ {
+            proxy_pass http://ai_service/api/business-skills$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
         # Tenant-prefixed System Copilot agent runtime. SSE - see comment
         # on the unprefixed /api/agent block above.
         location ~ ^/t/([^/]+)/api/agent(.*)$ {
@@ -1804,7 +1824,7 @@ http {
         # have pinned one language for a bilingual product, which is why there is
         # no rewrite here.
         # ════════════════════════════════════════════════════════════════════
-        # ★★ THE FLOW EXECUTOR, FIRST-PARTY — SO THE PASSWORD NEVER ENTERS NODE
+        # ★★ THE FLOW EXECUTOR, FIRST-PARTY - SO THE PASSWORD NEVER ENTERS NODE
         # ════════════════════════════════════════════════════════════════════
         # /v2 serves its own sign-in panel and drives Authentik's flow executor
         # directly. The password therefore travels:
@@ -1817,7 +1837,7 @@ http {
         # here would put our own process in the credential path.
         #
         # It adds no new exposure, because this same gateway already fronts
-        # `auth-dev.gotcha.co.il` further down this file — every password typed
+        # `auth-dev.gotcha.co.il` further down this file - every password typed
         # on the IdP's own page already crosses this proxy today.
         #
         # ★ SAME-ORIGIN RATHER THAN CORS, DELIBERATELY. A preflight from
@@ -1910,7 +1930,7 @@ http {
         server_name auth-dev.gotcha.co.il;
 
         # ════════════════════════════════════════════════════════════════════
-        # ★★ THE SIGN-IN SCREEN — AND THIS BLOCK IS A SECURITY CONTROL
+        # ★★ THE SIGN-IN SCREEN - AND THIS BLOCK IS A SECURITY CONTROL
         # ════════════════════════════════════════════════════════════════════
         # `frontend_auth` is the WHOLE application, root-mounted. It serves
         # /inbox, /en/home, /en/settings/billing and every other product route
@@ -2016,8 +2036,8 @@ http {
         # so a theme change is live on the next page load.
         # ★★ THE TAB ICON. Omer asked why the auth tab has none.
         #
-        # The app serves them — `app/icon.svg` and `app/apple-icon.png` answer
-        # 200 when asked directly — and the page declares both in <head>. They
+        # The app serves them - `app/icon.svg` and `app/apple-icon.png` answer
+        # 200 when asked directly - and the page declares both in <head>. They
         # 404 at the edge because THIS allowlist does not name them, so they
         # fall through to `location /` and Authentik answers instead.
         #
@@ -2028,7 +2048,7 @@ http {
         #
         # ⚠ A BROWSER PROBE CANNOT FIND THIS. A page-load capture reported 33
         #   requests and 0 failures, because the favicon is fetched by the
-        #   browser's chrome, not by the document — headless skips it entirely.
+        #   browser's chrome, not by the document - headless skips it entirely.
         #   Only a direct request, or a person looking at the tab, can see it.
         #
         # Exact matches: Next appends a cache-busting query (`?icon.<hash>.svg`)
@@ -2061,7 +2081,7 @@ http {
         # ★★ THE ROOT OF THIS ORIGIN IS OUR SIGN-IN SCREEN, NOT THE IdP's.
         #
         # `location /` below hands everything unmatched to Authentik, which is
-        # correct for `/if/flow/`, `/application/o/authorize/` and `/api/v3/` —
+        # correct for `/if/flow/`, `/application/o/authorize/` and `/api/v3/` -
         # the OIDC hops need it. But it also meant that typing the bare host
         # `auth-dev.gotcha.co.il` returned **Authentik's own purple login page**,
         # on the origin whose entire purpose is to serve the screen we designed.
@@ -2071,7 +2091,7 @@ http {
         #     /  and  /v2/api/auth/login      ->  Authentik's /if/flow/ UI
         #
         # ⚠ `= /` AND NOT A PREFIX. An exact-match location beats the `/` prefix
-        #   for the root alone and touches nothing else — a prefix here would
+        #   for the root alone and touches nothing else - a prefix here would
         #   swallow `/if/flow/` and `/application/o/authorize/` and break every
         #   sign-in, since those are the hops the flow itself redirects through.
         #
@@ -2079,10 +2099,10 @@ http {
         #   a permanent redirect would be cached in browsers that saw it once,
         #   outliving the config that produced it.
         #
-        # ⚠⚠ ABSOLUTE, AND BUILT FROM `$public_proto` — NOT `return 302 /sign-in`.
+        # ⚠⚠ ABSOLUTE, AND BUILT FROM `$public_proto` - NOT `return 302 /sign-in`.
         #   A relative target makes nginx synthesise the absolute URL from
         #   `$scheme`, and **TLS terminates upstream of this container, so
-        #   `$scheme` is "http" here** — the map at the top of this file exists
+        #   `$scheme` is "http" here** - the map at the top of this file exists
         #   to say so. The first version of this block sent
         #   `302 -> http://auth-dev.gotcha.co.il/sign-in`: a plaintext hop, on
         #   the one origin that exists to carry passwords. It looked correct in
