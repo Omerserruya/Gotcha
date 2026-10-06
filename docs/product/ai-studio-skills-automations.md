@@ -1,0 +1,151 @@
+# AI Studio: Skills and Automations - mapping, decisions and work plan
+
+Status: living document. Owner: rebrand supervisor session. Last update: 2026-10-06.
+Design source: `/home/ocs/projects/redesign/design/Redesigning GOTCHA from scratch 6/GOTCHA Directions.dc.html`
+(frames 00d-00h, 07, 07f, 07g, 09, 09b, 09c, 09d, 09e, 13g-13j, 21). Extracted spec: `/tmp/claude-1000/design6/SPEC.md` (local).
+
+Classification legend: **works** (exists and works) / **partial** / **adapt** (exists, needs adaptation) / **missing** / **check** (needs more checking).
+
+---
+
+## 1. Product concept (from Omer, 2026-10-06)
+
+- **Automation** = an explicit flow: trigger, conditions, nodes. Runs the same way every time and does not depend on the AI deciding to run it. It may hand control to an AI employee or run a skill; it must be clear who owns the conversation at every point.
+- **Skill** = guidance for an AI employee for a specific business case: when it applies, what to gather, the steps, the tools, completion and escalation. Business-specific, created by the tenant, attached to employees from the employee editor. Not necessarily a node graph and not just prompt text.
+- **AI employee layers** (product view, not one entity each): role, language, brand voice, goal, stage/progress, allowed tools, system skill / ROLE, attached business skills, knowledge.
+
+---
+
+## 2. Mapping of the existing system
+
+### 2.1 AI employee model
+| Capability | Where | Status |
+|---|---|---|
+| Role (selects the built-in methodology and the objective chain) | `AIAgent.role`, `packages/shared/prisma/schema.prisma:1220` | works |
+| Goal | `AIAgent.goal` rendered in `# Goals`, `services/ai/src/services/prompt-builder.service.ts:1071` | works |
+| Brand voice | `persona.brand_archetype` -> `renderBrandVoice`, `services/ai/src/services/brand-archetypes.ts:142` | works |
+| Per-agent tone fields | `tone/style/toneConfig/behavioral` (schema:1230-1253) | not used (tone comes from `personality.md`) |
+| Languages | `AIAgent.languages` (schema:1231) | partial: stored, ignored by the live reply path |
+| Hebrew style file | `prompt-builder:639-668` needs `ctx.locale === "he"`, never set on the autonomous path (`ai-bot:1549-1598`) | check, likely broken |
+| systemPrompt | `AIAgent.systemPrompt` (schema:1238) never reaches a model (`ai-bot:376-396`) | dead, do not build on it |
+| Author steps / when-then rules / escalation | `conversationFlow`, `behavioralAnchors`, `escalationRules` -> `# Agent Playbook Anchors` (`prompt-builder:1335-1468`) | works, static, always injected |
+| Allowed tools | `AgentToolPermission` (schema:2353) `isAllowed`, `usageRule`; `requireApproval` is inert per agent | works / partial |
+| Knowledge | `AIAgentKnowledge` (schema:1334), `knowledge.service.ts:29-60` | works |
+
+### 2.2 Per-turn loop (live path is `services/ai/src/services/ai-bot.service.ts`, `AGENT_LOOP_MODE` defaults to off)
+- Trigger: `services/incoming-worker/src/workers/incoming.worker.ts:742-754` -> `processAIBot` (`incoming-worker/src/services/ai-bot.service.ts:75-358`) -> `POST /api/ai-bot/reply` -> `generateAIBotReply` (`ai-bot:975`).
+- Context assembly order and prompt layers: `ai-bot:1199-1619`, `buildAgentPrompt` (`prompt-builder:385-438`). Stated priority: Safety > Execution Contract > Strategy > Brand Voice > Relationship > Playbooks > Style (`prompt-builder:721-723`).
+- Tools: built-in + custom + adapter tools filtered by `AgentToolPermission` and capability (`ai-bot:1996-2375`). Execution through `ActionOrchestrator` (`services/ai/src/services/orchestrator/action-orchestrator.ts:94-641`) with `evaluatePolicies` DENY / REQUIRE_APPROVAL / ALLOW and `ToolExecutionRequest` rows.
+- Coalescing: a fast second message aborts the in-flight turn and replaces it.
+- Status: **works**.
+
+### 2.3 Built-in "Skill" (code) and objectives
+- `services/ai/src/services/skills.ts`: 6 structured Skills (mission, objective, flow, success/failure, `requiredKnowledge[]` with priority), selected by role only (`ROLE_TO_SKILL`, `selectSkill`). Rendered as BLOCK 1.
+- Knowledge Ledger (`knowledge-ledger.ts`): deterministic gap check of `requiredKnowledge` against CRM, memory, facts. Live extraction merges `requiredKnowledge` (`intelligence-live/subscriber.ts`).
+- Objective engine (`objectives.ts`): fixed objectives with required info + completion tool; active objective = first incomplete; `ActiveGoalSnapshot` committed per turn and persisted in `AuditLog ai.bot_turn.metadata.activeGoal`, reloaded per customer for 14 days (`plan-context.service.ts:84-130`). Called from the planner and from about 3 more orchestrator sites (gates ~2706/2923, persistence ~3134).
+- Goal status (`goal-evaluator.ts`): a projection ACHIEVED / FAILED / BLOCKED / ACTIVE, not a state machine.
+- Unused: `AISkill` registry (`packages/shared/src/schemas/ai-worker.ts:26-49`) behind `USE_UNIFIED_WORKER`, no live caller.
+- Status: built-in skill **works** but is platform code, one per role; a tenant-defined, per-employee, relevance-selected skill is **missing**.
+
+### 2.4 Stage / funnel
+- `TenantFunnel` stages JSON per department or agent (schema:5178), stage `copilot` {goal, requiredQuestions, requiredDataFields, exitCriteria}; resolved from the CRM stage cache (`stage-resolver.service.ts:48-124`); rendered as `# Pipeline Stage`; `StageTransition` rows written only by manual/CRM/voice paths. The chat bot never advances the stage.
+- Status: **partial** (read-only in chat).
+
+### 2.5 Process-like entities
+- No tenant Process entity. "Processes" in the old UI = automation graphs (`FlowCanvas` + `ChatbotFlow`).
+- `ActionContract` + `ActionContractProgress` (schema:5280-5334): tenant-wide required-tool sequences with per-conversation progress and pause-on-approval; dispatch gates are disabled stubs (`ai-bot:2965-2969`). Status: **adapt** (good model for skill progress, not reused directly).
+
+### 2.6 Handover and HITL
+- Escalation: `escalateToHuman` (`incoming-worker ai-bot.service.ts:859-990`), `recordHandover`, `ConversationHandover`. Approval pause: `handledBy=awaiting_approval`, resume via `runApprovedAction` + `sendApprovalContinuation` + `restoreAiOwnership` (`services/conversation/src/routes/approvals.ts:437-830`). HITL policy lives in `tool-gate.ts` at tenant level.
+- Status: **works**. Resuming a specific skill step: **missing**.
+
+### 2.7 Automations
+| Capability | Where | Status |
+|---|---|---|
+| Graph store | `FlowCanvas` (one per tenant, always live, no validation), `ChatbotFlow` (sub-flows, `isActive`, free-text `trigger`, `runCount`) | adapt |
+| Runtime | `incoming-worker/src/services/flow-executor.service.ts` walker (MAX_STEPS 50), `flow-resume` queue, voice runtime `services/ai/src/services/voice-flow/voice-flow-runner.ts`, comment walker | works with bugs |
+| Triggers | inbound first message only (`incoming.worker.ts:728`), keyword/campaign (first message only), comment, webhook (`POST /webhooks/:token`), voice call events (separate runtime), scheduled message kick | partial; schedule/tag/order/conversation events missing |
+| Conditions | keyword, channel, regex work; tag, intent, sentiment, time, attribute always false | partial |
+| Send nodes | text, image/file (native on WA/Messenger/IG/Slack), quick reply (buttons), template (WA) | works; list missing, interactive is text+link |
+| Do nodes | set variable, http request, update contact tag/attribute, route to agent / sub-flow / department, end (close / handoff / wait) | works; assign to a person, create task, notify, run skill missing; `ai_generate` is a stub |
+| Validation | `services/chatbot/src/lib/graph-validator.ts` only on `/activate`; bypassed by PUT/POST `isActive` | partial |
+| Run history | none (`runCount` only) | missing |
+| Dedupe / loops | non-atomic inbound dedupe, webhook retries resend, voice in-process map | missing |
+| Known bugs | sub-flow resume on inbound restarts main canvas (`incoming.worker.ts:787-799`); wait + inbound runs twice (`flow-executor:163-166`); flow-resume does not re-check the cursor | bug |
+| v2 | `studio/automations` reads `ChatbotFlow` only, create/edit/activate not wired | partial |
+
+### 2.8 Logs
+- `AuditLog` `ai.tool_call.*`, `ai.bot_turn` (behaviorState, activeGoal, toolCalls), `ai.paused_for_approval`, `ToolExecutionRequest`, `ApprovalRequest`, `ConversationHandover`. No record of which skill was selected (missing). No flow run log (missing).
+
+---
+
+## 3. Decisions
+
+### 3.1 Skill representation
+- **New tenant entity `BusinessSkill`** (UI name: Skill). The built-in role `Skill` in `skills.ts` stays as the **ROLE / system skill** base layer and is not stored as a record. Reason: it is platform methodology tied to the objective chain; making it editable would break the chain and the cache-stable prompt prefix.
+- Fields (from 09/09b/21): `name`, `situation` (customer words), `category` (orders/products/bookings/other), `whenToUse`, `examples[]`, `exclusions[] {text, skillId?}`, `steps[] {id, kind: find|check|change|document|message|approval|handover, title, guidance, tools[] (tool names), approvalOverAmount?, elseNote?}`, `rules[] {type: never|handover, text}`, `requiredInfo[] {key, label, priority}` (derived from steps, editable), `status: draft|active|archived`, `version`, audit fields. Tenant-scoped.
+- **Assignment `AgentSkill`** `{aiAgentId, skillId, mode: on|watch|off, order}`. New skills default to `watch`. Employee fallback when no skill fits: `AIAgent.noSkillPolicy: answer_from_knowledge | always_handover | knowledge_only` (default `answer_from_knowledge`, which is today's behaviour).
+- **Run record `SkillRun`** `{conversationId, aiAgentId, skillId, skillVersion, mode, status: active|completed|handed_over|failed|abandoned, currentStepId, gatheredKeys[], stopReason, trace[] (step, tool, outcome, at), startedAt, endedAt}`. Gives continuity across turns, stats (runs, alone %, asked you, stop reasons) and the run log.
+
+### 3.2 Skill in the loop (no parallel engine)
+1. **Selection** inside the existing per-turn judgement call in `plan-context.service.ts` (the one that already resolves `requiredKnowledge`): input = the employee's skills in `on` and `watch` mode (name, whenToUse, examples, exclusions) + the open `SkillRun`; output = `{matchedSkillId | null, gatheredKeys}`. No extra LLM call.
+2. **Stickiness**: an open `SkillRun` stays active until completed / handed over / the customer clearly changes topic (the judgement returns another skill or none for two turns). Changing topic closes the run as `abandoned` with reason.
+3. **Conflicts**: several candidates -> the employee's `order`; `exclusions` route to the named skill; skill `rules` override skill steps; platform guardrails, tool gate and HITL override everything.
+4. **Injection**: only the active skill renders, as a per-turn block `# Active Skill` next to `# Pipeline Stage` / `# Current Plan` (steps with the current one marked, rules, required info status). BLOCK 2 lists the employee's skill names only, so the cached prefix stays stable.
+5. **Objective / ledger**: the active skill's `requiredInfo` is merged into the ledger's required keys (same path as the built-in skill), so "what to gather" uses the existing gap check and live extraction. Skill completion = its last step's tool succeeded or the `document` step done; recorded on `SkillRun` and fed to goal status.
+6. **Watch mode**: the skill is selected and a `SkillRun(mode=watch)` records what it would do, but the block is not injected. No customer-facing effect.
+7. **Tools and permissions**: a skill never grants a tool. A step's tools are checked against the employee's allowed tools and connected capabilities; a missing or blocked tool makes that step a hand-over point. `approvalOverAmount` can only tighten: it adds a REQUIRE_APPROVAL condition in `evaluatePolicies` for that tool while the skill is active.
+8. **Proposed vs pending vs done**: taken from `ToolExecutionRequest` status (proposed / approved / completed / failed / denied); the skill block tells the model which state each step is in, and the reply rules forbid claiming an action that is not `completed`.
+9. **Resume**: after approval or after the customer supplies missing info, the next turn reloads the open `SkillRun` and continues from `currentStepId`.
+10. **Skill changed or removed mid-conversation**: `SkillRun` pins `skillVersion`; an edit applies from the next run; removal or `off` closes open runs as `abandoned` (reason `skill_removed`) and the employee falls back to `noSkillPolicy`.
+11. **Logging**: `ai.skill_selected`, `ai.skill_step`, `ai.skill_completed`, `ai.skill_handed_over` audit rows + `activeSkillId` in `ai.bot_turn` metadata. No model reasoning stored.
+
+### 3.3 Automations
+- Keep the existing runtime (flow-executor walker + flow-resume queue). Each automation = one `ChatbotFlow` with a **structured trigger** (`triggerType`, `triggerConfig`) replacing the free-text one (old text kept as `description`). `FlowCanvas` (main playbook) stays as the routing graph and is shown read-only until migrated.
+- **Run log**: new `AutomationRun {flowId, triggerType, eventKey, conversationId?, status, startedAt, endedAt, error}` + `AutomationRunStep {runId, nodeId, nodeType, status, output, at}`. `eventKey` unique per flow = dedupe (one run per event). Loop guard: events caused by an automation do not trigger automations; max N runs per conversation per minute.
+- **Trigger dispatcher** (one place, incoming-worker): message received (every inbound, not only the first; keyword optional), new customer (first message), call missed / call answered (from the existing voice events, executed by the flow walker with the customer's real channel), tag added, webhook (exists), schedule (cron in the existing scheduled worker). Order event, cart, form, story mention: drawn as unavailable with the reason until a source exists.
+- **Coordination with the AI**: on an inbound, matching message automations run first. If an automation performed a Send node or set `handledBy=flow`, the AI does not answer that inbound (one responder per inbound). Otherwise the AI runs as today. "Hand to AI employee" and "Run a skill" set `assignedAiAgentId` (+ open a `SkillRun` for run-a-skill) and `handledBy=ai_agent`, ending the automation's ownership.
+- **Nodes to add / fix**: list message (WA), real buttons where the channel supports them, wait for reply with timeout branch, opening hours / language / segment / A-B / split by channel conditions, assign to a person, create task, notify team, close conversation, update customer field, run a skill. Fix: sub-flow resume, wait race, activate bypass, send failure handling (mark run failed + optional orphan handoff). Unavailable nodes (Sheets, rating, location, SMS) are listed dimmed with the reason.
+- **Validation** on every activate path (PUT/POST included), per-channel limits (3 buttons on WA, template outside 24h).
+- Versioned draft/publish and node-by-node test run: phase 3.
+
+### 3.4 Onboarding 00d-00h
+- UI skeleton per design, wired to what exists (workspace scan, ingest status, business facts, business core connect, try-it via Copilot/compose). No new backend (Omer: "only a skeleton, I'll edit more").
+
+### 3.5 Web chat settings 13g-13j
+- Frontend over the existing `GET/PUT /api/channels/webchat/:id/settings` + embed snippet. Settings the backend does not store are drawn with the reason.
+
+---
+
+## 4. Work plan (dependency order)
+
+| Phase | Backend | Frontend |
+|---|---|---|
+| **1. Skills core** | migration (`BusinessSkill`, `AgentSkill`, `SkillRun`, `AIAgent.noSkillPolicy`); CRUD + assign routes; permission-fit check route; selection in plan-context; `# Active Skill` block; ledger merge; SkillRun lifecycle; audit events; stats route | Studio nav "Skills"; 09 library; 09b editor (when, examples, not for, steps with tools, rules, used by); 21 new skill (describe -> draft); 07g employee skills tab (order, mode, fallback, add with fit check) |
+| **2. Automations core** | migration (`triggerType/Config`, `AutomationRun(+Step)`); dispatcher with dedupe + loop guard; runtime bug fixes; new nodes; validation on all paths; AI coordination rule; run log routes | 09c list (trigger, flow path, runs, last run, toggle); 09d builder (library, canvas, inspector); 09e add-step sheet with availability; run log |
+| **3. Depth** | skill sandbox test on a past conversation; backtest; templates; missing-skill suggestions from unhandled clusters; automation versioned publish + test run | 09b live test panel, 21 backtest, templates, suggestions |
+| **4. Onboarding + web chat** | none new | 00d-00h skeleton, 13g-13j |
+| **Fixes found** | `languages` unused, Hebrew style file never loads, chat bot never advances stage (document only) | - |
+
+Rules for every phase: dev only, no push, tests through the real router, tenant guard + `requireVisibleConversation` on every conversation route, no em-dashes.
+
+---
+
+## 5. Test scenarios (acceptance)
+1. Create a skill, save, edit, attach to an employee.
+2. Skill used in a conversation and continued after another message.
+3. Delivery status scenario.
+4. Product exchange scenario, with the tools available.
+5. Missing or blocked tool -> hand-over at that step.
+6. Tool failure and human approval -> resume.
+7. Automation fired by a real event.
+8. No double reply / double action (dedupe, one responder per inbound).
+9. Permissions and tenant isolation.
+10. Existing behaviour unchanged when no skills are attached.
+
+## 6. Assumptions log
+- ROLE / system skill = the existing code layer, not a record (see 3.1).
+- New skills start in watch mode (design 09/21).
+- "Asks you over X" on a step only tightens approval, never loosens.
+- Order event, cart, form and story triggers are shown unavailable until an event source exists.
+- `FlowCanvas` (main playbook) is not migrated in this round.

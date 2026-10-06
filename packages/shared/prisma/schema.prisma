@@ -202,6 +202,8 @@ model Tenant {
   customerHistoricalMemory  CustomerHistoricalMemory[]
   knowledgeCandidates       KnowledgeCandidate[]
 
+  businessSkills BusinessSkill[]
+
   @@map("tenants")
   customerNotes CustomerNote[]
 }
@@ -1312,6 +1314,10 @@ model AIAgent {
   // channel override → conversation department → tenant default.
   funnelId String? @map("funnel_id")
 
+  // What the employee does when none of its business skills fits the message:
+  // answer_from_knowledge (today's behaviour) | always_handover | knowledge_only.
+  noSkillPolicy String @default("answer_from_knowledge") @map("no_skill_policy")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -1319,6 +1325,7 @@ model AIAgent {
   department     Department?        @relation("AIAgentDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
   funnel         TenantFunnel?      @relation("AIAgentFunnel", fields: [funnelId], references: [id], onDelete: SetNull)
   knowledgeBases AIAgentKnowledge[]
+  agentSkills    AgentSkill[]
   routerRules    RouterRule[]       @relation("RouterRuleAIAgent")
   voiceChannels  VoiceChannel[]     @relation("VoiceChannelAIAgent")
 
@@ -1344,6 +1351,101 @@ model AIAgentKnowledge {
   @@index([aiAgentId])
   @@index([knowledgeBaseId])
   @@map("ai_agent_knowledge")
+}
+
+// ─── Business skills (AI Studio, design 6) ───────────────────
+// A tenant-defined playbook an AI employee follows for one business case:
+// when it applies, what to gather, the steps (with the tools each may use),
+// rules, completion and hand-over. NOT a parallel engine: the existing
+// per-turn loop selects it (wizard-binding judgement), the knowledge ledger
+// gathers its requiredInfo, and the tool gate still decides every tool.
+// The built-in role Skill (services/ai/src/services/skills.ts) stays code.
+// See docs/product/ai-studio-skills-automations.md §3.1-3.2.
+model BusinessSkill {
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  name         String
+  // The situation in the customer's words ("where is my order").
+  situation    String?
+  // orders | products | bookings | other
+  category     String    @default("other")
+  whenToUse    String?   @map("when_to_use")
+  examples     Json      @default("[]") // string[]
+  exclusions   Json      @default("[]") // [{ text, skillId? }]
+  // [{ id, kind: find|check|change|document|message|approval|handover,
+  //    title, guidance, tools: string[], approvalOverAmount?, elseNote? }]
+  steps        Json      @default("[]")
+  rules        Json      @default("[]") // [{ type: never|handover, text }]
+  requiredInfo Json      @default("[]") @map("required_info") // [{ key, label, priority }]
+  // draft | active | archived (never deleted: runs keep their history)
+  status       String    @default("draft")
+  version      Int       @default(1)
+  createdBy    String?   @map("created_by")
+  updatedBy    String?   @map("updated_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  archivedAt   DateTime? @map("archived_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentSkills AgentSkill[]
+  runs        SkillRun[]
+
+  @@index([tenantId, status])
+  @@map("business_skills")
+}
+
+// Which skills an employee uses, how (on | watch | off) and in what order
+// (order breaks a tie when several skills fit). New assignments start in watch.
+model AgentSkill {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  aiAgentId String   @map("ai_agent_id")
+  skillId   String   @map("skill_id")
+  mode      String   @default("watch")
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  aiAgent AIAgent       @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+  skill   BusinessSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([aiAgentId, skillId])
+  @@index([tenantId, skillId])
+  @@map("agent_skills")
+}
+
+// One use of a skill in one conversation: continuity across turns (the open
+// run is resumed), the run log, and the stats (runs, alone, asked you).
+// skillVersion pins the definition the run started with.
+model SkillRun {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  conversationId String    @map("conversation_id")
+  aiAgentId      String    @map("ai_agent_id")
+  skillId        String    @map("skill_id")
+  skillVersion   Int       @map("skill_version")
+  // on | watch (watch records what it would do; nothing is injected)
+  mode           String
+  // active | completed | handed_over | failed | abandoned
+  status         String    @default("active")
+  currentStepId  String?   @map("current_step_id")
+  gatheredKeys   Json      @default("[]") @map("gathered_keys")
+  stopReason     String?   @map("stop_reason")
+  // [{ step, tool?, outcome, at }] - no model reasoning is stored
+  trace          Json      @default("[]")
+  // Consecutive turns the judgement chose another skill or none: two closes
+  // the run as abandoned (topic change).
+  missedTurns    Int       @default(0) @map("missed_turns")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  skill BusinessSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conversationId, status])
+  @@index([tenantId, skillId, startedAt])
+  @@index([tenantId, aiAgentId, startedAt])
+  @@map("skill_runs")
 }
 
 // ─── Router Rules (Main Playbook) ───────────────────────────
