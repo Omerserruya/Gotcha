@@ -112,6 +112,14 @@ describe("WooCommerce", () => {
     });
     expect(o2).toMatchObject({ cancelled: true, financial: { key: "voided" }, items: [{ imageUrl: "https://img/77.jpg" }] });
     expect(o4).toMatchObject({ fulfillment: { key: "fulfilled" }, refund: { key: "partially_refunded" }, refundedAmount: { amount: "30.00" } });
+  });
+
+  it("a refunded order that had shipped says shipped, matching its timeline", async () => {
+    H.wooOrders = [order(5, { billing: { email: "dana@shop.com" }, status: "refunded", date_completed_gmt: "2026-10-05T12:00:00" })];
+    const [o] = (await get()).body.orders;
+    expect(o.financial.key).toBe("refunded");
+    expect(o.fulfillment.key).toBe("fulfilled");
+    expect(o.timeline.find((t: any) => t.key === "fulfilled").reached).toBe(true);
     expect(o1.detail.lineItems[0]).toMatchObject({ lineItemId: "11", unitPrice: { amount: "50.00" } });
   });
 

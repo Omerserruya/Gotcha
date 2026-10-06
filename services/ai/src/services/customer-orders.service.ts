@@ -88,7 +88,12 @@ function wooAddress(a: any): string | undefined {
 
 export function mapWooOrderCard(o: any, storeUrl: string, locale: Locale, matchedBy: MatchedBy, imageByProduct: Record<string, string> = {}): CustomerOrderCard {
   const currency = String(o?.currency || "USD");
-  const status = WOO_STATUS[String(o?.status || "")] ?? { financial: "pending", fulfillment: "unfulfilled" };
+  const base = WOO_STATUS[String(o?.status || "")] ?? { financial: "pending", fulfillment: "unfulfilled" };
+  // Woo has ONE status, so "refunded" hides whether the goods shipped first.
+  // A completion date says they did; the chip must not contradict the timeline.
+  const status = o?.date_completed_gmt && base.fulfillment === "unfulfilled" && !base.cancelled
+    ? { ...base, fulfillment: "fulfilled" }
+    : base;
   const total = Number(o?.total) || 0;
   const refunded = wooRefunded(o);
   const lines: any[] = Array.isArray(o?.line_items) ? o.line_items : [];
