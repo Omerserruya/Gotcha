@@ -83,7 +83,7 @@ export default async function Page({
         <p data-testid="roles-unavailable">{t('unavailable')}</p>
       ) : (
         <>
-          <RoleList roles={roles} />
+          <RoleList roles={roles} members={members} />
 
           <div className={styles.cards}>
             <section className={styles.card} data-testid="card-extra">

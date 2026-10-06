@@ -3,6 +3,7 @@ import { createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { memberSchema } from '@/api/contracts/people';
 import { roleSchema } from '@/api/contracts/roles';
 import roles from '@/i18n/messages/en/roles.json';
 
@@ -58,5 +59,36 @@ describe('★ 12b — the roles as one table', () => {
     render(await RoleList({ roles: [role({ id: 'o', features: ['*'], memberCount: 0 })] }));
     expect(screen.getByTestId('allows-o')).toHaveTextContent('Allows everything');
     expect(screen.getByTestId('members-o')).toHaveTextContent('No one yet');
+  });
+});
+
+describe('★ 12b’s PEOPLE — 02’s faces, from the roster', () => {
+  const owner = role({
+    id: 'owner',
+    name: 'Owner',
+    isSystem: true,
+    builtinKey: 'OWNER',
+    memberCount: 1,
+  });
+
+  it('a face per person who holds it — by id, or by the built-in key — named on hover', async () => {
+    render(
+      await RoleList({
+        roles: [owner],
+        members: [
+          memberSchema.parse({ id: 'u1', name: 'Maya Levi', roleBuiltinKey: 'OWNER' }),
+          memberSchema.parse({ id: 'u2', name: 'Tomer Adler', roleId: 'other' }),
+        ],
+      }),
+    );
+    const people = screen.getByTestId('members-owner');
+    expect(people).toHaveTextContent('ML');
+    expect(people).not.toHaveTextContent('TA');
+    expect(people.querySelector('[title]')).toHaveAttribute('title', 'Maya Levi');
+  });
+
+  it('roster unread: the count, as before — never an empty row of faces', async () => {
+    render(await RoleList({ roles: [owner], members: null }));
+    expect(screen.getByTestId('members-owner')).toHaveTextContent('One person');
   });
 });

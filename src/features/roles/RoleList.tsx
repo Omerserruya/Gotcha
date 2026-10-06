@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { Lock } from 'lucide-react';
 
+import type { Member } from '@/api/contracts/people';
 import { allowsEverything, isEditable, type Role } from '@/api/contracts/roles';
 import { Link } from '@/i18n/navigation';
 
@@ -24,8 +25,21 @@ import styles from './Roles.module.css';
  * built-in ones carry the sentence the platform itself uses for them. A
  * custom role gets no prose, because nobody wrote any.
  */
-export async function RoleList({ roles }: { readonly roles: readonly Role[] }) {
+export async function RoleList({
+  roles,
+  members = null,
+}: {
+  readonly roles: readonly Role[];
+  /** The roster, for 02's faces in PEOPLE; `null` when unread — then the count. */
+  readonly members?: readonly Member[] | null;
+}) {
   const t = await getTranslations('roles');
+  const holders = (role: Role) =>
+    (members ?? []).filter(
+      (m) =>
+        (m.roleId ?? null) === role.id ||
+        (role.builtinKey !== null && (m.roleBuiltinKey ?? null) === role.builtinKey),
+    );
 
   /*
     12b, measured: one white card — a mono head (ROLE · WHAT IT ALLOWS ·
@@ -75,7 +89,28 @@ export async function RoleList({ roles }: { readonly roles: readonly Role[] }) {
             </span>
 
             <span className={styles.colPeople} data-testid={`members-${role.id}`}>
-              {role.memberCount > 0 ? (
+              {members !== null && holders(role).length > 0 ? (
+                // 02: a face per person — initials, 26px; more than four, "+N".
+                <span
+                  className={styles.faces}
+                  title={holders(role)
+                    .map((m) => m.name ?? m.email ?? '')
+                    .filter(Boolean)
+                    .join(', ')}
+                >
+                  {holders(role)
+                    .slice(0, 4)
+                    .map((m) => (
+                      <span key={m.id} className={styles.face} aria-hidden="true">
+                        {initialsOf(m.name ?? m.email ?? '')}
+                      </span>
+                    ))}
+                  {holders(role).length > 4 ? (
+                    <span className={styles.faceMore}>+{holders(role).length - 4}</span>
+                  ) : null}
+                  <span className="srOnly">{t('members', { count: holders(role).length })}</span>
+                </span>
+              ) : role.memberCount > 0 ? (
                 t('members', { count: role.memberCount })
               ) : (
                 <span className={styles.nobody}>{t('noMembers')}</span>
@@ -106,4 +141,15 @@ export async function RoleList({ roles }: { readonly roles: readonly Role[] }) {
       </ul>
     </section>
   );
+}
+
+/** Two letters: the first of the first two words, or of an address's parts. */
+function initialsOf(name: string): string {
+  const words = name
+    .trim()
+    .split(/[\s@._-]+/)
+    .filter(Boolean);
+  return (
+    words.length > 1 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? '?').slice(0, 2)
+  ).toUpperCase();
 }

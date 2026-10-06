@@ -1148,3 +1148,30 @@
     }
   }
 }
+
+@layer features {
+  /* 12b's PEOPLE: 02's faces — 26px, warm, initials at 10/600, 4px apart. */
+  .faces {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .face {
+    display: inline-grid;
+    place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: 50%;
+    background-color: var(--avatar-surface);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .faceMore {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+}
