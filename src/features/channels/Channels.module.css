@@ -792,8 +792,78 @@
     border-block-start: 1px solid var(--border-subtle);
   }
 
+  /* 13b's AI mode: 02's segmented pair on the well, the current one dark. */
+  .modeSwitch {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .modeSegments {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background-color: var(--table-head-surface);
+  }
+
+  .modeSegment {
+    padding: 6px 11px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--intent-neutral-text);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .modeSegment[aria-checked='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .modeAsk {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-label);
+  }
+
+  .modeYes,
+  .modeNo {
+    padding: 5px 11px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    cursor: pointer;
+  }
+
+  .modeYes {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .modeNo {
+    border: 1px solid var(--border-default);
+    background: none;
+    color: var(--text-secondary);
+  }
+
+  .modeProblem {
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
   .panelFootLink,
   .panelFootDanger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: var(--font-size-label);
     color: var(--text-body);
     cursor: default;

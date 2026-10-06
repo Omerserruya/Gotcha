@@ -216,7 +216,14 @@
       "mode": {
         "AI_AUTO_REPLY": "עונה לבד",
         "HUMAN_WITH_COPILOT": "מנסח, אדם שולח"
-      }
+      },
+      "modeAsk": {
+        "AI_AUTO_REPLY": "לתת ל-GOTCHA לענות לבד במספר הזה?",
+        "HUMAN_WITH_COPILOT": "ש-GOTCHA תנסח ואדם ישלח במספר הזה?"
+      },
+      "modeYes": "כן, להחליף",
+      "modeNo": "לא עכשיו",
+      "modeFailed": "זה לא הוחלף — שום דבר לא השתנה."
     },
     "addNumber": "+ הוספת מספר נוסף",
     "learn": {

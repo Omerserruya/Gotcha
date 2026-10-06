@@ -16,6 +16,7 @@ import {
 } from '@/api/contracts/whatsapp-numbers';
 
 import styles from './Channels.module.css';
+import { ModeSwitch } from './ModeSwitch';
 
 /**
  * The resolved translator and locale, passed down rather than re-fetched.
@@ -162,7 +163,12 @@ export async function WhatsAppNumbers({
       <ul className={styles.numbers} data-testid="whatsapp-numbers">
         {numbers.data.map((n) => (
           <li key={n.id}>
-            <NumberCard number={n} t={t} locale={locale} />
+            <NumberCard
+              number={n}
+              t={t}
+              locale={locale}
+              mode={n.channelAccountId ? (responseModes[n.channelAccountId] ?? null) : null}
+            />
           </li>
         ))}
         {numbers.unprofiled.map((u) => (
@@ -182,10 +188,12 @@ function NumberCard({
   number,
   t,
   locale,
+  mode,
 }: {
   readonly number: WhatsAppNumber;
   readonly t: T;
   readonly locale: string;
+  readonly mode: string | null;
 }) {
   const delivery = deliveryState(number.health);
   const blocking = blockingChecks(number.health);
@@ -286,7 +294,7 @@ function NumberCard({
             })
           : t('neverChecked')}
       </p>
-      <NumberRows t={t} mode={null} />
+      <NumberRows t={t} mode={mode} channelAccountId={number.channelAccountId} />
     </article>
   );
 }
@@ -352,13 +360,21 @@ function UnprofiledCard({
           </span>
         </span>
       </div>
-      <NumberRows t={t} mode={mode} />
+      <NumberRows t={t} mode={mode} channelAccountId={number.channelAccountId} />
     </article>
   );
 }
 
 /** What is configured on a number — 02's four rows; "—" where nothing stores it. */
-function NumberRows({ t, mode }: { readonly t: T; readonly mode: string | null }) {
+function NumberRows({
+  t,
+  mode,
+  channelAccountId,
+}: {
+  readonly t: T;
+  readonly mode: string | null;
+  readonly channelAccountId: string | null;
+}) {
   return (
     <dl className={styles.numberRows}>
       <div>
@@ -369,7 +385,14 @@ function NumberRows({ t, mode }: { readonly t: T; readonly mode: string | null }
       <div>
         <dt>{t('rows.aiMode')}</dt>
         <dd data-testid="number-ai-mode">
-          {mode === 'AI_AUTO_REPLY' || mode === 'HUMAN_WITH_COPILOT' ? t(`rows.mode.${mode}`) : '—'}
+          {/* 02's two segments, live — where the account and its mode are known. */}
+          {channelAccountId && (mode === 'AI_AUTO_REPLY' || mode === 'HUMAN_WITH_COPILOT') ? (
+            <ModeSwitch channelAccountId={channelAccountId} current={mode} />
+          ) : mode === 'AI_AUTO_REPLY' || mode === 'HUMAN_WITH_COPILOT' ? (
+            t(`rows.mode.${mode}`)
+          ) : (
+            '—'
+          )}
         </dd>
       </div>
       <div>

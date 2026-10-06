@@ -28,6 +28,12 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
 }));
+/* The switch is a client component with its own test. */
+vi.mock('./ModeSwitch', () => ({
+  ModeSwitch: ({ channelAccountId, current }: { channelAccountId: string; current: string }) => (
+    <span data-testid={`mode-switch-${channelAccountId}`} data-current={current} />
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'channels.whatsapp') =>
     createTranslator({ locale: 'en', messages: { channels: messages }, namespace }),
@@ -399,7 +405,8 @@ describe('★ 13b — what is configured on a number, in 02’s rows', () => {
         responseModes: { ca1: 'AI_AUTO_REPLY' },
       }),
     );
-    expect(screen.getByTestId('number-ai-mode')).toHaveTextContent('Answers on its own');
+    // 02's two segments, live, on the account, set to what it is now.
+    expect(screen.getByTestId('mode-switch-ca1')).toHaveAttribute('data-current', 'AI_AUTO_REPLY');
     expect(screen.getByTestId('whatsapp-unprofiled')).toHaveTextContent(/Answered by—/);
   });
 });

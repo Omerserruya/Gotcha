@@ -158,6 +158,8 @@ export const numberSchema = z.object({
   name: z.string().nullable().default(null),
   state: z.enum(NUMBER_STATES),
   pendingAction: z.string().nullable().default(null),
+  /** The channel account behind the number — where its AI mode lives (13b). */
+  channelAccountId: z.string().nullable().catch(null).default(null),
   /** Coexistence numbers behave differently, so the card must know. */
   usesBusinessApp: z.boolean().default(false),
   qualityRating: z.string().nullable().default(null),

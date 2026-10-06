@@ -216,7 +216,14 @@
       "mode": {
         "AI_AUTO_REPLY": "Answers on its own",
         "HUMAN_WITH_COPILOT": "Drafts, a person sends"
-      }
+      },
+      "modeAsk": {
+        "AI_AUTO_REPLY": "Let GOTCHA answer on its own on this number?",
+        "HUMAN_WITH_COPILOT": "Have GOTCHA draft and a person send on this number?"
+      },
+      "modeYes": "Yes, switch",
+      "modeNo": "Not now",
+      "modeFailed": "That didn’t switch — nothing changed."
     },
     "addNumber": "+ Add another number",
     "learn": {

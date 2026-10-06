@@ -1,4 +1,4 @@
-import { MessageCircle, X } from 'lucide-react';
+import { List, MessageCircle, RefreshCw, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
 
@@ -79,9 +79,11 @@ export async function WhatsAppPanel({
         */}
         <footer className={styles.panelFoot}>
           <span className={styles.panelFootLink} aria-disabled="true" title={t('footNotYet')}>
+            <RefreshCw size={13} aria-hidden="true" />
             {t('foot.refresh')}
           </span>
           <span className={styles.panelFootLink} aria-disabled="true" title={t('footNotYet')}>
+            <List size={13} aria-hidden="true" />
             {t('foot.activity')}
           </span>
           <span className={styles.panelFootDanger} aria-disabled="true" title={t('footNotYet')}>
