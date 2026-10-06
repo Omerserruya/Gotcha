@@ -11,6 +11,8 @@
 import { Router, type Request, type Response } from "express";
 import { authenticate, resolveTenant, requireActiveTenant, requirePermission } from "@chatcenter/shared";
 import { commerceSummaries, segmentCounts, contactByOrderNumber } from "../services/customer-commerce.service";
+import { getCustomerOrders } from "../services/customer-orders.service";
+import { principalOf, commercePerms } from "../services/commerce-perms";
 
 const router = Router();
 const MAX_IDS = 100;
@@ -29,6 +31,29 @@ router.get("/commerce-summary", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("[customer-commerce] summary failed:", err?.message);
     res.status(500).json({ error: "commerce_summary_failed" });
+  }
+});
+
+/**
+ * GET /:contactId/orders?limit=10&locale=he - the customer's orders with
+ * details, one OrderCard shape for WooCommerce and Shopify, each card marked
+ * with how the customer was matched (verified / email / phone).
+ */
+router.get("/:contactId/orders", async (req: Request, res: Response) => {
+  try {
+    const perms = await commercePerms(principalOf(req as any));
+    const out = await getCustomerOrders({
+      tenantId: req.tenantId!,
+      contactId: String(req.params.contactId),
+      locale: (req.query.locale as string) || (req.headers["accept-language"] as string | undefined),
+      limit: Number(req.query.limit) || undefined,
+      perms,
+    });
+    if (out.source === null && out.reason === "contact_not_found") { res.status(404).json({ error: "contact_not_found" }); return; }
+    res.json(out);
+  } catch (err: any) {
+    console.error("[customer-commerce] orders failed:", err?.message);
+    res.status(500).json({ error: "customer_orders_failed" });
   }
 });
 

@@ -16,39 +16,14 @@ import {
   resolveTenant,
   requireActiveTenant,
   requirePermission,
-  hasPermission,
   isCustomerScopedAction,
   isOrderScopedAction,
-  type PermissionPrincipal,
 } from "@chatcenter/shared";
 import { buildCommerceContextResponse } from "../services/commerce-context.service";
+import { principalOf, commercePerms } from "../services/commerce-perms";
 import { executeCommerceAction } from "../services/commerce-actions.service";
 
 const router = Router();
-
-function principalOf(req: Request & { tenantId?: string }): PermissionPrincipal {
-  const u = (req as any).user ?? {};
-  return {
-    userId: u.userId,
-    tenantId: req.tenantId || u.tenantId,
-    role: u.role,
-    departmentRole: u.departmentRole,
-  };
-}
-
-async function commercePerms(p: PermissionPrincipal) {
-  const [canRead, canOpen, canCancel, canRefund, canReturn, canTag, canNote, canNotify] = await Promise.all([
-    hasPermission(p, "customer:commerce:read"),
-    hasPermission(p, "customer:commerce:open"),
-    hasPermission(p, "customer:commerce:cancel"),
-    hasPermission(p, "customer:commerce:refund"),
-    hasPermission(p, "customer:commerce:return"),
-    hasPermission(p, "customer:commerce:tag"),
-    hasPermission(p, "customer:commerce:note"),
-    hasPermission(p, "customer:commerce:notify"),
-  ]);
-  return { canRead, canOpen, canCancel, canRefund, canReturn, canTag, canNote, canNotify };
-}
 
 /** Which permission a given action needs. One table, so the route gate and the
  *  service gate cannot disagree about what an action costs. */

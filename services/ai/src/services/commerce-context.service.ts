@@ -59,13 +59,13 @@ export function invalidateCommerceCache(opts: { tenantId: string; conversationId
   return n;
 }
 
-type Locale = "en" | "he";
+export type Locale = "en" | "he";
 const he = (l: Locale) => l === "he";
 
 // ── Localized business-friendly labels (spec §3/§4) ─────────────────────────
 // Raw Shopify enums are never surfaced; each maps to a { key, label, tone }.
 
-function financialChip(status: string | null | undefined, locale: Locale): StatusChip {
+export function financialChip(status: string | null | undefined, locale: Locale): StatusChip {
   const s = String(status || "").toLowerCase();
   const M: Record<string, [string, string, StatusChip["tone"]]> = {
     paid: ["Paid", "שולם", "positive"],
@@ -80,7 +80,7 @@ function financialChip(status: string | null | undefined, locale: Locale): Statu
   return { key: s || "pending", label: he(locale) ? hit[1] : hit[0], tone: hit[2] };
 }
 
-function fulfillmentChip(status: string | null | undefined, locale: Locale): StatusChip {
+export function fulfillmentChip(status: string | null | undefined, locale: Locale): StatusChip {
   const s = String(status || "").toLowerCase();
   const M: Record<string, [string, string, StatusChip["tone"]]> = {
     "": ["Unfulfilled", "טרם נשלח", "neutral"],
@@ -97,7 +97,7 @@ function fulfillmentChip(status: string | null | undefined, locale: Locale): Sta
 }
 
 /** Refund chip derived from refunded vs total - never from a raw enum. */
-function refundChip(refunded: number, total: number, locale: Locale): StatusChip | null {
+export function refundChip(refunded: number, total: number, locale: Locale): StatusChip | null {
   if (!(refunded > 0)) return null;
   if (refunded >= total) {
     return { key: "refunded", label: he(locale) ? "הוחזר" : "Refunded", tone: "danger" };
@@ -105,7 +105,7 @@ function refundChip(refunded: number, total: number, locale: Locale): StatusChip
   return { key: "partially_refunded", label: he(locale) ? "הוחזר חלקית" : "Partially refunded", tone: "warning" };
 }
 
-function cancelledChip(locale: Locale): StatusChip {
+export function cancelledChip(locale: Locale): StatusChip {
   return { key: "cancelled", label: he(locale) ? "בוטל" : "Cancelled", tone: "danger" };
 }
 
@@ -126,7 +126,7 @@ function shippingChip(order: any, locale: Locale): StatusChip | null {
 
 // ── Money helpers (never cross-currency) ────────────────────────────────────
 
-function money(amount: unknown, currency: unknown): Money {
+export function money(amount: unknown, currency: unknown): Money {
   const n = Number(amount);
   return { amount: Number.isFinite(n) ? n.toFixed(2) : "0.00", currency: String(currency || "USD") };
 }
