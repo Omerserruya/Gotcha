@@ -112,6 +112,7 @@ describe("WooCommerce", () => {
     });
     expect(o2).toMatchObject({ cancelled: true, financial: { key: "voided" }, items: [{ imageUrl: "https://img/77.jpg" }] });
     expect(o4).toMatchObject({ fulfillment: { key: "fulfilled" }, refund: { key: "partially_refunded" }, refundedAmount: { amount: "30.00" } });
+    expect(o1.detail.lineItems[0]).toMatchObject({ lineItemId: "11", unitPrice: { amount: "50.00" } });
   });
 
   it("a refunded order that had shipped says shipped, matching its timeline", async () => {
@@ -120,7 +121,6 @@ describe("WooCommerce", () => {
     expect(o.financial.key).toBe("refunded");
     expect(o.fulfillment.key).toBe("fulfilled");
     expect(o.timeline.find((t: any) => t.key === "fulfilled").reached).toBe(true);
-    expect(o1.detail.lineItems[0]).toMatchObject({ lineItemId: "11", unitPrice: { amount: "50.00" } });
   });
 
   it("limit, and a second read inside a minute is served from the cache", async () => {
