@@ -1,6 +1,6 @@
 # AI Studio: Skills and Automations - mapping, decisions and work plan
 
-Status: living document. Owner: rebrand supervisor session. Last update: 2026-10-06.
+Status: living document. Owner: rebrand supervisor session. Last update: 2026-10-06 (Phase 1 backend built).
 Design source: `/home/ocs/projects/redesign/design/Redesigning GOTCHA from scratch 6/GOTCHA Directions.dc.html`
 (frames 00d-00h, 07, 07f, 07g, 09, 09b, 09c, 09d, 09e, 13g-13j, 21). Extracted spec: `/tmp/claude-1000/design6/SPEC.md` (local).
 
@@ -149,3 +149,12 @@ Rules for every phase: dev only, no push, tests through the real router, tenant 
 - "Asks you over X" on a step only tightens approval, never loosens.
 - Order event, cart, form and story triggers are shown unavailable until an event source exists.
 - `FlowCanvas` (main playbook) is not migrated in this round.
+- (Phase 1, backend) Only `active` skills run in the loop; a `draft` does not run, not even in watch. Publishing = PUT `status: "active"`.
+- (Phase 1) `version` increments on every PUT. A run follows ONE definition: no old definitions are stored, so editing a skill ends its open runs as `abandoned` (`skill_changed`) and the new version starts fresh if it still fits ("an edit applies from the next run").
+- (Phase 1) Selection rides the wizard-binding judgement call. An employee with skills but no wizard config now makes that call (the only added cost); with no skills the call and its prompt are byte-identical.
+- (Phase 1) A skill that finished in a conversation is not restarted there for 5 minutes (live check: a "thanks" restarted it). The employee still answers; it only does not open a duplicate run.
+- (Phase 1) While a live (`on`) skill owns the turn, `# Current Plan` renders paused (its drive stands aside, the tool list stays) and the objective-driven forcing, recovery and passive-close backstop are gated. The objective snapshot still persists, so the chain resumes after the skill ends.
+- (Phase 1) Step state = the run's own trace (each turn's tool calls from the bot log, including results reused from the idempotency window and sandbox simulations) merged with `ToolExecutionRequest` rows timed by their latest event. Request rows alone missed reused results.
+- (Phase 1) `askedYou` = runs that ended `handed_over` or whose trace has an approval request. Skill stats exclude sandbox (test chat) runs; the run log lists them.
+- (Phase 1) `noSkillPolicy` is set through `PATCH /api/ai-agents/:id` (there is no PUT on that route).
+- (Phase 1) `requiredInfo` is sent by the editor, not derived from the steps by the backend.
