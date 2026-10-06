@@ -17,13 +17,16 @@
  * unrestricted, exactly as in the list.
  */
 import type { Request, Response, NextFunction } from "express";
-import { canViewConversation } from "./conversation-visibility";
+import { canViewConversation, visibilityClause } from "./conversation-visibility";
 
 export async function requireVisibleConversation(req: Request, res: Response, next: NextFunction, id: string): Promise<void> {
   try {
     const user = (req as any).user ?? {};
     const tenantId = (req as any).tenantId as string | undefined;
-    if (!tenantId) { res.status(404).json({ error: "Conversation not found" }); return; }
+    if (!tenantId || !user.userId) { res.status(404).json({ error: "Conversation not found" }); return; }
+    // An unrestricted viewer (admin, or no department) has nothing to check:
+    // the handler behaves exactly as before, without an extra query per call.
+    if (!visibilityClause({ userId: user.userId, role: user.role, departmentId: user.departmentId })) { next(); return; }
     const ok = await canViewConversation(tenantId, String(id), {
       userId: user.userId,
       role: user.role,

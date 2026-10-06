@@ -4,6 +4,13 @@ import { visibilityClause } from "../lib/conversation-visibility";
 import { situationOf } from "../lib/situation";
 
 const router = Router();
+
+/** The signed-in viewer, in the shape the visibility rule takes. */
+const viewerOfReq = (req: Request) => ({
+  userId: (req as any).user?.userId as string,
+  role: (req as any).user?.role as string | undefined,
+  departmentId: (req as any).user?.departmentId as string | undefined,
+});
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
 // POST /resolve - find existing contact by email/phone or heuristic metadata match
@@ -489,7 +496,13 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       });
     }
 
-    const convWhere = { tenantId, OR: orClauses, ...originClause };
+    // The viewer's visibility, as in the inbox: a department-restricted agent
+    // does not get another department's threads through a customer's history.
+    // Unrestricted viewers keep the exact where they had.
+    const viewerVisibility = visibilityClause(viewerOfReq(req));
+    const convWhere = viewerVisibility
+      ? { tenantId, AND: [{ OR: orClauses }, { OR: viewerVisibility }], ...originClause }
+      : { tenantId, OR: orClauses, ...originClause };
     const [conversationCount, convos] = await Promise.all([
       prisma.conversation.count({ where: convWhere }),
       prisma.conversation.findMany({
@@ -702,8 +715,7 @@ const PERSON_CONVERSATIONS_MAX_LIMIT = 50;
  * ★ VISIBILITY. The list applies `visibilityClause` - the ONE rule the inbox
  * list and the socket room join use - so a department-restricted agent is not
  * shown other departments' conversations, or their summaries, through a
- * customer's history. /timeline does not apply it; that is a known gap of its
- * own and is not widened here.
+ * customer's history. /timeline and /insights apply it too.
  *
  * `summary` is ConversationIntelligence.summary through `situationOf`, the
  * cleaning the contact list already uses: the first meaningful line, markdown
@@ -808,7 +820,13 @@ router.get("/:id/insights", async (req: Request, res: Response) => {
     };
     if (orClauses.length === 0) return res.json(empty);
 
-    const convWhere = { tenantId, OR: orClauses, ...originClause };
+    // The viewer's visibility, as in the inbox: a department-restricted agent
+    // does not get another department's threads through a customer's history.
+    // Unrestricted viewers keep the exact where they had.
+    const viewerVisibility = visibilityClause(viewerOfReq(req));
+    const convWhere = viewerVisibility
+      ? { tenantId, AND: [{ OR: orClauses }, { OR: viewerVisibility }], ...originClause }
+      : { tenantId, OR: orClauses, ...originClause };
     const [conversationCount, convos] = await Promise.all([
       prisma.conversation.count({ where: convWhere }),
       prisma.conversation.findMany({

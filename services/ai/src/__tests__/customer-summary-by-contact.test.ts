@@ -28,6 +28,13 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@chatcenter/shared", () => ({
+  // Conversation visibility guard, pass-through: this suite covers other
+  // behaviour; the guard is proved in conversation-visibility-ai.test.ts.
+  requireVisibleConversation: (_q: any, _s: any, n: any) => n(),
+  visibleConversationFrom: () => (_q: any, _s: any, n: any) => n(),
+  canViewConversation: async () => true,
+  visibilityClause: () => null,
+  viewerOf: (req: any) => ({ userId: req?.user?.userId }),
   prisma: {
     contact: { findFirst: async ({ where }: any) => state.contacts.find((c) => c.id === where.id) ?? null },
     conversation: {

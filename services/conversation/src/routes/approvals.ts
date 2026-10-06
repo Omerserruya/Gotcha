@@ -37,6 +37,7 @@ import {
   outgoingMessageQueue,
   evaluateToolGate,
 } from "@chatcenter/shared";
+import { canViewConversation, visibilityClause } from "../lib/conversation-visibility";
 import { applyApprovalEdits } from "../lib/approval-edits";
 
 /**
@@ -278,6 +279,41 @@ export function sanitizeExecutionResult(value: unknown, depth = 0): unknown {
 }
 
 const router = Router();
+
+/**
+ * An approval is about a conversation, and answers only for a viewer who may
+ * see that conversation - the same rule as the inbox (404 otherwise, as for a
+ * missing approval). With no user on the request this passes through: the two
+ * internal dispatch routes above the user auth carry no session and are
+ * guarded by requireInternalKey, which still runs after this. An approval with
+ * no conversation, or none at all, is left to the handler.
+ */
+router.param("id", async (req: Request, res: Response, next, id: string) => {
+  try {
+    const user = (req as any).user;
+    const tenantId = (req as any).tenantId as string | undefined;
+    if (!user || !tenantId) return next();
+    // An unrestricted viewer (admin, or no department) has nothing to check -
+    // and must not lose an approval because its conversation was deleted.
+    if (!visibilityClause(viewerFromReq(req))) return next();
+    const approval = await prisma.approvalRequest.findFirst({
+      where: { id: String(id), tenantId },
+      select: { conversationId: true },
+    });
+    if (!approval?.conversationId) return next();
+    const ok = await canViewConversation(tenantId, approval.conversationId, viewerFromReq(req));
+    if (!ok) { res.status(404).json({ error: "approval not found" }); return; }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+const viewerFromReq = (req: Request) => ({
+  userId: (req as any).user?.userId as string,
+  role: (req as any).user?.role as string | undefined,
+  departmentId: (req as any).user?.departmentId as string | undefined,
+});
 
 /**
  * Did the tool say, in its own result, that nothing changed?

@@ -1,47 +1,20 @@
 /**
- * Who may see a conversation. ONE definition, used by the list query and by
- * the Socket.IO room join.
+ * Who may see a conversation, bound to this service's prisma.
  *
- * The rule already existed, inline in `conversationService.list`. It is lifted
- * here unchanged so the realtime path cannot answer a different question from
- * the REST path - a socket that is easier to get data out of than a request is
- * the whole problem this module exists to prevent.
- *
- * KNOWN HOLES, deliberately preserved rather than quietly fixed:
- *
- *   1. The filter only applies when the user HAS a department. A non-ADMIN with
- *      `departmentId` unset falls through to "see everything in the tenant".
- *   2. `GET /api/conversations/:id` applies no per-user scoping at all.
- *
- * Both predate this module and both are real. Tightening either one inside a
- * realtime change would move an access rule in a diff where no reviewer would
- * be looking for it; they are reported as their own items instead. When they
- * are fixed, this is the one place to fix them.
+ * The RULE (`visibilityClause`) is the shared one - packages/shared/src/lib/
+ * conversation-visibility-rule.ts - so the inbox list, the socket room join,
+ * every by-id route here and the AI service's conversation routes all answer
+ * the same question. Known hole (a non-admin with no department sees the whole
+ * tenant) is documented there.
  */
 import { prisma } from "@chatcenter/shared";
 
-export interface Viewer {
-  userId: string;
-  role?: string;
-  departmentId?: string;
-}
-
-/**
- * The visibility clause for a viewer, or `null` when the viewer is unrestricted
- * (an ADMIN, or - see hole 1 - a non-admin with no department).
- *
- * `null` means "add nothing to the where clause". It does NOT mean "match
- * nothing"; a caller that treats it as a filter value would invert the rule.
- */
-export function visibilityClause(viewer: Viewer): Record<string, unknown>[] | null {
-  const { role, userId, departmentId } = viewer;
-  if (!role || role === "ADMIN" || !departmentId) return null;
-  return [
-    { departmentId, assignedAgentId: null },
-    { departmentId: null, assignedAgentId: null },
-    { assignedAgentId: userId },
-  ];
-}
+// The rule itself is shared (one definition for every service, including the
+// AI service's conversation routes). Deep-imported from its import-free file so
+// this service's tests, which mock the @chatcenter/shared barrel, still run the
+// real rule. canViewConversation below binds it to this service's prisma.
+import { visibilityClause, type Viewer } from "@chatcenter/shared/src/lib/conversation-visibility-rule";
+export { visibilityClause, type Viewer };
 
 /**
  * May this viewer see this one conversation?

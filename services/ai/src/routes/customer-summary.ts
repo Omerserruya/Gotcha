@@ -12,7 +12,7 @@
  */
 
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireActiveTenant, prisma } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireActiveTenant, prisma, canViewConversation, visibilityClause, viewerOf } from "@chatcenter/shared";
 import {
   getCustomerBrief,
   refreshCustomerBriefFromConversation,
@@ -133,6 +133,13 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
       select: { channel: true, customerExternalId: true, tenantId: true },
     });
     if (!conv || conv.tenantId !== tenantId) {
+      res.status(404).json({ error: "conversation_not_found" });
+      return;
+    }
+    // Here, after the contactId → conversation resolution above, so both ways
+    // in are checked: a conversation this viewer may not see is the same 404.
+    const viewer = viewerOf(req);
+    if (visibilityClause(viewer) && !(await canViewConversation(tenantId, conversationId, viewer))) {
       res.status(404).json({ error: "conversation_not_found" });
       return;
     }

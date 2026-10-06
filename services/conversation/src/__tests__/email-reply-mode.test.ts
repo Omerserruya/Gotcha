@@ -31,7 +31,9 @@ vi.mock("@chatcenter/shared", async () => {
     ...actual,
     prisma,
     outgoingMessageQueue,
-    authenticate: (req: any, _res: any, next: any) => { req.user = { email: "agent@acme.test" }; next(); },
+    // A real principal always carries userId; the by-id visibility guard fails
+    // closed without one.
+    authenticate: (req: any, _res: any, next: any) => { req.user = { userId: "u_agent", email: "agent@acme.test" }; next(); },
     resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = "t1"; next(); },
     requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     validate: (schema: any) => (req: any, res: any, next: any) => {

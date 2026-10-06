@@ -3,6 +3,13 @@ import express from "express";
 import request from "supertest";
 
 vi.mock("@chatcenter/shared", () => ({
+  // Conversation visibility guard, pass-through: this suite covers other
+  // behaviour; the guard is proved in conversation-visibility-ai.test.ts.
+  requireVisibleConversation: (_q: any, _s: any, n: any) => n(),
+  visibleConversationFrom: () => (_q: any, _s: any, n: any) => n(),
+  canViewConversation: async () => true,
+  visibilityClause: () => null,
+  viewerOf: (req: any) => ({ userId: req?.user?.userId }),
   // The business policy moved into this barrel (lib/workspace-policy) so
   // services/auth can write what services/ai reads. An exhaustive mock has to
   // grow with it, or the routes fail to load rather than failing a test.

@@ -20,6 +20,13 @@ import path from "path";
 const H = vi.hoisted(() => ({ profile: null as any, historical: null as any }));
 
 vi.mock("@chatcenter/shared", () => ({
+  // Conversation visibility guard, pass-through: this suite covers other
+  // behaviour; the guard is proved in conversation-visibility-ai.test.ts.
+  requireVisibleConversation: (_q: any, _s: any, n: any) => n(),
+  visibleConversationFrom: () => (_q: any, _s: any, n: any) => n(),
+  canViewConversation: async () => true,
+  visibilityClause: () => null,
+  viewerOf: (req: any) => ({ userId: req?.user?.userId }),
   requireInternalKey: (_q: any, _s: any, n: any) => n(),
   requireEntitlement: () => (_q: any, _s: any, n: any) => n(),
   authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "agent1", role: "AGENT" }; n(); },

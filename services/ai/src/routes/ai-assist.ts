@@ -11,6 +11,7 @@ import {
   resolveEffectiveLocale,
   requireEntitlement,
   getRedis,
+  requireVisibleConversation,
 } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
 import { runDeduped } from "../services/copilot-dedup.service";
@@ -259,6 +260,9 @@ router.use("/voice", voiceRouter);
 // ─── Main AI Routes (require active tenant) ─────────────────
 
 router.use(authenticate, resolveTenant, requireActiveTenant());
+// Every /:conversationId route below answers only for a conversation this
+// viewer may see (the inbox's rule, shared); 404 otherwise.
+router.param("conversationId", requireVisibleConversation);
 
 // Tools registry - MUST be before /:conversationId routes
 router.get("/tools/registry", requireRole("ADMIN"), async (req: Request, res: Response) => {

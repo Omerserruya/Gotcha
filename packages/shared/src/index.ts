@@ -939,6 +939,7 @@ export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middle
 export { enforceMfaEnrollment } from "./middleware/mfa-guard";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
 export { requirePermission, requirePermissionOrRole } from "./middleware/permission-gate";
+export { visibilityClause, canViewConversation, requireVisibleConversation, visibleConversationFrom, viewerOf, type Viewer } from "./lib/conversation-visibility";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant, requirePaymentSetupAccess } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";

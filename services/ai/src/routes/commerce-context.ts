@@ -18,6 +18,7 @@ import {
   requirePermission,
   isCustomerScopedAction,
   isOrderScopedAction,
+  visibleConversationFrom,
 } from "@chatcenter/shared";
 import { buildCommerceContextResponse } from "../services/commerce-context.service";
 import { principalOf, commercePerms } from "../services/commerce-perms";
@@ -49,6 +50,10 @@ router.get(
   authenticate,
   resolveTenant,
   requireActiveTenant(),
+  // After authenticate: this router authenticates per route, so a router.param
+  // hook would run before the user exists. 404 for a conversation this viewer
+  // may not see.
+  visibleConversationFrom("conversationId"),
   requirePermission("customer:commerce:read"),
   async (req: Request & { tenantId?: string }, res: Response) => {
     try {
@@ -80,6 +85,10 @@ router.post(
   authenticate,
   resolveTenant,
   requireActiveTenant(),
+  // After authenticate: this router authenticates per route, so a router.param
+  // hook would run before the user exists. 404 for a conversation this viewer
+  // may not see.
+  visibleConversationFrom("conversationId"),
   // Needs at least one action permission; the specific action is checked below.
   requirePermission(
     "customer:commerce:cancel",
