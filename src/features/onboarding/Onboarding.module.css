@@ -743,6 +743,156 @@
     cursor: default;
   }
 
+  /* 00g */
+  .truth {
+    display: flex;
+    flex-direction: column;
+    max-inline-size: 680px;
+  }
+
+  .system {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-block-start: 24px;
+    padding: 18px 20px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .systemHead {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .systemText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .systemName {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .foundOn {
+    padding: 2px 7px;
+    border-radius: 5px;
+    background-color: var(--ai-avatar-surface);
+    font-size: 10.5px;
+    font-weight: 400;
+    color: var(--ai-avatar-text);
+  }
+
+  .connected {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background-color: var(--signal-done-surface);
+    font-size: 11px;
+    color: var(--signal-done-text);
+  }
+
+  .connectHere {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .systems {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-block-start: 10px;
+  }
+
+  .systemTile {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 12px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 12px;
+    background-color: var(--panel-field);
+    font-size: 12.5px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .systemTile:hover {
+    border-color: var(--border-emphasis);
+  }
+
+  .may {
+    display: flex;
+    flex-direction: column;
+    margin-block-start: 14px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .mayTitle {
+    margin: 0;
+    padding: 14px 18px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .mayRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 18px;
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+    font-size: 12.5px;
+  }
+
+  .always {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background-color: var(--panel-inset);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .stances {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 8px;
+    background-color: var(--panel-inset);
+  }
+
+  .stance {
+    padding: 4px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-faint);
+    font: inherit;
+    font-size: 11px;
+    cursor: default;
+  }
+
+  .mayWhy {
+    margin: 0;
+    padding: 10px 18px 14px;
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+    font-size: 11.5px;
+    color: var(--intent-blocked-text);
+  }
+
   @media (width <= 1000px) {
     .frame {
       grid-template-columns: 1fr;
@@ -774,6 +924,10 @@
 
     .learned {
       grid-template-columns: 1fr;
+    }
+
+    .systems {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
 }

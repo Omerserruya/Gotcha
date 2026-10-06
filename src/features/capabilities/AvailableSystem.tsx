@@ -3,12 +3,8 @@ import { getTranslations } from 'next-intl/server';
 import { humaniseCode } from '@/api/contracts/capabilities';
 import { sentenceCase, type Integration } from '@/api/contracts/integrations';
 
-import { ConnectForm } from './ConnectForm';
+import { ConnectFor } from './ConnectFor';
 import { IntegrationLogo } from './IntegrationLogo';
-import { OAuthButton } from './OAuthButton';
-import { ShopifyConnect } from './ShopifyConnect';
-import { WooConnect } from './WooConnect';
-import { oauthHere } from './oauth';
 import styles from './Capabilities.module.css';
 
 const RISK = new Set(['LOW', 'MEDIUM', 'HIGH']);
@@ -33,7 +29,6 @@ export async function AvailableSystem({
   readonly shopify?: { readonly mode: string; readonly helpUrl: string | null } | null;
 }) {
   const t = await getTranslations('capabilities');
-  const { oauth, fields } = integration.authSchema;
   const line = [
     integration.category ? humaniseCode(integration.category) : null,
     integration.description,
@@ -64,29 +59,15 @@ export async function AvailableSystem({
         <h2 className={styles.connectHeading}>
           {t('available.connectTitle', { name: integration.name })}
         </h2>
-        {integration.slug === 'shopify' ? (
-          <ShopifyConnect mode={shopify?.mode ?? null} helpUrl={shopify?.helpUrl ?? null} />
-        ) : integration.slug === 'woocommerce' ? (
-          // B: the store's own approval replaces the key form.
-          <WooConnect name={integration.name} />
-        ) : !oauth && fields.length > 0 ? (
-          <ConnectForm slug={integration.slug} name={integration.name} fields={fields} />
-        ) : oauth && oauthHere(integration.slug, false) ? (
-          <OAuthButton slug={integration.slug} name={integration.name} mode="connect" />
-        ) : (
-          <span
-            className={styles.connectButton}
-            aria-disabled="true"
-            title={
-              oauth
-                ? t('available.oauthNotHere', { name: integration.name })
-                : t('available.noForm')
-            }
-            data-testid="connect-drawn"
-          >
-            {t('available.connect')}
-          </span>
-        )}
+        <ConnectFor
+          integration={integration}
+          shopify={shopify}
+          drawn={{
+            connect: t('available.connect'),
+            oauthNotHere: t('available.oauthNotHere', { name: integration.name }),
+            noForm: t('available.noForm'),
+          }}
+        />
       </section>
 
       <section className={styles.group} data-testid="available-brings">

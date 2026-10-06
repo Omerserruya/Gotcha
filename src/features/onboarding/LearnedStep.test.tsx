@@ -58,9 +58,9 @@ beforeEach(() => {
 });
 
 describe('★★ 00f - what it knows, as it is in Knowledge', () => {
-  it('counts the facts against the pages read; each with its page; one still learning', () => {
+  it('counts what is there - topics (Knowledge documents), not facts - against the pages read; each with its page; one still learning', () => {
     show();
-    expect(screen.getByTestId('learned-count')).toHaveTextContent('2 facts from 142 pages');
+    expect(screen.getByTestId('learned-count')).toHaveTextContent('2 topics from 142 pages');
     expect(screen.getByTestId('learned-facts')).toHaveTextContent('/shipping');
     expect(screen.getByTestId('learned-facts')).toHaveTextContent('Learning…');
   });

@@ -3,6 +3,7 @@ import 'server-only';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
+import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
 import { knowledgeListSchema } from '@/api/contracts/knowledge';
 import { workspaceVoiceSchema, type WorkspaceVoice } from '@/api/contracts/workspace';
 import {
@@ -16,10 +17,15 @@ import {
 } from '@/api/contracts/onboarding';
 import {
   authEndpoints,
+  integrationEndpoints,
   knowledgeEndpoints,
   onboardingEndpoints,
   workspaceEndpoints,
 } from '@/api/endpoints/registry';
+import {
+  loadShopifyAvailability,
+  type ShopifyAvailability,
+} from '@/features/capabilities/load-capabilities';
 import { logger } from '@/observability/logger';
 
 /** Where 00d's guess came from - its line under the title says so. */
@@ -155,4 +161,39 @@ export async function loadLearned(): Promise<LearnedRead> {
       }),
   ]);
   return { discovery, facts, voice };
+}
+
+export interface TruthRead {
+  /** The catalogue with this workspace's connection on each. `null`: unread. */
+  readonly integrations: readonly Integration[] | null;
+  readonly shopify: ShopifyAvailability | null;
+  /** The store platform the website read found, and the site it found it on. */
+  readonly detected: { readonly slug: string; readonly host: string | null } | null;
+}
+
+/** 00g: what can be connected, what is, and what the read found on the site. */
+export async function loadTruth(): Promise<TruthRead> {
+  const [integrations, shopify, discovery] = await Promise.all([
+    serverApi()
+      .get({ endpoint: integrationEndpoints.list(), payload: integrationsSchema })
+      .catch((cause: unknown) => {
+        logger.warn('onboarding.integrations_failed', {
+          status: isApiError(cause) ? cause.status : undefined,
+        });
+        return null;
+      }),
+    loadShopifyAvailability(),
+    loadDiscovery(),
+  ]);
+  const platform = discovery?.technology?.platform?.slug?.trim().toLowerCase() || null;
+  return {
+    integrations,
+    shopify,
+    detected: platform
+      ? {
+          slug: platform,
+          host: discovery?.websiteDomain ? siteHost(discovery.websiteDomain) : null,
+        }
+      : null,
+  };
 }

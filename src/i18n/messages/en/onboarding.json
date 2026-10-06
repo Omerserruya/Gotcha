@@ -83,8 +83,8 @@
     "lead": "Approve once. Everything here lands in Knowledge, where you can change it any time.",
     "foot": "Nothing reaches a customer until you say so",
     "title": "What GOTCHA knows now",
-    "count": "{facts, plural, =1 {1 fact from your website} other {# facts from your website}}",
-    "countFromPages": "{facts, plural, =1 {1 fact} other {# facts}} from {pages, plural, =1 {1 page} other {# pages}}",
+    "count": "{facts, plural, =1 {1 topic from your website} other {# topics from your website}}",
+    "countFromPages": "{facts, plural, =1 {1 topic} other {# topics}} from {pages, plural, =1 {1 page} other {# pages}}",
     "none": "Nothing from your website is in Knowledge yet",
     "unread": "Couldn't read Knowledge just now",
     "inKnowledge": "In Knowledge",
@@ -123,7 +123,51 @@
   "truth": {
     "headline": "The most important connection you'll make.",
     "lead": "Your website explains how things work. Your store knows what's true right now. GOTCHA checks it before every answer about an order, a price or stock.",
-    "foot": "You decide what it may change. Reading is always safe"
+    "foot": "You decide what it may change. Reading is always safe",
+    "title": "Where does the truth live?",
+    "subtitle": "Orders, stock, prices and customers. GOTCHA checks here before every answer, so it never guesses from an old web page",
+    "systems": {
+      "shopify": "Shopify",
+      "woocommerce": "WooCommerce",
+      "priority": "Priority",
+      "wix": "Wix",
+      "google_sheets": "Google Sheets",
+      "custom_api": "Your API"
+    },
+    "how": {
+      "shopify": "One sign-in, at Shopify",
+      "woocommerce": "Your store's address, then approve in WooCommerce",
+      "priority": "An API key from Priority",
+      "wix": "One sign-in, at Wix",
+      "google_sheets": "A sheet you share with GOTCHA",
+      "custom_api": "Set up with GOTCHA's team"
+    },
+    "foundOn": "Found on <host></host>",
+    "connected": "Connected",
+    "unread": "Couldn't read your systems just now. Try again in a moment.",
+    "notOffered": "Connecting {name} isn't available yet.",
+    "comesBack": "Connecting opens {name}. When it's done you come back to Studio · Integrations, where the connection shows.",
+    "others": "Other systems",
+    "may": {
+      "title": "What GOTCHA may do there",
+      "read": "Read everything above",
+      "always": "Always on",
+      "actions": {
+        "address": "Change a delivery address",
+        "cancel": "Cancel an order that hasn't shipped",
+        "refund": "Refund or give credit",
+        "prices": "Change prices or stock"
+      },
+      "stances": {
+        "allowed": "Allowed",
+        "ask": "Ask me first",
+        "never": "Never"
+      },
+      "why": "You set these in Studio · Integrations once the workspace is live. They can't be set during setup yet"
+    },
+    "next": "Continue",
+    "skip": "Skip for now",
+    "skipWhy": "Without it, GOTCHA can explain your policies, but it can't check an order, a price or stock"
   },
   "try": {
     "headline": "Judge it on your own questions.",
