@@ -112,6 +112,14 @@ export async function EmployeeDetail({
             openConversations={employee.openConversations}
             paused={employee.status === 'PAUSED'}
           />
+          {/* 07g: what this employee knows how to do. */}
+          <Link
+            href={`/studio/employees/${employee.id}/skills`}
+            className={styles.button}
+            data-testid="employee-skills-link"
+          >
+            {t('detail.skills')}
+          </Link>
           {/* 07f: the Edit sheet over this screen. */}
           <Link
             href={{

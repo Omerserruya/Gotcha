@@ -189,5 +189,68 @@
     "runSteps": "{count, plural, =1 {1 step} other {# steps}} · version {version}",
     "openConversation": "Open the conversation"
   },
-  "notFound": "This skill isn’t here - it may have been archived, or it belongs to another workspace."
+  "notFound": "This skill isn’t here - it may have been archived, or it belongs to another workspace.",
+  "employee": {
+    "tabsLabel": "This employee",
+    "tabs": {
+      "profile": "Profile",
+      "knowledge": "Knowledge",
+      "skills": "Skills · {count}",
+      "channels": "Channels",
+      "limits": "Limits and handover"
+    },
+    "status": {
+      "live": "Live",
+      "paused": "Paused",
+      "draft": "Draft"
+    },
+    "save": "Save",
+    "saving": "Saving…",
+    "said": {
+      "saved": "Saved. It applies from the next conversation.",
+      "failed": "The skills couldn’t be saved just now. Nothing was changed.",
+      "policyFailed": "The skills are saved, but “When no skill fits” couldn’t be - try Save again."
+    },
+    "none": "{name} doesn’t carry any skills yet. Add one on the right - it starts in Watch.",
+    "runs": "{count, plural, =1 {1 run} other {# runs}}",
+    "watching": "watching",
+    "moveUp": "Move {name} up",
+    "moveDown": "Move {name} down",
+    "modeFor": "{name} for this employee",
+    "modes": {
+      "on": "On",
+      "watch": "Watch",
+      "off": "Off"
+    },
+    "draft": "Draft",
+    "draftWhy": "A draft runs nowhere, not even in Watch. Make it active from the skill.",
+    "fallback": {
+      "title": "When no skill fits",
+      "answer_from_knowledge": "Answer from Knowledge, hand over if unsure",
+      "always_handover": "Always hand over to the team",
+      "knowledge_only": "Answer from Knowledge only, never hand over"
+    },
+    "add": {
+      "title": "Add a skill",
+      "search": "Search skills",
+      "unread": "The skills couldn’t be read just now.",
+      "none": "Every skill is already here.",
+      "noMatch": "No skill matches.",
+      "usedBy": "Used by {names}",
+      "usedByNobody": "Nobody uses it yet",
+      "add": "Add",
+      "write": "Write a new skill"
+    },
+    "fit": {
+      "handsOver": "At step {step}, {name} would hand over: {why}",
+      "reasons": {
+        "integration_not_connected": "{tool} isn’t connected.",
+        "tool_disabled_for_workspace": "{tool} is switched off for the workspace.",
+        "not_allowed_for_employee": "{tool} isn’t allowed for this employee.",
+        "no_calendar_connected": "no calendar is connected."
+      }
+    },
+    "unread": "This employee’s skills couldn’t be read just now.",
+    "noEmployee": "This employee isn’t here."
+  }
 }

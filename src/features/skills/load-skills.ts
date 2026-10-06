@@ -3,8 +3,12 @@ import 'server-only';
 import { serverApi } from '@/api/client/server-api';
 import { isApiError } from '@/api/client/api-error';
 import {
+  employeeSkillsSchema,
+  skillFitSchema,
   skillOneSchema,
   skillsListSchema,
+  type EmployeeSkills,
+  type SkillFit,
   toolChoicesSchema,
   type Skill,
   type ToolChoice,
@@ -105,5 +109,72 @@ export async function loadSkill(id: string, now = new Date()): Promise<SkillRead
     others: (library.skills ?? [])
       .filter((s) => s.status !== 'archived' && s.id !== id)
       .map((s) => ({ id: s.id, name: s.name })),
+  };
+}
+
+/** How many candidates 07g checks against the employee before showing them (one call each). */
+export const FIT_CHECKS = 12;
+
+export interface EmployeeSkillsTab {
+  /** `null`: the employee's list could not be read. */
+  readonly assigned: EmployeeSkills | null;
+  /** Skills this employee does not carry yet, with who else does; `null`: unread. */
+  readonly candidates:
+    | readonly {
+        readonly skill: Skill;
+        readonly fit: SkillFit | null;
+      }[]
+    | null;
+  /** Every skill's "in the customer's words" - for the rows the employee carries, too. */
+  readonly situations: ReadonlyMap<string, string | null>;
+}
+
+/**
+ * 07g's reads: the employee's ordered list, and the skills they could add -
+ * each checked against what this employee may do (`/fit`), so "Add" says
+ * where they would have to hand over before anyone presses it.
+ */
+export async function loadEmployeeSkillsTab(agentId: string): Promise<EmployeeSkillsTab> {
+  const api = serverApi();
+  const [assigned, library] = await Promise.all([
+    api
+      .get({
+        endpoint: skillEndpoints.forEmployee(agentId),
+        payload: employeeSkillsSchema,
+        raw: true,
+      })
+      .then((r) => r.data)
+      .catch((cause: unknown) => {
+        logger.warn('skills.employee_tab_failed', { cause });
+        return null;
+      }),
+    loadSkillsLibrary(),
+  ]);
+  const situations = new Map((library.skills ?? []).map((s) => [s.id, s.situation] as const));
+  if (library.skills === null || assigned === null) {
+    return { assigned, candidates: null, situations };
+  }
+  const carried = new Set(assigned.skills.map((s) => s.skillId));
+  const open = library.skills.filter((s) => s.status !== 'archived' && !carried.has(s.id));
+  const checked = await Promise.all(
+    open.slice(0, FIT_CHECKS).map((skill) =>
+      api
+        .post({
+          endpoint: skillEndpoints.fit(agentId),
+          body: { skillId: skill.id },
+          payload: skillFitSchema,
+          raw: true,
+        })
+        .then((r) => r.data)
+        .catch((cause: unknown) => {
+          logger.warn('skills.fit_failed', { cause });
+          return null;
+        }),
+    ),
+  );
+  return {
+    assigned,
+    candidates: open.map((skill, i) => ({ skill, fit: checked[i] ?? null })),
+    situations,
   };
 }
