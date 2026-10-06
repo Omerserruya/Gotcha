@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useTimeZone, useTranslations } from 'next-intl';
 import { useMemo, useState, useTransition } from 'react';
 
 import { groupByDomain, type PermissionDef } from '@/api/contracts/permission-catalog';
@@ -9,6 +9,7 @@ import drawer from '@/design-system/styles/drawer.module.css';
 import { Link } from '@/i18n/navigation';
 
 import { addPermission } from './actions';
+import { dateIn, expiresAtOf, type Ends } from './grant-end';
 import styles from './Roles.module.css';
 
 /**
@@ -19,8 +20,9 @@ import styles from './Roles.module.css';
  * ⚠ Add is a WRITE that gives a real person a permission. No test presses
  * it against the platform; the action is mocked to throw in every test.
  *
- * An end date is not stored for an extra permission — "No end date" is the
- * only answer, and 7 days / 30 days / a date are drawn, not live.
+ * Ends (backend 53a5079a): no end date, 7 or 30 days, or a date — each the
+ * END of that day in the workspace's time zone. A date is in the future
+ * only; the server refuses a past one anyway, and says so.
  */
 export function GrantPicker({
   person,
@@ -38,6 +40,8 @@ export function GrantPicker({
   /* 02 draws checkboxes: several at once, one call each, in order. */
   const [chosen, setChosen] = useState<readonly string[]>([]);
   const [reason, setReason] = useState('');
+  const timeZone = useTimeZone() ?? 'Asia/Jerusalem';
+  const [ends, setEnds] = useState<Ends>({ kind: 'none' });
   const [problem, setProblem] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -65,10 +69,12 @@ export function GrantPicker({
 
   function add() {
     if (chosen.length === 0) return;
+    if (ends.kind === 'date' && !ends.date) return;
     setProblem(null);
+    const expiresAt = expiresAtOf(ends, timeZone);
     startTransition(async () => {
       for (const key of chosen) {
-        const result = await addPermission(person.id, key, reason.trim());
+        const result = await addPermission(person.id, key, reason.trim(), expiresAt);
         if (!result.ok) {
           // Stop at the first refusal: the ones before it are given.
           setProblem(tr(`error.${result.reason}` as 'error.failed'));
@@ -147,20 +153,46 @@ export function GrantPicker({
       <div className={styles.grantFoot}>
         <div className={styles.grantRow}>
           <span className={drawer.fieldLabel}>{t('ends')}</span>
-          <span className={styles.grantSegmented} title={t('noEndOnly')}>
-            <span className={styles.grantSegment} data-current="yes">
-              {t('noEnd')}
-            </span>
-            <span className={styles.grantSegment} aria-disabled="true">
-              {t('days7')}
-            </span>
-            <span className={styles.grantSegment} aria-disabled="true">
-              {t('days30')}
-            </span>
-            <span className={styles.grantSegment} aria-disabled="true">
-              {t('pickDate')}
-            </span>
+          <span className={styles.grantSegmented} role="radiogroup" aria-label={t('ends')}>
+            {(
+              [
+                ['none', t('noEnd'), { kind: 'none' }],
+                ['days7', t('days7'), { kind: 'days', days: 7 }],
+                ['days30', t('days30'), { kind: 'days', days: 30 }],
+                ['date', t('pickDate'), { kind: 'date', date: '' }],
+              ] as const
+            ).map(([key, label, value]) => {
+              const current =
+                ends.kind === value.kind &&
+                (ends.kind !== 'days' || (value.kind === 'days' && ends.days === value.days));
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={current}
+                  className={styles.grantSegment}
+                  data-current={current ? 'yes' : undefined}
+                  data-testid={`grant-ends-${key}`}
+                  onClick={() => setEnds(value)}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </span>
+          {ends.kind === 'date' ? (
+            <input
+              type="date"
+              className={drawer.box}
+              aria-label={t('pickDate')}
+              // Tomorrow, there: a date that has already ended is not an end.
+              min={dateIn(timeZone, new Date(), 1)}
+              value={ends.date}
+              data-testid="grant-ends-day"
+              onChange={(e) => setEnds({ kind: 'date', date: e.target.value })}
+            />
+          ) : null}
         </div>
         <label className={styles.grantRow}>
           <span className={drawer.fieldLabel}>{t('why')}</span>
@@ -178,7 +210,9 @@ export function GrantPicker({
             type="button"
             className={styles.grantAdd}
             data-testid="grant-add"
-            disabled={chosen.length === 0 || isPending || done}
+            disabled={
+              chosen.length === 0 || isPending || done || (ends.kind === 'date' && !ends.date)
+            }
             onClick={add}
           >
             {t('add')}

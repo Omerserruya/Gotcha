@@ -135,6 +135,10 @@ export const grantSchema = z.object({
   reason: z.string().nullable().default(null),
   updatedBy: z.string().nullable().default(null),
   updatedAt: z.string().nullable().default(null),
+  /** When it ends (backend 53a5079a); `null` = no end date. */
+  expiresAt: z.string().nullable().catch(null).default(null),
+  /** `false` once ended — the row stays, so the screen can say when. */
+  active: z.boolean().catch(true).default(true),
 });
 
 export type Grant = z.infer<typeof grantSchema>;

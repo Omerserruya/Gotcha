@@ -829,9 +829,13 @@
   .grantSegment {
     padding-block: var(--space-6);
     padding-inline: var(--space-10);
+    border: 0;
     border-radius: 7px;
+    background: none;
+    font: inherit;
     font-size: var(--font-size-label);
     color: var(--text-secondary);
+    cursor: pointer;
   }
 
   .grantSegment[data-current='yes'] {
@@ -839,8 +843,10 @@
     color: var(--action-text);
   }
 
-  .grantSegment[aria-disabled='true'] {
-    cursor: not-allowed;
+  /* An ended permission stays listed, muted, until someone removes it. */
+  .grant[data-ended] .grantText,
+  .grant[data-ended] .personQuiet {
+    opacity: 0.55;
   }
 
   .grantActions {

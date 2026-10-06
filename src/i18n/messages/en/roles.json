@@ -20,7 +20,6 @@
     "added": "given on top of their role",
     "removed": "taken away from what their role allows",
     "because": "because {reason}",
-    "noExpiry": "An exception lasts until someone removes it. GOTCHA has no end date for one.",
     "notInCatalogue": "this permission is not in the catalogue, so we cannot say what it allows"
   },
   "elsewhere": "Passwords and signed-in sessions live in your identity provider, not in GOTCHA — we don't hold either. Deactivating someone here keeps their history and stops them signing in.",
@@ -49,7 +48,8 @@
     "forbidden": "You don't have permission to change this.",
     "gone": "That person or permission no longer exists.",
     "needs_reason": "Say why first — a removal without a reason leaves nobody able to explain it.",
-    "failed": "That didn't go through."
+    "failed": "That didn't go through.",
+    "past_date": "That date has already passed — pick one ahead."
   },
   "form": {
     "heading": "New role",
@@ -197,7 +197,9 @@
     "extra": "Extra permissions",
     "save": "Save changes",
     "cancel": "Cancel",
-    "nothingToSave": "Nothing here is saved from this drawer yet — adding and removing a permission save themselves."
+    "nothingToSave": "Nothing here is saved from this drawer yet — adding and removing a permission save themselves.",
+    "ends": "Ends {date}",
+    "ended": "Ended {date}"
   },
   "table": {
     "role": "Role",
@@ -228,7 +230,6 @@
     "days7": "7 days",
     "days30": "30 days",
     "pickDate": "Pick a date",
-    "noEndOnly": "An extra permission has no end date yet.",
     "why": "Why",
     "whyPlaceholder": "Optional",
     "add": "Add permission",

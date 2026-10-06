@@ -83,12 +83,13 @@ describe('a per-person grant can also take something away', () => {
     expect(revoke.granted).toBe(false);
   });
 
-  it('carries no expiry and no limit, because neither column exists', () => {
-    // The design gives a grant an end date and a limit. `UserFeatureGrant` is
-    // feature · granted · reason · updatedBy. A date picker that saves
-    // nothing is the reassuring-direction failure.
+  it('carries its end (53a5079a) — and still no limit, because that column does not exist', () => {
+    // The design gives a grant an end date and a limit. The end landed with
+    // `expiresAt` + `active`; a limit is still nowhere, and a field for one
+    // would save nothing.
     const surface = Object.keys(grantSchema.parse({ feature: 'x', granted: true }));
-    expect(surface.filter((k) => /expir|until|limit|cap|amount/i.test(k))).toEqual([]);
+    expect(surface.filter((k) => /expir/i.test(k))).toEqual(['expiresAt']);
+    expect(surface.filter((k) => /until|limit|cap|amount/i.test(k))).toEqual([]);
   });
 });
 

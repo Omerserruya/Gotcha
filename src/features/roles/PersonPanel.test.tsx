@@ -23,6 +23,7 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'roles') =>
     createTranslator({ locale: 'en', messages: { roles: messages }, namespace }),
   getLocale: async () => 'en',
+  getTimeZone: async () => 'Asia/Jerusalem',
 }));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({
@@ -109,6 +110,8 @@ describe('exceptions to a role', () => {
           reason: 'covers weekends',
           updatedBy: 'maya',
           updatedAt: null,
+          expiresAt: null,
+          active: true,
         },
       ],
     });
@@ -130,6 +133,8 @@ describe('exceptions to a role', () => {
           reason: 'pending review',
           updatedBy: 'maya',
           updatedAt: null,
+          expiresAt: null,
+          active: true,
         },
       ],
     });
@@ -149,6 +154,8 @@ describe('exceptions to a role', () => {
           reason: null,
           updatedBy: null,
           updatedAt: null,
+          expiresAt: null,
+          active: true,
         },
         {
           feature: 'customer:profile:export',
@@ -156,6 +163,8 @@ describe('exceptions to a role', () => {
           reason: null,
           updatedBy: null,
           updatedAt: null,
+          expiresAt: null,
+          active: true,
         },
       ],
     });
@@ -165,11 +174,33 @@ describe('exceptions to a role', () => {
 });
 
 describe('what this panel does not claim', () => {
-  it('says an exception has no end date rather than offering one', async () => {
-    // The design says "with who added them and when they end". `updatedBy`
-    // exists; an end date does not.
-    await renderPanel();
-    expect(screen.getByTestId('overrides-no-expiry')).toHaveTextContent(/no end date/i);
+  it('★ 02: "Ends 30 Sep"; once past, muted "Ended 3 Oct" — the row stays, with Remove', async () => {
+    await renderPanel({
+      grants: [
+        {
+          feature: 'customer:export:run',
+          granted: true,
+          reason: null,
+          updatedBy: null,
+          updatedAt: null,
+          expiresAt: '2026-09-30T20:59:59.000Z',
+          active: true,
+        },
+        {
+          feature: 'conversation:assign:any',
+          granted: true,
+          reason: null,
+          updatedBy: null,
+          updatedAt: null,
+          expiresAt: '2026-10-03T20:59:59.000Z',
+          active: false,
+        },
+      ],
+    });
+    expect(screen.getByTestId('grant-ends-customer:export:run')).toHaveTextContent('Ends');
+    expect(screen.getByTestId('grant-ends-customer:export:run')).toHaveTextContent('30 Sep');
+    expect(screen.getByTestId('grant-conversation:assign:any')).toHaveAttribute('data-ended');
+    expect(screen.getByTestId('grant-ends-conversation:assign:any')).toHaveTextContent('Ended');
   });
 
   it('draws 02’s workload line as "—": nothing stores a cap or auto-assign', async () => {
@@ -206,6 +237,8 @@ describe('★★ the catalogue’s name, not the permission key', () => {
     reason: null,
     updatedBy: null,
     updatedAt: null,
+    expiresAt: null,
+    active: true,
   };
 
   it('★★ shows the display name where the catalogue has one', async () => {
@@ -257,6 +290,8 @@ describe('★★ the remove path, drawn and never pressed', () => {
     reason: null,
     updatedBy: null,
     updatedAt: null,
+    expiresAt: null,
+    active: true,
   };
 
   it('★★ offers a remove on an ADDED grant', async () => {

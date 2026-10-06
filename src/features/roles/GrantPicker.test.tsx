@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import { holds, type Person } from '@/api/contracts/roles';
@@ -14,6 +14,11 @@ const { addPermission } = vi.hoisted(() => ({
   }),
 }));
 vi.mock('./actions', () => ({ addPermission }));
+
+beforeEach(() => {
+  // Calls from the test before would be read as this one's.
+  addPermission.mockClear();
+});
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }));
@@ -51,6 +56,8 @@ const TOMER: Person = {
       reason: null,
       updatedBy: null,
       updatedAt: null,
+      expiresAt: null,
+      active: true,
     },
   ],
   permissions: ['conversation:messages:*', 'approvals:refund:approve'],
@@ -93,10 +100,12 @@ describe('★ 12e — what is already covered is shown and cannot be picked', ()
     expect(screen.getByTestId('grant-option-customer:export:run')).toBeInTheDocument();
   });
 
-  it('only "No end date" is live: nothing stores an end', () => {
+  it('Ends is live (53a5079a): "No end date" by default; a date field only for "Pick a date"', async () => {
     picker();
-    expect(screen.getByText('7 days')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByText('No end date')).toHaveAttribute('data-current', 'yes');
+    expect(screen.getByTestId('grant-ends-none')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByTestId('grant-ends-day')).toBeNull();
+    await userEvent.click(screen.getByTestId('grant-ends-date'));
+    expect(screen.getByTestId('grant-ends-day')).toBeInTheDocument();
   });
 
   it('Add waits for a pick', () => {
@@ -138,6 +147,37 @@ describe('★ 12e corrections (measurement of 9121d4f)', () => {
     await userEvent.click(screen.getByTestId('grant-add'));
     expect(await screen.findByTestId('grant-done')).toBeInTheDocument();
     expect(calls).toEqual(['conversation:assign:any', 'customer:export:run']);
-    expect(addPermission).toHaveBeenCalledWith('u1', 'customer:export:run', 'Friday shifts');
+    // No end date: `null`, sent — the PUT replaces the override whole.
+    expect(addPermission).toHaveBeenCalledWith('u1', 'customer:export:run', 'Friday shifts', null);
+  });
+
+  it('★ "30 days": the end of that day in the workspace’s zone, sent with each', async () => {
+    addPermission.mockResolvedValue({ ok: true } as never);
+    picker();
+    await userEvent.click(
+      screen.getByTestId('grant-option-customer:export:run').querySelector('input')!,
+    );
+    await userEvent.click(screen.getByTestId('grant-ends-days30'));
+    await userEvent.click(screen.getByTestId('grant-add'));
+    const sent = (addPermission.mock.calls[0] as unknown[])[3] as string;
+    // 23:59:59 in Israel is 20:59:59 or 21:59:59 UTC, never midday.
+    expect(sent).toMatch(/T2[01]:59:59\.000Z$/);
+    const days = (new Date(sent).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(29);
+    expect(days).toBeLessThan(31.1);
+  });
+
+  it('"Pick a date" waits for one; a past date is the server’s to refuse, and said', async () => {
+    addPermission.mockResolvedValue({ ok: false, reason: 'past_date' } as never);
+    picker();
+    await userEvent.click(
+      screen.getByTestId('grant-option-customer:export:run').querySelector('input')!,
+    );
+    await userEvent.click(screen.getByTestId('grant-ends-date'));
+    expect(screen.getByTestId('grant-add')).toBeDisabled();
+    await userEvent.type(screen.getByTestId('grant-ends-day'), '2099-01-31');
+    await userEvent.click(screen.getByTestId('grant-add'));
+    expect((addPermission.mock.calls[0] as unknown[])[3]).toMatch(/^2099-01-31T2[01]:59:59/);
+    expect(await screen.findByTestId('grant-problem')).toHaveTextContent('already passed');
   });
 });

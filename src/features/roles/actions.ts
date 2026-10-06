@@ -34,15 +34,20 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
 
 export type GrantResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly reason: 'forbidden' | 'gone' | 'needs_reason' | 'failed' };
+  | {
+      readonly ok: false;
+      readonly reason: 'forbidden' | 'gone' | 'needs_reason' | 'past_date' | 'failed';
+    };
 
 /** Gives someone a permission their role does not include. */
 export async function addPermission(
   userId: string,
   feature: string,
   reason: string,
+  /** ISO; `null` = no end date. */
+  expiresAt: string | null = null,
 ): Promise<GrantResult> {
-  return write(userId, feature, true, reason);
+  return write(userId, feature, true, reason, expiresAt);
 }
 
 /**
@@ -58,7 +63,7 @@ export async function removePermission(
   reason: string,
 ): Promise<GrantResult> {
   if (reason.trim().length === 0) return { ok: false, reason: 'needs_reason' };
-  return write(userId, feature, false, reason);
+  return write(userId, feature, false, reason, null);
 }
 
 async function write(
@@ -66,12 +71,17 @@ async function write(
   feature: string,
   granted: boolean,
   reason: string,
+  /*
+   * Always sent: the PUT REPLACES the override, so leaving it out would clear
+   * a date that was there (backend 53a5079a).
+   */
+  expiresAt: string | null,
 ): Promise<GrantResult> {
   try {
     await serverApi().put({
       endpoint: permissionEndpoints.userGrant(userId, feature),
       payload: grantSchema,
-      body: { granted, reason: reason.trim() || null },
+      body: { granted, reason: reason.trim() || null, expiresAt },
     });
     revalidatePath('/[locale]/(app)/settings/people', 'page');
     return { ok: true };
@@ -80,6 +90,7 @@ async function write(
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       if (cause.status === 404) return { ok: false, reason: 'gone' };
+      if (cause.status === 422) return { ok: false, reason: 'past_date' };
     }
     logger.warn('grants.write_failed', { cause, granted });
     return { ok: false, reason: 'failed' };

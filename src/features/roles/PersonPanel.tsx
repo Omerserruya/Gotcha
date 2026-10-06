@@ -1,4 +1,4 @@
-import { getLocale, getTranslations } from 'next-intl/server';
+import { getLocale, getTimeZone, getTranslations } from 'next-intl/server';
 
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
 import type { Member } from '@/api/contracts/people';
@@ -34,7 +34,15 @@ export async function PersonPanel({
 }) {
   const t = await getTranslations('roles');
   const locale = await getLocale();
-  const day = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
+  const timeZone = await getTimeZone();
+  /*
+   * 02's "30 Sep": day first, in the workspace's zone — an end at 23:59 there
+   * is 20:59 UTC, and read in UTC it would still be the right day only by luck.
+   * Built from parts: `{ day, month }` in `en` is "Sep 30".
+   */
+  const parts = (unit: 'day' | 'month') =>
+    new Intl.DateTimeFormat(locale, { timeZone, [unit]: unit === 'day' ? 'numeric' : 'short' });
+  const day = { format: (at: Date) => `${parts('day').format(at)} ${parts('month').format(at)}` };
 
   const added = additions(person);
   const removed = removals(person);
@@ -160,7 +168,13 @@ export async function PersonPanel({
               {added.length > 0 ? (
                 <ul className={styles.grantList} data-testid="grants-added">
                   {added.map((grant) => (
-                    <li key={grant.feature} className={styles.grant} data-kind="added">
+                    <li
+                      key={grant.feature}
+                      className={styles.grant}
+                      data-kind="added"
+                      data-ended={grant.active ? undefined : ''}
+                      data-testid={`grant-${grant.feature}`}
+                    >
                       <span className={styles.grantText}>
                         <span className={styles.grantFeature}>
                           {nameOf(grant.feature) ?? grant.feature}
@@ -185,8 +199,17 @@ export async function PersonPanel({
                           </span>
                         ) : null}
                       </span>
-                      {/* An override has no end date, so it does not pretend to. */}
-                      <span className={styles.personQuiet}>{t('person.noEnd')}</span>
+                      {/* 02: "Ends 30 Sep" — or, once past, "Ended 3 Oct" (the row stays). */}
+                      <span
+                        className={styles.personQuiet}
+                        data-testid={`grant-ends-${grant.feature}`}
+                      >
+                        {grant.expiresAt === null
+                          ? t('person.noEnd')
+                          : t(grant.active ? 'person.ends' : 'person.ended', {
+                              date: day.format(new Date(grant.expiresAt)),
+                            })}
+                      </span>
                       {/*
                       ⚠ A WRITE against a real person. No test and no capture
                       presses it. Only on an ADDED grant.
@@ -226,9 +249,6 @@ export async function PersonPanel({
               ) : null}
             </>
           )}
-          <p className="srOnly" data-testid="overrides-no-expiry">
-            {t('overrides.noExpiry')}
-          </p>
         </section>
 
         {/* 02's workload line. Nothing stores a cap or auto-assignment. */}
