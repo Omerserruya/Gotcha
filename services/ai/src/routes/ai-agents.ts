@@ -302,7 +302,7 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
           { role: "system", content: generatorSystemPrompt },
           {
             role: "user",
-            content: `Wizard answers for the new AI agent:\n\n${wizardSummary}\n\nProduce a 2–4 sentence description in the user's language. Do not repeat the agent's name. Output only the description text.`,
+            content: `Wizard answers for the new AI agent:\n\n${wizardSummary}\n\nProduce a 2-4 sentence description in the user's language. Do not repeat the agent's name. Output only the description text.`,
           },
         ],
         temperature: 0.7,

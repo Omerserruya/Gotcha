@@ -37,6 +37,21 @@ const STORE_TTL_SECONDS = 14 * 24 * 3600;
 
 export const SUGGESTIONS_UPDATED_EVENT = "copilot.suggestions.updated";
 
+/**
+ * A wide dash (em/en/bar) in a suggestion becomes a plain hyphen before it is
+ * stored: the agent sends these to customers, and the wide dash is the
+ * clearest written-by-AI tell (Omer, 2026-10-06). Only string `text` fields
+ * are touched; every other field passes through unchanged.
+ */
+export function plainDashes<T>(items: T): T {
+  if (!Array.isArray(items)) return items;
+  return items.map((it: any) =>
+    it && typeof it === "object" && typeof it.text === "string"
+      ? { ...it, text: it.text.replace(/[\u2013\u2014\u2015]/g, "-") }
+      : it,
+  ) as unknown as T;
+}
+
 export interface StoredSuggestions {
   suggestions: unknown[];
   copilotMode: string;
@@ -215,7 +230,7 @@ export async function generateAndStore(
     if ("notFound" in built) return { status: "not_found" };
     if ("noConfig" in built) return { status: "no_config" };
 
-    const suggestions = await getSuggestions(built.context);
+    const suggestions = plainDashes(await getSuggestions(built.context));
     if (turn.signal.aborted) return { status: "superseded" };
 
     const stored: StoredSuggestions = {

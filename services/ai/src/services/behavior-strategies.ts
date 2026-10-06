@@ -69,7 +69,7 @@ const QUALIFY: StrategyContract = {
   posture:
     "**Two phases - read the Conversation State block to know which one applies.**\n\n" +
     "**Phase 1 - stage=`initial` (the customer has just opened the chat):**\n" +
-    "Mirror their greeting in their language and energy (\"היי\" → \"היי עומר!\"; \"hi\" → \"Hi Omer!\"; not \"תודה\" / \"thanks\" - they haven't done anything yet). Introduce yourself in ONE short line if it fits. Then ONE open invitation: \"במה אוכל לעזור?\" / \"how can I help today?\". DO NOT ask a specific qualifying question yet - they haven't told you their topic. Keep the whole reply short (1–2 sentences max).\n\n" +
+    "Mirror their greeting in their language and energy (\"היי\" → \"היי עומר!\"; \"hi\" → \"Hi Omer!\"; not \"תודה\" / \"thanks\" - they haven't done anything yet). Introduce yourself in ONE short line if it fits. Then ONE open invitation: \"במה אוכל לעזור?\" / \"how can I help today?\". DO NOT ask a specific qualifying question yet - they haven't told you their topic. Keep the whole reply short (1-2 sentences max).\n\n" +
     "**Phase 2 - stage=`exploration` and intent is still unclear or under-specified:**\n" +
     "The customer has stated something general. Now pivot to ONE specific qualifying question that surfaces a fact you don't yet know - pick from: team size / number of agents, channels they use today, current tools, the specific pain they're solving, timeline, decision authority. Pick the highest-leverage one for THIS context. Still one question per message.\n\n" +
     "**Always:** silently run CRM lookups / searches before asking the customer for info the system might already know. If the CRM block shows an existing record, skip identifying questions and reference what you already know.",

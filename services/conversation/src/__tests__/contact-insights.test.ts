@@ -104,6 +104,9 @@ describe("moodOf / situationOf", () => {
     expect(moodOf(null)).toBeNull();
   });
   it("★ a structured summary becomes one plain line; placeholders are null", () => {
+    // A model's wide dash is shown as a plain hyphen.
+    expect(situationOf("בקשה לתמיכה \u2014 החזר כספי מלא עבור הזמנה 1016.")).toBe("בקשה לתמיכה - החזר כספי מלא עבור הזמנה 1016.");
+    expect(situationOf("\u2013 Asked about sizes \u2013 M or L.")).toBe("Asked about sizes - M or L.");
     // A labelled placeholder is no summary (it came out as "-").
     expect(situationOf("**Summary:** -")).toBeNull();
     expect(situationOf("- **סיכום:** …")).toBeNull();

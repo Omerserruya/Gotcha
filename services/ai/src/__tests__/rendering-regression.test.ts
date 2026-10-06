@@ -53,7 +53,9 @@ describe("source-level bypass visibility", () => {
   const read = (p: string) => readFileSync(join(__dirname, p), "utf8");
 
   it("humanizeReply's dash class contains ONLY wide dashes and runs atom-protected", () => {
-    const src = read("../services/ai-bot.service.ts");
+    // humanizeReply moved to reply-style.ts (shared by the follow-up generator);
+    // the reply path still reads it, so both files are held to the rule.
+    const src = read("../services/reply-style.ts") + read("../services/ai-bot.service.ts");
     // the incident class - an ASCII hyphen inside a dash character class -
     // must never reappear anywhere in the reply path
     expect(src).not.toMatch(/\[\s*-[\u2013\u2014\u2015]/);

@@ -29,12 +29,12 @@ function matches(row: any, where: any): boolean {
 }
 
 // The shared guard imports prisma from its own module, not the barrel.
-vi.mock("../../../../packages/shared/src/lib/prisma", () => ({
+vi.mock("@chatcenter/shared/src/lib/prisma", () => ({
   prisma: { conversation: { findFirst: async (a: any) => H.convs.find((c) => matches(c, a.where)) ?? null } },
 }));
 
 vi.mock("@chatcenter/shared", async () => {
-  const real = await import("../../../../packages/shared/src/lib/conversation-visibility");
+  const real = await import("@chatcenter/shared/src/lib/conversation-visibility");
   const pass = (_q: any, _s: any, n: any) => n();
   return {
     ...real,

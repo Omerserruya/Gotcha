@@ -153,7 +153,7 @@ ${kbBlock}
 ${toolBlock}
 
 ## Your task
-Generate 28–36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale - not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct.
+Generate 28-36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale - not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct.
 
 For EACH question decide:
 - coverage: "full" (answerable now from the knowledge above and/or an available tool), "partial" (only some of it is covered, or it needs data we don't clearly have), or "none" (cannot be handled).

@@ -82,7 +82,7 @@ const SUBMIT_SUGGESTIONS_TOOL = {
       properties: {
         suggestions: {
           type: "array",
-          description: "2–3 plan-aligned suggestions, each a distinct approach to the goal",
+          description: "2-3 plan-aligned suggestions, each a distinct approach to the goal",
           items: {
             type: "object",
             properties: {
@@ -117,9 +117,9 @@ const SUBMIT_SUGGESTIONS_TOOL = {
               evidence: {
                 type: "string",
                 description:
-                  "Exact verbatim substring (1–80 chars) from the customer's latest inbound message.",
+                  "Exact verbatim substring (1-80 chars) from the customer's latest inbound message.",
               },
-              confidence: { type: "number", description: "0–1 (only ≥ 0.85 will be persisted)" },
+              confidence: { type: "number", description: "0-1 (only ≥ 0.85 will be persisted)" },
             },
             required: ["kind", "severity", "evidence", "confidence"],
           },

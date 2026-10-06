@@ -95,7 +95,7 @@ const SYSTEM_SEARCH_CUSTOMERS = {
       required: ["query"],
       properties: {
         query: { type: "string", description: "Substring to match against displayName, email, or phone." },
-        limit: { type: "number", description: "Cap on results (1–20). Default 10." },
+        limit: { type: "number", description: "Cap on results (1-20). Default 10." },
       },
     },
   },

@@ -23,11 +23,16 @@ export function situationOf(summary: string | null | undefined): string | null {
     .map((l) => l.trim())
     .find((l) => l.length > 0);
   if (!line) return null;
-  let s = line.replace(/^[•*\-–]+\s*/, "").replace(/\*\*|__|`/g, "").trim();
+  // Wide dashes are a written-by-AI tell (Omer, 2026-10-06): shown as "-".
+  let s = line
+    .replace(/[\u2013\u2014\u2015]/g, "-")
+    .replace(/^[•*-]+\s*/, "")
+    .replace(/\*\*|__|`/g, "")
+    .trim();
   const colon = s.indexOf(":");
   if (colon > 0 && colon <= 40 && s.length > colon + 1) s = s.slice(colon + 1).trim();
   s = s.replace(/\s+/g, " ").trim();
-  // No letter or digit at all ("-", "…", "—") is a placeholder the summarizer
+  // No letter or digit at all ("-", "…", or a lone wide dash) is a placeholder the summarizer
   // left, not a summary. "**Summary:** -" used to come out as "-".
   if (!s || NOT_A_SUMMARY.test(s) || !/[\p{L}\p{N}]/u.test(s)) return null;
   const first = s.split(/(?<=[.!?])\s/)[0] ?? s;

@@ -437,7 +437,7 @@ export const CLOSE_CONVERSATION_TOOL = {
         },
         summary: {
           type: "string",
-          description: "1–2 sentence outcome for the CRM record. Customer-language not required.",
+          description: "1-2 sentence outcome for the CRM record. Customer-language not required.",
         },
       },
       required: ["resolution", "summary"],
