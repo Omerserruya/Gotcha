@@ -387,6 +387,19 @@ export interface OutboundAdapter {
     buttons: Array<{ id: string; title: string }>,
     emailThread?: EmailThreadContext,
   ): Promise<string | null>;
+  /**
+   * A list message (WhatsApp: up to 10 rows behind one button). The reply
+   * arrives as an interactive reply whose payload is the row id. Only
+   * WhatsApp implements it; callers check for it.
+   */
+  sendListMessage?(
+    credentials: ChannelCredentials,
+    accountExternalId: string,
+    recipientId: string,
+    bodyText: string,
+    buttonText: string,
+    rows: Array<{ id: string; title: string; description?: string }>,
+  ): Promise<string | null>;
   sendMediaMessage?(
     credentials: ChannelCredentials,
     accountExternalId: string,

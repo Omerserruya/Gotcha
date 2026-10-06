@@ -729,6 +729,38 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
     }
   },
 
+  async sendListMessage(
+    credentials: ChannelCredentials,
+    accountExternalId: string,
+    recipientId: string,
+    bodyText: string,
+    buttonText: string,
+    rows: Array<{ id: string; title: string; description?: string }>,
+  ): Promise<string | null> {
+    try {
+      const response = await axios.post(
+        `${WA_API_URL}/${accountExternalId}/messages`,
+        {
+          messaging_product: "whatsapp", to: recipientId, type: "interactive",
+          interactive: {
+            type: "list", body: { text: formatWhatsAppText(bodyText) },
+            action: {
+              // Meta limits: button text 20, row title 24, description 72, 10 rows.
+              button: buttonText.slice(0, 20),
+              sections: [{ rows: rows.slice(0, 10).map((r) => ({
+                id: r.id, title: r.title.slice(0, 24), ...(r.description ? { description: r.description.slice(0, 72) } : {}),
+              })) }],
+            },
+          },
+        },
+        { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }
+      );
+      return response.data?.messages?.[0]?.id || null;
+    } catch (err: any) {
+      throw new ChannelSendError(buildWaSendError(err));
+    }
+  },
+
   async sendMediaMessage(
     credentials: ChannelCredentials,
     accountExternalId: string,

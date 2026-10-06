@@ -350,6 +350,29 @@ export interface FlowResumeJob {
   channel: string;
   // Message to carry through on resume (usually empty for a Wait resume)
   message: string;
+  // The automation run this timer belongs to. The worker resumes only while
+  // the conversation is still parked on THIS run at THIS node; anything else
+  // is a stale timer and is dropped.
+  automationRunId?: string;
+  // A Wait-for-reply timeout (take the "timeout" branch), not a plain Wait.
+  timeout?: boolean;
+}
+
+/**
+ * An event that can fire automations without an inbound message (job name
+ * "automation-event" on the incoming-messages queue). `eventKey` is the
+ * event's identity: one run per automation per key.
+ */
+export interface AutomationEventJob {
+  tenantId: string;
+  type: "tag_added" | "schedule" | "call_missed" | "call_answered";
+  eventKey: string;
+  contactId?: string | null;
+  conversationId?: string | null;
+  // tag_added: the tag; schedule: the automation to run
+  tag?: string;
+  flowId?: string;
+  payload?: Record<string, unknown>;
 }
 
 // ─── Worker factory ─────────────────────────────────────────

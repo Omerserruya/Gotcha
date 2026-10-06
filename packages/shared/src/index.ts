@@ -12,6 +12,7 @@ export type {
   BroadcastJob,
   ScheduledMessageJob,
   FlowResumeJob,
+  AutomationEventJob,
   HistoricalImportChunkJob,
   HistoricalIntelligenceJob,
 } from "./lib/queue";

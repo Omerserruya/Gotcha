@@ -10,6 +10,7 @@ import { startIncomingWorker } from "./workers/incoming.worker";
 import { startChannelHealthWorker } from "./workers/channel-health.worker";
 import { startIdleConversationWorker } from "./workers/idle-conversation.worker";
 import { startFlowResumeWorker } from "./workers/flow-resume.worker";
+import { startAutomationScheduler } from "./services/automation-runner.service";
 
 import { assertEnforcementConfigured } from "@chatcenter/shared";
 
@@ -31,6 +32,9 @@ startIdleConversationWorker().catch((err) => {
 // graph walker, re-entering the flow at the scheduled node.
 startFlowResumeWorker();
 console.log("[flow-resume] Worker started");
+// Schedule-triggered automations (Studio > Automations).
+startAutomationScheduler();
+console.log("[automations] Scheduler started");
 
 // Graceful shutdown
 process.on("SIGTERM", () => {

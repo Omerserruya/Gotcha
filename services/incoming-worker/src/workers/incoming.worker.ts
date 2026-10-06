@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
+import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -692,6 +692,27 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {
     try {
+      // Automations (Studio > Automations) first. A run parked on this
+      // conversation takes the reply; otherwise live message automations fire.
+      // One responder per inbound: when one of them answered, nothing else
+      // (AI employee, playbook) answers this message too. They never run while
+      // a person owns the conversation (this whole block is skipped then).
+      const { automationsForInbound, automationAnsweredBefore } = await import("../services/automation-runner.service");
+      const answeredByAutomation = await automationsForInbound({
+        tenantId,
+        conversation: conversation as any,
+        messageId: message.id,
+        message: body,
+        channel: channel.toLowerCase(),
+        replyPayload: interactiveReply?.payload ?? null,
+        contactId: savedContact?.id ?? null,
+      });
+      if (answeredByAutomation) return;
+      // An automation may have moved ownership while it ran (hand to AI,
+      // assign); the branches below read the current row.
+      conversation = (await prisma.conversation.findFirst({ where: { id: conversation.id, tenantId } })) ?? conversation;
+      if (conversation.assignedAgentId || conversation.isHandedOver) return;
+
       // Department / role picker override (deterministic safety net).
       // When the customer taps a department-picker button ("מכירה" / "שירות"),
       // route by ROLE to an ACTIVE matching employee + set the department,
@@ -725,7 +746,15 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       // Check if this is a new conversation needing routing
       const messageCount = await prisma.message.count({ where: { conversationId: conversation.id } });
 
-      if (messageCount <= 1 && !conversation.departmentId) {
+      // The playbook routes the conversation's first message - or, when an
+      // automation answered the first ones, the first message no automation
+      // answered while the conversation is still unowned.
+      const c = conversation as any;
+      const firstUnanswered =
+        messageCount <= 1 ||
+        (!c.handledBy && !c.assignedAiAgentId && !c.chatbotNodeId && !c.automationRunId &&
+          (await automationAnsweredBefore(tenantId, conversation.id)));
+      if (firstUnanswered && !conversation.departmentId) {
         // New conversation - route via playbook rules
         const { routeConversation } = await import("../services/routing.service");
         const routing = await routeConversation(tenantId, conversation.id, body, channel);
@@ -784,7 +813,21 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
             data: { flowExpiresAt: null },
           });
         }
-        const { executeMainFlow } = await import("../services/flow-executor.service");
+        const { executeMainFlow, executeSubFlow } = await import("../services/flow-executor.service");
+        // A sub-flow parked here resumes in THAT flow. Resuming the main
+        // canvas with a node id it does not have restarted it from its entry.
+        if ((conversation as any).chatbotFlowId) {
+          await executeSubFlow({
+            tenantId,
+            conversationId: conversation.id,
+            message: body,
+            channel: channel.toLowerCase(),
+            flowId: (conversation as any).chatbotFlowId,
+            resumeNodeId: (conversation as any).chatbotNodeId,
+            replyPayload: interactiveReply?.payload ?? null,
+          });
+          return;
+        }
         await executeMainFlow({
           tenantId,
           conversationId: conversation.id,
@@ -826,6 +869,18 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
     return;
   }
 
+  // An automation with a webhook trigger: same walk, plus a run in its log.
+  // The job id is the event: BullMQ's own retries of this job run it once.
+  if (targetMode !== "connected") {
+    const flow = await prisma.chatbotFlow.findFirst({ where: { id: workflowId, tenantId }, select: { triggerType: true } });
+    if (flow?.triggerType) {
+      const { runContextFree } = await import("../services/automation-runner.service");
+      const r = await runContextFree({ tenantId, flowId: workflowId, triggerType: "webhook", eventKey: `hook:${job.id}`, payload });
+      console.log(`[incoming-worker] webhook-trigger automation=${workflowId} run=${r?.id ?? "duplicate"} status=${r?.status ?? "-"}`);
+      return;
+    }
+  }
+
   const { executeWebhookFlow } = await import("../services/flow-executor.service");
   const mode = targetMode === "connected" ? "connected" : "flow";
   const result = await executeWebhookFlow({ tenantId, workflowId, payload, targetMode: mode });
@@ -833,6 +888,18 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
     `[incoming-worker] webhook-trigger flow=${workflowId} trigger=${triggerId} mode=${mode} ` +
       `executed=${result.executed} halted=${result.halted} reason=${result.reason ?? "-"} steps=${result.trace.length}`,
   );
+}
+
+/** Automation events that do not come with an inbound message (tag added). */
+async function processAutomationEvent(job: Job<AutomationEventJob>): Promise<void> {
+  const ev = job.data;
+  const tenant = await prisma.tenant.findUnique({ where: { id: ev.tenantId }, select: { status: true } });
+  if (!tenant || tenant.status !== "ACTIVE") return;
+  if (ev.type === "tag_added" && ev.contactId && ev.tag) {
+    const { runTagAdded } = await import("../services/automation-runner.service");
+    const r = await runTagAdded({ tenantId: ev.tenantId, contactId: ev.contactId, tag: ev.tag, eventKey: ev.eventKey });
+    console.log(`[incoming-worker] automation-event tag_added contact=${ev.contactId} runs=${r.runs.length}`);
+  }
 }
 
 // Dispatcher: same queue, multiple job names. Keeps DM, comment-trigger, and
@@ -854,6 +921,10 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
   }
   if (job.name === "webhook-trigger") {
     await processWebhookTrigger(job as Job<WebhookTriggerJob>);
+    return;
+  }
+  if (job.name === "automation-event") {
+    await processAutomationEvent(job as unknown as Job<AutomationEventJob>);
     return;
   }
   if (job.name === "process-history") {

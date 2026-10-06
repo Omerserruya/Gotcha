@@ -27,7 +27,7 @@
 
 import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue, describeSendError, safeFetch as sharedSafeFetch } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
-import { processAIBot } from "./ai-bot.service";
+import { processAIBot, getBusinessHoursState } from "./ai-bot.service";
 import { tryLinkIdentifierFromInbound } from "./identity-link.service";
 
 // ─── Graph shapes (ReactFlow-compatible) ─────────────────────
@@ -79,6 +79,21 @@ interface FlowExecCtx {
   flowScope: "main" | "sub";
   flowId?: string;
   trace: Array<{ nodeId: string; type: string; action: string; detail?: any }>;
+  // Set when this walk is an automation run (Studio > Automations): the run
+  // log, the one-responder rule and the cursor all key on it.
+  run?: AutomationRunCtx;
+}
+
+export interface AutomationRunCtx {
+  id: string;
+  flowId: string;
+  // This run responded to the inbound that fired or resumed it: it sent
+  // something that arrived, parked waiting for the customer, or handed the
+  // conversation on. The AI employee then does not also answer that message.
+  answered: boolean;
+  currentNodeId: string | null;
+  // Who owned the conversation before the run claimed it (restored at the end).
+  prevOwner: string | null;
 }
 
 export interface FlowExecutionResult {
@@ -94,7 +109,14 @@ export interface FlowExecutionResult {
     | "quick_reply_unresolved"
     | "loop_guard"
     | "no_adapter"
-    | "no_entry";
+    | "no_entry"
+    // An inbound arrived while the flow sits on a timed Wait: the timer, not
+    // the message, moves it on (resuming here ran the rest of the flow twice).
+    | "waiting_on_timer"
+    // A Wait-for-reply had no exit for what the customer did.
+    | "no_branch"
+    // The automation was paused or deleted while a run was parked.
+    | "automation_inactive";
   matchedNodeId?: string | null;
   endKind?: "close" | "handoff_human" | "wait_for_reply";
   route?: { routeType: "AI_AGENT" | "FLOW" | "HUMAN" | "DEPARTMENT"; targetId: string | null };
@@ -116,6 +138,8 @@ export async function executeMainFlow(opts: {
    * gave a reply a machine-readable payload.
    */
   replyPayload?: string | null;
+  /** The flow-resume worker's timer, not an inbound message. */
+  fromTimer?: boolean;
 }): Promise<FlowExecutionResult> {
   const canvas = await prisma.flowCanvas.findUnique({ where: { tenantId: opts.tenantId } });
   const nodes = (canvas?.nodes as unknown as GraphNode[]) || [];
@@ -130,6 +154,7 @@ export async function executeMainFlow(opts: {
   let resumingVar: string | null = null;
   if (opts.resumeNodeId) {
     const paused = nodes.find((n) => n.id === opts.resumeNodeId);
+    if (paused?.type === "wait" && !opts.fromTimer) return waitingOnTimer(paused);
     if (paused) {
       if (paused.type === "collect_input") {
         // The inbound `message` is the reply the user just sent; store it into
@@ -195,11 +220,21 @@ export async function executeSubFlow(opts: {
   resumeNodeId?: string | null; // set when continuing after quick_reply / Wait / collect_input
   /** See executeMainFlow - the tapped button id, not its visible title. */
   replyPayload?: string | null;
+  /** See executeMainFlow. */
+  fromTimer?: boolean;
+  /** A Wait-for-reply timeout fired (take its "timeout" exit). */
+  timeout?: boolean;
+  /** This walk is an automation run. */
+  run?: AutomationRunCtx;
 }): Promise<FlowExecutionResult> {
   const flow = await prisma.chatbotFlow.findFirst({
     where: { id: opts.flowId, tenantId: opts.tenantId, isActive: true },
   });
-  if (!flow) return { executed: false, halted: false, trace: [] };
+  if (!flow) {
+    return opts.run
+      ? { executed: false, halted: true, reason: "automation_inactive", trace: [] }
+      : { executed: false, halted: false, trace: [] };
+  }
 
   const nodes = (flow.nodes as unknown as GraphNode[]) || [];
   const edges = (flow.edges as unknown as GraphEdge[]) || [];
@@ -207,9 +242,22 @@ export async function executeSubFlow(opts: {
 
   let startId: string | null = null;
   let resumingVar: string | null = null;
+  let resumeTrace: FlowExecCtx["trace"] = [];
   if (opts.resumeNodeId) {
     const paused = nodes.find((n) => n.id === opts.resumeNodeId);
-    if (paused) {
+    if (paused?.type === "wait" && !opts.fromTimer) return waitingOnTimer(paused);
+    if (paused?.type === "wait_for_reply") {
+      // A timer that is not this node's timeout, or a reply after the
+      // timeout already fired, does not move it.
+      if (opts.fromTimer && !opts.timeout) return waitingOnTimer(paused);
+      const branch = opts.timeout ? "timeout" : replyBranch(paused, nodes, edges, opts.message, opts.replyPayload);
+      const out = edges.find((e) => e.source === paused.id && e.sourceHandle === branch);
+      resumeTrace = [{ nodeId: paused.id, type: paused.type, action: out ? "resumed" : "no_branch", detail: { branch } }];
+      if (!out) {
+        return { executed: true, halted: true, reason: "no_branch", matchedNodeId: paused.id, trace: resumeTrace };
+      }
+      startId = out.target;
+    } else if (paused) {
       if (paused.type === "collect_input") {
         resumingVar = String(paused.data?.variable || "").trim() || null;
         const out = edges.find((e) => e.source === paused.id);
@@ -240,15 +288,21 @@ export async function executeSubFlow(opts: {
       }
     }
   }
-  if (!startId) {
-    const startNode = nodes.find((n) => n.type === "start");
-    const out = startNode ? edges.find((e) => e.source === startNode.id) : null;
-    startId = out?.target ?? (startNode?.id ?? null);
+  if (!startId && !opts.resumeNodeId) {
+    // An automation enters at its trigger step; a playbook sub-flow at Start.
+    const startNode = nodes.find((n) => n.type === "automation_trigger") ?? nodes.find((n) => n.type === "start");
+    startId = startNode?.id ?? null;
+    if (startNode?.type === "start") {
+      const out = edges.find((e) => e.source === startNode.id);
+      startId = out?.target ?? startNode.id;
+    }
   }
-  if (!startId) return { executed: false, halted: false, reason: "no_entry", trace: [] };
+  if (!startId) return { executed: false, halted: false, reason: "no_entry", trace: resumeTrace };
 
   const ctx = await buildCtx(opts, { flowScope: "sub", flowId: opts.flowId });
   ctx.resumingCollectInputVar = resumingVar;
+  ctx.run = opts.run;
+  ctx.trace.push(...resumeTrace);
   return walk(startId, nodes, edges, ctx);
 }
 
@@ -275,6 +329,8 @@ export async function executeWebhookFlow(opts: {
   // nodes wired to the webhook trigger node on the Main Playbook canvas. The
   // two paths share walk() - only entry resolution + which graph differs.
   targetMode?: "flow" | "connected";
+  /** This walk is an automation run (schedule / webhook automations). */
+  run?: AutomationRunCtx;
 }): Promise<FlowExecutionResult> {
   if (opts.targetMode === "connected") {
     return executeWebhookConnectedNodes(opts);
@@ -294,6 +350,7 @@ export async function executeWebhookFlow(opts: {
   // walking through one here is forward-compatible and harmless for flows that
   // still start from a plain `start` node).
   const entryNode =
+    nodes.find((n) => n.type === "automation_trigger") ||
     nodes.find((n) => n.type === "webhook_trigger") ||
     nodes.find((n) => n.type === "start") ||
     null;
@@ -323,6 +380,7 @@ export async function executeWebhookFlow(opts: {
     flowScope: "sub",
     flowId: flow.id,
     trace: [],
+    run: opts.run,
   };
   return walk(startId, nodes, edges, ctx);
 }
@@ -766,6 +824,7 @@ async function walk(
       return { executed: true, halted: true, reason: "loop_guard", trace: ctx.trace };
     }
     visited.add(currentId);
+    if (ctx.run) ctx.run.currentNodeId = currentId;
 
     const node = nodes.find((n) => n.id === currentId);
     if (!node) {
@@ -786,12 +845,13 @@ async function walk(
 
       case "condition_group": {
         const matched = evaluateConditionNode(node, ctx);
+        const handle = matched ? "true" : "false";
         ctx.trace.push({
           nodeId: node.id,
           type: "condition_group",
           action: matched ? "match" : "no_match",
+          detail: { branch: handle },
         });
-        const handle = matched ? "true" : "false";
         const next = outgoing.find((e) => e.sourceHandle === handle) || null;
         currentId = next?.target || null;
         break;
@@ -808,13 +868,7 @@ async function walk(
         // here and resume on next inbound. Resume path (executeMainFlow's
         // generic branch) continues from the first outgoing edge.
         if (node.data?.waitForReply) {
-          await persistVars(ctx);
-          if (ctx.conversationId) {
-            await prisma.conversation.update({
-              where: { id: ctx.conversationId },
-              data: { chatbotNodeId: node.id, handledBy: "flow" },
-            });
-          }
+          await park(ctx, node.id, true);
           ctx.trace.push({ nodeId: node.id, type: node.type, action: "paused_for_reply" });
           return {
             executed: true,
@@ -875,13 +929,7 @@ async function walk(
         }
         // Pause and remember where we are. Next inbound resumes from here by
         // matching the reply payload against sourceHandle on outgoing edges.
-        await persistVars(ctx);
-        if (ctx.conversationId) {
-          await prisma.conversation.update({
-            where: { id: ctx.conversationId },
-            data: { chatbotNodeId: node.id, handledBy: "flow" },
-          });
-        }
+        await park(ctx, node.id, true);
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent_and_paused" });
         return {
           executed: true,
@@ -1001,13 +1049,7 @@ async function walk(
       case "collect_input": {
         const prompt = interpolate(String(node.data?.prompt || ""), ctx.vars);
         if (prompt) await sendText(prompt, ctx);
-        await persistVars(ctx);
-        if (ctx.conversationId) {
-          await prisma.conversation.update({
-            where: { id: ctx.conversationId },
-            data: { chatbotNodeId: node.id, handledBy: "flow" },
-          });
-        }
+        await park(ctx, node.id, true);
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "prompted_and_paused" });
         return {
           executed: true, halted: true, reason: "wait_for_reply",
@@ -1019,18 +1061,20 @@ async function walk(
       case "wait": {
         const amount = Math.max(1, Number(node.data?.amount ?? 1));
         const unit = String(node.data?.unit || "seconds");
+        // `durationMs` (what the validator checks and automations send) wins;
+        // amount + unit is the older editor's shape.
         const delayMs =
+          typeof node.data?.durationMs === "number" && node.data.durationMs > 0 ? node.data.durationMs :
           unit === "hours"   ? amount * 3600_000 :
           unit === "minutes" ? amount * 60_000 :
                                amount * 1000;
-        await persistVars(ctx);
         // Context-free runs have no thread to resume - record the halt and stop
         // rather than scheduling a resume job that could never fire.
         if (ctx.conversationId) {
-          await prisma.conversation.update({
-            where: { id: ctx.conversationId },
-            data: { chatbotNodeId: node.id, handledBy: "flow" },
-          });
+          // A playbook flow owns the conversation while it waits. An
+          // automation's timed wait does not: whoever answered before keeps
+          // answering, and the timer moves the run on later.
+          await park(ctx, node.id, !ctx.run);
           // Enqueue a delayed resume job. The flow-resume worker picks it up
           // after `delay` ms and calls executeMainFlow/executeSubFlow with
           // resumeNodeId = this node, which walks from its first outgoing edge.
@@ -1044,6 +1088,7 @@ async function walk(
               resumeNodeId: node.id,
               channel: ctx.channel,
               message: "",
+              ...(ctx.run ? { automationRunId: ctx.run.id } : {}),
             },
             { delay: delayMs, removeOnComplete: true, removeOnFail: 100 },
           );
@@ -1140,6 +1185,183 @@ async function walk(
         });
         currentId = outgoing[0]?.target || null;
         break;
+      }
+
+      // ─── Automations (Studio > Automations) ────────────────────
+      case "automation_trigger": {
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "trigger_enter" });
+        currentId = outgoing[0]?.target || null;
+        break;
+      }
+
+      case "opening_hours": {
+        const { state } = await getBusinessHoursState(ctx.tenantId);
+        // Not configured = always open (the same reading the AI gate uses).
+        const branch = state.open ? "open" : "closed";
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "evaluated", detail: { branch, configured: state.configured } });
+        currentId = outgoing.find((e) => e.sourceHandle === branch)?.target ?? null;
+        break;
+      }
+
+      case "split_channel": {
+        const ch = String(ctx.sendCtx?.channel ?? ctx.channel ?? "").toUpperCase();
+        const hit = outgoing.find((e) => e.sourceHandle === ch);
+        const branch = hit ? ch : "other";
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "evaluated", detail: { branch } });
+        currentId = (hit ?? outgoing.find((e) => e.sourceHandle === "other"))?.target ?? null;
+        break;
+      }
+
+      case "language": {
+        const lang = await conversationLanguage(ctx);
+        const listed: string[] = Array.isArray(node.data?.languages) ? node.data.languages : [];
+        const branch = lang && listed.includes(lang) ? lang : "other";
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "evaluated", detail: { branch, detected: lang } });
+        currentId = outgoing.find((e) => e.sourceHandle === branch)?.target ?? null;
+        break;
+      }
+
+      case "segment": {
+        const branch = await customerSegment(ctx);
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "evaluated", detail: { branch } });
+        currentId = outgoing.find((e) => e.sourceHandle === branch)?.target ?? null;
+        break;
+      }
+
+      case "ab_split": {
+        const pct = Number(node.data?.percentA ?? 50);
+        // Stable per run (or conversation): a resumed run never changes sides.
+        const branch = bucketOf(`${ctx.run?.id ?? ctx.conversationId ?? ""}:${node.id}`) < pct ? "a" : "b";
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "evaluated", detail: { branch } });
+        currentId = outgoing.find((e) => e.sourceHandle === branch)?.target ?? null;
+        break;
+      }
+
+      case "send_buttons": {
+        const body = interpolate(String(node.data?.text || ""), ctx.vars);
+        const buttons = (Array.isArray(node.data?.buttons) ? node.data.buttons : [])
+          .slice(0, 3)
+          .map((b: any) => ({ id: String(b?.id ?? "").slice(0, 256), title: interpolate(String(b?.title ?? ""), ctx.vars).slice(0, 20) }))
+          .filter((b: any) => b.id && b.title);
+        await sendButtons(body, buttons, ctx);
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent", detail: { buttons: buttons.length } });
+        currentId = outgoing[0]?.target || null;
+        break;
+      }
+
+      case "send_list": {
+        const body = interpolate(String(node.data?.text || ""), ctx.vars);
+        const rows = (Array.isArray(node.data?.options) ? node.data.options : [])
+          .slice(0, 10)
+          .map((o: any) => ({ id: String(o?.id ?? ""), title: interpolate(String(o?.title ?? ""), ctx.vars), description: o?.description ? String(o.description) : undefined }))
+          .filter((o: any) => o.id && o.title);
+        await sendList(body, String(node.data?.buttonText || "Options"), rows, ctx);
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent", detail: { options: rows.length } });
+        currentId = outgoing[0]?.target || null;
+        break;
+      }
+
+      case "wait_for_reply": {
+        // Context-free runs have no customer to wait for.
+        if (!ctx.conversationId) {
+          ctx.trace.push({ nodeId: node.id, type: node.type, action: "skip_noop" });
+          currentId = null;
+          break;
+        }
+        const timeoutMs = Number(node.data?.timeoutMs) > 0 ? Number(node.data.timeoutMs) : 30 * 60_000;
+        await park(ctx, node.id, true);
+        await flowResumeQueue.add(
+          "resume",
+          {
+            tenantId: ctx.tenantId,
+            conversationId: ctx.conversationId,
+            flowKind: ctx.flowScope,
+            flowId: ctx.flowId,
+            resumeNodeId: node.id,
+            channel: ctx.channel,
+            message: "",
+            timeout: true,
+            ...(ctx.run ? { automationRunId: ctx.run.id } : {}),
+          },
+          { delay: timeoutMs, removeOnComplete: true, removeOnFail: 100 },
+        );
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "paused_for_reply", detail: { timeoutMs } });
+        return { executed: true, halted: true, reason: "wait_for_reply", matchedNodeId: node.id, trace: ctx.trace };
+      }
+
+      case "assign": {
+        if (ctx.conversationId) {
+          const to = node.data?.to === "person" ? "person" : "team";
+          const data: any = { handledBy: "human" };
+          if (to === "person" && node.data?.userId) Object.assign(data, { assignedAgentId: String(node.data.userId), status: "OPEN" });
+          else Object.assign(data, { status: "WAITING", ...(node.data?.departmentId ? { departmentId: String(node.data.departmentId) } : {}) });
+          await prisma.conversation.update({ where: { id: ctx.conversationId }, data });
+          publishEvent({ event: "conversation:updated", tenantId: ctx.tenantId, data: { id: ctx.conversationId, ...data } }).catch(() => {});
+          // A person owns it now: the AI must not also answer this message.
+          if (ctx.run) { ctx.run.answered = true; ctx.run.prevOwner = "human"; }
+        }
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "assigned", detail: { to: node.data?.to ?? "team" } });
+        currentId = outgoing[0]?.target || null;
+        break;
+      }
+
+      case "hand_to_ai":
+      case "run_skill": {
+        const aiAgentId = String(node.data?.aiAgentId || "").trim() || null;
+        const skillId = node.type === "run_skill" ? String(node.data?.skillId || "").trim() || null : null;
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "handed_to_ai", detail: { aiAgentId, skillId } });
+        await persistVars(ctx);
+        if (ctx.run) { ctx.run.answered = true; ctx.run.prevOwner = "ai_agent"; }
+        const dispatched = await dispatchRoute("agent", aiAgentId, ctx, skillId);
+        return {
+          executed: true, halted: true, reason: "route_dispatched", matchedNodeId: node.id,
+          route: { routeType: dispatched, targetId: aiAgentId }, trace: ctx.trace,
+        };
+      }
+
+      case "add_tag": {
+        const tag = interpolate(String(node.data?.tag || ""), ctx.vars).trim();
+        // No tag event is emitted for this write: an automation's own tag
+        // must not fire tag automations (loop guard).
+        await updateContact(ctx, "add_tag", tag, "");
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: tag ? "tagged" : "skip_noop", detail: { tag } });
+        currentId = outgoing[0]?.target || null;
+        break;
+      }
+
+      case "create_task": {
+        const r = await createCrmTask(ctx, {
+          title: interpolate(String(node.data?.title || ""), ctx.vars),
+          body: interpolate(String(node.data?.body || ""), ctx.vars),
+          dueInMinutes: Number(node.data?.dueInMinutes) > 0 ? Number(node.data.dueInMinutes) : null,
+        });
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: r.ok ? "task_created" : "task_failed", detail: r });
+        currentId = outgoing[0]?.target || null;
+        break;
+      }
+
+      case "notify_team": {
+        const r = await notifyTeam(ctx, {
+          message: interpolate(String(node.data?.message || ""), ctx.vars),
+          userIds: Array.isArray(node.data?.userIds) ? node.data.userIds.map(String) : [],
+          departmentId: node.data?.departmentId ? String(node.data.departmentId) : null,
+        });
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: r ? "notified" : "notify_failed" });
+        currentId = outgoing[0]?.target || null;
+        break;
+      }
+
+      case "close_conversation": {
+        const text = String(node.data?.message || "");
+        if (text.trim()) await sendText(text, ctx);
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: "closed" });
+        await persistVars(ctx);
+        if (ctx.run) ctx.run.answered = true;
+        await applyEnd("close", ctx);
+        if (ctx.conversationId) {
+          publishEvent({ event: "conversation:updated", tenantId: ctx.tenantId, data: { id: ctx.conversationId, status: "CLOSED" } }).catch(() => {});
+        }
+        return { executed: true, halted: true, reason: "end_node", matchedNodeId: node.id, endKind: "close", trace: ctx.trace };
       }
 
       default: {
@@ -1601,6 +1823,7 @@ async function persistOutbound(
   // inbound, and moving it would sink a waiting customer down the queue on the
   // strength of a delivery that did not happen.
   if (extId) {
+    if (ctx.run) ctx.run.answered = true;
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
       data: { lastMessageAt: m.createdAt },
@@ -1619,6 +1842,8 @@ async function dispatchRoute(
   routeType: "agent" | "flow" | "human",
   targetId: string | null,
   ctx: FlowExecCtx,
+  // An automation's "Run a skill": the employee starts this business skill.
+  startSkillId: string | null = null,
 ): Promise<"AI_AGENT" | "FLOW" | "HUMAN" | "DEPARTMENT"> {
   // Context-free run: no conversation to assign, hand off, or drive an agent
   // against. Map the author's intent to its terminal type without side effects.
@@ -1631,10 +1856,12 @@ async function dispatchRoute(
     // separate question and is not answered yet.
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
-      data: { assignedAiAgentId: targetId },
+      // An automation hands over for good: its cursor goes with it.
+      data: { assignedAiAgentId: targetId, ...(ctx.run ? { chatbotNodeId: null, chatbotFlowId: null, automationRunId: null } : {}) },
     });
 
-    await processAIBot(ctx.tenantId, ctx.conversationId, ctx.message, targetId);
+    if (startSkillId) await processAIBot(ctx.tenantId, ctx.conversationId, ctx.message, targetId, startSkillId);
+    else await processAIBot(ctx.tenantId, ctx.conversationId, ctx.message, targetId);
 
     // Ownership transfers only once the AI employee has actually taken the
     // turn. This used to be written BEFORE the call, so a turn the AI
@@ -1742,6 +1969,9 @@ async function applyOrphanedHandoff(
 ): Promise<void> {
   // Context-free run (webhook trigger): no Conversation row, nothing to strand.
   if (!ctx.conversationId) return;
+  // An automation run settles the conversation itself when it ends (it
+  // restores the owner it found), in automation-runner.service.
+  if (ctx.run) return;
   try {
     const conv = await prisma.conversation.findUnique({
       where: { id: ctx.conversationId },
@@ -1846,6 +2076,185 @@ async function applyEnd(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
+
+/**
+ * Park the conversation's cursor at a node. `claim` = the flow owns the
+ * replies while parked (handledBy "flow"); an automation's timed wait does not
+ * claim. A sub-flow also records WHICH flow, so the next inbound resumes that
+ * flow and not the main canvas; an automation run records its run id.
+ */
+async function park(ctx: FlowExecCtx, nodeId: string, claim: boolean): Promise<void> {
+  if (ctx.run && claim) {
+    ctx.run.answered = true;
+    // Remember the owner the run displaced, once per run, to restore it later.
+    if (ctx.vars.__automationRunId !== ctx.run.id) {
+      ctx.vars.__automationRunId = ctx.run.id;
+      ctx.vars.__automationPrevOwner = ctx.run.prevOwner;
+    }
+  }
+  await persistVars(ctx);
+  if (!ctx.conversationId) return;
+  await prisma.conversation.update({
+    where: { id: ctx.conversationId },
+    data: {
+      chatbotNodeId: nodeId,
+      ...(claim ? { handledBy: "flow" } : {}),
+      ...(ctx.flowScope === "sub" && ctx.flowId ? { chatbotFlowId: ctx.flowId } : {}),
+      ...(ctx.run ? { automationRunId: ctx.run.id } : {}),
+    },
+  });
+}
+
+function waitingOnTimer(paused: GraphNode): FlowExecutionResult {
+  return {
+    executed: false, halted: true, reason: "waiting_on_timer", matchedNodeId: paused.id,
+    trace: [{ nodeId: paused.id, type: paused.type, action: "waiting_on_timer" }],
+  };
+}
+
+/**
+ * Which exit of a Wait-for-reply the customer's reply takes: the tapped
+ * button / list row (by payload, or by its visible title when typed), else
+ * "reply". The options are the ones the message right before it offered.
+ */
+export function replyBranch(paused: GraphNode, nodes: GraphNode[], edges: GraphEdge[], message: string, replyPayload?: string | null): string {
+  const inbound = edges.find((e) => e.target === paused.id);
+  const prev = inbound ? nodes.find((n) => n.id === inbound.source) : undefined;
+  const opts: any[] = prev?.type === "send_buttons" ? prev.data?.buttons ?? [] : prev?.type === "send_list" ? prev.data?.options ?? [] : [];
+  const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+  const byId = replyPayload ? opts.find((o) => norm(o?.id) === norm(replyPayload)) : undefined;
+  const byTitle = !byId && message ? opts.find((o) => norm(o?.title) === norm(message)) : undefined;
+  const hit = byId ?? byTitle;
+  return hit ? `btn:${hit.id}` : "reply";
+}
+
+/** 0..99, stable for a key. */
+function bucketOf(key: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return Math.abs(h) % 100;
+}
+
+/** he / ar / en from the conversation's detected locale, else the message's script. */
+async function conversationLanguage(ctx: FlowExecCtx): Promise<string | null> {
+  if (ctx.conversationId) {
+    const c = await prisma.conversation.findFirst({ where: { id: ctx.conversationId, tenantId: ctx.tenantId }, select: { detectedLocale: true } });
+    const loc = String((c as any)?.detectedLocale ?? "").slice(0, 2).toLowerCase();
+    if (loc) return loc;
+  }
+  const m = ctx.message || "";
+  if (/[\u0590-\u05FF]/.test(m)) return "he";
+  if (/[\u0600-\u06FF]/.test(m)) return "ar";
+  if (/[a-zA-Z]/.test(m)) return "en";
+  return null;
+}
+
+/** vip (tagged "vip"), new (no earlier conversation), else returning. */
+async function customerSegment(ctx: FlowExecCtx): Promise<"vip" | "new" | "returning"> {
+  if (!ctx.conversationId) return "new";
+  const conv = await prisma.conversation.findFirst({
+    where: { id: ctx.conversationId, tenantId: ctx.tenantId },
+    select: { customerExternalId: true, channel: true },
+  });
+  if (!conv) return "new";
+  const contact = await prisma.contact.findFirst({
+    where: { tenantId: ctx.tenantId, channel: conv.channel, externalId: conv.customerExternalId },
+    select: { tags: true },
+  });
+  const tags = Array.isArray(contact?.tags) ? (contact!.tags as string[]).map((t) => String(t).toLowerCase()) : [];
+  if (tags.includes("vip")) return "vip";
+  const earlier = await prisma.conversation.count({
+    where: { tenantId: ctx.tenantId, channel: conv.channel, customerExternalId: conv.customerExternalId, id: { not: ctx.conversationId } },
+  });
+  return earlier > 0 ? "returning" : "new";
+}
+
+async function sendButtons(body: string, buttons: Array<{ id: string; title: string }>, ctx: FlowExecCtx) {
+  const sendCtx = ctx.sendCtx;
+  if (!sendCtx || !body.trim() || !buttons.length) return;
+  const adapter = getOutboundAdapter(sendCtx.channel as any);
+  if (!adapter) return;
+  let extId: string | null;
+  try {
+    extId = await adapter.sendInteractiveMessage(sendCtx.credentials, sendCtx.channelAccountExternalId, sendCtx.recipientId, body, buttons);
+  } catch (err: any) {
+    const { sendError } = describeSendError(err, sendCtx.channel as any);
+    await persistOutbound(ctx, body, "interactive", null, { buttons, sendError });
+    throw err;
+  }
+  await persistOutbound(ctx, body, "interactive", extId, { buttons });
+}
+
+async function sendList(body: string, buttonText: string, rows: Array<{ id: string; title: string; description?: string }>, ctx: FlowExecCtx) {
+  const sendCtx = ctx.sendCtx;
+  if (!sendCtx || !body.trim() || !rows.length) return;
+  const adapter = getOutboundAdapter(sendCtx.channel as any);
+  if (!adapter?.sendListMessage) {
+    // The validator keeps lists on WhatsApp; a path that still reaches another
+    // channel fails loudly rather than pretending it sent.
+    throw new Error(`send_list: ${sendCtx.channel} has no list messages`);
+  }
+  let extId: string | null;
+  try {
+    extId = await adapter.sendListMessage(sendCtx.credentials, sendCtx.channelAccountExternalId, sendCtx.recipientId, body, buttonText, rows);
+  } catch (err: any) {
+    const { sendError } = describeSendError(err, sendCtx.channel as any);
+    await persistOutbound(ctx, body, "interactive", null, { list: rows, sendError });
+    throw err;
+  }
+  await persistOutbound(ctx, body, "interactive", extId, { list: rows });
+}
+
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
+const internalKey = () => process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN || "";
+
+/** A task in the tenant's connected CRM, through the ai service (it owns the CRM connectors). */
+async function createCrmTask(
+  ctx: FlowExecCtx,
+  task: { title: string; body: string; dueInMinutes: number | null },
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!task.title.trim()) return { ok: false, reason: "no_title" };
+  try {
+    const r = await fetch(`${AI_SERVICE_URL}/api/internal/automation-actions/create-task`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Internal-Key": internalKey(), "x-tenant-id": ctx.tenantId },
+      body: JSON.stringify({ tenantId: ctx.tenantId, conversationId: ctx.conversationId, ...task }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const j: any = await r.json().catch(() => ({}));
+    return r.ok ? { ok: true } : { ok: false, reason: String(j?.reason || j?.error || `http_${r.status}`) };
+  } catch (err: any) {
+    return { ok: false, reason: `unreachable: ${err?.message ?? err}` };
+  }
+}
+
+/** An in-app notification to the chosen people (or a department), through the notifications service. */
+async function notifyTeam(
+  ctx: FlowExecCtx,
+  n: { message: string; userIds: string[]; departmentId: string | null },
+): Promise<boolean> {
+  if (!n.message.trim()) return false;
+  try {
+    const { notificationsQueue } = await import("@chatcenter/shared");
+    await notificationsQueue.add("system-event", {
+      id: `automation:${ctx.run?.id ?? "flow"}:${ctx.run?.currentNodeId ?? Date.now()}`,
+      type: "automation.notify_team",
+      tenantId: ctx.tenantId,
+      data: {
+        message: n.message.slice(0, 1000),
+        userIds: n.userIds,
+        departmentId: n.departmentId,
+        conversationId: ctx.conversationId,
+        automationId: ctx.run?.flowId ?? ctx.flowId ?? null,
+      },
+      metadata: { source: "automation", timestamp: new Date().toISOString() },
+    }, { removeOnComplete: true, removeOnFail: 100 });
+    return true;
+  } catch (err: any) {
+    console.warn("[flow-executor] notify_team enqueue failed:", err?.message);
+    return false;
+  }
+}
 
 /**
  * Replace `{{var_name}}` (and dotted paths like `{{customer.email}}`) in a

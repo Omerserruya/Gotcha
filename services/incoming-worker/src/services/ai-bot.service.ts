@@ -77,6 +77,9 @@ export async function processAIBot(
   conversationId: string,
   incomingMessage: string,
   aiAgentId?: string | null,
+  // An automation's "Run a skill": the employee starts this business skill
+  // on this turn instead of choosing one.
+  startSkillId?: string | null,
 ): Promise<boolean> {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
@@ -176,6 +179,7 @@ export async function processAIBot(
         conversationId,
         aiAgentId: resolvedAgentId,
         incomingMessage,
+        ...(startSkillId ? { startSkillId } : {}),
         // Closed + "active" policy: the AI answers, but must speak truthfully
         // about human availability. Localized next-opening wording is computed
         // HERE (the tenant config lives on this side) and injected as prompt
@@ -773,7 +777,7 @@ function isHumanRequest(message: string): boolean {
 // ─── Business hours (tenant-persisted; shared evaluator) ─────
 const HEBREW_RE = /[֐-׿]/;
 
-async function getBusinessHoursState(
+export async function getBusinessHoursState(
   tenantId: string,
 ): Promise<{ cfg: BusinessHoursConfig | null; state: BusinessOpenState }> {
   try {

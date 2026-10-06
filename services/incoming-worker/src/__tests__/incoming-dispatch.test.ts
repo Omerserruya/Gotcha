@@ -32,7 +32,9 @@ vi.mock("@chatcenter/shared", () => ({
   checkShopifyResponseVersion: () => ({ ok: true, served: "2026-07" }),
   metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
-  prisma: { tenant, message: { findFirst: vi.fn() } },
+  // chatbotFlow: the webhook path asks whether the linked flow is an
+  // automation (has a trigger); null here = a plain flow, the legacy path.
+  prisma: { tenant, message: { findFirst: vi.fn() }, chatbotFlow: { findFirst: async () => null } },
   createWorker: vi.fn(),
   analyticsQueue: { add: vi.fn() },
   outgoingMessageQueue: { add: vi.fn() },
