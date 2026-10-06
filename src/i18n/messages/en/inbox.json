@@ -136,7 +136,9 @@
     "orders": {
       "returning": "Returning · {count} orders",
       "count": "{count, plural, one {# order} other {# orders}}"
-    }
+    },
+    "notAvailable": "This conversation isn’t available — it may have been deleted, or it isn’t yours to see.",
+    "openFailed": "We couldn’t open this conversation just now. This is our side, not yours."
   },
   "context": {
     "label": "About this customer"

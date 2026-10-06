@@ -135,6 +135,7 @@ const data = (over: Record<string, unknown> = {}) => {
     nextCursor: null,
     undatedCount: 0,
     open: row() as ReturnType<typeof row> | null,
+    missing: null as 'unavailable' | 'failed' | null,
     messages: [] as unknown,
     timeline: null as unknown,
     orders: null as unknown,
@@ -611,6 +612,19 @@ describe('★★ 02b — the queue is clear, and only then', () => {
       ClearQueueList,
     );
     expect(JSON.stringify(Object.keys(props(tree, ClearQueuePane) ?? {}))).toContain('clear');
+  });
+
+  it('★★ ?c= opened by link on an empty queue is open — not "all clear"', async () => {
+    loadClearQueue.mockClear();
+    const tree = await page({ rows: [], messages: null });
+    expect(loadClearQueue).not.toHaveBeenCalled();
+    expect(found(tree).panels).toContain(CopilotWall);
+  });
+
+  it('★ a link to a conversation that is not available says so', async () => {
+    const tree = await page({ rows: [], open: null, messages: null, missing: 'unavailable' });
+    expect(JSON.stringify(tree)).toContain('open.notAvailable');
+    expect(JSON.stringify(tree)).not.toContain('open.none');
   });
 
   it('★ no wall on a clear queue: no header, no body, nothing for them to read', async () => {

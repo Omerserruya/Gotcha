@@ -1,3 +1,4 @@
+import type React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +13,13 @@ import { ActivityProvider, ActivityStrip, STEPS_SHOWN, WorkingState } from './Ac
 
 const read = vi.hoisted(() => vi.fn<(id: string) => Promise<readonly ActivityStep[] | null>>());
 vi.mock('./wall-actions', () => ({ readActivity: read }));
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 const stop = vi.hoisted(() => vi.fn());
 vi.mock('../conversation-actions', () => ({ stopAi: stop }));
 
@@ -86,6 +94,9 @@ describe('★★ What it did — one read, then the events', () => {
       'Refundwaiting for approval',
     );
     expect(screen.getByTestId('wall-step-e1')).toHaveTextContent('Order lookup28ms');
+    // Somebody must decide it: the words are the way to Approvals.
+    expect(screen.getByTestId('wall-step-approve-e2')).toHaveAttribute('href', '/approvals');
+    expect(screen.queryByTestId('wall-step-approve-e1')).toBeNull();
     expect(screen.getByTestId('wall-activity-count')).toHaveTextContent('2 steps · 28ms');
     expect(read).toHaveBeenCalledTimes(1);
     expect(joined).toHaveBeenCalledWith('c1');

@@ -13,6 +13,7 @@ import {
 } from 'react';
 
 import { labelOf, type ActivityStep } from '@/api/contracts/ai-activity';
+import { Link } from '@/i18n/navigation';
 import { useConversationRoom, useRealtimeEvent } from '@/realtime/realtime-provider';
 
 import { stopAi } from '../conversation-actions';
@@ -175,13 +176,29 @@ export function ActivityStrip() {
                 // The provider's message on a failure — never the tool's arguments.
                 title={step.error ?? undefined}
               >
-                {step.status === 'completed'
-                  ? step.durationMs === null
-                    ? t('status.completed')
-                    : seconds(step.durationMs)
-                  : step.status === null
-                    ? '—'
-                    : t(`status.${step.status}`)}
+                {step.status === 'proposed' ? (
+                  /*
+                   * Somebody has to decide it, and Approvals is where. The
+                   * list — there is no route to a single approval.
+                   */
+                  <Link
+                    href="/approvals"
+                    className={styles.stepLink}
+                    data-testid={`wall-step-approve-${step.id}`}
+                  >
+                    {t('status.proposed')}
+                  </Link>
+                ) : step.status === 'completed' ? (
+                  step.durationMs === null ? (
+                    t('status.completed')
+                  ) : (
+                    seconds(step.durationMs)
+                  )
+                ) : step.status === null ? (
+                  '—'
+                ) : (
+                  t(`status.${step.status}`)
+                )}
               </span>
             </li>
           ))}

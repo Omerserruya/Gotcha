@@ -78,7 +78,13 @@ export default async function Page({
     Its own reads only then, so a busy inbox pays for nothing.
   */
   const clear =
-    data.rows !== null && data.rows.length === 0 && view === 'queue' && channel === null
+    data.rows !== null &&
+    data.rows.length === 0 &&
+    view === 'queue' &&
+    channel === null &&
+    // A conversation opened by link on an empty queue is open, not "all clear".
+    data.open === null &&
+    data.missing === null
       ? await loadClearQueue()
       : null;
   /*
@@ -261,7 +267,13 @@ export default async function Page({
                 <ClearQueuePane clear={clear} />
               ) : data.open === null ? (
                 <p className={styles.note} data-testid="inbox-nothing-open">
-                  {data.rows === null ? t('open.unavailable') : t('open.none')}
+                  {data.missing === 'unavailable'
+                    ? t('open.notAvailable')
+                    : data.missing === 'failed'
+                      ? t('open.openFailed')
+                      : data.rows === null
+                        ? t('open.unavailable')
+                        : t('open.none')}
                 </p>
               ) : (
                 <>

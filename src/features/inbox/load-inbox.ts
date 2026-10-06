@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { viewQuery, type InboxView, type QueueChannelFilter } from './inbox-views';
+import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import {
   autoGreetingSchema,
@@ -146,6 +147,12 @@ export interface InboxData {
    */
   readonly undatedCount: number | undefined;
   readonly open: ConversationRow | null;
+  /**
+   * `?c=` named a conversation and it could not be opened: `unavailable`
+   * (404/403 — gone, or not this person's to see), `failed` (any other
+   * error). `null` when nothing was asked for, or it opened.
+   */
+  readonly missing: 'unavailable' | 'failed' | null;
   /** `null` when nothing is open. See `ConversationDetail`. */
   readonly detail: Promise<ConversationDetail> | null;
   /** `User.id` of the person looking, or `null` when we could not read it. */
@@ -290,7 +297,17 @@ export async function loadInbox(
    * the queue gave us — and NOT the first undated one, which has no claim to
    * being most recent.
    */
-  const open = (conversationId ? rows?.find((r) => r.id === conversationId) : rows?.[0]) ?? null;
+  const listed = (conversationId ? rows?.find((r) => r.id === conversationId) : rows?.[0]) ?? null;
+
+  /*
+   * ★★ A LINK OPENS ITS CONVERSATION, WHATEVER THE VIEW. Cmd-K, a
+   *   notification and Approvals all link `?c=` to a conversation that may
+   *   not be in this view's page of rows. It is read by id, rather than
+   *   "Nothing is open" with the id in the address bar.
+   */
+  const direct = conversationId && !listed ? await openById(conversationId) : null;
+  const open = listed ?? (direct && 'row' in direct ? direct.row : null);
+  const missing = direct && 'missing' in direct ? direct.missing : null;
 
   const paging = {
     // A failed read claims nothing about what else exists.
@@ -332,7 +349,33 @@ export async function loadInbox(
   };
 
   // ★ Started, not awaited: it runs while the page renders. See `ConversationDetail`.
-  return { rows, ...paging, ...viewer, open, detail: open ? loadConversation(open.id) : null };
+  return {
+    rows,
+    ...paging,
+    ...viewer,
+    open,
+    missing,
+    detail: open ? loadConversation(open.id) : null,
+  };
+}
+
+/** One conversation by id, for a link from outside the current view. Never rejects. */
+async function openById(
+  conversationId: string,
+): Promise<{ readonly row: ConversationRow } | { readonly missing: 'unavailable' | 'failed' }> {
+  try {
+    const row = await serverApi().get({
+      endpoint: inboxEndpoints.conversation(conversationId),
+      payload: conversationRowSchema,
+    });
+    return { row };
+  } catch (cause) {
+    if (isApiError(cause) && (cause.status === 404 || cause.status === 403)) {
+      return { missing: 'unavailable' };
+    }
+    logger.warn('inbox.open_by_id_failed', { cause });
+    return { missing: 'failed' };
+  }
 }
 
 /** The second round, for one conversation. Never rejects. */
