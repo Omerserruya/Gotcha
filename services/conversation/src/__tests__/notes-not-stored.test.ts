@@ -24,7 +24,9 @@ import express from "express";
 import request from "supertest";
 
 vi.mock("@chatcenter/shared", () => ({
-  prisma: {},
+  // Every /:id route first checks the viewer may see the conversation; this
+  // one exists and is visible, so the request reaches the notes handler.
+  prisma: { conversation: { findFirst: async () => ({ id: "c1" }) } },
   authenticate: (req: any, _res: any, next: any) => { req.user = { userId: "u1", role: "AGENT" }; next(); },
   resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = "t1"; next(); },
   requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),

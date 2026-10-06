@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma, latestHandover } from "@chatcenter/shared";
+import { requireVisibleConversation } from "../lib/require-visible-conversation";
 import * as conversationService from "../services/conversation.service";
 
 async function generateAndSaveSummary(tenantId: string, conversationId: string, authHeader?: string) {
@@ -33,6 +34,9 @@ async function generateAndSaveSummary(tenantId: string, conversationId: string, 
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
+// Every /:id route below answers only for a conversation this viewer may
+// see; 404 otherwise. See lib/require-visible-conversation.ts.
+router.param("id", requireVisibleConversation);
 
 /**
  * The tenant's most recent change of handler.
@@ -106,6 +110,7 @@ router.get("/history/:customerExternalId", async (req: Request, res: Response) =
       req.tenantId!,
       customerExternalId,
       conversationId,
+      { userId: req.user!.userId, role: req.user!.role, departmentId: (req.user as any)?.departmentId },
     );
     res.json({ data });
   } catch (err) {
@@ -205,7 +210,7 @@ router.post("/:id/stop-ai", async (req: Request, res: Response) => {
 
 // Allow both ADMIN and the assigned agent to transfer/reassign
 /*
- * ARCHIVE AND MARK-UNREAD — the two context-menu actions the server could not do.
+ * ARCHIVE AND MARK-UNREAD - the two context-menu actions the server could not do.
  *
  * The queue's right-click menu specifies seven actions. Five had routes. These
  * two did not: archive had nothing at all, and "mark as unread" lived only as a

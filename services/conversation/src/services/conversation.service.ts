@@ -637,6 +637,10 @@ export async function getHistoryByCustomerExternalId(
   tenantId: string,
   customerExternalId: string,
   conversationId?: string,
+  /** The viewer. Their visibility applies, as in the list: a department-
+   *  restricted agent does not get another department's threads (and their
+   *  last message) through a customer's history. */
+  viewer?: { userId: string; role?: string; departmentId?: string },
 ) {
   // Cross-platform history walk. The bare (tenantId, customerExternalId) lookup
   // only finds same-channel conversations (Instagram PSID matches the PSID,
@@ -737,11 +741,13 @@ export async function getHistoryByCustomerExternalId(
   // So this one call site opts in deliberately, and every row carries its
   // `origin` onward so the panel can label imported threads rather than
   // passing them off as conversations that happened in GOTCHA.
+  const historyVisibility = viewer ? visibilityClause(viewer) : null;
   const conversations = await withHistoricalRecords(() =>
     prisma.conversation.findMany({
       where: {
         tenantId,
         customerExternalId: { in: Array.from(externalIds) },
+        ...(historyVisibility ? { OR: historyVisibility } : {}),
       },
       include: {
         assignedAgent: { select: { id: true, name: true } },

@@ -7,9 +7,13 @@ import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, de
   type EmailThreadContext,
 } from "@chatcenter/shared";
 import * as messageService from "../services/message.service";
+import { requireVisibleConversation } from "../lib/require-visible-conversation";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
+// Every /:conversationId route below answers only for a conversation this viewer may
+// see; 404 otherwise. See lib/require-visible-conversation.ts.
+router.param("conversationId", requireVisibleConversation);
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";

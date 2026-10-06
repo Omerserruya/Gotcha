@@ -35,6 +35,13 @@ import {
 import { getHistoryByCustomerExternalId } from "../services/conversation.service";
 
 const router = Router();
+
+/** The signed-in viewer, for the same conversation visibility as the inbox. */
+const viewerOf = (req: Request) => ({
+  userId: (req as any).user?.userId as string,
+  role: (req as any).user?.role as string | undefined,
+  departmentId: (req as any).user?.departmentId as string | undefined,
+});
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
 // Feature-flag gate - short-circuits to 404 for non-enabled tenants.
@@ -462,7 +469,7 @@ router.get("/missed/:id/detail", async (req: Request, res: Response) => {
       lastMessageAt: Date | null; customerName: string | null;
     }>();
     for (const seed of seedExternalIds) {
-      const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId)
+      const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId, viewerOf(req))
         .catch(() => [] as Awaited<ReturnType<typeof getHistoryByCustomerExternalId>>);
       for (const c of rows) {
         if (c.id === session.conversationId) continue;
@@ -610,7 +617,7 @@ router.get("/:id/context", async (req: Request, res: Response) => {
           lastMessageAt: Date | null; aiSummary: string | null;
         }>();
         for (const seed of seedExternalIds) {
-          const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId)
+          const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId, viewerOf(req))
             .catch(() => [] as Awaited<ReturnType<typeof getHistoryByCustomerExternalId>>);
           for (const c of rows) {
             if (c.id === session.conversationId) continue;
