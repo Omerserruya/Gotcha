@@ -929,6 +929,27 @@ function silentTurnFallback(locale: string): string {
     : "Sorry - I couldn't finish checking that just now. Shall I try again, or pass you to a person?";
 }
 
+/**
+ * The text a turn delivers. An empty turn gets the honest fallback, except
+ * when an escalation or an approval pause already owes the customer a message
+ * from another path. A SIMULATED escalation (the test chat) counts as one:
+ * live, the hand-off message comes from the worker's escalation path; in the
+ * test chat the fallback ("I couldn't finish checking - shall I pass you to a
+ * person?") showed an operator a message live would never send.
+ */
+export function deliverableReply(t: {
+  safeReply: string | null | undefined;
+  pendingEscalation: boolean;
+  awaitingApproval: boolean;
+  toolCallLog: Array<{ tool: string; decision?: string }>;
+  locale: string;
+}): string {
+  if (t.safeReply?.trim()) return t.safeReply;
+  const simulatedEscalation = t.toolCallLog.some((c) => c.tool === "escalate_to_human" && c.decision === "simulated");
+  if (t.pendingEscalation || t.awaitingApproval || simulatedEscalation) return t.safeReply ?? "";
+  return silentTurnFallback(t.locale);
+}
+
 function renderPendingApprovalsBlock(pending: Array<{ tool: string }>): string | undefined {
   if (!pending.length) return undefined;
   const list = pending.map((a) => `\`${a.tool}\``).join(", ");
@@ -4827,12 +4848,8 @@ async function generateAIBotReplyInner(
   // An escalation or an approval pause is a different case: both already owe
   // the customer a message from another path, and adding one here would make
   // two.
-  const deliverable =
-    safeReply?.trim() ||
-    (pendingEscalation || awaitingApproval
-      ? safeReply
-      : silentTurnFallback(replyLocale));
-  if (!safeReply?.trim() && !pendingEscalation && !awaitingApproval) {
+  const deliverable = deliverableReply({ safeReply, pendingEscalation: !!pendingEscalation, awaitingApproval: !!awaitingApproval, toolCallLog, locale: replyLocale });
+  if (deliverable === silentTurnFallback(replyLocale)) {
     console.error(
       `[ai-bot] SILENT TURN: no reply produced conv=${opts.conversationId} ` +
         `tools=${toolCallLog.map((t) => t.tool).join(",") || "none"} - sent the fallback instead of nothing`,

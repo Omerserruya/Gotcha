@@ -273,7 +273,7 @@ const MARK: Record<StepState, string> = {
  * the next step: the customer would answer "yes" to nobody.
  */
 export const HANDOVER_WORDING_RULE =
-  "If you hand over to a person this turn (escalate_to_human, or a step you cannot do), your message must not offer, promise or ask the customer to confirm any further step. Say a person will continue from here.";
+  "If you hand over to a person this turn (escalate_to_human, or a step you cannot do), your message must not offer, promise or ask the customer to confirm any further step, and must not ask them for anything. Say a person will continue from here.";
 
 /** BLOCK 2 line: names only, so the cached prefix changes only when the list does. */
 export function renderSkillNamesLine(names: string[]): string | null {
@@ -286,6 +286,15 @@ export function renderActiveSkillBlock(skill: SkillCandidate, states: Array<{ st
   const lines: string[] = [`# Active Skill: ${skill.name}`];
   if (skill.whenToUse) lines.push(`Why this skill: ${skill.whenToUse}`);
   lines.push("While this skill is active it decides your next move, ahead of the Current Plan's next action. Platform rules, approvals and tool permissions still apply.");
+  // Said up front, not only on the step's own line: the employee offered
+  // ("shall I confirm the exchange?") and gathered details for a step it
+  // cannot do long before reaching it.
+  const cannot = states.filter((s) => s.state === "unavailable").map((s) => s.step.title);
+  if (cannot.length) {
+    lines.push(
+      `You cannot do these steps yourself: ${cannot.join("; ")}. At no point offer them, promise them, ask the customer to confirm them, or ask for details only they need (an address, a size, a date). When you reach one, tell the customer a person will continue it.`,
+    );
+  }
   lines.push("", "Steps, in order:");
   states.forEach((s, i) => {
     const here = current && s.step.id === current.id ? " <- you are here" : "";

@@ -181,12 +181,23 @@ describe("★ the prompt", () => {
     expect(out.activeBlock!.split("\n")[here + 1]).toMatch(/do not offer it, promise it or ask the customer to confirm it/);
     expect(out.activeBlock).toContain("a person will continue it");
     expect(out.activeBlock).toContain(HANDOVER_WORDING_RULE);
+    // Up front too, before the employee ever reaches that step.
+    const lines = out.activeBlock!.split("\n");
+    const limit = lines.findIndex((l) => l.startsWith("You cannot do these steps yourself: Exchange the item."));
+    expect(limit).toBeGreaterThan(-1);
+    expect(limit).toBeLessThan(lines.findIndex((l) => l.startsWith("Steps, in order:")));
+    expect(lines[limit]).toMatch(/ask for details only they need/);
+  });
+
+  it("no step it cannot do → no limits line", () => {
+    const block = renderActiveSkillBlock(skill(), computeStepStates(skill().steps, [], ["shopify.order_lookup", "shopify.track_shipment"]), []);
+    expect(block).not.toContain("You cannot do these steps yourself");
   });
 
   it("the hand-over wording rule rides every active block (an escalation can come from any step)", () => {
     const block = renderActiveSkillBlock(skill(), computeStepStates(skill().steps, [], ["shopify.order_lookup", "shopify.track_shipment"]), []);
     expect(block).toContain(HANDOVER_WORDING_RULE);
-    expect(HANDOVER_WORDING_RULE).toMatch(/must not offer, promise or ask the customer to confirm any further step/);
+    expect(HANDOVER_WORDING_RULE).toMatch(/must not offer, promise or ask the customer to confirm any further step, and must not ask them for anything/);
     expect(HANDOVER_WORDING_RULE).not.toMatch(/[–—―]/);
   });
 });
