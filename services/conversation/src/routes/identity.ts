@@ -384,7 +384,7 @@ const TIMELINE_COVERAGE = {
     available: true,
     // Stated because the gap is invisible from the data: the stream looks
     // complete and simply omits a whole class of action.
-    detail: "ToolExecution records catalog HTTP tools only. An action taken through an adapter, such as a Shopify refund, is not recorded here.",
+    detail: "Every tool the AI called through the action orchestrator, including adapter tools such as a Shopify refund, with its status (proposed, approved, running, completed, failed, denied).",
   },
   order: { available: false, reason: "no_local_model", detail: "Orders live in the commerce platform and are served by their own screen." },
   return: { available: false, reason: "no_local_model", detail: "Returns live in the commerce platform and are served by their own screen." },
@@ -547,6 +547,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     const messageWhere = { tenantId, conversationId: { in: conversationIds }, ...originClause };
     const olderMessage = keysetOlderThan("createdAt", decoded);
     const olderHandover = keysetOlderThan("at", decoded);
+    const olderAction = keysetOlderThan("proposedAt", decoded);
 
     type Event = {
       type: TimelineEventType;
@@ -558,7 +559,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       direction?: string;
       body?: string | null;
       handover?: { from: string | null; to: string; actorUserId: string | null; reason: string | null };
-      action?: { tool: string; success: boolean; triggeredBy: string; durationMs: number | null; approvedBy: string | null };
+      action?: { tool: string; success: boolean; status: string; triggeredBy: string; durationMs: number | null; approvedBy: string | null };
     };
 
     const [messageCount, handoverCount, actionCount, messageRows, handoverRows, actionRows] = await Promise.all([
@@ -566,8 +567,12 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       wanted.has("handover")
         ? (prisma as any).conversationHandover.count({ where: { tenantId, conversationId: { in: conversationIds } } })
         : Promise.resolve(0),
+      // tool_execution_requests, not tool_executions: every AI tool call goes
+      // through the ActionOrchestrator, which writes a row here per call;
+      // tool_executions only records catalog HTTP tools, so on a Shopify or Woo
+      // store this was always 0 while the AI looked up orders and refunded.
       wanted.has("ai_action")
-        ? (prisma as any).toolExecution.count({ where: { tenantId, conversationId: { in: conversationIds } } })
+        ? (prisma as any).toolExecutionRequest.count({ where: { tenantId, conversationId: { in: conversationIds } } })
         : Promise.resolve(0),
       wanted.has("message")
         ? prisma.message.findMany({
@@ -585,11 +590,12 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
           })
         : Promise.resolve([] as any[]),
       wanted.has("ai_action")
-        ? (prisma as any).toolExecution.findMany({
-            where: { tenantId, conversationId: { in: conversationIds }, ...olderMessage },
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        ? (prisma as any).toolExecutionRequest.findMany({
+            where: { tenantId, conversationId: { in: conversationIds }, ...olderAction },
+            orderBy: [{ proposedAt: "desc" }, { id: "desc" }],
             take: limit + 1,
-            select: { id: true, conversationId: true, toolName: true, success: true, triggeredBy: true, durationMs: true, approvedBy: true, createdAt: true },
+            // args/result are not selected: they hold customer data.
+            select: { id: true, conversationId: true, tool: true, status: true, actor: true, decidedAt: true, startedAt: true, completedAt: true, proposedAt: true },
           })
         : Promise.resolve([] as any[]),
     ]);
@@ -620,12 +626,22 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       ...(actionRows as any[]).map((t): Event => ({
         type: "ai_action",
         id: t.id,
-        createdAt: t.createdAt,
+        createdAt: t.proposedAt,
         conversationId: t.conversationId,
         channel: byConversation.get(t.conversationId)?.channel ?? null,
         origin: byConversation.get(t.conversationId)?.origin ?? null,
         body: null,
-        action: { tool: t.toolName, success: t.success, triggeredBy: t.triggeredBy, durationMs: t.durationMs ?? null, approvedBy: t.approvedBy ?? null },
+        action: {
+          tool: t.tool,
+          // The same `action` keys as before, plus `status`. success is only
+          // true for a completed call; a proposed/denied one did not succeed.
+          success: t.status === "completed",
+          status: t.status,
+          triggeredBy: "ai",
+          durationMs: t.startedAt && t.completedAt ? new Date(t.completedAt).getTime() - new Date(t.startedAt).getTime() : null,
+          // Who decided an approval-gated call, when somebody did.
+          approvedBy: t.status === "approved" && t.decidedAt ? ((t.actor as any)?.agentId ?? null) : null,
+        },
       })),
     ];
 

@@ -77,11 +77,13 @@ vi.mock("@chatcenter/shared", () => ({
         return applyKeyset(state.handovers, args, "at").slice(0, args.take);
       },
     },
-    toolExecution: {
+    // AI actions come from tool_execution_requests (the orchestrator's row per
+    // tool call); tool_executions only ever held catalog HTTP tools.
+    toolExecutionRequest: {
       count: async () => state.actions.length,
       findMany: async (args: any) => {
         state.seen.actionArgs = args;
-        return applyKeyset(state.actions, args, "createdAt").slice(0, args.take);
+        return applyKeyset(state.actions, args, "proposedAt").slice(0, args.take);
       },
     },
     identityLinkSuggestion: { findMany: async () => [], create: async () => ({}) },
@@ -323,8 +325,9 @@ describe("the union carries what exists and names what does not", () => {
     fromHandler: "ai", toHandler: "human", actorUserId: "u9", reason: "customer asked", ...o,
   });
   const action = (id: string, iso: string, o: any = {}) => ({
-    id, conversationId: "cv1", createdAt: new Date(iso),
-    toolName: "shopify_get_order", success: true, triggeredBy: "ai", durationMs: 120, approvedBy: null, ...o,
+    id, conversationId: "cv1", proposedAt: new Date(iso),
+    tool: "shopify.get_order", status: "completed", actor: {}, decidedAt: null,
+    startedAt: new Date(iso), completedAt: new Date(new Date(iso).getTime() + 120), ...o,
   });
 
   it("★ interleaves the three sources in one time-ordered stream", async () => {
@@ -357,13 +360,23 @@ describe("the union carries what exists and names what does not", () => {
   it("carries an AI action's tool and outcome, including a failure", async () => {
     state.messages = [];
     state.messageCount = 0;
-    state.actions = [action("t1", "2026-09-01T10:00:00Z", { success: false, approvedBy: "u3" })];
+    state.actions = [action("t1", "2026-09-01T10:00:00Z", { status: "failed" })];
 
     const res = await get();
 
     expect(res.body.events[0].action).toEqual({
-      tool: "shopify_get_order", success: false, triggeredBy: "ai", durationMs: 120, approvedBy: "u3",
+      tool: "shopify.get_order", success: false, status: "failed", triggeredBy: "ai", durationMs: 120, approvedBy: null,
     });
+  });
+
+  it("an approved action names who approved it", async () => {
+    state.messages = [];
+    state.messageCount = 0;
+    state.actions = [action("t1", "2026-09-01T10:00:00Z", { status: "approved", actor: { agentId: "u3" }, decidedAt: new Date("2026-09-01T10:00:30Z"), startedAt: null, completedAt: null })];
+
+    const res = await get();
+
+    expect(res.body.events[0].action).toMatchObject({ status: "approved", success: false, approvedBy: "u3", durationMs: null });
   });
 
   it("★ declares orders, returns and notes ABSENT, with a reason", async () => {
@@ -378,11 +391,10 @@ describe("the union carries what exists and names what does not", () => {
   it("★ states the AI-action COVERAGE, because the gap is invisible from the data", async () => {
     const res = await get();
 
-    // ToolExecution records catalog HTTP tools only. A Shopify refund through
-    // an adapter is not in it, so the stream looks complete while omitting a
-    // whole class of action.
+    // The source is every tool call the AI made through the orchestrator,
+    // adapter tools included (a Shopify refund is in it now), with its status.
     expect(res.body.coverage.ai_action.available).toBe(true);
-    expect(res.body.coverage.ai_action.detail).toContain("catalog HTTP tools only");
+    expect(res.body.coverage.ai_action.detail).toContain("including adapter tools");
   });
 
   it("honours ?types= and reports what it used", async () => {
@@ -443,16 +455,16 @@ describe("the union carries what exists and names what does not", () => {
 });
 
 /**
- * Every handle the person is known by — and why the alias list alone is not it.
+ * Every handle the person is known by - and why the alias list alone is not it.
  *
  * `metadata.aliases` covers only handles MERGED INTO this contact. Somebody
  * unified-but-never-merged, linked by `personId`, has handles that list cannot
- * see — so a panel built on aliases says "channels we joined up" rather than
+ * see - so a panel built on aliases says "channels we joined up" rather than
  * "her channels". The sibling walk already happens to scope the query; it was
  * simply discarded on the way out.
  *
  * ★ PROJECTED, never the raw rows. `findSiblingContacts` selects no columns, so
- * each sibling arrives carrying its whole `metadata` JSON — which holds customer
+ * each sibling arrives carrying its whole `metadata` JSON - which holds customer
  * phone numbers. Returning them as-is would ship that blob once per channel.
  */
 describe("the person's channels", () => {
@@ -535,7 +547,7 @@ describe("the person's channels", () => {
  * The response carries named columns, never the open JSON column.
  *
  * `effective` was a `findFirst` with no `select`, so every timeline response
- * shipped the contact's `metadata` — which holds phone numbers among other
+ * shipped the contact's `metadata` - which holds phone numbers among other
  * things. One consumer was picking `aliases` out of it and asserting in its own
  * test that a `phone` beside it did not survive its parse: a guard protecting
  * exactly one caller. `aliases` is served as part of `identityChannels` now, so
