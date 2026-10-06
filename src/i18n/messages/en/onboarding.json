@@ -48,8 +48,35 @@
   },
   "reading": {
     "headline": "It reads your website so you don't have to explain it.",
-    "lead": "Every fact keeps a link to the page it came from. Change the page, and GOTCHA learns again.",
-    "foot": "You can close this tab, it keeps going"
+    "lead": {
+      "starting": "Starting…",
+      "reading": "About two minutes. You can watch, or go make coffee",
+      "done": "Done. Here's what it found",
+      "failed": "It couldn't finish reading the site. You can try again, or try another address",
+      "notStarted": "The read hasn't started. Try again from your website"
+    },
+    "foot": "You can close this tab, it keeps going",
+    "title": "Reading <host></host>",
+    "titleNoHost": "Reading your website",
+    "progress": "How far the read is",
+    "tracks": {
+      "pages": "Pages",
+      "products": "Products",
+      "policies": "Policies",
+      "places": "Places",
+      "voice": "Voice"
+    },
+    "ofPages": "of {requested}",
+    "counting": "Counting as it reads",
+    "notCounted": "Not counted separately yet",
+    "found": "Found just now",
+    "factsSoon": "Facts appear here as pages are turned into knowledge",
+    "nothingWritten": "Nothing was added to Knowledge from this read",
+    "factsUnread": "Couldn't read Knowledge just now",
+    "notFound": "not found anywhere",
+    "missed": "Couldn't check just now. Trying again",
+    "next": "See what it learned",
+    "again": "Back to your website"
   },
   "learned": {
     "headline": "What it knows, and how it will sound.",

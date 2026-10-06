@@ -138,3 +138,72 @@ export function siteHost(input: string): string | null {
   }
   return bare;
 }
+
+/** The knowledge sources a website read writes (`ingest/latest` counts the same set). */
+const SCANNED_SOURCE_TYPES = new Set(['onboarding_scan', 'url', 'website', 'web']);
+
+export interface ScannedFact {
+  readonly id: string;
+  readonly title: string;
+  /** The page it came from, as 00e writes it: "/shipping". */
+  readonly path: string | null;
+  readonly ready: boolean;
+  readonly updatedAt: string | null;
+}
+
+/**
+ * 00e's "Found just now" and 00f's list: what the read put in Knowledge, each
+ * with the page it came from, newest first.
+ */
+export function scannedFacts(
+  documents: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly status: string;
+    readonly sourceType: string;
+    readonly sourceUrl: string | null;
+    readonly updatedAt: string | null;
+  }[],
+): readonly ScannedFact[] {
+  return documents
+    .filter((d) => SCANNED_SOURCE_TYPES.has(d.sourceType) && d.title.trim() !== '')
+    .map((d) => ({
+      id: d.id,
+      title: d.title.trim(),
+      path: pathOf(d.sourceUrl),
+      ready: d.status === 'ready',
+      updatedAt: d.updatedAt,
+    }))
+    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+}
+
+function pathOf(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const { pathname } = new URL(url);
+    return pathname === '' ? '/' : pathname.replace(/\/+$/, '') || '/';
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * How far a read is, from its phase alone - the route reports no finer
+ * progress. `null` before it has started.
+ */
+export function readProgress(discovery: Discovery | null): number | null {
+  if (!discovery || discovery.status === 'PENDING') return null;
+  if (discovery.status === 'COMPLETE') return 1;
+  switch (discovery.scanPhase) {
+    case 'homepage':
+      return 0.15;
+    case 'pages':
+      return 0.45;
+    case 'synthesis':
+      return 0.8;
+    case 'done':
+      return 1;
+    default:
+      return discovery.status === 'SCANNING' ? 0.1 : null;
+  }
+}

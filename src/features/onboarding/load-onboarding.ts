@@ -3,14 +3,17 @@ import 'server-only';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
+import { knowledgeListSchema } from '@/api/contracts/knowledge';
 import {
   discoveryReadSchema,
+  scannedFacts,
   onboardingStatusSchema,
   siteFromEmail,
   siteHost,
   type Discovery,
+  type ScannedFact,
 } from '@/api/contracts/onboarding';
-import { authEndpoints, onboardingEndpoints } from '@/api/endpoints/registry';
+import { authEndpoints, knowledgeEndpoints, onboardingEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /** Where 00d's guess came from - its line under the title says so. */
@@ -71,17 +74,53 @@ export async function loadWebsiteStep(): Promise<WebsiteRead> {
   };
 }
 
+/** The scan's row, `null` when never scanned. Throws when unread. */
+export async function readDiscovery(): Promise<Discovery | null> {
+  const read = await serverApi().get({
+    endpoint: onboardingEndpoints.discovery(),
+    payload: discoveryReadSchema,
+    raw: true,
+  });
+  return read.data.discovery;
+}
+
 /** The scan's row. `null`: never scanned - or unread, which 00d treats the same way. */
 export async function loadDiscovery(): Promise<Discovery | null> {
   try {
-    const read = await serverApi().get({
-      endpoint: onboardingEndpoints.discovery(),
-      payload: discoveryReadSchema,
-      raw: true,
-    });
-    return read.data.discovery;
+    return await readDiscovery();
   } catch (cause) {
     logger.warn('onboarding.discovery_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return null;
+  }
+}
+
+export interface ReadingRead {
+  readonly discovery: Discovery | null;
+  /** `null`: Knowledge could not be read - not "nothing found". */
+  readonly facts: readonly ScannedFact[] | null;
+}
+
+/**
+ * 00e: the read's row, and the pages it has turned into Knowledge so far.
+ * Throws when the row is unread: on 00e that is "couldn't look", never "it
+ * has not started".
+ */
+export async function loadReading(): Promise<ReadingRead> {
+  const [discovery, facts] = await Promise.all([readDiscovery(), loadScannedFacts()]);
+  return { discovery, facts };
+}
+
+export async function loadScannedFacts(): Promise<readonly ScannedFact[] | null> {
+  try {
+    const sources = await serverApi().get({
+      endpoint: knowledgeEndpoints.sources(),
+      payload: knowledgeListSchema,
+    });
+    return scannedFacts(sources.flatMap((s) => s.documents));
+  } catch (cause) {
+    logger.warn('onboarding.facts_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
     return null;
