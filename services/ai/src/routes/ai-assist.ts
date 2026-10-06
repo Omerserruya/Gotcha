@@ -21,6 +21,7 @@ import {
   isGenerating,
 } from "../services/copilot-suggestions.service";
 import { getCustomerMemory } from "../services/customer-memory.service";
+import { getAiActivity } from "../services/ai-activity.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
@@ -524,6 +525,25 @@ router.post("/:conversationId/suggestions/refresh", requireEntitlement("ai.copil
   } catch (err: any) {
     console.error("AI suggestions refresh error:", err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to refresh suggestions" });
+  }
+});
+
+/**
+ * GET /:conversationId/ai-activity?limit=20 - the AI's recent steps in this
+ * conversation (tool, labelKey, status, timings), newest first, without the
+ * tool's arguments or result. Live updates: `ai.activity.updated` on conv:{id}.
+ */
+router.get("/:conversationId/ai-activity", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const convId = req.params.conversationId as string;
+    const exists = await prisma.conversation.findFirst({ where: { id: convId, tenantId }, select: { id: true } });
+    if (!exists) { res.status(404).json({ error: "Conversation not found" }); return; }
+    const limit = Number(req.query.limit) || 20;
+    res.json({ data: await getAiActivity(tenantId, convId, limit) });
+  } catch (err: any) {
+    console.error("ai-activity read error:", err?.message ?? err);
+    res.status(500).json({ error: "Failed to read AI activity" });
   }
 });
 

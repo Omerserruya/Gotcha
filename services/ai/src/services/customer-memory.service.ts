@@ -9,7 +9,7 @@
  *      rendered as "What we know about this customer from before".
  *
  * ★ ONE READ PER STORE, SHARED WITH THE PROMPT. The prompt renders from the
- * loaders below and GET /api/customer-memory returns them, so the screen
+ * loaders below and GET /api/ai-assist/:id/customer-memory returns them, so the screen
  * cannot show a fact the model does not receive, or miss one it does. A
  * separate query here would drift the first time someone tunes the prompt's
  * filter.

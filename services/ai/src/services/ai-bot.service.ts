@@ -1166,7 +1166,7 @@ async function buildSessionFactsBlock(opts: {
 
   // (1) Structured facts already extracted/persisted for this person.
   try {
-    // The same loader GET /api/customer-memory returns, so the screen's
+    // The same loader GET /api/ai-assist/:id/customer-memory returns, so the screen's
     // "GOTCHA remembers" is exactly this list.
     const known = await loadProfileFactsForPrompt(opts.tenantId, opts.conversationId);
     const lines = known.map((f) => `- ${f.key}: ${f.value}`);

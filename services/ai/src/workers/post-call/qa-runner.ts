@@ -10,6 +10,7 @@ import {
   type QAScoreFinding,
 } from "../../services/intelligence/persistence/qa-score-store";
 import type { PostCallQAJobData } from "../../services/intelligence/queues";
+import { channels } from "../../services/intelligence/events/channels";
 
 /**
  * Mode A QA orchestrator.
@@ -98,10 +99,19 @@ export async function runQA(
     return { ok: false, reason: "qa_score_write_failed" };
   }
 
-  await publishEvent({
+  // To the agent on this call only, like coaching.hint: these are scores of
+  // one person's performance. Published with no channel they went to every tab
+  // in the workspace. No assigned agent → nobody to tell live (admins read the
+  // QAScore row); never tenant-wide. `tenant:{id}:admin` is not used because no
+  // socket joins it.
+  const qaConv = await prisma.conversation
+    .findFirst({ where: { id: job.conversationId, tenantId: job.tenantId }, select: { assignedAgentId: true } })
+    .catch(() => null);
+  if (qaConv?.assignedAgentId) await publishEvent({
     event: "qa.scored",
     tenantId: job.tenantId,
     data: {
+      channel: channels.agent(qaConv.assignedAgentId),
       conversationId: job.conversationId,
       callAnalysisId: callAnalysis.id,
       qaScoreId: writeResult.id,

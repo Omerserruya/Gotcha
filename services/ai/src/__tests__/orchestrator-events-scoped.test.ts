@@ -68,6 +68,9 @@ const action = (tool: string, o: Partial<ProposedAction> = {}): ProposedAction =
 let orch: ActionOrchestrator;
 beforeEach(() => { H.events.length = 0; H.store.clear(); H.gate.decision = "ALLOWED"; orch = new ActionOrchestrator(); });
 
+const lifecycle = () => H.events.filter((e) => e.event.startsWith("tool.execution.")).map((e) => e.event);
+const activity = () => H.events.filter((e) => e.event === "ai.activity.updated").map((e) => e.data);
+
 function assertScoped() {
   expect(H.events.length).toBeGreaterThan(0);
   for (const e of H.events) {
@@ -83,27 +86,34 @@ function assertScoped() {
 describe("★ tool lifecycle events are scoped to the conversation and carry no tool data", () => {
   it("a run: started + completed, without the order the tool returned", async () => {
     await orch.submit(action("shopify.order_lookup"), async () => ORDER, { idempotency: false });
-    expect(H.events.map((e) => e.event)).toEqual(["tool.execution.started", "tool.execution.completed"]);
+    expect(lifecycle()).toEqual(["tool.execution.started", "tool.execution.completed"]);
     assertScoped();
+    // The panel's live line: one step per lifecycle event, labelled, same room.
+    expect(activity().map((a) => [a.status, a.labelKey, a.id])).toEqual([
+      ["running", "looking_up_order", "a1"],
+      ["completed", "looking_up_order", "a1"],
+    ]);
   });
 
   it("a failure", async () => {
     await orch.submit(action("shopify.order_lookup"), async () => { throw new Error("timeout"); }, { idempotency: false });
-    expect(H.events.map((e) => e.event)).toContain("tool.execution.failed");
+    expect(lifecycle()).toContain("tool.execution.failed");
+    expect(activity().at(-1)).toMatchObject({ status: "failed", tool: "shopify.order_lookup" });
     assertScoped();
   }, 30_000); // withRetry's real backoff runs before the failure is final
 
   it("a proposal, without the arguments the AI proposed", async () => {
     H.gate.decision = "REQUIRE_APPROVAL";
     await orch.submit(action("shopify.process_refund"), async () => ORDER, { idempotency: false });
-    expect(H.events.map((e) => e.event)).toContain("tool.execution.proposed");
+    expect(lifecycle()).toContain("tool.execution.proposed");
     assertScoped();
   });
 
   it("approve and deny by id now reach the conversation (they used to carry no tenant at all)", async () => {
     await orch.approve("a1", "agent1");
     await orch.deny("a1", "agent1", "no");
-    expect(H.events.map((e) => e.event)).toEqual(["tool.execution.approved", "tool.execution.denied"]);
+    expect(lifecycle()).toEqual(["tool.execution.approved", "tool.execution.denied"]);
+    expect(activity().map((a) => a.status)).toEqual(["approved", "denied"]);
     assertScoped();
   });
 

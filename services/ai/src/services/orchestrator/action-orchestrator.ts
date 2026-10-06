@@ -11,6 +11,7 @@ import {
 } from "@chatcenter/shared";
 import { CircuitBreakers, withRetry, pushToDlq } from "./runner";
 import { channels } from "../intelligence/events/channels";
+import { labelKeyFor, statusForEvent } from "../ai-activity.service";
 import { precheckAdapterAction } from "../connectors/integration-framework";
 import { withOrderCurrency } from "../approval-currency";
 import type {
@@ -547,6 +548,7 @@ export class ActionOrchestrator {
       await this.emit("tool.execution.completed", action.id, {
         tenantId: action.tenantId,
         conversationId: action.conversationId,
+        tool: action.tool,
         result: outcome.result,
         durationMs,
       });
@@ -581,6 +583,7 @@ export class ActionOrchestrator {
     await this.emit("tool.execution.failed", action.id, {
       tenantId: action.tenantId,
       conversationId: action.conversationId,
+      tool: action.tool,
       error: errMsg,
       attempts: outcome.attempts,
       durationMs,
@@ -680,11 +683,25 @@ export class ActionOrchestrator {
         console.warn(`[orchestrator] emit ${event} skipped: no tenant/conversation to scope it to (execution ${executionId})`);
         return;
       }
+      const channel = channels.conversation(String(safe.conversationId));
+      const ts = new Date().toISOString();
       await publishEvent({
         event,
         tenantId: String(safe.tenantId),
-        data: { executionId, ...safe, channel: channels.conversation(String(safe.conversationId)), ts: new Date().toISOString() },
+        data: { executionId, ...safe, channel, ts },
       });
+      // The inbox panel's live line. One small event per step, same room, same
+      // no-args/no-result rule; the panel re-reads GET .../ai-activity for the
+      // full list.
+      const status = statusForEvent(event);
+      if (status) {
+        const tool = typeof safe.tool === "string" ? safe.tool : "";
+        await publishEvent({
+          event: "ai.activity.updated",
+          tenantId: String(safe.tenantId),
+          data: { conversationId: safe.conversationId, id: executionId, tool, labelKey: labelKeyFor(tool), status, channel, ts },
+        });
+      }
     } catch (err: any) {
       console.warn(`[orchestrator] emit ${event} failed:`, err?.message);
     }

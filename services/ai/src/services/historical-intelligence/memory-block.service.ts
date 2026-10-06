@@ -42,7 +42,7 @@ export interface HistoricalMemoryForPrompt {
 
 /**
  * The ONE read of imported history for a customer. The prompt block below
- * renders from it and `GET /api/customer-memory` returns it, so the screen
+ * renders from it and `GET /api/ai-assist/:id/customer-memory` returns it, so the screen
  * cannot show a fact the model does not get (or hide one it does).
  */
 export async function loadHistoricalMemoryForPrompt(args: {
