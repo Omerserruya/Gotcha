@@ -1,4 +1,14 @@
 @layer features {
+  /* 09 after an archive: one quiet line above the library. */
+  .archivedNote {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+    font-size: 12.5px;
+  }
+
   /*
    * 09 · Studio · Skills (design 6), from its markup: a list column beside a
    * 290px side, gap 20; 12px filter pills; a white table card (radius 14) with

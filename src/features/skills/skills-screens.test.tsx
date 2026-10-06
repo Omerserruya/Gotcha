@@ -28,6 +28,7 @@ const actions = vi.hoisted(() => ({
   saveSkill: vi.fn(),
   giveSkill: vi.fn(),
   readRuns: vi.fn(),
+  archiveSkill: vi.fn(),
 }));
 vi.mock('./skill-actions', () => actions);
 
@@ -470,5 +471,59 @@ describe('★ the step’s threshold: a chip when set, a link when not (dev)', (
     expect(group.tagName).not.toBe('FIELDSET');
     expect(group).toHaveAttribute('role', 'radiogroup');
     expect(screen.getByRole('radiogroup', { name: 'Start it' })).toBe(group);
+  });
+});
+
+describe('★ 09b - Archive skill: quiet, confirmed, and says what happens (dev acceptance 1)', () => {
+  const open = async () => {
+    const s = skill({ status: 'active' });
+    wrap(<SkillEditor skill={s} employees={[]} tools={[]} otherSkills={[]} />);
+    fireEvent.keyDown(screen.getByTestId('skill-more'), { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('skill-archive'));
+    return screen.findByTestId('skill-archive-confirm');
+  };
+
+  beforeEach(() => {
+    actions.archiveSkill.mockReset();
+    push.mockReset();
+  });
+
+  it('the confirmation says what archiving does; nothing is sent until Archive', async () => {
+    const dialog = await open();
+    expect(dialog).toHaveTextContent('Employees stop using it.');
+    expect(dialog).toHaveTextContent('The run history is kept.');
+    expect(actions.archiveSkill).not.toHaveBeenCalled();
+  });
+
+  it('archived: back to 09, with its note', async () => {
+    actions.archiveSkill.mockResolvedValue(true);
+    await open();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('skill-archive-yes'));
+    });
+    expect(actions.archiveSkill).toHaveBeenCalledWith('k1');
+    expect(push).toHaveBeenCalledWith('/studio/skills?archived=1');
+  });
+
+  it('refused: it stays, and says so - no navigation', async () => {
+    actions.archiveSkill.mockResolvedValue(false);
+    await open();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('skill-archive-yes'));
+    });
+    expect(screen.getByTestId('skill-archive-failed')).toHaveTextContent('It wasn’t archived');
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('an archived skill offers no Archive', () => {
+    wrap(
+      <SkillEditor
+        skill={skill({ status: 'archived' })}
+        employees={[]}
+        tools={[]}
+        otherSkills={[]}
+      />,
+    );
+    expect(screen.queryByTestId('skill-more')).toBeNull();
   });
 });

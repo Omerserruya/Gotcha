@@ -13,7 +13,12 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly category?: string; readonly new?: string }>;
+  readonly searchParams?: Promise<{
+    readonly category?: string;
+    readonly new?: string;
+    /** Back from 09b's Archive: one line saying it happened. */
+    readonly archived?: string;
+  }>;
 } = {}) {
   const t = await getTranslations('skills');
   const params = (await searchParams) ?? {};
@@ -54,6 +59,11 @@ export default async function Page({
         </span>
       }
     >
+      {params.archived === '1' ? (
+        <p className={styles.archivedNote} role="status" data-testid="skills-archived">
+          {t('editor.archive.done')}
+        </p>
+      ) : null}
       <SkillsLibrary skills={skills} tools={tools} category={category} />
       {creating ? (
         <NewSkill

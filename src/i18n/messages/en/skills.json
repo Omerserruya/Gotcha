@@ -189,7 +189,18 @@
     },
     "runSteps": "{count, plural, =1 {1 step} other {# steps}} · version {version}",
     "openConversation": "Open the conversation",
-    "statsNone": "Last 7 days · it hasn’t run yet"
+    "statsNone": "Last 7 days · it hasn’t run yet",
+    "archive": {
+      "item": "Archive skill",
+      "title": "Archive “{name}”?",
+      "what": "Employees stop using it. Conversations that are in the middle of it finish on the current version. The run history is kept.",
+      "yes": "Archive",
+      "archiving": "Archiving…",
+      "cancel": "Cancel",
+      "failed": "It wasn’t archived. Try again in a moment.",
+      "done": "Skill archived. Employees no longer use it, and its run history is kept."
+    },
+    "more": "More"
   },
   "notFound": "This skill isn’t here - it may have been archived, or it belongs to another workspace.",
   "employee": {

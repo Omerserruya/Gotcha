@@ -1,14 +1,16 @@
 'use client';
 
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { humanizeTag } from '@/api/contracts/approvals';
 import { skillStatus, type Skill, type SkillRun, type ToolChoice } from '@/api/contracts/skills';
-import { Link } from '@/i18n/navigation';
+import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
+import { Link, useRouter } from '@/i18n/navigation';
 
-import { giveSkill, readRuns, saveSkill, type SaveResult } from './skill-actions';
+import { archiveSkill, giveSkill, readRuns, saveSkill, type SaveResult } from './skill-actions';
 import { bodyOf, draftOf, draftProblems, type SkillDraft } from './skill-draft';
 import { SkillForm } from './SkillForm';
 import { avatarTone, employeeInitials } from './skill-words';
@@ -62,6 +64,10 @@ export function SkillEditor({
     | 'reading'
     | 'failed'
   >(null);
+  const router = useRouter();
+  /** Archive's confirmation: closed, open, or open and refused. */
+  const [archiving, setArchiving] = useState<'closed' | 'open' | 'failed'>('closed');
+  const [isArchiving, startArchive] = useTransition();
   const [isSaving, startSave] = useTransition();
   const [, startGive] = useTransition();
 
@@ -129,6 +135,12 @@ export function SkillEditor({
     });
   };
 
+  const archive = () =>
+    startArchive(async () => {
+      if (await archiveSkill(skill.id)) router.push('/studio/skills?archived=1');
+      else setArchiving('failed');
+    });
+
   const openLog = (cursor: string | null) => {
     if (cursor === null) setLog('reading');
     startGive(async () => {
@@ -174,6 +186,30 @@ export function SkillEditor({
           >
             {t('editor.runLog')}
           </button>
+          {skill.status === 'archived' ? null : (
+            // Quiet, as the design has no archive: one item behind ⋯.
+            <Menu>
+              <MenuTrigger asChild>
+                <button
+                  type="button"
+                  className={styles.secondary}
+                  aria-label={t('editor.more')}
+                  data-testid="skill-more"
+                >
+                  <MoreHorizontal size={14} aria-hidden="true" />
+                </button>
+              </MenuTrigger>
+              <MenuContent align="end">
+                <MenuItem
+                  tone="danger"
+                  onSelect={() => setArchiving('open')}
+                  data-testid="skill-archive"
+                >
+                  {t('editor.archive.item')}
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+          )}
           <button
             type="button"
             className={styles.primary}
@@ -195,6 +231,41 @@ export function SkillEditor({
           {t('editor.saved', { version: result.skill.version })}
         </p>
       ) : null}
+
+      <Dialog
+        open={archiving !== 'closed'}
+        onOpenChange={(open) => (open ? null : setArchiving('closed'))}
+      >
+        <DialogContent
+          title={t('editor.archive.title', { name: skill.name })}
+          description={t('editor.archive.what')}
+          data-testid="skill-archive-confirm"
+        >
+          {archiving === 'failed' ? (
+            <p className={styles.problem} role="alert" data-testid="skill-archive-failed">
+              {t('editor.archive.failed')}
+            </p>
+          ) : null}
+          <span className={styles.confirmActions}>
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={() => setArchiving('closed')}
+            >
+              {t('editor.archive.cancel')}
+            </button>
+            <button
+              type="button"
+              className={styles.danger}
+              onClick={archive}
+              disabled={isArchiving}
+              data-testid="skill-archive-yes"
+            >
+              {isArchiving ? t('editor.archive.archiving') : t('editor.archive.yes')}
+            </button>
+          </span>
+        </DialogContent>
+      </Dialog>
 
       <div className={styles.columns}>
         <SkillForm

@@ -90,6 +90,27 @@ export async function saveSkill(
   }
 }
 
+/**
+ * 09b's Archive: DELETE is an archive (Backend b9278d7e). Employees stop
+ * using it; a conversation in the middle of it finishes on its version; the
+ * run history is kept. `false`: it did not happen.
+ */
+export async function archiveSkill(id: string): Promise<boolean> {
+  try {
+    await serverApi().delete({
+      endpoint: skillEndpoints.one(id),
+      payload: skillOneSchema,
+      raw: true,
+    });
+    revalidatePath('/[locale]/studio/skills', 'layout');
+    return true;
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('skills.archive_failed', { status: isApiError(cause) ? cause.status : undefined });
+    return false;
+  }
+}
+
 /** The step editor's tool choices; with an employee, whether each is allowed for them. */
 export async function readTools(agentId?: string): Promise<readonly ToolChoice[] | null> {
   try {
