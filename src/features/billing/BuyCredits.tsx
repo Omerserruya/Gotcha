@@ -312,7 +312,11 @@ export function BuyCredits({
         </span>
       </p>
 
-      {pkg ? (
+      {/*
+        02 draws no quantity: a pack is the amount. The field appears only
+        where the server says a pack may be bought several at once.
+      */}
+      {pkg && (pkg.maxPurchaseQuantity ?? 0) > 1 ? (
         <label className={styles.buyQuantity}>
           <span>{t('buy.quantity')}</span>
           <input

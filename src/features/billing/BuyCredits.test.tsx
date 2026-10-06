@@ -631,3 +631,18 @@ describe('★ 17d — 02’s dialog (measurement of 208d849)', () => {
     expect(screen.getByTestId('buy-pay-with')).toHaveTextContent('No card on file');
   });
 });
+
+describe('★ 17d — 02 draws no quantity: a pack is the amount', () => {
+  it('no field unless the server says a pack may be bought several at once', () => {
+    const one = show({
+      packages: {
+        ...PACKS,
+        packages: PACKS.packages.map((p) => ({ ...p, maxPurchaseQuantity: null })),
+      },
+    });
+    expect(screen.queryByTestId('buy-quantity')).toBeNull();
+    one.unmount();
+    show();
+    expect(screen.getByTestId('buy-quantity')).toBeInTheDocument();
+  });
+});
