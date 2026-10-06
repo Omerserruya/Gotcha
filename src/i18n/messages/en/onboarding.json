@@ -171,7 +171,23 @@
   },
   "try": {
     "headline": "Judge it on your own questions.",
-    "lead": "Things your customers really asked. If an answer is off, fix it once and it's fixed everywhere.",
-    "foot": "Setup mode: it only talks to your team until you go live"
+    "lead": "Things customers asked that GOTCHA couldn't answer yet. Teach each one once, and every employee knows it",
+    "foot": "Setup mode: it only talks to your team until you go live",
+    "title": "Your real questions",
+    "titleNone": "No customer questions yet",
+    "leadNone": "Once customers write, what GOTCHA can't answer yet shows up here and on Home, to teach once",
+    "unread": "Couldn't read your customers' questions just now",
+    "answersWhy": "Trying GOTCHA's answers needs a live workspace: the test chat opens after you go live. Until then, teach the answers it's missing",
+    "asked": "{count, plural, =1 {Asked once} other {Asked # times}}",
+    "teach": "Teach the answer",
+    "answerLabel": "The answer",
+    "placeholder": "The answer, the way you'd give it to a customer",
+    "save": "Teach it",
+    "teaching": "Teaching…",
+    "cancel": "Cancel",
+    "learned": "Learned. It's in Knowledge now, for every employee",
+    "failed": "It wasn't learned. Try again in a moment",
+    "open": "Open my workspace",
+    "nextOnHome": "Next on Home: connect WhatsApp and invite your team"
   }
 }

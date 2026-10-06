@@ -893,6 +893,68 @@
     color: var(--intent-blocked-text);
   }
 
+  /* 00h */
+  .try {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-inline-size: 660px;
+  }
+
+  .try > .title,
+  .try > .subtitle {
+    margin: 0;
+  }
+
+  .questions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .question {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 18px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+  }
+
+  .asked {
+    align-self: flex-start;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background-color: var(--panel-inset);
+    font-size: 13px;
+  }
+
+  .teach {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .teachActions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .learnedLine {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--signal-done-text);
+  }
+
+  .actions > .quiet {
+    align-self: center;
+  }
+
   @media (width <= 1000px) {
     .frame {
       grid-template-columns: 1fr;

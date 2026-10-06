@@ -4,7 +4,11 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
-import { knowledgeListSchema } from '@/api/contracts/knowledge';
+import {
+  knowledgeListSchema,
+  unansweredListSchema,
+  type UnansweredQuestion,
+} from '@/api/contracts/knowledge';
 import { workspaceVoiceSchema, type WorkspaceVoice } from '@/api/contracts/workspace';
 import {
   discoveryReadSchema,
@@ -196,4 +200,28 @@ export async function loadTruth(): Promise<TruthRead> {
         }
       : null,
   };
+}
+
+/** 00h shows three. */
+export const TRY_QUESTIONS = 3;
+
+/**
+ * 00h: real questions customers asked that GOTCHA could not answer -
+ * the newest open ones. `null`: unread.
+ */
+export async function loadTry(): Promise<readonly UnansweredQuestion[] | null> {
+  try {
+    const page = await serverApi().get({
+      endpoint: knowledgeEndpoints.unanswered(),
+      payload: unansweredListSchema,
+      raw: true,
+      query: { status: 'open', limit: String(TRY_QUESTIONS) },
+    });
+    return page.data.filter((q) => q.question.trim() !== '').slice(0, TRY_QUESTIONS);
+  } catch (cause) {
+    logger.warn('onboarding.questions_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return null;
+  }
 }

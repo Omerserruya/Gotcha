@@ -1,7 +1,11 @@
 'use server';
 
+import { z } from 'zod';
+
+import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 import { siteHost } from '@/api/contracts/onboarding';
+import { onboardingEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { discoverAfterResponse } from './discover-after';
@@ -29,5 +33,30 @@ export async function readReading(): Promise<ReadingRead | null> {
     await signInIfSignedOut(cause);
     logger.warn('onboarding.reading_failed', { cause });
     return null;
+  }
+}
+
+/**
+ * 00h's Teach: the answer to a real question, into Knowledge - where every
+ * employee answers from. `false`: it was not learned (the route says so when
+ * it could not embed it), or the request failed.
+ */
+export async function teachAnswer(
+  question: string,
+  answer: string,
+  locale: string,
+): Promise<boolean> {
+  try {
+    const answered = await serverApi().post({
+      endpoint: onboardingEndpoints.teach(),
+      body: { label: question.trim().slice(0, 200), method: 'text', value: answer.trim(), locale },
+      payload: z.object({ data: z.looseObject({ ok: z.boolean() }) }),
+      raw: true,
+    });
+    return answered.data.ok;
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('onboarding.teach_failed', { cause });
+    return false;
   }
 }

@@ -610,11 +610,19 @@ export const channelEndpoints = {
  *   discovery  GET   the scan's row: status, scanPhase, crawl, brand (ADMIN)
  *   discover   POST  `{ domain, locale }` - crawls, synthesises and ingests
  *              in ONE long request; 409 `scan_in_progress` within 3 minutes
+ *   teach      POST  `{ label, method: 'text', value, locale }` - an answer
+ *              into Knowledge (embedded; re-teaching the same label replaces
+ *              it), closes a matching gap, schedules the next-day nudge.
+ *              `{ data: { ok: false, reason } }` when it was not learned
+ *
+ * NOT used: `employee-chat` - it tunes the new employee's persona from the
+ * business summary (not Knowledge) and saves the persona and transcript.
  */
 export const onboardingEndpoints = {
   status: () => endpoint('/api/onboarding/status'),
   discovery: () => endpoint('/api/onboarding/discovery'),
   discover: () => endpoint('/api/onboarding/discover'),
+  teach: () => endpoint('/api/onboarding/teach'),
 } as const;
 
 /**
