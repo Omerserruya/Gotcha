@@ -14,6 +14,7 @@ import { Pager } from './Pager';
 import { readSuggestions, refreshSuggestions } from './wall-actions';
 import { canUse, saysRecommended, suggestionView } from './wall-model';
 import styles from './Wall.module.css';
+import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
 
 /**
  * 02's "Three ways to answer · 1 of 3 open".
@@ -93,9 +94,9 @@ export function SuggestionCarousel({ conversationId }: { readonly conversationId
       </div>
 
       {view === null ? (
-        <p className={styles.note} data-testid="wall-suggestions-loading">
-          {t('wall.answers.reading')}
-        </p>
+        <div data-testid="wall-suggestions-loading">
+          <CenteredLoader size={32} tone="light" minHeight={96} label={t('wall.answers.reading')} />
+        </div>
       ) : view.kind === 'note' ? (
         <>
           <p className={styles.note} data-testid="wall-suggestions-note" data-note={view.note}>

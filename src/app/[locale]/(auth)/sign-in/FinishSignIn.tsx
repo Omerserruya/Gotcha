@@ -6,10 +6,10 @@ import { useTranslations } from 'next-intl';
 
 import { completeAuthorization, type AuthorizationOutcome } from '@/api/client/flow-executor';
 import { followableCompletion } from '@/api/contracts/auth-flow';
-import { Logo } from '@/design-system/brand/Logo';
 import { logger } from '@/observability/logger';
 
 import styles from './SignIn.module.css';
+import { Loader } from '@/design-system/primitives/loader/Loader';
 
 /**
  * The last hop of sign-in, done with two fetches instead of a rendered page.
@@ -176,7 +176,7 @@ export function FinishSignIn({
       data-reason={giveUp ?? ''}
       data-component={outcome?.component ?? ''}
     >
-      <Logo variant="framed" size={38} />
+      <Loader size={64} label={t('signIn.starting')} />
       <p className={styles.finishingWord}>{t('signIn.starting')}</p>
     </div>
   );

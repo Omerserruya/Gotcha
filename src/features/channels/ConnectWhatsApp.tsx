@@ -16,6 +16,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { useMetaSignup } from './signup/use-meta-signup';
 import { connectNumber } from './whatsapp-actions';
 import styles from './Channels.module.css';
+import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
 
 type Path = 'business_app' | 'new';
 const STEPS = ['where', 'meta', 'number', 'learn'] as const;
@@ -167,9 +168,17 @@ export function ConnectWhatsApp({
               </ul>
             </div>
             {step === 'meta' ? (
-              <p className={styles.connectWaiting} role="status" data-testid="connect-waiting">
-                {meta.stage === 'reading' ? t('meta.reading') : t('meta.waiting')}
-              </p>
+              <div data-testid="connect-waiting">
+                {/* The loader for the wait; the words still say what is being waited for. */}
+                <CenteredLoader
+                  size={32}
+                  minHeight={72}
+                  label={t(`meta.${meta.stage === 'reading' ? 'reading' : 'waiting'}`)}
+                />
+                <p className={styles.connectWaiting}>
+                  {meta.stage === 'reading' ? t('meta.reading') : t('meta.waiting')}
+                </p>
+              </div>
             ) : null}
             <p className={styles.connectNote}>
               <Info size={14} aria-hidden="true" />

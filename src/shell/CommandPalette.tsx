@@ -18,6 +18,7 @@ import {
   type PersonHit,
 } from './command-search';
 import { ltr } from '@/lib/bidi';
+import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
 
 /** The rail's ⌘K button opens the palette by this event - its look unchanged. */
 export const OPEN_COMMAND_PALETTE = 'gotcha:command-palette';
@@ -60,6 +61,7 @@ const STORE_NAMES: Readonly<Record<string, string>> = {
 export function CommandPalette() {
   const t = useTranslations('navigation');
   const tp = useTranslations('navigation.palette');
+  const common = useTranslations('common');
   const tch = useTranslations('channels');
   const router = useRouter();
   const locale = useLocale();
@@ -72,6 +74,8 @@ export function CommandPalette() {
   const [actions, setActions] = useState<readonly ActionHit[]>([]);
   const [orderMiss, setOrderMiss] = useState<OrderMiss | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
+  /** The query the results on screen answer: searching is "typed, and not answered yet". */
+  const [answered, setAnswered] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   /** Closing forgets the question: the next ⌘K starts empty. */
@@ -116,6 +120,7 @@ export function CommandPalette() {
       void Promise.all([searchConversations(query), searchPeople(query)]).then(
         ([conversations, found]) => {
           if (!current) return;
+          setAnswered(query);
           setSearchFailed(!conversations.ok && !found.ok);
           setHits(conversations.ok ? conversations.hits : []);
           setPeople(found.ok ? found.people : []);
@@ -304,6 +309,9 @@ export function CommandPalette() {
               </section>
             );
           })}
+          {query.trim().length >= 2 && answered !== query ? (
+            <CenteredLoader size={32} minHeight={72} label={common('loading')} />
+          ) : null}
           {/* An order number that found nobody: the search ran, and says where. */}
           {orderMiss && query.trim().length >= 2 ? (
             <p className={styles.note} data-testid="command-order-miss">

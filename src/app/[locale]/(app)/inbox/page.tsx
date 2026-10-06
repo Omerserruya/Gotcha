@@ -16,10 +16,11 @@ import { parseChannelFilter, parseInboxView } from '@/features/inbox/inbox-views
 import { loadClearQueue } from '@/features/inbox/load-clear-queue';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { PendingPane } from '@/features/inbox/PendingPane';
-import { ContextSkeleton, StreamSkeleton } from '@/features/inbox/Skeletons';
+import { StreamSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 import { channelName } from '@/api/contracts/inbox';
+import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
 
 /**
  * Inbox - screen 02.
@@ -69,6 +70,7 @@ export default async function Page({
 }) {
   const t = await getTranslations('inbox');
   const channelNames = await getTranslations('channels');
+  const common = await getTranslations('common');
   const { c, cursor, view: rawView, channel: rawChannel } = await searchParams;
   const view = parseInboxView(rawView);
   const channel = parseChannelFilter(rawChannel);
@@ -357,7 +359,18 @@ export default async function Page({
                   />
                   <div className={styles.copilotBody}>
                     {data.open && data.detail ? (
-                      <Suspense key={data.open.id} fallback={<ContextSkeleton />}>
+                      <Suspense
+                        key={data.open.id}
+                        // The panel's parts have no one shape: the loader, light on the dark wall.
+                        fallback={
+                          <CenteredLoader
+                            size={32}
+                            tone="light"
+                            minHeight={240}
+                            label={common('loading')}
+                          />
+                        }
+                      >
                         <CopilotWall
                           detail={data.detail}
                           conversation={{

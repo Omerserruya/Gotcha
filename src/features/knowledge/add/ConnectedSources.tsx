@@ -18,6 +18,7 @@ import {
   type KnowledgeIntegration,
 } from './sources';
 import styles from './AddKnowledge.module.css';
+import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
 
 /**
  * 08b after connecting: each connected Drive or Confluence - what is kept in
@@ -50,7 +51,8 @@ export function ConnectedSources({
     };
   }, [kbId, onConnected]);
 
-  if (integrations === 'loading') return null;
+  if (integrations === 'loading')
+    return <CenteredLoader size={32} minHeight={96} label={t('loading')} />;
   if (integrations === null) {
     return (
       <p className={styles.problem} data-testid="sources-unread">
@@ -172,7 +174,7 @@ function DriveSourceCard({ integration }: { readonly integration: KnowledgeInteg
             </button>
           ) : null}
           {files === 'loading' ? (
-            <p className={styles.sourceMeta}>{t('loading')}</p>
+            <CenteredLoader size={32} minHeight={120} label={t('loading')} />
           ) : files === null ? (
             <p className={styles.problem} data-testid="drive-unread">
               {t('filesUnread')}

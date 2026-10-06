@@ -21,5 +21,6 @@
   "language": {
     "label": "Language"
   },
-  "productDescription": "The Customer Operations OS. Conversations, actions, approvals and AI in one place."
+  "productDescription": "The Customer Operations OS. Conversations, actions, approvals and AI in one place.",
+  "loading": "Loading"
 }

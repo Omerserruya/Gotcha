@@ -11,6 +11,7 @@ import type { WallConversation, WallHistory } from './load-wall';
 import { conversationMessages } from './wall-actions';
 import { historyChannels } from './wall-model';
 import styles from './Wall.module.css';
+import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
 
 type Level =
   | { readonly at: 'wall' }
@@ -221,7 +222,13 @@ function Whole({
 }) {
   const t = useTranslations('inbox.wall.history');
   const format = useFormatter();
-  if (!read) return <p className={styles.note}>{pending ? t('reading') : '-'}</p>;
+  if (!read) {
+    return pending ? (
+      <CenteredLoader size={32} tone="light" minHeight={160} label={t('reading')} />
+    ) : (
+      <p className={styles.note}>-</p>
+    );
+  }
   if (!read.ok) {
     return (
       <p className={styles.note} data-testid="wall-whole-failed">
