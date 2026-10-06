@@ -23,6 +23,7 @@ import { shortDate } from './CustomerScreen';
 import { PromiseCard } from './CustomerSubtabs';
 import type { AuditRead } from './load-customer';
 import styles from './Customers.module.css';
+import { DecideHere } from './DecideHere';
 
 /**
  * Screen 04e — what was done in this customer's context.
@@ -219,6 +220,8 @@ interface Row {
   readonly testid: string;
   readonly pending: boolean;
   readonly money: boolean;
+  /** A pending approval's id — decided on the row. */
+  readonly approvalId?: string;
 }
 
 /**
@@ -420,6 +423,7 @@ export async function CustomerActions({
       line: humanReason(approval.reason),
       testid: `action-approval-${approval.id}`,
       pending: approval.status === 'PENDING',
+      approvalId: approval.id,
       money: MONEY.test(approval.tool),
     })),
   ]
@@ -517,11 +521,10 @@ export async function CustomerActions({
                     {row.line}
                   </span>
                 ) : null}
-                {row.pending ? (
+                {row.pending && row.approvalId ? (
+                  // 02: decided here — Approve · Decline · Change amount (in 03).
                   <span className={styles.spineFoot}>
-                    <Link href="/approvals" className={styles.actionDecide}>
-                      {t('actions.openInApprovals')}
-                    </Link>
+                    <DecideHere approvalId={row.approvalId} />
                   </span>
                 ) : null}
               </article>

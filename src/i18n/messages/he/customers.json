@@ -239,6 +239,23 @@
       "upTo": "עד {amount}",
       "upToPercent": "עד {percent} מההזמנה",
       "approvalAbove": "אדם מאשר מעל {amount}"
+    },
+    "decide": {
+      "approve": "אישור",
+      "decline": "דחייה",
+      "changeAmount": "שינוי סכום",
+      "approveAsk": "לאשר? זה ירוץ עכשיו.",
+      "approveYes": "כן, לאשר",
+      "declineAsk": "למה לא?",
+      "notNow": "לא עכשיו",
+      "approvedRan": "אושר — זה רץ.",
+      "approvedNotRun": "אושר, וזה לא רץ — ראו באישורים.",
+      "declined": "נדחה.",
+      "refused": {
+        "stale": "מישהו כבר החליט על זה.",
+        "forbidden": "אין לך הרשאה להחליט על זה.",
+        "failed": "זה לא עבר — שום דבר לא השתנה."
+      }
     }
   },
   "teamNotes": {

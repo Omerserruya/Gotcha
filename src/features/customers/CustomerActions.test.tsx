@@ -54,6 +54,12 @@ vi.mock('@/i18n/navigation', () => ({
     </a>
   ),
 }));
+/* The decision controls are a client component with their own test. */
+vi.mock('./DecideHere', () => ({
+  DecideHere: ({ approvalId }: { approvalId: string }) => (
+    <span data-testid={`decide-here-${approvalId}`} />
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'customers') =>
     createTranslator({ locale: 'en', messages: { customers: messages }, namespace }),
@@ -340,7 +346,8 @@ describe('★★ 04e — one spine: what was done, and what GOTCHA asked for', (
     expect(row).toHaveTextContent('Process refund of 179 for order #1842');
     expect(row).toHaveTextContent('Waiting on you');
     expect(row).toHaveTextContent('The box arrived damaged in her photo.');
-    expect(row.querySelector('a')).toHaveAttribute('href', '/approvals');
+    // 02: decided on the row (Approve · Decline · Change amount).
+    expect(row.querySelector('[data-testid^="decide-here-"]')).not.toBeNull();
     // No decision control is drawn here: deciding is 03's.
     expect(row.querySelector('button')).toBeNull();
   });

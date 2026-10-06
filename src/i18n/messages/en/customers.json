@@ -239,6 +239,23 @@
       "upTo": "up to {amount}",
       "upToPercent": "up to {percent} of the order",
       "approvalAbove": "a person approves above {amount}"
+    },
+    "decide": {
+      "approve": "Approve",
+      "decline": "Decline",
+      "changeAmount": "Change amount",
+      "approveAsk": "Approve it? It runs now.",
+      "approveYes": "Yes, approve",
+      "declineAsk": "Why not?",
+      "notNow": "Not now",
+      "approvedRan": "Approved — it ran.",
+      "approvedNotRun": "Approved, and it didn’t run — see Approvals.",
+      "declined": "Declined.",
+      "refused": {
+        "stale": "Someone already decided this one.",
+        "forbidden": "You can’t decide this one.",
+        "failed": "That didn’t go through — nothing changed."
+      }
     }
   },
   "teamNotes": {

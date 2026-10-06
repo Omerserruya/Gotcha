@@ -2203,6 +2203,47 @@
     text-decoration: none;
   }
 
+  /* 04e: decided on the row — 02's Approve (dark) · Decline · Change amount. */
+  .decideRow {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+
+  .decidePrimary,
+  .decideQuiet {
+    padding: 5px 11px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .decidePrimary {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .decideQuiet {
+    border: 1px solid var(--border-default);
+    background: none;
+    color: var(--text-secondary);
+  }
+
+  .decideSaid {
+    font-size: 11.5px;
+    color: var(--text-primary);
+  }
+
+  .decideProblem {
+    font-size: 11.5px;
+    color: var(--intent-blocked-text);
+  }
+
   .actionDecide:focus-visible {
     outline: var(--border-width-thick) solid var(--border-focus);
     outline-offset: 2px;
