@@ -159,4 +159,52 @@ describe('★★ 19 — ⌘K from anywhere', () => {
     openWithKeys();
     expect(screen.getByTestId('command-input')).toHaveValue('');
   });
+
+  it('★ one person’s conversations told apart: their last word and when, on the right', async () => {
+    searchConversations.mockResolvedValue({
+      ok: true,
+      hits: [
+        {
+          id: 'c1',
+          name: 'Matan Amran',
+          handle: null,
+          channel: 'WHATSAPP',
+          lastAt: '2026-10-03T09:00:00Z',
+          lastWord: 'Cancel order #1016',
+        },
+        {
+          id: 'c2',
+          name: 'Matan Amran',
+          handle: null,
+          channel: 'WHATSAPP',
+          lastAt: null,
+          lastWord: 'היי',
+        },
+      ],
+    });
+    mount();
+    openWithKeys();
+    await userEvent.type(screen.getByTestId('command-input'), 'matan');
+    expect(await screen.findByTestId('command-item-conversation-c1')).toHaveTextContent(
+      'Cancel order #1016 · 3 Oct',
+    );
+    expect(
+      screen.getByTestId('command-item-conversation-c2').querySelector('bdi'),
+    ).toHaveTextContent('היי');
+  });
+
+  it('★ an order number that found nobody: a quiet line — the search ran', async () => {
+    searchPeople.mockResolvedValue({
+      ok: true,
+      people: [],
+      actions: [],
+      orderMiss: { kind: 'no_match', number: '1016', source: 'woocommerce' },
+    });
+    mount();
+    openWithKeys();
+    await userEvent.type(screen.getByTestId('command-input'), '1016');
+    expect(await screen.findByTestId('command-order-miss')).toHaveTextContent(
+      'No customer here matches order #1016 in WooCommerce.',
+    );
+  });
 });

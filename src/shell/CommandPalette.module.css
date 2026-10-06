@@ -142,6 +142,18 @@
     color: var(--text-subtle);
   }
 
+  /* What tells a row apart: subtle, and cut before it crowds the name. */
+  .detail {
+    min-inline-size: 0;
+    max-inline-size: 45%;
+    overflow: hidden;
+    margin-inline-start: auto;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
   /* 02's "Needs approval": 11.5px on the blocked tint. */
   .chip {
     flex: none;

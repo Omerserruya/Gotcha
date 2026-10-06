@@ -30,6 +30,8 @@ const resultSchema = z.object({
         customerName: z.string().nullable().catch(null).default(null),
         customerExternalId: z.string().nullable().catch(null).default(null),
         channel: z.string().nullable().catch(null).default(null),
+        lastMessageAt: z.string().nullable().catch(null).default(null),
+        lastMessageBody: z.string().nullable().catch(null).default(null),
       }),
     )
     .catch([])
@@ -41,6 +43,9 @@ export type ConversationHit = {
   readonly name: string | null;
   readonly handle: string | null;
   readonly channel: string | null;
+  /** What tells one person's conversations apart: when, and their last word. */
+  readonly lastAt: string | null;
+  readonly lastWord: string | null;
 };
 
 export async function searchConversations(
@@ -64,6 +69,8 @@ export async function searchConversations(
         name: row.customerName,
         handle: row.customerExternalId,
         channel: row.channel,
+        lastAt: row.lastMessageAt,
+        lastWord: row.lastMessageBody?.replace(/\s+/g, ' ').trim().slice(0, 60) || null,
       })),
     };
   } catch (cause) {
@@ -80,6 +87,15 @@ export type PersonHit = {
   /** Found by an order number (`by-order`), not by name/phone/email. */
   readonly byOrder: string | null;
 };
+
+/**
+ * An order number that found no customer: the store answered, or there was
+ * no store to ask. The route answers `contactId: null` alike for "no such
+ * order" and "an order no contact matches", so one sentence covers both.
+ */
+export type OrderMiss =
+  | { readonly kind: 'no_match'; readonly number: string; readonly source: string }
+  | { readonly kind: 'no_store'; readonly number: string };
 
 export type ActionHit = {
   readonly id: string;
@@ -99,16 +115,19 @@ export async function searchPeople(query: string): Promise<
       readonly ok: true;
       readonly people: readonly PersonHit[];
       readonly actions: readonly ActionHit[];
+      readonly orderMiss?: OrderMiss | null;
     }
   | { readonly ok: false }
 > {
   const search = query.trim().slice(0, 80);
   if (search.length < 2) return { ok: true, people: [], actions: [] };
   try {
-    const [listed, ordered] = await Promise.all([
+    const [listed, byOrder] = await Promise.all([
       contactsMatching(search),
       looksLikeOrderNumber(search) ? orderCustomer(search) : Promise.resolve(null),
     ]);
+    const ordered = byOrder?.row ?? null;
+    const orderMiss = byOrder?.miss ?? null;
     const rows = [...(ordered ? [ordered] : []), ...(listed ?? [])];
     const people = collapseToPeople(rows)
       .slice(0, 5)
@@ -133,7 +152,7 @@ export async function searchPeople(query: string): Promise<
       .slice(0, 3)
       .map((a) => ({ id: a.id, summary: a.summary }));
     if (listed === null && !ordered) return { ok: false };
-    return { ok: true, people, actions };
+    return { ok: true, people, actions, orderMiss };
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('command.people_failed', { cause });
@@ -167,7 +186,10 @@ async function contactsMatching(search: string): Promise<readonly CustomerRow[] 
     });
 }
 
-async function orderCustomer(search: string): Promise<CustomerRow | null> {
+async function orderCustomer(
+  search: string,
+): Promise<{ readonly row: CustomerRow | null; readonly miss: OrderMiss | null } | null> {
+  const number = search.replace(/^#/, '');
   try {
     const found = await serverApi().get({
       endpoint: customerEndpoints.byOrder(),
@@ -175,13 +197,16 @@ async function orderCustomer(search: string): Promise<CustomerRow | null> {
       query: { number: search },
       raw: true,
     });
-    if (!found.contactId) return null;
+    if (found.source === null) return { row: null, miss: { kind: 'no_store', number } };
+    if (!found.contactId) {
+      return { row: null, miss: { kind: 'no_match', number, source: found.source } };
+    }
     const contact = await serverApi().get({
       endpoint: customerEndpoints.detail(found.contactId),
       payload: z.object({ data: customerRowSchema }),
       raw: true,
     });
-    return contact.data;
+    return { row: contact.data, miss: null };
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('command.by_order_failed', { cause });

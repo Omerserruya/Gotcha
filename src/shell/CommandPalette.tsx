@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { channelName } from '@/api/contracts/inbox';
@@ -14,6 +14,7 @@ import {
   searchPeople,
   type ActionHit,
   type ConversationHit,
+  type OrderMiss,
   type PersonHit,
 } from './command-search';
 
@@ -30,6 +31,14 @@ type Item = {
   readonly title?: string;
   /** DO THIS: the action's state, 02's chip ("Needs approval"). */
   readonly chip?: string;
+  /** What tells it apart from its neighbours — their last word, and when. Theirs: isolated. */
+  readonly detail?: string;
+};
+
+/** The store's own name for its slug; any other, as sent. */
+const STORE_NAMES: Readonly<Record<string, string>> = {
+  woocommerce: 'WooCommerce',
+  shopify: 'Shopify',
 };
 
 /**
@@ -52,6 +61,7 @@ export function CommandPalette() {
   const tp = useTranslations('navigation.palette');
   const tch = useTranslations('channels');
   const router = useRouter();
+  const locale = useLocale();
   const { canSee } = usePermissions();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -59,6 +69,7 @@ export function CommandPalette() {
   const [hits, setHits] = useState<readonly ConversationHit[]>([]);
   const [people, setPeople] = useState<readonly PersonHit[]>([]);
   const [actions, setActions] = useState<readonly ActionHit[]>([]);
+  const [orderMiss, setOrderMiss] = useState<OrderMiss | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
@@ -68,6 +79,7 @@ export function CommandPalette() {
     setHits([]);
     setPeople([]);
     setActions([]);
+    setOrderMiss(null);
     setSearchFailed(false);
     setActive(0);
   }
@@ -107,6 +119,7 @@ export function CommandPalette() {
           setHits(conversations.ok ? conversations.hits : []);
           setPeople(found.ok ? found.people : []);
           setActions(found.ok ? found.actions : []);
+          setOrderMiss(found.ok ? (found.orderMiss ?? null) : null);
         },
       );
     }, 200);
@@ -152,6 +165,10 @@ export function CommandPalette() {
           .filter(Boolean)
           .join(' · '),
         href: `/inbox?c=${encodeURIComponent(hit.id)}`,
+        detail:
+          [hit.lastWord, hit.lastAt ? shortWhen(hit.lastAt, locale) : null]
+            .filter(Boolean)
+            .join(' · ') || undefined,
       })),
       ...matching(screens, typed)
         .slice(0, typed ? 6 : 8)
@@ -175,7 +192,7 @@ export function CommandPalette() {
         href: `/home?ask=${encodeURIComponent(typed)}`,
       },
     ];
-  }, [actions, hits, people, query, screens, tch, tp]);
+  }, [actions, hits, locale, people, query, screens, tch, tp]);
 
   if (!open) return null;
 
@@ -261,6 +278,11 @@ export function CommandPalette() {
                               : item.label}
                           </span>
                           {item.meta ? <span className={styles.meta}>{item.meta}</span> : null}
+                          {item.detail ? (
+                            <bdi dir="auto" className={styles.detail}>
+                              {item.detail}
+                            </bdi>
+                          ) : null}
                           {item.chip ? <span className={styles.chip}>{item.chip}</span> : null}
                         </button>
                       ) : (
@@ -280,6 +302,17 @@ export function CommandPalette() {
               </section>
             );
           })}
+          {/* An order number that found nobody: the search ran, and says where. */}
+          {orderMiss && query.trim().length >= 2 ? (
+            <p className={styles.note} data-testid="command-order-miss">
+              {orderMiss.kind === 'no_store'
+                ? tp('orderNoStore')
+                : tp('orderNoMatch', {
+                    number: orderMiss.number,
+                    store: STORE_NAMES[orderMiss.source] ?? orderMiss.source,
+                  })}
+            </p>
+          ) : null}
           {searchFailed && query.trim().length >= 2 ? (
             <p className={styles.note} data-testid="command-search-failed">
               {tp('searchFailed')}
@@ -294,4 +327,19 @@ export function CommandPalette() {
       </div>
     </div>
   );
+}
+
+/** "14:05" today, else "3 Oct" — day first, 24-hour. */
+function shortWhen(iso: string, locale: string): string | null {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  if (at.toDateString() === new Date().toDateString()) {
+    return new Intl.DateTimeFormat(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(at);
+  }
+  const part = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale, o).format(at);
+  return `${part({ day: 'numeric' })} ${part({ month: 'short' })}`;
 }

@@ -81,8 +81,23 @@ describe('★★ 19 — customers, and only the actions that exist', () => {
 
   it('nobody found: no approvals read; a name is never sent to by-order', async () => {
     contacts = [];
-    expect(await searchPeople('zz')).toEqual({ ok: true, people: [], actions: [] });
+    expect(await searchPeople('zz')).toEqual({
+      ok: true,
+      people: [],
+      actions: [],
+      orderMiss: null,
+    });
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it('★ measured on dev: an order number that found nobody says the search ran, and where', async () => {
+    contacts = [];
+    order = { contactId: null };
+    expect(await searchPeople('1016')).toMatchObject({
+      ok: true,
+      people: [],
+      orderMiss: { kind: 'no_match', number: '1016', source: 'woocommerce' },
+    });
   });
 
   it('the customers read failed: said as a failure, not as nobody', async () => {

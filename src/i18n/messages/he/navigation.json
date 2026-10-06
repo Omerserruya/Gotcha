@@ -94,6 +94,8 @@
     "everywhere": "עובד מכל מסך",
     "customer": "לקוח/ה",
     "order": "הזמנה #{number}",
-    "needsApproval": "ממתין לאישור"
+    "needsApproval": "ממתין לאישור",
+    "orderNoMatch": "אין כאן לקוח שתואם להזמנה #{number} ב-{store}.",
+    "orderNoStore": "אין חנות מחוברת שאפשר לחפש בה הזמנות."
   }
 }

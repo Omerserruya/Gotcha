@@ -94,6 +94,8 @@
     "everywhere": "Works from every screen",
     "customer": "customer",
     "order": "Order #{number}",
-    "needsApproval": "Needs approval"
+    "needsApproval": "Needs approval",
+    "orderNoMatch": "No customer here matches order #{number} in {store}.",
+    "orderNoStore": "No store is connected to search orders in."
   }
 }
