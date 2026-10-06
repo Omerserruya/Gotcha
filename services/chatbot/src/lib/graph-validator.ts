@@ -18,11 +18,13 @@ interface GEdge { id?: string; source: string; target: string; sourceHandle?: st
 // Nodes with no input port - legitimate flow entries.
 const ENTRY_TYPES = new Set([
   "channel_entry", "campaign_entry", "start", "keyword_trigger", "comment_trigger", "schedule_trigger",
+  "automation_trigger",
 ]);
 // Nodes with no output port - they terminate a branch.
-const TERMINAL_TYPES = new Set(["end", "route_target", "default_fallback"]);
+// hand_to_ai / run_skill / close_conversation end an automation's ownership.
+const TERMINAL_TYPES = new Set(["end", "route_target", "default_fallback", "hand_to_ai", "run_skill", "close_conversation"]);
 // Branch nodes whose exits are labelled (true/false) rather than a single flow.
-const BRANCH_TYPES = new Set(["condition_group"]);
+const BRANCH_TYPES = new Set(["condition_group", "opening_hours", "wait_for_reply", "split_channel", "language", "segment", "ab_split"]);
 // Static nodes that may appear AT MOST ONCE in a process (duplicates are a
 // modelling error - two starts / two default fallbacks are ambiguous).
 const SINGLETON_TYPES = new Set(["start", "default_fallback"]);

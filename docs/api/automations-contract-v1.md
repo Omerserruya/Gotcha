@@ -5,8 +5,9 @@ backend will return; anything still being built is marked **(building)**. Owner:
 (Rebrand-gaps-Backend). Plan: `docs/product/ai-studio-skills-automations.md` §3.3.
 
 Base path: **`/api/automations`** (chatbot service, through the gateway; `/t/:tenant/api/automations`
-works too). Auth: the normal session. Reads need `ai:workflows:read` or any staff role; writes need
-`ai:workflows:update` (or ADMIN); going live needs `ai:workflows:publish` (or ADMIN).
+works too). Auth: the normal session. Reads: any signed-in member of the tenant (as `/api/chatbot-flows`);
+writes need `ai:workflows:update` (or ADMIN); activate/pause need `ai:workflows:publish` (or ADMIN).
+`/api/chatbot-flows` answers 409 for an automation: edit and activate it only here.
 
 An automation **is** a `ChatbotFlow` that has a structured trigger. Flows without a trigger (the old
 sub-flows that the main playbook routes into) are not listed here and keep working as before.
@@ -62,7 +63,11 @@ author set one, otherwise the catalogue name.
 | GET | `/api/automations/runs/:runId` | | `{ data: Run & { steps: RunStep[] } }` |
 | GET | `/api/automations/:id/node-stats` | `?days=7` | `{ data: { [nodeId]: { reached, failed, branches: { [handle]: n } } } }` ("Sent 86 times · 61 tapped a button") |
 
-`Issue = { severity: "error"|"warning", code, nodeId?, message }`. The same validator gates every way
+`Issue = { severity: "error"|"warning", code, nodeId?, message }`. Codes include `no_trigger`, `trigger_node`,
+`no_steps`, `trigger_no_event_source`, `trigger_not_connected`, `missing_config`, `too_many_buttons`,
+`too_many_options`, `title_too_long`, `duplicate_button`, `channel_not_supported`, `no_customer_on_path`,
+`node_unavailable`, `unknown_node`, `unknown_branch`, `no_output`, `cycle`, `broken_edge`, `invalid_delay`.
+POST /activate returns `{ data, warnings }`. The same validator gates every way
 an automation can go live (activate, and a save while live). `isActive` is not accepted on POST/PUT.
 
 Templates (09c "Start from a template") and versioned draft/publish + the test run (09d "Test",
@@ -97,7 +102,7 @@ A run in a conversation the viewer may not see (department rules) is not listed,
 | `new_customer` | `{ channels?: Channel[] }` | the first message ever from a customer | yes |
 | `tag_added` | `{ tags: string[] }` | one of the tags is added to the customer | yes **(building)** |
 | `schedule` | `{ at: "09:00", days?: ["sun".."sat"], timezone?: "Asia/Jerusalem" }` | at that time; there is no customer on this path (Send nodes unavailable) | yes **(building)** |
-| `webhook` | `{}`; the response adds `config.url` | a POST to that URL; the body is `{{body.*}}` | yes |
+| `webhook` | `{}` | a POST to the automation's webhook URL; the body is `{{body.*}}`. The URL and secret come from the existing `/api/webhook-triggers` (create one with `workflowId` = the automation id) | yes |
 | `call_missed` / `call_answered` | `{ lines?: string[] }` | voice call events | only with a connected voice line **(building)** |
 | `order_event`, `cart_abandoned`, `form_submitted`, `story_mention` | | | **no**: `reason: "no_event_source"` (drawn dimmed) |
 

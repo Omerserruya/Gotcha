@@ -4,6 +4,10 @@ import { prisma, authenticate, resolveTenant, requirePermissionOrRole, validate,
 import { validateGraph } from "../lib/graph-validator";
 
 const router = Router();
+
+// An automation (a flow with a trigger) is edited and made live only through
+// /api/automations, whose gate also checks the trigger and the node settings.
+const AUTOMATION_ONLY = "automation: edit and activate this through /api/automations";
 router.use(authenticate, resolveTenant);
 
 const flowSchema = z.object({
@@ -49,6 +53,11 @@ router.post(
   async (req: Request, res: Response) => {
   try {
     const { name, description, channel, nodes, edges, isActive } = req.body;
+    // Created live = activated: the same gate as /activate, or it is a bypass.
+    if (isActive) {
+      const { errors, warnings } = validateGraph(nodes ?? [], edges ?? []);
+      if (errors.length > 0) { res.status(422).json({ error: "validation_failed", errors, warnings }); return; }
+    }
     const flow = await prisma.chatbotFlow.create({
       data: { tenantId: req.tenantId!, name, description, channel: channel ?? null, nodes, edges, isActive: isActive || false },
     });
@@ -60,6 +69,7 @@ router.put("/:id", requirePermissionOrRole("ai:workflows:update", "ADMIN"), vali
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
+    if ((existing as any).triggerType) { res.status(409).json({ error: AUTOMATION_ONLY }); return; }
     const { name, description, nodes, edges, isActive, expectedUpdatedAt } = req.body;
     // Stale-version guard: if the caller loaded an older revision than what is
     // on disk, reject with 409 rather than clobbering the newer edit.
@@ -67,9 +77,16 @@ router.put("/:id", requirePermissionOrRole("ai:workflows:update", "ADMIN"), vali
       res.status(409).json({ error: "stale_version_conflict: this process changed since you opened it; reload before saving." });
       return;
     }
+    // Saving a flow that is (or becomes) live passes the same gate as
+    // /activate: a PUT must not be a way around validation.
+    const willBeActive = isActive ?? existing.isActive;
+    if (willBeActive) {
+      const { errors, warnings } = validateGraph(nodes ?? (existing.nodes as any) ?? [], edges ?? (existing.edges as any) ?? []);
+      if (errors.length > 0) { res.status(422).json({ error: "validation_failed", errors, warnings }); return; }
+    }
     const flow = await prisma.chatbotFlow.update({
       where: { id: req.params.id as string },
-      data: { name, description, nodes, edges, isActive: isActive ?? existing.isActive },
+      data: { name, description, nodes, edges, isActive: willBeActive },
     });
     res.json(flow);
   } catch (err) { console.error("Update flow error:", err); res.status(500).json({ error: "Failed to update flow" }); }
@@ -88,6 +105,7 @@ router.post("/:id/activate", requirePermissionOrRole("ai:workflows:publish", "AD
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
+    if ((existing as any).triggerType) { res.status(409).json({ error: AUTOMATION_ONLY }); return; }
     // Authoritative gate (§3): publishing is BLOCKED by validation errors. The
     // frontend validates for UX, but this is the check that cannot be bypassed.
     const { errors, warnings } = validateGraph((existing.nodes as any) ?? [], (existing.edges as any) ?? []);

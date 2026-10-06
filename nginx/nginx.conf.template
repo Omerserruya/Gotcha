@@ -672,6 +672,17 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Studio > Automations (chatbot service)
+        location /api/automations {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://chatbot_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # F1 identity (conversation service)
         location /api/identity {
             limit_req zone=api burst=20 nodelay;
@@ -1390,6 +1401,15 @@ http {
 
         location ~ ^/t/([^/]+)/api/chatbot-flows(.*)$ {
             proxy_pass http://chatbot_service/api/chatbot-flows$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/automations(.*)$ {
+            proxy_pass http://chatbot_service/api/automations$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
