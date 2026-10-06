@@ -13,42 +13,18 @@
  * not something to show a merchant.
  */
 import { prisma } from "@chatcenter/shared";
+import { activityLabelKey, ACTIVITY_LABEL_KEYS as SHARED_LABEL_KEYS } from "@chatcenter/shared/src/lib/ai-activity-labels";
 
 export type ActivityStatus = "proposed" | "approved" | "running" | "completed" | "failed" | "denied";
 
-/** Ordered: the first pattern that matches the bare tool name wins. */
-const LABEL_RULES: Array<[RegExp, string]> = [
-  [/^escalate_to_human$/, "handing_to_team"],
-  [/refund/, "processing_refund"],
-  [/cancel_order/, "cancelling_order"],
-  [/(create|get)_returns?$|exchange_order_item/, "handling_return"],
-  [/track_shipment|shipment_status|tracking_url|delivery_eta|fulfillment_status/, "checking_delivery"],
-  [/update_order_shipping_address|edit_order|update_order_fulfillment|update_order_status/, "updating_order"],
-  [/order_lookup|find_latest_order|get_order|reconcile_order_items|list_orders/, "looking_up_order"],
-  [/search_products|variant_information|list_products|get_product/, "checking_products"],
-  [/coupon|discount/, "creating_discount"],
-  [/send_invoice|resend_confirmation/, "sending_order_email"],
-  [/add_order_note|create_note/, "adding_note"],
-  [/check_availability/, "checking_calendar"],
-  [/schedule_meeting/, "booking_meeting"],
-  [/link_customer_identifier|resolve_identity|get_customer|search_customers|get_contact|update_my_profile/, "identifying_customer"],
-  [/create_lead|create_contact|update_contact|update_crm/, "saving_customer"],
-  [/tag_contact/, "tagging_customer"],
-  [/schedule_followup/, "scheduling_followup"],
-];
+// The label map is shared with the customer timeline (conversation service),
+// so a tool reads the same in the live line and in the history. Deep-imported
+// from its import-free file; see packages/shared/src/lib/ai-activity-labels.ts.
 
-export const ACTIVITY_LABEL_KEYS = [...new Set([...LABEL_RULES.map(([, k]) => k), "working"])];
-
-/** "shopify.order_lookup" / "integration_order_lookup" → "order_lookup". */
-function bareName(tool: string): string {
-  const afterDot = tool.includes(".") ? tool.slice(tool.lastIndexOf(".") + 1) : tool;
-  return afterDot.replace(/^integration_/, "");
-}
+export const ACTIVITY_LABEL_KEYS = SHARED_LABEL_KEYS;
 
 export function labelKeyFor(tool: string): string {
-  const name = bareName(String(tool || ""));
-  for (const [re, key] of LABEL_RULES) if (re.test(name)) return key;
-  return "working";
+  return activityLabelKey(tool);
 }
 
 /** The orchestrator's lifecycle event name → the step's status. */

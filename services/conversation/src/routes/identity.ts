@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
 import { visibilityClause } from "../lib/conversation-visibility";
 import { situationOf } from "../lib/situation";
+import { activityLabelKey } from "@chatcenter/shared/src/lib/ai-activity-labels";
 
 const router = Router();
 
@@ -559,7 +560,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       direction?: string;
       body?: string | null;
       handover?: { from: string | null; to: string; actorUserId: string | null; reason: string | null };
-      action?: { tool: string; success: boolean; status: string; triggeredBy: string; durationMs: number | null; approvedBy: string | null };
+      action?: { tool: string; labelKey: string; success: boolean; status: string; triggeredBy: string; durationMs: number | null; approvedBy: string | null };
     };
 
     const [messageCount, handoverCount, actionCount, messageRows, handoverRows, actionRows] = await Promise.all([
@@ -633,6 +634,8 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
         body: null,
         action: {
           tool: t.tool,
+          // The same key the inbox panel's live line uses, from the shared map.
+          labelKey: activityLabelKey(t.tool),
           // The same `action` keys as before, plus `status`. success is only
           // true for a completed call; a proposed/denied one did not succeed.
           success: t.status === "completed",

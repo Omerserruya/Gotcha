@@ -365,7 +365,7 @@ describe("the union carries what exists and names what does not", () => {
     const res = await get();
 
     expect(res.body.events[0].action).toEqual({
-      tool: "shopify.get_order", success: false, status: "failed", triggeredBy: "ai", durationMs: 120, approvedBy: null,
+      tool: "shopify.get_order", labelKey: "looking_up_order", success: false, status: "failed", triggeredBy: "ai", durationMs: 120, approvedBy: null,
     });
   });
 
