@@ -98,6 +98,20 @@ import {
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import { loadProfileFactsForPrompt } from "./customer-memory.service";
 import { humanizeReply } from "./reply-style";
+import {
+  loadSkillContext,
+  selectionCandidates,
+  decideSkillTurn,
+  applySkillDecision,
+  loadRunRequests,
+  businessSkillsForPrompt,
+  skillLedgerFields,
+  skillApprovalReason,
+  settleSkillRun,
+  type SkillContext,
+  type SkillCandidate,
+} from "./skill-runtime.service";
+import { mergeKnowledgeFields } from "./prompt-builder.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
 import { isAgentArchitectureEnabled } from "@chatcenter/shared";
@@ -1537,11 +1551,23 @@ async function generateAIBotReplyInner(
   // brand-new prospect who answered every question still read as knowing
   // nothing → objectives stuck forever (real WhatsApp regression). Feed in what
   // the customer ACTUALLY said this session so progression reflects reality.
+  // ── Business skills (design 6): this employee's skills + the open run ──
+  // Fail-soft: a skills error costs the turn its skills, never its reply.
+  const skillCtx: SkillContext = await loadSkillContext(opts.tenantId, config.id, opts.conversationId).catch((err: any) => {
+    console.warn("[ai-bot] skill context load failed (turn runs without skills):", err?.message);
+    return { candidates: [], openRun: null, noSkillPolicy: "answer_from_knowledge" };
+  });
+  // The open run's fields join the session knowledge now; a NEW run's fields
+  // join the ledger once it is chosen below.
+  const openRunSkill = skillCtx.openRun
+    ? skillCtx.candidates.find((c) => c.id === skillCtx.openRun!.skillId && c.mode === "on")
+    : undefined;
+
   const sessionFactsBlock = await buildSessionFactsBlock({
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     messages,
-    knowledgeFields: requiredKnowledgeFor(config.role),
+    knowledgeFields: mergeKnowledgeFields(requiredKnowledgeFor(config.role), openRunSkill ? skillLedgerFields(openRunSkill) : []),
     signal,
   });
 
@@ -2435,11 +2461,32 @@ async function generateAIBotReplyInner(
     },
     messages,
     signal,
+    // Skill selection rides the same judgement call (none offered → identical).
+    skills: skillCtx.candidates.length ? selectionCandidates(skillCtx) : undefined,
+    openSkillId: skillCtx.openRun?.skillId ?? null,
   });
   const committedActionTools = planContext.completedActionTools;
   const priorGoal = planContext.priorGoal;
   const wizardFacts = planContext.wizardFacts;
   const toolCapabilityHints = planContext.toolCapabilityHints;
+
+  // Which skill this turn works in (stickiness, topic change, edits: see
+  // decideSkillTurn). Watch runs are recorded but never shape the reply.
+  const skillDecision = decideSkillTurn(skillCtx, wizardFacts.matchedSkillId);
+  const skillRunId = skillCtx.candidates.length || skillCtx.openRun
+    ? await applySkillDecision(opts.tenantId, opts.conversationId, config.id, skillDecision).catch((err: any) => {
+        console.warn("[ai-bot] skill run record failed:", err?.message);
+        return null;
+      })
+    : null;
+  const activeSkill: SkillCandidate | null = skillRunId ? skillDecision.active?.skill ?? null : null;
+  const activeOnSkill: SkillCandidate | null = activeSkill && activeSkill.mode === "on" ? activeSkill : null;
+  // While a live skill runs, it - not the objective chain - decides this turn's
+  // next move: the objective-driven forcing below stands aside.
+  const skillOwnsTurn = !!activeOnSkill;
+  // A step's "ask you over X" can only TIGHTEN approval (orchestrator hook).
+  const skillTighten = (a: { tool: string; args?: unknown }) =>
+    skillApprovalReason(activeOnSkill, a.tool, (a.args ?? {}) as Record<string, unknown>);
 
   // OUTCOME QUALITY > DATA COLLECTION (role-agnostic): don't let the model create
   // records (lead/contact/deal/opportunity/ticket/case/…) unless creation is
@@ -2459,6 +2506,21 @@ async function generateAIBotReplyInner(
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
 
+  // Business skills for the prompt (undefined → the prompt is exactly what it
+  // was before skills existed). Watch runs never reach the prompt.
+  const skillRequests = activeOnSkill && !skillDecision.starts && skillCtx.openRun
+    ? await loadRunRequests(opts.tenantId, opts.conversationId, skillCtx.openRun.startedAt).catch(() => [])
+    : [];
+  const businessSkills = businessSkillsForPrompt({
+    ctx: skillCtx,
+    activeOnSkill,
+    requests: skillRequests,
+    surface: toolFunctionNames,
+    factText: [ctxSlot.customerBlock, ctxSlot.crmBlock, ctxSlot.memoryBlock, ctxSlot.sessionFactsBlock]
+      .filter((x): x is string => !!x && !!x.trim())
+      .join("\n"),
+  });
+
   const promptOpts: BuildPromptOpts = {
     behaviorState,
     agent: toAgentRecord(config),
@@ -2475,6 +2537,7 @@ async function generateAIBotReplyInner(
     wizardFacts,
     company: companyContext ?? undefined,
     businessCore: businessCoreMap,
+    businessSkills,
   };
   const systemPrompt = buildAgentPrompt(promptOpts);
 
@@ -2985,7 +3048,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
-          { ledger, ctx: ledgerCtx, idempotency: true },
+          { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
 
@@ -3220,7 +3283,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
-          { ledger, ctx: ledgerCtx, idempotency: true },
+          { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({
@@ -3358,6 +3421,9 @@ async function generateAIBotReplyInner(
     if (
       ripeAct?.tool &&
       !apDisqualified &&
+      // A live business skill owns this turn's next move; forcing the
+      // objective chain's tool here would hijack it.
+      !skillOwnsTurn &&
       !actionAlreadyTaken &&
       isNonAdvancingReply(replyText) &&
       !awaitingApproval &&
@@ -3447,7 +3513,7 @@ async function generateAIBotReplyInner(
                 { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
                 agentToolCtx,
               ),
-            { ledger, ctx: ledgerCtx, idempotency: true },
+            { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
           );
           const result = unwrapToolExec(tc.id, toolName, exec);
           toolCallLog.push({
@@ -3527,6 +3593,9 @@ async function generateAIBotReplyInner(
     if (
       failedActions.length > 0 &&
       !succeededAction &&
+      // A live skill has its own fallback (the step's else note / hand-over);
+      // objective-driven recovery would steer toward a different goal.
+      !skillOwnsTurn &&
       !detectHumanHandoff(opts.incomingMessage) &&
       !awaitingApproval &&
       !budget.exceededTurnCap()
@@ -3659,7 +3728,7 @@ async function generateAIBotReplyInner(
                   { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
                   agentToolCtx,
                 ),
-              { ledger, ctx: ledgerCtx, idempotency: true },
+              { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
             );
             const result = unwrapToolExec(tc.id, toolName, exec);
             toolCallLog.push({
@@ -3859,7 +3928,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
-          { ledger, ctx: ledgerCtx, idempotency: true },
+          { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({ tool: toolName, args: toolArgs, result: result.content, decision: "executed_on_retry", sideEffect: "background" });
@@ -3904,6 +3973,9 @@ async function generateAIBotReplyInner(
     !committedActionThisTurn &&
     !customerIsClosing(opts.incomingMessage) &&
     !decisionDisqualified &&
+    // Closing out a finished skill ("anything else?") is not the objective
+    // chain's passive close; the skill, not the chain, owns this turn.
+    !skillOwnsTurn &&
     // Block a passive close when EITHER an active objective forbids it OR the
     // business OUTCOME is still pending/blocked (the case the bare null cursor
     // used to mask: "no next objective" ≠ "the goal happened").
@@ -4121,7 +4193,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
-          { ledger, ctx: ledgerCtx, idempotency: true },
+          { ledger, ctx: ledgerCtx, idempotency: true, tightenApproval: skillTighten },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({ tool: toolName, args: toolArgs, result: result.content, decision: "executed_on_retry", sideEffect: undefined });
@@ -4441,6 +4513,23 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] decision-trace log failed:", err?.message);
   }
 
+  // Business skill: move the run to where this turn's tool requests put it
+  // (step, completion, hand-over). Fail-soft, like every skill path.
+  if (skillRunId && activeSkill) {
+    const escalatedThisTurn =
+      !!pendingEscalation ||
+      toolCallLog.some((t) => t.tool === "escalate_to_human" && (t.decision === "executed" || t.decision === "executed_on_retry"));
+    await settleSkillRun({
+      tenantId: opts.tenantId,
+      conversationId: opts.conversationId,
+      aiAgentId: config.id,
+      runId: skillRunId,
+      skill: activeSkill,
+      surface: toolFunctionNames,
+      escalatedThisTurn,
+    }).catch((err: any) => console.warn("[ai-bot] skill run settle failed:", err?.message));
+  }
+
   // Audit - full BehaviorState + tool calls.
   prisma.auditLog.create({
     data: {
@@ -4463,6 +4552,10 @@ async function generateAIBotReplyInner(
         activeGoal: nextGoalSnapshot ?? undefined,
         // WIZARD→RUNTIME: the structured judgment facts that drove this turn.
         wizardFacts: wizardFacts.evaluated ? wizardFacts : undefined,
+        // The business skill this turn worked in (absent when none).
+        activeSkillId: activeSkill?.id ?? undefined,
+        activeSkillMode: activeSkill?.mode ?? undefined,
+        skillRunId: skillRunId ?? undefined,
         toolCalls: toolCallLog.length > 0 ? toolCallLog : undefined,
         behaviorState: {
           strategy: behaviorState.strategy,

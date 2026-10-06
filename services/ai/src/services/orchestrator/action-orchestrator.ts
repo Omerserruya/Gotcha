@@ -45,6 +45,13 @@ export interface SubmitLedgerOpts {
    * to a normal execution. Off by default → non-bot callers are unaffected.
    */
   idempotency?: boolean;
+  /**
+   * TIGHTEN-ONLY approval hook (business skills: a step's "ask you over X").
+   * Consulted only when the policy gate says ALLOW; a returned reason turns that
+   * into REQUIRE_APPROVAL. It is never consulted for DENY or REQUIRE_APPROVAL,
+   * so it cannot loosen anything.
+   */
+  tightenApproval?: (action: ProposedAction) => string | null;
 }
 
 /** Redelivery window for cross-turn idempotency. WhatsApp/webhook retries land
@@ -164,6 +171,13 @@ export class ActionOrchestrator {
 
     if (gate.decision === "DENY") {
       return recordIfLedger(await this.recordDeny(action, gate.reason, "policy"));
+    }
+
+    // Tighten only: an ALLOW may become REQUIRE_APPROVAL, nothing else changes.
+    if (gate.decision === "ALLOW" && opts?.tightenApproval) {
+      let why: string | null = null;
+      try { why = opts.tightenApproval(action); } catch { why = null; }
+      if (why) gate = { ...gate, decision: "REQUIRE_APPROVAL", reason: why } as PolicyResult;
     }
 
     // ── Tenant BUSINESS policy (deterministic, prompt-proof) ──────────────

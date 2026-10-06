@@ -50,7 +50,8 @@ import {
   type ActionCategory,
 } from "./behavior-strategies";
 import { renderBrandVoice } from "./brand-archetypes";
-import { buildSkillBlock, requiredKnowledgeFor, roleToSkill } from "./skills";
+import { buildSkillBlock, requiredKnowledgeFor, roleToSkill, type KnowledgeField } from "./skills";
+import { renderSkillNamesLine } from "./skill-runtime.service";
 import { computeKnowledgeLedger, renderKnowledgeLedger } from "./knowledge-ledger";
 import {
   type CrmStateFlags,
@@ -217,6 +218,18 @@ export interface BuildPromptOpts {
    * no funnel is configured or the resolver couldn't determine a stage.
    */
   stageContext?: import("./intelligence/prompts/blocks/copilot-config-block").StageContextForPrompt;
+  /**
+   * Business skills (design 6). `names`: the employee's live (mode on) skills,
+   * rendered in BLOCK 2 so the cached prefix changes only when the list does.
+   * `activeBlock` / `noSkillBlock`: the per-turn block. `requiredInfo`: the
+   * active skill's fields, merged into the knowledge ledger.
+   */
+  businessSkills?: {
+    names: string[];
+    activeBlock: string | null;
+    noSkillBlock: string | null;
+    requiredInfo: KnowledgeField[];
+  };
   /**
    * CRM presence flags for THIS customer, resolved from the CRM prefetch. Drives
    * the per-turn Prospect State block (NEW_PROSPECT / KNOWN_CONTACT /
@@ -461,6 +474,9 @@ function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): str
     // Which system serves each part, so the model resolves through the
     // merchant's choice rather than whichever tool name it reaches for first.
     push(parts, buildBusinessCoreBlock(opts));
+    // Business skills: NAMES only here (stable per employee); the active one is
+    // rendered in full in the turn block.
+    if (opts.behaviorState.mode === "agent") push(parts, renderSkillNamesLine(opts.businessSkills?.names ?? []));
   }
   push(parts, buildAgentPlaybooksStatic(opts));
   // Product Qualification Context (sales-oriented skills) - anchors discovery to
@@ -726,6 +742,11 @@ function buildTurnBlock(opts: BuildPromptOpts, strategy: StrategyContract): stri
   const parts: string[] = [];
   push(parts, buildTurnState(opts));
   push(parts, buildPipelineStage(opts));
+  // The active business skill sits next to the stage and ahead of the Current
+  // Plan it takes precedence over (agent mode only; null otherwise).
+  if (opts.behaviorState.mode === "agent") {
+    push(parts, opts.businessSkills?.activeBlock ?? opts.businessSkills?.noSkillBlock ?? null);
+  }
   push(parts, buildCurrentPlanBlock(opts));
   push(parts, buildKnowledgeLedger(opts));
   push(parts, buildGoals(opts, strategy));
@@ -807,11 +828,20 @@ function buildPipelineStage(opts: BuildPromptOpts): string | null {
 // knowledge-ledger.ts.
 function buildKnowledgeLedger(opts: BuildPromptOpts): string | null {
   if (opts.behaviorState.mode !== "agent") return null;
-  const required = requiredKnowledgeFor(opts.agent.role);
+  // The active business skill's requiredInfo joins the role's fields - the same
+  // gap check and the same next-target choice, no second ledger.
+  const required = mergeKnowledgeFields(requiredKnowledgeFor(opts.agent.role), opts.businessSkills?.requiredInfo ?? []);
   if (!required.length) return null;
 
   const ledger = computeKnowledgeLedger(required, factTextOf(opts));
   return renderKnowledgeLedger(ledger);
+}
+
+/** Role fields first; a skill field with a key the role already has is not repeated. */
+export function mergeKnowledgeFields(role: KnowledgeField[], skill: KnowledgeField[]): KnowledgeField[] {
+  if (!skill.length) return role;
+  const keys = new Set(role.map((f) => f.key));
+  return [...role, ...skill.filter((f) => !keys.has(f.key))];
 }
 
 // Concatenated resolved-fact text (customer + CRM + memory) used by both the
