@@ -64,6 +64,8 @@ export const errorEnvelopeSchema = z.object({
   /** Limit breaches only. */
   limit: z.number().optional(),
   current: z.number().optional(),
+  /** A 429's wait in seconds (`REFRESH_RATE_LIMITED`). A bad value is no wait, not an unread error. */
+  retryAfterSeconds: z.number().nonnegative().optional().catch(undefined),
   /**
    * The billing services' machine-readable reason, which is **not** `code`.
    *

@@ -17,6 +17,11 @@ export interface RealtimeTransport {
   on(type: RealtimeEventType, listener: RealtimeListener): () => void;
   /** Subscribes to connection-state changes. Returns an unsubscribe function. */
   onStateChange(listener: (state: ConnectionState) => void): () => void;
+  /**
+   * Ask for one conversation's room (`conv:{id}`), where events scoped to it
+   * are sent — the tenant room never carries them. Returns the leave.
+   */
+  joinConversation(conversationId: string): () => void;
 }
 
 /**

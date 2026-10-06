@@ -7,7 +7,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, Image as ImageIcon, Paperclip, X } from 'lucide-react';
 
 import { composeDraft, type ComposeResult } from './compose-actions';
-import { REPLY_TO_EVENT, type ReplyTarget } from './reply-event';
+import {
+  FILL_COMPOSER_EVENT,
+  REPLY_TO_EVENT,
+  type ComposerFill,
+  type ReplyTarget,
+} from './reply-event';
 import { COMPOSE_KINDS, type ComposeKind } from './compose-kinds';
 import { sendReply, type SendResult } from './send-actions';
 import { MAX_MEDIA_BYTES, sendMedia, type MediaResult } from './send-media';
@@ -121,6 +126,28 @@ export function Composer({
     };
     window.addEventListener(REPLY_TO_EVENT, onReply);
     return () => window.removeEventListener(REPLY_TO_EVENT, onReply);
+  }, []);
+
+  /*
+   * The Copilot wall's "Use this", "Edit" and "Ask": the text into the box,
+   * focused — never sent. Edit selects it, to be typed over; the others leave
+   * the caret at the end, ready to send. After the frame, so the box holds it.
+   */
+  useEffect(() => {
+    const onFill = (event: Event) => {
+      const { text: filled, select } = (event as CustomEvent<ComposerFill>).detail;
+      setText(filled);
+      setResult(null);
+      requestAnimationFrame(() => {
+        const box = body.current;
+        if (!box) return;
+        box.focus();
+        if (select) box.select();
+        else box.setSelectionRange(box.value.length, box.value.length);
+      });
+    };
+    window.addEventListener(FILL_COMPOSER_EVENT, onFill);
+    return () => window.removeEventListener(FILL_COMPOSER_EVENT, onFill);
   }, []);
 
   const empty = text.trim() === '';

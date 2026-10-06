@@ -1,19 +1,15 @@
 import { getTranslations } from 'next-intl/server';
 import { Suspense } from 'react';
 
-import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { ConversationHeader } from '@/features/inbox/ConversationHeader';
 import { Composer } from '@/features/inbox/Composer';
-import {
-  ConversationContext,
-  ConversationStream,
-  OrdersChip,
-} from '@/features/inbox/ConversationDetail';
+import { ConversationStream, OrdersChip } from '@/features/inbox/ConversationDetail';
 import { StreamLive } from '@/features/inbox/StreamLive';
 import { ClearQueueList, ClearQueuePane } from '@/features/inbox/ClearQueue';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
-import { IdentityPanel } from '@/features/inbox/IdentityPanel';
+import { AskCopilot } from '@/features/inbox/wall/AskCopilot';
+import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import styles from '@/features/inbox/Inbox.module.css';
 import { parseChannelFilter, parseInboxView } from '@/features/inbox/inbox-views';
 import { loadClearQueue } from '@/features/inbox/load-clear-queue';
@@ -321,42 +317,31 @@ export default async function Page({
             {clear ? null : (
               <aside className={styles.contextColumn} aria-label={t('context.label')}>
                 {/*
-                ⚠ THE COPILOT’S SCROLLING BODY. 02: `[372x693] flex:1 1 0%
-                  ovf:hidden`, between a fixed 45px header and a pinned 71px
-                  input. Neither of those exists yet; the body is in place so
-                  that adding them does not mean restructuring this again.
-              */}
+                  02's wall: a fixed 45px header, the scrolling body, and the
+                  pinned "Ask Copilot anything…". Only the body waits for the
+                  second round; the other two paint with the frame.
+                */}
+                <WallHeader />
                 <div className={styles.copilotBody}>
                   {data.open && data.detail ? (
                     <Suspense key={data.open.id} fallback={<ContextSkeleton />}>
-                      <ConversationContext
+                      <CopilotWall
                         detail={data.detail}
                         conversation={{
                           id: data.open.id,
-                          contactName: data.open.customerName,
-                          channel: data.open.channel,
-                          /*
-                           * ★ THE HANDLE, WHICH THE PANEL WAS SAYING IT DID NOT HAVE.
-                           * It rendered *"No channel handle is recorded for this
-                           * person"* beside a row showing a channel, because nothing
-                           * passed one.
-                           */
-                          customerExternalId: data.open.customerExternalId,
+                          contactId: data.open.contactId,
+                          customerName: data.open.customerName,
                         }}
                       />
                     </Suspense>
                   ) : (
-                    /*
-                    Nothing open: both panels draw their own absence, as before.
-                    `conversationId` null leaves the order controls absent rather
-                    than broken — the endpoint has nowhere to route.
-                  */
-                    <>
-                      <IdentityPanel timeline={null} conversation={null} />
-                      <CustomerOrders orders={null} conversationId={null} />
-                    </>
+                    <p className={styles.note} data-testid="wall-nothing-open">
+                      {t('wall.nothingOpen')}
+                    </p>
                   )}
                 </div>
+                {/* Keyed: a question half-typed about one person is not asked about the next. */}
+                <AskCopilot key={data.open?.id ?? 'none'} conversationId={data.open?.id ?? null} />
               </aside>
             )}
           </div>

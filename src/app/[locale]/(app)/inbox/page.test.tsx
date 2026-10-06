@@ -2,19 +2,15 @@ import type { ReactElement, ReactNode } from 'react';
 import { isValidElement, Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CustomerOrders } from '@/features/customers/CustomerOrders';
 import { ConversationHeader } from '@/features/inbox/ConversationHeader';
 import { ClearQueueList, ClearQueuePane } from '@/features/inbox/ClearQueue';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { PageContainer } from '@/shell/PageContainer';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
-import { IdentityPanel } from '@/features/inbox/IdentityPanel';
 import { Composer } from '@/features/inbox/Composer';
-import {
-  ConversationContext,
-  ConversationStream,
-  OrdersChip,
-} from '@/features/inbox/ConversationDetail';
+import { ConversationStream, OrdersChip } from '@/features/inbox/ConversationDetail';
+import { AskCopilot } from '@/features/inbox/wall/AskCopilot';
+import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import { PendingPane } from '@/features/inbox/PendingPane';
 
 /**
@@ -69,9 +65,8 @@ vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 const ASYNC_PANELS = new Set<unknown>([
   ConversationList,
   ConversationStream,
-  ConversationContext,
-  IdentityPanel,
-  CustomerOrders,
+  CopilotWall,
+  WallHeader,
 ]);
 
 /** Every element in the tree, with the async panels above it. */
@@ -143,16 +138,15 @@ const data = (over: Record<string, unknown> = {}) => {
     messages: [] as unknown,
     timeline: null as unknown,
     orders: null as unknown,
-    copilot: { state: 'unavailable' } as unknown,
     meId: 'me',
     colleagues: [{ id: 'u2', name: 'Dana' }],
     greeting: null,
     ...over,
   };
-  const { messages, timeline, orders, copilot, ...shell } = base;
+  const { messages, timeline, orders, ...shell } = base;
   return {
     ...shell,
-    detail: base.open ? Promise.resolve({ messages, timeline, orders, copilot }) : null,
+    detail: base.open ? Promise.resolve({ messages, timeline, orders }) : null,
   };
 };
 
@@ -174,7 +168,7 @@ describe('★★ four panels, and none of them inside another', () => {
     // The stream and the wall stream in: each reads the second round inside
     // its own `<Suspense>`. What THEY mount is ConversationDetail.test's.
     expect(panels).toContain(ConversationStream);
-    expect(panels).toContain(ConversationContext);
+    expect(panels).toContain(CopilotWall);
   });
 
   it('★★ NONE is a descendant of another — the trap that has cost five screens', async () => {
@@ -198,37 +192,33 @@ describe('★★ four panels, and none of them inside another', () => {
     // The queue and the context panels are still mounted; the stream is not,
     // because there is no conversation to stream.
     expect(panels).toContain(ConversationList);
-    expect(panels).toContain(IdentityPanel);
-    expect(panels).toContain(CustomerOrders);
+    // The wall keeps its header with nothing open; its body has nothing to read.
+    expect(panels).toContain(WallHeader);
+    expect(panels).not.toContain(CopilotWall);
     expect(panels).not.toContain(ConversationStream);
   });
 });
 
-describe('★★ 04d’s commerce panel, not a second one', () => {
-  it('★★ is given the orders the page already read, and the conversation to act through', async () => {
+describe('★★ the Copilot wall is given the round it reads, and the handle', () => {
+  it('★★ the same second round as the stream, and the conversation to act through', async () => {
     /*
-     * A second commerce contract would be two answers about somebody's money,
-     * both rendered confidently, on the same screen. `CustomerOrders` takes
-     * its data as a prop and reads nothing itself.
+     * One commerce read for the order carousel, the stream and the chip: a
+     * second would be two answers about somebody's money on one screen.
      */
     const orders = { state: 'ok', data: {} };
     const props = propsOf<{
       detail: Promise<{ orders: unknown }>;
-      conversation: { id: string };
-    }>(await page({ orders }), ConversationContext);
+      conversation: { id: string; customerExternalId: string | null };
+    }>(await page({ orders }), CopilotWall);
 
-    // The wall reads the same second round; it hands `orders` on — see
-    // ConversationDetail.test for the hand-over to CustomerOrders.
     expect((await props!.detail).orders).toBe(orders);
     expect(props?.conversation.id).toBe('conv1');
   });
 
-  it('★ gets a null conversation id when nothing is open, so its actions are absent', async () => {
-    // The endpoint has nowhere to route, and controls that cannot work are
-    // better absent than broken.
+  it('★ "Ask Copilot" gets no conversation when nothing is open, so it is off rather than broken', async () => {
     const props = propsOf<{ conversationId: string | null }>(
       await page({ rows: [], open: null, messages: null }, { view: 'resolved' }),
-      CustomerOrders,
+      AskCopilot,
     );
     expect(props?.conversationId).toBeNull();
   });
@@ -457,9 +447,8 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
     return found;
   };
 
-  it('★★ the identity panel sits INSIDE the conversation column', async () => {
-    // The wall's contents stream in as `ConversationContext`, which mounts it.
-    const chain = ancestorsOf(await page(), ConversationContext);
+  it('★★ the wall sits INSIDE the conversation column', async () => {
+    const chain = ancestorsOf(await page(), CopilotWall);
     expect(chain.some((c) => c.includes('conversationColumn'))).toBe(true);
     expect(chain.some((c) => c.includes('contextColumn'))).toBe(true);
   });
@@ -491,7 +480,7 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
      *   selected. It is now one section with two bodies, and this is the
      *   assertion that keeps it that way.
      */
-    const chain = ancestorsOf(await page({ open: null }), IdentityPanel);
+    const chain = ancestorsOf(await page({ open: null }), WallHeader);
     expect(chain.some((c) => c.includes('contextColumn'))).toBe(true);
   });
 });
@@ -568,7 +557,7 @@ describe('★★ the second round streams in, and the page does not wait for it'
       const inner = (element.props as { children?: ReactNode }).children;
       if (
         isValidElement(inner) &&
-        (inner.type === ConversationStream || inner.type === ConversationContext)
+        (inner.type === ConversationStream || inner.type === CopilotWall)
       ) {
         keys.push(element.key);
       }
@@ -624,10 +613,12 @@ describe('★★ 02b — the queue is clear, and only then', () => {
     expect(JSON.stringify(Object.keys(props(tree, ClearQueuePane) ?? {}))).toContain('clear');
   });
 
-  it('★ no wall on a clear queue: no identity, no orders, nothing for them to read', async () => {
-    const { panels } = found(await page({ rows: [], open: null, messages: null }));
-    expect(panels).not.toContain(IdentityPanel);
-    expect(panels).not.toContain(CustomerOrders);
+  it('★ no wall on a clear queue: no header, no body, nothing for them to read', async () => {
+    const tree = await page({ rows: [], open: null, messages: null });
+    const { panels } = found(tree);
+    expect(panels).not.toContain(WallHeader);
+    expect(panels).not.toContain(CopilotWall);
+    expect(propsOf(tree, AskCopilot)).toBeNull();
   });
 
   it.each([

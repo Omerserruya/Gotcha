@@ -25,6 +25,8 @@ export class SocketTransport implements RealtimeTransport {
   private currentState: ConnectionState = 'idle';
   private readonly listeners = new Map<RealtimeEventType, Set<RealtimeListener>>();
   private readonly stateListeners = new Set<(state: ConnectionState) => void>();
+  /** Conversation rooms asked for, counted: two screens on one conversation leave once. */
+  private readonly rooms = new Map<string, number>();
 
   constructor(
     private readonly options: {
@@ -61,7 +63,15 @@ export class SocketTransport implements RealtimeTransport {
         reconnectionDelayMax: 15_000,
       });
 
-      socket.on('connect', () => this.setState('connected'));
+      socket.on('connect', () => {
+        this.setState('connected');
+        /*
+         * ★ EVERY CONNECT, NOT THE FIRST. A room is the server's memory of this
+         *   socket, and a reconnect is a new socket: without asking again, a
+         *   conversation open across a network blip goes quiet for good.
+         */
+        for (const conversationId of this.rooms.keys()) this.subscribe(conversationId);
+      });
       socket.on('disconnect', () => this.setState('reconnecting'));
       socket.on('connect_error', (error) => {
         logger.warn('realtime.connect_error', { message: error.message });
@@ -94,6 +104,42 @@ export class SocketTransport implements RealtimeTransport {
     set.add(listener);
     this.listeners.set(type, set);
     return () => set.delete(listener);
+  }
+
+  joinConversation(conversationId: string): () => void {
+    const count = this.rooms.get(conversationId) ?? 0;
+    this.rooms.set(conversationId, count + 1);
+    if (count === 0 && this.socket?.connected) this.subscribe(conversationId);
+    let left = false;
+    return () => {
+      if (left) return;
+      left = true;
+      const now = (this.rooms.get(conversationId) ?? 1) - 1;
+      if (now > 0) {
+        this.rooms.set(conversationId, now);
+        return;
+      }
+      this.rooms.delete(conversationId);
+      this.socket?.emit('unsubscribe:conversation', { conversationId });
+    };
+  }
+
+  /**
+   * The server answers with an ack, deliberately: a join that failed in
+   * silence looks exactly like a conversation with nothing new. Logged, so it
+   * is not silent here either.
+   */
+  private subscribe(conversationId: string): void {
+    this.socket?.emit(
+      'subscribe:conversation',
+      { conversationId },
+      (answer: { ok?: boolean; reason?: string } | undefined) => {
+        if (answer?.ok) return;
+        logger.warn('realtime.conversation_join_refused', {
+          reason: answer?.reason ?? 'no_answer',
+        });
+      },
+    );
   }
 
   onStateChange(listener: (state: ConnectionState) => void): () => void {

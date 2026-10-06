@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import inbox from '@/i18n/messages/en/inbox.json';
 
 import { Composer } from './Composer';
+import { fillComposer } from './reply-event';
 import type { ComposeResult } from './compose-actions';
 import type { SendResult } from './send-actions';
 import type { MediaResult } from './send-media';
@@ -524,5 +525,29 @@ describe('★★ up to five files — each its own upload, the words once', () =
     fireEvent.drop(composer, { dataTransfer: { files: [dropped], types: ['Files'] } });
     expect(screen.getByTestId('composer-file-0')).toHaveTextContent('drop.png');
     expect(media).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ the Copilot wall fills the box — and sends nothing', () => {
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+  it('★ Use this: the text, the caret at its end, ready to send — nothing sent', async () => {
+    show();
+    act(() => fillComposer('Sorry, Dana — on its way.'));
+    const box = screen.getByTestId('composer-body') as HTMLTextAreaElement;
+    expect(box).toHaveValue('Sorry, Dana — on its way.');
+    await act(frame);
+    expect(box).toHaveFocus();
+    expect(box.selectionStart).toBe(box.value.length);
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('★ Edit: the same text, selected, to be typed over', async () => {
+    show();
+    act(() => fillComposer('A reply', { select: true }));
+    const box = screen.getByTestId('composer-body') as HTMLTextAreaElement;
+    await act(frame);
+    expect([box.selectionStart, box.selectionEnd]).toEqual([0, 'A reply'.length]);
+    expect(sent).not.toHaveBeenCalled();
   });
 });

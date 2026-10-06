@@ -42,6 +42,11 @@ export type RealtimeEvent =
   | (RealtimeEventBase & { type: 'approval.requested'; approvalId: string })
   | (RealtimeEventBase & { type: 'approval.resolved'; approvalId: string })
   | (RealtimeEventBase & { type: 'ai.activity'; conversationId: string })
+  /**
+   * The conversation's stored ready replies changed (Backend: generated on an
+   * inbound message, kept). The wall re-reads them — never on every render.
+   */
+  | (RealtimeEventBase & { type: 'copilot.suggestions.updated'; conversationId: string })
   | (RealtimeEventBase & { type: 'presence.changed'; userId: string })
   /**
    * One FINAL utterance of a live call. Interim results are not published.
@@ -113,6 +118,20 @@ function str(payload: unknown, key: string): string | null {
 }
 
 export const translators: readonly EventTranslator[] = [
+  /*
+   * The wall's suggestions changed (Backend 9c5e96cc). Sent to `conv:{id}`
+   * only, as the bus's `data`: `{tenantId, conversationId, basedOnMessageId,
+   * generatedAt, channel}` — never the text, so the screen re-reads.
+   */
+  (wireEvent, payload) => {
+    if (wireEvent !== 'copilot.suggestions.updated') return null;
+    const data = field(payload, 'data') ?? payload;
+    const tenantId = str(payload, 'tenantId') ?? str(data, 'tenantId');
+    const conversationId = str(data, 'conversationId');
+    if (!tenantId || !conversationId) return null;
+    return { type: 'copilot.suggestions.updated', tenantId, at: Date.now(), conversationId };
+  },
+
   /*
    * ════════════════════════════════════════════════════════════════════════════
    * ★★ TWO EVENT TYPES WERE DECLARED AND NEITHER HAD A TRANSLATOR

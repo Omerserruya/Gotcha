@@ -598,39 +598,6 @@
     color: var(--text-subtle);
   }
 
-  /* Who this is, across the channels we managed to join up. */
-
-  .identity {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-  }
-
-  .identityName {
-    margin: 0;
-  }
-
-  .handles {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .handle {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-8);
-  }
-
-  .handleChannel,
-  .handleId {
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-  }
-
   /*
    * A system divider. No bubble, no side: it records what a colleague did,
    * and the stream's `align-self` would otherwise put it on the customer's.
@@ -940,11 +907,16 @@
     min-block-size: 0;
     overflow-y: auto;
     /*
-     * 02 pads every Copilot section 18px either side. The contents arrive in
-     * Wave 5; the padding belongs to the container, so it is here now and
-     * nothing sits flush against the wall's edge in the meantime.
+     * 02 pads every Copilot section 18px either side — and each section
+     * draws its own #262626 rule edge to edge, so the padding is the
+     * sections' (`wall/Wall.module.css`), not this container's.
      */
+    padding: 0;
+  }
+
+  .contextColumn > .copilotBody > .note {
     padding: var(--space-16) 18px;
+    color: var(--menu-dark-icon);
   }
 
   .queueColumn,
@@ -1111,90 +1083,11 @@
 }
 
 @layer features {
-  /* ── What GOTCHA would say ───────────────────────────────────────────────
-   *
-   * Below the stream, where a suggested reply is next to the place a reply gets
-   * written. Every one of its states is a section with the same heading, so the
-   * panel does not appear and disappear as a plan or a model call changes — a
-   * heading that vanishes reads as a screen that failed to load.
-   */
-  .copilot {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-    padding: var(--space-16);
-    background-color: var(--panel-inset);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-card);
-  }
-
-  .copilotHeading {
-    margin: 0;
-    font-size: var(--font-size-meta);
-    font-weight: 500;
-  }
-
-  .copilotNote {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
-    color: var(--text-subtle);
-    max-inline-size: var(--size-reading);
-  }
-
-  .copilotList {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
-  }
-
-  .copilotItem {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    padding: var(--space-12);
-    background-color: var(--panel-field);
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: var(--radius-control);
-  }
-
-  /*
-   * A proposed ACTION reads differently from a draft reply, because one is text
-   * to send and the other is something the AI would do. The distinction is in the
-   * words as well; this only keeps it visible.
-   */
-  .copilotItem[data-draft='no'] {
-    background-color: var(--panel-well);
-  }
-
-  .copilotMeta {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    color: var(--text-muted);
-  }
-
-  .copilotText {
-    font-size: var(--font-size-meta);
-    line-height: var(--line-height-snug);
-  }
-
-  .copilotWhy {
-    margin: 0;
-    font-size: var(--font-size-caption);
-    line-height: var(--line-height-snug);
-    color: var(--text-subtle);
-  }
-}
-
-@layer features {
   /* ── The reply box ───────────────────────────────────────────────────────
    *
-   * At the bottom of the conversation column, below the copilot panel, so the
-   * order down the column is: who this is · who is driving · what was said ·
-   * what GOTCHA would say · what you are about to say.
+   * At the bottom of the conversation column, under the stream: who this is ·
+   * who is driving · what was said · what you are about to say. What GOTCHA
+   * would say is the wall's, beside it (`wall/`), and lands here on Use this.
    */
   /*
    * 02's composer: a white card, `border:1px #E6E2DA`, radius 14px, clipped.

@@ -1,0 +1,688 @@
+@layer features {
+  /*
+   * 02 Inbox · the Copilot wall, from the design's own values: 372px of
+   * #171717, sections 18px either side and ruled by #262626, 11–13px type,
+   * muted #8E8A83. Line-height `normal` per block, as 02 sets none.
+   */
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 15px 18px;
+    border-block-end: var(--border-width-thin) solid var(--copilot-raised);
+    line-height: normal;
+  }
+
+  .dot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--signal-ai);
+  }
+
+  .headerName {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .headerState {
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--menu-dark-icon);
+  }
+
+  .meta {
+    font-size: 11px;
+    color: var(--menu-dark-icon);
+  }
+
+  .note {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--menu-dark-icon);
+  }
+
+  .textButton {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 11px;
+    color: var(--frame-text-body);
+    cursor: pointer;
+  }
+
+  .textButton:disabled {
+    color: var(--menu-dark-icon);
+    cursor: default;
+  }
+
+  /* ── What it did ── */
+  .activity {
+    padding: 11px 18px 12px;
+    border-block-end: var(--border-width-thin) solid var(--copilot-raised);
+    line-height: normal;
+  }
+
+  .activityHead {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-block-end: 9px;
+    font-size: 11.5px;
+    color: var(--menu-dark-icon);
+  }
+
+  .rule {
+    flex: 1;
+    block-size: 1px;
+    background-color: var(--copilot-raised);
+  }
+
+  .step {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .stepDot {
+    flex: none;
+    inline-size: 5px;
+    block-size: 5px;
+    border-radius: 50%;
+    background-color: var(--frame-dot-idle);
+  }
+
+  .stepText {
+    font-size: 12px;
+    color: var(--frame-text-body);
+  }
+
+  /* ── Sections ── */
+  .answers,
+  .block,
+  .person {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 18px;
+    border-block-end: var(--border-width-thin) solid var(--copilot-raised);
+    line-height: normal;
+  }
+
+  .block,
+  .person {
+    gap: 10px;
+    padding-block: 13px;
+  }
+
+  .blockHead {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .blockTitle {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .blockHead > .meta:first-of-type {
+    margin-inline-start: auto;
+  }
+
+  .block .blockHead > .meta:first-of-type {
+    margin-inline-start: 0;
+  }
+
+  .pager {
+    display: flex;
+    gap: 5px;
+  }
+
+  .block .pager {
+    margin-inline-start: auto;
+  }
+
+  .pageButton {
+    inline-size: 22px;
+    block-size: 22px;
+    padding: 0;
+    border: var(--border-width-thin) solid var(--frame-line);
+    border-radius: 6px;
+    background: none;
+    font-size: 11px;
+    color: var(--frame-text-body);
+    cursor: pointer;
+  }
+
+  .pageButton:disabled {
+    color: var(--menu-dark-icon);
+    cursor: default;
+  }
+
+  /* ── Three ways to answer ── */
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    touch-action: pan-y;
+  }
+
+  .cards:focus-visible {
+    outline: var(--focus-ring-width) solid var(--signal-ai);
+    outline-offset: 2px;
+  }
+
+  .openCard {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 12px;
+    background-color: var(--copilot-card);
+    border: var(--border-width-thin) solid var(--copilot-say-edge);
+    border-radius: 12px;
+  }
+
+  .foldedCard {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 11px 12px;
+    border: 0;
+    border-radius: 12px;
+    background-color: var(--copilot-card-quiet);
+    font: inherit;
+    text-align: start;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .cardHead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cardHead > .meta {
+    margin-inline-start: auto;
+    font-size: 10.5px;
+  }
+
+  .cardLabel {
+    font-size: 11px;
+    color: var(--frame-text-secondary);
+  }
+
+  .cardLabel[data-recommended='yes'] {
+    color: var(--signal-ai);
+  }
+
+  .openText {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--copilot-text-strong);
+    white-space: pre-wrap;
+  }
+
+  .foldedText {
+    overflow: hidden;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--copilot-text-muted);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .why {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--menu-dark-icon);
+  }
+
+  .cardActions {
+    display: flex;
+    gap: 7px;
+    margin-block-start: 3px;
+  }
+
+  .useButton,
+  .outlineButton {
+    align-self: flex-start;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .useButton {
+    border: 0;
+    background-color: var(--frame-text);
+    color: var(--frame-base);
+  }
+
+  .outlineButton {
+    border: var(--border-width-thin) solid var(--frame-line);
+    background: none;
+    color: var(--frame-text-body);
+  }
+
+  .retryLine {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 0;
+  }
+
+  /* ── The order ── */
+  .order {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    touch-action: pan-y;
+  }
+
+  .order:focus-visible {
+    outline: var(--focus-ring-width) solid var(--signal-ai);
+    outline-offset: 2px;
+  }
+
+  .orderImage {
+    flex: none;
+    inline-size: 40px;
+    block-size: 40px;
+    border-radius: 8px;
+    object-fit: cover;
+    background-color: var(--copilot-well);
+  }
+
+  .orderFacts {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 5px;
+    min-inline-size: 0;
+  }
+
+  .orderTitle {
+    font-size: 12.5px;
+    color: var(--copilot-text-strong);
+  }
+
+  .orderLine {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11.5px;
+  }
+
+  .chipText {
+    font-size: 11.5px;
+    color: var(--frame-text-body);
+  }
+
+  .chipText[data-tone='positive'] {
+    color: var(--copilot-positive);
+  }
+
+  .chipText[data-tone='warning'] {
+    color: var(--signal-waiting);
+  }
+
+  .chipText[data-tone='danger'] {
+    color: var(--menu-dark-danger);
+  }
+
+  .orderRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    margin-block-start: 2px;
+  }
+
+  .orderRow > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .outlineSmall {
+    padding: 5px 10px;
+    border: var(--border-width-thin) solid var(--frame-line);
+    border-radius: 7px;
+    background: none;
+    font: inherit;
+    font-size: 11px;
+    color: var(--frame-text);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .outlineSmall:disabled {
+    color: var(--menu-dark-icon);
+    cursor: default;
+  }
+
+  .violetLink {
+    margin-inline-start: auto;
+    font-size: 11px;
+    color: var(--signal-ai);
+    text-decoration: none;
+  }
+
+  .violetLink[data-off] {
+    color: var(--menu-dark-icon);
+  }
+
+  /* ── The person ── */
+  .personHead {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+
+  .avatar {
+    flex: none;
+    inline-size: 30px;
+    block-size: 30px;
+    border-radius: 50%;
+    background-color: var(--copilot-well);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 30px;
+    text-align: center;
+    color: var(--copilot-initials);
+  }
+
+  .personName {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-inline-size: 0;
+    font-size: 12.5px;
+  }
+
+  .stats {
+    display: flex;
+    margin: 0;
+    padding-block-start: 11px;
+    border-block-start: var(--border-width-thin) solid var(--copilot-raised);
+  }
+
+  .stat {
+    flex: 1;
+  }
+
+  .stat dt {
+    font-size: 10.5px;
+    color: var(--menu-dark-icon);
+  }
+
+  .stat dd {
+    margin: 2px 0 0;
+    font-size: 13px;
+  }
+
+  .stat dd[data-tone='frustrated'] {
+    color: var(--menu-dark-danger);
+  }
+
+  .stat dd[data-tone='about_to_buy'] {
+    color: var(--copilot-positive);
+  }
+
+  .memory {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .fact dt {
+    font-size: 10.5px;
+    color: var(--menu-dark-icon);
+  }
+
+  .fact dd {
+    margin: 0;
+    color: var(--frame-text-body);
+  }
+
+  /* Background, not confirmed: quieter than what the AI is told outright. */
+  .fromBefore {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-inline-start: 10px;
+    border-inline-start: var(--border-width-thin) solid var(--copilot-raised);
+  }
+
+  .beforeFacts {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0;
+    padding-inline-start: 14px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--copilot-text-muted);
+  }
+
+  /* ── History ── */
+  .historyRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    inline-size: 100%;
+    padding: 11px 18px;
+    border: 0;
+    background: none;
+    font: inherit;
+    line-height: normal;
+    text-align: start;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .historyRow:disabled {
+    cursor: default;
+  }
+
+  .historyText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+    font-size: 12.5px;
+  }
+
+  .chevron {
+    font-size: 14px;
+    color: var(--menu-dark-icon);
+  }
+
+  .historyRow:dir(rtl) .chevron {
+    transform: scaleX(-1);
+  }
+
+  .drill {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 18px;
+    line-height: normal;
+  }
+
+  .back {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--signal-ai);
+    cursor: pointer;
+  }
+
+  .historyList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .historyItem {
+    inline-size: 100%;
+    padding: 9px 0;
+    border: 0;
+    border-block-end: var(--border-width-thin) solid var(--copilot-raised);
+    background: none;
+    font: inherit;
+    text-align: start;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .historyItem[data-current='yes'] {
+    background-color: var(--copilot-card-quiet);
+  }
+
+  .conversationFacts {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .channelMark {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 24px;
+    block-size: 24px;
+    border-radius: 7px;
+    background-color: var(--copilot-well);
+    color: var(--frame-text-body);
+  }
+
+  .summaryLine {
+    overflow: hidden;
+    font-size: 11.5px;
+    color: var(--menu-dark-icon);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .summary {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--copilot-text-strong);
+  }
+
+  .whole {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .wholeMessage {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background-color: var(--copilot-card);
+  }
+
+  .wholeMessage[data-direction='OUTBOUND'] {
+    background-color: var(--copilot-card-quiet);
+  }
+
+  .wholeBody {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--frame-text-body);
+    white-space: pre-wrap;
+  }
+
+  /* ── Ask Copilot anything… ── */
+  .ask {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 18px 14px;
+    border-block-start: var(--border-width-thin) solid var(--copilot-raised);
+    background-color: var(--copilot-input-surface);
+    line-height: normal;
+  }
+
+  .askField {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 13px;
+    border-radius: 11px;
+    background-color: var(--copilot-card);
+  }
+
+  .askInput {
+    flex: 1;
+    min-inline-size: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--frame-text);
+  }
+
+  .askInput::placeholder {
+    color: var(--menu-dark-icon);
+  }
+
+  .askInput:focus {
+    outline: none;
+  }
+
+  .askField:focus-within {
+    outline: var(--focus-ring-width) solid var(--signal-ai);
+  }
+
+  .askSend {
+    flex: none;
+    inline-size: 22px;
+    block-size: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background-color: var(--copilot-ask-mark);
+    cursor: pointer;
+  }
+
+  .askSend:enabled {
+    background-color: var(--signal-ai);
+  }
+
+  .askSend:disabled {
+    cursor: default;
+  }
+}

@@ -107,6 +107,12 @@ export const conversationRowSchema = z.object({
    */
   customerExternalId: z.string().nullable().default(null),
   /**
+   * The person this conversation is with — Backend is adding it (asked
+   * 2026-10-06, read-only, merged → target). Named now so it is not stripped
+   * the day it arrives; `null` until then, and the wall says "—" with why.
+   */
+  contactId: z.string().min(1).nullable().catch(null).default(null),
+  /**
    * The last message the CUSTOMER could have seen, flattened by the route
    * from a `take: 1` — and excluding FAILED sends, deliberately: *"a failed
    * outbound is a message the customer never received"*, so previewing it

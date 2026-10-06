@@ -65,6 +65,16 @@ export const suggestionsResponseSchema = z.object({
    * the one we happen to render.
    */
   copilotMode: z.string().default('READY_MESSAGE'),
+  /*
+   * Backend 9c5e96cc: the GET reads what is stored and never runs the model.
+   * Generation happens on a customer message, and these say where it is.
+   */
+  /** A customer message exists that these do not answer yet. */
+  stale: z.boolean().catch(false).default(false),
+  /** A generation is scheduled or running; `copilot.suggestions.updated` follows. */
+  generating: z.boolean().catch(false).default(false),
+  basedOnMessageId: z.string().nullable().catch(null).default(null),
+  generatedAt: z.string().nullable().catch(null).default(null),
 });
 export type SuggestionsResponse = z.infer<typeof suggestionsResponseSchema>;
 

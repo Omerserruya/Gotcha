@@ -226,5 +226,111 @@
       "minutes": "{count}m",
       "whyNone": "Nothing records why a conversation was passed to a person."
     }
+  },
+  "wall": {
+    "name": "Copilot",
+    "previous": "Previous",
+    "next": "Next",
+    "carousel": "carousel",
+    "nothingOpen": "Open a conversation to see what GOTCHA knows about the person in it.",
+    "activity": {
+      "title": "What it did",
+      "pending": "What GOTCHA is doing on this conversation, step by step, arrives with the AI-activity contract Backend is building.",
+      "stop": "stop",
+      "stopPending": "Stopping a running step arrives with the AI-activity contract. To stop the AI on this conversation, use Stop AI above."
+    },
+    "answers": {
+      "title": "{count, plural, =0 {Ways to answer} =1 {One way to answer} =2 {Two ways to answer} =3 {Three ways to answer} other {# ways to answer}}",
+      "position": "{at} of {count} open",
+      "reading": "Reading what GOTCHA would say…",
+      "waiting": "Suggestions come when the customer writes.",
+      "writing": "Writing suggestions…",
+      "stale": "The customer wrote since — new ones are on the way.",
+      "recommended": "Recommended",
+      "another": "Another way",
+      "use": "Use this",
+      "useTitle": "Puts this reply in the box below. Nothing is sent until you press Send.",
+      "edit": "Edit",
+      "editTitle": "Puts this reply in the box below, selected, to change. Nothing is sent.",
+      "retry": "Try again",
+      "trying": "Asking…",
+      "wait": "Try again in {seconds}s",
+      "waitUnnamed": "Just refreshed — try again in a moment."
+    },
+    "orders": {
+      "title": "Orders",
+      "number": "Order #{number}",
+      "position": "{at} of {count}",
+      "carousel": "orders",
+      "noImage": "The store sent no image for this item.",
+      "more": "+{count} more",
+      "cancelled": "Cancelled",
+      "refund": "Refund",
+      "replace": "Replace",
+      "track": "Track",
+      "noTracking": "No tracking link on this order yet.",
+      "shopify": "Open in Shopify ↗",
+      "noShopify": "The store sent no admin link for this order."
+    },
+    "person": {
+      "unnamed": "No name on record",
+      "since": "Since {date}",
+      "profile": "Profile ↗",
+      "noContact": "This conversation does not name its customer yet, so their profile can’t be read. Backend is adding it.",
+      "unread": "Couldn’t read this just now.",
+      "lifetime": "Lifetime",
+      "orders": "Orders",
+      "refunds": "Refunds",
+      "mood": "Mood",
+      "none": "None",
+      "refundsPartial": "Only some of their orders were read, so refunds can’t be counted.",
+      "noMood": "GOTCHA hasn’t read a mood in their messages.",
+      "moods": {
+        "frustrated": "Upset",
+        "about_to_buy": "About to buy"
+      },
+      "noFacts": "GOTCHA hasn’t learned anything about this customer yet.",
+      "learned": "What GOTCHA learned",
+      "howItLearns": "It learns from what they say in conversations, and from what your team enters about them.",
+      "fromBefore": "From before",
+      "fromBeforeTitle": "Learned from an imported history — background, not confirmed.",
+      "source": {
+        "conversation": "from a conversation",
+        "person": "entered by a person",
+        "crm": "from your CRM",
+        "worked_out": "worked out"
+      }
+    },
+    "history": {
+      "title": "History across all channels",
+      "none": "No other conversations with this person.",
+      "back": "‹ Back",
+      "count": "{count, plural, =1 {1 conversation} other {# conversations}}",
+      "calls": "{count, plural, =1 {1 call} other {# calls}}",
+      "more": "Showing the newest {shown} of {total}.",
+      "thisOne": "this one",
+      "noSummary": "No summary yet",
+      "openWhole": "Open the whole conversation",
+      "reading": "Reading the conversation…",
+      "wholeFailed": "Couldn’t read this conversation just now.",
+      "wholeLabel": "The whole conversation, to read",
+      "customer": "Customer",
+      "yourSide": "Your side",
+      "attachment": "An attachment"
+    },
+    "ask": {
+      "placeholder": "Ask Copilot anything…",
+      "label": "Ask Copilot",
+      "title": "GOTCHA answers by writing a reply into the box below. Nothing is sent to the customer.",
+      "nothingOpen": "Open a conversation to ask about it.",
+      "send": "Ask",
+      "asking": "Asking…",
+      "failed": {
+        "empty": "Write a question first.",
+        "blank": "GOTCHA had nothing to write for that.",
+        "units_exhausted": "The workspace has used its AI units. Someone with an admin role can top up.",
+        "failed": "Couldn’t reach GOTCHA just now. Nothing was sent."
+      }
+    }
   }
 }

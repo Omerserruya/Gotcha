@@ -1,0 +1,324 @@
+import { getFormatter, getTranslations } from 'next-intl/server';
+
+import { orderToExpand, ordersIn, type Money } from '@/api/contracts/customer-orders';
+import { UserText } from '@/design-system/primitives/text/UserText';
+import { Link } from '@/i18n/navigation';
+
+import { initials } from '../initials';
+import type { ConversationDetail } from '../load-inbox';
+import { loadWallPerson, type WallMemory, type WallPerson } from './load-wall';
+import { OrdersCarousel } from './OrdersCarousel';
+import { SuggestionCarousel } from './SuggestionCarousel';
+import { WallBody } from './WallBody';
+import { factLabel, firstOrder, refundCount } from './wall-model';
+import styles from './Wall.module.css';
+
+/**
+ * 02 Inbox's dark right-hand wall, top to bottom (Omer, 2026-10-06):
+ *
+ *   header      Copilot · Working on this · stop             → WallHeader
+ *   what it did steps, dots, results                         → ActivityStrip
+ *   answers     Three ways to answer · 1 of 3                → SuggestionCarousel
+ *   order       Order #1842 · 2 of 6 ‹ ›                     → OrdersCarousel
+ *   person      name, since, Lifetime/Orders/Refunds/Mood     → PersonBlock
+ *   history     History across all channels ›                → WallBody
+ *   ask         Ask Copilot anything…                        → AskCopilot
+ *
+ * ★ Where a value has no source yet the element keeps its shape and says
+ *   "—", with a title naming what it waits for. Never a zero, never a guess.
+ */
+
+/** 02's 45px header. The live AI-activity contract is Backend's, pending. */
+export async function WallHeader() {
+  const t = await getTranslations('inbox.wall');
+  return (
+    <div className={styles.header} data-testid="wall-header">
+      <span className={styles.dot} aria-hidden="true" />
+      <span className={styles.headerName}>{t('name')}</span>
+      <span className={styles.headerState} title={t('activity.pending')} data-testid="wall-working">
+        —
+      </span>
+      <button
+        type="button"
+        className={styles.textButton}
+        disabled
+        title={t('activity.stopPending')}
+        data-testid="wall-stop"
+      >
+        {t('activity.stop')}
+      </button>
+    </div>
+  );
+}
+
+/** "What it did · 5 steps · 4s", in shape: the steps arrive with the activity contract. */
+export async function ActivityStrip() {
+  const t = await getTranslations('inbox.wall.activity');
+  return (
+    <section className={styles.activity} data-testid="wall-activity" title={t('pending')}>
+      <div className={styles.activityHead}>
+        <span>{t('title')}</span>
+        <span className={styles.rule} aria-hidden="true" />
+        <span>—</span>
+      </div>
+      <div className={styles.step}>
+        <span className={styles.stepDot} aria-hidden="true" />
+        <span className={styles.stepText}>—</span>
+      </div>
+    </section>
+  );
+}
+
+/** The wall's body for one open conversation. */
+export async function CopilotWall({
+  detail,
+  conversation,
+}: {
+  readonly detail: Promise<ConversationDetail>;
+  readonly conversation: {
+    readonly id: string;
+    /** Backend is adding it to the row (asked 2026-10-06); `null` until then. */
+    readonly contactId: string | null;
+    readonly customerName: string | null;
+  };
+}) {
+  const { timeline, orders } = await detail;
+  const contactId = conversation.contactId ?? timeline?.contact?.id ?? null;
+  const person = await loadWallPerson(contactId, conversation.id);
+  const t = await getTranslations('inbox.wall.person');
+  const cards = ordersIn(orders);
+
+  return (
+    <WallBody history={person.history} why={contactId === null ? t('noContact') : t('unread')}>
+      <ActivityStrip />
+      <SuggestionCarousel conversationId={conversation.id} />
+      <OrdersCarousel
+        state={orders?.state ?? null}
+        missing={orders?.missing ?? []}
+        orders={cards}
+        start={firstOrder(cards, orderToExpand(cards))}
+        conversationId={conversation.id}
+      />
+      <PersonBlock
+        name={timeline?.contact?.displayName ?? conversation.customerName}
+        contactId={contactId}
+        person={person}
+        shop={orders?.state === 'ok' ? (orders.data?.summary ?? orders.summary ?? null) : null}
+        createdAt={timeline?.contact?.createdAt ?? null}
+        refunds={refundCount(
+          cards,
+          orders?.state === 'ok' ? (orders.data?.summary?.orderCount ?? null) : null,
+        )}
+      />
+    </WallBody>
+  );
+}
+
+async function PersonBlock({
+  name,
+  contactId,
+  person,
+  shop,
+  createdAt,
+  refunds,
+}: {
+  readonly name: string | null;
+  readonly contactId: string | null;
+  readonly person: WallPerson;
+  /** The store's own summary of this person, through the conversation's link. */
+  readonly shop: {
+    readonly orderCount: number;
+    readonly shopCurrencyTotal?: Money | null;
+    readonly customerSince?: string | null;
+    readonly defaultAddress?: string | null;
+  } | null;
+  readonly createdAt: string | null;
+  readonly refunds: number | null;
+}) {
+  const t = await getTranslations('inbox.wall.person');
+  const format = await getFormatter();
+
+  const money = (amount: number, currency: string) =>
+    format.number(amount, { style: 'currency', currency, maximumFractionDigits: 0 });
+
+  /*
+   * The store's summary first: it is the same read as the order carousel
+   * above, so the two cannot disagree. The bulk facts only when there is a
+   * contact to read them for.
+   */
+  const facts = typeof person.commerce === 'object' ? person.commerce : null;
+  const lifetime =
+    shop?.shopCurrencyTotal?.amount != null && shop.shopCurrencyTotal.currency
+      ? money(shop.shopCurrencyTotal.amount, shop.shopCurrencyTotal.currency)
+      : facts && facts.currency
+        ? money(facts.lifetimeValue, facts.currency)
+        : null;
+  const orders = shop ? shop.orderCount : facts ? facts.orderCount : null;
+  const since = shop?.customerSince ?? createdAt;
+  const why = contactId === null ? t('noContact') : t('unread');
+
+  return (
+    <section className={styles.person} data-testid="wall-person">
+      <div className={styles.personHead}>
+        <span className={styles.avatar} aria-hidden="true">
+          {initials(name)}
+        </span>
+        <span className={styles.personName}>
+          <span>{name?.trim() ? <UserText>{name}</UserText> : t('unnamed')}</span>
+          <span className={styles.meta} data-testid="wall-person-since">
+            {since ? (
+              t('since', {
+                date: format.dateTime(new Date(since), { month: 'long', year: 'numeric' }),
+              })
+            ) : (
+              <span title={why}>—</span>
+            )}
+            {shop?.defaultAddress ? (
+              <>
+                {' · '}
+                <UserText>{shop.defaultAddress}</UserText>
+              </>
+            ) : null}
+          </span>
+        </span>
+        {contactId ? (
+          <Link
+            className={styles.violetLink}
+            href={`/customers/${contactId}`}
+            data-testid="wall-profile"
+          >
+            {t('profile')}
+          </Link>
+        ) : (
+          <span className={styles.violetLink} data-off="" title={t('noContact')}>
+            {t('profile')}
+          </span>
+        )}
+      </div>
+
+      <dl className={styles.stats}>
+        <Stat label={t('lifetime')} value={lifetime} why={why} testid="lifetime" />
+        <Stat
+          label={t('orders')}
+          value={orders === null ? null : format.number(orders)}
+          why={why}
+          testid="orders"
+        />
+        <Stat
+          label={t('refunds')}
+          value={refunds === null ? null : refunds === 0 ? t('none') : format.number(refunds)}
+          why={t('refundsPartial')}
+          testid="refunds"
+        />
+        <Stat
+          label={t('mood')}
+          value={person.mood ? t(`moods.${person.mood}`) : null}
+          why={contactId === null ? t('noContact') : t('noMood')}
+          tone={person.mood ?? undefined}
+          testid="mood"
+        />
+      </dl>
+
+      <Memory memory={person.memory} />
+    </section>
+  );
+}
+
+/**
+ * What GOTCHA learned — exactly what the AI is given (Backend cd504002, the
+ * prompt's own loaders): the facts it is told not to ask again, each with a
+ * quiet word on where it came from; then "From before", an imported
+ * history's summary, marked as background rather than confirmed.
+ */
+async function Memory({ memory }: { readonly memory: WallMemory | null }) {
+  const t = await getTranslations('inbox.wall.person');
+  if (memory === null) {
+    return (
+      <p className={styles.note} data-testid="wall-memory-unread" title={t('unread')}>
+        {t('learned')} · —
+      </p>
+    );
+  }
+  if (memory.facts.length === 0 && memory.historical === null) {
+    return (
+      <div data-testid="wall-memory-none">
+        <p className={styles.note}>{t('noFacts')}</p>
+        <p className={styles.note}>{t('howItLearns')}</p>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.memory} data-testid="wall-memory">
+      {memory.facts.length > 0 ? (
+        <dl className={styles.facts} aria-label={t('learned')}>
+          {memory.facts.map((fact, i) => (
+            <div
+              key={`${fact.key}-${i}`}
+              className={styles.fact}
+              data-testid={`wall-fact-${fact.key}`}
+            >
+              <dt>{factLabel(fact.key)}</dt>
+              <dd>
+                <UserText>{fact.value}</UserText>
+                {fact.source ? (
+                  <span className={styles.meta}>
+                    {' · '}
+                    {t(`source.${fact.source}`)}
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {memory.historical ? (
+        <div className={styles.fromBefore} data-testid="wall-memory-before">
+          <span className={styles.meta} title={t('fromBeforeTitle')}>
+            {t('fromBefore')}
+          </span>
+          {memory.historical.summary ? (
+            <p className={styles.note}>
+              <UserText>{memory.historical.summary}</UserText>
+            </p>
+          ) : null}
+          {memory.historical.facts.length > 0 ? (
+            <ul className={styles.beforeFacts}>
+              {memory.historical.facts.map((fact, i) => (
+                <li key={i}>
+                  <UserText>{fact}</UserText>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  why,
+  tone,
+  testid,
+}: {
+  readonly label: string;
+  readonly value: string | null;
+  readonly why: string;
+  readonly tone?: string;
+  readonly testid: string;
+}) {
+  return (
+    <div className={styles.stat}>
+      <dt>{label}</dt>
+      <dd
+        data-testid={`wall-stat-${testid}`}
+        data-tone={tone}
+        title={value === null ? why : undefined}
+      >
+        {value ?? '—'}
+      </dd>
+    </div>
+  );
+}

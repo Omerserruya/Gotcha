@@ -19,3 +19,21 @@ export interface ReplyTarget {
 export function replyTo(target: ReplyTarget): void {
   window.dispatchEvent(new CustomEvent<ReplyTarget>(REPLY_TO_EVENT, { detail: target }));
 }
+
+/**
+ * The Copilot wall → the composer: put this text in the reply box. "Use
+ * this", "Edit" and "Ask Copilot" all land here; nothing is ever sent by it.
+ */
+export const FILL_COMPOSER_EVENT = 'gotcha:fill-composer';
+
+export interface ComposerFill {
+  readonly text: string;
+  /** Edit: the text selected, to be changed. Otherwise the caret at its end. */
+  readonly select?: boolean;
+}
+
+export function fillComposer(text: string, { select = false }: { select?: boolean } = {}): void {
+  window.dispatchEvent(
+    new CustomEvent<ComposerFill>(FILL_COMPOSER_EVENT, { detail: { text, select } }),
+  );
+}

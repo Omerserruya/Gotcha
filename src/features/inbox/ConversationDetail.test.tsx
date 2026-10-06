@@ -3,11 +3,7 @@ import { readFileSync } from 'node:fs';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { CustomerOrders } from '@/features/customers/CustomerOrders';
-
-import { ConversationContext, ConversationStream, OrdersChip } from './ConversationDetail';
-import { CopilotPanel } from './CopilotPanel';
-import { IdentityPanel } from './IdentityPanel';
+import { ConversationStream, OrdersChip } from './ConversationDetail';
 import type { ConversationDetail } from './load-inbox';
 import { MessageStream } from './MessageStream';
 import { StreamPin } from './StreamPin';
@@ -30,7 +26,6 @@ const detail = (over: Partial<ConversationDetail> = {}): Promise<ConversationDet
     messages: [],
     timeline: null,
     orders: null,
-    copilot: { state: 'unavailable' },
     ...over,
   } as ConversationDetail);
 
@@ -47,7 +42,7 @@ const propsIn = <T,>(tree: ReactNode, type: unknown): T | null => {
   return found;
 };
 
-describe('★★ ConversationStream — the stream, the pin and the Copilot strip', () => {
+describe('★★ ConversationStream — the stream and the pin', () => {
   it('★★ hands the messages and the channel to the stream', async () => {
     const messages = [{ id: 'm1' }] as never;
     const tree = await ConversationStream({
@@ -67,44 +62,6 @@ describe('★★ ConversationStream — the stream, the pin and the Copilot stri
       channel: null,
     });
     expect(propsIn<{ conversationId: string }>(tree, StreamPin)?.conversationId).toBe('c7');
-  });
-
-  it('★ and gives the Copilot strip its read', async () => {
-    const copilot = { state: 'ok', suggestions: [] } as never;
-    const tree = await ConversationStream({
-      detail: detail({ copilot }),
-      conversationId: 'c7',
-      channel: null,
-    });
-    expect(propsIn<{ read: unknown }>(tree, CopilotPanel)?.read).toBe(copilot);
-  });
-});
-
-describe('★★ ConversationContext — 04d’s orders and who this is', () => {
-  const conversation = {
-    id: 'c7',
-    contactName: 'Dana',
-    channel: 'WHATSAPP',
-    customerExternalId: '+972500000000',
-  };
-
-  it('★★ the orders the page already read, and the conversation to act through', async () => {
-    const orders = { state: 'ok', data: {} } as never;
-    const tree = await ConversationContext({ detail: detail({ orders }), conversation });
-    const props = propsIn<{ orders: unknown; conversationId: unknown }>(tree, CustomerOrders);
-    expect(props?.orders).toBe(orders);
-    expect(props?.conversationId).toBe('c7');
-  });
-
-  it('★ the identity panel gets the timeline and the handle', async () => {
-    const timeline = { entries: [] } as never;
-    const tree = await ConversationContext({ detail: detail({ timeline }), conversation });
-    const props = propsIn<{ timeline: unknown; conversation: { customerExternalId: string } }>(
-      tree,
-      IdentityPanel,
-    );
-    expect(props?.timeline).toBe(timeline);
-    expect(props?.conversation.customerExternalId).toBe('+972500000000');
   });
 });
 

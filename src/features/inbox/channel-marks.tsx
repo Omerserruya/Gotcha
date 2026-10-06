@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Globe, Mail, MessageCircle, MessagesSquare, type LucideProps } from 'lucide-react';
+import { Globe, Mail, MessageCircle, MessagesSquare, Phone, type LucideProps } from 'lucide-react';
 
 /*
  * The channel marks — which glyph and which tint each channel wears. Lifted
@@ -71,6 +71,8 @@ const CHANNEL_MARKS = {
      globe before, which is web chat's mark. */
   MESSENGER: { Icon: MessagesSquare, tone: 'messenger' },
   WEBCHAT: { Icon: Globe, tone: 'web' },
+  /* The wall's history lists calls beside chats; a globe would call one a website. */
+  VOICE: { Icon: Phone, tone: 'web' },
 } as const;
 
 export function channelMark(channel: string | null): {

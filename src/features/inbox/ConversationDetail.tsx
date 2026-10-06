@@ -1,10 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
-import { CustomerOrders } from '@/features/customers/CustomerOrders';
-
 import { orderCountOf } from './ConversationHeader';
-import { CopilotPanel } from './CopilotPanel';
-import { IdentityPanel } from './IdentityPanel';
 import type { ConversationDetail } from './load-inbox';
 import { MessageStream } from './MessageStream';
 import { StreamPin } from './StreamPin';
@@ -30,7 +26,7 @@ import styles from './Inbox.module.css';
  *   calling them directly.
  */
 
-/** The stream, the Copilot's strip under it, and the pin to its latest message. */
+/** The stream and the pin to its latest message. The suggestions are the wall's now. */
 export async function ConversationStream({
   detail,
   conversationId,
@@ -40,42 +36,12 @@ export async function ConversationStream({
   readonly conversationId: string;
   readonly channel: string | null;
 }) {
-  const { messages, copilot } = await detail;
+  const { messages } = await detail;
   return (
     <>
       <MessageStream messages={messages} channel={channel} />
       {/* After the stream, because it scrolls the stream: it must exist. */}
       <StreamPin conversationId={conversationId} />
-      <CopilotPanel read={copilot} />
-    </>
-  );
-}
-
-/** The Copilot wall's contents: who this is, and their orders. */
-export async function ConversationContext({
-  detail,
-  conversation,
-}: {
-  readonly detail: Promise<ConversationDetail>;
-  readonly conversation: {
-    readonly id: string;
-    readonly contactName: string | null;
-    readonly channel: string | null;
-    readonly customerExternalId: string | null;
-  };
-}) {
-  const { timeline, orders } = await detail;
-  return (
-    <>
-      <IdentityPanel
-        timeline={timeline}
-        conversation={{
-          contactName: conversation.contactName,
-          channel: conversation.channel,
-          customerExternalId: conversation.customerExternalId,
-        }}
-      />
-      <CustomerOrders orders={orders} conversationId={conversation.id} />
     </>
   );
 }

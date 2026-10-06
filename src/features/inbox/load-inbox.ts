@@ -21,7 +21,6 @@ import { currentUserSchema } from '@/api/contracts/identity';
 import { authEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { z } from 'zod';
-import { loadCopilot, type CopilotRead } from './load-copilot';
 
 /**
  * What screen 02 reads.
@@ -128,8 +127,12 @@ export interface ConversationDetail {
   readonly messages: readonly InboxMessage[] | null;
   readonly timeline: CustomerTimeline | null;
   readonly orders: CommerceContextResponse | null;
-  /** Never `null`: `loadCopilot` returns which KIND of nothing it got. */
-  readonly copilot: CopilotRead;
+  /*
+   * ⚠ NO SUGGESTIONS HERE. This promise is re-run on every `router.refresh()`
+   *   — a delivery change, a new message — and Omer's rule is one read on
+   *   open, then only the realtime event or "Try again". The wall's
+   *   `SuggestionCarousel` reads them itself.
+   */
 }
 
 export interface InboxData {
@@ -336,7 +339,7 @@ export async function loadInbox(
 export async function loadConversation(conversationId: string): Promise<ConversationDetail> {
   const api = serverApi();
   const open = { id: conversationId };
-  const [messages, timeline, orders, copilot] = await Promise.all([
+  const [messages, timeline, orders] = await Promise.all([
     api
       .get({ endpoint: inboxEndpoints.messages(open.id), payload: streamPageSchema, raw: true })
       .then((page) => page.data)
@@ -378,19 +381,7 @@ export async function loadConversation(conversationId: string): Promise<Conversa
         logger.warn('inbox.orders_failed', { cause });
         return null;
       }),
-    /*
-     * ★★ A PEER, AND ITS 402 IS AN ORDINARY STATE.
-     *
-     * `requireEntitlement('ai.copilot')` refuses this for any tenant whose plan
-     * does not include Copilot — which is Foundation, a plan the company sells.
-     * So the read must not take the conversation down with it, and its refusal
-     * must not be read as the whole tenant being gated, which is what
-     * `tenantGateFrom` used to do with it.
-     *
-     * `loadCopilot` owns that distinction and never throws.
-     */
-    loadCopilot(open.id),
   ]);
 
-  return { messages, timeline, orders, copilot };
+  return { messages, timeline, orders };
 }

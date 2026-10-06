@@ -86,6 +86,12 @@ export function useRealtimeEvent(type: RealtimeEventType, listener: RealtimeList
  * the server render right for free - there is no socket during SSR, so the
  * server snapshot is always `idle`.
  */
+/** Be in this conversation's room while mounted — where its own events are sent. */
+export function useConversationRoom(conversationId: string): void {
+  const transport = useContext(RealtimeContext);
+  useEffect(() => transport?.joinConversation(conversationId), [transport, conversationId]);
+}
+
 export function useRealtimeConnectionState(): ConnectionState {
   const transport = useContext(RealtimeContext);
 

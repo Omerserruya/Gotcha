@@ -161,6 +161,25 @@ describe('★★ the entitlement gate’s own fields survive the envelope', () =
     expect(api.current).toBe(3);
   });
 
+  it('★★ keeps a 429’s own wait — the Copilot refresh says how long (9c5e96cc)', async () => {
+    respond(429, {
+      error: 'Suggestions were just refreshed. Try again in a moment.',
+      code: 'REFRESH_RATE_LIMITED',
+      retryAfterSeconds: 12,
+    });
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.status).toBe(429);
+    expect(api.code).toBe('REFRESH_RATE_LIMITED');
+    expect(api.retryAfterSeconds).toBe(12);
+  });
+
+  it('★ a bad wait is no wait — not an error body we could not read', async () => {
+    respond(429, { code: 'REFRESH_RATE_LIMITED', retryAfterSeconds: 'soon' });
+    const api = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(api.code).toBe('REFRESH_RATE_LIMITED');
+    expect(api.retryAfterSeconds).toBeUndefined();
+  });
+
   it('★ keeps a null `currentPlan`, which means the tenant has no plan at all', async () => {
     /*
      * `.nullable()` and not just `.optional()`: the resolver sends an explicit

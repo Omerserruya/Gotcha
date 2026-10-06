@@ -145,7 +145,8 @@
       "payment": "תשלום",
       "returns": "החזרות",
       "returnsValue": "{count, plural, =0 {אין} other {# הוחזרו או בוטלו}}"
-    }
+    },
+    "notPossible": "זה לא אפשרי להזמנה הזו."
   },
   "actions": {
     "title": "מה נעשה כאן",

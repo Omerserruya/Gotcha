@@ -99,6 +99,8 @@ export interface ApiErrorInit {
   /** Limit breaches only. */
   readonly limit?: number;
   readonly current?: number;
+  /** A 429's own wait, where the route sends one (`REFRESH_RATE_LIMITED`). */
+  readonly retryAfterSeconds?: number;
   readonly cause?: unknown;
 }
 
@@ -124,6 +126,8 @@ export class ApiError extends Error {
   readonly currentPlan?: string | null;
   readonly limit?: number;
   readonly current?: number;
+  /** A 429's own wait, where the route sends one (`REFRESH_RATE_LIMITED`). */
+  readonly retryAfterSeconds?: number;
 
   constructor(init: ApiErrorInit) {
     super(init.developerMessage ?? init.kind, { cause: init.cause });
@@ -148,6 +152,7 @@ export class ApiError extends Error {
     this.currentPlan = init.currentPlan;
     this.limit = init.limit;
     this.current = init.current;
+    this.retryAfterSeconds = init.retryAfterSeconds;
   }
 
   /**

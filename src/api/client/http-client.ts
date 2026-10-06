@@ -105,6 +105,7 @@ async function readErrorBody(response: Response): Promise<{
   currentPlan?: string | null;
   limit?: number;
   current?: number;
+  retryAfterSeconds?: number;
 }> {
   let raw: unknown;
   try {
@@ -130,6 +131,7 @@ async function readErrorBody(response: Response): Promise<{
     currentPlan: parsed.data.currentPlan,
     limit: parsed.data.limit,
     current: parsed.data.current,
+    retryAfterSeconds: parsed.data.retryAfterSeconds,
   };
 }
 
@@ -206,6 +208,7 @@ export class HttpClient {
         currentPlan,
         limit,
         current,
+        retryAfterSeconds,
       } = await readErrorBody(response);
       const error = fail({
         /*
@@ -233,6 +236,7 @@ export class HttpClient {
         currentPlan,
         limit,
         current,
+        retryAfterSeconds,
         requestId: effectiveRequestId,
       });
       if (error.kind === 'authentication') {

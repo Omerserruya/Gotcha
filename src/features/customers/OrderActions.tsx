@@ -46,9 +46,20 @@ import styles from './Customers.module.css';
 export function OrderActions({
   order,
   conversationId,
+  only,
+  label,
+  buttonClassName,
 }: {
   readonly order: OrderCard;
   readonly conversationId: string;
+  /**
+   * The Inbox wall's fixed set (02: Refund · Replace). Each is drawn whether
+   * or not this order allows it — disabled, with the platform's reason as
+   * its title, when it does not — so the wall's row has one shape.
+   */
+  readonly only?: readonly OrderAction[];
+  readonly label?: (action: OrderAction) => string;
+  readonly buttonClassName?: string;
 }) {
   const t = useTranslations('customers');
   const [result, setResult] = useState<OrderActionResult | null>(null);
@@ -83,7 +94,9 @@ export function OrderActions({
     order.eligibility.exchangeable ? 'exchange_item' : null,
   ].filter((a): a is OrderAction => a !== null);
 
-  if (possible.length === 0) {
+  const shown = only ?? possible;
+
+  if (!only && possible.length === 0) {
     return order.eligibility.reasonIfNot ? (
       <p className={styles.orderCan} data-testid={`order-why-not-${order.orderId}`}>
         {order.eligibility.reasonIfNot}
@@ -113,11 +126,16 @@ export function OrderActions({
 
   return (
     <div className={styles.orderActions} data-testid={`order-actions-${order.orderId}`}>
-      {possible.map((action) => (
+      {shown.map((action) => (
         <button
           key={action}
           type="button"
-          className={styles.orderAction}
+          className={buttonClassName ?? styles.orderAction}
+          title={
+            possible.includes(action)
+              ? undefined
+              : (order.eligibility.reasonIfNot ?? t('orders.notPossible'))
+          }
           data-testid={`order-action-${order.orderId}-${action}`}
           /*
            * Disabled once anything has been attempted on this order. The
@@ -125,10 +143,12 @@ export function OrderActions({
            * action already waiting for a human is a second request for the
            * same money.
            */
-          disabled={isPending || attempted}
+          disabled={isPending || attempted || !possible.includes(action)}
           onClick={() => run(action)}
         >
-          {isPending ? t('orders.running') : t(`orders.action.${action}` as 'orders.action.cancel')}
+          {isPending
+            ? t('orders.running')
+            : (label?.(action) ?? t(`orders.action.${action}` as 'orders.action.cancel'))}
         </button>
       ))}
 

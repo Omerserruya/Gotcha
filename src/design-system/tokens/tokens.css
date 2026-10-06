@@ -343,6 +343,15 @@
     --copilot-card: #1f1f1f;
     /* 05e's "Say this" card: a violet edge on the dark panel. */
     --copilot-say-edge: #3a3457;
+    /* 02's wall: a reply card folded below the open one, a step under --copilot-card. */
+    --copilot-card-quiet: #1c1c1c;
+    /* 02's wall: the order's image well and the person's avatar. */
+    --copilot-well: #2a2a2a;
+    --copilot-initials: #c4bfb7;
+    /* 02's wall: "Paid" — a lighter green than --signal-done, read on #171717. */
+    --copilot-positive: #b9d188;
+    /* 02's wall: the mark at the end of "Ask Copilot anything…". */
+    --copilot-ask-mark: #2e2a3f;
     /* 05e's "End call": the one destructive control on a live call. */
     --danger-action: #c0442a;
     --danger-action-text: #fff;

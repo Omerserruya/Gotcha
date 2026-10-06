@@ -94,3 +94,41 @@ export async function composeDraft(
     return { ok: false, reason: 'failed' };
   }
 }
+
+/**
+ * The wall's "Ask Copilot anything": the agent's own words as the instruction,
+ * with this conversation. The route drafts ONE outbound message —
+ * it answers questions by writing the reply — and nothing is sent: the text
+ * goes into the composer for a person to read.
+ */
+export async function askCopilot(
+  conversationId: string,
+  instruction: string,
+): Promise<ComposeResult> {
+  const asked = instruction.trim();
+  if (asked === '') return { ok: false, reason: 'empty' };
+  try {
+    const { text } = await serverApi().post({
+      endpoint: inboxEndpoints.compose(),
+      payload: composed,
+      body: {
+        instruction: asked.slice(0, 1000),
+        surface: 'inbox',
+        conversationId,
+      },
+      timeoutMs: 60_000,
+    });
+    return text.trim() === '' ? { ok: false, reason: 'blank' } : { ok: true, text: text.trim() };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    // An agent's words about a customer: never logged.
+    logger.warn('inbox.ask_failed', {
+      conversationId,
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (isApiError(cause) && cause.developerMessage?.startsWith('ai_units:')) {
+      return { ok: false, reason: 'units_exhausted' };
+    }
+    return { ok: false, reason: 'failed' };
+  }
+}

@@ -145,7 +145,8 @@
       "payment": "Payment",
       "returns": "Returns",
       "returnsValue": "{count, plural, =0 {None} other {# refunded or cancelled}}"
-    }
+    },
+    "notPossible": "That isn’t possible for this order."
   },
   "actions": {
     "title": "What was done here",

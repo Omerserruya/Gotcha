@@ -851,6 +851,14 @@ export const customerEndpoints = {
    */
   identityInsights: (id: string) => endpoint('/api/identity/{id}/insights', { id }),
   /**
+   * Backend ed8f3e1f — every channel's conversations for one person, newest
+   * first, each with its stored one-line summary. `?limit=&current=<id>` marks
+   * the open one `isCurrent`. `{ data, total, hasMore }`; `total` counts only
+   * what this viewer may see. 404: no such contact.
+   */
+  conversations: (contactId: string) =>
+    endpoint('/api/identity/{contactId}/conversations', { contactId }),
+  /**
    * The written character summary. A **POST**, and it requires a
    * `conversationId` — customer-level intelligence behind a
    * conversation-shaped door, so 04b passes this person's most recent
@@ -1303,6 +1311,21 @@ export const inboxEndpoints = {
    */
   suggestions: (conversationId: string) =>
     endpoint('/api/ai-assist/{conversationId}/suggestions', { conversationId }),
+  /**
+   * POST `{ locale? }` — the agent's "Try again", and nothing else ever calls
+   * it (Backend 9c5e96cc). 15s per conversation, 20 per agent per 10 min:
+   * 429 `REFRESH_RATE_LIMITED` with `retryAfterSeconds`.
+   */
+  /**
+   * Backend cd504002 — what the AI is GIVEN about this customer, from the
+   * same loaders the prompt renders from: `{ data: { conversationId, facts:
+   * [{key, value, confidence, source, observedAt}], historical: { summary,
+   * facts } | null } }`. Keyed on the conversation; 404 outside the tenant.
+   */
+  customerMemory: (conversationId: string) =>
+    endpoint('/api/ai-assist/{conversationId}/customer-memory', { conversationId }),
+  suggestionsRefresh: (conversationId: string) =>
+    endpoint('/api/ai-assist/{conversationId}/suggestions/refresh', { conversationId }),
 
   /**
    * Drafts or refines ONE outbound message from a plain-language instruction.

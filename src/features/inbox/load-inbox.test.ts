@@ -19,7 +19,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 vi.mock('server-only', () => ({}));
-vi.mock('./load-copilot', () => ({ loadCopilot: async () => null }));
 
 /** A promise this test decides when to settle, per endpoint path. */
 const pending = new Map<string, (value: unknown) => void>();
