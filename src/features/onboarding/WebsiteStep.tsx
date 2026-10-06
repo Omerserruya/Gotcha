@@ -1,11 +1,12 @@
 'use client';
 
-import { Camera, FileText, Globe, Languages, MessageCircle, ShoppingBag } from 'lucide-react';
+import { FileText, Globe, Languages, MessageCircle, ShoppingBag } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { languageNames, siteHost, type Discovery } from '@/api/contracts/onboarding';
 import { industryReading } from '@/api/contracts/workspace';
+import { InstagramGlyph } from '@/features/inbox/channel-marks';
 import { useRouter } from '@/i18n/navigation';
 import { brandMark, brandName } from '@/lib/brand-mark';
 
@@ -220,7 +221,7 @@ export function WebsiteStep({
         <span className={styles.sources}>
           {(
             [
-              ['instagram', Camera],
+              ['instagram', InstagramGlyph],
               ['catalogue', FileText],
               ['yourself', MessageCircle],
             ] as const

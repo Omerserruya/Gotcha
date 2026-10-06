@@ -1,8 +1,11 @@
 import { Lock } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-import { isConnected, type Integration } from '@/api/contracts/integrations';
+import { isFailing, type Integration } from '@/api/contracts/integrations';
 import { ConnectFor } from '@/features/capabilities/ConnectFor';
+import { OAuthButton } from '@/features/capabilities/OAuthButton';
+import { oauthHere } from '@/features/capabilities/oauth';
+import { WooConnect } from '@/features/capabilities/WooConnect';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
 import { Link } from '@/i18n/navigation';
@@ -22,6 +25,22 @@ export const TRUTH_SYSTEMS = [
 /** 00g's write actions - what GOTCHA may change in the store. */
 const ACTIONS = ['address', 'cancel', 'refund', 'prices'] as const;
 const STANCES = ['allowed', 'ask', 'never'] as const;
+
+export type Standing = 'connected' | 'failing' | 'none';
+
+/**
+ * Where a system stands. A connection ROW is not a connection: an ERROR
+ * row, a failed test or a stored error needs reconnecting (dev: Shopify's
+ * row was ERROR, its lastError an OAuth error page, and 00g said
+ * "Connected"). Connected is CONNECTED and not failing; anything else - no
+ * row, or one still pending - is not connected yet.
+ */
+export function standingOf(integration: Integration | null): Standing {
+  const connection = integration?.tenantConnection ?? null;
+  if (!connection) return 'none';
+  if (isFailing(connection)) return 'failing';
+  return connection.status === 'CONNECTED' ? 'connected' : 'none';
+}
 
 /**
  * 00g - Source of truth (design 6). One system in the card - the one the
@@ -56,9 +75,9 @@ export function TruthStep({
   const of = (slug: string) => integrations?.find((i) => i.slug === slug) ?? null;
   const nameOf = (slug: string) => of(slug)?.name || t(`systems.${slug}`);
   const integration = of(selected);
-  const connected = integration !== null && isConnected(integration);
+  const standing = standingOf(integration);
   const anyConnected = (integrations ?? []).some(
-    (i) => (TRUTH_SYSTEMS as readonly string[]).includes(i.slug) && isConnected(i),
+    (i) => (TRUTH_SYSTEMS as readonly string[]).includes(i.slug) && standingOf(i) === 'connected',
   );
 
   return (
@@ -80,13 +99,37 @@ export function TruthStep({
             </span>
             <span className={styles.quiet}>{t(`how.${selected}`)}</span>
           </span>
-          {connected ? (
+          {standing === 'connected' ? (
             <span className={styles.connected} data-testid="truth-connected">
               {t('connected')}
             </span>
+          ) : standing === 'failing' ? (
+            <span className={styles.failing} data-testid="truth-failing">
+              {t('failing')}
+            </span>
           ) : null}
         </span>
-        {connected ? null : integrations === null ? (
+        {standing === 'connected' ? null : standing === 'failing' && integration ? (
+          // Never the stored error (dev: an HTML page) - one line, in our words.
+          <div className={styles.connectHere} data-testid="truth-reconnect">
+            <p className={styles.why}>{t('failingWhy', { name: integration.name })}</p>
+            {integration.slug === 'woocommerce' ? (
+              <WooConnect name={integration.name} />
+            ) : oauthHere(integration.slug, true) ? (
+              <OAuthButton slug={integration.slug} name={integration.name} mode="reconnect" />
+            ) : (
+              <ConnectFor
+                integration={integration}
+                shopify={shopify}
+                drawn={{
+                  connect: tc('connect'),
+                  oauthNotHere: tc('oauthNotHere', { name: integration.name }),
+                  noForm: tc('noForm'),
+                }}
+              />
+            )}
+          </div>
+        ) : integrations === null ? (
           <p className={styles.why} data-testid="truth-unread">
             {t('unread')}
           </p>
@@ -112,7 +155,7 @@ export function TruthStep({
 
       <nav className={styles.systems} aria-label={t('others')}>
         {TRUTH_SYSTEMS.filter((slug) => slug !== selected).map((slug) => {
-          const entry = of(slug);
+          const tile = standingOf(of(slug));
           return (
             <Link
               key={slug}
@@ -122,9 +165,12 @@ export function TruthStep({
               data-testid={`truth-tile-${slug}`}
             >
               <IntegrationLogo slug={slug} size="pill" />
-              <span>{nameOf(slug)}</span>
-              {entry && isConnected(entry) ? (
+              {/* The design's short names, one line each ("Your API"). */}
+              <span className={styles.tileName}>{t(`systems.${slug}`)}</span>
+              {tile === 'connected' ? (
                 <span className={styles.connected}>{t('connected')}</span>
+              ) : tile === 'failing' ? (
+                <span className={styles.failing}>{t('failing')}</span>
               ) : null}
             </Link>
           );

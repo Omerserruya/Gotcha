@@ -800,6 +800,21 @@
     color: var(--signal-done-text);
   }
 
+  .failing {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background-color: var(--approval-chip-surface);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--intent-blocked-text);
+  }
+
+  .tileName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .connectHere {
     display: flex;
     flex-direction: column;
@@ -815,9 +830,10 @@
 
   .systemTile {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
-    padding: 12px;
+    min-inline-size: 0;
+    padding: 12px 10px;
     border: var(--border-width-thin) solid var(--border-default);
     border-radius: 12px;
     background-color: var(--panel-field);

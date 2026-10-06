@@ -167,7 +167,9 @@
     },
     "next": "Continue",
     "skip": "Skip for now",
-    "skipWhy": "Without it, GOTCHA can explain your policies, but it can't check an order, a price or stock"
+    "skipWhy": "Without it, GOTCHA can explain your policies, but it can't check an order, a price or stock",
+    "failing": "Needs reconnecting",
+    "failingWhy": "{name} stopped letting GOTCHA in. Reconnect to sign in again."
   },
   "try": {
     "headline": "Judge it on your own questions.",

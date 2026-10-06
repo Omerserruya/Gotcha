@@ -26,18 +26,28 @@ vi.mock('@/features/capabilities/shopify-actions', () => ({
   verifyShopifyBilling: vi.fn(),
 }));
 
-import { TruthStep } from './TruthStep';
+import { standingOf, TruthStep } from './TruthStep';
 
-const system = (slug: string, name: string, connected = false): Integration =>
+const system = (
+  slug: string,
+  name: string,
+  connection: Record<string, unknown> | boolean = false,
+): Integration =>
   integrationSchema.parse({
     id: `i-${slug}`,
     slug,
     name,
     authType: 'OAUTH2',
     authSchema: { oauth: true, fields: [] },
-    tenantConnection: connected
-      ? { id: `c-${slug}`, status: 'ACTIVE', createdAt: '2026-10-01T00:00:00Z' }
-      : null,
+    tenantConnection:
+      connection === false
+        ? null
+        : {
+            id: `c-${slug}`,
+            status: 'CONNECTED',
+            createdAt: '2026-10-01T00:00:00Z',
+            ...(connection === true ? {} : connection),
+          },
   });
 
 const show = (props: Partial<Parameters<typeof TruthStep>[0]> = {}) =>
@@ -106,5 +116,45 @@ describe('★★ 00g - the store the read found, connected the way 10 connects',
     expect(choices.length).toBe(12);
     choices.forEach((b) => expect(b).toBeDisabled());
     expect(screen.getByTestId('truth-may-why')).toHaveTextContent('once the workspace is live');
+  });
+});
+
+describe('★★ a connection row is not a connection (dev: Shopify ERROR read "Connected")', () => {
+  const ERROR_PAGE = '<!DOCTYPE html><html><body>unauthorized</body></html>';
+
+  it('ERROR, a failed test, or a stored error is "needs reconnecting" - never Connected', () => {
+    expect(standingOf(system('shopify', 'Shopify', { status: 'ERROR' }))).toBe('failing');
+    expect(standingOf(system('shopify', 'Shopify', { lastTestResult: false }))).toBe('failing');
+    expect(standingOf(system('shopify', 'Shopify', { lastError: 'denied' }))).toBe('failing');
+    expect(standingOf(system('shopify', 'Shopify', { status: 'PENDING' }))).toBe('none');
+    expect(standingOf(system('shopify', 'Shopify', true))).toBe('connected');
+    expect(standingOf(null)).toBe('none');
+  });
+
+  it('the card: Needs reconnecting, a reason in our words, and Reconnect - not the stored error', () => {
+    show({
+      integrations: [
+        system('shopify', 'Shopify', { status: 'ERROR', lastError: ERROR_PAGE }),
+        system('woocommerce', 'WooCommerce', true),
+      ],
+    });
+    expect(screen.queryByTestId('truth-connected')).toBeNull();
+    expect(screen.getByTestId('truth-failing')).toHaveTextContent('Needs reconnecting');
+    expect(screen.getByTestId('truth-reconnect')).toHaveTextContent(
+      'Shopify stopped letting GOTCHA in',
+    );
+    expect(screen.getByTestId('oauth-shopify')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('<!DOCTYPE');
+    expect(screen.getByTestId('truth-tile-woocommerce')).toHaveTextContent('Connected');
+  });
+
+  it('a failing store does not count as connected for Continue', () => {
+    show({ integrations: [system('shopify', 'Shopify', { status: 'ERROR' })] });
+    expect(screen.getByTestId('truth-next')).toHaveTextContent('Skip for now');
+  });
+
+  it("tiles use the design's short names", () => {
+    show({ integrations: [system('shopify', 'Shopify'), system('custom_api', 'Custom API')] });
+    expect(screen.getByTestId('truth-tile-custom_api')).toHaveTextContent('Your API');
   });
 });
