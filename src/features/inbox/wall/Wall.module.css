@@ -207,12 +207,23 @@
     gap: 8px;
   }
 
-  .cardHead > .meta {
+  .cardWhy {
+    flex: 0 1 auto;
+    max-inline-size: 55%;
     margin-inline-start: auto;
+    overflow: hidden;
     font-size: 10.5px;
+    color: var(--menu-dark-icon);
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .cardLabel {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     font-size: 11px;
     color: var(--frame-text-secondary);
   }
@@ -235,13 +246,6 @@
     color: var(--copilot-text-muted);
     white-space: nowrap;
     text-overflow: ellipsis;
-  }
-
-  .why {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.4;
-    color: var(--menu-dark-icon);
   }
 
   .cardActions {

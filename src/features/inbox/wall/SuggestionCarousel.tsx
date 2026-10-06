@@ -12,7 +12,7 @@ import { fillComposer } from '../reply-event';
 import { useCarousel } from './use-carousel';
 import { Pager } from './Pager';
 import { readSuggestions, refreshSuggestions } from './wall-actions';
-import { canUse, suggestionView } from './wall-model';
+import { canUse, saysRecommended, suggestionView } from './wall-model';
 import styles from './Wall.module.css';
 
 /**
@@ -175,19 +175,29 @@ function CardHead({
 }) {
   const t = useTranslations('inbox');
   const approach = suggestion.approach?.trim();
+  const rationale = suggestion.rationale?.trim();
+  // The model often writes "Recommended · escalate" itself: ours once, not twice.
+  const ours =
+    recommended && !(approach && saysRecommended(approach, t('wall.answers.recommended')));
+  /* A band, never a percentage — see `confidenceBand`. */
+  const confidence = isDraft(suggestion)
+    ? t(`copilot.confidence.${confidenceBand(suggestion)}` as 'copilot.confidence.high')
+    : t('copilot.proposal');
   return (
     <span className={styles.cardHead}>
       <span className={styles.cardLabel} data-recommended={recommended ? 'yes' : 'no'}>
-        {recommended ? t('wall.answers.recommended') : null}
-        {recommended && approach ? ' · ' : null}
+        {ours ? t('wall.answers.recommended') : null}
+        {ours && approach ? ' · ' : null}
         {approach ? <UserText>{approach}</UserText> : null}
         {!recommended && !approach ? t('wall.answers.another') : null}
       </span>
-      <span className={styles.meta}>
-        {/* A band, never a percentage — see `confidenceBand`. */}
-        {isDraft(suggestion)
-          ? t(`copilot.confidence.${confidenceBand(suggestion)}` as 'copilot.confidence.high')
-          : t('copilot.proposal')}
+      {/*
+        02's top right is the WHY or the cost ("no refund yet", "costs ₪179",
+        "needs approval") — the model's rationale. How sure it is goes in the
+        title; with no rationale, it is the line.
+      */}
+      <span className={styles.cardWhy} title={confidence} data-testid={`wall-why-${suggestion.id}`}>
+        {rationale ? <UserText>{rationale}</UserText> : confidence}
       </span>
     </span>
   );
@@ -209,11 +219,6 @@ function OpenCard({
     >
       <CardHead suggestion={suggestion} recommended={recommended} />
       <UserText className={styles.openText}>{suggestion.text}</UserText>
-      {suggestion.rationale?.trim() ? (
-        <p className={styles.why}>
-          <UserText>{suggestion.rationale}</UserText>
-        </p>
-      ) : null}
       {/*
         A proposed action has no button here — the approvals screen is where
         a tool is fired, with the keyboard model built for no undo.

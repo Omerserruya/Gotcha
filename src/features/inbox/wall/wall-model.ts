@@ -133,3 +133,15 @@ export function factLabel(key: string): string {
   const words = key.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+/**
+ * Does the model's own approach already lead with "Recommended"? Checked in
+ * English and in the reader's word, case-insensitively, so the label is
+ * never "Recommended · Recommended · escalate".
+ */
+export function saysRecommended(approach: string, word: string): boolean {
+  const head = approach.trim().toLocaleLowerCase();
+  return [word, 'recommended'].some(
+    (w) => w.trim() && head.startsWith(w.trim().toLocaleLowerCase()),
+  );
+}

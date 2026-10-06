@@ -229,3 +229,38 @@ describe('★★ Use this and Edit put text in the box — and send nothing', ()
     expect(screen.getByText('הסלמה').closest('bdi')?.textContent).toBe('הסלמה');
   });
 });
+
+describe('★ the card’s head, as 02 draws it', () => {
+  it('★ "Recommended" once, when the model already led with it', async () => {
+    read.mockResolvedValue(ok([s('a', { approach: 'Recommended · escalate' }), s('b')]));
+    show();
+    const head = (await screen.findByTestId('wall-suggestion-a')).querySelector(
+      '[data-recommended]',
+    );
+    expect(head?.textContent).toBe('Recommended · escalate');
+  });
+
+  it('ours when it did not', async () => {
+    read.mockResolvedValue(ok([s('a', { approach: 'escalate' })]));
+    show();
+    const head = (await screen.findByTestId('wall-suggestion-a')).querySelector(
+      '[data-recommended]',
+    );
+    expect(head?.textContent).toBe('Recommended · escalate');
+  });
+
+  it('★★ top right is the why — confidence in its title; folded cards too', async () => {
+    read.mockResolvedValue(
+      ok([s('a', { rationale: 'no refund yet' }), s('b', { rationale: 'costs ₪179' }), s('c')]),
+    );
+    show();
+    const why = await screen.findByTestId('wall-why-a');
+    expect(why).toHaveTextContent('no refund yet');
+    expect(why).toHaveAttribute('title', 'Confident');
+    expect(screen.getByTestId('wall-why-b')).toHaveTextContent('costs ₪179');
+    // No rationale: the confidence is the line, so the corner is never blank.
+    expect(screen.getByTestId('wall-why-c')).toHaveTextContent('Confident');
+    // And not repeated under the text.
+    expect(screen.getAllByText('no refund yet')).toHaveLength(1);
+  });
+});

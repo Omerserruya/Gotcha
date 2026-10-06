@@ -11,6 +11,7 @@ import {
   firstOrder,
   historyChannels,
   refundCount,
+  saysRecommended,
   stepTo,
   suggestionView,
 } from './wall-model';
@@ -168,5 +169,17 @@ describe('factLabel — a field key as words', () => {
     ['  city ', 'City'],
   ])('%s → %s', (key, label) => {
     expect(factLabel(key)).toBe(label);
+  });
+});
+
+describe('saysRecommended', () => {
+  it.each([
+    ['Recommended · escalate', 'Recommended', true],
+    ['recommended: escalate', 'Recommended', true],
+    ['מומלץ · הסלמה', 'מומלץ', true],
+    ['Recommended · escalate', 'מומלץ', true],
+    ['escalate', 'Recommended', false],
+  ])('%s (%s) → %s', (approach, word, expected) => {
+    expect(saysRecommended(approach, word)).toBe(expected);
   });
 });
