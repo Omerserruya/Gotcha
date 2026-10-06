@@ -296,7 +296,7 @@ export async function CustomerActions({
     const key = ACTION_KEYS[event.action];
     if (key) return t(`actions.name.${key}` as 'actions.name.aiResponded');
     const tool = toolOf(event);
-    if (tool) return t('actions.name.adapterCall', { tool: toolWords(tool) });
+    if (tool) return t('actions.name.adapterCall', { tool: toolWords(tool, event.labelKey) });
     for (const [prefix, k] of PREFIX_KEYS) {
       if (event.action.startsWith(prefix)) {
         const detail = event.action.slice(prefix.length);
@@ -308,7 +308,7 @@ export async function CustomerActions({
         }
         // The tool's own name, made legible: "shopify.lookup_order" → "Lookup order".
         return t(`actions.name.${k}` as 'actions.name.aiToolCall', {
-          detail: toolWords(detail),
+          detail: toolWords(detail, event.labelKey),
         });
       }
     }

@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 import { addToCall, holdCustomer, leaveCall, type CallWriteResult } from './actions';
 import styles from './Calls.module.css';
 import { pastedNumber } from './dial';
+import { ltr } from '@/lib/bidi';
 
 /**
  * 05e's Transfer - live (Omer, 2026-10-04), as the old app does it
@@ -97,7 +98,7 @@ export function TransferPanel({
       ) : (
         <>
           <p className={styles.transferNote} data-testid="transfer-added">
-            {t('added', { number: added })}
+            {t('added', { number: ltr(added) ?? '' })}
           </p>
           <div className={styles.transferRow}>
             <button

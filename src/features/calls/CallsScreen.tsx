@@ -10,6 +10,7 @@ import { Link } from '@/i18n/navigation';
 import { CallButton } from './CallButton';
 import { dialable, pastedNumber } from './dial';
 import styles from './Calls.module.css';
+import { ltr } from '@/lib/bidi';
 
 /**
  * Screen 05d - phone calls, measured.
@@ -73,7 +74,7 @@ export async function DialerCard({
   const t = await getTranslations('calls');
   const chosen = results?.[0] ?? null;
   const chosenName = chosen
-    ? (chosen.displayName ?? displayHandle('VOICE', chosen.phone ?? ''))
+    ? (chosen.displayName ?? ltr(displayHandle('VOICE', chosen.phone ?? '')))
     : null;
 
   return (
@@ -126,10 +127,10 @@ export async function DialerCard({
                   </span>
                   <span className={styles.dialerWho}>
                     <span className={styles.dialerName}>
-                      {row.displayName ?? displayHandle('VOICE', row.phone ?? row.externalId)}
+                      {row.displayName ?? ltr(displayHandle('VOICE', row.phone ?? row.externalId))}
                     </span>
                     <span className={styles.dialerLine}>
-                      {row.phone ? displayHandle('VOICE', row.phone) : (row.email ?? '-')}
+                      {row.phone ? ltr(displayHandle('VOICE', row.phone)) : (row.email ?? '-')}
                     </span>
                   </span>
                   {/* 02's "Trade": the merchant's own tag on the person. */}
@@ -331,7 +332,8 @@ export async function RecentCalls({
                 : call.direction === 'outbound'
                   ? PhoneOutgoing
                   : PhoneIncoming;
-              const who = displayHandle('VOICE', call.customerNumber) || t('recent.unknownNumber');
+              const who =
+                ltr(displayHandle('VOICE', call.customerNumber)) || t('recent.unknownNumber');
               return (
                 <li key={call.id} className={styles.recentRow} data-testid={`call-${call.id}`}>
                   <span className={styles.recentIcon} data-missed={isMissed(call) ? '' : undefined}>

@@ -125,7 +125,10 @@ export async function CustomerHeader({
         {initialsOf(name)}
       </span>
       <div className={styles.cardWho}>
-        <h1 className={styles.cardName}>{name ?? t('list.unnamed')}</h1>
+        {/* A name, or a handle standing in for one: isolated, so a phone reads left to right. */}
+        <h1 className={styles.cardName}>
+          {name ? <UserText>{name}</UserText> : t('list.unnamed')}
+        </h1>
         <p className={styles.cardFacts}>{facts.length > 0 ? facts.join(' · ') : '-'}</p>
         {/* The one place in the product that is serif italic: the character summary. */}
         <p
@@ -133,7 +136,8 @@ export async function CustomerHeader({
           data-testid="customer-summary"
           data-empty={summary ? undefined : ''}
         >
-          {summary ?? t('card.noSummary')}
+          {/* The server's words (often English): isolated, so the period stays at the end. */}
+          {summary ? <UserText>{summary}</UserText> : t('card.noSummary')}
         </p>
       </div>
       <div className={styles.cardActions}>
@@ -452,7 +456,10 @@ export async function CustomerSide({ detail }: { readonly detail: CustomerDetail
             {handles.map((handle) => (
               <div key={`${handle.channel}-${handle.externalId}`}>
                 <dt>{channelName(handle.channel, channels) ?? handle.channel}</dt>
-                <dd>{displayHandle(handle.channel, handle.externalId)}</dd>
+                {/* A phone in a Hebrew page lays out backwards unless it is its own island. */}
+                <dd>
+                  <bdi dir="ltr">{displayHandle(handle.channel, handle.externalId)}</bdi>
+                </dd>
               </div>
             ))}
           </dl>

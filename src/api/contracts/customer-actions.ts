@@ -74,6 +74,12 @@ export const auditEventSchema = z.object({
    * lookup that uses it, and was built from the write sites.
    */
   action: z.string(),
+  /**
+   * A tool row's tool, as a stable key to translate (Backend's one shared
+   * map). Only on tool rows; `null` on every other row and from an older
+   * service - the tool's own name, made legible, then.
+   */
+  labelKey: z.string().nullable().catch(null).default(null),
   targetType: z.string().nullable().default(null),
   /**
    * ⚠ THE CONVERSATION THE ACTION HAPPENED IN, NOT THE THING ACTED ON. The

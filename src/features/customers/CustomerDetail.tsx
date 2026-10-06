@@ -16,6 +16,7 @@ import type { CustomerDetail as Detail } from './load-customer';
 
 import styles from './Customers.module.css';
 import { channelName } from '@/api/contracts/inbox';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * Screen 04b - one customer.
@@ -99,7 +100,11 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
   return (
     <div className={styles.detail} data-testid="customer-detail">
       <h1 className={styles.detailName} data-testid="detail-name">
-        {contact?.displayName?.trim() || contact?.externalId || t('list.unnamed')}
+        {contact?.displayName?.trim() || contact?.externalId ? (
+          <UserText>{contact?.displayName?.trim() || contact?.externalId}</UserText>
+        ) : (
+          t('list.unnamed')
+        )}
       </h1>
 
       {/*

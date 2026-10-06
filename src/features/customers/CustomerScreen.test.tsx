@@ -54,6 +54,23 @@ describe('★★ 04b’s header', () => {
       expect(screen.getByTestId('customer-summary')).toHaveTextContent(summary.slice(0, 20));
   });
 
+  it('★★ the summary is the server’s words: isolated, so the period stays at the end (dev)', async () => {
+    render(
+      await CustomerHeader({
+        detail: detail({
+          brief: {
+            ...FIXTURE_DETAIL.brief!,
+            summary: 'Returning customer - see prior conversations.',
+          },
+        }),
+        contactId: 'k1',
+      }),
+    );
+    const bdi = screen.getByTestId('customer-summary').querySelector('bdi');
+    expect(bdi).toHaveAttribute('dir', 'auto');
+    expect(bdi?.textContent).toBe('Returning customer - see prior conversations.');
+  });
+
   it('⚠ no summary keeps the line, quietly - not an omission', async () => {
     render(await CustomerHeader({ detail: detail({ brief: null }), contactId: 'k1' }));
     const line = screen.getByTestId('customer-summary');
@@ -184,6 +201,13 @@ describe('★★ the side: WORTH, GOTCHA remembers, Reach them, the pinned note 
     expect(worth).toHaveTextContent('lifetime');
     expect(worth).toHaveTextContent('refunds');
     expect(worth.textContent?.match(/-/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('★★ a handle is a left-to-right island - a phone in Hebrew laid out backwards (dev)', async () => {
+    render(await CustomerSide({ detail: detail() }));
+    const phone = screen.getByTestId('customer-reach').querySelector('dd bdi');
+    expect(phone).toHaveAttribute('dir', 'ltr');
+    expect(phone?.textContent).toMatch(/^\+44/);
   });
 
   it('★ every block stays when its data is empty', async () => {

@@ -17,6 +17,7 @@ import {
 
 import styles from './Channels.module.css';
 import { ModeSwitch } from './ModeSwitch';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * The resolved translator and locale, passed down rather than re-fetched.
@@ -202,7 +203,9 @@ function NumberCard({
   return (
     <article className={styles.number} data-testid="whatsapp-number" data-delivery={delivery}>
       <p className={styles.numberLine}>
-        <span className={styles.numberPhone}>{number.phoneNumber ?? number.id}</span>
+        <span className={styles.numberPhone}>
+          <bdi dir="ltr">{number.phoneNumber ?? number.id}</bdi>
+        </span>
         {number.name ? <span className={styles.numberName}>{number.name}</span> : null}
       </p>
 
@@ -353,7 +356,13 @@ function UnprofiledCard({
   return (
     <article className={styles.number} data-testid="whatsapp-unprofiled">
       <div className={styles.numberHead}>
-        <span className={styles.numberPhone}>{number.name ?? number.phoneNumberId}</span>
+        <span className={styles.numberPhone}>
+          {number.name ? (
+            <UserText>{number.name}</UserText>
+          ) : (
+            <bdi dir="ltr">{number.phoneNumberId}</bdi>
+          )}
+        </span>
         <span className={styles.numberChips}>
           <span className={styles.chipQuiet} title={t('unprofiled.body')}>
             {t('unprofiled.noHealth')}

@@ -17,6 +17,7 @@ import {
   type OrderMiss,
   type PersonHit,
 } from './command-search';
+import { ltr } from '@/lib/bidi';
 
 /** The rail's ⌘K button opens the palette by this event - its look unchanged. */
 export const OPEN_COMMAND_PALETTE = 'gotcha:command-palette';
@@ -148,16 +149,17 @@ export function CommandPalette() {
         group: 'go' as const,
         label: person.byOrder
           ? tp('order', { number: person.byOrder.replace(/^#/, '') })
-          : (person.name ?? person.handle ?? tp('someone')),
+          : (person.name ?? ltr(person.handle) ?? tp('someone')),
+        // A handle is an LTR island: a phone in a Hebrew line lays out backwards otherwise.
         meta: person.byOrder
-          ? (person.name ?? person.handle ?? tp('customer'))
-          : [tp('customer'), person.handle].filter(Boolean).join(' · '),
+          ? (person.name ?? ltr(person.handle) ?? tp('customer'))
+          : [tp('customer'), ltr(person.handle)].filter(Boolean).join(' · '),
         href: `/customers/${encodeURIComponent(person.id)}`,
       })),
       ...(searchable ? hits : []).map((hit) => ({
         key: `conversation-${hit.id}`,
         group: 'go' as const,
-        label: hit.name ?? hit.handle ?? tp('someone'),
+        label: hit.name ?? ltr(hit.handle) ?? tp('someone'),
         meta: [
           hit.channel ? (channelName(hit.channel, tch) ?? tch('name.other')) : null,
           tp('conversation'),

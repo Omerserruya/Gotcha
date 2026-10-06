@@ -78,6 +78,7 @@ const event = (over: Partial<AuditEvent> = {}): AuditEvent => ({
   // A tool GOTCHA used: an action on the account, with an outcome to report.
   // (A reply is the conversation, and collapses - see its own tests.)
   action: 'ai.tool_call.lookup_order',
+  labelKey: null,
   targetType: 'conversation',
   targetId: 'c1',
   createdAt: '2026-09-18T09:16:00.000Z',
@@ -178,10 +179,25 @@ describe('★★ the outcome column, and the name that never decides it', () => 
   it('★ names the tool an adapter row acted through, in the reader’s words', async () => {
     // Backend's own label for the tool, as the inbox panel says it - never "shopify.process_refund".
     await show(
-      ok([event({ id: 't', action: 'adapter.ok.shopify.process_refund', succeeded: true })]),
+      ok([
+        event({
+          id: 't',
+          action: 'adapter.ok.shopify.process_refund',
+          labelKey: 'processing_refund',
+          succeeded: true,
+        }),
+      ]),
     );
     expect(screen.getByTestId('action-t')).toHaveTextContent(/Store: Refund/);
     expect(screen.getByTestId('action-t')).not.toHaveTextContent(/process_refund/);
+  });
+
+  it('★★ the server’s key, not a guess of ours: a tool row with none is its own name', async () => {
+    // Backend's map is the one source; with no labelKey there is nothing to translate.
+    await show(
+      ok([event({ id: 'n', action: 'adapter.ok.shopify.process_refund', succeeded: true })]),
+    );
+    expect(screen.getByTestId('action-n')).toHaveTextContent(/Store: Process refund/);
   });
 
   it('★★ a tool with no label is its own name made legible, never "A step"', async () => {

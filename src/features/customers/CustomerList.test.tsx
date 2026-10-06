@@ -81,7 +81,11 @@ describe('★★ 04’s rows - what is true about them today', () => {
     expect(screen.getByTestId('situation-k1')).toHaveTextContent('Where is order #1842?');
     expect(screen.getByTestId('since-k1')).toHaveTextContent('12m ago');
     // The handle moved to the title: how to reach them, not what is true.
-    expect(link).toHaveAttribute('title', 'Reach: +972500000001');
+    expect(link).toHaveAttribute(
+      'title',
+      // The phone is its own LTR island: in Hebrew it would lay out backwards.
+      `Reach: ${String.fromCharCode(0x2066)}+972500000001${String.fromCharCode(0x2069)}`,
+    );
   });
 
   it('★ open and their word last: "Waiting on you"; answered: no chip - a tag shows instead', async () => {

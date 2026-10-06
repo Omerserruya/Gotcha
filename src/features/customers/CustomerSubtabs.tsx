@@ -9,6 +9,7 @@ import { Link } from '@/i18n/navigation';
 import { CUSTOMER_TABS, customerFacts, initialsOf, shortDate } from './CustomerScreen';
 import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * 04c-04f's shared shell: a COMPACT header - 04b's large one is the
@@ -46,7 +47,9 @@ export async function CustomerTopBar({
         </span>
         <span>
           {/* The page's one h1: the person, as 04b's large header has it. */}
-          <h1 className={styles.topName}>{name ?? t('list.unnamed')}</h1>
+          <h1 className={styles.topName}>
+            {name ? <UserText>{name}</UserText> : t('list.unnamed')}
+          </h1>
           {facts.length > 0 ? (
             <span className={styles.topFacts} data-testid="customer-top-facts">
               {facts.join(' · ')}

@@ -293,7 +293,7 @@ function NumberStep({
               <span className={styles.pathRadio} aria-hidden="true" />
               <span className={styles.pathBody}>
                 <span className={styles.pathTitle}>
-                  {c.phoneNumber ?? c.phoneNumberId}
+                  <bdi dir="ltr">{c.phoneNumber ?? c.phoneNumberId}</bdi>
                   {c.name ? <span className={styles.pathName}>{c.name}</span> : null}
                 </span>
                 <span className={styles.pathText}>

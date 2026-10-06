@@ -1,24 +1,19 @@
 import { getTranslations } from 'next-intl/server';
 
-import { ACTIVITY_LABELS, labelForTool, type ActivityLabel } from '@/api/contracts/ai-activity';
+import { ACTIVITY_LABELS, type ActivityLabel } from '@/api/contracts/ai-activity';
 import { humanizeTag } from '@/api/contracts/approvals';
 
 /**
- * A tool in the reader's words, as the inbox panel says it.
- *
- *   labelKey given   the server's key (a9c79156, Backend's one map). `null` -
- *                    an older service - or "working", or a key this screen
- *                    has no words for: the tool's own name made legible.
- *   labelKey absent  a row that never carries one (04e's audit events and
- *                    approvals): `labelForTool`, the copy of that map.
+ * A tool in the reader's words, as the inbox panel says it: the server's
+ * `labelKey` (Backend's one shared map - on the timeline, the audit log and
+ * approvals). With no key (an older service, a row that is not a tool),
+ * "working", or a key this screen has no words for: the tool's own name made
+ * legible. Never a guess of ours.
  */
-export async function toolWords(): Promise<(tool: string, labelKey?: string | null) => string> {
+export async function toolWords(): Promise<(tool: string, labelKey: string | null) => string> {
   const steps = await getTranslations('inbox.wall.activity');
-  const legible = (tool: string) => humanizeTag(tool.split('.').pop() ?? tool);
-  const words = (key: string | null): string | null =>
-    key && key !== 'working' && (ACTIVITY_LABELS as readonly string[]).includes(key)
-      ? steps(`label.${key as ActivityLabel}`)
-      : null;
   return (tool, labelKey) =>
-    (labelKey === undefined ? words(labelForTool(tool)) : words(labelKey)) ?? legible(tool);
+    labelKey && labelKey !== 'working' && (ACTIVITY_LABELS as readonly string[]).includes(labelKey)
+      ? steps(`label.${labelKey as ActivityLabel}`)
+      : humanizeTag(tool.split('.').pop() ?? tool);
 }

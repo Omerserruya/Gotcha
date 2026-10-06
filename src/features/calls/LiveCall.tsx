@@ -12,6 +12,7 @@ import { endCall } from './actions';
 import styles from './Calls.module.css';
 import { TransferPanel } from './TransferPanel';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { ltr } from '@/lib/bidi';
 
 /**
  * Screen 05e - on a call. Measured.
@@ -153,7 +154,7 @@ export function LiveCall({
     const seconds = Math.floor((at - start) / 1000);
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   };
-  const who = contactName ?? displayHandle('VOICE', customerNumber);
+  const who = contactName ?? ltr(displayHandle('VOICE', customerNumber));
   const initials =
     (contactName ?? '')
       .split(/\s+/)
@@ -185,7 +186,7 @@ export function LiveCall({
           </span>
           <span className={styles.liveLine}>
             {[
-              displayHandle('VOICE', customerNumber),
+              ltr(displayHandle('VOICE', customerNumber)),
               direction === 'inbound'
                 ? t('live.theyCalled')
                 : direction === 'outbound'

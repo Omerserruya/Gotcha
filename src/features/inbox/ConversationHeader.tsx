@@ -12,6 +12,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 
 import { initials } from './initials';
 import styles from './Inbox.module.css';
+import { ltr } from '@/lib/bidi';
 
 /**
  * How many orders this customer has, or `null` when we cannot say.
@@ -110,7 +111,7 @@ export async function ConversationHeader({
              * The handle, which is what makes two unnamed people tellable
              * apart. Already on screen 04's rows, so this is not new exposure.
              */
-            conversation.customerExternalId,
+            ltr(conversation.customerExternalId),
             t(`open.status.${conversation.status}` as 'open.status.OPEN'),
           ]
             .filter(Boolean)

@@ -21,6 +21,7 @@ import {
 import { OutreachTabs } from '@/features/outreach/OutreachTabs';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
+import { ltr } from '@/lib/bidi';
 
 /**
  * Screen 05c - message templates.
@@ -56,7 +57,7 @@ export default async function Page({
       channel: c.channel,
       label: [
         channelName(c.channel, tch) ?? c.channel,
-        c.displayName ?? (c.externalId ? displayHandle(c.channel, c.externalId) : null),
+        c.displayName ?? (c.externalId ? ltr(displayHandle(c.channel, c.externalId)) : null),
       ]
         .filter(Boolean)
         .join(' · '),

@@ -289,6 +289,7 @@ describe('★★ the timeline must never claim to be a history', () => {
               direction: null,
               action: {
                 tool: 'process_refund',
+                labelKey: 'processing_refund',
                 success: false,
                 triggeredBy: 'ai',
                 durationMs: 120,
@@ -333,6 +334,7 @@ describe('★★ the timeline must never claim to be a history', () => {
                 direction: null,
                 action: {
                   tool: 'process_refund',
+                  labelKey: 'processing_refund',
                   success,
                   status,
                   triggeredBy: 'ai',

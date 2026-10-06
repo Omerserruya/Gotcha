@@ -15,6 +15,7 @@ import { InFlightList, MonthStrip } from '@/features/outreach/OutreachLists';
 import styles from '@/features/outreach/Outreach.module.css';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
+import { ltr } from '@/lib/bidi';
 
 /**
  * Outreach - screens 05 and 05b.
@@ -89,7 +90,7 @@ export default async function Page({
       channel: c.channel,
       label: [
         channelName(c.channel, tch) ?? c.channel,
-        c.displayName ?? (c.externalId ? displayHandle(c.channel, c.externalId) : null),
+        c.displayName ?? (c.externalId ? ltr(displayHandle(c.channel, c.externalId)) : null),
       ]
         .filter(Boolean)
         .join(' · '),

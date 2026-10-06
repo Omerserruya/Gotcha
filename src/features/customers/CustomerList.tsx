@@ -13,6 +13,8 @@ import type { CommerceFacts } from './load-customer-facts';
 import { sinceWords, type PersonToday, type Segment } from './people-today';
 import { chipOf, insightOf, money, reasonKey, situationLine, valueCell } from './row-facts';
 import styles from './Customers.module.css';
+import { ltr } from '@/lib/bidi';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * Screen 04 - the customer list.
@@ -148,7 +150,7 @@ export async function CustomerList({
                 <Link
                   className={styles.rowLink}
                   href={`/customers/${row.id}`}
-                  title={handle ? t('today.phone', { handle }) : undefined}
+                  title={handle ? t('today.phone', { handle: ltr(handle) }) : undefined}
                 >
                   <span className={styles.avatarStack} aria-hidden="true">
                     <span className={styles.avatar}>{initialsOf(label)}</span>
@@ -158,7 +160,9 @@ export async function CustomerList({
                   </span>
                   <span className={styles.rowBody}>
                     <span className={styles.rowTop}>
-                      <span className={styles.rowName}>{label ?? t('list.unnamed')}</span>
+                      <span className={styles.rowName}>
+                        {label ? <UserText>{label}</UserText> : t('list.unnamed')}
+                      </span>
                       {/*
                         02's state chip: a mood when the AI read one in their
                         open conversation (01bb7b6e), else waiting on you,
