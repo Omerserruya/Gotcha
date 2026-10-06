@@ -1003,33 +1003,32 @@ router.get("/:id", async (req: Request, res: Response) => {
     // Load the surrounding context so the frontend card doesn't need
     // N extra round trips.
     const [conversation, contact, recentMessages] = await Promise.all([
-      // SAFE ONLY BECAUSE `row.conversationId` IS `null`, NEVER `undefined`.
-      // It is nullable by design - a System Copilot plan has no conversation -
-      // and Prisma treats the two differently: `id: null` matches nothing
-      // (the PK is non-nullable), while `id: undefined` DROPS THE FILTER and
-      // would return an arbitrary conversation from this tenant, presented as
-      // this approval's context. The value comes straight from the row, so it
-      // is null today; normalising nulls to undefined anywhere upstream - the
-      // kind of change that looks like tidying - turns this into a defect with
-      // no error to notice.
-      prisma.conversation.findFirst({
-        where: { id: row.conversationId, tenantId },
-      }),
+      // ★ A System Copilot plan has NO conversation, and then there is nothing
+      // to load. This used to query `id: null`, on the belief that it "matches
+      // nothing" - Prisma REJECTS null for a required field (validation
+      // error), so every conversation-less approval answered 500. And
+      // `undefined` would drop the filter and return an arbitrary conversation,
+      // so the id is never passed through at all when it is absent.
+      row.conversationId
+        ? prisma.conversation.findFirst({ where: { id: row.conversationId, tenantId } })
+        : Promise.resolve(null),
       row.contactId
         ? prisma.contact.findFirst({ where: { id: row.contactId, tenantId } })
         : Promise.resolve(null),
-      prisma.message.findMany({
-        where: { conversationId: row.conversationId, tenantId },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: {
-          id: true,
-          direction: true,
-          body: true,
-          createdAt: true,
-          senderName: true,
-        },
-      }),
+      row.conversationId
+        ? prisma.message.findMany({
+            where: { conversationId: row.conversationId, tenantId },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+            select: {
+              id: true,
+              direction: true,
+              body: true,
+              createdAt: true,
+              senderName: true,
+            },
+          })
+        : Promise.resolve([] as any[]),
     ]);
 
     return res.json({

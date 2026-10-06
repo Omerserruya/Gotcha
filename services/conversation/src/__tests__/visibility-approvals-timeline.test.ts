@@ -44,12 +44,24 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       },
       user: { findMany: async () => [] },
       conversation: {
-        findFirst: async (a: any) => H.convs.find((c) => matches(c, a.where)) ?? null,
+        // Faithful to Prisma: null for a REQUIRED field is a validation error,
+        // not "matches nothing" (that belief hid a 500 on every approval with
+        // no conversation).
+        findFirst: async (a: any) => {
+          if (a.where?.id === null) throw new Error("PrismaClientValidationError: Argument `id` must not be null");
+          return H.convs.find((c) => matches(c, a.where)) ?? null;
+        },
         findMany: async (a: any) => { H.seenConvWhere = a.where; return H.convs.filter((c) => matches(c, a.where)).slice(0, a.take ?? 1e9); },
         count: async (a: any) => H.convs.filter((c) => matches(c, a.where)).length,
       },
       contact: { findFirst: async (a: any) => (a.where.id === "k1" ? { id: "k1", tenantId: "T", channel: "WHATSAPP", externalId: "9725", personId: "p1", mergedIntoId: null, metadata: {} } : null) },
-      message: { findMany: async () => [{ id: "m1", body: "secret", direction: "INBOUND", createdAt: new Date(), conversationId: "c_support" }], count: async () => 1 },
+      message: {
+        findMany: async (a: any) => {
+          if (a.where?.conversationId === null) throw new Error("PrismaClientValidationError: Argument `conversationId` must not be null");
+          return [{ id: "m1", body: "secret", direction: "INBOUND", createdAt: new Date(), conversationId: "c_support" }];
+        },
+        count: async () => 1,
+      },
       conversationHandover: { findMany: async () => [], count: async () => 0 },
       toolExecution: { findMany: async () => [], count: async () => 0 },
     },
@@ -87,9 +99,11 @@ describe("approval by id", () => {
     expect(JSON.stringify(hidden.body)).not.toContain("secret");
   });
 
-  it("an approval with no conversation (a System Copilot plan) is left to its handler", async () => {
+  it("★ an approval with no conversation (a System Copilot plan) opens - it used to 500", async () => {
     agentOfSales();
-    expect((await request(app).get("/api/approvals/a_system")).status).toBe(200);
+    const r = await request(app).get("/api/approvals/a_system");
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ conversation: null, recentMessages: [], approval: { id: "a_system", labelKey: "working" } });
   });
 
   it("admin sees it, with its context", async () => {
