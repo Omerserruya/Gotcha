@@ -277,6 +277,7 @@
     display: flex;
     gap: 16px;
     align-items: flex-start;
+    min-inline-size: 0;
   }
 
   .pickerArea {
@@ -324,6 +325,7 @@
     flex: 1;
     flex-direction: column;
     gap: 6px;
+    min-inline-size: 0;
     max-inline-size: 170px;
   }
 
@@ -353,6 +355,7 @@
   }
 
   .codeField input {
+    inline-size: 100%;
     font-family: var(--font-mono);
     font-size: 12px;
   }

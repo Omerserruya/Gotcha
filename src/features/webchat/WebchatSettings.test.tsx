@@ -194,6 +194,14 @@ describe('★ install', () => {
 describe("★ the preview's marks come from one name - the business's", () => {
   it('logo "AVIV & CO.", launcher its first word "AVIV" (dev: "STOR" beside "ST")', () => {
     expect(brandMark('Aviv & Co.')).toEqual({ logo: 'AVIV & CO.', launcher: 'AVIV' });
+    // dev: "Urban Supply - GOTCHA..." drew "URBAN SUPPLY -".
+    expect(brandMark('Urban Supply - GOTCHA demo store')).toEqual({
+      logo: 'URBAN SUPPLY',
+      launcher: 'URBAN',
+    });
+    expect(brandMark('Urban Supply | Shop').logo).toBe('URBAN SUPPLY');
+    expect(brandMark('Urban Supply · Tel Aviv').logo).toBe('URBAN SUPPLY');
+    expect(brandMark('Shop,').launcher).toBe('SHOP');
     show('appearance');
     expect(screen.getByTestId('webchat-preview-launcher')).toHaveTextContent(/^AVIV$/);
     expect(screen.getByTestId('webchat-preview')).toHaveTextContent('AVIV & CO.');
