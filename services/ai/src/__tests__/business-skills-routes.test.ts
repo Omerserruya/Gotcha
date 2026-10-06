@@ -21,6 +21,11 @@ const H = vi.hoisted(() => ({
     agentToolPermission: [] as any[],
   },
   governable: [] as any[],
+  // The integration catalog is global (not per tenant).
+  catalog: [
+    { slug: "woocommerce", name: "WooCommerce", tools: [{ slug: "get_order", name: "Get Order" }, { slug: "list_products", name: "List Products" }] },
+    { slug: "shopify", name: "Shopify", tools: [{ slug: "order_lookup", name: "Order lookup" }, { slug: "create_vip_coupon", name: "Create VIP Coupon" }] },
+  ],
   seq: 0,
 }));
 
@@ -120,6 +125,16 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         findMany: async (a: any) => H.db.agentToolPermission.filter((p) => p.tenantId === a.where.tenantId && p.aiAgentId === a.where.aiAgentId && p.isAllowed),
       },
       tenantIntegration: { count: async () => 0 },
+      integrationCatalog: {
+        findMany: async (a: any = {}) => H.catalog
+          .filter((c) => !a.where?.slug?.in || a.where.slug.in.includes(c.slug))
+          .map((c) => ({ slug: c.slug, name: c.name })),
+      },
+      catalogTool: {
+        findMany: async (a: any) => H.catalog
+          .filter((c) => a.where.integration.slug.in.includes(c.slug))
+          .flatMap((c) => c.tools.map((t) => ({ slug: t.slug, name: t.name, integration: { slug: c.slug } }))),
+      },
       $transaction: async (ops: any[]) => Promise.all(ops),
     },
   };
@@ -226,6 +241,36 @@ describe("the library", () => {
     expect(tools.find((t: any) => t.name === "shopify.order_lookup")).toMatchObject({ source: "integration", connected: true });
   });
 
+  it("★ one label source: /tools and every step's tools carry provider, providerLabel, actionLabel", async () => {
+    H.governable.push({ name: "shopify.create_vip_coupon", slug: "create_vip_coupon", integrationSlug: "shopify", integrationStatus: "CONNECTED", isEnabled: true, displayName: "Create VIP Coupon", catalogCategory: "WRITE", riskLevel: "HIGH" });
+    const tools = (await request(app).get("/api/business-skills/tools")).body.data;
+    expect(tools.find((t: any) => t.name === "shopify.create_vip_coupon")).toMatchObject({ provider: "shopify", providerLabel: "Shopify", actionLabel: "Create VIP coupon" });
+    expect(tools.find((t: any) => t.name === "escalate_to_human")).toMatchObject({ provider: null, providerLabel: null, actionLabel: "Escalate to a person" });
+    const he = (await request(app).get("/api/business-skills/tools?locale=he")).body.data;
+    expect(he.find((t: any) => t.name === "escalate_to_human").actionLabel).toBe("העברה לנציג אנושי");
+
+    const body = skillBody({ steps: [
+      { kind: "find", title: "Find the order", tools: ["woocommerce.get_order", "unknown_vendor.do_thing"] },
+      { kind: "message", title: "Tell the customer", tools: [] },
+    ] });
+    const created = (await request(app).post("/api/business-skills").send(body)).body.data;
+    const want = [
+      { name: "woocommerce.get_order", provider: "woocommerce", providerLabel: "WooCommerce", actionLabel: "Get order" },
+      { name: "unknown_vendor.do_thing", provider: "unknown_vendor", providerLabel: "Unknown vendor", actionLabel: "Do thing" },
+    ];
+    expect(created.steps[0].toolDetails).toEqual(want);
+    expect(created.steps[1].toolDetails).toEqual([]);
+    const got = (await request(app).get(`/api/business-skills/${created.id}`)).body.data;
+    expect(got.steps[0].toolDetails).toEqual(want);
+    expect((await request(app).get("/api/business-skills")).body.data.find((x: any) => x.id === created.id).steps[0].toolDetails).toEqual(want);
+
+    // Read-only: sent back on a PUT it is not stored.
+    const put = await request(app).put(`/api/business-skills/${created.id}`).send({ ...body, steps: got.steps });
+    expect(put.status).toBe(200);
+    expect(H.db.businessSkill.find((x) => x.id === created.id)!.steps[0]).not.toHaveProperty("toolDetails");
+    expect(put.body.data.steps[0].toolDetails).toEqual(want);
+  });
+
   it("stats: live runs, watch runs, alone share, asked you, stop reasons, used by", async () => {
     const id = (await request(app).post("/api/business-skills").send(skillBody())).body.data.id;
     H.db.agentSkill.push({ id: "as1", tenantId: "T", aiAgentId: "maya", skillId: id, mode: "on", order: 0 });
@@ -289,7 +334,7 @@ describe("★ the fit check uses the bot's own tool rule", () => {
     });
     const r = (await request(app).post("/api/ai-agents/maya/skills/fit").send({ skillId: id })).body.data;
     expect(r).toMatchObject({ fits: false, handsOverAtStep: "s2", reason: "not_allowed_for_employee" });
-    expect(r.steps[0].tools[0]).toEqual({ name: "shopify.order_lookup", allowed: true, connected: true });
+    expect(r.steps[0].tools[0]).toEqual({ name: "shopify.order_lookup", provider: "shopify", providerLabel: "Shopify", actionLabel: "Order lookup", allowed: true, connected: true });
     expect(r.steps[1].tools[0]).toMatchObject({ name: "shopify.track_shipment", allowed: false, connected: true });
   });
 

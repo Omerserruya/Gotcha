@@ -6,6 +6,7 @@
 import { Router, type Request, type Response } from "express";
 import { authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole } from "@chatcenter/shared";
 import { SkillValidationError, getAgentSkills, setAgentSkills, fitCheck } from "../services/business-skills.service";
+import { localeOf } from "../services/tool-labels.service";
 
 const router = Router();
 // Per-route, NOT router.use: this router shares the /api/ai-agents prefix and
@@ -47,7 +48,7 @@ router.post("/:id/skills/fit", ...AUTH, CAN_READ, async (req: Request, res: Resp
   try {
     const skillId = typeof req.body?.skillId === "string" ? req.body.skillId : "";
     if (!skillId) { res.status(422).json({ error: "skillId is required" }); return; }
-    const out = await fitCheck(req.tenantId!, String(req.params.id), skillId);
+    const out = await fitCheck(req.tenantId!, String(req.params.id), skillId, localeOf(req));
     if (!out) { res.status(404).json({ error: "AI employee or skill not found" }); return; }
     res.json({ data: out });
   } catch (err: any) {

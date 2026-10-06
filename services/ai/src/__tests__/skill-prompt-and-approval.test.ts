@@ -29,6 +29,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 import { buildAgentPrompt, stablePrefixOf, type AgentRecord } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { ActionOrchestrator } from "../services/orchestrator/action-orchestrator";
+import { computeStepStates, renderActiveSkillBlock, HANDOVER_WORDING_RULE } from "../services/skill-runtime.service";
 
 const AGENT = { name: "Maya", role: "customer_support", tone: "friendly", style: {}, identity: {}, goals: {}, toneConfig: {}, behavioral: {}, persona: {}, conversationFlow: null, customGuardrails: null, escalationRules: null, behavioralAnchors: null } as AgentRecord;
 const behaviorState = computeBehaviorState({
@@ -69,6 +70,19 @@ describe("★ the prompt", () => {
     const without = buildAgentPrompt(base as any);
     expect(without).toContain("# Current Plan (decide and ACT this turn)");
     expect(without).not.toContain("paused this turn");
+  });
+
+  it("★ an escalation turn's prompt carries the hand-over wording rule (in the turn, not the prefix)", () => {
+    const states = computeStepStates(
+      [{ id: "e1", kind: "find", title: "Find the order", tools: ["shopify.order_lookup"] }, { id: "e2", kind: "change", title: "Exchange the item", tools: ["shopify.exchange_order_item"] }],
+      [{ tool: "shopify.order_lookup", status: "completed", proposedAt: new Date(1) }],
+      ["shopify.order_lookup"],
+    );
+    const active = renderActiveSkillBlock({ id: "sk", name: "Exchange a product", whenToUse: null, rules: [] } as any, states, []);
+    const p = buildAgentPrompt({ ...base, businessSkills: { names: ["Exchange a product"], activeName: "Exchange a product", activeBlock: active, noSkillBlock: null, requiredInfo: [] } } as any);
+    expect(p).toContain(HANDOVER_WORDING_RULE);
+    expect(p).toMatch(/Exchange the item.*<- you are here\n.*do not offer it, promise it or ask the customer to confirm it/);
+    expect(stablePrefixOf(p)).not.toContain(HANDOVER_WORDING_RULE);
   });
 
   it("the cached prefix does not change with the active skill (cache-stable)", () => {

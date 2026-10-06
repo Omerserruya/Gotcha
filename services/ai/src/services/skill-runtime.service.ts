@@ -254,6 +254,13 @@ const MARK: Record<StepState, string> = {
   failed: "[failed]", denied: "[not permitted]", todo: "[to do]", unavailable: "[you cannot do this step]",
 };
 
+/**
+ * When the turn hands over, the same message must not offer or ask to do
+ * the next step: the customer would answer "yes" to nobody.
+ */
+export const HANDOVER_WORDING_RULE =
+  "If you hand over to a person this turn (escalate_to_human, or a step you cannot do), your message must not offer, promise or ask the customer to confirm any further step. Say a person will continue from here.";
+
 /** BLOCK 2 line: names only, so the cached prefix changes only when the list does. */
 export function renderSkillNamesLine(names: string[]): string | null {
   if (!names.length) return null;
@@ -271,7 +278,7 @@ export function renderActiveSkillBlock(skill: SkillCandidate, states: Array<{ st
     const tools = (s.step.tools ?? []).length ? ` (tools: ${(s.step.tools ?? []).join(", ")})` : "";
     lines.push(`${i + 1}. ${MARK[s.state]} ${s.step.title}${tools}${here}`);
     if (s.step.guidance) lines.push(`   ${s.step.guidance}`);
-    if (s.state === "unavailable") lines.push("   You do not have the tool for this step: tell the customer a person will take over, and hand over here.");
+    if (s.state === "unavailable") lines.push("   You do not have the tool for this step: do not offer it, promise it or ask the customer to confirm it (never \"shall I go ahead?\"). Tell the customer a person will continue it, and hand over here.");
     if (s.step.elseNote && (s.state === "failed" || s.state === "denied" || s.state === "unavailable")) lines.push(`   If it cannot be done: ${s.step.elseNote}`);
   });
   const never = skill.rules.filter((r) => r.type === "never");
@@ -285,6 +292,7 @@ export function renderActiveSkillBlock(skill: SkillCandidate, states: Array<{ st
   lines.push(
     "",
     "Only a step marked [done] has happened. A step waiting for approval is PENDING: tell the customer it is being checked, never that it is done. Never claim a step you have not seen marked [done].",
+    HANDOVER_WORDING_RULE,
   );
   return lines.join("\n");
 }

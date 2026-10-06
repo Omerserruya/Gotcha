@@ -26,6 +26,7 @@ import {
   selectionCandidates,
   traceAsRequests,
   outcomeOfCall,
+  HANDOVER_WORDING_RULE,
   type SkillCandidate,
   type SkillContext,
 } from "../services/skill-runtime.service";
@@ -165,6 +166,27 @@ describe("★ the prompt", () => {
     expect(block).toContain("You do not have the tool for this step");
     expect(block).toContain("If it cannot be done: offer a person");
     expect(block).not.toMatch(/[–—―]/);
+  });
+
+  it("★ at a step it cannot do, the hand-over turn may not offer or ask to do it", () => {
+    // Exchange: the order is found, the swap tool is not on this employee.
+    const out = businessSkillsForPrompt({
+      ...base, ctx: ctx({ candidates: [exchange] }), activeOnSkill: exchange,
+      requests: [{ tool: "shopify.order_lookup", status: "completed", proposedAt: new Date(1) }],
+      surface: ["shopify.order_lookup"],
+    })!;
+    const here = out.activeBlock!.split("\n").findIndex((l) => l.includes("<- you are here"));
+    expect(out.activeBlock!.split("\n")[here]).toContain("[you cannot do this step] Exchange the item");
+    expect(out.activeBlock!.split("\n")[here + 1]).toMatch(/do not offer it, promise it or ask the customer to confirm it/);
+    expect(out.activeBlock).toContain("a person will continue it");
+    expect(out.activeBlock).toContain(HANDOVER_WORDING_RULE);
+  });
+
+  it("the hand-over wording rule rides every active block (an escalation can come from any step)", () => {
+    const block = renderActiveSkillBlock(skill(), computeStepStates(skill().steps, [], ["shopify.order_lookup", "shopify.track_shipment"]), []);
+    expect(block).toContain(HANDOVER_WORDING_RULE);
+    expect(HANDOVER_WORDING_RULE).toMatch(/must not offer, promise or ask the customer to confirm any further step/);
+    expect(HANDOVER_WORDING_RULE).not.toMatch(/[–—―]/);
   });
 });
 

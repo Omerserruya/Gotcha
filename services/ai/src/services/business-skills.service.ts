@@ -13,6 +13,7 @@
  */
 import { prisma, buildAgentTools, visibilityClause, type Viewer } from "@chatcenter/shared";
 import { getGovernableIntegrationTools } from "./tool-registry";
+import { labelTool, type Locale, type ToolLabel } from "./tool-labels.service";
 
 export const SKILL_CATEGORIES = ["orders", "products", "bookings", "other"] as const;
 export const SKILL_STEP_KINDS = ["find", "check", "change", "document", "message", "approval", "handover"] as const;
@@ -389,7 +390,7 @@ export async function setAgentSkills(tenantId: string, aiAgentId: string, items:
 
 // ── Tools: the step editor's list and the fit check ────────────────────────
 
-export interface ToolChoice {
+export interface ToolChoice extends ToolLabel {
   name: string;
   displayName: string;
   source: "system" | "integration";
@@ -421,19 +422,22 @@ function systemToolNames(): Array<{ name: string; description: string }> {
  * an agentId, each carries whether the bot would offer it to that employee -
  * the same rule as the bot's surface (allowed + enabled + CONNECTED + AUTO).
  */
-export async function listToolChoices(tenantId: string, aiAgentId?: string | null): Promise<ToolChoice[]> {
-  const [integration, calendarConnected, allowed] = await Promise.all([
+export async function listToolChoices(tenantId: string, aiAgentId?: string | null, locale: Locale = "en"): Promise<ToolChoice[]> {
+  const [integration, calendarConnected, allowed, providerNames] = await Promise.all([
     getGovernableIntegrationTools(tenantId, { includeDisconnected: true }),
     prisma.tenantIntegration.count({
       where: { tenantId, status: "CONNECTED", integration: { category: "CALENDAR" as any } },
     }).then((n) => n > 0).catch(() => false),
     aiAgentId ? allowedIntegrationToolsFor(tenantId, aiAgentId) : Promise.resolve(null),
+    prisma.integrationCatalog.findMany({ select: { slug: true, name: true } })
+      .then((rows: any[]) => new Map(rows.map((r) => [r.slug as string, r.name as string])))
+      .catch(() => new Map<string, string>()),
   ]);
   const sys: ToolChoice[] = systemToolNames().map((t) => {
     const needsCalendar = CALENDAR_SYSTEM_TOOLS.has(t.name);
     const connected = needsCalendar ? calendarConnected : true;
     return {
-      name: t.name, displayName: t.name.replace(/_/g, " "), source: "system", integrationSlug: null,
+      name: t.name, displayName: t.name.replace(/_/g, " "), ...labelTool(t.name, null, null, locale), source: "system", integrationSlug: null,
       category: needsCalendar ? "CALENDAR" : "SYSTEM", riskLevel: null, connected,
       ...(aiAgentId ? { allowedForAgent: connected, ...(connected ? {} : { reason: "no_calendar_connected" }) } : {}),
     };
@@ -441,7 +445,8 @@ export async function listToolChoices(tenantId: string, aiAgentId?: string | nul
   const integ: ToolChoice[] = integration.map((t) => {
     const connected = t.integrationStatus === "CONNECTED";
     const base: ToolChoice = {
-      name: t.name, displayName: t.displayName, source: "integration", integrationSlug: t.integrationSlug,
+      name: t.name, displayName: t.displayName, ...labelTool(t.name, t.displayName, providerNames.get(t.integrationSlug), locale),
+      source: "integration", integrationSlug: t.integrationSlug,
       category: t.catalogCategory, riskLevel: t.riskLevel, connected,
     };
     if (!aiAgentId) return base;
@@ -478,7 +483,7 @@ export interface FitResult {
   fits: boolean;
   handsOverAtStep: string | null;
   reason: string | null;
-  steps: Array<{ stepId: string; tools: Array<{ name: string; allowed: boolean; connected: boolean; reason?: string }> }>;
+  steps: Array<{ stepId: string; tools: Array<ToolLabel & { name: string; allowed: boolean; connected: boolean; reason?: string }> }>;
 }
 
 /**
@@ -486,13 +491,13 @@ export interface FitResult {
  * surface for the employee. The first step with a tool it cannot use is where
  * the employee will hand over (the skill still runs up to there).
  */
-export async function fitCheck(tenantId: string, aiAgentId: string, skillId: string): Promise<FitResult | null> {
+export async function fitCheck(tenantId: string, aiAgentId: string, skillId: string, locale: Locale = "en"): Promise<FitResult | null> {
   const [agent, skill] = await Promise.all([
     prisma.aIAgent.findFirst({ where: { id: aiAgentId, tenantId }, select: { id: true } }),
     prisma.businessSkill.findFirst({ where: { id: skillId, tenantId }, select: { steps: true, status: true } }),
   ]);
   if (!agent || !skill) return null;
-  const choices = new Map((await listToolChoices(tenantId, aiAgentId)).map((c) => [c.name, c]));
+  const choices = new Map((await listToolChoices(tenantId, aiAgentId, locale)).map((c) => [c.name, c]));
   const steps = (Array.isArray(skill.steps) ? skill.steps : []) as any[];
   let handsOverAtStep: string | null = null;
   let reason: string | null = null;
@@ -504,7 +509,8 @@ export async function fitCheck(tenantId: string, aiAgentId: string, skillId: str
       const connected = !!c?.connected;
       const r = c ? c.reason : "unknown_tool";
       if (!allowed && !handsOverAtStep) { handsOverAtStep = String(s.id); reason = r ?? "not_allowed_for_employee"; }
-      return { name, allowed, connected, ...(allowed ? {} : { reason: r ?? "not_allowed_for_employee" }) };
+      const label: ToolLabel = c ? { provider: c.provider, providerLabel: c.providerLabel, actionLabel: c.actionLabel } : labelTool(name, null, null, locale);
+      return { name, ...label, allowed, connected, ...(allowed ? {} : { reason: r ?? "not_allowed_for_employee" }) };
     }),
   }));
   if (skill.status === "archived" && !reason) reason = "skill_archived";

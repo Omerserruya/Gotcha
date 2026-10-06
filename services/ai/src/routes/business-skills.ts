@@ -6,6 +6,7 @@
  */
 import { Router, type Request, type Response } from "express";
 import { authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, viewerOf } from "@chatcenter/shared";
+import { withToolDetails, localeOf } from "../services/tool-labels.service";
 import {
   SkillValidationError,
   listSkills,
@@ -41,7 +42,7 @@ function fail(res: Response, err: any, what: string) {
 
 router.get("/", CAN_READ, async (req: Request, res: Response) => {
   try {
-    res.json({ data: await listSkills(req.tenantId!, { includeArchived: req.query.includeArchived === "true", from: fromOf(req) }) });
+    res.json({ data: await withToolDetails(await listSkills(req.tenantId!, { includeArchived: req.query.includeArchived === "true", from: fromOf(req) }), localeOf(req)) });
   } catch (err) { fail(res, err, "list skills"); }
 });
 
@@ -54,7 +55,7 @@ router.get("/stats", CAN_READ, async (req: Request, res: Response) => {
 router.get("/tools", CAN_READ, async (req: Request, res: Response) => {
   try {
     const agentId = typeof req.query.agentId === "string" && req.query.agentId ? req.query.agentId : null;
-    res.json({ data: await listToolChoices(req.tenantId!, agentId) });
+    res.json({ data: await listToolChoices(req.tenantId!, agentId, localeOf(req)) });
   } catch (err) { fail(res, err, "list tools"); }
 });
 
@@ -63,13 +64,15 @@ router.get("/:id", CAN_READ, async (req: Request, res: Response) => {
     const skill = await getSkill(req.tenantId!, String(req.params.id));
     if (!skill) { res.status(404).json({ error: "Skill not found" }); return; }
     const [stats] = await skillStats(req.tenantId!, fromOf(req), [skill.id]);
-    res.json({ data: { ...skill, stats: stats ?? null } });
+    const [shown] = await withToolDetails([skill], localeOf(req));
+    res.json({ data: { ...shown, stats: stats ?? null } });
   } catch (err) { fail(res, err, "read the skill"); }
 });
 
 router.post("/", CAN_WRITE, async (req: Request, res: Response) => {
   try {
-    res.status(201).json({ data: await createSkill(req.tenantId!, (req as any).user?.userId, req.body) });
+    const [shown] = await withToolDetails([await createSkill(req.tenantId!, (req as any).user?.userId, req.body)], localeOf(req));
+    res.status(201).json({ data: shown });
   } catch (err) { fail(res, err, "create the skill"); }
 });
 
@@ -77,7 +80,8 @@ router.put("/:id", CAN_WRITE, async (req: Request, res: Response) => {
   try {
     const skill = await updateSkill(req.tenantId!, String(req.params.id), (req as any).user?.userId, req.body);
     if (!skill) { res.status(404).json({ error: "Skill not found" }); return; }
-    res.json({ data: skill });
+    const [shown] = await withToolDetails([skill], localeOf(req));
+    res.json({ data: shown });
   } catch (err) { fail(res, err, "update the skill"); }
 });
 
