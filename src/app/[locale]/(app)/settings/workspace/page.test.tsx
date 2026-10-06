@@ -30,6 +30,7 @@ vi.mock('@/features/workspace/BusinessDrawer', () => ({ BusinessDrawer: stub('bu
 vi.mock('@/features/workspace/HoursDrawer', () => ({ HoursDrawer: stub('hours') }));
 vi.mock('@/features/workspace/LanguageDrawer', () => ({ LanguageDrawer: stub('language') }));
 vi.mock('@/features/workspace/load-workspace', () => ({
+  loadWebsiteScan: async () => null,
   loadWorkspace: async () => ({
     workspace: { name: 'Urban Supply', languages: ['he'] },
     voice: null,

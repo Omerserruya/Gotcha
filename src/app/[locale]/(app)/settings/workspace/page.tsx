@@ -6,7 +6,7 @@ import { HoursDrawer } from '@/features/workspace/HoursDrawer';
 import { LanguageDrawer } from '@/features/workspace/LanguageDrawer';
 import { ScanPanel } from '@/features/workspace/ScanPanel';
 import { loadLanguages } from '@/features/workspace/load-languages';
-import { loadWorkspace } from '@/features/workspace/load-workspace';
+import { loadWebsiteScan, loadWorkspace } from '@/features/workspace/load-workspace';
 import { ProhibitedClaims } from '@/features/workspace/ProhibitedClaims';
 import { VoiceEditor } from '@/features/workspace/VoiceEditor';
 import styles from '@/features/workspace/Workspace.module.css';
@@ -61,7 +61,7 @@ export default async function Page({
           closeHref="/settings/workspace"
           testId="drawer-business"
         >
-          <BusinessDrawer workspace={workspace} />
+          <BusinessDrawer workspace={workspace} scan={await loadWebsiteScan()} />
         </Drawer>
       ) : workspace && panel === 'hours' ? (
         <Drawer

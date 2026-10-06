@@ -82,7 +82,7 @@ export function ScanPanel({ domain }: { readonly domain: string | null }) {
   }
 
   return (
-    <section className={styles.scan} data-testid="scan">
+    <section id="scan" className={styles.scan} data-testid="scan">
       {/*
         02's banner: a pill row — the sentence, the "From website" legend the
         rows use, and "Scan again" on the right. What a rescan will and will

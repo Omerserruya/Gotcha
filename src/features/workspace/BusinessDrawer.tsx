@@ -15,6 +15,7 @@ import drawer from '@/design-system/styles/drawer.module.css';
 
 import { saveWorkspaceFacts } from './actions';
 import styles from './Workspace.module.css';
+import type { WebsiteScan } from './load-workspace';
 
 /**
  * 11b, measured: the business's facts as one form in a drawer — opened from
@@ -25,13 +26,23 @@ import styles from './Workspace.module.css';
  * allow-list, and nothing stores a note for visitors: those are drawn, not
  * live, and say so on their titles.
  */
-export function BusinessDrawer({ workspace }: { readonly workspace: Workspace }) {
+export function BusinessDrawer({
+  workspace,
+  scan = null,
+}: {
+  readonly workspace: Workspace;
+  /** 11b's website line — what the scan read, and what else it found. */
+  readonly scan?: WebsiteScan | null;
+}) {
   const t = useTranslations('workspace');
   const locale = useLocale();
   const [name, setName] = useState(workspace.name ?? '');
   const [description, setDescription] = useState(workspace.description ?? '');
   const [address, setAddress] = useState(workspace.address ?? '');
   const [problem, setProblem] = useState<string | null>(null);
+  /** "3 days ago", in the reader's language. */
+  const ago = (days: number) =>
+    new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-days, 'day');
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -65,14 +76,47 @@ export function BusinessDrawer({ workspace }: { readonly workspace: Workspace })
       <div className={drawer.drawerBody} data-testid="business-drawer">
         <div className={drawer.field}>
           <span className={drawer.fieldLabel}>{t('fact.website')}</span>
-          <span
-            className={drawer.box}
-            aria-disabled="true"
-            title={t('website.readOnly')}
-            data-testid="business-website"
-          >
-            {workspace.websiteDomain ? displayHost(workspace.websiteDomain) : '—'}
+          <span className={styles.websiteRow}>
+            <span
+              className={drawer.box}
+              aria-disabled="true"
+              title={t('website.readOnly')}
+              data-testid="business-website"
+            >
+              {workspace.websiteDomain ? displayHost(workspace.websiteDomain) : '—'}
+            </span>
+            {/*
+              The rescan is the Workspace page's (POST /workspace/scan): it
+              answers with what it applied and what it only offers, and that
+              conversation lives in its panel — so this leads there.
+            */}
+            <Link
+              href={{ pathname: '/settings/workspace', hash: 'scan' }}
+              className={styles.scanAgainLink}
+              data-testid="business-scan-again"
+            >
+              {t('website.scanAgain')}
+            </Link>
           </span>
+          {scan && scan.pagesRead > 0 ? (
+            <span className={drawer.hint} data-testid="business-scan-line">
+              {[
+                t('website.pagesRead', { count: scan.pagesRead }),
+                scan.daysAgo === null ? t('website.reading') : ago(scan.daysAgo),
+              ].join(' ')}
+              {scan.topics.length > 0 ? ` · ${scan.topics.join(', ')}` : ''}
+            </span>
+          ) : null}
+          {scan && scan.alsoFound.length > 0 ? (
+            <span className={styles.alsoFound} data-testid="business-also-found">
+              <span className={styles.alsoFoundLabel}>{t('website.alsoFound')}</span>
+              {scan.alsoFound.map((item) => (
+                <span key={`${item.kind}-${item.name}`} className={styles.alsoFoundChip}>
+                  {item.kind === 'store' ? t('website.store', { name: item.name }) : item.name}
+                </span>
+              ))}
+            </span>
+          ) : null}
         </div>
 
         <label className={drawer.field}>

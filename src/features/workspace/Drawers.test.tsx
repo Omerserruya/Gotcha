@@ -11,8 +11,10 @@ import messages from '@/i18n/messages/en/workspace.json';
 const { saveWorkspaceFacts } = vi.hoisted(() => ({ saveWorkspaceFacts: vi.fn() }));
 vi.mock('./actions', () => ({ saveWorkspaceFacts }));
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ href, children }: { href: string; children: ReactNode }) => (
-    <a href={href}>{children}</a>
+  Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
+    <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
+      {children}
+    </a>
   ),
 }));
 
@@ -225,5 +227,37 @@ describe('★ 11d — two cards, no paragraphs', () => {
     await userEvent.selectOptions(screen.getByTestId('language-main'), 'en');
     await userEvent.click(screen.getByTestId('drawer-save-language'));
     expect(saveWorkspaceFacts).toHaveBeenCalledWith({ languages: ['en'] }, null);
+  });
+});
+
+describe('★ 11b — the website: what the scan read, what else it found, and Scan again', () => {
+  it('"42 pages read" with when and its topics; "Also found" as chips; Scan again leads to the scan', () => {
+    inIntl(
+      <BusinessDrawer
+        workspace={ws()}
+        scan={{
+          pagesRead: 42,
+          daysAgo: 3,
+          topics: ['products', 'shipping'],
+          alsoFound: [
+            { kind: 'store', name: 'Shopify' },
+            { kind: 'channel', name: 'Instagram' },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByTestId('business-scan-line')).toHaveTextContent(
+      '42 pages read 3 days ago · products, shipping',
+    );
+    expect(screen.getByTestId('business-also-found')).toHaveTextContent(
+      'Also foundShopify storeInstagram',
+    );
+    expect(screen.getByTestId('business-scan-again').getAttribute('href')).toContain('scan');
+  });
+
+  it('nothing read: no line and no chips — never "0 pages read"', () => {
+    inIntl(<BusinessDrawer workspace={ws()} scan={null} />);
+    expect(screen.queryByTestId('business-scan-line')).toBeNull();
+    expect(screen.queryByTestId('business-also-found')).toBeNull();
   });
 });

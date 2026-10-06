@@ -200,6 +200,12 @@ export const analyticsEndpoints = {
 export const setupEndpoints = {
   state: () => endpoint('/api/setup/state'),
   knowledgeIngest: () => endpoint('/api/knowledge/ingest/latest'),
+  /**
+   * What the website scan found (ADMIN). 11b reads two parts: the store
+   * platform and the contact channels — "Also found". The rest is
+   * onboarding's.
+   */
+  discovery: () => endpoint('/api/onboarding/discovery'),
 } as const;
 
 /**

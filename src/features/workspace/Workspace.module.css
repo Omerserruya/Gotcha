@@ -375,6 +375,51 @@
    * 02's "From website" chip — on the rows and as the banner's legend, one
    * look for both: violet, radius 6, `padding:3px 8px`, 10.5px, a dot.
    */
+  /* 11b: the site, then Scan again beside it — 02's row. */
+  .websiteRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .websiteRow > :first-child {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .scanAgainLink {
+    flex: none;
+    padding: 7px var(--space-12);
+    border: 1px solid var(--border-default);
+    border-radius: var(--space-8);
+    font-size: var(--font-size-label);
+    color: var(--text-primary);
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  /* "Also found" — what else the scan saw, as quiet chips. */
+  .alsoFound {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-block-start: 6px;
+  }
+
+  .alsoFoundLabel {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .alsoFoundChip {
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--panel-well);
+    font-size: var(--font-size-caption);
+    color: var(--intent-neutral-text);
+  }
+
   .fromWebsite {
     display: inline-flex;
     align-items: center;

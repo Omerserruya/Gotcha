@@ -119,7 +119,12 @@
   },
   "website": {
     "notSet": "Not set. GOTCHA learned what it knows from your website, so without one there is nothing to scan.",
-    "readOnly": "Changed when you reconnect your store, not here."
+    "readOnly": "Changed when you reconnect your store, not here.",
+    "scanAgain": "Scan again",
+    "pagesRead": "{count, plural, one {# page read} other {# pages read}}",
+    "reading": "— still reading",
+    "alsoFound": "Also found",
+    "store": "{name} store"
   },
   "intro": {
     "withSite": "Most of this was filled in from {domain} when you signed up. Scanning again only updates fields marked “From your website”.",
