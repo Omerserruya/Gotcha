@@ -163,6 +163,20 @@ export function decideSkillTurn(ctx: SkillContext, matched: string | null | unde
   return { active: null, close, starts: false };
 }
 
+/**
+ * An automation's "Run a skill" names the skill for this turn. It counts only
+ * when the employee has that skill (on or watch); then it replaces the
+ * judgement's pick and is not held back by the restart cooldown (a person
+ * built the automation to start it). Otherwise the judgement stands.
+ */
+export function withStartSkill(ctx: SkillContext, judged: string | null | undefined, startSkillId?: string | null): { ctx: SkillContext; matched: string | null | undefined } {
+  if (!startSkillId || !ctx.candidates.some((c) => c.id === startSkillId)) return { ctx, matched: judged };
+  return {
+    ctx: { ...ctx, recentlyDoneSkillIds: (ctx.recentlyDoneSkillIds ?? []).filter((id) => id !== startSkillId) },
+    matched: startSkillId,
+  };
+}
+
 // ── Step states (pure over ToolExecutionRequest rows) ──────────────────────
 
 export type StepState = "done" | "awaiting_approval" | "in_progress" | "failed" | "denied" | "todo" | "unavailable";

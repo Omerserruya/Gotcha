@@ -58,6 +58,7 @@ import decisionTimelineRoutes from "./routes/decision-timeline";
 import customerCardRoutes from "./routes/customer-card";
 import unansweredQuestionRoutes from "./routes/unanswered-questions";
 import gdprInternalRoutes from "./routes/gdpr-internal";
+import automationActionsInternalRoutes from "./routes/automation-actions-internal";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService, getDefaultModel } from "./services/ai.service";
@@ -189,6 +190,7 @@ app.use("/api/decision-timeline", decisionTimelineRoutes);
 app.use("/api", customerCardRoutes);
 app.use("/api", unansweredQuestionRoutes);
 app.use("/api/gdpr-internal", gdprInternalRoutes);
+app.use("/api/internal/automation-actions", automationActionsInternalRoutes);
 app.use("/api/copilot", copilotOutcomesRoutes);
 app.use("/api", postCallRoutes);
 

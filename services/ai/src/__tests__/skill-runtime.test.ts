@@ -27,6 +27,7 @@ import {
   traceAsRequests,
   outcomeOfCall,
   HANDOVER_WORDING_RULE,
+  withStartSkill,
   type SkillCandidate,
   type SkillContext,
 } from "../services/skill-runtime.service";
@@ -269,5 +270,20 @@ describe("★ found in the live check: a just-finished skill is not restarted", 
   it("another skill still starts; an older finished one can start again", () => {
     expect(decideSkillTurn(ctx({ recentlyDoneSkillIds: ["sk_delivery"] }), "sk_exchange").starts).toBe(true);
     expect(decideSkillTurn(ctx({ doneSkillIds: ["sk_delivery"], recentlyDoneSkillIds: [] }), "sk_delivery").starts).toBe(true);
+  });
+});
+
+describe("★ an automation's Run a skill", () => {
+  it("names the skill for the turn when the employee has it, past the restart cooldown", () => {
+    const c = ctx({ recentlyDoneSkillIds: ["sk_exchange"] } as any);
+    const r = withStartSkill(c, null, "sk_exchange");
+    expect(r.matched).toBe("sk_exchange");
+    expect(decideSkillTurn(r.ctx, r.matched)).toMatchObject({ starts: true, active: { skill: { id: "sk_exchange" } } });
+  });
+
+  it("a skill the employee does not have changes nothing; no start keeps the judgement", () => {
+    const c = ctx();
+    expect(withStartSkill(c, "sk_delivery", "sk_other")).toEqual({ ctx: c, matched: "sk_delivery" });
+    expect(withStartSkill(c, "sk_delivery", null)).toEqual({ ctx: c, matched: "sk_delivery" });
   });
 });

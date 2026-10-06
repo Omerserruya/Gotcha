@@ -102,6 +102,7 @@ import {
   loadSkillContext,
   selectionCandidates,
   decideSkillTurn,
+  withStartSkill,
   applySkillDecision,
   loadRunRequests,
   traceAsRequests,
@@ -1002,6 +1003,8 @@ export async function generateAIBotReply(opts: {
    * Never set by the incoming-worker.
    */
   sandbox?: { enabled: true; writes: "safe" | "real" };
+  /** An automation's "Run a skill": start this business skill on this turn. */
+  startSkillId?: string | null;
 }): Promise<AIBotReplyResult> {
   // Per-conversation cancellation: if a newer inbound for this conversation
   // hits the AI service mid-turn, it calls beginTurn() again which aborts
@@ -1208,6 +1211,8 @@ async function generateAIBotReplyInner(
     closedHours?: ClosedHoursContext;
     /** See generateAIBotReply - reaches the tool dispatcher only. */
     sandbox?: { enabled: true; writes: "safe" | "real" };
+    /** See generateAIBotReply. */
+    startSkillId?: string | null;
   },
   signal: AbortSignal,
 ): Promise<AIBotReplyResult> {
@@ -2473,7 +2478,8 @@ async function generateAIBotReplyInner(
 
   // Which skill this turn works in (stickiness, topic change, edits: see
   // decideSkillTurn). Watch runs are recorded but never shape the reply.
-  const skillDecision = decideSkillTurn(skillCtx, wizardFacts.matchedSkillId);
+  const started = withStartSkill(skillCtx, wizardFacts.matchedSkillId, opts.startSkillId);
+  const skillDecision = decideSkillTurn(started.ctx, started.matched);
   const skillRunId = skillCtx.candidates.length || skillCtx.openRun
     ? await applySkillDecision(opts.tenantId, opts.conversationId, config.id, skillDecision).catch((err: any) => {
         console.warn("[ai-bot] skill run record failed:", err?.message);
