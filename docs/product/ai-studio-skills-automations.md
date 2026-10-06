@@ -132,16 +132,19 @@ Rules for every phase: dev only, no push, tests through the real router, tenant 
 ---
 
 ## 5. Test scenarios (acceptance)
-1. Create a skill, save, edit, attach to an employee.
-2. Skill used in a conversation and continued after another message.
-3. Delivery status scenario.
-4. Product exchange scenario, with the tools available.
-5. Missing or blocked tool -> hand-over at that step.
-6. Tool failure and human approval -> resume.
-7. Automation fired by a real event.
-8. No double reply / double action (dedupe, one responder per inbound).
-9. Permissions and tenant isolation.
-10. Existing behaviour unchanged when no skills are attached.
+
+Status 2026-10-06: 1-3, 5, 7-10 passed; 4 blocked on a test store; 6 passed at test level only.
+
+1. Create a skill, save, edit, attach to an employee. **Passed** (supervisor, through the UI on dev: create, edit, attach, detach, archive). Routes: `business-skills-routes.test.ts`.
+2. Skill used in a conversation and continued after another message. **Passed live** (Phase 1 test chat, Maya; sticky run across turns, 9edb32a9). Test: `skill-runtime.test.ts` (sticky / one missed turn / topic change).
+3. Delivery status scenario. **Passed live** (Phase 1 test chat: get_order, completed).
+4. Product exchange scenario, with the tools available. **Blocked**: needs a store with an exchange tool (Shopify is in ERROR on dev; WooCommerce has no exchange tool). Not simulated on purpose. Up to there it passes live: order found, stock checked, hand-over at swap.
+5. Missing or blocked tool -> hand-over at that step. **Passed live** (Exchange hands over at `swap`; re-run with the skill on and the wording fix, b0f807ba). Fit check reports `handsOverAtStep: swap`.
+6. Tool failure and human approval -> resume. **Passed at test level only**: `skill-approval-resume.test.ts` (69be34d8) and `skill-prompt-and-approval.test.ts` (the orchestrator tightens ALLOW to an approval). Not live: the only amount-gated step is the unavailable swap.
+7. Automation fired by a real event. **Passed live** (Phase 2: inbound message, tag added by a person through the gateway, schedule and webhook in tests; e39816e5, 19d68e8d).
+8. No double reply / double action (dedupe, one responder per inbound). **Passed live** (same message twice and same tag event twice = one run; loop guard 5/minute; automation answered = 0 AI turns; nothing runs while a person owns the conversation).
+9. Permissions and tenant isolation. **Passed live** (56537f4f): another tenant's admin gets 404 on automation routes and 402 (plan gate, reveals nothing) on skill routes, whose cross-tenant 404 is covered by router tests; a plain agent gets 403 on every skill and automation write.
+10. Existing behaviour unchanged when no skills are attached. **Passed** (test: the prompt is byte-identical without skills, `skill-prompt-and-approval.test.ts`; the wizard judgement call is unchanged without skills).
 
 ## 6. Assumptions log
 - ROLE / system skill = the existing code layer, not a record (see 3.1).
