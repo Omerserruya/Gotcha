@@ -11,6 +11,7 @@ import { useRealtimeEvent } from '@/realtime/realtime-provider';
 import { endCall } from './actions';
 import styles from './Calls.module.css';
 import { TransferPanel } from './TransferPanel';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * Screen 05e — on a call. Measured.
@@ -270,7 +271,9 @@ export function LiveCall({
                       <span className={styles.speaker}>
                         {line.speaker === 'agent' ? t('live.you') : (firstName ?? t('live.them'))}
                       </span>
-                      <span className={styles.said}>{line.text}</span>
+                      <span className={styles.said}>
+                        <UserText>{line.text}</UserText>
+                      </span>
                     </span>
                   </li>
                 ))}

@@ -17,6 +17,7 @@ const MAX_FILES = 5;
 import { Link } from '@/i18n/navigation';
 
 import styles from './Inbox.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * The reply box — screen 02's last missing part.
@@ -243,7 +244,9 @@ export function Composer({
         <div className={styles.composerQuote} data-testid="composer-replying">
           <span className={styles.quote}>
             <span className={styles.quoteWho}>{t('replyingTo', { who: replying.who })}</span>
-            <span className={styles.quoteText}>{replying.preview}</span>
+            <span className={styles.quoteText}>
+              <UserText>{replying.preview}</UserText>
+            </span>
           </span>
           <button
             type="button"

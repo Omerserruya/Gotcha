@@ -411,8 +411,8 @@
     "wrote": "{count, plural, other {כתב/ה # פעמים}}"
   },
   "since": {
-    "minutes": "לפני {n} ד׳",
-    "hours": "לפני {n} ש׳",
+    "minutes": "לפני {n} דק׳",
+    "hours": "לפני {n} שע׳",
     "yesterday": "אתמול",
     "days": "{n} ימים",
     "months": "{n, plural, one {חודש אחד} two {חודשיים} other {# חודשים}}"

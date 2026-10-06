@@ -178,7 +178,9 @@ export async function KnowledgeScreen({
                   data-testid={`conflict-${candidate.id}`}
                 >
                   <div className={styles.conflictHead}>
-                    <p className={styles.conflictQuestion}>{candidate.question}</p>
+                    <p className={styles.conflictQuestion}>
+                      <UserText>{candidate.question}</UserText>
+                    </p>
                     <p className={styles.conflictAsked}>
                       {t('conflicts.asked', { count: candidate.occurrenceCount })}
                     </p>
@@ -351,7 +353,9 @@ export async function KnowledgeScreen({
                 {unanswered.map((question) => (
                   <li key={question.id} className={styles.gap} data-testid={`gap-${question.id}`}>
                     <span className={styles.gapText}>
-                      <span className={styles.gapQuestion}>{question.question}</span>
+                      <span className={styles.gapQuestion}>
+                        <UserText>{question.question}</UserText>
+                      </span>
                       {/* One person twenty times ≠ twenty people once: kept apart. */}
                       <span className={styles.gapCount}>
                         {t('gaps.asked', {

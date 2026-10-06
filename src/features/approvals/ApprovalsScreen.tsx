@@ -30,6 +30,8 @@ import {
   type Words,
 } from './request-words';
 import styles from './Approvals.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
+import { isolated } from './isolate';
 
 /**
  * Screen 03 — the queue and the decision.
@@ -430,7 +432,9 @@ export function ApprovalsScreen({
       : (amountOf(approval) ?? '');
   };
   const say = (words: Words | null, fallback: string) =>
-    words ? t(`request.${words.key}` as 'request.queueRefund', words.values as never) : fallback;
+    words
+      ? t(`request.${words.key}` as 'request.queueRefund', isolated(words.values) as never)
+      : fallback;
   const createdClock = selected ? clock(selected.createdAt) : null;
   const expiresClock = selected ? dayClock(selected.expiresAt) : null;
 
@@ -480,7 +484,9 @@ export function ApprovalsScreen({
                   data-failed={moment.dispatched === false ? '' : undefined}
                 >
                   <span className={styles.queueTop}>
-                    <span className={styles.queueSummary}>{moment.summary}</span>
+                    <span className={styles.queueSummary}>
+                      <UserText>{moment.summary}</UserText>
+                    </span>
                     <span className={styles.queueWhen} data-done="">
                       {moment.dispatched === false ? t('queue.didntRun') : t('queue.done')}
                     </span>

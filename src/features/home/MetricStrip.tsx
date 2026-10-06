@@ -182,8 +182,11 @@ function ChannelSplit({
            * queue.
            */
           <span key={channel.channel}>
-            {channelName(channel.channel, channelNames) ?? channelNames('name.other')}{' '}
-            {share(channel.conversationCount)}%
+            {/* A name that may be Latin in a Hebrew label ("צ'אט Shopify"), and its share apart. */}
+            <bdi dir="auto">
+              {channelName(channel.channel, channelNames) ?? channelNames('name.other')}
+            </bdi>{' '}
+            <span>{`${share(channel.conversationCount)}%`}</span>
           </span>
         ))}
       </div>

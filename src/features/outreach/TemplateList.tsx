@@ -15,6 +15,7 @@ import { Link } from '@/i18n/navigation';
 import { DuplicateTemplate } from './DuplicateTemplate';
 import { SubmitTemplate } from './SendButtons';
 import styles from './Outreach.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * Screen 05c — message templates, measured.
@@ -228,7 +229,7 @@ export async function TemplatePreview({
           <p className={styles.tplBubbleBody}>
             {bodyParts(template).map((part, index) =>
               'text' in part ? (
-                <span key={index}>{part.text}</span>
+                <UserText key={index}>{part.text}</UserText>
               ) : (
                 <mark key={index} className={styles.tplVar} title={`{{${part.key}}}`}>
                   {part.variable}

@@ -9,6 +9,7 @@ import { Link } from '@/i18n/navigation';
 import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
 import { displayHandle } from './phone';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
  * 04b — a person with a history, not a record.
@@ -378,7 +379,9 @@ export async function CustomerTimelineList({
           </time>
           <span className={styles.timelineDot} aria-hidden="true" />
           <span className={styles.timelineText}>
-            <span className={styles.timelineTitle}>{row.title}</span>
+            <span className={styles.timelineTitle}>
+              <UserText>{row.title}</UserText>
+            </span>
             {row.line ? <span className={styles.timelineLine}>{row.line}</span> : null}
           </span>
         </li>
@@ -430,7 +433,9 @@ export async function CustomerSide({ detail }: { readonly detail: CustomerDetail
         {facts.length > 0 ? (
           <ul className={styles.remembers}>
             {facts.slice(0, 4).map((fact, index) => (
-              <li key={index}>{fact.text}</li>
+              <li key={index}>
+                <UserText>{fact.text}</UserText>
+              </li>
             ))}
           </ul>
         ) : (
@@ -464,7 +469,9 @@ export async function CustomerSide({ detail }: { readonly detail: CustomerDetail
                 when: format.dateTime(new Date(note.createdAt), { day: 'numeric', month: 'short' }),
               })}
             </p>
-            <p className={styles.pinnedBody}>{note.body}</p>
+            <p className={styles.pinnedBody}>
+              <UserText>{note.body}</UserText>
+            </p>
           </>
         ) : (
           <p className={styles.sideNone}>{t('card.noNote')}</p>

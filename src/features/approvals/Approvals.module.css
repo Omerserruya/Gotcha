@@ -850,9 +850,11 @@
     border-block-end: 0;
   }
 
+  /* 02's 56 as a floor: "2 באוג׳" is wider in Hebrew and must stay one line. */
   .decidedWhen {
     flex: none;
-    inline-size: 56px;
+    min-inline-size: 56px;
+    white-space: nowrap;
     font-family: var(--font-mono);
     font-size: 10.5px;
     font-weight: var(--font-weight-medium);

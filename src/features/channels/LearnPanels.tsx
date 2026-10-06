@@ -15,6 +15,7 @@ import { Link } from '@/i18n/navigation';
 import { ReportFoot } from './ReportFootActions';
 import { SuggestionActions } from './SuggestionActions';
 import styles from './Channels.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 const href = (view: 'progress' | 'report', importId: string, tab?: string) => ({
   pathname: '/settings/channels',
@@ -472,7 +473,9 @@ export async function ReportPanel({
                         .join(' · ')}
                     </span>
                   </p>
-                  <p className={styles.reportQuestion}>{c.question}</p>
+                  <p className={styles.reportQuestion}>
+                    <UserText>{c.question}</UserText>
+                  </p>
                   {split ? (
                     // 02: "Your replies said 14 days in 61 chats and 30 days in 12."
                     <p className={styles.reportAnswer} data-testid={`said-${c.id}`}>
@@ -511,7 +514,9 @@ export async function ReportPanel({
                 </p>
                 {ready.slice(0, 2).map((c) => (
                   <p key={c.id} className={styles.reportReadyRow}>
-                    <span className={styles.reportReadyQ}>{c.question}</span>
+                    <span className={styles.reportReadyQ}>
+                      <UserText>{c.question}</UserText>
+                    </span>
                     <span>{c.answer}</span>
                   </p>
                 ))}

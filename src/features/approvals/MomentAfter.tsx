@@ -12,6 +12,7 @@ import {
 import { Link } from '@/i18n/navigation';
 
 import styles from './Approvals.module.css';
+import { UserText } from '@/design-system/primitives/text/UserText';
 
 /** What 03b knows about the decision it follows. */
 export interface MomentOutcome {
@@ -258,7 +259,9 @@ export function MomentAfter({
           <>
             <div className={styles.momentNextText}>
               <p className={styles.momentNextEyebrow}>{next.eyebrow}</p>
-              <p className={styles.momentNextTitle}>{next.summary}</p>
+              <p className={styles.momentNextTitle}>
+                <UserText>{next.summary}</UserText>
+              </p>
               {next.line ? <p className={styles.momentNextLine}>{next.line}</p> : null}
             </div>
             <button

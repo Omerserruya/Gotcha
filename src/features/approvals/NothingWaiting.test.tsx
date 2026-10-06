@@ -120,7 +120,17 @@ describe('★★ how it ended, in one word — and never "someone"', () => {
 
   it('★ a rejection shows its reason in the status, as 02’s "Rejected · outside policy"', async () => {
     await show([approval({ id: 'a2', status: 'REJECTED', decisionReason: 'outside policy' })]);
-    expect(screen.getByTestId('reason-a2')).toHaveTextContent('Rejected · outside policy');
+    // One of our reasons, said in the reader's language (the stored label maps back).
+    expect(screen.getByTestId('reason-a2')).toHaveTextContent(/Rejected · outside policy/i);
+  });
+
+  it('★ the platform’s own words stay as written', async () => {
+    await show([
+      approval({ id: 'a3', status: 'REJECTED', decisionReason: 'not eligible under policy' }),
+    ]);
+    expect(screen.getByTestId('reason-a3')).toHaveTextContent(
+      'Rejected · not eligible under policy',
+    );
   });
 
   it('★★ approved and then it did not run — the ending 02’s tidy column cannot show', async () => {

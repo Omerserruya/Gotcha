@@ -6,6 +6,8 @@ import { humaniseCode } from '@/api/contracts/capabilities';
 import { Link } from '@/i18n/navigation';
 
 import { decisionSentence } from './decision-sentence';
+import { isolated } from './isolate';
+import { reasonKeyOf } from './reason-words';
 import type { HandledToday } from './handled';
 import type { decisionStats } from './load-approvals';
 
@@ -89,6 +91,15 @@ export async function NothingWaiting({
             maximumFractionDigits: 0,
           })
         : format.number(approval.facts.amount);
+  /** One of our reasons in the reader's language; anyone's own words as written, isolated. */
+  const reasonSaid = (text: string) => {
+    const key = reasonKeyOf(text);
+    return key === null
+      ? isolated({ text }).text
+      : key === 'tooGenerous'
+        ? t('reject3.tooGenerous')
+        : t(`action2.reasons.${key}`);
+  };
   const sentence = (approval: Approval) => {
     const asked = amountOf(approval);
     // Edited: what ran, and what was asked — "Refunded 120 (was 179)".
@@ -105,7 +116,7 @@ export async function NothingWaiting({
     const { key, values } = decisionSentence(approval, customerNames[approval.id] ?? null, ran);
     return key === 'none'
       ? approval.summary
-      : t(`decided.sentence.${key}` as 'decided.sentence.refunded', values as never);
+      : t(`decided.sentence.${key}` as 'decided.sentence.refunded', isolated(values) as never);
   };
 
   /*
@@ -234,7 +245,9 @@ export async function NothingWaiting({
                     data-testid={`reason-${approval.id}`}
                     title={by}
                   >
-                    {t('decided.status.rejectedBecause', { reason: approval.decisionReason })}
+                    {t('decided.status.rejectedBecause', {
+                      reason: reasonSaid(approval.decisionReason),
+                    })}
                   </span>
                 ) : (
                   <span className={styles.decidedStatus} data-tone={stance} title={by}>

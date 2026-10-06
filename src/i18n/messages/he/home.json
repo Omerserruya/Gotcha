@@ -71,7 +71,7 @@
     "more": "{count, plural, one {עוד אחד ממתין} two {עוד # ממתינים} other {עוד # ממתינים}} · פתחו את התיבה",
     "wait": {
       "minutes": "{count} דק׳",
-      "hours": "{count} ש׳",
+      "hours": "{count} שע׳",
       "days": "{count} ימ׳"
     },
     "intent": {
@@ -197,7 +197,7 @@
     "timeSavedMeasured": "מבוסס על השיחות שלכם",
     "timeSavedDefault": "מבוסס על ממוצע הפלטפורמה, לא על ההיסטוריה שלכם",
     "duration": {
-      "hours": "{count} ש׳",
+      "hours": "{count} שע׳",
       "minutes": "{count} דק׳",
       "days": "{count} ימ׳"
     },
