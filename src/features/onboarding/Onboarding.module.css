@@ -810,8 +810,38 @@
   }
 
   .tileName {
+    min-inline-size: 0;
+    line-height: 1.2;
+  }
+
+  .tileMark {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+  }
+
+  .tileMark[data-standing]::after {
+    content: '';
+    position: absolute;
+    inset-block-start: -2px;
+    inset-inline-end: -2px;
+    inline-size: 8px;
+    block-size: 8px;
+    border: 2px solid var(--panel-field);
+    border-radius: 50%;
+    background-color: var(--signal-done-text);
+  }
+
+  .tileMark[data-standing='failing']::after {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .srOnly {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
     overflow: hidden;
-    text-overflow: ellipsis;
+    clip-path: inset(50%);
     white-space: nowrap;
   }
 

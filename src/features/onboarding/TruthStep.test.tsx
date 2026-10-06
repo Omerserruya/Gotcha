@@ -145,7 +145,9 @@ describe('★★ a connection row is not a connection (dev: Shopify ERROR read "
     );
     expect(screen.getByTestId('oauth-shopify')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('<!DOCTYPE');
-    expect(screen.getByTestId('truth-tile-woocommerce')).toHaveTextContent('Connected');
+    // The name whole, the standing a dot on the mark - and said to a screen reader.
+    expect(screen.getByTestId('truth-tile-woocommerce')).toHaveTextContent('WooCommerce');
+    expect(screen.getByTestId('truth-tile-standing-woocommerce')).toHaveTextContent('Connected');
   });
 
   it('a failing store does not count as connected for Continue', () => {

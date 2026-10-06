@@ -561,7 +561,7 @@ function Conversation({
           ) : (
             <ul className={styles.choices}>
               {employees.map((e) => (
-                <li key={e.id} className={styles.choice} aria-disabled="true">
+                <li key={e.id} className={styles.choice}>
                   <span className={styles.initials} aria-hidden="true">
                     {e.name.slice(0, 2).toUpperCase()}
                   </span>

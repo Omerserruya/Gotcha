@@ -164,14 +164,22 @@ export function TruthStep({
               scroll={false}
               data-testid={`truth-tile-${slug}`}
             >
-              <IntegrationLogo slug={slug} size="pill" />
-              {/* The design's short names, one line each ("Your API"). */}
-              <span className={styles.tileName}>{t(`systems.${slug}`)}</span>
-              {tile === 'connected' ? (
-                <span className={styles.connected}>{t('connected')}</span>
-              ) : tile === 'failing' ? (
-                <span className={styles.failing}>{t('failing')}</span>
-              ) : null}
+              {/* The standing is a dot on the mark, so the name always shows whole (dev). */}
+              <span
+                className={styles.tileMark}
+                data-standing={tile === 'none' ? undefined : tile}
+                title={tile === 'none' ? undefined : t(tile)}
+              >
+                <IntegrationLogo slug={slug} size="pill" />
+              </span>
+              <span className={styles.tileName}>
+                {t(`systems.${slug}`)}
+                {tile === 'none' ? null : (
+                  <span className={styles.srOnly} data-testid={`truth-tile-standing-${slug}`}>
+                    {` · ${t(tile)}`}
+                  </span>
+                )}
+              </span>
             </Link>
           );
         })}
