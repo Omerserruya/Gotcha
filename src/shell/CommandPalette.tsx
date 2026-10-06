@@ -9,7 +9,13 @@ import { usePermissions } from '@/permissions/permissions-context';
 
 import styles from './CommandPalette.module.css';
 import { destinations, matching } from './command-palette-model';
-import { searchConversations, type ConversationHit } from './command-search';
+import {
+  searchConversations,
+  searchPeople,
+  type ActionHit,
+  type ConversationHit,
+  type PersonHit,
+} from './command-search';
 
 /** The rail's ⌘K button opens the palette by this event — its look unchanged. */
 export const OPEN_COMMAND_PALETTE = 'gotcha:command-palette';
@@ -22,17 +28,20 @@ type Item = {
   /** Absent: drawn, not live. */
   readonly href?: string;
   readonly title?: string;
+  /** DO THIS: the action's state, 02's chip ("Needs approval"). */
+  readonly chip?: string;
 };
 
 /**
  * 19, measured: ⌘K — a 720 dialog over any screen, at the studio overlays'
  * 72% scrim. One input; DO THIS, GO TO, ASK; a foot of keys.
  *
- *   GO TO   real: the screens the person may see (the rail's own list and
- *           permission check), and conversations by the customer's name or
- *           channel id — the one search the platform has.
- *   DO THIS drawn, not live: nothing turns "refund dana" into an action on
- *           an object, and every action is a write.
+ *   GO TO   real: customers (the contacts search, and an order number's
+ *           customer), conversations by name or channel id, and the screens
+ *           the person may see.
+ *   DO THIS only what can be acted on: an approval PENDING for a customer
+ *           found — opening Approvals, where it is decided. Nothing is
+ *           invented from the words; with none, no section.
  *   ASK     goes to Home with the question in its box — FILLED, never sent:
  *           sending runs the assistant.
  *
@@ -48,6 +57,8 @@ export function CommandPalette() {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [hits, setHits] = useState<readonly ConversationHit[]>([]);
+  const [people, setPeople] = useState<readonly PersonHit[]>([]);
+  const [actions, setActions] = useState<readonly ActionHit[]>([]);
   const [searchFailed, setSearchFailed] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
@@ -55,6 +66,8 @@ export function CommandPalette() {
   function reset() {
     setQuery('');
     setHits([]);
+    setPeople([]);
+    setActions([]);
     setSearchFailed(false);
     setActive(0);
   }
@@ -87,11 +100,15 @@ export function CommandPalette() {
     if (!open || query.trim().length < 2) return;
     let current = true;
     const timer = setTimeout(() => {
-      void searchConversations(query).then((result) => {
-        if (!current) return;
-        setSearchFailed(!result.ok);
-        setHits(result.ok ? result.hits : []);
-      });
+      void Promise.all([searchConversations(query), searchPeople(query)]).then(
+        ([conversations, found]) => {
+          if (!current) return;
+          setSearchFailed(!conversations.ok && !found.ok);
+          setHits(conversations.ok ? conversations.hits : []);
+          setPeople(found.ok ? found.people : []);
+          setActions(found.ok ? found.actions : []);
+        },
+      );
     }, 200);
     return () => {
       current = false;
@@ -113,6 +130,17 @@ export function CommandPalette() {
     const typed = query.trim();
     const searchable = typed.length >= 2;
     const go: Item[] = [
+      ...(searchable ? people : []).map((person) => ({
+        key: `customer-${person.id}`,
+        group: 'go' as const,
+        label: person.byOrder
+          ? tp('order', { number: person.byOrder.replace(/^#/, '') })
+          : (person.name ?? person.handle ?? tp('someone')),
+        meta: person.byOrder
+          ? (person.name ?? person.handle ?? tp('customer'))
+          : [tp('customer'), person.handle].filter(Boolean).join(' · '),
+        href: `/customers/${encodeURIComponent(person.id)}`,
+      })),
       ...(searchable ? hits : []).map((hit) => ({
         key: `conversation-${hit.id}`,
         group: 'go' as const,
@@ -131,7 +159,13 @@ export function CommandPalette() {
     ];
     if (!typed) return go;
     return [
-      { key: 'do', group: 'do', label: typed, meta: '—', title: tp('doNone') },
+      ...(searchable ? actions : []).map((action) => ({
+        key: `approval-${action.id}`,
+        group: 'do' as const,
+        label: action.summary,
+        chip: tp('needsApproval'),
+        href: '/approvals',
+      })),
       ...go,
       {
         key: 'ask',
@@ -141,7 +175,7 @@ export function CommandPalette() {
         href: `/home?ask=${encodeURIComponent(typed)}`,
       },
     ];
-  }, [hits, query, screens, tch, tp]);
+  }, [actions, hits, people, query, screens, tch, tp]);
 
   if (!open) return null;
 
@@ -227,6 +261,7 @@ export function CommandPalette() {
                               : item.label}
                           </span>
                           {item.meta ? <span className={styles.meta}>{item.meta}</span> : null}
+                          {item.chip ? <span className={styles.chip}>{item.chip}</span> : null}
                         </button>
                       ) : (
                         <span

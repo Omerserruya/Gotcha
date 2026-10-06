@@ -85,13 +85,15 @@
       "go": "לעבור אל",
       "ask": "לשאול"
     },
-    "doNone": "עדיין אין המרה של משפט לפעולה.",
     "someone": "מישהו",
     "conversation": "שיחה",
     "ask": "לשאול את GOTCHA: “{question}”",
     "askMeta": "בדף הבית",
-    "searchFailed": "לא הצלחנו לחפש שיחות כרגע.",
+    "searchFailed": "לא הצלחנו לחפש כרגע.",
     "keys": "↑↓ מעבר · ↵ פתיחה · esc סגירה",
-    "everywhere": "עובד מכל מסך"
+    "everywhere": "עובד מכל מסך",
+    "customer": "לקוח/ה",
+    "order": "הזמנה #{number}",
+    "needsApproval": "ממתין לאישור"
   }
 }

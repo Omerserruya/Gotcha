@@ -142,6 +142,16 @@
     color: var(--text-subtle);
   }
 
+  /* 02's "Needs approval": 11.5px on the blocked tint. */
+  .chip {
+    flex: none;
+    padding: 3px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--intent-blocked-surface);
+    font-size: var(--font-size-caption);
+    color: var(--intent-blocked-text);
+  }
+
   .note {
     margin: 0;
     padding: 8px 22px;

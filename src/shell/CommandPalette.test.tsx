@@ -12,7 +12,8 @@ vi.mock('@/permissions/permissions-context', () => ({
   usePermissions: () => ({ canSee: () => true }),
 }));
 const searchConversations = vi.hoisted(() => vi.fn());
-vi.mock('./command-search', () => ({ searchConversations }));
+const searchPeople = vi.hoisted(() => vi.fn());
+vi.mock('./command-search', () => ({ searchConversations, searchPeople }));
 
 import { CommandPalette, OPEN_COMMAND_PALETTE } from './CommandPalette';
 
@@ -32,6 +33,8 @@ beforeEach(() => {
     ok: true,
     hits: [{ id: 'c1', name: 'Dana Cohen', handle: '+97250', channel: 'WHATSAPP' }],
   });
+  searchPeople.mockReset();
+  searchPeople.mockResolvedValue({ ok: true, people: [], actions: [] });
 });
 
 describe('★★ 19 — ⌘K from anywhere', () => {
@@ -76,15 +79,48 @@ describe('★★ 19 — ⌘K from anywhere', () => {
     expect(screen.getByTestId('command-item-ask')).toHaveTextContent('Ask GOTCHA: “knowledge”');
   });
 
-  it('★ DO THIS is drawn, not live: nothing turns a sentence into an action', async () => {
+  it('★ DO THIS only for what can be acted on — nothing pending, no section at all', async () => {
     mount();
     openWithKeys();
     await userEvent.type(screen.getByTestId('command-input'), 'refund dana');
-    const action = screen.getByTestId('command-item-do');
-    expect(action).toHaveAttribute('aria-disabled', 'true');
-    expect(action).toHaveAttribute('title', expect.stringMatching(/Nothing turns a sentence/));
+    await screen.findByTestId('command-item-conversation-c1');
+    expect(screen.queryByTestId('command-group-do')).toBeNull();
+  });
+
+  it('★★ a pending approval for a customer found: DO THIS, with 02’s chip, opening Approvals', async () => {
+    searchPeople.mockResolvedValue({
+      ok: true,
+      people: [{ id: 'k1', name: 'Dana Cohen', handle: '+97250', byOrder: null }],
+      actions: [{ id: 'a1', summary: 'Refund Dana Cohen · order #1842' }],
+    });
+    mount();
+    openWithKeys();
+    await userEvent.type(screen.getByTestId('command-input'), 'dana');
+    const action = await screen.findByTestId('command-item-approval-a1');
+    expect(action).toHaveTextContent('Refund Dana Cohen · order #1842');
+    expect(action).toHaveTextContent('Needs approval');
     await userEvent.click(action);
-    expect(push).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith('/approvals');
+  });
+
+  it('★ GO TO a customer — by name, or by an order number', async () => {
+    searchPeople.mockResolvedValue({
+      ok: true,
+      people: [
+        { id: 'k1', name: 'Dana Cohen', handle: '+97250', byOrder: null },
+        { id: 'k2', name: 'Noa Gil', handle: null, byOrder: '#1842' },
+      ],
+      actions: [],
+    });
+    mount();
+    openWithKeys();
+    await userEvent.type(screen.getByTestId('command-input'), 'dana');
+    expect(await screen.findByTestId('command-item-customer-k1')).toHaveTextContent(
+      'Dana Cohencustomer · +97250',
+    );
+    expect(screen.getByTestId('command-item-customer-k2')).toHaveTextContent('Order #1842Noa Gil');
+    await userEvent.click(screen.getByTestId('command-item-customer-k1'));
+    expect(push).toHaveBeenCalledWith('/customers/k1');
   });
 
   it('★ ASK goes to Home with the question — Home only fills its box', async () => {
@@ -108,6 +144,7 @@ describe('★★ 19 — ⌘K from anywhere', () => {
 
   it('a failed search says so, and the screens still work', async () => {
     searchConversations.mockResolvedValue({ ok: false });
+    searchPeople.mockResolvedValue({ ok: false });
     mount();
     openWithKeys();
     await userEvent.type(screen.getByTestId('command-input'), 'dana');

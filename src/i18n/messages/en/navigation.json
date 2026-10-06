@@ -85,13 +85,15 @@
       "go": "Go to",
       "ask": "Ask"
     },
-    "doNone": "Nothing turns a sentence into an action yet.",
     "someone": "Someone",
     "conversation": "conversation",
     "ask": "Ask GOTCHA: “{question}”",
     "askMeta": "on Home",
-    "searchFailed": "Conversations couldn't be searched just now.",
+    "searchFailed": "Couldn’t search just now.",
     "keys": "↑↓ move · ↵ open · esc close",
-    "everywhere": "Works from every screen"
+    "everywhere": "Works from every screen",
+    "customer": "customer",
+    "order": "Order #{number}",
+    "needsApproval": "Needs approval"
   }
 }
