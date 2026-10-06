@@ -3,6 +3,7 @@ import { createFormatter, createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
 import messages from '@/i18n/messages/en/customers.json';
+import inboxMessages from '@/i18n/messages/en/inbox.json';
 
 import { CustomerDetail } from './CustomerDetail';
 import type { CustomerDetail as Detail } from './load-customer';
@@ -28,7 +29,11 @@ import type { CustomerDetail as Detail } from './load-customer';
  */
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'customers') =>
-    createTranslator({ locale: 'en', messages: { customers: messages }, namespace }),
+    createTranslator({
+      locale: 'en',
+      messages: { customers: messages, inbox: inboxMessages },
+      namespace,
+    }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
@@ -304,15 +309,15 @@ describe('★★ the timeline must never claim to be a history', () => {
       }),
     );
     const action = screen.getByTestId('event-action');
-    expect(action).toHaveTextContent(/tried process_refund and it failed/i);
-    expect(action).not.toHaveTextContent(/^GOTCHA ran/);
+    expect(action).toHaveTextContent(/^Refund - didn’t go through$/);
+    expect(action).not.toHaveTextContent(/done/);
   });
 
   it.each([
-    ['proposed', false, /asked to run process_refund, waiting for approval/],
-    ['denied', false, /asked to run process_refund and it was declined/],
-    ['running', false, /is running process_refund/],
-    ['completed', true, /^GOTCHA ran process_refund/],
+    ['proposed', false, /^Refund - waiting for approval$/],
+    ['denied', false, /^Refund - declined$/],
+    ['running', false, /^Refund - running$/],
+    ['completed', true, /^Refund - done$/],
   ] as const)(
     '★★ by its status (4b7c2e1b): %s is not "it failed"',
     async (status, success, words) => {
@@ -351,7 +356,7 @@ describe('★★ the timeline must never claim to be a history', () => {
       const action = screen.getByTestId('event-action');
       expect(action).toHaveAttribute('data-status', status);
       expect(action).toHaveTextContent(words);
-      if (status !== 'completed') expect(action).not.toHaveTextContent(/failed/);
+      if (status !== 'completed') expect(action).not.toHaveTextContent(/didn’t go through/);
     },
   );
 

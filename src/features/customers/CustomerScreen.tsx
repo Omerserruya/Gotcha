@@ -1,9 +1,10 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
+import { toolWords as toolWordsOf } from './tool-words';
+
 import { channelHandles, type TimelineEvent, actionOutcome } from '@/api/contracts/customer-detail';
 import { ordersIn } from '@/api/contracts/customer-orders';
 import { channelName } from '@/api/contracts/inbox';
-import { humanizeTag } from '@/api/contracts/approvals';
 import { Link } from '@/i18n/navigation';
 
 import type { CustomerDetail } from './load-customer';
@@ -238,6 +239,7 @@ export async function CustomerTimelineList({
   readonly only?: 'conversations';
 }) {
   const t = await getTranslations('customers');
+  const toolWords = await toolWordsOf();
   const channels = await getTranslations('channels');
   const format = await getFormatter();
   const now = new Date();
@@ -280,7 +282,7 @@ export async function CustomerTimelineList({
           key: `a-${event.id}`,
           at: event.createdAt,
           tone: 'action',
-          title: humanizeTag(event.action.tool.split('.').pop() ?? event.action.tool),
+          title: toolWords(event.action.tool),
           line: t(`card.aiAction.${actionOutcome(event.action)}`),
         });
       }

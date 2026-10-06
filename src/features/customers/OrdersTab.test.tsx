@@ -8,6 +8,7 @@ import {
   type CommerceContextResponse,
 } from '@/api/contracts/customer-orders';
 import messages from '@/i18n/messages/en/customers.json';
+import inboxMessages from '@/i18n/messages/en/inbox.json';
 
 import {
   OrdersTab,
@@ -43,7 +44,11 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'customers') =>
-    createTranslator({ locale: 'en', messages: { customers: messages }, namespace }),
+    createTranslator({
+      locale: 'en',
+      messages: { customers: messages, inbox: inboxMessages },
+      namespace,
+    }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 

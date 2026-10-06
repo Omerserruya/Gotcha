@@ -3,6 +3,7 @@ import { createFormatter, createTranslator, NextIntlClientProvider } from 'next-
 import { describe, expect, it, vi } from 'vitest';
 
 import messages from '@/i18n/messages/en/customers.json';
+import inboxMessages from '@/i18n/messages/en/inbox.json';
 
 import { FIXTURE_DETAIL } from './capture-fixtures';
 import { CustomerActions } from './CustomerActions';
@@ -38,7 +39,11 @@ import { CustomerNotes } from './CustomerNotes';
 vi.mock('@/i18n/navigation', () => ({ Link: 'a' }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'customers') =>
-    createTranslator({ locale: 'en', messages: { customers: messages }, namespace }),
+    createTranslator({
+      locale: 'en',
+      messages: { customers: messages, inbox: inboxMessages },
+      namespace,
+    }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
@@ -79,7 +84,7 @@ describe('the capture fixture agrees with the capture spec', () => {
     await show();
     expect(screen.getByTestId('event-imported')).toHaveTextContent(/imported/i);
     expect(screen.getByTestId('event-handover')).toHaveTextContent(/Handed to Dana/);
-    expect(screen.getByTestId('event-action')).toHaveTextContent(/get_customer_orders/);
+    expect(screen.getByTestId('event-action')).toHaveTextContent(/Customer identification - done/);
   });
 
   it('renders the notes section in its linked state, with the anonymity sentence', async () => {

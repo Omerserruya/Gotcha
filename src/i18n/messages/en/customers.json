@@ -67,12 +67,12 @@
         "message": "message"
       },
       "action": {
-        "proposed": "GOTCHA asked to run {tool}, waiting for approval.",
-        "approved": "{tool} was approved.",
-        "running": "GOTCHA is running {tool}.",
-        "completed": "GOTCHA ran {tool}.",
-        "failed": "GOTCHA tried {tool} and it failed.",
-        "denied": "GOTCHA asked to run {tool} and it was declined."
+        "proposed": "{tool} - waiting for approval",
+        "approved": "{tool} - approved",
+        "running": "{tool} - running",
+        "completed": "{tool} - done",
+        "failed": "{tool} - didn’t go through",
+        "denied": "{tool} - declined"
       }
     },
     "absent": {
@@ -182,12 +182,12 @@
       "aiResponded": "GOTCHA replied",
       "aiBotTurn": "GOTCHA took a turn in the conversation",
       "aiPausedForApproval": "GOTCHA paused and asked for approval",
-      "aiToolCall": "GOTCHA used {detail}",
+      "aiToolCall": "GOTCHA: {detail}",
       "aiBudgetAborted": "GOTCHA stopped, out of budget for {detail}",
       "messageSent": "A message was sent",
       "productMessageSent": "A product was sent in the chat",
       "crossCustomerDenied": "A request for another customer's data was refused",
-      "adapterCall": "Called {tool}",
+      "adapterCall": "Store: {tool}",
       "commerceExecuted": "A change to the customer's record was sent to the store",
       "commerceFailed": "A change to the customer's record did not go through",
       "commerceDenied": "A change to the customer's record was not allowed",

@@ -2,7 +2,9 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { Cog, User, Workflow } from 'lucide-react';
 
+import { UserText } from '@/design-system/primitives/text/UserText';
 import { humanizeTag, type Approval } from '@/api/contracts/approvals';
+import { toolWords as toolWordsOf } from './tool-words';
 import {
   POLICY_KINDS,
   policyLines,
@@ -213,6 +215,13 @@ interface Row {
     readonly testid?: string;
   } | null;
   readonly line: string | null;
+  /**
+   * The title and line are the SERVER's words (an approval's summary and
+   * reason, written in English whatever the reader's language): isolated, so
+   * a period does not jump to the start of a Hebrew line. Our own composed
+   * lines are not wrapped - a Latin first word would flip their order.
+   */
+  readonly serverText?: boolean;
   /** The platform's key, as the title's tooltip, when the title is our humanising of it. */
   readonly rawKey?: string;
   readonly lineTestid?: string;
@@ -249,6 +258,7 @@ export async function CustomerActions({
   readonly filter?: ActionFilter;
 }) {
   const t = await getTranslations('customers');
+  const toolWords = await toolWordsOf();
   const format = await getFormatter();
   const now = new Date();
 
@@ -286,7 +296,7 @@ export async function CustomerActions({
     const key = ACTION_KEYS[event.action];
     if (key) return t(`actions.name.${key}` as 'actions.name.aiResponded');
     const tool = toolOf(event);
-    if (tool) return t('actions.name.adapterCall', { tool });
+    if (tool) return t('actions.name.adapterCall', { tool: toolWords(tool) });
     for (const [prefix, k] of PREFIX_KEYS) {
       if (event.action.startsWith(prefix)) {
         const detail = event.action.slice(prefix.length);
@@ -298,7 +308,7 @@ export async function CustomerActions({
         }
         // The tool's own name, made legible: "shopify.lookup_order" → "Lookup order".
         return t(`actions.name.${k}` as 'actions.name.aiToolCall', {
-          detail: humanizeTag(detail.split('.').pop() ?? detail),
+          detail: toolWords(detail),
         });
       }
     }
@@ -412,6 +422,7 @@ export async function CustomerActions({
       at: approval.createdAt,
       who: whoAsked(approval),
       title: approval.summary,
+      serverText: true,
       chip: {
         label:
           approval.status === 'PENDING'
@@ -503,7 +514,7 @@ export async function CustomerActions({
               <article className={styles.spineCard}>
                 <span className={styles.spineTop}>
                   <span className={styles.actionTitle} title={row.rawKey}>
-                    {row.title}
+                    {row.serverText ? <UserText>{row.title}</UserText> : row.title}
                   </span>
                   {row.chip ? (
                     <span
@@ -518,7 +529,7 @@ export async function CustomerActions({
                 </span>
                 {row.line ? (
                   <span className={styles.actionLine} data-testid={row.lineTestid}>
-                    {row.line}
+                    {row.serverText ? <UserText>{row.line}</UserText> : row.line}
                   </span>
                 ) : null}
                 {row.pending && row.approvalId ? (

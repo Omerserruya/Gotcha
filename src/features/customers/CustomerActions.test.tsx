@@ -9,6 +9,7 @@ import {
   type AuditEvent,
 } from '@/api/contracts/customer-actions';
 import messages from '@/i18n/messages/en/customers.json';
+import inboxMessages from '@/i18n/messages/en/inbox.json';
 
 import { approvalSchema } from '@/api/contracts/approvals';
 import { businessPoliciesSchema } from '@/api/contracts/business-policies';
@@ -62,7 +63,11 @@ vi.mock('./DecideHere', () => ({
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'customers') =>
-    createTranslator({ locale: 'en', messages: { customers: messages }, namespace }),
+    createTranslator({
+      locale: 'en',
+      messages: { customers: messages, inbox: inboxMessages },
+      namespace,
+    }),
   getFormatter: async () => createFormatter({ locale: 'en', timeZone: 'Asia/Jerusalem' }),
 }));
 
@@ -170,11 +175,31 @@ describe('★★ the outcome column, and the name that never decides it', () => 
     expect(screen.getByTestId('action-outcome-f')).toHaveAttribute('data-outcome', 'failed');
   });
 
-  it('★ names the tool an adapter row acted through, rather than the raw action', async () => {
+  it('★ names the tool an adapter row acted through, in the reader’s words', async () => {
+    // Backend's own label for the tool, as the inbox panel says it - never "shopify.process_refund".
     await show(
       ok([event({ id: 't', action: 'adapter.ok.shopify.process_refund', succeeded: true })]),
     );
-    expect(screen.getByTestId('action-t')).toHaveTextContent(/shopify\.process_refund/);
+    expect(screen.getByTestId('action-t')).toHaveTextContent(/Store: Refund/);
+    expect(screen.getByTestId('action-t')).not.toHaveTextContent(/process_refund/);
+  });
+
+  it('★★ a tool with no label is its own name made legible, never "A step"', async () => {
+    await show(
+      ok([event({ id: 'u', action: 'adapter.ok.shopify.reindex_widgets', succeeded: true })]),
+    );
+    expect(screen.getByTestId('action-u')).toHaveTextContent(/Store: Reindex widgets/);
+  });
+
+  it('★★ an approval’s summary is the server’s English: isolated, so its period stays put', async () => {
+    render(
+      await CustomerActions({
+        actions: ok([]),
+        approvals: [approval({ summary: 'Refund ₪179 for order #TEST-1842.' })],
+      }),
+    );
+    const title = screen.getByText('Refund ₪179 for order #TEST-1842.');
+    expect(title.closest('bdi')?.textContent).toBe('Refund ₪179 for order #TEST-1842.');
   });
 
   it('★ an action it has no words for is KEPT - in words, with the key as its tooltip', async () => {
@@ -578,7 +603,7 @@ describe('★★ no internal key reaches the screen', () => {
         actions: ok([event({ id: 't', action: 'ai.tool_call.shopify.lookup_order' })]),
       }),
     );
-    expect(screen.getByTestId('action-t')).toHaveTextContent('GOTCHA used Lookup order');
+    expect(screen.getByTestId('action-t')).toHaveTextContent('GOTCHA: Lookup order');
     expect(screen.getByTestId('action-t')).not.toHaveTextContent('shopify.lookup_order');
   });
 

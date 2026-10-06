@@ -67,12 +67,12 @@
         "message": "הודעה"
       },
       "action": {
-        "proposed": "GOTCHA ביקש להריץ {tool}, ממתין לאישור.",
-        "approved": "{tool} אושר.",
-        "running": "GOTCHA מריץ {tool}.",
-        "completed": "GOTCHA הריצה {tool}.",
-        "failed": "GOTCHA ניסתה {tool} וזה נכשל.",
-        "denied": "GOTCHA ביקש להריץ {tool} והבקשה נדחתה."
+        "proposed": "{tool} - ממתין לאישור",
+        "approved": "{tool} - אושר",
+        "running": "{tool} - רץ",
+        "completed": "{tool} - בוצע",
+        "failed": "{tool} - לא עבר",
+        "denied": "{tool} - נדחה"
       }
     },
     "absent": {
@@ -182,12 +182,12 @@
       "aiResponded": "GOTCHA השיבה",
       "aiBotTurn": "GOTCHA לקחה תור בשיחה",
       "aiPausedForApproval": "GOTCHA עצרה וביקשה אישור",
-      "aiToolCall": "GOTCHA השתמשה ב-{detail}",
+      "aiToolCall": "GOTCHA: {detail}",
       "aiBudgetAborted": "GOTCHA עצרה, נגמר התקציב עבור {detail}",
       "messageSent": "נשלחה הודעה",
       "productMessageSent": "נשלח מוצר בצ׳אט",
       "crossCustomerDenied": "בקשה לנתונים של לקוח אחר נדחתה",
-      "adapterCall": "קריאה ל-{tool}",
+      "adapterCall": "החנות: {tool}",
       "commerceExecuted": "שינוי ברשומת הלקוח נשלח לחנות",
       "commerceFailed": "שינוי ברשומת הלקוח לא עבר",
       "commerceDenied": "שינוי ברשומת הלקוח לא הותר",

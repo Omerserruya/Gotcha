@@ -6,12 +6,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CommerceSummary, Insight } from '@/api/contracts/customer-facts';
 import { customerRowSchema, type CustomerRow } from '@/api/contracts/customers';
 import messages from '@/i18n/messages/en/customers.json';
+import inboxMessages from '@/i18n/messages/en/inbox.json';
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
     createTranslator({
       locale: 'en',
-      messages: { customers: messages },
+      messages: { customers: messages, inbox: inboxMessages },
       namespace: namespace as 'customers',
     }),
   getLocale: async () => 'en',
@@ -321,7 +322,7 @@ describe('★★ the join that makes a row "today"', () => {
     const { key, n } = sinceWords(at, NOW);
     const t = createTranslator({
       locale: 'en',
-      messages: { customers: messages },
+      messages: { customers: messages, inbox: inboxMessages },
       namespace: 'customers',
     });
     expect(t(`since.${key}` as 'since.days', { n: n ?? 0 })).toBe(words);

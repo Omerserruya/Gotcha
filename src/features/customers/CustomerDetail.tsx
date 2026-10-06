@@ -1,5 +1,7 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
+import { toolWords as toolWordsOf } from './tool-words';
+
 import {
   coverageCaveats,
   hasBrief,
@@ -80,6 +82,7 @@ import { channelName } from '@/api/contracts/inbox';
 export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
   const t = await getTranslations('customers');
   const channelNames = await getTranslations('channels');
+  const toolWords = await toolWordsOf();
   const format = await getFormatter();
 
   if (!detail.timeline) {
@@ -318,7 +321,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
                   >
                     {/* By status (4b7c2e1b): a refund waiting for approval is not a failure. */}
                     {t(`detail.timeline.action.${actionOutcome(event.action)}`, {
-                      tool: event.action.tool,
+                      tool: toolWords(event.action.tool),
                     })}
                   </span>
                 ) : (
