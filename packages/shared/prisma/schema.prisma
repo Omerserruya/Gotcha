@@ -997,6 +997,9 @@ model Conversation {
   flowExpiresAt      DateTime?          @map("flow_expires_at")
   isHandedOver       Boolean            @default(false) @map("is_handed_over")
   handledBy          String?            @map("handled_by") // "ai_agent", "flow", "human", null (unrouted)
+  // The automation run whose cursor is parked on this conversation
+  // (chatbotNodeId belongs to it). Null = no automation is waiting here.
+  automationRunId    String?            @map("automation_run_id")
   lastMessageAt      DateTime?          @map("last_message_at")
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
@@ -1493,20 +1496,83 @@ model ChatbotFlow {
   channel     ChannelType? // null = ALL channels
   trigger     String? // trigger condition description
   runCount    Int          @default(0) @map("run_count") // number of times this flow has been executed
+  // Automation trigger (Studio > Automations). Null = a sub-flow the main
+  // playbook routes into; those are never fired by events. Types and config
+  // shapes: packages/shared/src/lib/automation-catalog.ts.
+  triggerType   String?   @map("trigger_type")
+  triggerConfig Json?     @map("trigger_config")
+  activatedAt   DateTime? @map("activated_at")
+  activatedBy   String?   @map("activated_by")
+  pausedAt      DateTime? @map("paused_at")
+  pausedBy      String?   @map("paused_by")
   // JSON definition of the flow graph
   nodes       Json         @default("[]")
   edges       Json         @default("[]")
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
+  automationRuns AutomationRun[]
   // WebhookTrigger.workflowId references a flow here in "flow" mode, but is a
   // plain (un-FK'd) anchor - see that model - so there is no relation back-ref.
 
   @@index([tenantId, isActive])
   @@index([tenantId, channel, isActive])
+  @@index([tenantId, triggerType, isActive])
   @@map("chatbot_flows")
+}
+
+/// One automation run: an event fired a ChatbotFlow with a trigger.
+model AutomationRun {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  flowId         String    @map("flow_id")
+  triggerType    String    @map("trigger_type")
+  // The event's identity (e.g. "msg:<messageId>", "tag:<contactId>:<tag>:<ts>").
+  // Unique per flow: the same event never runs the same automation twice.
+  eventKey       String    @map("event_key")
+  conversationId String?   @map("conversation_id")
+  contactId      String?   @map("contact_id")
+  // running | waiting | completed | failed | skipped
+  status         String    @default("running")
+  // This run responded to the inbound that fired it (sent, waits, or handed
+  // on), so the AI employee does not also answer that message.
+  answeredInbound Boolean  @default(false) @map("answered_inbound")
+  currentNodeId  String?   @map("current_node_id")
+  error          String?
+  startedAt      DateTime  @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  flow  ChatbotFlow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  steps AutomationRunStep[]
+
+  @@unique([flowId, eventKey])
+  @@index([tenantId, flowId, startedAt])
+  @@index([tenantId, conversationId, startedAt])
+  @@map("automation_runs")
+}
+
+/// One node an automation run passed through (the run log's node trace).
+model AutomationRunStep {
+  id       String   @id @default(cuid())
+  tenantId String   @map("tenant_id")
+  runId    String   @map("run_id")
+  nodeId   String   @map("node_id")
+  nodeType String   @map("node_type")
+  // ok | failed | skipped | waiting
+  status   String
+  // The branch taken out of this node (sourceHandle), when it branches.
+  branch   String?
+  output   Json?
+  at       DateTime @default(now())
+
+  run AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, at])
+  @@index([tenantId, nodeId])
+  @@map("automation_run_steps")
 }
 
 // ─── Webhook Triggers ────────────────────────────────────────
