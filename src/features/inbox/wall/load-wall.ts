@@ -1,9 +1,11 @@
 import 'server-only';
 
+import { getLocale } from 'next-intl/server';
 import { z } from 'zod';
 
 import { serverApi } from '@/api/client/server-api';
 import type { CommerceSummary, Mood } from '@/api/contracts/customer-facts';
+import { customerOrdersSchema, type CustomerOrders } from '@/api/contracts/customer-orders';
 import { customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { loadCommerce, loadInsights } from '@/features/customers/load-customer-facts';
 import { logger } from '@/observability/logger';
@@ -21,6 +23,12 @@ export interface WallPerson {
   /** What GOTCHA learned — exactly what the AI is given; `null` when unread. */
   readonly memory: WallMemory | null;
   readonly history: WallHistory | null;
+  /**
+   * This person's orders, by contact (Backend e30900fd) — Woo or Shopify.
+   * `null`: no contact to read for, or the read failed; the wall then falls
+   * back to the conversation's own commerce context.
+   */
+  readonly orders: CustomerOrders | null;
 }
 
 /** Where a fact came from, said quietly beside it. `null`: a source we do not name. */
@@ -128,7 +136,7 @@ export async function loadWallPerson(
    *   `POST /identity/resolve` is never the fallback: it CREATES on a miss.
    *   Memory is keyed on the conversation and is read either way.
    */
-  const [commerce, insights, memory, history] = await Promise.all([
+  const [commerce, insights, memory, history, orders] = await Promise.all([
     contactId ? loadCommerce([contactId]) : Promise.resolve(null),
     contactId ? loadInsights([contactId]) : Promise.resolve(null),
     api
@@ -186,6 +194,22 @@ export async function loadWallPerson(
             logger.warn('inbox.wall_history_failed', { cause });
             return null;
           }),
+    !contactId
+      ? Promise.resolve(null)
+      : getLocale()
+          .then((locale) =>
+            api.get({
+              endpoint: customerEndpoints.contactOrders(contactId),
+              query: { limit: 10, locale },
+              payload: customerOrdersSchema,
+              // `orders` beside `source`: the whole body is the contract.
+              raw: true,
+            }),
+          )
+          .catch((cause: unknown) => {
+            logger.warn('inbox.wall_orders_failed', { cause });
+            return null;
+          }),
   ]);
   return {
     commerce:
@@ -197,5 +221,6 @@ export async function loadWallPerson(
     mood: contactId ? (insights?.get(contactId)?.mood ?? null) : null,
     memory,
     history,
+    orders,
   };
 }

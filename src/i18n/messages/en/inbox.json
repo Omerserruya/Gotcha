@@ -307,7 +307,18 @@
       "track": "Track",
       "noTracking": "No tracking link on this order yet.",
       "shopify": "Open in Shopify ↗",
-      "noShopify": "The store sent no admin link for this order."
+      "woo": "Open in WooCommerce ↗",
+      "noAdmin": "The store sent no admin link for this order.",
+      "readOnly": "Refunds from here work with Shopify only for now.",
+      "matchedBy": {
+        "email": "Matched by email",
+        "phone": "Matched by phone"
+      },
+      "storeNotChosen": "Two stores are connected — choose which one is your store in Business core.",
+      "chooseStore": "Choose the store",
+      "storeUnreachable": "Your store couldn’t be reached just now, so its orders can’t be shown.",
+      "noIdentifiers": "There’s no email or phone on this customer to find their orders by.",
+      "noWooOrders": "No orders from this customer in WooCommerce."
     },
     "person": {
       "unnamed": "No name on record",

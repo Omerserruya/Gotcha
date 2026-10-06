@@ -414,3 +414,69 @@ export function shopifyAdminHref(adminUrl: string | null | undefined): string | 
   if (!(host.endsWith('.myshopify.com') || host === 'admin.shopify.com')) return null;
   return url.href;
 }
+
+/* ── One customer's orders, by contact (Backend e30900fd) ─────────────────── */
+
+/**
+ * How the store's customer was matched to this person. `verified` is
+ * Shopify's trusted linkage; Woo matches on an exact billing email or phone,
+ * and the card says which — a match by phone is a claim a reader may weigh.
+ */
+export const MATCHED_BY = ['verified', 'email', 'phone'] as const;
+export type MatchedBy = (typeof MATCHED_BY)[number];
+
+/** Why no store was read: `source: null` answers. */
+export const NO_STORE_REASONS = [
+  'no_store_connected',
+  'store_not_chosen',
+  'store_unreachable',
+  'no_identifiers',
+] as const;
+export type NoStoreReason = (typeof NO_STORE_REASONS)[number];
+
+/** Woo's cards are read-only; this is the platform's `reasonIfNot` for it. */
+export const ACTIONS_NOT_SUPPORTED = 'actions_not_supported_for_store';
+
+/**
+ * `GET /api/commerce-context/customers/:contactId/orders?limit=&locale=` —
+ * one OrderCard shape for WooCommerce and Shopify:
+ *
+ *   { source: "woocommerce", orders }
+ *   { source: "shopify", state, orders }     state: the conversation panel's
+ *   { source: null, reason, orders: [] }     reason: why no store was read
+ *
+ * Strict on the envelope (`orders` required): an older service's 404/HTML is
+ * "unread", never a customer with no orders.
+ */
+export const customerOrdersSchema = z.object({
+  source: z.string().nullable(),
+  state: z.enum(COMMERCE_STATES).nullable().catch(null).default(null),
+  reason: z.string().nullable().catch(null).default(null),
+  orders: z.array(
+    orderCardSchema.extend({
+      matchedBy: z.enum(MATCHED_BY).nullable().catch(null).default(null),
+    }),
+  ),
+});
+export type CustomerOrders = z.infer<typeof customerOrdersSchema>;
+export type MatchedOrderCard = CustomerOrders['orders'][number];
+
+/**
+ * A WooCommerce order's admin link, or `null`. The route builds it from the
+ * store's own URL (`…/wp-admin/post.php?post=<id>&action=edit`); we check it
+ * is that and nothing else — https, no credentials, the edit page — since the
+ * host is the merchant's and cannot be listed.
+ */
+export function wooAdminHref(adminUrl: string | null | undefined): string | null {
+  if (!adminUrl) return null;
+  let url: URL;
+  try {
+    url = new URL(adminUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) return null;
+  if (!url.pathname.endsWith('/wp-admin/post.php')) return null;
+  if (url.searchParams.get('action') !== 'edit' || !url.searchParams.get('post')) return null;
+  return url.href;
+}

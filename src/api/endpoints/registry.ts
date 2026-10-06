@@ -829,6 +829,9 @@ export const customerEndpoints = {
   commerceSummary: () => endpoint('/api/commerce-context/customers/commerce-summary'),
   commerceSegments: () => endpoint('/api/commerce-context/customers/segments'),
   byOrder: () => endpoint('/api/commerce-context/customers/by-order'),
+  /** Backend e30900fd — one person's orders, Woo or Shopify. See `customerOrdersSchema`. */
+  contactOrders: (contactId: string) =>
+    endpoint('/api/commerce-context/customers/{contactId}/orders', { contactId }),
   insights: () => endpoint('/api/contacts/insights'),
   tags: () => endpoint('/api/contacts/tags'),
   detail: (id: string) => endpoint('/api/contacts/{id}', { id }),

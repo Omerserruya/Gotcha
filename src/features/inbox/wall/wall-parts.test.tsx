@@ -20,6 +20,13 @@ const ask = vi.hoisted(() => vi.fn());
 vi.mock('../compose-actions', () => ({ askCopilot: ask }));
 const runOrder = vi.hoisted(() => vi.fn());
 vi.mock('@/features/customers/order-actions', () => ({ runOrderAction: runOrder }));
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 const wrap = (node: ReactNode) =>
   render(
@@ -169,7 +176,14 @@ const order = (id: string, over: Partial<OrderCard> = {}): OrderCard =>
 describe('★★ Order #1842 · 2 of 6', () => {
   const show = (orders: OrderCard[], start = 0) =>
     wrap(
-      <OrdersCarousel state="ok" missing={[]} orders={orders} start={start} conversationId="c1" />,
+      <OrdersCarousel
+        source="shopify"
+        state="ok"
+        missing={[]}
+        orders={orders}
+        start={start}
+        conversationId="c1"
+      />,
     );
 
   it('opens where it is told, and steps', () => {
@@ -202,7 +216,7 @@ describe('★★ Order #1842 · 2 of 6', () => {
       }),
     ]);
     expect(screen.getByTestId('wall-order-track')).toBeDisabled();
-    expect(screen.queryByTestId('wall-order-shopify')).toBeNull();
+    expect(screen.queryByTestId('wall-order-admin')).toBeNull();
   });
 
   it('a link when there is one', () => {
@@ -220,7 +234,7 @@ describe('★★ Order #1842 · 2 of 6', () => {
       'href',
       'https://track.example/1',
     );
-    expect(screen.getByTestId('wall-order-shopify')).toHaveAttribute(
+    expect(screen.getByTestId('wall-order-admin')).toHaveAttribute(
       'href',
       'https://shop.myshopify.com/admin/orders/1',
     );
@@ -231,9 +245,110 @@ describe('★★ Order #1842 · 2 of 6', () => {
     ['not_connected', 'not_connected'],
     ['ok', 'ok'],
   ] as const)('★ no order to show (%s) says which nothing it is', (state, attr) => {
-    wrap(<OrdersCarousel state={state} missing={[]} orders={[]} start={0} conversationId="c1" />);
+    wrap(
+      <OrdersCarousel
+        source="shopify"
+        state={state}
+        missing={[]}
+        orders={[]}
+        start={0}
+        conversationId="c1"
+      />,
+    );
     expect(screen.getByTestId('wall-orders')).toHaveAttribute('data-state', attr);
     expect(screen.getByTestId('wall-orders-note').textContent?.trim()).not.toBe('');
+  });
+});
+
+describe('★★ WooCommerce, by contact (e30900fd) — read-only, and says how it matched', () => {
+  const woo = (over: Partial<OrderCard> = {}) => ({
+    ...order('91', {
+      adminUrl: 'https://shop.example/wp-admin/post.php?post=91&action=edit',
+      eligibility: {
+        cancellable: false,
+        refundable: false,
+        returnable: false,
+        exchangeable: false,
+        reasonIfNot: 'actions_not_supported_for_store',
+      },
+      ...over,
+    }),
+    matchedBy: 'phone' as const,
+  });
+  const showWoo = (orders: ReturnType<typeof woo>[], reason: string | null = null) =>
+    wrap(
+      <OrdersCarousel
+        source={reason ? null : 'woocommerce'}
+        state={null}
+        reason={reason}
+        missing={[]}
+        orders={orders}
+        start={0}
+        conversationId="c1"
+      />,
+    );
+
+  it('★★ Refund and Replace drawn, disabled, with the sentence — not the platform’s code', () => {
+    showWoo([woo()]);
+    for (const id of ['order-action-91-refund', 'order-action-91-exchange_item']) {
+      expect(screen.getByTestId(id)).toBeDisabled();
+      expect(screen.getByTestId(id)).toHaveAttribute(
+        'title',
+        'Refunds from here work with Shopify only for now.',
+      );
+    }
+  });
+
+  it('★ "Matched by phone"; and "Open in WooCommerce" to its admin', () => {
+    showWoo([woo()]);
+    expect(screen.getByTestId('wall-order-matched')).toHaveTextContent('Matched by phone');
+    const admin = screen.getByTestId('wall-order-admin');
+    expect(admin).toHaveTextContent('Open in WooCommerce');
+    expect(admin).toHaveAttribute(
+      'href',
+      'https://shop.example/wp-admin/post.php?post=91&action=edit',
+    );
+  });
+
+  it('⚠ a Woo admin link that is not the edit page is no link', () => {
+    showWoo([woo({ adminUrl: 'https://evil.example/login' })]);
+    expect(screen.queryByTestId('wall-order-admin')).toBeNull();
+  });
+
+  it('verified needs no word', () => {
+    wrap(
+      <OrdersCarousel
+        source="shopify"
+        state="ok"
+        missing={[]}
+        orders={[{ ...order('41'), matchedBy: 'verified' as const }]}
+        start={0}
+        conversationId="c1"
+      />,
+    );
+    expect(screen.queryByTestId('wall-order-matched')).toBeNull();
+  });
+
+  it('★ no orders in Woo: says which store', () => {
+    showWoo([]);
+    expect(screen.getByTestId('wall-orders-note')).toHaveTextContent(
+      'No orders from this customer in WooCommerce.',
+    );
+  });
+
+  it('★★ two stores, none chosen: says so, and links to choose', () => {
+    showWoo([], 'store_not_chosen');
+    expect(screen.getByTestId('wall-orders-note')).toHaveTextContent('Two stores are connected');
+    expect(screen.getByTestId('wall-orders-choose')).toHaveAttribute('href', '/settings/systems');
+  });
+
+  it.each([
+    ['no_store_connected', 'No store is connected'],
+    ['store_unreachable', 'couldn’t be reached'],
+    ['no_identifiers', 'no email or phone'],
+  ])('%s → its own sentence', (reason, words) => {
+    showWoo([], reason);
+    expect(screen.getByTestId('wall-orders-note')).toHaveTextContent(words);
   });
 });
 

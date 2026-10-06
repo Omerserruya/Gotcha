@@ -441,6 +441,10 @@
     text-decoration: none;
   }
 
+  .inlineLink {
+    color: var(--signal-ai);
+  }
+
   .violetLink[data-off] {
     color: var(--menu-dark-icon);
   }

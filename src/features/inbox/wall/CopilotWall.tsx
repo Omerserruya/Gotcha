@@ -1,6 +1,6 @@
 import { getFormatter, getTranslations } from 'next-intl/server';
 
-import { orderToExpand, ordersIn, type Money } from '@/api/contracts/customer-orders';
+import { orderToExpand, type Money } from '@/api/contracts/customer-orders';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
@@ -11,7 +11,7 @@ import { ActivityStrip, WorkingState } from './Activity';
 import { OrdersCarousel } from './OrdersCarousel';
 import { SuggestionCarousel } from './SuggestionCarousel';
 import { WallBody } from './WallBody';
-import { factLabel, firstOrder, refundCount } from './wall-model';
+import { factLabel, firstOrder, ordersView, refundCount } from './wall-model';
 import styles from './Wall.module.css';
 
 /**
@@ -87,17 +87,19 @@ export async function CopilotWall({
   }
 
   const person = await loadWallPerson(contactId, conversation.id);
-  const cards = ordersIn(orders);
+  const view = ordersView(person.orders, orders);
 
   return (
     <WallBody history={person.history} why={contactId === null ? t('noContact') : t('unread')}>
       <ActivityStrip />
       <SuggestionCarousel conversationId={conversation.id} />
       <OrdersCarousel
-        state={orders?.state ?? null}
-        missing={orders?.missing ?? []}
-        orders={cards}
-        start={firstOrder(cards, orderToExpand(cards))}
+        source={view.source}
+        state={view.state}
+        reason={view.reason}
+        missing={view.missing}
+        orders={view.orders}
+        start={firstOrder(view.orders, orderToExpand(view.orders))}
         conversationId={conversation.id}
       />
       <PersonBlock
@@ -107,8 +109,12 @@ export async function CopilotWall({
         shop={orders?.state === 'ok' ? (orders.data?.summary ?? orders.summary ?? null) : null}
         createdAt={timeline?.contact?.createdAt ?? null}
         refunds={refundCount(
-          cards,
-          orders?.state === 'ok' ? (orders.data?.summary?.orderCount ?? null) : null,
+          view.orders,
+          orders?.state === 'ok'
+            ? (orders.data?.summary?.orderCount ?? null)
+            : typeof person.commerce === 'object'
+              ? (person.commerce?.orderCount ?? null)
+              : null,
         )}
       />
     </WallBody>

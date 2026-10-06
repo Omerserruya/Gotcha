@@ -1,6 +1,13 @@
 import type { ActivityStatus, ActivityStep } from '@/api/contracts/ai-activity';
 import { copilotSentinel, isDraft, type Suggestion } from '@/api/contracts/copilot';
-import { type OrderCard } from '@/api/contracts/customer-orders';
+import {
+  ordersIn,
+  type CommerceContextResponse,
+  type CommerceState,
+  type CustomerOrders,
+  type MatchedOrderCard,
+  type OrderCard,
+} from '@/api/contracts/customer-orders';
 
 import type { CopilotRead } from '../load-copilot';
 import type { WallHistory } from './load-wall';
@@ -206,5 +213,41 @@ export function activitySummary(steps: readonly ActivityStep[]): {
     count: steps.length,
     totalMs: steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0),
     running: steps.some((s) => s.status === 'running'),
+  };
+}
+
+/** What the order carousel is given: one source, chosen. */
+export interface OrdersView {
+  readonly source: string | null;
+  readonly state: CommerceState | null;
+  readonly reason: string | null;
+  readonly missing: readonly string[];
+  readonly orders: readonly (OrderCard & { readonly matchedBy?: MatchedOrderCard['matchedBy'] })[];
+}
+
+/**
+ * The person's orders by contact when that was read (Woo or Shopify, one
+ * shape); otherwise the conversation's own commerce context — a visitor, or a
+ * failed contact read. Never both: two answers about money on one screen.
+ */
+export function ordersView(
+  byContact: CustomerOrders | null,
+  conversation: CommerceContextResponse | null,
+): OrdersView {
+  if (byContact) {
+    return {
+      source: byContact.source,
+      state: byContact.source === 'shopify' ? byContact.state : null,
+      reason: byContact.source === null ? (byContact.reason ?? 'unknown') : null,
+      missing: [],
+      orders: byContact.orders,
+    };
+  }
+  return {
+    source: conversation ? 'shopify' : null,
+    state: conversation?.state ?? null,
+    reason: null,
+    missing: conversation?.missing ?? [],
+    orders: ordersIn(conversation),
   };
 }

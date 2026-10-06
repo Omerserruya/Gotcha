@@ -3,14 +3,18 @@
 import { useFormatter, useTranslations } from 'next-intl';
 
 import {
+  ACTIONS_NOT_SUPPORTED,
   shopifyAdminHref,
+  wooAdminHref,
   type CommerceState,
+  type MatchedBy,
   type Money,
   type OrderCard,
   type StatusChip,
 } from '@/api/contracts/customer-orders';
 import { OrderActions } from '@/features/customers/OrderActions';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { Link } from '@/i18n/navigation';
 
 import { useCarousel } from './use-carousel';
 import { Pager } from './Pager';
@@ -19,25 +23,35 @@ import styles from './Wall.module.css';
 /**
  * 02's "Order #1842 · 2 of 6" ‹ ›.
  *
- * The conversation's own commerce context — the same read, contract and
- * eight states as 04d, keyed on this conversation. Orders per contact are
- * Backend's next contract; when it lands this reads that instead.
+ * This person's orders by contact (Backend e30900fd) — WooCommerce or
+ * Shopify, one card shape — or, with no contact to read for, the
+ * conversation's own commerce context (04d's read and eight states).
+ *
+ * ★ WOO IS READ-ONLY. Its cards carry no eligibility (`reasonIfNot:
+ *   actions_not_supported_for_store`): Refund and Replace are drawn,
+ *   disabled, saying why — and its admin link is WooCommerce's.
  *
  * ⚠ REFUND AND REPLACE ARE REAL. They are 04d's `OrderActions` — permission,
  *   policy, approval and an idempotency key per attempt — and on dev they are
  *   not pressed on a real conversation (Omer, 2026-10-06).
  */
 export function OrdersCarousel({
+  source,
   state,
+  reason = null,
   missing,
   orders,
   start,
   conversationId,
 }: {
-  /** `null`: the read failed. */
+  /** The store read: `shopify`, `woocommerce`, or `null` when none was. */
+  readonly source: string | null;
+  /** Shopify's state. `null` with no `reason`: the read failed. */
   readonly state: CommerceState | null;
+  /** Why no store was read (`source: null`). */
+  readonly reason?: string | null;
   readonly missing: readonly string[];
-  readonly orders: readonly OrderCard[];
+  readonly orders: readonly (OrderCard & { readonly matchedBy?: MatchedBy | null })[];
   readonly start: number;
   readonly conversationId: string;
 }) {
@@ -59,17 +73,45 @@ export function OrdersCarousel({
   };
 
   if (!order) {
+    const woo = source === 'woocommerce';
     return (
-      <section className={styles.block} data-testid="wall-orders" data-state={state ?? 'unread'}>
+      <section
+        className={styles.block}
+        data-testid="wall-orders"
+        data-state={reason ?? (woo ? 'woocommerce' : (state ?? 'unread'))}
+      >
         <h3 className={styles.blockTitle}>{t('title')}</h3>
         <p className={styles.note} data-testid="wall-orders-note">
-          {state === null
-            ? customers('orders.unread')
-            : state === 'missing_scopes'
-              ? customers('orders.missingScopes', { scopes: missing.join(', ') })
-              : state === 'ok'
-                ? customers('orders.state.no_orders')
-                : customers(`orders.state.${state}` as 'orders.state.not_connected')}
+          {reason === 'store_not_chosen' ? (
+            <>
+              {t('storeNotChosen')}{' '}
+              <Link
+                href="/settings/systems"
+                className={styles.inlineLink}
+                data-testid="wall-orders-choose"
+              >
+                {t('chooseStore')}
+              </Link>
+            </>
+          ) : reason === 'no_store_connected' ? (
+            customers('orders.state.not_connected')
+          ) : reason === 'store_unreachable' ? (
+            t('storeUnreachable')
+          ) : reason === 'no_identifiers' ? (
+            t('noIdentifiers')
+          ) : reason !== null ? (
+            customers('orders.unread')
+          ) : woo ? (
+            t('noWooOrders')
+          ) : state === null ? (
+            customers('orders.unread')
+          ) : state === 'missing_scopes' ? (
+            customers('orders.missingScopes', { scopes: missing.join(', ') })
+          ) : state === 'ok' ? (
+            customers('orders.state.no_orders')
+          ) : (
+            customers(`orders.state.${state}` as 'orders.state.not_connected')
+          )}
         </p>
       </section>
     );
@@ -78,7 +120,9 @@ export function OrdersCarousel({
   const item = order.items[0] ?? null;
   const image = item?.imageUrl ?? order.detail?.lineItems.find((l) => l.imageUrl)?.imageUrl ?? null;
   const tracking = order.detail?.tracking.find((x) => x.url)?.url ?? null;
-  const admin = shopifyAdminHref(order.adminUrl);
+  const woo = source === 'woocommerce';
+  const admin = woo ? wooAdminHref(order.adminUrl) : shopifyAdminHref(order.adminUrl);
+  const readOnly = order.eligibility.reasonIfNot === ACTIONS_NOT_SUPPORTED;
   const placed = order.createdAt
     ? format.dateTime(new Date(order.createdAt), { day: 'numeric', month: 'short' })
     : null;
@@ -125,6 +169,12 @@ export function OrdersCarousel({
               <Chip chip={order.refund} />
             ) : null}
           </span>
+          {/* How the store's customer was found. Verified needs no word. */}
+          {order.matchedBy === 'email' || order.matchedBy === 'phone' ? (
+            <span className={styles.meta} data-testid="wall-order-matched">
+              {t(`matchedBy.${order.matchedBy}`)}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -135,6 +185,8 @@ export function OrdersCarousel({
           only={['refund', 'exchange_item']}
           label={(action) => (action === 'refund' ? t('refund') : t('replace'))}
           buttonClassName={styles.outlineSmall}
+          // The platform's reason is a code here, not a sentence.
+          whyNot={readOnly ? t('readOnly') : undefined}
           key={order.orderId}
         />
         {tracking ? (
@@ -164,13 +216,13 @@ export function OrdersCarousel({
             href={admin}
             target="_blank"
             rel="noopener noreferrer"
-            data-testid="wall-order-shopify"
+            data-testid="wall-order-admin"
           >
-            {t('shopify')}
+            {woo ? t('woo') : t('shopify')}
           </a>
         ) : (
-          <span className={styles.violetLink} data-off="" title={t('noShopify')}>
-            {t('shopify')}
+          <span className={styles.violetLink} data-off="" title={t('noAdmin')}>
+            {woo ? t('woo') : t('shopify')}
           </span>
         )}
       </div>

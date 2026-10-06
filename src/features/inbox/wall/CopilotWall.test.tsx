@@ -58,7 +58,7 @@ const show = async (tree: Promise<ReactNode> | ReactNode) =>
     </NextIntlClientProvider>,
   );
 
-const blank: WallPerson = { commerce: null, mood: null, memory: null, history: null };
+const blank: WallPerson = { commerce: null, mood: null, memory: null, history: null, orders: null };
 
 const detail = (over: Partial<ConversationDetail> = {}): Promise<ConversationDetail> =>
   Promise.resolve({ messages: [], timeline: null, orders: null, ...over } as ConversationDetail);

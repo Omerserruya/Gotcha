@@ -49,6 +49,7 @@ export function OrderActions({
   only,
   label,
   buttonClassName,
+  whyNot,
 }: {
   readonly order: OrderCard;
   readonly conversationId: string;
@@ -60,6 +61,8 @@ export function OrderActions({
   readonly only?: readonly OrderAction[];
   readonly label?: (action: OrderAction) => string;
   readonly buttonClassName?: string;
+  /** The title on an action this order cannot take, in place of the platform's `reasonIfNot`. */
+  readonly whyNot?: string;
 }) {
   const t = useTranslations('customers');
   const [result, setResult] = useState<OrderActionResult | null>(null);
@@ -134,7 +137,7 @@ export function OrderActions({
           title={
             possible.includes(action)
               ? undefined
-              : (order.eligibility.reasonIfNot ?? t('orders.notPossible'))
+              : (whyNot ?? order.eligibility.reasonIfNot ?? t('orders.notPossible'))
           }
           data-testid={`order-action-${order.orderId}-${action}`}
           /*

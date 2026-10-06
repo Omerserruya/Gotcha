@@ -30,6 +30,7 @@ vi.mock('@/features/customers/load-customer-facts', () => ({
   loadInsights: async () => new Map([['k1', { mood: 'frustrated' }]]),
 }));
 vi.mock('server-only', () => ({}));
+vi.mock('next-intl/server', () => ({ getLocale: async () => 'en' }));
 
 import { loadWallPerson } from './load-wall';
 
@@ -134,5 +135,32 @@ describe('★★ history (ed8f3e1f) — keyed on the contact, strict on the enve
   ])('★★ %s is "couldn’t read", never an empty history', async (_, answer) => {
     answers.set(HISTORY, answer);
     expect((await loadWallPerson('k1', 'c1')).history).toBeNull();
+  });
+});
+
+describe('★★ orders by contact (e30900fd) — strict, and only with a contact', () => {
+  const ORDERS = '/api/commerce-context/customers/k1/orders';
+
+  it('asks for 10 in the reader’s language; reads Woo with matchedBy', async () => {
+    answers.set(ORDERS, {
+      source: 'woocommerce',
+      orders: [{ orderId: 'o1', orderNumber: '91', matchedBy: 'email' }],
+    });
+    const person = await loadWallPerson('k1', 'c1');
+    expect(asked.find((a) => a.path === ORDERS)?.query).toEqual({ limit: 10, locale: 'en' });
+    expect(person.orders).toMatchObject({
+      source: 'woocommerce',
+      orders: [{ matchedBy: 'email' }],
+    });
+  });
+
+  it('★★ an envelope without `orders` is unread, not "no orders"', async () => {
+    answers.set(ORDERS, { source: 'woocommerce' });
+    expect((await loadWallPerson('k1', 'c1')).orders).toBeNull();
+  });
+
+  it('no contact: not asked', async () => {
+    await loadWallPerson(null, 'c1');
+    expect(asked.map((a) => a.path)).not.toContain(ORDERS);
   });
 });

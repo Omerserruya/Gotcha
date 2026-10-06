@@ -9,6 +9,7 @@ import {
   canUse,
   factLabel,
   firstOrder,
+  ordersView,
   historyChannels,
   refundCount,
   saysRecommended,
@@ -181,5 +182,38 @@ describe('saysRecommended', () => {
     ['escalate', 'Recommended', false],
   ])('%s (%s) → %s', (approach, word, expected) => {
     expect(saysRecommended(approach, word)).toBe(expected);
+  });
+});
+
+describe('★★ ordersView — one source, never two', () => {
+  const ctx = {
+    state: 'ok',
+    missing: [],
+    summary: null,
+    data: { recentOrders: [order()] },
+  } as never;
+
+  it('by contact when it was read — Woo, Shopify, or a reason', () => {
+    expect(
+      ordersView({ source: 'woocommerce', state: null, reason: null, orders: [] }, ctx),
+    ).toMatchObject({
+      source: 'woocommerce',
+      orders: [],
+    });
+    expect(
+      ordersView(
+        { source: 'shopify', state: 'customer_not_linked', reason: null, orders: [] },
+        ctx,
+      ),
+    ).toMatchObject({ source: 'shopify', state: 'customer_not_linked', orders: [] });
+    expect(
+      ordersView({ source: null, state: null, reason: 'store_not_chosen', orders: [] }, ctx),
+    ).toMatchObject({ source: null, reason: 'store_not_chosen' });
+  });
+
+  it('★ no contact read (a visitor, a failure): the conversation’s own', () => {
+    expect(ordersView(null, ctx)).toMatchObject({ source: 'shopify', state: 'ok', reason: null });
+    expect(ordersView(null, ctx).orders).toHaveLength(1);
+    expect(ordersView(null, null)).toMatchObject({ source: null, state: null, reason: null });
   });
 });
