@@ -246,7 +246,7 @@ function Whole({
   const format = useFormatter();
   if (!read) {
     return pending ? (
-      <CenteredLoader size={32} tone="light" minHeight={160} label={t('reading')} />
+      <CenteredLoader size={32} tone="light" fill minHeight={160} label={t('reading')} />
     ) : (
       <p className={styles.note}>-</p>
     );

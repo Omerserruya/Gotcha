@@ -45,11 +45,17 @@ export function Loader({ size = 48, tone = 'dark', label }: LoaderProps) {
 /** The loader in the middle of the area it stands for. */
 export function CenteredLoader({
   minHeight = 160,
+  fill = false,
   ...loader
-}: LoaderProps & { readonly minHeight?: number }) {
+}: LoaderProps & {
+  readonly minHeight?: number;
+  /** Take the parent's whole height (a page's card, the Copilot panel) and centre in it. */
+  readonly fill?: boolean;
+}) {
   return (
     <div
       className={styles.centered}
+      data-fill={fill ? '' : undefined}
       style={{ '--min': `${minHeight}px` } as CSSProperties}
       data-testid="centered-loader"
     >

@@ -10,8 +10,9 @@ import { PageContainer } from '@/shell/PageContainer';
 export default function Loading() {
   const t = useTranslations('common');
   return (
-    <PageContainer>
-      <CenteredLoader size={56} minHeight={420} label={t('loading')} />
+    // `screen` + `flush`: the body is the card's whole remaining height, and the loader fills it.
+    <PageContainer layout="screen" flush>
+      <CenteredLoader size={56} fill label={t('loading')} />
     </PageContainer>
   );
 }

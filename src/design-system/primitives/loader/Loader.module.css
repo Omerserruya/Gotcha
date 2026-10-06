@@ -88,4 +88,13 @@
     inline-size: 100%;
     min-block-size: var(--min, 160px);
   }
+
+  /*
+   * The whole area, not a band at its top (measured on dev: the mark sat at
+   * y≈254 of an 876px card). The parent gives the height; this takes it.
+   */
+  .centered[data-fill] {
+    align-self: stretch;
+    min-block-size: 100%;
+  }
 }

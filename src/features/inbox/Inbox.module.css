@@ -904,6 +904,9 @@
    */
   .contextColumn > .copilotBody {
     flex: 1;
+    /* A flex column, so a loader in it can take its whole height. */
+    display: flex;
+    flex-direction: column;
     min-block-size: 0;
     overflow-y: auto;
     /*

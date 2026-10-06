@@ -368,12 +368,7 @@ export default async function Page({
                         key={data.open.id}
                         // The panel's parts have no one shape: the loader, light on the dark wall.
                         fallback={
-                          <CenteredLoader
-                            size={32}
-                            tone="light"
-                            minHeight={240}
-                            label={common('loading')}
-                          />
+                          <CenteredLoader size={32} tone="light" fill label={common('loading')} />
                         }
                       >
                         <CopilotWall
