@@ -36,7 +36,7 @@ import { getPolicy, setPolicy, validatePolicyPatch, PolicyValidationError } from
 import voiceRouter from "./ai-assist-voice";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
-import { discoverBusiness } from "../services/business-discovery.service";
+import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
 import { tuneEmployeeChat } from "../services/employee-tuning.service";
 
 const router = Router();
@@ -102,7 +102,9 @@ router.post("/onboarding-employee-chat", authenticate, resolveTenant, requireRol
       persona: persona || {},
       messages: messages.filter((m) => m && typeof m.content === "string").slice(-10),
     });
-    res.json({ data: { ok: true, ...result } });
+    // The reply and the tuned persona are shown in onboarding and stored on
+    // the discovery row: no wide dash in either (same rule as the scan).
+    res.json({ data: { ok: true, ...withoutWideDashes(result) } });
   } catch (err) {
     console.error("Employee tuning chat error:", err);
     res.status(500).json({ error: "Failed to chat with the employee" });

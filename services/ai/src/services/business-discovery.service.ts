@@ -166,6 +166,7 @@ const SYSTEM_PROMPT = (lang: string) =>
     "",
     "Depth over breadth. Be SPECIFIC and NON-OBVIOUS (counts, languages, conflicting pages). Generic output ('you are in retail') is a failure. Never invent specifics - an honest gap beats a guess.",
     `Write ALL human-readable prose (summary, reasons, report, gap labels, purposes) in ${lang}. Keep enum-like slugs (employeeRole, confidence values, tool slugs) in English.`,
+    "PUNCTUATION: never write the em-dash (U+2014), the en-dash (U+2013) or the horizontal bar (U+2015), in any language. Use a regular hyphen (-), a comma or a period.",
     "",
     "Respond ONLY with a single JSON object (no prose, no code fences) with EXACTLY these keys:",
     "{",
@@ -282,7 +283,9 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
     try { parsed = JSON.parse(stripFences(resp.content ?? "")); }
     catch { console.warn(`[business-discovery] JSON parse failed (len=${(resp.content ?? "").length})`); return null; }
     if (!parsed || typeof parsed !== "object") return null;
-    return normalizeReport(parsed, input);
+    // The prompt asks for no wide dashes; this makes it true for every field
+    // the screens show (brand, business, knowledge, gaps, recommendation, report).
+    return withoutWideDashes(normalizeReport(parsed, input));
   } catch (err: any) {
     console.warn("[business-discovery] scan failed:", err?.message);
     return null;
@@ -346,6 +349,25 @@ function policy(p: any): PolicyFinding {
     return { found, confidence: conf(p.confidence, found === null ? "unknown" : "likely"), url: str(p.url) };
   }
   return { found: null, confidence: "unknown" };
+}
+
+const WIDE_DASH_RE = /[\u2013\u2014\u2015]/g;
+
+/**
+ * Every string in a value, at any depth, with the em-dash, en-dash and
+ * horizontal bar replaced by a regular hyphen. Keys, numbers and booleans
+ * are left alone. Omer's rule: no wide dash in anything the product shows,
+ * model output included.
+ */
+export function withoutWideDashes<T>(value: T): T {
+  if (typeof value === "string") return value.replace(WIDE_DASH_RE, "-") as unknown as T;
+  if (Array.isArray(value)) return value.map((v) => withoutWideDashes(v)) as unknown as T;
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = withoutWideDashes(v);
+    return out as T;
+  }
+  return value;
 }
 
 export function normalizeReport(raw: any, input: DiscoveryInput): DiscoveryReport {

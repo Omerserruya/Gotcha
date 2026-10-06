@@ -107,6 +107,7 @@ function systemPrompt(input: TuneChatInput, lang: string, kbBlock: string | null
     kbBlock ? `\n# What you already know about this business\n${kbBlock}` : "",
     "",
     `Write the reply in ${lang}.`,
+    "Never write the em-dash (U+2014), the en-dash (U+2013) or the horizontal bar (U+2015), in the reply or the persona. Use a regular hyphen (-), a comma or a period.",
     "Respond ONLY with a JSON object (no fences, no prose outside it):",
     '{ "reply": string, "persona": { "tone": "professional"|"friendly"|"casual"|"formal", "personality": string, "focus": string, "goal": string, "successCriteria": string[], "instructions": string[] } }',
     "- persona MUST carry forward the current persona, modified only by what the owner said in the latest message.",
