@@ -18,7 +18,7 @@ vi.mock('./webchat-actions', () => actions);
 
 import type { WebchatTab } from '@/api/contracts/webchat';
 
-import { SAVE_AFTER_MS, WebchatSettings } from './WebchatSettings';
+import { SAVE_AFTER_MS, WebchatSettings, brandMark } from './WebchatSettings';
 
 const config: WebchatConfig = webchatSettingsSchema.parse({
   data: {
@@ -46,6 +46,7 @@ const show = (tab: WebchatTab, live = false) =>
         initial={config}
         widget={{ widgetId: 'widget_1', live, name: 'avivco.il' }}
         employees={[{ id: 'e1', name: 'Shira', line: 'Sales', paused: false }]}
+        business="Aviv & Co."
         tab={tab}
       />
     </NextIntlClientProvider>,
@@ -187,5 +188,14 @@ describe('★ install', () => {
     show('install', true);
     expect(screen.getByTestId('webchat-status')).toHaveTextContent('Live');
     expect(screen.queryByTestId('webchat-go-live')).toBeNull();
+  });
+});
+
+describe("★ the preview's marks come from one name - the business's", () => {
+  it('logo "AVIV & CO.", launcher its first word "AVIV" (dev: "STOR" beside "ST")', () => {
+    expect(brandMark('Aviv & Co.')).toEqual({ logo: 'AVIV & CO.', launcher: 'AVIV' });
+    show('appearance');
+    expect(screen.getByTestId('webchat-preview-launcher')).toHaveTextContent(/^AVIV$/);
+    expect(screen.getByTestId('webchat-preview')).toHaveTextContent('AVIV & CO.');
   });
 });

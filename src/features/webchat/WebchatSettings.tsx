@@ -72,6 +72,7 @@ export function WebchatSettings({
   initial,
   widget,
   employees,
+  business,
   tab,
 }: {
   readonly id: string;
@@ -82,6 +83,7 @@ export function WebchatSettings({
     readonly name: string | null;
   } | null;
   readonly employees: readonly WebchatEmployee[] | null;
+  readonly business: string | null;
   readonly tab: WebchatTab;
 }) {
   const t = useTranslations('channels.webchat');
@@ -218,7 +220,7 @@ export function WebchatSettings({
             <Install widgetId={widget?.widgetId ?? null} live={widget?.live ?? false} />
           )}
         </div>
-        <Preview config={config} site={widget?.name ?? null} />
+        <Preview config={config} site={widget?.name ?? null} business={business} />
       </div>
     </div>
   );
@@ -785,13 +787,16 @@ function Install({ widgetId, live }: { readonly widgetId: string | null; readonl
 function Preview({
   config,
   site,
+  business,
 }: {
   readonly config: WebchatConfig;
   readonly site: string | null;
+  readonly business: string | null;
 }) {
   const t = useTranslations('channels.webchat.preview');
   const colour = isHex(config.appearance.primaryColor) ? config.appearance.primaryColor : '#121212';
   const name = config.ux.welcome.assistantName.trim() || t('assistant');
+  const mark = brandMark(business ?? name);
   const questions = config.ux.welcome.suggestedQuestions.filter((q) => q.trim()).slice(0, 3);
   return (
     <aside className={styles.preview} aria-label={t('label')} data-testid="webchat-preview">
@@ -818,7 +823,7 @@ function Preview({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={config.appearance.logoUrl} alt="" />
             ) : (
-              name.slice(0, 2).toUpperCase()
+              mark.logo
             )}
           </span>
           <span className={styles.assistant} data-testid="webchat-preview-name">
@@ -854,9 +859,19 @@ function Preview({
           style={{ backgroundColor: colour }}
           data-testid="webchat-preview-launcher"
         >
-          {name.slice(0, 4).toUpperCase()}
+          {mark.launcher}
         </span>
       </div>
     </aside>
   );
+}
+
+/**
+ * One source for both marks, as the design draws them from the business's
+ * name: the logo "AVIV & CO.", the launcher its first word "AVIV".
+ */
+export function brandMark(name: string): { readonly logo: string; readonly launcher: string } {
+  const upper = name.trim().toUpperCase();
+  const first = upper.split(/\s+/)[0] ?? '';
+  return { logo: upper.slice(0, 14), launcher: first.slice(0, 5) };
 }

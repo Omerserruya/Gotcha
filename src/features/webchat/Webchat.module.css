@@ -4,11 +4,11 @@
    * with its globe tile, status chip and Go live; four tabs; the tab's cards on
    * the left beside a 330px live preview.
    */
+  /* The settings section already pads the page (32 / 40), as every other settings screen. */
   .page {
     display: flex;
     flex-direction: column;
     gap: 18px;
-    padding: 32px 34px;
     line-height: normal;
   }
 
@@ -281,6 +281,7 @@
 
   .pickerArea {
     display: flex;
+    flex: none;
     flex-direction: column;
     gap: 10px;
     inline-size: 160px;
@@ -476,6 +477,13 @@
     font-weight: 600;
   }
 
+  /* One line, as 07g's role line: the rest is the employee's, in Studio. */
+  .choiceText > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .choiceText,
   .toggleText {
     display: flex;
@@ -598,8 +606,9 @@
     font-family: var(--font-mono);
     font-size: 11.5px;
     line-height: 1.6;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    /* Never broken inside a string: the block scrolls sideways instead. */
+    white-space: pre;
+    overflow-x: auto;
     direction: ltr;
     text-align: start;
   }
@@ -694,6 +703,9 @@
   .logo {
     display: grid;
     place-items: center;
+    padding: 6px;
+    text-align: center;
+    overflow-wrap: anywhere;
     inline-size: 64px;
     block-size: 64px;
     margin-block-start: -32px;
