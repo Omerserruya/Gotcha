@@ -42,7 +42,7 @@ describe('★★ 04 reads the day; the dialer’s search does not', () => {
     expect(data.quiet).toEqual({ ids: new Set(['wa-2']), count: 2, capped: false });
   });
 
-  it('either read failing is unknown — never "nobody"', async () => {
+  it('either read failing is unknown - never "nobody"', async () => {
     get.mockImplementation(async () => {
       throw new Error('down');
     });
@@ -58,7 +58,7 @@ describe('★★ 04 reads the day; the dialer’s search does not', () => {
   });
 });
 
-describe('★★ 04’s search: an order number finds its customer too — added, never instead', () => {
+describe('★★ 04’s search: an order number finds its customer too - added, never instead', () => {
   it('the phone match stays; the order’s customer joins it, once', async () => {
     get.mockImplementation(
       async ({

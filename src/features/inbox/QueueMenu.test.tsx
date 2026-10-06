@@ -63,7 +63,7 @@ beforeEach(() => {
 afterEach(() => act(() => clearSelected()));
 
 describe('★★ right-click a row: the menu acts on that row', () => {
-  it('★★ offers what applies to it — an open, unassigned conversation, seen by an admin', () => {
+  it('★★ offers what applies to it - an open, unassigned conversation, seen by an admin', () => {
     show();
     rightClick(screen.getByTestId('row-c1'));
     expect(screen.getByTestId('menu-assign-me')).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe('★★ right-click a row: the menu acts on that row', () => {
     expect(menu.textContent).not.toMatch(/pause|unread|archive/i);
   });
 
-  it('⚠⚠ Assign to me says it greets the customer — before it is pressed', () => {
+  it('⚠⚠ Assign to me says it greets the customer - before it is pressed', () => {
     show({ greeting: true });
     rightClick(screen.getByTestId('row-c1'));
     expect(screen.getByTestId('menu-assign-me')).toHaveTextContent(/greeting/i);
@@ -93,7 +93,7 @@ describe('★★ right-click a row: the menu acts on that row', () => {
     await waitFor(() => expect(actions.closeConversation).toHaveBeenCalledWith('c1'));
   });
 
-  it('⚠ an agent is not offered Delete — the route would refuse them', () => {
+  it('⚠ an agent is not offered Delete - the route would refuse them', () => {
     show({ role: 'AGENT' });
     rightClick(screen.getByTestId('row-c1'));
     expect(screen.queryByTestId('menu-delete')).toBeNull();
@@ -117,7 +117,7 @@ describe('⚠⚠ Delete asks first, and forces only what is still open', () => {
     expect(actions.deleteConversation).not.toHaveBeenCalled();
   });
 
-  it('★★ an OPEN conversation is deleted with force — Omer’s ruling', async () => {
+  it('★★ an OPEN conversation is deleted with force - Omer’s ruling', async () => {
     show();
     rightClick(screen.getByTestId('row-c1'));
     await userEvent.click(screen.getByTestId('menu-delete'));
@@ -175,7 +175,7 @@ describe('★★ shift-click picks several, and the menu acts on all of them', (
 });
 
 describe('★ 02’s item is 30 tall, and items stack at 1px', () => {
-  it('the dark menu’s lines are `normal` — inherited 1.6 made each item 36', () => {
+  it('the dark menu’s lines are `normal` - inherited 1.6 made each item 36', () => {
     const css = readFileSync(
       'src/design-system/primitives/overlay/overlay.module.css',
       'utf8',
@@ -220,7 +220,7 @@ describe('★★ Stop AI and Back to the AI, from the menu', () => {
       </NextIntlClientProvider>,
     );
 
-  it('the AI’s conversation: Stop AI stops it (stop-ai) — not claim, which assigns and greets', async () => {
+  it('the AI’s conversation: Stop AI stops it (stop-ai) - not claim, which assigns and greets', async () => {
     showAi();
     rightClick(screen.getByTestId('row-a1'));
     expect(screen.queryByTestId('menu-assign-me')).toBeNull();

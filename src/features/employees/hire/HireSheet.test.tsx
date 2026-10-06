@@ -47,7 +47,7 @@ const sheet = (props: Partial<Parameters<typeof HireSheet>[0]> = {}) =>
     </NextIntlClientProvider>,
   );
 
-describe('★ 07b — the job, where it works, its name; nothing written', () => {
+describe('★ 07b - the job, where it works, its name; nothing written', () => {
   it('Continue waits for a job; "Something else" waits for its words', async () => {
     sheet();
     expect(screen.getByTestId('hire-continue')).toBeDisabled();
@@ -63,16 +63,16 @@ describe('★ 07b — the job, where it works, its name; nothing written', () =>
     expect(screen.getByTestId('hire-knows')).toHaveTextContent('Returns policy');
   });
 
-  it('no channel connected is "—", with why', () => {
+  it('no channel connected is "-", with why', () => {
     sheet({ channels: [] });
-    expect(screen.getByText('—', { selector: 'span' })).toHaveAttribute(
+    expect(screen.getByText('-', { selector: 'span' })).toHaveAttribute(
       'title',
       expect.stringMatching(/No channel is connected/),
     );
   });
 });
 
-describe('★ 07c — the business’s own actions, with 10’s ceiling', () => {
+describe('★ 07c - the business’s own actions, with 10’s ceiling', () => {
   it('a money-moving action never offers "Do it"', async () => {
     sheet({ initialStep: 2 });
     expect(screen.getByTestId('hire-choice-shopify.process_refund-do_it')).toBeDisabled();
@@ -92,8 +92,8 @@ describe('★ 07c — the business’s own actions, with 10’s ceiling', () => 
   });
 });
 
-describe('★ 07d — the report’s shape, and nothing created', () => {
-  it('eight cases of "—", and the test, Hire and watch-only are drawn not live', () => {
+describe('★ 07d - the report’s shape, and nothing created', () => {
+  it('eight cases of "-", and the test, Hire and watch-only are drawn not live', () => {
     sheet({ initialStep: 3 });
     expect(screen.getByTestId('hire-cases').querySelectorAll('li')).toHaveLength(8);
     for (const id of ['hire-run-test', 'hire-it', 'hire-watch']) {
@@ -114,7 +114,7 @@ describe('★ 07d — the report’s shape, and nothing created', () => {
   });
 });
 
-describe('★ 07b–07d corrections (measurement of aca09ea)', () => {
+describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
   it('a channel by its name, never its enum', () => {
     sheet();
     expect(screen.getByTestId('hire-channel-SHOPIFY_LIVE_CHAT')).toHaveTextContent(
@@ -132,13 +132,13 @@ describe('★ 07b–07d corrections (measurement of aca09ea)', () => {
     );
   });
 
-  it('an empty group is drawn with "—" and why, never left out', () => {
+  it('an empty group is drawn with "-" and why, never left out', () => {
     sheet({
       initialStep: 2,
       tools: [TOOLS[1]!],
     });
     const group = screen.getByTestId('hire-group-answering');
-    expect(group).toHaveTextContent('—');
+    expect(group).toHaveTextContent('-');
     expect(group.querySelector('p')).toHaveAttribute(
       'title',
       expect.stringMatching(/changes something/),

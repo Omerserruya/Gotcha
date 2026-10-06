@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 
 describe('★★ drafts at the wire', () => {
-  it('a campaign: POST /api/broadcasts with a template — no status, no send', async () => {
+  it('a campaign: POST /api/broadcasts with a template - no status, no send', async () => {
     post.mockResolvedValue({ id: 'b1' });
     expect(
       await createCampaignDraft({
@@ -36,7 +36,7 @@ describe('★★ drafts at the wire', () => {
     });
   });
 
-  it('picked people: a manual audience of exactly them — the route reads audience.type manual', async () => {
+  it('picked people: a manual audience of exactly them - the route reads audience.type manual', async () => {
     post.mockResolvedValue({ id: 'b2' });
     await createCampaignDraft({
       name: 'Picked',

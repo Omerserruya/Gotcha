@@ -23,7 +23,7 @@ import styles from './Wall.module.css';
  * ════════════════════════════════════════════════════════════════════════════
  *   the GET      once, when the wall mounts on a conversation
  *   the GET      again, on `copilot.suggestions.updated` for this one
- *   the refresh  "Try again" — a model call, metered, and only the button
+ *   the refresh  "Try again" - a model call, metered, and only the button
  *
  * Not in `loadConversation`: the page re-renders on every delivery change
  * (`StreamLive`), and a read there is a read per refresh.
@@ -179,7 +179,7 @@ function CardHead({
   // The model often writes "Recommended · escalate" itself: ours once, not twice.
   const ours =
     recommended && !(approach && saysRecommended(approach, t('wall.answers.recommended')));
-  /* A band, never a percentage — see `confidenceBand`. */
+  /* A band, never a percentage - see `confidenceBand`. */
   const confidence = isDraft(suggestion)
     ? t(`copilot.confidence.${confidenceBand(suggestion)}` as 'copilot.confidence.high')
     : t('copilot.proposal');
@@ -193,7 +193,7 @@ function CardHead({
       </span>
       {/*
         02's top right is the WHY or the cost ("no refund yet", "costs ₪179",
-        "needs approval") — the model's rationale. How sure it is goes in the
+        "needs approval") - the model's rationale. How sure it is goes in the
         title; with no rationale, it is the line.
       */}
       <span className={styles.cardWhy} title={confidence} data-testid={`wall-why-${suggestion.id}`}>
@@ -220,7 +220,7 @@ function OpenCard({
       <CardHead suggestion={suggestion} recommended={recommended} />
       <UserText className={styles.openText}>{suggestion.text}</UserText>
       {/*
-        A proposed action has no button here — the approvals screen is where
+        A proposed action has no button here - the approvals screen is where
         a tool is fired, with the keyboard model built for no undo.
       */}
       {canUse(suggestion) ? (

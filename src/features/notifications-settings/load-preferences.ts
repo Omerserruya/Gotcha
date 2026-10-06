@@ -22,7 +22,7 @@ import { observedVolume, VOLUME_WINDOW_DAYS, type ObservedVolume } from './volum
  *   - the current user, for the phone number WhatsApp alerts would reach.
  *
  * The last one is worth a word. `UserNotificationPreference` has a `whatsapp`
- * boolean and **no number** — the destination is the person's own
+ * boolean and **no number** - the destination is the person's own
  * `User.phoneNumber`, and it is not settable from here. So the screen states
  * where alerts go and where that is changed, rather than drawing a field that
  * writes nowhere.

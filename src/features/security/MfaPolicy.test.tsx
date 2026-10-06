@@ -19,7 +19,7 @@ const show = (mfaRequiredForAdmins: boolean, mfaRequiredForAllUsers: boolean) =>
     </NextIntlClientProvider>,
   );
 
-describe('★ 16 — "Two-step sign-in" says the rule it holds, and only that', () => {
+describe('★ 16 - "Two-step sign-in" says the rule it holds, and only that', () => {
   it.each([
     [true, true, 'Required for everyone'],
     [true, false, 'Required for admins'],
@@ -32,7 +32,7 @@ describe('★ 16 — "Two-step sign-in" says the rule it holds, and only that', 
   });
 });
 
-describe('★ 16 — the level sits at the row’s end, the stored one dark', () => {
+describe('★ 16 - the level sits at the row’s end, the stored one dark', () => {
   it.each([
     [true, true, 'everyone'],
     [true, false, 'admins'],

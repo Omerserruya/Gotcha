@@ -71,7 +71,7 @@ describe('★ 13b is reached from its row on 13, now that it is not a section', 
   });
 });
 
-describe('★ 13 — the warning above the list, and who answers on the line', () => {
+describe('★ 13 - the warning above the list, and who answers on the line', () => {
   it('a troubled channel raises the banner, in the platform’s own words', async () => {
     render(
       await ChannelList({
@@ -115,7 +115,7 @@ describe('★ 13 — the warning above the list, and who answers on the line', (
 });
 
 describe('★ 13 corrections (measurement of 9b8dd9f)', () => {
-  it('★★ a troubled row says "Needs attention", never "Connected" — the words on its title', async () => {
+  it('★★ a troubled row says "Needs attention", never "Connected" - the words on its title', async () => {
     render(
       await ChannelList({
         channels: [
@@ -176,7 +176,7 @@ describe('★ a provider with no app on the server is said up front, not after a
   });
 });
 
-describe('★★ web chat’s Settings is its embed code — reachable any time after Create', () => {
+describe('★★ web chat’s Settings is its embed code - reachable any time after Create', () => {
   const webchat = () =>
     channelSchema.parse({
       id: 'wc1',

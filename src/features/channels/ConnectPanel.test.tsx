@@ -44,9 +44,9 @@ const show = (channel: Parameters<typeof ConnectPanel>[0]['channel']) =>
     </NextIntlClientProvider>,
   );
 
-describe('★★ 13 — an OAuth channel connects at its provider (backend ecd64c4d)', () => {
+describe('★★ 13 - an OAuth channel connects at its provider (backend ecd64c4d)', () => {
   it.each(['INSTAGRAM', 'MESSENGER', 'GMAIL', 'SLACK', 'OUTLOOK'] as const)(
-    '%s: Continue asks for the provider’s page, then goes there — only on the click',
+    '%s: Continue asks for the provider’s page, then goes there - only on the click',
     async (channel) => {
       startChannelConnect.mockResolvedValue({ ok: true, url: 'https://provider.example/auth' });
       show(channel);
@@ -94,8 +94,8 @@ describe('★ the row itself: "Not set up yet" in place of Connect', () => {
   });
 });
 
-describe('★★ web chat: after Create, the code to paste — in the same panel', () => {
-  it('★ created: the code opens on the NEW row — held in the URL, so the refresh keeps it', async () => {
+describe('★★ web chat: after Create, the code to paste - in the same panel', () => {
+  it('★ created: the code opens on the NEW row - held in the URL, so the refresh keeps it', async () => {
     connectWebChat.mockResolvedValue({ ok: true, data: { id: 'ch1', externalId: 'wc_123' } });
     setResponseMode.mockResolvedValue({ ok: true });
     show('WEBCHAT');
@@ -119,9 +119,9 @@ describe('★★ web chat: after Create, the code to paste — in the same panel
     expect(screen.getByTestId('webchat-copy')).toHaveTextContent('Copied');
   });
 
-  it('the snippet escapes what it embeds — an id can never close the script', () => {
+  it('the snippet escapes what it embeds - an id can never close the script', () => {
     const code = embedCode('a"b</script><script>x', 'https://dev.gotcha.co.il');
-    // Exactly one closing tag — the snippet's own, at the end.
+    // Exactly one closing tag - the snippet's own, at the end.
     expect(code.match(/<\/script>/g)).toHaveLength(1);
     expect(code.endsWith('</script>')).toBe(true);
     expect(code).toContain('widgetId: "a\\"b\\u003c/script>\\u003cscript>x"');

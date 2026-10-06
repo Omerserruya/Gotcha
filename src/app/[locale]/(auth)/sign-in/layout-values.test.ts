@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ A LITERAL IN A STYLESHEET HAS NOTHING BEHIND IT
  * ════════════════════════════════════════════════════════════════════════════
- * The editorial panel was 460px where the design says 508px — 48px narrow,
+ * The editorial panel was 460px where the design says 508px - 48px narrow,
  * on the screen's largest element, and nothing in the repository disagreed.
  * Omer read it off the screen; no artefact could have.
  *
@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest';
 
 /*
  * ⚠⚠ COMMENTS ARE STRIPPED FIRST, AND THAT IS NOT TIDINESS.
- *   These comments QUOTE THE MOCK — `font-size:13.5px; line-height:1.65` —
+ *   These comments QUOTE THE MOCK - `font-size:13.5px; line-height:1.65` -
  *   so a declaration regex run over the raw file finds the quotation before
  *   the rule. It read 1.65 out of a comment and reported the file correct
  *   while the rule said something else.
@@ -59,7 +59,7 @@ describe('⚠⚠ 00a values quoted from the design', () => {
     /*
      * `position: relative` with a fixed block-size is what lets three
      * absolutely-positioned statements of different lengths cross-fade in
-     * place. Lose either and the panel jumps on every transition — which is
+     * place. Lose either and the panel jumps on every transition - which is
      * the kind of thing that reads as "the animation is broken".
      */
     expect(declaration('editorialStage', 'position')).toBe('relative');
@@ -69,7 +69,7 @@ describe('⚠⚠ 00a values quoted from the design', () => {
   it('⚠⚠ the ticks are spaced at the design’s 5px, not at a token that was nearby', () => {
     /*
      * `gap:5px` in the mock. The scale has 4 and 6 and no 5, and my first
-     * version used `--space-8` — three pixels wider, invented, and nothing
+     * version used `--space-8` - three pixels wider, invented, and nothing
      * could have disagreed with it. A literal with the design's number beats a
      * token chosen for proximity.
      */
@@ -97,7 +97,7 @@ describe('⚠⚠ 00a values quoted from the design', () => {
 describe('⚠⚠ the two that change what the reviewer sees', () => {
   it('⚠⚠ the supporting paragraph is the design’s 390px, not 340', () => {
     /*
-     * `max-width:390px` in the mock. Ours was 340 — 13% narrower, on the
+     * `max-width:390px` in the mock. Ours was 340 - 13% narrower, on the
      * element "the left side with the changing sentences is too narrow" was
      * actually pointing at. The panel width was the other half of that
      * sentence and was fixed first.
@@ -113,7 +113,7 @@ describe('⚠⚠ the two that change what the reviewer sees', () => {
      * `--font-serif-style` existed only inside `:root:lang(he)`, where
      * `normal` is correct and deliberate. In Latin the custom property was
      * undefined, so `font-style: var(--font-serif-style)` was an invalid
-     * declaration — dropped in silence — and the largest text on the sign-in
+     * declaration - dropped in silence - and the largest text on the sign-in
      * screen has been upright since it shipped.
      *
      * Asserted in both directions: the base must be italic AND the Hebrew
@@ -145,13 +145,13 @@ describe('⚠⚠ the cluster: six values, all rounded the same direction', () =>
    *   #2E2E2E → #333     the hairline
    *
    * ★ Not six small calls. A systematic drift in one direction, and the fix
-   *   is on the scale rather than in this screen — 00b's editorial column is
+   *   is on the scale rather than in this screen - 00b's editorial column is
    *   the same shell, and so is recovery's.
    *
    * ⚠ THREE OF THE SIX WERE ALREADY TOKENS NOTHING READ HERE:
    *   `--line-height-loose` was 1.65, `--frame-text-eyebrow` was #6e6a63, and
    *   `--frame-text-secondary` was #a29d95 and correct. The value existed and
-   *   the call site did not use it — the third time today.
+   *   the call site did not use it - the third time today.
    */
   it('★★ the two spacing steps are the design’s own numbers', () => {
     expect(declaration('editorial', 'padding-inline')).toBe('var(--space-34)');
@@ -195,7 +195,7 @@ describe('⚠⚠ the cluster: six values, all rounded the same direction', () =>
     /*
      * `#333` appears nowhere in `Directions.dc.html`; `#2E2E2E` appears twice,
      * as the frame hairline on both 00a and 00b. Changed on the token because
-     * the other reader — the shell's frame border — is the same hairline in
+     * the other reader - the shell's frame border - is the same hairline in
      * the same design language.
      */
     const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');

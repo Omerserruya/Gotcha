@@ -18,11 +18,11 @@ const POLICY: Record<Level, TenantSecurity> = {
 };
 
 /**
- * Who must use two-factor authentication — one policy, three levels.
+ * Who must use two-factor authentication - one policy, three levels.
  *
  * The design also asks for SSO and a Google domain. No field for either exists
  * on this route, and it may be an identity-provider setting rather than one of
- * ours, so the screen draws no control for it (the page shows "—").
+ * ours, so the screen draws no control for it (the page shows "-").
  */
 export function MfaPolicy({ policy }: { readonly policy: TenantSecurity }) {
   const t = useTranslations('security');
@@ -50,7 +50,7 @@ export function MfaPolicy({ policy }: { readonly policy: TenantSecurity }) {
       : 'none';
 
   /*
-    16: 02's first policy row — "Two-step sign-in" over what is required —
+    16: 02's first policy row - "Two-step sign-in" over what is required -
     with its state at the row's end. 02 draws an "On" chip; the rule is live
     here, so the end is a segmented control with the stored level dark. 02's
     "4 of 4 set up" is not drawn: nothing reads who has enrolled.

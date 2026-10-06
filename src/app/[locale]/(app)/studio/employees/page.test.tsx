@@ -60,7 +60,7 @@ const page = async (employees: unknown, query: Record<string, string> = {}) => {
   return Page({ searchParams: Promise.resolve(query) });
 };
 
-describe('★★ 07 is 02’s screen — header, then the list beside the selected one', () => {
+describe('★★ 07 is 02’s screen - header, then the list beside the selected one', () => {
   it('a screen page, flush, with the hire action in the header', async () => {
     const tree = (await page([employee('a')])) as ReactElement<{
       layout: string;
@@ -78,7 +78,7 @@ describe('★★ 07 is 02’s screen — header, then the list beside the select
     expect(find<{ employee: { id: string } }>(tree, EmployeeDetail)?.employee.id).toBe('b');
   });
 
-  it('an unknown id falls back to the first — never an empty detail', async () => {
+  it('an unknown id falls back to the first - never an empty detail', async () => {
     const tree = await page([employee('a'), employee('b')], { employee: 'gone' });
     expect(find<{ selectedId: string }>(tree, EmployeeRail)?.selectedId).toBe('a');
   });
@@ -96,7 +96,7 @@ describe('★★ 07 is 02’s screen — header, then the list beside the select
   });
 });
 
-describe('★ 07b — Hire opens the sheet; its reads only then', () => {
+describe('★ 07b - Hire opens the sheet; its reads only then', () => {
   it('without ?hire, no sheet and no extra reads', async () => {
     loadChannels.mockClear();
     loadKnowledge.mockClear();
@@ -120,7 +120,7 @@ describe('★ 07b — Hire opens the sheet; its reads only then', () => {
   });
 });
 
-describe('★ 07e / 07f — the dialog and the sheet, by query', () => {
+describe('★ 07e / 07f - the dialog and the sheet, by query', () => {
   it('neither without its query', async () => {
     const tree = await page([employee('a')]);
     expect(find(tree, EditSheet)).toBeNull();

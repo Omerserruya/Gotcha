@@ -10,9 +10,9 @@ import { addCustomer, type AddCustomerResult } from './customer-actions';
 import styles from './Customers.module.css';
 
 /**
- * 04's "Add a customer" — live (Omer, 2026-10-04). Name and phone, email if
+ * 04's "Add a customer" - live (Omer, 2026-10-04). Name and phone, email if
  * known; the person is created as the WhatsApp identity they write from, or
- * — when the phone is already here — the existing person opens instead.
+ * - when the phone is already here - the existing person opens instead.
  */
 export function AddCustomer() {
   const t = useTranslations('customers.add');

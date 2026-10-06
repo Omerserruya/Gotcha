@@ -56,7 +56,7 @@ describe('★★ 08b at the wire', () => {
     expect((body(0) as FormData).get('file')).toBeInstanceOf(File);
   });
 
-  it('★ no base yet: one is made first — then the document goes into it', async () => {
+  it('★ no base yet: one is made first - then the document goes into it', async () => {
     post.mockResolvedValueOnce({ id: 'kb-new' }).mockResolvedValueOnce(doc);
     await addKnowledge('none', { way: 'text', title: 'a', body: 'b' }, 'Knowledge');
     expect(path(0)).toBe('/api/knowledge-bases');
@@ -64,7 +64,7 @@ describe('★★ 08b at the wire', () => {
     expect(path(1)).toBe('/api/knowledge-bases/kb-new/documents');
   });
 
-  it('★★ the bases could not be read: refused — a failed read never makes a second base', async () => {
+  it('★★ the bases could not be read: refused - a failed read never makes a second base', async () => {
     expect(await addKnowledge('unknown', { way: 'text', title: 'a', body: 'b' }, 'K')).toEqual({
       ok: false,
       reason: 'failed',

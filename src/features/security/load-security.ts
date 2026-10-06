@@ -21,7 +21,7 @@ import { captureFixturesEnabled, FIXTURE_LOGINS, FIXTURE_SESSIONS } from './capt
 /**
  * What screen 16 shows.
  *
- * Four reads, all degrading independently — on a security screen more than
+ * Four reads, all degrading independently - on a security screen more than
  * anywhere, one section failing must not blank the others, because the reader
  * came to check something specific and the rest is still true.
  *
@@ -29,7 +29,7 @@ import { captureFixturesEnabled, FIXTURE_LOGINS, FIXTURE_SESSIONS } from './capt
  * Sessions and login history get that for free: the backend answers
  * `{ available: false }` rather than an empty list. The audit log is given the
  * same shape by hand, because it is the section where the difference matters
- * most — *"nothing happened"* is reassuring and *"we cannot read the log"* is
+ * most - *"nothing happened"* is reassuring and *"we cannot read the log"* is
  * not, and they must never look alike.
  *
  * **Nothing here logs an IP, a city or a user agent.** A failure is logged by
@@ -95,7 +95,7 @@ export async function loadSecurity(): Promise<SecurityData> {
   ]);
 
   /*
-   * Capture only, and only outside production — see `capture-fixtures.ts`.
+   * Capture only, and only outside production - see `capture-fixtures.ts`.
    * This screen renders a real IP and a real city, and acceptance screenshots
    * are committed. Everything else on the page still reads live.
    */

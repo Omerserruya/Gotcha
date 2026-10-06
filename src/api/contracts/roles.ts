@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Roles and per-person permissions — screens 12b, 12c and 12e.
+ * Roles and per-person permissions - screens 12b, 12c and 12e.
  *
  * Shapes read from `services/auth/src/routes/permissions.ts`. Every endpoint
  * the redesign needs exists; what does not exist are two fields the design
@@ -11,7 +11,7 @@ import { z } from 'zod';
  * ```prisma
  * model TenantRoleFeature { roleId · feature }   // composite key. no columns.
  * ```
- * The design describes each role in prose **including money limits** —
+ * The design describes each role in prose **including money limits** -
  * *"refunds up to ₪1,000"*, *"refunds up to ₪500"*. **There is no amount
  * anywhere in this model.** A role grants `billing.refund` or it does not.
  *
@@ -27,7 +27,7 @@ import { z } from 'zod';
  * ```
  * The design's 12e is *"add a permission to one person"* and describes only
  * the first. **The second exists, is stored the same way, and is the more
- * dangerous of the two** — a person can be quietly missing something their
+ * dangerous of the two** - a person can be quietly missing something their
  * role says they have. A screen that surfaces *"extras"* and hides removals
  * reports half the exceptions.
  *
@@ -46,12 +46,12 @@ export const roleSchema = z.object({
   isSystem: z.boolean().default(false),
   /** `admin` · `agent` · `department_manager` · `owner`, when built in. */
   builtinKey: z.string().nullable().default(null),
-  /** The permission keys this role holds. No amounts — see above. */
+  /** The permission keys this role holds. No amounts - see above. */
   features: z
     .array(z.union([z.string(), z.object({ feature: z.string() })]))
     .default([])
     .transform((items) => items.map((i) => (typeof i === 'string' ? i : i.feature))),
-  /** `_count.assignments` — how many people wear this role. */
+  /** `_count.assignments` - how many people wear this role. */
   memberCount: z.number().default(0),
 });
 
@@ -95,7 +95,7 @@ export const roleListSchema = z
 /**
  * The feature key that means *everything*.
  *
- * `permissions.ts:37` — `if (key === "*") return true`. A role holding it
+ * `permissions.ts:37` - `if (key === "*") return true`. A role holding it
  * passes every check regardless of what else it has.
  */
 export const WILDCARD_FEATURE = '*';
@@ -106,7 +106,7 @@ export const WILDCARD_FEATURE = '*';
  * **This exists because counting was arithmetically right and said the
  * opposite of the truth.** Owner holds exactly one row, `*`, so the screen
  * rendered *"Allows one thing"* directly beneath *"Full access to
- * everything"* — and a reader comparing Owner's 1 to Admin's 58 concludes
+ * everything"* - and a reader comparing Owner's 1 to Admin's 58 concludes
  * Owner is the narrower role.
  *
  * **The row was counted without being read.** A wildcard role says what it
@@ -125,7 +125,7 @@ export function isEditable(role: Role): boolean {
  * One person's exception to their role.
  *
  * `granted` is the whole story: **true adds, false removes.** Both are
- * exceptions and both deserve to be visible — the design names only the
+ * exceptions and both deserve to be visible - the design names only the
  * first, and a person silently missing a permission their role grants is the
  * harder of the two to discover.
  */
@@ -137,7 +137,7 @@ export const grantSchema = z.object({
   updatedAt: z.string().nullable().default(null),
   /** When it ends (backend 53a5079a); `null` = no end date. */
   expiresAt: z.string().nullable().catch(null).default(null),
-  /** `false` once ended — the row stays, so the screen can say when. */
+  /** `false` once ended - the row stays, so the screen can say when. */
   active: z.boolean().catch(true).default(true),
 });
 
@@ -155,7 +155,7 @@ export function isAddition(grant: Grant): boolean {
  * route itself and is not read here.
  *
  * ── SCOPE IS PER ROLE ASSIGNMENT, NOT PER PERMISSION ──
- * `UserRoleAssignment` carries `scope`, `assignedAt` and `assignedBy` — so a
+ * `UserRoleAssignment` carries `scope`, `assignedAt` and `assignedBy` - so a
  * person's reach is set **when a role is given to them**. A permission only
  * declares whether the scope dimension applies to it at all
  * (`PermissionDef.scoped`), never what it is set to.
@@ -163,10 +163,10 @@ export function isAddition(grant: Grant): boolean {
  * ── AND TWO THINGS THE DESIGN ASKS FOR THAT DO NOT EXIST ──
  * **Workload capacity and auto-assign.** *"Workload caps how many
  * conversations the person holds at once"* has no field on `User` and none
- * anywhere in the schema — searched across every service, where the only
+ * anywhere in the schema - searched across every service, where the only
  * `maxConcurrent` is a voice-gateway socket limit read from an env var.
  *
- * **A grant's end date.** *"with who added them and when they end"* — the
+ * **A grant's end date.** *"with who added them and when they end"* - the
  * first exists as `updatedBy`, the second does not.
  */
 export const personScopeSchema = z.enum(['own', 'team', 'department', 'workspace']).nullable();
@@ -186,7 +186,7 @@ export const personSchema = z.object({
       }),
     )
     .default([]),
-  /** Overrides — additions AND removals. See `grantSchema`. */
+  /** Overrides - additions AND removals. See `grantSchema`. */
   grants: z.array(grantSchema).default([]),
   /** The effective permission keys, after role and overrides. */
   permissions: z.array(z.string()).default([]),
@@ -214,7 +214,7 @@ export const personDetailSchema = z.object({ data: z.unknown() }).transform(({ d
  * Overrides that ADD something the person's role does not give.
  *
  * Separated from removals because they are different facts, not two values of
- * one. An addition is visible on its own — this person has something extra.
+ * one. An addition is visible on its own - this person has something extra.
  */
 export function additions(person: Person): readonly Grant[] {
   return person.grants.filter((g) => g.granted);
@@ -225,7 +225,7 @@ export function additions(person: Person): readonly Grant[] {
  *
  * **These are invisible by construction.** The roles screen shows the Agent
  * role allowing refunds, the person is listed as an Agent, and the person
- * cannot refund — every screen in the chain tells the truth and the reader
+ * cannot refund - every screen in the chain tells the truth and the reader
  * still ends up wrong.
  *
  * So they are surfaced beside the additions, and a removal must read
@@ -237,13 +237,13 @@ export function removals(person: Person): readonly Grant[] {
   return person.grants.filter((g) => !g.granted);
 }
 
-/** Any override at all — the number 12b must count, rather than "extras". */
+/** Any override at all - the number 12b must count, rather than "extras". */
 export function overrideCount(person: Person): number {
   return person.grants.length;
 }
 
 /**
- * Every pattern key a role holds — screen 12c.
+ * Every pattern key a role holds - screen 12c.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★ A WILDCARD IS A STANDING INSTRUCTION, NOT SHORTHAND FOR TODAY'S LIST
@@ -255,7 +255,7 @@ export function overrideCount(person: Person): number {
  *   "conversation:messages:*" → every action under conversation:messages
  *
  * *"so roles auto-inherit new permissions."* So expanding a wildcard into the
- * boxes it currently matches does not produce a different role — it produces
+ * boxes it currently matches does not produce a different role - it produces
  * one that is **identical on the day it is saved and diverges from then on**,
  * silently, every time anyone adds a permission key.
  *
@@ -263,8 +263,8 @@ export function overrideCount(person: Person): number {
  * as a manager who cannot do something their job description says they can.
  *
  * ── AND IT IS NOT ONLY THE OWNER ROLE ──
- * Measured on this database: **Department Manager** — seeded, ordinary,
- * non-Owner — holds `conversation:messages:*` and `customer:commerce:*`
+ * Measured on this database: **Department Manager** - seeded, ordinary,
+ * non-Owner - holds `conversation:messages:*` and `customer:commerce:*`
  * alongside fourteen explicit keys, on every tenant that has it.
  *
  * That is the dangerous shape. Owner is one unmatched string and looks odd.
@@ -279,7 +279,7 @@ export function wildcardsIn(features: readonly string[]): readonly string[] {
  * Can a checkbox grid represent this role without changing what it means?
  *
  * No, whenever it holds any pattern. **A control that cannot represent a
- * state the system can be in will be used to destroy that state** — so the
+ * state the system can be in will be used to destroy that state** - so the
  * grid must not be the thing that saves one.
  */
 export function gridCanRepresent(features: readonly string[]): boolean {
@@ -289,7 +289,7 @@ export function gridCanRepresent(features: readonly string[]): boolean {
 /**
  * Does this effective list already grant `key`? An exact key, `*`, or a
  * pattern that covers it (`conversation:messages:*` covers
- * `conversation:messages:read`) — the catalogue's own wildcard semantic.
+ * `conversation:messages:read`) - the catalogue's own wildcard semantic.
  */
 export function holds(effective: readonly string[], key: string): boolean {
   return effective.some(

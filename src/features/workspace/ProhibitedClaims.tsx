@@ -10,14 +10,14 @@ import { saveProhibitedClaims } from './actions';
 import styles from './Workspace.module.css';
 
 /**
- * "Never say" — hard constraints, listed plainly.
+ * "Never say" - hard constraints, listed plainly.
  *
  * These are already enforced: the prompt builder reads the same list and the
  * AI obeys it. This screen is the first thing that can author one.
  *
  * The API replaces the whole list, so add and remove are edits to a local list
  * followed by one write. The list is applied optimistically and put back on
- * failure — a rule that vanished from the screen but not from the AI would be
+ * failure - a rule that vanished from the screen but not from the AI would be
  * the worst outcome here, so the screen never claims a removal it did not get.
  *
  * TWO DIFFERENT SERVER BEHAVIOURS, and conflating them was a real bug here:
@@ -25,7 +25,7 @@ import styles from './Workspace.module.css';
  *   - blanks and case-duplicates are dropped SILENTLY, 200 with a shorter
  *     array. So the returned list is rendered, never the submitted one.
  *   - 50 items and 200 characters are HARD LIMITS. Over either and the whole
- *     save is rejected 422 with nothing written — not trimmed. So the UI
+ *     save is rejected 422 with nothing written - not trimmed. So the UI
  *     enforces both itself: a pasted 201-character rule must be stopped here,
  *     because the server's answer is to discard the entire list.
  *
@@ -82,7 +82,7 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
       <p className={styles.cardTitle}>{t('title')}</p>
 
       {/*
-        02 draws a READ state — the rules as bullets and an "Add a rule" link.
+        02 draws a READ state - the rules as bullets and an "Add a rule" link.
         The link opens the editing in place: the field, and each rule's Remove.
       */}
       <div className={styles.claims} data-testid="claims-list">
@@ -129,7 +129,7 @@ export function ProhibitedClaims({ claims }: { claims: readonly string[] }) {
             {/*
             `addAction`, not `add`. The field's label and this button both
             read `t('add')` and both rendered "Add a rule", one above the
-            other — a label naming the thing and a button naming the verb are
+            other - a label naming the thing and a button naming the verb are
             not the same string, and using one key for both guarantees they
             can never differ.
 

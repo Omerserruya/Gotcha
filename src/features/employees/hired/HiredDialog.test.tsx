@@ -57,8 +57,8 @@ const show = async (over: Record<string, unknown> = {}, channels = ['WhatsApp', 
     }),
   );
 
-describe('★★ 07e — what is true of the employee, and "—" where nothing backs 02', () => {
-  it('the head: its status in words, and when it was created — never who', async () => {
+describe('★★ 07e - what is true of the employee, and "-" where nothing backs 02', () => {
+  it('the head: its status in words, and when it was created - never who', async () => {
     await show();
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Maya is working');
     expect(screen.getByTestId('hired-line')).toHaveTextContent(/^Created July 30.*05:16/);
@@ -74,10 +74,10 @@ describe('★★ 07e — what is true of the employee, and "—" where nothing b
     expect(screen.getByTestId('hired-answers')).toHaveTextContent(row);
   });
 
-  it('★ no watch-only mode: the row is drawn, its value "—" with the reason', async () => {
+  it('★ no watch-only mode: the row is drawn, its value "-" with the reason', async () => {
     await show();
     expect(screen.getByTestId('hired-watch')).toHaveTextContent('Drafts first, and tells you');
-    expect(screen.getByTitle(/no watch-only mode/)).toHaveTextContent('—');
+    expect(screen.getByTitle(/no watch-only mode/)).toHaveTextContent('-');
   });
 
   it('where it answers, and its handover rules; Change and Adjust open 07f', async () => {
@@ -100,7 +100,7 @@ describe('★★ 07e — what is true of the employee, and "—" where nothing b
     });
     const card = screen.getByTestId('hired-gap');
     expect(card).toHaveTextContent('The readiness test found 2 gaps');
-    expect(card).toHaveTextContent('A full product catalogue — Upload the full list.');
+    expect(card).toHaveTextContent('A full product catalogue - Upload the full list.');
     expect(screen.getByTestId('hired-resolve')).toHaveAttribute('href', '/studio/knowledge');
   });
 

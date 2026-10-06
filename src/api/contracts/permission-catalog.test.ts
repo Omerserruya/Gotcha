@@ -27,12 +27,12 @@ const perm = (over: Partial<ReturnType<typeof permissionDefSchema.parse>> = {}) 
     ...over,
   });
 
-describe('the round trip — the reason this is not a grid', () => {
+describe('the round trip - the reason this is not a grid', () => {
   it('returns exactly what it was given when nothing changed', () => {
     /*
      * The design's four-level radio over five independent keys cannot do
      * this. It must pick one of four levels to represent five booleans, so
-     * saving an untouched role drops whatever the levels cannot express —
+     * saving an untouched role drops whatever the levels cannot express -
      * silently, with no error and no warning.
      *
      * A control that cannot represent a state the system can be in will
@@ -60,7 +60,7 @@ describe('the round trip — the reason this is not a grid', () => {
   });
 
   it('preserves the exact combination the grid could not express', () => {
-    // "Can read and close but not reply" — five independent actions, and the
+    // "Can read and close but not reply" - five independent actions, and the
     // one a shift lead plausibly needs. A four-way level has no value for it.
     const awkward = ['conversation:messages:read', 'conversation:messages:close'];
     expect(selectionToFeatures(awkward)).toEqual(awkward);
@@ -74,7 +74,7 @@ describe('scope is per role, and only where it applies', () => {
   });
 
   it('refuses a scope on a permission that declares none', () => {
-    // `PermissionDef.scoped` is a boolean — whether the dimension APPLIES,
+    // `PermissionDef.scoped` is a boolean - whether the dimension APPLIES,
     // not what it is set to. A greyed scope control on a row that has none
     // is the same lie in miniature.
     expect(takesScope(perm({ scoped: false }))).toBe(false);

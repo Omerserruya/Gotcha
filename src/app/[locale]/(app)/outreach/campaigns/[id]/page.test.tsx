@@ -52,8 +52,8 @@ beforeEach(() => {
   loadCampaign.mockReset();
 });
 
-describe('★★ 05b — one campaign, three answers', () => {
-  it('★ ok: the two cards, the strip, the chart, the replies — all mounted', async () => {
+describe('★★ 05b - one campaign, three answers', () => {
+  it('★ ok: the two cards, the strip, the chart, the replies - all mounted', async () => {
     loadCampaign.mockResolvedValue({
       state: 'ok',
       campaign: campaignSchema.parse({
@@ -70,7 +70,7 @@ describe('★★ 05b — one campaign, three answers', () => {
     expect(loadCampaign).toHaveBeenCalledWith('b1');
   });
 
-  it('⚠ a 404 is "no such campaign", not a failure — and a failure is not a 404', async () => {
+  it('⚠ a 404 is "no such campaign", not a failure - and a failure is not a 404', async () => {
     loadCampaign.mockResolvedValue({ state: 'missing' });
     expect(testids(await page())).toContain('results-missing');
     loadCampaign.mockResolvedValue({ state: 'failed' });

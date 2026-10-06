@@ -5,18 +5,18 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ A 'use server' FILE MAY EXPORT ONLY ASYNC FUNCTIONS — AND VITEST IGNORES IT
+ * ★★ A 'use server' FILE MAY EXPORT ONLY ASYNC FUNCTIONS - AND VITEST IGNORES IT
  * ════════════════════════════════════════════════════════════════════════════
  * Next refuses the whole module at runtime when a server-action file exports
  * anything else: "A "use server" file can only export async functions, found
  * object." `approvals/actions.ts` exported `EDIT_REFUSALS`, and approve,
- * reject and edit ALL answered 500 on dev while every test passed — vitest
+ * reject and edit ALL answered 500 on dev while every test passed - vitest
  * reads the directive as a string and moves on.
  *
  * So this reads every 'use server' file and allows, at the top level, only:
  * `export async function`, `export default async function`, and type-only
- * exports (`export type`, `export interface`). Anything else — a const, a
- * plain function, a re-export list — fails here, before it fails a merchant.
+ * exports (`export type`, `export interface`). Anything else - a const, a
+ * plain function, a re-export list - fails here, before it fails a merchant.
  */
 
 const ROOT = join(__dirname);
@@ -61,7 +61,7 @@ describe('★★ every server-action file exports only async functions (and type
   });
 });
 
-describe('the check itself — run against the defect it is for', () => {
+describe('the check itself - run against the defect it is for', () => {
   it('★ catches the exact export that broke approvals', () => {
     const broken =
       "'use server';\n\nexport async function a() {}\nexport const EDIT_REFUSALS = ['x'] as const;\n";

@@ -31,8 +31,8 @@ describe('★★ the state machine is three, not the design’s five', () => {
     /*
      * `ConversationStatus` is OPEN | WAITING | CLOSED. Waiting-on-customer
      * and waiting-on-business are one undifferentiated WAITING, and
-     * waiting-on-an-external-system does not exist — so 02b's "11 exchanges
-     * held — returns system down" has nothing to derive from.
+     * waiting-on-an-external-system does not exist - so 02b's "11 exchanges
+     * held - returns system down" has nothing to derive from.
      */
     expect([...CONVERSATION_STATUSES]).toEqual(['OPEN', 'WAITING', 'CLOSED']);
     expect(CONVERSATION_STATUSES).not.toContain('HELD');
@@ -45,7 +45,7 @@ describe('★★ agent-unread does not exist, and the nearest field is a trap', 
     /*
      * The same word for the opposite party's fact. Reading it as "the agent
      * has seen this" marks a queue read because the CUSTOMER read our reply
-     * — the queue would empty itself as customers open their phones.
+     * - the queue would empty itself as customers open their phones.
      */
     const read = message({ readAt: '2026-09-25T11:30:00.000Z' });
     expect(read.readAt).not.toBeNull();
@@ -85,7 +85,7 @@ describe('★★ waiting is computable; first-reply is not', () => {
 describe('★★ an unconstrained messageType is not a domain', () => {
   it('★★ returns null for a type nobody has accounted for', () => {
     /*
-     * `messageType` is a free String with no enum — the observed values are
+     * `messageType` is a free String with no enum - the observed values are
      * what writers happen to have written. An exhaustive switch turns an
      * unknown into whatever the default branch says, and a default of
      * "system message" would mislabel the next type somebody adds.
@@ -103,7 +103,7 @@ describe('★★ an unconstrained messageType is not a domain', () => {
 describe('★★ a reply whose quote we never stored is still a reply', () => {
   it('★★ keeps the provider id when our lookup missed', () => {
     /*
-     * `replyToMessageId` can fail to resolve — the quoted message may
+     * `replyToMessageId` can fail to resolve - the quoted message may
      * predate GOTCHA or have been deleted. Rendering that as an ordinary
      * message loses the fact that the customer was answering something,
      * which is often the only thing making it legible.
@@ -122,7 +122,7 @@ describe('★★ the voice note cannot be read out', () => {
      * "Read what she said" has nothing behind it. An inbound voice note is
      * stored as a file; the only audio-specific code in the worker is a
      * filename extension. The Deepgram credential exists and the client does
-     * not — "we have the key" reads like "we have the feature".
+     * not - "we have the key" reads like "we have the feature".
      */
     expect(hasTranscript(message({ messageType: 'audio', mediaUrl: 'https://x/a.ogg' }))).toBe(
       false,
@@ -130,7 +130,7 @@ describe('★★ the voice note cannot be read out', () => {
   });
 });
 
-describe('★★ channelName — one function, because this defect was found twelve times', () => {
+describe('★★ channelName - one function, because this defect was found twelve times', () => {
   /*
    * ════════════════════════════════════════════════════════════════════════════
    * TWELVE SITES, SIX OF THEM FOUND AFTER THE FIRST THREE WERE "FIXED"
@@ -145,7 +145,7 @@ describe('★★ channelName — one function, because this defect was found twe
    * written by somebody who had read none of the comments.
    *
    * The translator is passed in because this module is a contract and must not
-   * reach for a framework — which is also what makes it testable here with a
+   * reach for a framework - which is also what makes it testable here with a
    * plain function instead of a renderer.
    */
   const catalogue = new Set([
@@ -177,7 +177,7 @@ describe('★★ channelName — one function, because this defect was found twe
     /*
      * ★ THIS IS THE ASSERTION THAT COVERS THE THREE WORST SITES. `ChannelList`,
      *   `ConnectPanel` and `ConnectableRow` called the translator with an
-     *   unguarded key, and next-intl returns the KEY it could not resolve — so an
+     *   unguarded key, and next-intl returns the KEY it could not resolve - so an
      *   unlisted channel rendered `name.TELEGRAM`, which is worse than the enum.
      *
      * The stub throws on an unknown key for exactly that reason: a stub that
@@ -190,7 +190,7 @@ describe('★★ channelName — one function, because this defect was found twe
   it('★★ returns null for absent, which is not "another channel"', () => {
     /*
      * Three states. "We were not told which channel" is not "a channel we do not
-     * recognise", and the inbox queue distinguishes them in its own words — it
+     * recognise", and the inbox queue distinguishes them in its own words - it
      * can only do that if this returns something distinguishable.
      */
     expect(channelName(null, t)).toBeNull();
@@ -219,14 +219,14 @@ describe('★★ channelName — one function, because this defect was found twe
   });
 });
 
-describe('★★ deliveryOf — pending and failed were the same rendering: silence', () => {
+describe('★★ deliveryOf - pending and failed were the same rendering: silence', () => {
   /*
    * ════════════════════════════════════════════════════════════════════════════
    * THE CONTRACT CARRIED THE TIMESTAMPS AND NOT THE STATUS
    * ════════════════════════════════════════════════════════════════════════════
    * `deliveredAt` and `readAt` have always been named, so a delivered message
    * could be told from an undelivered one. **A FAILED message has no timestamp
-   * either**, so it looked exactly like one still on its way — and the stream
+   * either**, so it looked exactly like one still on its way - and the stream
    * showed nothing for both.
    *
    * `Message.status` was on the wire the entire time: the list route puts no
@@ -263,7 +263,7 @@ describe('★★ deliveryOf — pending and failed were the same rendering: sile
     /*
      * The house pattern for a status column is `z.enum(...).catch('PENDING')`,
      * and it is wrong on this field: catching an unrecognised failure to
-     * `PENDING` renders it as **"still sending"** — the reassuring direction, on
+     * `PENDING` renders it as **"still sending"** - the reassuring direction, on
      * the one field whose job is to stop somebody believing a message arrived.
      */
     expect(deliveryOf(out({ status: 'REJECTED_BY_PROVIDER' }))).toBe('unknown');
@@ -336,7 +336,7 @@ describe('★★ deliveryOf — pending and failed were the same rendering: sile
 });
 
 describe('★★ the contract keeps what the stream draws', () => {
-  it('★★ `replyTo` and `senderName` survive parsing — `z.object` stripped both', () => {
+  it('★★ `replyTo` and `senderName` survive parsing - `z.object` stripped both', () => {
     const parsed = messageSchema.parse({
       id: 'm1',
       direction: 'OUTBOUND',
@@ -361,14 +361,14 @@ describe('★★ the contract keeps what the stream draws', () => {
     });
   });
 
-  it('★ and both are optional — an older service sends neither', () => {
+  it('★ and both are optional - an older service sends neither', () => {
     const parsed = messageSchema.parse({ id: 'm1', direction: 'INBOUND', createdAt: 'x' });
     expect(parsed.replyTo).toBeNull();
     expect(parsed.senderName).toBeNull();
   });
 });
 
-describe('⚠ senderLabel — a login email is not a name', () => {
+describe('⚠ senderLabel - a login email is not a name', () => {
   it.each([
     ['OUTBOUND', 'Support AI', 'Support AI'],
     ['OUTBOUND', 'dana@shop.co.il', null],

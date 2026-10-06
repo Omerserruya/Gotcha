@@ -86,7 +86,7 @@ describe('★★ the click is answered before the server is', () => {
     expect(screen.getByTestId('row-c2')).toHaveAttribute('aria-current', 'true');
   });
 
-  it('⚠ a click that opens a new tab marks nothing — this tab is not going anywhere', () => {
+  it('⚠ a click that opens a new tab marks nothing - this tab is not going anywhere', () => {
     render(rows('c1'));
     click(screen.getByTestId('row-c2'), { metaKey: true });
     expect(screen.getByTestId('row-c1')).toHaveAttribute('aria-current', 'true');
@@ -100,7 +100,7 @@ describe('★★ the click is answered before the server is', () => {
   });
 });
 
-describe('⚠⚠ the overlay clears when the URL lands — not only when the open conversation changes', () => {
+describe('⚠⚠ the overlay clears when the URL lands - not only when the open conversation changes', () => {
   it('★★ the clicked conversation is gone, the first row opens again: the overlay still goes', () => {
     const { rerender } = render(rows('c1'));
     click(screen.getByTestId('row-c2'));

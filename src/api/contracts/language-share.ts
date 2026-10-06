@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * The language mix of recent conversations — screen 11d.
+ * The language mix of recent conversations - screen 11d.
  *
  * `GET /api/analytics/language-share`, grouped on
  * `Conversation.detectedLocale` over a trailing window.
@@ -51,7 +51,7 @@ export function undetected(share: LanguageShare): LanguageShareRow | null {
  * A handful of conversations produces percentages that look authoritative and
  * move twenty points on one more chat. The screen shows counts either way and
  * withholds the SHARES below this, which is the same reasoning as
- * `MIN_SAMPLE_CONVERSATIONS` on the credits estimate — a rate needs a sample.
+ * `MIN_SAMPLE_CONVERSATIONS` on the credits estimate - a rate needs a sample.
  */
 export const MIN_FOR_SHARES = 20;
 
@@ -63,7 +63,7 @@ export function sharesAreMeaningful(share: LanguageShare): boolean {
  * Languages the business is answered in that the workspace does not store.
  *
  * The design's Russian line. `stored` is the single `primaryLanguage`, and
- * every other detected language is one GOTCHA was not told about — which is
+ * every other detected language is one GOTCHA was not told about - which is
  * worth showing even though the AI replies in the customer's language
  * regardless, because it is the signal that a market exists.
  */

@@ -34,7 +34,7 @@ describe('★★ a delta belongs to the metric it was computed for', () => {
     /*
      * THE TRAP. `resolvedConversationsPct` is the change in the count of
      * resolved conversations; the design's "Resolved · 94%" is the rate.
-     * They can move in opposite directions — a week with twice the volume
+     * They can move in opposite directions - a week with twice the volume
      * and an identical rate shows +100% beside a number that did not change.
      *
      * The fixture says exactly that: rate 94, count delta +100%.
@@ -55,7 +55,7 @@ describe('★★ a delta belongs to the metric it was computed for', () => {
 describe('★★ three ways to have no comparison, and they are different sentences', () => {
   it('★★ "no baseline" is not "no change"', () => {
     /*
-     * `null` means the prior period had a zero denominator — the normal
+     * `null` means the prior period had a zero denominator - the normal
      * state for a tenant in its first period. Rendering it as "flat" would
      * tell a brand-new workspace that nothing has changed since a week that
      * does not exist.
@@ -68,7 +68,7 @@ describe('★★ three ways to have no comparison, and they are different senten
 
   it('★★ "nobody computes this" is not "no baseline" either', () => {
     /*
-     * `undefined` — the metric has no delta field at all. Distinct from
+     * `undefined` - the metric has no delta field at all. Distinct from
      * null: one is "we could not compare this period", the other is "this
      * comparison does not exist anywhere". The screen says neither as 0%.
      */
@@ -96,7 +96,7 @@ describe('★★ three ways to have no comparison, and they are different senten
 describe('★ the strip shows what exists and invents nothing', () => {
   it('★★ never reconstructs the prior period from the percentage', () => {
     /*
-     * The design asks for the comparison "in the same unit as the metric" —
+     * The design asks for the comparison "in the same unit as the metric" -
      * "up 140 conversations". That means `current / (1 + pct/100)`, which is
      * a derived number a reader cannot tell from a recorded one, with
      * rounding error, in a headline. No metric carries an absolute delta.

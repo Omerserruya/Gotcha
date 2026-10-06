@@ -9,7 +9,7 @@ import {
   purchasedBalance,
 } from './credits';
 
-/** The tenant as measured on 2026-09-23 — every figure from a real row. */
+/** The tenant as measured on 2026-09-23 - every figure from a real row. */
 const MEASURED = {
   period: { startsAt: '2026-09-08T00:00:00.000Z', endsAt: '2027-09-08T00:00:00.000Z' },
   plan: { name: 'AI Voice', includedCredits: 7000 },
@@ -56,7 +56,7 @@ describe('consumption that counts expiry as spend is not shown as usage', () => 
   });
 
   it('accepts it again as soon as any spend is measured', () => {
-    // Not a permanent suppression — it lifts on the route's own evidence.
+    // Not a permanent suppression - it lifts on the route's own evidence.
     const s = creditSummarySchema.parse({
       ...MEASURED,
       observedRemaining: {

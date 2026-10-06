@@ -14,12 +14,12 @@ import { hoursPatch, weekOf, type DayHours } from './hours';
 import styles from './Workspace.module.css';
 
 /**
- * 11c, measured: the week as rows — day, a switch, opens – closes — then
+ * 11c, measured: the week as rows - day, a switch, opens - closes - then
  * "Copy Sunday to every weekday", the holidays, and what happens outside
  * these hours.
  *
  * ★ What the setting cannot hold is drawn, not live: `+ Split` (one range a
- * day — `dayScheduleSchema` is `{ enabled, open?, close? }`) and the holiday
+ * day - `dayScheduleSchema` is `{ enabled, open?, close? }`) and the holiday
  * calendar (no dates at all). Each says why on its title.
  *
  * ★ Outside-hours travels with every save. The setting is REPLACED by the
@@ -37,11 +37,11 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
   const [copied, setCopied] = useState(false);
   /*
     02's master switch. A stored week that is switched off is SHOWN, under
-    "Use these hours" off — never as seven closed days, which says something
+    "Use these hours" off - never as seven closed days, which says something
     else: that the business is closed every day.
   */
   /*
-    Which days were ever stored. With none — dev's `{ enabled: false }` — no
+    Which days were ever stored. With none - dev's `{ enabled: false }` - no
     day is "Closed": nothing was set, so the rows are empty and the week sits
     under "Use these hours" off.
   */
@@ -116,18 +116,18 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
                 <span className={styles.weekRange}>
                   <EntryInput
                     className={styles.weekTime}
-                    aria-label={`${t(`day.${day}`)} — ${t('hours.open')}`}
+                    aria-label={`${t(`day.${day}`)} - ${t('hours.open')}`}
                     placeholder="HH:mm"
                     value={week[day].open ?? ''}
                     parse={parseClock}
                     onCommit={(next) => setDay(day, { open: next })}
                   />
                   <span className={styles.weekDash} aria-hidden="true">
-                    –
+                    -
                   </span>
                   <EntryInput
                     className={styles.weekTime}
-                    aria-label={`${t(`day.${day}`)} — ${t('hours.close')}`}
+                    aria-label={`${t(`day.${day}`)} - ${t('hours.close')}`}
                     placeholder="HH:mm"
                     value={week[day].close ?? ''}
                     parse={parseClock}
@@ -138,7 +138,7 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
                 <span className={styles.weekClosed}>{t('hours.closedDay')}</span>
               ) : (
                 <span className={styles.weekClosed} data-testid={`hours-unset-${day}`}>
-                  — – —
+                  - - -
                 </span>
               )}
               <span
@@ -154,7 +154,7 @@ export function HoursDrawer({ workspace }: { readonly workspace: Workspace }) {
         </ul>
 
         {/*
-          Sunday to Thursday is the Israeli working week. Purely local — it
+          Sunday to Thursday is the Israeli working week. Purely local - it
           fills the inputs and changes nothing until Save.
         */}
         <button

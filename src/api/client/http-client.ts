@@ -29,7 +29,7 @@ export interface HttpRequest<TPayload extends z.ZodType> {
    * Skips envelope unwrapping and parses the whole body.
    *
    * Needed where `data` is a sibling of other fields rather than the payload
-   * itself — `/api/notifications` answers `{ data, nextCursor }`, and
+   * itself - `/api/notifications` answers `{ data, nextCursor }`, and
    * unwrapping would throw the cursor away and silently break pagination.
    */
   readonly raw?: boolean;
@@ -277,7 +277,7 @@ export class HttpClient {
      * The envelope is not universal: roughly a third of handlers use it and
      * the rest answer bare, and at least one more shape exists
      * (`{ ok, pending, reviews }`). So a missing envelope is normal rather
-     * than a contract break — and `raw` opts out entirely for the endpoints
+     * than a contract break - and `raw` opts out entirely for the endpoints
      * where `data` sits alongside other fields.
      */
     const unwrapped =

@@ -20,7 +20,7 @@ import styles from './Billing.module.css';
  *
  * **`GET /api/billing/invoices` is mounted and serving**, and has been. Every
  * billing router mounts at bare `/api` and declares its own full path, so a
- * search for an `/api/billing` mount returns nothing — the comment was
+ * search for an `/api/billing` mount returns nothing - the comment was
  * precise, confident and wrong, which is the combination that gets believed.
  *
  * And what it hid is the point: **four invoices, every one FAILED, $5,996.**
@@ -35,7 +35,7 @@ import styles from './Billing.module.css';
  * ── STILL ABSENT ──
  * The overage sentence and the spending cap are not softened here: there is
  * no rate field on this route, so *"bills ₪0.40 per extra conversation"*
- * would be asserting billing behaviour from a mockup — and **a wrong claim
+ * would be asserting billing behaviour from a mockup - and **a wrong claim
  * about money belongs least of all on the billing screen.**
  */
 export async function Invoices({ invoices }: { readonly invoices: readonly Invoice[] | null }) {
@@ -99,7 +99,7 @@ export async function Invoices({ invoices }: { readonly invoices: readonly Invoi
                 lost document. `providerPdfUrl` is written with PAID.
 
                 ★★ AND THE LINK IS THE VALIDATED ONE, NOT THE RAW FIELD. This
-                read `href={invoice.providerPdfUrl ?? '#'}` — a string the
+                read `href={invoice.providerPdfUrl ?? '#'}` - a string the
                 payment provider wrote, straight into an `href`, with the guard
                 for exactly that sitting unused two directories away. The `??
                 '#'` was dead, because the branch already required a URL; it is
@@ -112,13 +112,13 @@ export async function Invoices({ invoices }: { readonly invoices: readonly Invoi
                 never runs for a value it would refuse. The security property
                 lives in the contract; what is here is the type narrowing plus
                 defence in depth, and it is recorded as untested rather than
-                counted as verified. Two guards, one test — the outer one means
+                counted as verified. Two guards, one test - the outer one means
                 the inner is never exercised.
               */}
               {/*
                 ★ BOTH, NOT EITHER. `absence` carries the PAID rule; `receipt`
                 carries the safety one. Testing only the second would show a
-                receipt link on a FAILED invoice that happened to carry a URL —
+                receipt link on a FAILED invoice that happened to carry a URL -
                 contractually possible, and a charge that did not go through is
                 the last row to hand somebody a receipt for.
               */}

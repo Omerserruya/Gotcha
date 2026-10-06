@@ -15,14 +15,14 @@ import styles from './Customers.module.css';
 import { channelName } from '@/api/contracts/inbox';
 
 /**
- * Screen 04b — one customer.
+ * Screen 04b - one customer.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★ THE DESIGN CALLS THIS "A PERSON WITH A HISTORY". IT IS NOT A HISTORY.
  * ════════════════════════════════════════════════════════════════════════════
  * `GET /api/identity/:id/timeline` takes 50 conversations and the newest 5
  * messages of each, and says so nowhere in its payload. Rendered under the
- * design's words this is a claim of completeness the data cannot support —
+ * design's words this is a claim of completeness the data cannot support -
  * and it is the calm wrong value at the scale of a whole screen, because
  * nothing looks broken. The stream reads convincingly and messages six
  * through n are simply absent.
@@ -40,7 +40,7 @@ import { channelName } from '@/api/contracts/inbox';
  * ════════════════════════════════════════════════════════════════════════════
  * WHAT IS DELIBERATELY ABSENT
  * ════════════════════════════════════════════════════════════════════════════
- * **NOTES — CORRECTED.** They are not absent. This screen first shipped
+ * **NOTES - CORRECTED.** They are not absent. This screen first shipped
  * saying so, on the strength of `POST /conversations/:id/notes` being a demo
  * stub. The stub is real; the capability is somewhere else entirely, in the
  * merchant's CRM. The section above reads them and does not offer a write.
@@ -55,7 +55,7 @@ import { channelName } from '@/api/contracts/inbox';
  * direction. `customer-card.ts` names them itself: `Contact.createdAt` is
  * when WE made the row, `CustomerProfile.firstSeenAt` is `new Date()` when
  * ingestion first processed them, and `lastSeenAt` is rewritten with `now`
- * on every update — *"pipeline activity wearing a customer-activity name"*.
+ * on every update - *"pipeline activity wearing a customer-activity name"*.
  * A line saying a three-year customer joined today is worse than no line.
  *
  * ── 04d IS A SIBLING, NOT A CHILD ──
@@ -65,7 +65,7 @@ import { channelName } from '@/api/contracts/inbox';
  * unresolved async node and the render produces nothing. Screen 11 hit this
  * with `ScanPanel` and solved it the same way.
  *
- * Found here by 25 tests failing at once on a missing `timeline-count` —
+ * Found here by 25 tests failing at once on a missing `timeline-count` -
  * the whole tree had stopped rendering, and the symptom named a testid that
  * had nothing to do with the cause.
  *
@@ -102,8 +102,8 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         ★ A PERSON WHO HAS NEVER WRITTEN IS A REAL STATE, NOT AN EDGE CASE.
 
         Somebody imported from a CRM who has never sent a message. Four of
-        this page's sections are then UNREACHABLE rather than empty — no
-        brief, no orders, no order actions, no CRM notes — and four blank
+        this page's sections are then UNREACHABLE rather than empty - no
+        brief, no orders, no order actions, no CRM notes - and four blank
         panels would read as a broken page.
 
         Read from the brief's own `meta.reason`, which Backend kept distinct
@@ -160,7 +160,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         ── WHAT GOTCHA REMEMBERS ──
         Read-only, and it says so. There is no correct-or-delete route, so
         drawing an edit affordance would be a control the platform cannot
-        honour — and these are statements about a customer that somebody
+        honour - and these are statements about a customer that somebody
         might most want to fix.
       */}
       {hasMemory(detail.memory) ? (
@@ -177,7 +177,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
 
           {/*
             ★ BLOCK-LEVEL PROVENANCE. This is where the whole set came from
-            and when — genuinely useful, and NOT what the design asked for.
+            and when - genuinely useful, and NOT what the design asked for.
           */}
           <p className={styles.memorySource} data-testid="memory-source">
             {t('detail.memory.source', {
@@ -202,18 +202,18 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
           ) : null}
 
           {/*
-            ★★ THE TRACE EXISTS AND IS NOT FOLLOWABLE — A DIFFERENT SENTENCE
+            ★★ THE TRACE EXISTS AND IS NOT FOLLOWABLE - A DIFFERENT SENTENCE
             FROM THE ONE THIS SCREEN SHIPPED WITH.
 
             `evidenceConversationIds` now arrives, and they are real
             `Conversation.id` values. But those conversations carry
             `origin: "HISTORICAL_IMPORT"`, and `applyLiveByDefault` injects
-            `origin: "LIVE"` into bulk reads — so a read that does not name an
+            `origin: "LIVE"` into bulk reads - so a read that does not name an
             origin returns ZERO ROWS.
 
             A link here would open an empty conversation: the same failure the
             block-level statement was chosen to avoid, arriving from the other
-            direction. Not a missing field — a present one whose destination
+            direction. Not a missing field - a present one whose destination
             is empty unless whatever serves it passes `withHistoricalRecords`.
 
             Nobody has loaded one and watched messages come back, so no link
@@ -235,7 +235,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
 
       {/*
         ══════════════════════════════════════════════════════════════════════
-        RECENT ACTIVITY — NEVER "HER WHOLE HISTORY"
+        RECENT ACTIVITY - NEVER "HER WHOLE HISTORY"
         ══════════════════════════════════════════════════════════════════════
       */}
       <section className={styles.timeline} data-testid="customer-timeline">
@@ -277,7 +277,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
                     : t(`detail.timeline.kind.${event.type}` as 'detail.timeline.kind.handover')}
                   {/*
                     ★ IMPORTED IS NOT OBSERVED. Something we were TOLD about,
-                    not something the product watched happen — and until
+                    not something the product watched happen - and until
                     today these were excluded from the timeline entirely, so
                     a long-standing customer rendered as brand new.
                   */}
@@ -331,8 +331,8 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         {/*
           ★★ THE COUNT, BOTH HALVES.
 
-          The route now returns `totals.messages` — the real number of this
-          person's messages — so the screen can say "50 of 1,284" instead of
+          The route now returns `totals.messages` - the real number of this
+          person's messages - so the screen can say "50 of 1,284" instead of
           implying it holds everything.
 
           This replaces a sentence that named 50 conversations × 5 messages,
@@ -360,7 +360,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         ) : null}
 
         {/*
-          ★★ WHAT THE STREAM CANNOT FULLY TELL YOU — FROM THE SERVER, NOT
+          ★★ WHAT THE STREAM CANNOT FULLY TELL YOU - FROM THE SERVER, NOT
           FROM A HARDCODED SENTENCE.
 
           `coverage` names both kinds of gap and the screen renders both
@@ -370,13 +370,13 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
 
           The partial one is the dangerous one. `ai_action` is
           `available: true` and still omits any action taken through an
-          adapter — a Shopify refund the AI performed is not in this list.
+          adapter - a Shopify refund the AI performed is not in this list.
           Backend's own note says the gap is invisible from the data, so a
           screen that renders the events and drops the detail deletes the
           only warning there is.
 
           Server-supplied rather than written here, so a source arriving or
-          changing its limit updates the screen without an edit — the
+          changing its limit updates the screen without an edit - the
           opposite of the hardcoded "messages only" sentence this replaces,
           which was already stale the day the union shipped.
         */}
@@ -393,7 +393,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
 
       {/*
         ══════════════════════════════════════════════════════════════════════
-        NOTES — WHICH LIVE IN THE MERCHANT'S CRM, AND ARE READ-ONLY HERE
+        NOTES - WHICH LIVE IN THE MERCHANT'S CRM, AND ARE READ-ONLY HERE
         ══════════════════════════════════════════════════════════════════════
         This screen first shipped saying notes were not recorded. That was
         wrong: `POST /conversations/:id/notes` is a demo stub, but
@@ -401,7 +401,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         not store notes; the merchant's CRM does.
 
         ★ SO THE 14d SHAPE APPLIES AFTER ALL, because there IS a repair a
-        merchant can perform — connect a CRM, and link this contact to a
+        merchant can perform - connect a CRM, and link this contact to a
         record in it. Two repairs, two sentences: sending somebody to connect
         a CRM they already have is the mistake 14d exists to prevent.
 
@@ -413,7 +413,7 @@ export async function CustomerDetail({ detail }: { readonly detail: Detail }) {
         of record, which is worse than not offering the control.
 
         ⚠ There is also no author. `CrmActivity` carries no actor, so these
-        are dated and anonymous — said on screen rather than left for
+        are dated and anonymous - said on screen rather than left for
         somebody to assume the newest note is theirs.
       */}
       <section className={styles.notes} data-testid="customer-notes">

@@ -20,7 +20,7 @@ import styles from './Inbox.module.css';
  * ⚠ ABOUT "AN ASYNC COMPONENT NESTED INSIDE ANOTHER RENDERS NOTHING". That
  *   note, on this page and four others, is about the TEST HARNESS: calling a
  *   page as a function leaves a nested async element unresolved in the tree it
- *   inspects. React Server Components render nested async components — this
+ *   inspects. React Server Components render nested async components - this
  *   is Next's documented streaming pattern (`01-getting-started/06-fetching-
  *   data.md`, `<Suspense><BlogList /></Suspense>`). These are tested by
  *   calling them directly.
@@ -50,7 +50,7 @@ export async function ConversationStream({
  * 02's "Returning · 6 orders" chip, which needs the order read.
  *
  * Its fallback is nothing: the header paints without it and the chip appears
- * beside the name when the count is known — a chip that might not exist is
+ * beside the name when the count is known - a chip that might not exist is
  * not worth a placeholder.
  */
 export async function OrdersChip({ detail }: { readonly detail: Promise<ConversationDetail> }) {

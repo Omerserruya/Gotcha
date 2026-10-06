@@ -50,8 +50,8 @@ const rows = [
   { id: 'c', personId: null, channel: 'WHATSAPP', displayName: 'C', externalId: 'c', tags: [] },
 ];
 
-describe('★★ 04 — the count is the title', () => {
-  it('★★ in PEOPLE — two contacts of one person are one customer', async () => {
+describe('★★ 04 - the count is the title', () => {
+  it('★★ in PEOPLE - two contacts of one person are one customer', async () => {
     const props = propsOf<{ title: string; fill?: boolean }>(
       await page({ rows, total: 3 }),
       PageContainer,
@@ -60,7 +60,7 @@ describe('★★ 04 — the count is the title', () => {
     expect(props?.fill).toBe(true);
   });
 
-  it('⚠⚠ and not when the list is cut — `total` counts records', async () => {
+  it('⚠⚠ and not when the list is cut - `total` counts records', async () => {
     const props = propsOf<{ title: string }>(
       await page({ rows, total: 4180, truncated: true }),
       PageContainer,
@@ -69,7 +69,7 @@ describe('★★ 04 — the count is the title', () => {
   });
 });
 
-describe('★★ 04 — the segment is in the URL, and the counts are live', () => {
+describe('★★ 04 - the segment is in the URL, and the counts are live', () => {
   const dana = { id: 'k1', externalId: 'wa-1', displayName: 'Dana', channel: 'WHATSAPP', tags: [] };
   const rotem = {
     id: 'k2',

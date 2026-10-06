@@ -23,14 +23,14 @@ const STEPS = ['where', 'meta', 'number', 'learn'] as const;
 /**
  * 13c → 13d, as 02 draws them: one sheet, four steps.
  *
- *   1 Where it lives — one question before Meta (business app, or not)
- *   2 Meta           — Meta's window; nothing is connected
- *   3 Number         — exactly one number per pass, its PIN if it needs one
- *   4 Learn          — 13e, the import, once Meta sends the history
+ *   1 Where it lives - one question before Meta (business app, or not)
+ *   2 Meta           - Meta's window; nothing is connected
+ *   3 Number         - exactly one number per pass, its PIN if it needs one
+ *   4 Learn          - 13e, the import, once Meta sends the history
  *
  * Only "Continue with Meta" opens Meta, with the server's launch for the
- * choice made here (backend 294adc0c) — fetched up front for both, since the
- * popup must open inside the click — and inspect follows that choice's path.
+ * choice made here (backend 294adc0c) - fetched up front for both, since the
+ * popup must open inside the click - and inspect follows that choice's path.
  */
 export function ConnectWhatsApp({
   launches,
@@ -248,7 +248,7 @@ export function ConnectWhatsApp({
   );
 }
 
-/** 13d — which number GOTCHA answers. One per pass, so nothing else is rebound by accident. */
+/** 13d - which number GOTCHA answers. One per pass, so nothing else is rebound by accident. */
 function NumberStep({
   candidates,
   chosen,

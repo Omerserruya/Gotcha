@@ -11,7 +11,7 @@ import { BillingProfileSection } from './BillingProfile';
  * The warning that used to vanish.
  *
  * This block depends on TWO parallel reads and failed roughly one capture in
- * six — a different viewport each run, with a clear request budget. The
+ * six - a different viewport each run, with a clear request budget. The
  * condition was `methods !== null && ...`, so a lost payment-methods fetch
  * removed the whole warning and left a page that looked complete.
  *
@@ -46,7 +46,7 @@ describe('★ a lost read never removes the warning', () => {
 
   it('★ says so when the invoices could not be counted, instead of rounding to zero', async () => {
     /*
-     * There IS no payment method — that much was read. The failure count was
+     * There IS no payment method - that much was read. The failure count was
      * not. Defaulting it to 0 demoted "and 4 charges have already failed" to
      * a bare "there's nothing to charge", losing the half that makes it
      * urgent, with nothing to show anything was missing.
@@ -116,8 +116,8 @@ describe('both facts, stated together, when both were read', () => {
   });
 });
 
-describe('★ 17e — 02’s fields, as stored', () => {
-  it('a filled profile fills 02’s boxes; PO and language have no column: "—", and why', async () => {
+describe('★ 17e - 02’s fields, as stored', () => {
+  it('a filled profile fills 02’s boxes; PO and language have no column: "-", and why', async () => {
     render(
       await BillingProfileSection({
         profile: billingProfileSchema.parse({
@@ -137,7 +137,7 @@ describe('★ 17e — 02’s fields, as stored', () => {
     expect(fields).toHaveTextContent('Legal nameAviv & Co. Ltd');
     expect(fields).toHaveTextContent('Company no. / VAT ID515234781');
     const po = screen.getByText('Purchase order / reference').nextElementSibling;
-    expect(po).toHaveTextContent(/^—$/);
+    expect(po).toHaveTextContent(/^-$/);
     expect(po).toHaveAttribute('title', 'GOTCHA has no field for this yet.');
     expect(screen.getByTestId('profile-send-to')).toHaveTextContent('finance@example.com');
     expect(screen.getByTestId('payment-method')).toHaveTextContent('Visa ending 4417');
@@ -145,7 +145,7 @@ describe('★ 17e — 02’s fields, as stored', () => {
   });
 });
 
-describe('★ 17e — every state draws 02’s drawer', () => {
+describe('★ 17e - every state draws 02’s drawer', () => {
   it('never entered: all six boxes, "No card on file" as a row, the chip area', async () => {
     render(
       await BillingProfileSection({
@@ -167,13 +167,13 @@ describe('★ 17e — every state draws 02’s drawer', () => {
     ]) {
       expect(fields).toHaveTextContent(label);
     }
-    expect(screen.getByTestId('profile-send-to')).toHaveTextContent('—');
+    expect(screen.getByTestId('profile-send-to')).toHaveTextContent('-');
   });
 
-  it('an unread card list is "—" in the row, never "No card on file"', async () => {
+  it('an unread card list is "-" in the row, never "No card on file"', async () => {
     render(
       await BillingProfileSection({ profile: NO_PROFILE, methods: null, failedInvoiceCount: 0 }),
     );
-    expect(screen.getByTestId('payment-method-none')).toHaveTextContent(/^—Add card$/);
+    expect(screen.getByTestId('payment-method-none')).toHaveTextContent(/^-Add card$/);
   });
 });

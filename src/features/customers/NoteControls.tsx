@@ -11,7 +11,7 @@ import styles from './Customers.module.css';
  *
  * ★ THE SCREEN MIRRORS `requireOwnEditable` RATHER THAN DISCOVERING IT.
  * Both routes answer 403 `not_the_author` for anybody else, so a screen that
- * drew these controls for everyone would be offering a button that fails —
+ * drew these controls for everyone would be offering a button that fails -
  * and the failure would read as a fault rather than as the rule it is. The
  * caller checks `canEdit` before mounting this at all.
  *
@@ -20,7 +20,7 @@ import styles from './Customers.module.css';
  * read that may be a page-load old.
  *
  * ── DELETE IS CONFIRMED, BECAUSE THE AUTHOR CANNOT UNDO IT ──
- * The row survives — *"a customer's history should not develop holes"* — but
+ * The row survives - *"a customer's history should not develop holes"* - but
  * it leaves every read this product has, so from the merchant's side it is
  * gone for good. The confirm is a plain second press rather than a dialog:
  * the destructive-action rule this project has applied elsewhere.

@@ -19,13 +19,13 @@ import styles from './Employees.module.css';
  * That sentence is true because of a deliberate implementation choice, not by
  * luck: the route clears `handledBy` as well as the employee id. Clearing the
  * id alone would leave the conversation reading as *"the AI is handling
- * this"* — so it would sit unanswered **while the inbox told a human it was
+ * this"* - so it would sit unanswered **while the inbox told a human it was
  * covered.**
  *
  * ── AND THE HISTORY SURVIVES, WHICH IT MUST SAY ──
  * Only **live** conversations are released. Finished ones keep the employee's
  * id, because on a closed thread that id is the record of **who handled it**
- * — and it is what this screen's own "handled in total" figure reads.
+ * - and it is what this screen's own "handled in total" figure reads.
  *
  * **A merchant who believes deleting an employee erases its record will make
  * a different decision than one who knows it does not.** So the dialog says
@@ -90,7 +90,7 @@ export function DeleteEmployee({ employee }: { readonly employee: Employee }) {
             : t('delete.noneLive')}
         </li>
 
-        {/* The record, which survives — and saying so changes the decision. */}
+        {/* The record, which survives - and saying so changes the decision. */}
         {finished > 0 ? (
           <li data-testid={`delete-history-${employee.id}`}>
             {t('delete.historyKept', { count: finished })}

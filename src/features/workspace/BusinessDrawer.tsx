@@ -18,7 +18,7 @@ import styles from './Workspace.module.css';
 import type { WebsiteScan } from './load-workspace';
 
 /**
- * 11b, measured: the business's facts as one form in a drawer — opened from
+ * 11b, measured: the business's facts as one form in a drawer - opened from
  * the Website, What you sell and Address rows.
  *
  * `PATCH /workspace` takes name, description and address here. The website,
@@ -31,7 +31,7 @@ export function BusinessDrawer({
   scan = null,
 }: {
   readonly workspace: Workspace;
-  /** 11b's website line — what the scan read, and what else it found. */
+  /** 11b's website line - what the scan read, and what else it found. */
   readonly scan?: WebsiteScan | null;
 }) {
   const t = useTranslations('workspace');
@@ -83,12 +83,12 @@ export function BusinessDrawer({
               title={t('website.readOnly')}
               data-testid="business-website"
             >
-              {workspace.websiteDomain ? displayHost(workspace.websiteDomain) : '—'}
+              {workspace.websiteDomain ? displayHost(workspace.websiteDomain) : '-'}
             </span>
             {/*
               The rescan is the Workspace page's (POST /workspace/scan): it
               answers with what it applied and what it only offers, and that
-              conversation lives in its panel — so this leads there.
+              conversation lives in its panel - so this leads there.
             */}
             <Link
               href={{ pathname: '/settings/workspace', hash: 'scan' }}
@@ -154,7 +154,7 @@ export function BusinessDrawer({
               {(() => {
                 const industry = industryReading(workspace.industry);
                 return industry === null
-                  ? '—'
+                  ? '-'
                   : 'code' in industry
                     ? t(`business.industryName.${industry.code}`)
                     : industry.text;
@@ -164,7 +164,7 @@ export function BusinessDrawer({
           <div className={drawer.field}>
             <span className={drawer.fieldLabel}>{t('business.country')}</span>
             <span className={drawer.box} aria-disabled="true" title={t('business.notHere')}>
-              {countryName(workspace.country, locale) ?? '—'}
+              {countryName(workspace.country, locale) ?? '-'}
             </span>
           </div>
         </div>
@@ -191,7 +191,7 @@ export function BusinessDrawer({
             title={t('business.noNote')}
             data-testid="business-note"
           >
-            —
+            -
           </span>
         </div>
 

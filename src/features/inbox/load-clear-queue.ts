@@ -11,7 +11,7 @@ import { analyticsEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
- * 02b's reads — only when the queue is clear, so an empty list never reads as
+ * 02b's reads - only when the queue is clear, so an empty list never reads as
  * "the system stopped". Today's counts (Home's overview, the same range) and
  * what GOTCHA is in the middle of. Each is `null` when its read failed.
  */

@@ -40,8 +40,8 @@ export async function clearSession(): Promise<void> {
  * Returns a session whose access token is usable right now.
  *
  * ★★ IT REFRESHES ONLY WHERE THE RESULT CAN BE KEPT. With rotation, a refresh
- * spends the refresh token; one done inside a Server Component render — where
- * a cookie cannot be written — left the cookie holding the spent token, and
+ * spends the refresh token; one done inside a Server Component render - where
+ * a cookie cannot be written - left the cookie holding the spent token, and
  * the next refresh ended the session. So:
  *
  *   · the proxy refreshes ahead of expiry, before every page render, and

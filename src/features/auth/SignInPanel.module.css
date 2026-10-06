@@ -47,12 +47,12 @@
    *   trailing edge instead, and the input keeps the border.
    *
    *   Not a stylistic preference: `.input` is what carries the border, the
-   *   background and — wherever the browser applies them — the focus and
+   *   background and - wherever the browser applies them - the focus and
    *   invalid states. Moving the border to a wrapper would move all of those
    *   with it and re-open every one on a screen holding a password. The
    *   rendered result is the same box with the same icon at the same edge.
    *
-   * ★ `--signal-done-text` IS `#4f7a2e` and `--text-faint` IS `#a8a39a` —
+   * ★ `--signal-done-text` IS `#4f7a2e` and `--text-faint` IS `#a8a39a` -
    *   exactly the mock's two values. The tokens were read from this design, so
    *   they are used rather than the literals.
    */
@@ -81,7 +81,7 @@
   }
 
   /*
-   * The reveal is a button, so it is focusable and reachable by keyboard —
+   * The reveal is a button, so it is focusable and reachable by keyboard -
    * the mock draws an icon, and an icon somebody cannot operate without a
    * mouse is not the same control.
    */
@@ -138,7 +138,7 @@
     max-inline-size: var(--size-reading);
   }
 
-  /* Before the first stage lands. Deliberately quiet — it is usually one hop. */
+  /* Before the first stage lands. Deliberately quiet - it is usually one hop. */
   .loading {
     margin: 0;
     font-size: var(--font-size-caption);

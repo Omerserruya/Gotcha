@@ -53,7 +53,7 @@ const role = (id: string, name: string, features: string[]): Role => ({
 
 const ROLES: readonly Role[] = [
   role('r1', 'Agent', ['conversation:messages:read', 'crm:contacts:read']),
-  // Measured: two scoped wildcards beside explicit keys — the dangerous shape.
+  // Measured: two scoped wildcards beside explicit keys - the dangerous shape.
   role('r3', 'Department Manager', [
     'crm:contacts:read',
     'conversation:messages:*',
@@ -69,7 +69,7 @@ const renderForm = (initialSourceId = '') =>
     </NextIntlClientProvider>,
   );
 
-describe('★ 12c — 02’s table on the approved mapping', () => {
+describe('★ 12c - 02’s table on the approved mapping', () => {
   it('a ladder row is a level; separate jobs are actions', () => {
     renderForm();
     expect(screen.getByTestId('role-level-crm:contacts-edit')).toBeInTheDocument();
@@ -78,10 +78,10 @@ describe('★ 12c — 02’s table on the approved mapping', () => {
     expect(screen.queryByTestId('role-level-customer:commerce-edit')).toBeNull();
   });
 
-  it('scope is the assignment’s on scoped rows; a money limit is "—"', () => {
+  it('scope is the assignment’s on scoped rows; a money limit is "-"', () => {
     renderForm();
     expect(screen.getByTestId('role-row-customer:commerce')).toHaveTextContent('Per assignment');
-    expect(screen.getByTestId('role-row-crm:contacts')).toHaveTextContent(/—$/);
+    expect(screen.getByTestId('role-row-crm:contacts')).toHaveTextContent(/-$/);
   });
 
   it('sends the level’s actions and the toggled ones', async () => {
@@ -104,7 +104,7 @@ describe('★ 12c — 02’s table on the approved mapping', () => {
   });
 });
 
-describe('★ Start from — a copy, compared, and changes marked', () => {
+describe('★ Start from - a copy, compared, and changes marked', () => {
   it('seeds from the source and says the two are not linked', () => {
     renderForm('r1');
     expect(screen.getByTestId('role-level-crm:contacts-view')).toHaveAttribute(
@@ -176,7 +176,7 @@ describe('the two refusals need different actions', () => {
   });
 });
 
-describe('★ 12c — 02 starts from Agent, and says what differs from the start', () => {
+describe('★ 12c - 02 starts from Agent, and says what differs from the start', () => {
   const withAgent: readonly Role[] = [
     // The platform's own key, lowercase (invite-role.service.ts: builtinKey "agent").
     { ...role('ra', 'Agent', ['conversation:messages:read']), builtinKey: 'agent' },

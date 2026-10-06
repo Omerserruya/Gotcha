@@ -39,12 +39,12 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * One customer — screen 04b.
+ * One customer - screen 04b.
  *
  * ── THE DEFECT THIS ROUTE EXISTS TO FIX ──
  * Screen 04 shipped as a list of people with no `<Link>`, no `href` and no
  * `onClick`. A merchant saw their customers and could not open one, and
- * nothing said why — the rows simply did not respond. A list of people
+ * nothing said why - the rows simply did not respond. A list of people
  * implies a destination, so that is worse than a missing screen.
  *
  * ── AND IT USES A DIFFERENT MEMORY TABLE FROM THE ONE THE LIST RULED OUT ──
@@ -64,7 +64,7 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  /** `?tab=` — 04b's tabs: everything, conversations, orders, actions, notes. */
+  /** `?tab=` - 04b's tabs: everything, conversations, orders, actions, notes. */
   searchParams?: Promise<{ tab?: string; channel?: string; more?: string; filter?: string }>;
 }) {
   const { id } = await params;
@@ -82,7 +82,7 @@ export default async function Page({
     return (
       /*
         04b, measured: its own header across the panel (not the screen
-        header — a 64px disc and a 30px name), then a main column and a 340px
+        header - a 64px disc and a 30px name), then a main column and a 340px
         side, each scrolling inside itself.
       */
       <PageContainer layout="screen" flush>
@@ -103,7 +103,7 @@ export default async function Page({
   }
 
   /*
-    04c–04f: the compact header, the tab row with that tab's filters, then
+    04c-04f: the compact header, the tab row with that tab's filters, then
     the tab's main column and its side. Each tab's parts are siblings here,
     so the structural test can see them.
   */

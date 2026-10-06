@@ -67,7 +67,7 @@ const history: WallHistory = {
   ],
 };
 
-describe('★★ History across all channels — three levels over the column', () => {
+describe('★★ History across all channels - three levels over the column', () => {
   const show = (h: WallHistory | null = history) =>
     wrap(
       <WallBody history={h} why="The conversation names no customer yet.">
@@ -82,12 +82,12 @@ describe('★★ History across all channels — three levels over the column', 
     );
   });
 
-  it('★ unread: the shape, "—", and why — never "0 conversations"', () => {
+  it('★ unread: the shape, "-", and why - never "0 conversations"', () => {
     show(null);
     const row = screen.getByTestId('wall-history');
     expect(row).toBeDisabled();
     expect(row).toHaveAttribute('title', 'The conversation names no customer yet.');
-    expect(screen.getByTestId('wall-history-line')).toHaveTextContent('—');
+    expect(screen.getByTestId('wall-history-line')).toHaveTextContent('-');
   });
 
   it('★★ 1 → 2 → 3 and back: the list covers the wall; the summary needs no read', async () => {
@@ -111,7 +111,7 @@ describe('★★ History across all channels — three levels over the column', 
     expect(screen.getByTestId('wall-history-more')).toHaveTextContent(
       'Showing the newest 3 of 24.',
     );
-    // "No summary yet" — not an empty line.
+    // "No summary yet" - not an empty line.
     expect(screen.getByTestId('wall-summary-c2')).toHaveTextContent('No summary yet');
 
     fireEvent.click(screen.getByTestId('wall-history-c1'));
@@ -260,7 +260,7 @@ describe('★★ Order #1842 · 2 of 6', () => {
   });
 });
 
-describe('★★ WooCommerce, by contact (e30900fd) — read-only, and says how it matched', () => {
+describe('★★ WooCommerce, by contact (e30900fd) - read-only, and says how it matched', () => {
   const woo = (over: Partial<OrderCard> = {}) => ({
     ...order('91', {
       adminUrl: 'https://shop.example/wp-admin/post.php?post=91&action=edit',
@@ -288,7 +288,7 @@ describe('★★ WooCommerce, by contact (e30900fd) — read-only, and says how 
       />,
     );
 
-  it('★★ Refund and Replace drawn, disabled, with the sentence — not the platform’s code', () => {
+  it('★★ Refund and Replace drawn, disabled, with the sentence - not the platform’s code', () => {
     showWoo([woo()]);
     for (const id of ['order-action-91-refund', 'order-action-91-exchange_item']) {
       expect(screen.getByTestId(id)).toBeDisabled();
@@ -352,7 +352,7 @@ describe('★★ WooCommerce, by contact (e30900fd) — read-only, and says how 
   });
 });
 
-describe('★★ Ask Copilot anything — into the reply box, never to the customer', () => {
+describe('★★ Ask Copilot anything - into the reply box, never to the customer', () => {
   it('the answer lands in the composer, selected; the field empties', async () => {
     ask.mockResolvedValue({ ok: true, text: 'Here is a reply.' });
     const fills: ComposerFill[] = [];

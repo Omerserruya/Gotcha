@@ -6,7 +6,7 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Usage & billing · Invoices — every charge, behind the Billing
+ * Settings · Usage & billing · Invoices - every charge, behind the Billing
  * card's "All" on 17. Not drawn in 02; 17b's shape, "← Usage & billing"
  * above the title.
  */

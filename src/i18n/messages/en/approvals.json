@@ -23,7 +23,7 @@
     "reason": "Why: {reason}",
     "policyRule": "Flagged by {rule}",
     "lapsed": "The deadline passed, so this can no longer be decided here. GOTCHA has handed the conversation to a person.",
-    "outcomeUnknown": "This was approved before GOTCHA recorded what happened next, so we can't tell you whether it ran. It can't be retried — re-running it could repeat something that already happened."
+    "outcomeUnknown": "This was approved before GOTCHA recorded what happened next, so we can't tell you whether it ran. It can't be retried - re-running it could repeat something that already happened."
   },
   "risk": {
     "HIGH": "High risk",
@@ -43,7 +43,7 @@
   },
   "announce": {
     "approvedAndRan": "Approved: {summary}. It ran.",
-    "approvedButFailed": "Approved: {summary}. It did not run — you can try again.",
+    "approvedButFailed": "Approved: {summary}. It did not run - you can try again.",
     "rejected": "Rejected: {summary}.",
     "retryWorked": "It ran this time.",
     "retryFailedAgain": "It failed again."
@@ -55,10 +55,10 @@
     "failed": "That didn't go through.",
     "edit_not_allowed": "This action can't be approved with a different amount.",
     "amount_above_original": "An edited amount has to be less than what was asked.",
-    "invalid_amount": "That amount can't be sent — check it and try again.",
+    "invalid_amount": "That amount can't be sent - check it and try again.",
     "edit_requires_original_amount": "This is a full refund with no amount to edit. Approve it as it is, or reject it.",
     "percentage_above_original": "An edited discount has to be less than what was asked.",
-    "invalid_percentage": "That discount can't be sent — check it and try again.",
+    "invalid_percentage": "That discount can't be sent - check it and try again.",
     "edit_requires_original_percentage": "This discount carries no percentage to edit. Approve it as it is, or reject it."
   },
   "rest": {
@@ -73,17 +73,17 @@
     "unavailable": "We couldn't read your past decisions just now.",
     "approved": "Approved by {who} at {when}",
     "rejected": "Rejected by {who} at {when}",
-    "lapsed": "Deadline passed at {when} — handed to a person",
+    "lapsed": "Deadline passed at {when} - handed to a person",
     "cancelled": "Cancelled at {when}",
     "someone": "someone",
     "askedBy": "asked by {who}",
     "because": "Reason given: {reason}",
     "didNotRun": "You approved this, but it didn't run. Open it to try again.",
     "outcomeUnknown": "Approved before GOTCHA recorded what happened next, so we can't say whether it ran.",
-    "incomplete": "This shows your most recent decisions, not all of them — GOTCHA can only hand back the last hundred of each kind.",
+    "incomplete": "This shows your most recent decisions, not all of them - GOTCHA can only hand back the last hundred of each kind.",
     "approvedNoTime": "Approved by {who}",
     "rejectedNoTime": "Rejected by {who}",
-    "lapsedNoTime": "Deadline passed — handed to a person",
+    "lapsedNoTime": "Deadline passed - handed to a person",
     "cancelledNoTime": "Cancelled",
     "count": "{count, plural, one {# decision} other {# decisions}}",
     "latest": "Your latest {count}",
@@ -99,7 +99,7 @@
       "edited": "Edited",
       "editedPercent": "Edited · {was}% → {now}%"
     },
-    "incompleteShort": "Your most recent decisions — the list holds the last hundred of each kind.",
+    "incompleteShort": "Your most recent decisions - the list holds the last hundred of each kind.",
     "byVia": "Decided by {who} via {channel}",
     "channel": {
       "whatsapp": "WhatsApp",
@@ -178,13 +178,13 @@
     },
     "failure": {
       "theStore": "the store",
-      "connection": "The store connection needs reconnecting — {provider} refused GOTCHA's access.",
+      "connection": "The store connection needs reconnecting - {provider} refused GOTCHA's access.",
       "reconnect": "Reconnect the store, then retry.",
       "already_done": "It had already been done, so nothing changed.",
       "after_shipping": "It can't be done once the order has shipped.",
       "not_permitted": "A permission or a rule stopped it.",
-      "provider_unavailable": "{provider} didn't answer. This usually passes — try again.",
-      "exceeds_limit": "It's over a limit — the amount or count is too high.",
+      "provider_unavailable": "{provider} didn't answer. This usually passes - try again.",
+      "exceeds_limit": "It's over a limit - the amount or count is too high.",
       "unknown": "{provider} didn't say why in words we can show."
     }
   },
@@ -236,8 +236,8 @@
     "lookups": "Orders looked up",
     "returns": "Returns opened",
     "refundsUnder": "Refunds under {limit}",
-    "failedOne": "{count, plural, one {# tried and failed} other {# tried and failed}} — {system} needs fixing.",
-    "failedMany": "{count, plural, one {# tried and failed} other {# tried and failed}} — a connection needs fixing.",
+    "failedOne": "{count, plural, one {# tried and failed} other {# tried and failed}} - {system} needs fixing.",
+    "failedMany": "{count, plural, one {# tried and failed} other {# tried and failed}} - a connection needs fixing.",
     "reconnect": "Reconnect it"
   },
   "request": {

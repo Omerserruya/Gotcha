@@ -8,12 +8,12 @@ import styles from './Calls.module.css';
 import { pastedNumber } from './dial';
 
 /**
- * 05e's Transfer — live (Omer, 2026-10-04), as the old app does it
+ * 05e's Transfer - live (Omer, 2026-10-04), as the old app does it
  * (`ChatCenter/frontend/src/app/voice/[sessionId]/page.tsx`):
  *
  *   1. add a third party to the call by number   `add-participant`
  *   2. optionally hold the customer while you talk to them   `customer-hold`
- *   3. hand over and leave — the customer and the third party stay
+ *   3. hand over and leave - the customer and the third party stay
  *      `agent-leave`, behind a confirm, because it cannot be undone
  *
  * Each step is a click; nothing runs on its own.

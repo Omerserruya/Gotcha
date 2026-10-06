@@ -12,8 +12,8 @@ import { toggleSelected, useSelection } from './queue-selection';
  *
  * ⚠ THE MARK IS THE SERVER'S UNTIL A CLICK, THEN THE CLICK'S UNTIL THE SERVER
  *   ANSWERS. With nothing pending, `data-open` and `aria-current` say what the
- *   server rendered. With a click pending, they follow the click — on this
- *   row and off every other — so exactly one row is marked throughout.
+ *   server rendered. With a click pending, they follow the click - on this
+ *   row and off every other - so exactly one row is marked throughout.
  *
  * A click that opens elsewhere (a new tab) is not this tab navigating, and
  * marks nothing. Shift-click picks the row for the queue menu.
@@ -28,7 +28,7 @@ export function QueueRowLink({
   readonly href: ComponentProps<typeof Link>['href'];
   /** What the server rendered: is this the open conversation? */
   readonly open: boolean;
-  /** What to show while the click is pending — from the row, already loaded. */
+  /** What to show while the click is pending - from the row, already loaded. */
   readonly pending: PendingOpen;
   readonly children: ReactNode;
 }) {

@@ -3,7 +3,7 @@
   "description": "What each one is responsible for, and how much of it they finish on their own.",
   "unavailable": "We couldn't read your AI employees just now.",
   "none": "No AI employees yet.",
-  "noneBody": "Until one exists, nobody is answering automatically — every message waits for a person.",
+  "noneBody": "Until one exists, nobody is answering automatically - every message waits for a person.",
   "status": {
     "ACTIVE": "Working",
     "PAUSED": "Paused",
@@ -30,7 +30,7 @@
   },
   "pause": {
     "lead": "Pause {name}?",
-    "midConversation": "{count, plural, =1 {One person is mid-conversation with it right now. They will simply stop getting replies — nobody is told, and the conversation is not passed to anyone.} other {# people are mid-conversation with it right now. They will simply stop getting replies — nobody is told, and the conversations are not passed to anyone.}}",
+    "midConversation": "{count, plural, =1 {One person is mid-conversation with it right now. They will simply stop getting replies - nobody is told, and the conversation is not passed to anyone.} other {# people are mid-conversation with it right now. They will simply stop getting replies - nobody is told, and the conversations are not passed to anyone.}}",
     "noneOpen": "Nobody is mid-conversation right now. If someone writes in while it's paused, they'll get no reply and nobody will be told."
   },
   "error": {
@@ -42,7 +42,7 @@
     "lead": "Delete {name}?",
     "live": "{count, plural, =1 {One person is mid-conversation with it. They will stop getting replies and will wait unassigned until someone claims them.} other {# people are mid-conversation with it. They will stop getting replies and will wait unassigned until someone claims them.}}",
     "noneLive": "Nobody is mid-conversation with it right now.",
-    "historyKept": "{count, plural, =1 {The one conversation it already finished keeps its record — deleting it doesn't unmake the work it did.} other {The # conversations it already finished keep their record — deleting it doesn't unmake the work it did.}}",
+    "historyKept": "{count, plural, =1 {The one conversation it already finished keeps its record - deleting it doesn't unmake the work it did.} other {The # conversations it already finished keep their record - deleting it doesn't unmake the work it did.}}",
     "routing": "New conversations will stop being sent to it."
   },
   "deleted": {
@@ -113,7 +113,7 @@
       "on_its_own": "Allowed",
       "ask_first": "Ask first",
       "never": "Never",
-      "everyone": "The same for every AI employee — set in Integrations.",
+      "everyone": "The same for every AI employee - set in Integrations.",
       "none": "Nothing it can do yet.",
       "unavailable": "We couldn't read what it may do just now."
     },
@@ -174,7 +174,7 @@
       "sub": "Pick the closest job. You can sharpen it later.",
       "goal": "The job, in your own words",
       "where": "Where should it work?",
-      "noChannels": "No channel is connected yet — connect one in Settings · Channels.",
+      "noChannels": "No channel is connected yet - connect one in Settings · Channels.",
       "callIt": "Call it"
     },
     "channel": {
@@ -240,13 +240,13 @@
       "next": {
         "1": "Next: how much it may decide alone, and when it should hand over.",
         "2": "Next: you see it answer before anything is created.",
-        "3": "Hiring from here comes next — nothing is created until it does."
+        "3": "Hiring from here comes next - nothing is created until it does."
       }
     },
     "continue": "Continue",
     "cancel": "Cancel",
     "back": "Back",
-    "notYet": "Hiring from here comes next — nothing is created until it does.",
+    "notYet": "Hiring from here comes next - nothing is created until it does.",
     "note": {
       "1": "Nothing goes live until you've tried it in step 3",
       "2": "Nothing is live until you have seen step 3",
@@ -257,7 +257,7 @@
     "title": "Edit {name}",
     "close": "Close",
     "apply": "Changes apply from its next reply",
-    "applyOpen": "Changes apply from its next reply — in {count, plural, one {its # open conversation} other {its # open conversations}} too",
+    "applyOpen": "Changes apply from its next reply - in {count, plural, one {its # open conversation} other {its # open conversations}} too",
     "edited": "Last edited {when}",
     "responsible": "Responsible for",
     "handles": "What it handles",
@@ -277,11 +277,11 @@
     "preview": "Preview with these rules",
     "previewNone": "Nothing replays a conversation under new rules yet.",
     "save": "Save changes",
-    "saveNotYet": "Saving changes how a working employee answers customers — waiting for approval.",
+    "saveNotYet": "Saving changes how a working employee answers customers - waiting for approval.",
     "cancel": "Cancel",
     "changes": "{count, plural, one {# change} other {# changes}}",
     "noChanges": "No changes",
-    "responsiblePlaceholder": "What this employee is responsible for — e.g. questions after a purchase"
+    "responsiblePlaceholder": "What this employee is responsible for - e.g. questions after a purchase"
   },
   "hired": {
     "close": "Close",

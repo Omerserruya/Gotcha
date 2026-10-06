@@ -12,7 +12,7 @@ import { acceptScanFields, runWorkspaceScan } from './actions';
 import styles from './Workspace.module.css';
 
 /**
- * Scan again — screen 11b.
+ * Scan again - screen 11b.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * A RESCAN IS A CONVERSATION, NOT A BUTTON
@@ -41,7 +41,7 @@ export function ScanPanel({ domain }: { readonly domain: string | null }) {
   const t = useTranslations('workspace.scan');
   const tWorkspace = useTranslations('workspace');
   /*
-    02's banner sentence. The domain is named when we have one — "filled in
+    02's banner sentence. The domain is named when we have one - "filled in
     from avivco.il" is a verifiable claim and "from your website" is not.
   */
   const host = domain ? displayHost(domain) : null;
@@ -84,7 +84,7 @@ export function ScanPanel({ domain }: { readonly domain: string | null }) {
   return (
     <section id="scan" className={styles.scan} data-testid="scan">
       {/*
-        02's banner: a pill row — the sentence, the "From website" legend the
+        02's banner: a pill row - the sentence, the "From website" legend the
         rows use, and "Scan again" on the right. What a rescan will and will
         not do is said on the control itself, before it is pressed.
       */}
@@ -167,11 +167,11 @@ export function ScanPanel({ domain }: { readonly domain: string | null }) {
                     </p>
                     <p className={styles.scanValue}>
                       <span className={styles.scanValueLabel}>{t('currentLabel')}</span>
-                      <span data-testid="scan-offer-current">{String(offer.current ?? '—')}</span>
+                      <span data-testid="scan-offer-current">{String(offer.current ?? '-')}</span>
                     </p>
                     <p className={styles.scanValue}>
                       <span className={styles.scanValueLabel}>{t('proposedLabel')}</span>
-                      <span data-testid="scan-offer-proposed">{String(offer.proposed ?? '—')}</span>
+                      <span data-testid="scan-offer-proposed">{String(offer.proposed ?? '-')}</span>
                     </p>
                     <Button
                       size="sm"

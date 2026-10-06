@@ -4,7 +4,7 @@ import styles from './StudioSplit.module.css';
 
 /**
  * Studio's frame under the header (07, 09, 10): a list on the left, the
- * selected item's detail beside it. Measured — 07 and 09: list 330, detail
+ * selected item's detail beside it. Measured - 07 and 09: list 330, detail
  * the rest (888); 10: list 290. Each pane scrolls inside itself; the frame
  * does not scroll (it sits in `PageContainer flush`).
  */

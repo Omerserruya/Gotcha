@@ -26,7 +26,7 @@ const intl = (node: React.ReactNode) =>
     </NextIntlClientProvider>,
   );
 
-describe('★★ Add the ready ones — asks, then adds', () => {
+describe('★★ Add the ready ones - asks, then adds', () => {
   it('the first press asks; the second adds and says how many', async () => {
     addReadyAnswers.mockResolvedValue({ ok: true, approved: 140, skipped: 2 });
     intl(<AddReady importId="i1" count={142} />);
@@ -44,7 +44,7 @@ describe('★★ Add the ready ones — asks, then adds', () => {
   });
 });
 
-describe('★★ Run again — says it clears the report, then starts over', () => {
+describe('★★ Run again - says it clears the report, then starts over', () => {
   it('the warning names what goes; yes starts it and opens 13e', async () => {
     rerunAnalysis.mockResolvedValue({ ok: true });
     intl(

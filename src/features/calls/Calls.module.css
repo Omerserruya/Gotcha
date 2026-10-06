@@ -1,11 +1,11 @@
 @layer features {
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 05d, measured — the dialer and a column: the week, the recent calls
+   * 05d, measured - the dialer and a column: the week, the recent calls
    * ════════════════════════════════════════════════════════════════════════
    * `padding:22px 40px 30px`, `gap:14px`; a 400 dialer drawn in focus
    * (`#C9BCF7`), the column the rest. Each card scrolls inside itself.
-   * The four-figure strip draws all four: what nothing records is "—".
+   * The four-figure strip draws all four: what nothing records is "-".
    */
   .screen {
     flex: 1;
@@ -474,7 +474,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 05e, measured — on a call
+   * 05e, measured - on a call
    * ════════════════════════════════════════════════════════════════════════
    * The call's header across the panel, then the transcript (818) and
    * Copilot in the dark (400), each scrolling inside itself.
@@ -527,7 +527,7 @@
   .liveWho {
     font-size: 18px;
     font-weight: var(--font-weight-semibold);
-    /* 02: `-0.02em` on the name — measured, as the screen titles were. */
+    /* 02: `-0.02em` on the name - measured, as the screen titles were. */
     letter-spacing: var(--letter-spacing-heading);
     color: var(--text-primary);
   }

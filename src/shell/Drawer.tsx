@@ -11,7 +11,7 @@ import styles from '@/design-system/styles/drawer.module.css';
  * line, ×), then whatever the screen puts in it. The URL holds the state
  * (`?panel=`), so the scrim and the × both go to `closeHref`.
  *
- * The body and its footer are the caller's — a form owns its own Save — so
+ * The body and its footer are the caller's - a form owns its own Save - so
  * they use `drawerBody` / `drawerFoot` from `design-system/styles/drawer.module.css`.
  */
 export async function Drawer({
@@ -29,7 +29,7 @@ export async function Drawer({
   /** 02's widths: 560 (11b, 11c), 600 (12d, 14c), 620 (11d), 820 (14e). */
   readonly width?: 560 | 600 | 620 | 820 | 860;
   readonly testId?: string;
-  /** Before the title — 12d's 44px disc. */
+  /** Before the title - 12d's 44px disc. */
   readonly lead?: ReactNode;
   readonly children: ReactNode;
 }) {

@@ -11,8 +11,8 @@ import type { CustomerDetail } from './load-customer';
 import styles from './Customers.module.css';
 
 /**
- * 04c–04f's shared shell: a COMPACT header — 04b's large one is the
- * Everything tab's alone — then the tab row with that tab's filter chips on
+ * 04c-04f's shared shell: a COMPACT header - 04b's large one is the
+ * Everything tab's alone - then the tab row with that tab's filter chips on
  * the right, then a main column and a 340px side.
  *
  * Measured on 04c: the header at `padding:22px 44px 18px`, a breadcrumb, a
@@ -29,7 +29,7 @@ export async function CustomerTopBar({
   const t = await getTranslations('customers');
   const contact = detail.timeline?.contact ?? null;
   const name = contact?.displayName ?? contact?.externalId ?? null;
-  // 04b's facts, the same words: a lone "—" under a name reads as broken.
+  // 04b's facts, the same words: a lone "-" under a name reads as broken.
   const facts = await customerFacts(detail);
 
   return (
@@ -169,17 +169,17 @@ export function channelsOf(detail: CustomerDetail): readonly string[] {
 }
 
 /**
- * 04c — every conversation as a card on one spine.
+ * 04c - every conversation as a card on one spine.
  *
  * Measured: a 72px date column (the day, and the time under it), a 24px spine
  * (the channel's 22px square, a 1px `#EDE9E1` line down to the next), and the
- * card — white, radius 12, `padding:13px 16px`, `1px #E6E2DA`; the newest
+ * card - white, radius 12, `padding:13px 16px`, `1px #E6E2DA`; the newest
  * marked with 02's 3px `#C96A4B` edge. In the card: the customer's own words
  * as the title, what was said after as the line, chips of what it held, and
  * "Open it".
  *
  * Not drawn from data we lack: 02's status chip ("Open · frustrated"), who
- * handled it ("Support AI, then you"), media counts ("1 photo") — the
+ * handled it ("Support AI, then you"), media counts ("1 photo") - the
  * timeline carries none of them. The channel stands in the meta slot, and a
  * conversation imported from history says "Imported", which is true.
  */
@@ -192,7 +192,7 @@ export async function ConversationsTab({
   readonly detail: CustomerDetail;
   readonly contactId: string;
   readonly channel: string | null;
-  /** How many times the page has asked for older ones — see `MAX_MORE`. */
+  /** How many times the page has asked for older ones - see `MAX_MORE`. */
   readonly more: number;
 }) {
   const t = await getTranslations('customers');
@@ -226,7 +226,7 @@ export async function ConversationsTab({
 
   /*
    * ★★ THE TOTAL IS THE PERSON'S, NOT THE PAGE'S. The cards are what one
-   * page of events holds — 20 of 70 on the measured customer — and the side
+   * page of events holds - 20 of 70 on the measured customer - and the side
    * says 70. The heading says 70 too, and the foot says how many are not
    * drawn yet, as 02 does ("19 older conversations below").
    *
@@ -336,7 +336,7 @@ export async function ConversationsTab({
 
 /**
  * How far "older conversations" can reach: the route caps a page at 200
- * events, and each step asks for 50 more — so three steps past the first.
+ * events, and each step asks for 50 more - so three steps past the first.
  */
 export const MAX_MORE = 3;
 
@@ -345,13 +345,13 @@ export function timelineLimit(more: number): number {
   return Math.min(200, 50 * (1 + more));
 }
 
-/** `?more=` as a step count — anything else is the first page. */
+/** `?more=` as a step count - anything else is the first page. */
 export function parseMore(raw: string | undefined): number {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? Math.min(n, MAX_MORE) : 0;
 }
 
-/** 04c's side: their pattern, how they write, what they ask — and the promise card. */
+/** 04c's side: their pattern, how they write, what they ask - and the promise card. */
 export async function ConversationsSide({ detail }: { readonly detail: CustomerDetail }) {
   const t = await getTranslations('customers');
   const format = await getFormatter();
@@ -359,7 +359,7 @@ export async function ConversationsSide({ detail }: { readonly detail: CustomerD
   const channels = new Set((detail.timeline?.identityChannels ?? []).map((c) => c.channel)).size;
   const writes = detail.brief?.signals ?? [];
   const figure = (n: number | null | undefined) =>
-    n === null || n === undefined ? '—' : format.number(n);
+    n === null || n === undefined ? '-' : format.number(n);
 
   return (
     <>
@@ -405,7 +405,7 @@ export async function ConversationsSide({ detail }: { readonly detail: CustomerD
 /**
  * 02's "An open promise" card, at the foot of every sub-tab's side.
  *
- * Nothing records a promise as a promise — the notes carry them as text — so
+ * Nothing records a promise as a promise - the notes carry them as text - so
  * the card keeps its place and says there is none to show, in neutral rather
  * than 02's warning pink: a pink card with nothing in it would alarm.
  */

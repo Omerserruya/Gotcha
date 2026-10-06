@@ -14,7 +14,7 @@ import { TransferPanel } from './TransferPanel';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
- * Screen 05e — on a call. Measured.
+ * Screen 05e - on a call. Measured.
  *
  * The call's own header (a 44px disc, the person at 18/600, "On the call ·
  * 1:24", who called whom), then the live transcript (818) beside Copilot in
@@ -23,7 +23,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * ── WHAT IS LIVE ──
  *   the transcript    `call.transcript`, ordered by `seq`; persisted lines
  *                     first, so a reload mid-call is not blank
- *   "Say this"        `call.suggestions` — things to say, never sent: there
+ *   "Say this"        `call.suggestions` - things to say, never sent: there
  *                     is no route that speaks on an agent's behalf
  *   the clock         from the call's start, counted here
  *
@@ -37,9 +37,9 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  *   stop                 nothing pauses Copilot on a call
  *
  * ── NOT DRAWN, BY STANDING RULINGS (their tests guard them) ──
- *   Mute — nothing implements it, and on a live call a control that fails
+ *   Mute - nothing implements it, and on a live call a control that fails
  *   fails silently while somebody talks. Translation, inline intent chips,
- *   in-call approval — none exists on the voice path; nothing claims them.
+ *   in-call approval - none exists on the voice path; nothing claims them.
  */
 export function LiveCall({
   sessionId,
@@ -57,7 +57,7 @@ export function LiveCall({
   readonly customerNumber: string;
   readonly initialTranscript: readonly TranscriptLine[];
   readonly contactName?: string | null;
-  /** The contact, when the call was matched to one — for "Add a note". */
+  /** The contact, when the call was matched to one - for "Add a note". */
   readonly customerId?: string | null;
   readonly direction?: string | null;
   /** When the call started, for the clock and each line's time. */
@@ -198,7 +198,7 @@ export function LiveCall({
         </span>
 
         {/*
-          05e: Transfer and End call — live (Omer, 2026-10-04), the old app's
+          05e: Transfer and End call - live (Omer, 2026-10-04), the old app's
           calls. Mute is absent rather than disabled (its ruling).
         */}
         <div className={styles.liveActions}>
@@ -325,7 +325,7 @@ export function LiveCall({
           </section>
 
           {/*
-            Suggestions, from the legacy channel — see `events.ts`. Things to
+            Suggestions, from the legacy channel - see `events.ts`. Things to
             say, never sent: there is no route that speaks for an agent.
           */}
           <section className={styles.copilotBlock} data-testid="suggestions-block">
@@ -352,7 +352,7 @@ export function LiveCall({
           </section>
 
           <div className={styles.copilotAsk}>
-            {/* 02's "Careful" card — drawn in its shape: nothing produces a warning yet. */}
+            {/* 02's "Careful" card - drawn in its shape: nothing produces a warning yet. */}
             <section className={styles.carefulCard} data-testid="copilot-careful">
               <p className={styles.carefulTitle}>{t('live.careful')}</p>
               <p className={styles.carefulBody}>{t('live.carefulNone')}</p>

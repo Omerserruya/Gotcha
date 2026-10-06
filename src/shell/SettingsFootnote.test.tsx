@@ -30,7 +30,7 @@ describe('★ the footnote is 11’s, not every screen’s', () => {
     expect(screen.getByRole('link', { name: 'Studio' })).toHaveAttribute('href', '/studio');
   });
 
-  it('★ on 12–18: nothing — 02 draws no footnote there', () => {
+  it('★ on 12-18: nothing - 02 draws no footnote there', () => {
     for (const path of ['/settings/people', '/settings/billing/plan', '/settings/developer']) {
       const { container, unmount } = show(path);
       expect(container).toBeEmptyDOMElement();

@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * Settings · Security — screen 16.
+   * Settings · Security - screen 16.
    *
    * Four sections, each with its own heading and its own failure state. One
    * section failing must not blank the others: the reader came to check
@@ -114,7 +114,7 @@
   }
 
   /*
-   * "We could not find out" — NOT "there is nothing".
+   * "We could not find out" - NOT "there is nothing".
    *
    * Given its own tone precisely because the difference matters here: an empty
    * list is reassuring and an unreadable one is not, and they must never look

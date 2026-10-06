@@ -8,22 +8,22 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 import styles from './Automations.module.css';
 
 /**
- * Screen 09's detail — the selected automation, measured.
+ * Screen 09's detail - the selected automation, measured.
  *
  * The name (24/600) over where it runs, Pause / Duplicate on the right; a
  * WHEN / THEN card; then how it has gone beside why it stopped.
  *
  * ── LIVE ──
- *   WHEN        `trigger` — free text, rendered as written
+ *   WHEN        `trigger` - free text, rendered as written
  *   THEN        the flow graph's steps, in the order it runs them, each by
  *               its node type; where it branches, it says so and stops
- *   runs        `runCount` — ALL-TIME, never "this week": no clock, no records
- *   on / off    `isActive` — a bare boolean: no actor, no date
+ *   runs        `runCount` - ALL-TIME, never "this week": no clock, no records
+ *   on / off    `isActive` - a bare boolean: no actor, no date
  *
  * ── IN THEIR SHAPE ──
- *   finished alone / waited for you / stopped — no run records exist
- *   why it stopped — nothing records a stop's cause
- *   Pause, Duplicate — not built from here yet
+ *   finished alone / waited for you / stopped - no run records exist
+ *   why it stopped - nothing records a stop's cause
+ *   Pause, Duplicate - not built from here yet
  */
 export async function AutomationDetail({ automation }: { readonly automation: Automation }) {
   const t = await getTranslations('automations');
@@ -42,7 +42,7 @@ export async function AutomationDetail({ automation }: { readonly automation: Au
         <div className={styles.heading}>
           <h2 className={styles.name}>{automation.name}</h2>
           {/*
-            One channel, or all of them — never the enum, and never a list of
+            One channel, or all of them - never the enum, and never a list of
             every channel for a null: the model says "all", not "these eight".
           */}
           <p className={styles.where} data-testid={`where-${automation.id}`}>
@@ -106,7 +106,7 @@ export async function AutomationDetail({ automation }: { readonly automation: Au
           <dl className={styles.wentFigures}>
             <div>
               <dd data-testid={`runs-${automation.id}`}>
-                {hasEverRun(automation) ? format.number(automation.runCount) : '—'}
+                {hasEverRun(automation) ? format.number(automation.runCount) : '-'}
               </dd>
               <dt>
                 {hasEverRun(automation)
@@ -115,15 +115,15 @@ export async function AutomationDetail({ automation }: { readonly automation: Au
               </dt>
             </div>
             <div>
-              <dd>—</dd>
+              <dd>-</dd>
               <dt>{t('detail.alone')}</dt>
             </div>
             <div>
-              <dd>—</dd>
+              <dd>-</dd>
               <dt>{t('detail.waited')}</dt>
             </div>
             <div>
-              <dd>—</dd>
+              <dd>-</dd>
               <dt>{t('detail.stopped')}</dt>
             </div>
           </dl>

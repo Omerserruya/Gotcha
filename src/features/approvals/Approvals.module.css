@@ -9,7 +9,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * Screen 03, measured — a 300px queue beside one decision
+   * Screen 03, measured - a 300px queue beside one decision
    * ════════════════════════════════════════════════════════════════════════
    * The page body is flush (`PageContainer flush`): the queue runs from the
    * header to the panel's bottom, with `#EDE9E1` down its right edge, and the
@@ -79,7 +79,7 @@
 
   /*
    * 02: `padding:14px 20px`, `gap:5px`. The one on screen is white with a 3px
-   * `#121212` edge — and 02 lets its text move 3px for it, so ours does too.
+   * `#121212` edge - and 02 lets its text move 3px for it, so ours does too.
    */
   .queueButton {
     inline-size: 100%;
@@ -113,7 +113,7 @@
     gap: var(--space-8);
   }
 
-  /* 13.5px — 500 in the list, 600 on the one on screen. */
+  /* 13.5px - 500 in the list, 600 on the one on screen. */
   .queueSummary {
     min-inline-size: 0;
     font-size: 13.5px;
@@ -128,7 +128,7 @@
     font-weight: var(--font-weight-semibold);
   }
 
-  /* How long it has waited — or how long is left, in red, when it is close. */
+  /* How long it has waited - or how long is left, in red, when it is close. */
   .queueWhen {
     flex: none;
     font-size: 10.5px;
@@ -155,7 +155,7 @@
     color: var(--intent-urgent-text);
   }
 
-  /* "Moves money" in 02's violet — a reach, not a danger. */
+  /* "Moves money" in 02's violet - a reach, not a danger. */
   .queueTag[data-tag='FINANCIAL'],
   .queueTag[data-tag='MOVES_MONEY'],
   .queueTag[data-tag='commerce'] {
@@ -210,7 +210,7 @@
 
   /*
    * Risk labels, as labels. `IRREVERSIBLE` says the action cannot be taken
-   * back — it does NOT describe a window in which it could be, because no such
+   * back - it does NOT describe a window in which it could be, because no such
    * window exists anywhere in this product.
    */
   .riskTags {
@@ -343,8 +343,8 @@
 
   /*
    * 02's reject bar: white, radius 12, `padding:12px 16px`, the question and
-   * one-tap reasons. A rejection carries a reason by contract — the route
-   * answers 400 without one — so the field is part of the bar.
+   * one-tap reasons. A rejection carries a reason by contract - the route
+   * answers 400 without one - so the field is part of the bar.
    */
   .rejectBar {
     display: flex;
@@ -413,7 +413,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 03b, measured — the moment after
+   * 03b, measured - the moment after
    * ════════════════════════════════════════════════════════════════════════
    * The pane, `gap:14px`: the confirmation, what was sent, the pattern, and
    * "Up next" at its foot. The decided row stays green at the queue's head.
@@ -782,7 +782,7 @@
    */
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 03c — 02's "What you decided earlier" card, measured
+   * 03c - 02's "What you decided earlier" card, measured
    * ════════════════════════════════════════════════════════════════════════
    * White, `1px #E6E2DA`, radius 14, clipped. A header row at `14px 18px`:
    * the heading 12.5/600, a count 11.5 `#8C887F`. Rows at `12px 18px`,
@@ -928,7 +928,7 @@
 
 @layer features {
   /*
-   * One day, as a group — drawn only when the queue spans days. `.queue`
+   * One day, as a group - drawn only when the queue spans days. `.queue`
    * keeps its own dividers between items, so the day adds none.
    */
   .queueDay {
@@ -1065,7 +1065,7 @@
     color: var(--frame-text);
   }
 
-  /* 02: the queue's foot, pinned — "Change what needs asking", underlined. */
+  /* 02: the queue's foot, pinned - "Change what needs asking", underlined. */
   .queueFoot {
     margin: auto 0 0;
     padding: var(--space-16) var(--space-20);
@@ -1124,7 +1124,7 @@
     gap: 9px;
   }
 
-  /* 02's dot: green — nothing classifies a reason as for or against. */
+  /* 02's dot: green - nothing classifies a reason as for or against. */
   .whyList li::before {
     content: '';
     flex: none;
@@ -1184,7 +1184,7 @@
     color: var(--text-disabled);
   }
 
-  /* 02: the key on Approve — a small mono tile beside the word. */
+  /* 02: the key on Approve - a small mono tile beside the word. */
   .key {
     padding: 1px 5px;
     border-radius: 4px;
@@ -1194,7 +1194,7 @@
     color: var(--action-text);
   }
 
-  /* 02: Edit amount, Ask — outlined, `11px 20px`, radius 10. */
+  /* 02: Edit amount, Ask - outlined, `11px 20px`, radius 10. */
   .secondary {
     padding: 11px var(--space-20);
     border: 1px solid var(--border-default);
@@ -1228,7 +1228,7 @@
     color: var(--action-text);
   }
 
-  /* Tried and failed today — amber on the dark card, with the repair. */
+  /* Tried and failed today - amber on the dark card, with the repair. */
   .handledFailed {
     margin: var(--space-10) 0 0;
     font-size: 13px;

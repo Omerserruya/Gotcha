@@ -31,7 +31,7 @@ describe('★★ Hebrew: a name and an order number keep their own direction (me
   });
 });
 
-describe('★ a rejection reason in the reader’s language — when it was one of ours', () => {
+describe('★ a rejection reason in the reader’s language - when it was one of ours', () => {
   it('our labels, from either catalogue, map back to their key; anyone’s own words do not', () => {
     expect(reasonKeyOf('Outside policy')).toBe('policy');
     expect(reasonKeyOf(he.action2.reasons.policy)).toBe('policy');
@@ -43,7 +43,7 @@ describe('★ a rejection reason in the reader’s language — when it was one 
 });
 
 describe('★ Hebrew catalogues: a prefix letter never glued to a placeholder', () => {
-  it('ל ב מ ש כ before {…} take a maqaf — "ל־{name}", never "ל{name}"', async () => {
+  it('ל ב מ ש כ before {…} take a maqaf - "ל־{name}", never "ל{name}"', async () => {
     const { readdirSync, readFileSync } = await import('node:fs');
     const dir = 'src/i18n/messages/he';
     const glued = readdirSync(dir)

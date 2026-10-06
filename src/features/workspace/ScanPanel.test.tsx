@@ -52,7 +52,7 @@ describe('★ what the scan will do is said before the button', () => {
    * S2 (2026-10-03): what a rescan will and will not touch is said ON the
    * control (02's banner has no paragraph), before it is pressed.
    */
-  it('names the domain and what will and will not be touched — on Scan again', () => {
+  it('names the domain and what will and will not be touched - on Scan again', () => {
     renderPanel();
     const run = screen.getByTestId('scan-run');
     expect(run).toHaveAttribute('title', expect.stringMatching(/urban-supply\.example/));
@@ -154,7 +154,7 @@ describe('★ the two reasons a field was not taken are different admissions', (
     expect(await screen.findByTestId('scan-offer-because')).toHaveTextContent(/you edited this/i);
   });
 
-  it('says nobody recorded who wrote it — which is every field on this estate', async () => {
+  it('says nobody recorded who wrote it - which is every field on this estate', async () => {
     runWorkspaceScan.mockResolvedValue({
       ok: true,
       applied: [],

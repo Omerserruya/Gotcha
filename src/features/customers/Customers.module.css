@@ -4,13 +4,13 @@
    *
    * A list of contacts, deliberately plain. The design's row-as-a-sentence
    * needs a "current situation" this platform does not compute, and value and
-   * order count are two live uncached Shopify calls per person — so a row here
+   * order count are two live uncached Shopify calls per person - so a row here
    * carries only what is genuinely known: who they are, and where they came in.
    */
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 04, measured — a list card that is a window, and a 330px side column
+   * 04, measured - a list card that is a window, and a 330px side column
    * ════════════════════════════════════════════════════════════════════════
    */
   .columns {
@@ -21,7 +21,7 @@
     line-height: normal;
   }
 
-  /* White, `1px #E6E2DA`, radius 14 — and it scrolls inside (`fillCard`). */
+  /* White, `1px #E6E2DA`, radius 14 - and it scrolls inside (`fillCard`). */
   .listCard {
     min-inline-size: 0;
     background-color: var(--panel-field);
@@ -45,7 +45,7 @@
     border-block-end: 0;
   }
 
-  /* 02: `padding:13px 18px`, `gap:14px` — 67 tall. */
+  /* 02: `padding:13px 18px`, `gap:14px` - 67 tall. */
   .rowLink {
     display: flex;
     align-items: center;
@@ -157,7 +157,7 @@
     color: var(--intent-neutral-text);
   }
 
-  /* 02: 12px `#6B6660`, one line — the situation is cut, "wrote N times" never is. */
+  /* 02: 12px `#6B6660`, one line - the situation is cut, "wrote N times" never is. */
   .rowLine {
     display: flex;
     min-inline-size: 0;
@@ -399,14 +399,14 @@
     /*
      * ★★ `--font-serif`, AND ITS STYLE TOKEN WITH IT.
      * This said `var(--font-family-serif, Georgia, …)`. That token does not
-     * exist, so the fallback was what ran — and the fallback is the bug:
+     * exist, so the fallback was what ran - and the fallback is the bug:
      * **Georgia has no Hebrew glyphs**, so a Hebrew customer brief was
      * rendered in whatever the system substituted, never in the brand serif.
      * `--font-serif` is locale-aware by design: Instrument Serif in Latin,
      * Frank Ruhl Libre in Hebrew.
      *
      * And the style follows it rather than being hardcoded, because Frank
-     * Ruhl Libre has no italic — hardcoding `italic` asks the browser to
+     * Ruhl Libre has no italic - hardcoding `italic` asks the browser to
      * slant Hebrew synthetically, which is the thing `--font-serif-style`
      * exists to stop. `Text.module.css` pairs the two tokens in both of its
      * serif roles; a fallback is not a licence to do it differently.
@@ -462,7 +462,7 @@
   }
 
   /*
-    The limits. Deliberately NOT styled as warnings — they are properties of
+    The limits. Deliberately NOT styled as warnings - they are properties of
     the data, and an alarm colour would read as something being wrong rather
     than as the screen being precise about what it holds.
   */
@@ -577,7 +577,7 @@
   }
 
   /*
-    The tone is the PLATFORM's judgement, not ours — re-deciding it here
+    The tone is the PLATFORM's judgement, not ours - re-deciding it here
     would make this screen disagree with the Inbox about the same order.
   */
   .chip {
@@ -630,7 +630,7 @@
   }
 
   /*
-    Waiting on a person is NOT an error and must not be styled as one — the
+    Waiting on a person is NOT an error and must not be styled as one - the
     reader has to finish this sentence rather than dismiss it and press again.
   */
   .orderWaiting {
@@ -658,7 +658,7 @@
   /*
    * ★ `.unavailable` WAS USED BY THREE PLACES IN `CustomerDetail` AND
    * DEFINED BY NONE. A CSS module hands back `undefined` for a class it does
-   * not have, React drops it, and the element renders unstyled — a failure
+   * not have, React drops it, and the element renders unstyled - a failure
    * with no error anywhere. Found while adding the fourth user.
    */
   .unavailable {
@@ -899,7 +899,7 @@
 
   /*
    * ★★ A FAILED PUSH IS NOT QUIET. There was a CRM to write to and it
-   * refused — the one destination a merchant may need to act on, and the
+   * refused - the one destination a merchant may need to act on, and the
    * whole lesson of the stub that answered 200 and wrote nothing.
    */
   .noteDestFailed {
@@ -947,7 +947,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 04b, measured — the customer card
+   * 04b, measured - the customer card
    * ════════════════════════════════════════════════════════════════════════
    */
   .cardScreen {
@@ -1308,7 +1308,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 04c–04f, measured — the sub-tabs' compact shell
+   * 04c-04f, measured - the sub-tabs' compact shell
    * ════════════════════════════════════════════════════════════════════════
    */
 
@@ -1673,7 +1673,7 @@
     gap: 22px;
   }
 
-  /* 04c–04f's side strips label at 11px; 04's own "worth" strip keeps 11.5. */
+  /* 04c-04f's side strips label at 11px; 04's own "worth" strip keeps 11.5. */
   .pattern dt {
     font-size: 11px;
   }
@@ -1709,7 +1709,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 04d, measured — their orders (the tab; scoped, so the inbox's panel
+   * 04d, measured - their orders (the tab; scoped, so the inbox's panel
    * keeps `CustomerOrders`'s own styles)
    * ════════════════════════════════════════════════════════════════════════
    */
@@ -1781,7 +1781,7 @@
   }
 
   /*
-    The tone is the PLATFORM's judgement, not ours — re-deciding it here
+    The tone is the PLATFORM's judgement, not ours - re-deciding it here
     would make this screen disagree with the Inbox about the same order.
     02: `padding:3px 8px`, radius 6, 10.5px.
   */
@@ -1832,7 +1832,7 @@
     gap: var(--space-12);
   }
 
-  /* 40px, radius 9 — the square stays where Shopify gave no image. */
+  /* 40px, radius 9 - the square stays where Shopify gave no image. */
   .ordersTab .orderThumb {
     flex: none;
     inline-size: 40px;
@@ -2091,7 +2091,7 @@
   }
 
   /*
-   * 04d's "On file": label 70, value, 8 apart — one row each, as REACH THEM.
+   * 04d's "On file": label 70, value, 8 apart - one row each, as REACH THEM.
    * Unscoped: the side column is outside `.ordersTab`, and scoped it never
    * applied, so each label sat over its value.
    */
@@ -2122,7 +2122,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 04e, measured — what was done on their account
+   * 04e, measured - what was done on their account
    * ════════════════════════════════════════════════════════════════════════
    */
   .actions {
@@ -2203,7 +2203,7 @@
     text-decoration: none;
   }
 
-  /* 04e: decided on the row — 02's Approve (dark) · Decline · Change amount. */
+  /* 04e: decided on the row - 02's Approve (dark) · Decline · Change amount. */
   .decideRow {
     display: inline-flex;
     flex-wrap: wrap;
@@ -2350,7 +2350,7 @@
     color: var(--intent-opportunity-text);
   }
 
-  /* Waiting on you — 02's warm chip. */
+  /* Waiting on you - 02's warm chip. */
   .rowChip[data-tone='waiting'] {
     background-color: var(--intent-urgent-surface);
     color: var(--intent-urgent-text);
@@ -2484,7 +2484,7 @@
     color: var(--text-subtle);
   }
 
-  /* 02: a 5px track, the share filled — dark, wholesale violet, never-bought pale. */
+  /* 02: a 5px track, the share filled - dark, wholesale violet, never-bought pale. */
   .whoTrack {
     display: block;
     block-size: 5px;

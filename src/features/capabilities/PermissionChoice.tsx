@@ -32,7 +32,7 @@ import styles from './Capabilities.module.css';
  * A financial tool can be stored as auto-approve: set before this ceiling
  * existed, or by curl, since the write does not enforce the guard. The
  * screen shows what IS and withholds the option to put it back. **Hiding the
- * current state would be worse — an admin cannot fix a setting the screen
+ * current state would be worse - an admin cannot fix a setting the screen
  * will not show them.**
  */
 export function PermissionChoice({
@@ -41,7 +41,7 @@ export function PermissionChoice({
 }: {
   readonly capability: Capability;
   /**
-   * Why none of the three can be chosen right now — a connection down, a
+   * Why none of the three can be chosen right now - a connection down, a
    * permission not granted. The control is still drawn, its stored state
    * marked, every segment disabled with this as its title: a state, never a
    * paragraph beside the row.
@@ -67,7 +67,7 @@ export function PermissionChoice({
   /*
     ★★ ALWAYS ALL THREE, AND THE STORED ONE ALWAYS SHOWN (02's control).
     A choice the ceiling withholds is DISABLED, not absent, and says why on
-    itself — the sentence lives on the segment, not beside every row. And a
+    itself - the sentence lives on the segment, not beside every row. And a
     stored state the ceiling would now forbid (a refund set to run on its
     own, before the ceiling or by curl) is still drawn as the current one:
     an admin cannot turn off what the screen will not show them.

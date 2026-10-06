@@ -23,20 +23,20 @@ import { ConnectedSources } from './ConnectedSources';
 import styles from './AddKnowledge.module.css';
 
 /**
- * 08b, measured: "Add knowledge" — an 860 dialog over 08. The ways in as
+ * 08b, measured: "Add knowledge" - an 860 dialog over 08. The ways in as
  * cards, the chosen one's form under them, then "What it learned" and
  * "Teach all of it".
  *
  * LIVE for a document, a page and a typed fact (Omer, 2026-10-04): each
  * writes a document into the tenant's knowledge and the platform reads and
- * embeds it in the background — so what comes back is "being read", never
+ * embeds it in the background - so what comes back is "being read", never
  * "learned". Nothing is sent without the button. Drive and Confluence connect at
  * Google or Atlassian and come back here (backend df9ee4cd).
  *
- *   document       `POST …/documents/upload` — PDF, Word, Markdown or
+ *   document       `POST …/documents/upload` - PDF, Word, Markdown or
  *                  text, up to 10 MB (`file-parser.service.ts`)
  *   page           `POST …/documents`, `sourceType: "url"`
- *   drive          Google Drive or Confluence (`knowledge-oauth.ts`) —
+ *   drive          Google Drive or Confluence (`knowledge-oauth.ts`) -
  *                  not Dropbox, which the platform has no connector for
  *   text           `POST …/documents`, `sourceType: "text"`
  *   conversation   nothing pins one answer; past conversations come in
@@ -330,19 +330,19 @@ export function AddKnowledge({
             </div>
           ) : (
             <p className={styles.none} title={t('pinNone')} data-testid="add-pin">
-              —
+              -
             </p>
           )}
 
           {/*
             "What it learned": the platform previews nothing before a source
-            is added, and reads it in the background after — so this says
+            is added, and reads it in the background after - so this says
             what was added and that it is being read, never what it learned.
           */}
           <section className={styles.learned} data-testid="add-learned">
             <header className={styles.learnedHead}>
               <h3 className={styles.learnedTitle}>{t('learned')}</h3>
-              <span className={styles.meta}>—</span>
+              <span className={styles.meta}>-</span>
             </header>
             {result?.ok ? (
               <p className={styles.added} data-testid="add-added">
@@ -353,7 +353,7 @@ export function AddKnowledge({
               </p>
             ) : (
               <p className={styles.learnedNone} title={t('learnedNone')}>
-                —
+                -
               </p>
             )}
           </section>

@@ -15,8 +15,8 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ A NOTE CAN LEAVE THIS PRODUCT, AND THAT IS THE POINT OF `aiUsable`
  * ════════════════════════════════════════════════════════════════════════════
- * `POST` mirrors the note into the merchant's elected CRM when — and only
- * when — `aiUsable` is true. The service's own comment says why the push is
+ * `POST` mirrors the note into the merchant's elected CRM when - and only
+ * when - `aiUsable` is true. The service's own comment says why the push is
  * the only place that can stop it:
  *
  *   note → elected CRM → crmBundle.notes → bundle.recent_crm_notes
@@ -38,7 +38,7 @@ export type NoteWriteResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: 'too_long' }
   | { readonly ok: false; readonly reason: 'empty' }
-  /** 403 `not_the_author` — a permission fact, not a fault. */
+  /** 403 `not_the_author` - a permission fact, not a fault. */
   | { readonly ok: false; readonly reason: 'not_the_author' }
   | { readonly ok: false; readonly reason: 'failed' };
 
@@ -70,7 +70,7 @@ export async function createNote(
       /*
        * `visibility` is deliberately NOT sent. The route defaults it to TEAM,
        * and 04f under Omer's "classic notes only" ruling offers no control
-       * for it — so sending a value would be this screen deciding an axis it
+       * for it - so sending a value would be this screen deciding an axis it
        * does not show. The column keeps its own default.
        */
       body: { body: body.trim(), aiUsable },
@@ -97,7 +97,7 @@ export async function editNote(
       endpoint: customerEndpoints.note(contactId, noteId),
       /*
        * Body only. `aiUsable` is omitted rather than resent, because the
-       * route applies it *"only when stated"* — and resending the value we
+       * route applies it *"only when stated"* - and resending the value we
        * happen to be holding would overwrite a change somebody else made
        * between the read and the edit. The business-hours defaults trap,
        * which the service's own comment names.
@@ -119,14 +119,14 @@ export async function editNote(
  *
  * *"A customer's history should not develop holes, and a deleted note is
  * still evidence of what somebody believed at the time."* It leaves every
- * default read, so the screen simply stops showing it — but the control is
+ * default read, so the screen simply stops showing it - but the control is
  * still worth confirming, because the author cannot bring it back.
  */
 export async function removeNote(contactId: string, noteId: string): Promise<NoteWriteResult> {
   try {
     /*
      * Its own schema: the delete answers `{ note: { id, deletedAt } }` and
-     * `noteWriteSchema` requires a whole row. No `raw` — this body has no
+     * `noteWriteSchema` requires a whole row. No `raw` - this body has no
      * top-level `data`, checked at the route rather than assumed in either
      * direction, which is what the two envelope bugs today were about.
      */

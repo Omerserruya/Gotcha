@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * Screen 09 · Studio · Automations — the selected automation, measured.
+   * Screen 09 · Studio · Automations - the selected automation, measured.
    * 02 sets no line-height on any of it.
    */
 
@@ -35,7 +35,7 @@
     min-inline-size: 0;
   }
 
-  /* 24/600 — 02's one 24px heading at −0.025em (09's), not the −0.02 figures. */
+  /* 24/600 - 02's one 24px heading at −0.025em (09's), not the −0.02 figures. */
   .name {
     margin: 0;
     font-size: 24px;
@@ -156,7 +156,7 @@
     margin: 0;
   }
 
-  /* The number on top, its label under it — 02's order. */
+  /* The number on top, its label under it - 02's order. */
   .wentFigures > div {
     display: flex;
     flex-direction: column;

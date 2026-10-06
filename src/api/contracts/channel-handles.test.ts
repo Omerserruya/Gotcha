@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { channelHandles, timelineSchema } from './customer-detail';
 
 /**
- * Screen 02's identity panel — the handles we can actually name.
+ * Screen 02's identity panel - the handles we can actually name.
  *
  * `contact.metadata.aliases` was on the wire the whole time: the route sends
  * `contact: effective` from a `findFirst` with no `select`, so the entire row
@@ -36,8 +36,8 @@ describe('★★ every channel, from the route’s own projection', () => {
   it('★★ no longer reads the contact’s raw metadata', () => {
     /*
      * This used to parse `contact.metadata.aliases`, because the route sent
-     * the whole row. The obvious fix — "return the siblings you already
-     * compute" — would have been WORSE: `findSiblingContacts` selects no
+     * the whole row. The obvious fix - "return the siblings you already
+     * compute" - would have been WORSE: `findSiblingContacts` selects no
      * columns, so each sibling carries its own metadata blob and returning
      * them raw ships the customer's phone number once per linked channel
      * instead of once.
@@ -57,7 +57,7 @@ describe('★★ every channel, from the route’s own projection', () => {
     /*
      * Required, not defaulted. It is present on every response including
      * empty ones, so absence means the service is older than this contract
-     * — and an empty list would say "she uses one channel" about somebody
+     * - and an empty list would say "she uses one channel" about somebody
      * who uses four.
      */
     expect(() => timelineSchema.parse({ contact: { id: 'c1' }, events: [] })).toThrow();

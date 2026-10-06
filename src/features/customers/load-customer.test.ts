@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Screen 04b/04d/04e's loader — specifically, the envelope.
+ * Screen 04b/04d/04e's loader - specifically, the envelope.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHY THIS FILE MOCKS THE UNWRAP RULE INSTEAD OF MOCKING PAST IT
  * ════════════════════════════════════════════════════════════════════════════
  * The 04e read shipped without `raw: true`. `/api/audit-logs/customer/:id`
  * answers `{ contact, data, nextCursor, coverage, scope }`, the client
- * unwrapped `.data` — an ARRAY — and handed it to a schema expecting an
+ * unwrapped `.data` - an ARRAY - and handed it to a schema expecting an
  * object. Every request 200'd and every parse failed at `(root)`.
  *
  * Nothing caught it, and the reason is worth more than the fix. The only
@@ -18,8 +18,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * returns the parsed answer cannot catch a parse that should not have
  * happened.
  *
- * So `get` here models `http-client.ts`'s rule verbatim — unwrap `data`
- * unless `raw` — and then runs the real schema. That is the smallest mock
+ * So `get` here models `http-client.ts`'s rule verbatim - unwrap `data`
+ * unless `raw` - and then runs the real schema. That is the smallest mock
  * that can still fail.
  */
 
@@ -40,7 +40,7 @@ vi.mock('@/api/client/server-api', () => ({
       if (body instanceof Error) throw body;
       /*
        * `http-client.ts`: unwrap `{ data }` unless `raw`. Copied because
-       * this is the rule the defect turned on — a paraphrase that behaved
+       * this is the rule the defect turned on - a paraphrase that behaved
        * differently would make this test agree with itself rather than with
        * the client.
        */
@@ -105,7 +105,7 @@ const TIMELINE = {
 };
 
 /**
- * The audit envelope as the route sends it — `data` is a SIBLING of four
+ * The audit envelope as the route sends it - `data` is a SIBLING of four
  * other keys, which is the whole point.
  */
 /**
@@ -148,12 +148,12 @@ beforeEach(() => {
     },
     '/api/audit-logs/customer/c1': AUDIT,
     // The timeline carries an externalId, so the memory read IS attempted
-    // and must be stubbed — otherwise it fails and this file reports a
+    // and must be stubbed - otherwise it fails and this file reports a
     // failure of its own making.
     '/api/historical-imports/customer-context': { data: { context: null } },
     '/api/crm/conversation/conv-1/context': { data: {} },
     '/api/commerce-context/conv-1': ORDERS_OK,
-    // 04f. Contact-keyed and enveloped as `{ notes, contactId }` — no
+    // 04f. Contact-keyed and enveloped as `{ notes, contactId }` - no
     // top-level `data`, so nothing is unwrapped and no `raw` is wanted.
     '/api/identity/c1/notes': { notes: [], contactId: 'c1' },
     // The viewer's User.id, which is what `authorUserId` holds. NOT the
@@ -166,7 +166,7 @@ beforeEach(() => {
 describe('★★ the audit envelope, where `data` is a sibling and not the payload', () => {
   it('★★ reads the five-key envelope rather than unwrapping it to an array', async () => {
     /*
-     * THE DEFECT. Without `raw: true` the client hands `.data` — `[]` — to
+     * THE DEFECT. Without `raw: true` the client hands `.data` - `[]` - to
      * `customerAuditSchema`, which expects an object, and the parse fails at
      * `(root)` on a clean 200.
      */
@@ -194,7 +194,7 @@ describe('★★ the audit envelope, where `data` is a sibling and not the paylo
   it('★★ records the failure by name when the read does break', async () => {
     /*
      * `readsFailed` is what stops the capture fixture standing a healthy
-     * panel over a read that returned nothing — which is how this defect
+     * panel over a read that returned nothing - which is how this defect
      * passed 84 assertions.
      */
     // The body the DEFECT produced: the client unwrapped the envelope and
@@ -237,7 +237,7 @@ describe('★★ the audit envelope, where `data` is a sibling and not the paylo
     expect(detail.policies?.actionKinds).toEqual(['REFUND', 'DISCOUNT']);
   });
 
-  it('★★ a 403 on the rules is an answer — not a failed read', async () => {
+  it('★★ a 403 on the rules is an answer - not a failed read', async () => {
     const { ApiError } = await import('@/api/client/api-error');
     BODIES['/api/business-policies'] = new ApiError({ kind: 'authorization', status: 403 });
     const { loadCustomer } = await import('./load-customer');
@@ -286,7 +286,7 @@ describe('★★ the audit envelope, where `data` is a sibling and not the paylo
     /*
      * Every key at this level used to be defaulted, so `{}` parsed and
      * rendered "nothing has been recorded against this person yet" with no
-     * caveats — a confident claim about somebody's history built out of a
+     * caveats - a confident claim about somebody's history built out of a
      * response that said nothing. A stale service produces exactly that body.
      */
     const { coverage: _dropped, ...withoutCoverage } = AUDIT;
@@ -304,14 +304,14 @@ describe('★★ 04d\u2019s success path, which no test or capture has ever reac
     /*
      * THE SURVIVOR THE SWEEP FOUND.
      *
-     * `/api/commerce-context/:id` answers the union unenveloped —
+     * `/api/commerce-context/:id` answers the union unenveloped -
      * `{ state: "ok", data: {...} }`. Without `raw: true` the client sees a
      * top-level `data`, unwraps it, and hands the bare context to a schema
      * that REQUIRES `state`. 04d then renders "we couldn't read your
      * orders" for a working store.
      *
      * ★ IT HAS NEVER FIRED. Shopify is in ERROR on the demo tenant, so the
-     * only reachable answer is `{ state: "connection_unhealthy" }` — no
+     * only reachable answer is `{ state: "connection_unhealthy" }` - no
      * `data` key, nothing unwrapped, everything green. The success path
      * breaks the moment a store connects.
      */
@@ -339,7 +339,7 @@ describe('★★ 04f reads what 04e could not: the contact, with no conversation
   it('★ joins the fan-out, because notes are keyed on the person', async () => {
     /*
      * The stub these replace was conversation-keyed, and that WAS the defect
-     * — "a note is about a person, and the person outlives the thread". So
+     * - "a note is about a person, and the person outlives the thread". So
      * unlike the audit read, which waits on the commerce read for
      * `shopifyCustomerId`, this needs nothing from the other answers and
      * costs no extra round trip.
@@ -355,7 +355,7 @@ describe('★★ 04f reads what 04e could not: the contact, with no conversation
     /*
      * `authorUserId` holds `User.id`; the session holds Authentik's `sub`.
      * Comparing the wrong pair would hide the edit control from everybody,
-     * including the author — and it would look like a permission problem
+     * including the author - and it would look like a permission problem
      * rather than a mismatched identifier.
      */
     const { loadCustomer } = await import('./load-customer');

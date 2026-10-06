@@ -14,8 +14,8 @@ import { auditVerdict, describeAuditAction } from '@/api/contracts/security';
  * than left to be spotted among successes.
  *
  * An empty list is a real answer on this route: the backend already drops
- * server-side noise — logins from private IPs and library user agents, which
- * are token refreshes rather than people — so nothing here is an artefact of
+ * server-side noise - logins from private IPs and library user agents, which
+ * are token refreshes rather than people - so nothing here is an artefact of
  * our own filtering.
  */
 export async function LoginHistory({
@@ -88,7 +88,7 @@ export async function LoginHistory({
  *
  * `AuditLog` holds 5,159 rows on this tenant, 5,059 of them written by the AI.
  * Until `GET /api/audit-logs` existed, every one of its eleven read sites was
- * an AI service reading the log for its own reasoning — the AI could see its
+ * an AI service reading the log for its own reasoning - the AI could see its
  * own history and the account's owner could not.
  *
  * When the read fails this renders **"we cannot read this"**, never an empty
@@ -96,7 +96,7 @@ export async function LoginHistory({
  * is unreadable"* is not, and a section that shows the first when it means the
  * second is actively dangerous.
  *
- * Among what it contains: 22 `adapter.err.shopify.process_refund` rows —
+ * Among what it contains: 22 `adapter.err.shopify.process_refund` rows -
  * refunds that failed and that nobody was ever told about, because the
  * notification path emits only on success. This screen does not fix that; it
  * is simply the first place they are visible.
@@ -144,7 +144,7 @@ export async function AuditSection({
       <AuditHead facets={facets} truncated={facetsTruncated} t={t} />
 
       {/*
-        02's row: the time (mono), what happened, and its kind at the end —
+        02's row: the time (mono), what happened, and its kind at the end -
         "Failure" in red when it did not work, otherwise who did it.
       */}
       <ul className={styles.auditRows} data-testid="audit-list">
@@ -163,8 +163,8 @@ export async function AuditSection({
                 {shortWhen(at, now, locale, t('audit.yesterday'))}
               </time>
               {/*
-                ★★ `succeeded` is `null` on every `adapter.*` row — nothing
-                recorded one — while the action name said `err` in so many
+                ★★ `succeeded` is `null` on every `adapter.*` row - nothing
+                recorded one - while the action name said `err` in so many
                 words. `auditVerdict` reads both and prefers the column; a row
                 with neither still says nothing rather than guessing (null is
                 "not recorded", not "failed").
@@ -201,12 +201,12 @@ const HEAD_FACETS = 4;
 /**
  * 16's head: "Everything that happened", the facets as 02's chips, Export.
  *
- * The facets are the log's real action vocabulary, not categories we chose —
+ * The facets are the log's real action vocabulary, not categories we chose -
  * the log conflates actions that had an effect with lookups the AI made while
  * composing one answer, and the schema does not distinguish them, so any
  * split we invented would be a guess that drifts as tools are added. They
  * read in the same words as the rows; the count rides on the title. "All" is
- * dark because the list below is all of it — nothing filters it yet, so the
+ * dark because the list below is all of it - nothing filters it yet, so the
  * chips are states, not buttons.
  */
 function AuditHead({
@@ -312,7 +312,7 @@ const KNOWN = {
 } as const;
 
 /**
- * 02's row is a sentence — who did what. The log carries the actor and the
+ * 02's row is a sentence - who did what. The log carries the actor and the
  * action; the object (which customer, which order, how much) is not on the
  * read, so the sentence stops at the verb. Nothing raw is printed: no ids,
  * no phone numbers.
@@ -341,7 +341,7 @@ export function auditSentence(
   return t('audit.sentence.other', { actor, action: describeAuditAction(entry.action).name });
 }
 
-/** Chip words for the known actions — the rows' sentences, short. */
+/** Chip words for the known actions - the rows' sentences, short. */
 const CHIPS: Partial<Record<keyof typeof KNOWN, string>> = {
   'ai.responded': 'replies',
   'message.sent': 'messages',
@@ -356,7 +356,7 @@ const CHIPS: Partial<Record<keyof typeof KNOWN, string>> = {
 
 /**
  * A facet's chip: the row's sentence without its actor, short enough that
- * four sit in the head uncut — "Looked up by phone", "Searched products",
+ * four sit in the head uncut - "Looked up by phone", "Searched products",
  * "AI replies". A leading "customer" is the connector's subject on every
  * lookup and is dropped when something follows it.
  */

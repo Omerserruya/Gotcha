@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * What GOTCHA knows — screen 08.
+ * What GOTCHA knows - screen 08.
  *
  * Shapes read from `services/ai/src/routes/knowledge.ts` and
  * `services/ai/src/routes/unanswered-questions.ts`.
@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ── THE SCREEN CAN SAY WHEN. IT CANNOT SAY WHETHER THAT IS GOOD. ──
  * The design labels each source *"Fresh"* and counts *"Out of date · 4"*.
  * `updatedAt` is real and drives *"last refreshed"*, but **there is no
- * staleness policy anywhere in the platform** — no threshold, no field, no
+ * staleness policy anywhere in the platform** - no threshold, no field, no
  * job. So the screen states the date and lets the reader judge it.
  *
  * *"Last refreshed 29 July"* is a fact. *"Fresh"* is a verdict that needs a
@@ -17,10 +17,10 @@ import { z } from 'zod';
  * a source last touched two months ago, which is this tenant's actual state.
  *
  * ── WHAT ELSE IS NOT MODELLED ──
- * **No topic strength**, so *"Answers confidently · 34 topics"* and *"Thin —
+ * **No topic strength**, so *"Answers confidently · 34 topics"* and *"Thin -
  * guesses sometimes · 6"* have no source at all.
  *
- * **Conflicts are `IntelligenceReview`** — the design's *"Contradicts
+ * **Conflicts are `IntelligenceReview`** - the design's *"Contradicts
  * itself"* with two values and a resolve action. The mechanism is real; this
  * tenant has zero.
  *
@@ -46,7 +46,7 @@ export const knowledgeSourceSchema = z.object({
   name: z.string().default(''),
   description: z.string().nullable().default(null),
   isActive: z.boolean().default(true),
-  /** `all` | `agent` | `department` — who this source is available to. */
+  /** `all` | `agent` | `department` - who this source is available to. */
   scope: z.string().default('all'),
   documents: z.array(knowledgeDocumentSchema).default([]),
 });
@@ -57,7 +57,7 @@ export const knowledgeListSchema = z.array(knowledgeSourceSchema);
 /**
  * When this source was last refreshed, or `null` if it holds nothing.
  *
- * The newest document's `updatedAt` — the route's own comment says that field
+ * The newest document's `updatedAt` - the route's own comment says that field
  * *"drives last refreshed"*.
  */
 export function lastRefreshed(source: KnowledgeSource): string | null {
@@ -81,17 +81,17 @@ export function notReadyCount(source: KnowledgeSource): number {
  *    OF A THRESHOLD
  * ════════════════════════════════════════════════════════════════════════════
  * The design's header is four counters: confident, thin, contradictory, out
- * of date. Three of them read as slices of one thing — what GOTCHA knows.
+ * of date. Three of them read as slices of one thing - what GOTCHA knows.
  * They are not.
  *
  * `confidence` is a column on **`KnowledgeCandidate` and nowhere else in the
- * knowledge domain** — checked against every `confidence` field in the
+ * knowledge domain** - checked against every `confidence` field in the
  * schema; the others belong to conversation intelligence, identity linking
  * and discovery facts. `KnowledgeDocument` has none and `KnowledgeChunk` has
  * none.
  *
  * And a candidate is a **suggestion awaiting approval**. Approving one
- * creates a `KnowledgeDocument` — which has no confidence column — so **the
+ * creates a `KnowledgeDocument` - which has no confidence column - so **the
  * score exists only while the thing is not yet knowledge, and is discarded
  * at the moment it becomes knowledge.**
  *
@@ -106,7 +106,7 @@ export function notReadyCount(source: KnowledgeSource): number {
 /**
  * How long without a refresh before a source is worth a second look.
  *
- * ★ OURS, NOT THE PLATFORM'S. No staleness policy exists anywhere — no
+ * ★ OURS, NOT THE PLATFORM'S. No staleness policy exists anywhere - no
  * threshold, no field, no job. The design's *"Ageing"* on a folder whose
  * last change was five months ago and *"Fresh"* on a site rescanned
  * yesterday are the only guidance, so ninety days sits between them.
@@ -122,7 +122,7 @@ export const STALE_AFTER_DAYS = 90;
  *
  * ★ A SOURCE THAT HOLDS NOTHING IS NOT OUT OF DATE. `lastRefreshed` is null
  * both for an empty source and for one whose documents carry no timestamp,
- * and neither is a stale source — one is empty and the other is unknown.
+ * and neither is a stale source - one is empty and the other is unknown.
  * Counting them would put a number against a state nobody can act on.
  */
 export function staleSources(
@@ -140,7 +140,7 @@ export function staleSources(
 }
 
 /**
- * Sources we cannot date at all — no document carries an `updatedAt`.
+ * Sources we cannot date at all - no document carries an `updatedAt`.
  *
  * Reported separately rather than folded into either count, because "we do
  * not know when this was last read" is a different thing to tell somebody
@@ -155,8 +155,8 @@ export function undatedSources(sources: readonly KnowledgeSource[]): readonly Kn
  *
  * Both are called "Company Knowledge" and a list that prints the name twice
  * tells the reader nothing about which is which. So a name shared with
- * another source is shown with what actually distinguishes them — how much is
- * in each — rather than being silently ambiguous.
+ * another source is shown with what actually distinguishes them - how much is
+ * in each - rather than being silently ambiguous.
  */
 export function hasAmbiguousName(
   source: KnowledgeSource,
@@ -178,7 +178,7 @@ export const unansweredQuestionSchema = z.object({
   question: z.string().default(''),
   timesAsked: z.number().default(0),
   distinctAskers: z.number().default(0),
-  /** Why it went unanswered — a bounded vocabulary the route validates. */
+  /** Why it went unanswered - a bounded vocabulary the route validates. */
   reason: z.string().nullable().default(null),
   lastAskedAt: z.string().nullable().default(null),
   resolvedAt: z.string().nullable().default(null),
@@ -191,7 +191,7 @@ export const unansweredListSchema = z.object({
   nextCursor: z.string().nullable().default(null),
 });
 
-/** Still open — nobody has added an answer. */
+/** Still open - nobody has added an answer. */
 export function isOpen(question: UnansweredQuestion): boolean {
   return question.resolvedAt === null;
 }

@@ -12,7 +12,7 @@ import { HttpClient } from './http-client';
  * ════════════════════════════════════════════════════════════════════════════
  * THE DEFECT: ONE REQUIRED FIELD DISCARDED THE WHOLE BODY
  * ════════════════════════════════════════════════════════════════════════════
- * `errorEnvelopeSchema.error` was `z.string()` — required. A refusal without
+ * `errorEnvelopeSchema.error` was `z.string()` - required. A refusal without
  * an `error` key failed `safeParse`, and `readErrorBody` answers `{}` on a
  * failed parse, so **every other field went with it**: the code, the detail,
  * the invoice id. Not one field missing, all of them.
@@ -62,8 +62,8 @@ describe('★★ a refusal with no `error` key keeps everything else', () => {
 
     expect(api.failureCode).toBe('quantity_exceeds_maximum');
     expect(api.failureDetail?.max).toBe(10);
-    // And `code` stays undefined, which is the point: matching on it here —
-    // the idiom every other action uses — could never have fired.
+    // And `code` stays undefined, which is the point: matching on it here -
+    // the idiom every other action uses - could never have fired.
     expect(api.code).toBeUndefined();
   });
 
@@ -79,7 +79,7 @@ describe('★★ a refusal with no `error` key keeps everything else', () => {
   it('★★ the 409 carries the reference a merchant can quote', async () => {
     /*
      * The unsettled charge. The route sends `{ ...result, error:
-     * "payment_outcome_unknown" }`, so this one DID parse before — but
+     * "payment_outcome_unknown" }`, so this one DID parse before - but
      * `invoiceId` was not a field on the envelope, and `z.object` strips what
      * it is not told about. The screen had to say "check your invoices" with
      * nothing to check for.
@@ -112,7 +112,7 @@ describe('★★ a refusal with no `error` key keeps everything else', () => {
   });
 
   it('★ a body that is not an envelope at all still produces a usable error', async () => {
-    // Making `error` optional means almost anything parses. That is fine —
+    // Making `error` optional means almost anything parses. That is fine -
     // every field is optional, so the result is an ApiError with a status and
     // no claims, which is what an unrecognised body should produce.
     respond(500, { nothing: 'recognisable' });
@@ -125,13 +125,13 @@ describe('★★ a refusal with no `error` key keeps everything else', () => {
 });
 
 describe('★★ the entitlement gate’s own fields survive the envelope', () => {
-  it('★★ keeps `upgradePath`, `feature`, `currentPlan` — none of which were declared', async () => {
+  it('★★ keeps `upgradePath`, `feature`, `currentPlan` - none of which were declared', async () => {
     /*
      * ════════════════════════════════════════════════════════════════════════
      * TWO DIFFERENT 402s SHARE THIS ENVELOPE AND DO NOT SHARE FIELD NAMES
      * ════════════════════════════════════════════════════════════════════════
-     * The tenant gate sends `checkoutPath`. `EntitlementDeniedError` — the
-     * feature-level refusal in `packages/shared` — sends **`upgradePath`**, plus
+     * The tenant gate sends `checkoutPath`. `EntitlementDeniedError` - the
+     * feature-level refusal in `packages/shared` - sends **`upgradePath`**, plus
      * `feature` and `currentPlan`. Only the first was declared, so `z.object`
      * stripped the rest and the panel had nothing to say and nowhere to point.
      *
@@ -161,7 +161,7 @@ describe('★★ the entitlement gate’s own fields survive the envelope', () =
     expect(api.current).toBe(3);
   });
 
-  it('★★ keeps a 429’s own wait — the Copilot refresh says how long (9c5e96cc)', async () => {
+  it('★★ keeps a 429’s own wait - the Copilot refresh says how long (9c5e96cc)', async () => {
     respond(429, {
       error: 'Suggestions were just refreshed. Try again in a moment.',
       code: 'REFRESH_RATE_LIMITED',
@@ -173,7 +173,7 @@ describe('★★ the entitlement gate’s own fields survive the envelope', () =
     expect(api.retryAfterSeconds).toBe(12);
   });
 
-  it('★ a bad wait is no wait — not an error body we could not read', async () => {
+  it('★ a bad wait is no wait - not an error body we could not read', async () => {
     respond(429, { code: 'REFRESH_RATE_LIMITED', retryAfterSeconds: 'soon' });
     const api = (await buy().catch((e: unknown) => e)) as ApiError;
     expect(api.code).toBe('REFRESH_RATE_LIMITED');
@@ -192,7 +192,7 @@ describe('★★ the entitlement gate’s own fields survive the envelope', () =
   });
 });
 
-describe('★★ 1aaaefe4 — a 422 key-form refusal keeps its merchant sentence', () => {
+describe('★★ 1aaaefe4 - a 422 key-form refusal keeps its merchant sentence', () => {
   it('`{ error, message }` → developerMessage and userMessage, through the real client', async () => {
     respond(422, { error: 'validation_failed', message: 'WooCommerce rejected those keys.' });
     const caught = await buy().catch((e: unknown) => e);

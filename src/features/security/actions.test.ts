@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Screen 16's writes — specifically, whether the answer is read.
+ * Screen 16's writes - specifically, whether the answer is read.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE SCHEMA DEFAULT WAS THE HARMLESS HALF OF THIS DEFECT
@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * default would have fixed nothing.
  *
  * The sweep that found this could only see the schema. **A scan sees the
- * half of a defect that is written down in the shape it scans for** — which
+ * half of a defect that is written down in the shape it scans for** - which
  * is why its own header says the question it cannot answer is what the
  * screen ends up saying.
  */
@@ -32,7 +32,7 @@ describe('★★ revoking a session reports what the server said, not that we as
     /*
      * The request not throwing is a different fact from the session being
      * gone. Told "signed out", somebody stops worrying about a session that
-     * is still live — which on this screen is the whole point of the list.
+     * is still live - which on this screen is the whole point of the list.
      */
     del.mockResolvedValue({ ok: false });
     const { revokeSession } = await import('./actions');
@@ -52,7 +52,7 @@ describe('★★ revoking a session reports what the server said, not that we as
   });
 
   it('★ the same holds for signing out every other device', async () => {
-    // Fix the instance, then sweep the name — the sibling had the identical
+    // Fix the instance, then sweep the name - the sibling had the identical
     // discard, and a fix applied to one of two call sites is half a fix.
     del.mockResolvedValue({ ok: false });
     const { revokeOtherSessions } = await import('./actions');

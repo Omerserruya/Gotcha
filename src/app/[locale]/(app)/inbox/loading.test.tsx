@@ -5,7 +5,7 @@ import Loading from './loading';
 
 /*
  * ★★ OMER: "content placeholders". The frame and both panels at once, with
- *    the shape of their content inside — before the first read returns.
+ *    the shape of their content inside - before the first read returns.
  */
 describe('★★ the inbox before its first read', () => {
   it('draws both panels, each with its own placeholders', () => {

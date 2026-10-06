@@ -62,13 +62,13 @@ const sheet = (over: Record<string, unknown> = {}, props: Record<string, unknown
     </NextIntlClientProvider>,
   );
 
-describe('★★ 07f — the profile’s sentences, editable; Save drawn, not live', () => {
+describe('★★ 07f - the profile’s sentences, editable; Save drawn, not live', () => {
   it('the head names it and says the truth about open conversations', () => {
     sheet();
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Edit Maya');
     // The runtime reads the employee per reply: open conversations take the change.
     expect(screen.getByTestId('edit-line')).toHaveTextContent(
-      'Changes apply from its next reply — in its 3 open conversations too',
+      'Changes apply from its next reply - in its 3 open conversations too',
     );
     expect(screen.getByTestId('edit-line')).not.toHaveTextContent(/finish under the current/);
   });
@@ -119,14 +119,14 @@ describe('★★ 07f — the profile’s sentences, editable; Save drawn, not li
 
   it('drawn in their shape, each with its reason: topics, sign-off, disclosure, target, preview', () => {
     sheet();
-    expect(within(screen.getByTestId('edit-handles')).getByText('—')).toHaveAttribute(
+    expect(within(screen.getByTestId('edit-handles')).getByText('-')).toHaveAttribute(
       'title',
       expect.stringMatching(/grouped by topic/),
     );
-    expect(screen.getByTitle(/No sign-off is stored/)).toHaveTextContent('—');
-    expect(screen.getByTitle(/No disclosure rule/)).toHaveTextContent('—');
-    expect(screen.getByTitle(/No handover target/)).toHaveTextContent('—');
-    expect(screen.getByTestId('edit-preview')).toHaveTextContent('—');
+    expect(screen.getByTitle(/No sign-off is stored/)).toHaveTextContent('-');
+    expect(screen.getByTitle(/No disclosure rule/)).toHaveTextContent('-');
+    expect(screen.getByTitle(/No handover target/)).toHaveTextContent('-');
+    expect(screen.getByTestId('edit-preview')).toHaveTextContent('-');
   });
 
   it('where it answers and what is connected are read, and say where they are set', () => {
@@ -136,13 +136,13 @@ describe('★★ 07f — the profile’s sentences, editable; Save drawn, not li
     expect(screen.getByTestId('edit-tools')).toHaveTextContent('Shopify');
   });
 
-  it('a failed read is "—" with its reason, never an empty list', () => {
+  it('a failed read is "-" with its reason, never an empty list', () => {
     sheet({}, { tools: null, mayDo: null });
-    expect(within(screen.getByTestId('edit-tools')).getByText('—')).toHaveAttribute(
+    expect(within(screen.getByTestId('edit-tools')).getByText('-')).toHaveAttribute(
       'title',
       expect.stringMatching(/couldn't read/),
     );
-    expect(within(screen.getByTestId('edit-may-do')).getByText('—')).toHaveAttribute(
+    expect(within(screen.getByTestId('edit-may-do')).getByText('-')).toHaveAttribute(
       'title',
       expect.stringMatching(/couldn't read/),
     );

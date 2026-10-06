@@ -1,20 +1,20 @@
 import { z } from 'zod';
 
 /**
- * The report at the end of an import — screen 13f.
+ * The report at the end of an import - screen 13f.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * "NOTHING IS USED UNTIL APPROVED" IS TRUE BY CONSTRUCTION
  * ════════════════════════════════════════════════════════════════════════════
  * `POST /candidates/:id/approve` **creates a knowledge document** and stores
  * its id on the candidate. Nothing in the AI path reads `KnowledgeCandidate`
- * at all — verified repo-wide: every consumer is the import pipeline or a
+ * at all - verified repo-wide: every consumer is the import pipeline or a
  * review route, and `knowledge-ingest.ts` only counts and lists PENDING ones.
  *
  * So the agent reads documents, and a document does not exist until somebody
  * approves. The screen's central claim is enforced by the shape of the data
  * rather than by anyone's discipline, which is the strongest form it can
- * take — and it is worth saying on the screen, because a reviewer who does
+ * take - and it is worth saying on the screen, because a reviewer who does
  * not believe it will rush.
  *
  * ════════════════════════════════════════════════════════════════════════════
@@ -43,14 +43,14 @@ export const CURATION_VERDICTS = ['kept', 'rewritten', 'live_data'] as const;
  *   knowledge-dedupe.stage.ts:254       { key, answer, occurrenceCount }
  *
  * The dedupe stage runs after extraction and merges clusters, and its
- * `mergeVariants` reads back only three of the four — so **`customerCount`
+ * `mergeVariants` reads back only three of the four - so **`customerCount`
  * survives extraction and is dropped by the first merge that touches the
  * candidate.** Present sometimes, absent sometimes, and never a zero we
  * should print as one.
  *
  * So it is `nullish` and the screen shows it only where it exists. The
  * column's own comment promises a fourth field, `exampleEvidenceIds[]`,
- * which **no code writes at all** — see `examples` on the candidate.
+ * which **no code writes at all** - see `examples` on the candidate.
  */
 export const variantSchema = z.object({
   /** Normalised form of the answer; the join key for `examples`. */
@@ -79,7 +79,7 @@ export const candidateSchema = z.object({
   answer: z.string(),
   status: z.enum(CANDIDATE_STATUSES),
   /**
-   * More than one observed answer. Cannot be approved as it stands — the API
+   * More than one observed answer. Cannot be approved as it stands - the API
    * refuses *"rather than silently enshrining whichever variant happened to
    * be most common"*.
    */
@@ -101,7 +101,7 @@ export const candidateSchema = z.object({
   /**
    * ★ The answer is real and cannot be stated as fact.
    *
-   * *"'We usually do viewings Thursday and Friday' is true — but an agent
+   * *"'We usually do viewings Thursday and Friday' is true - but an agent
    * that states it as fact will promise a slot nobody checked."*
    *
    * A candidate can be correct AND unsafe to assert, and nothing else on this
@@ -114,14 +114,14 @@ export const candidateSchema = z.object({
    * ════════════════════════════════════════════════════════════════════════
    * ★ `.catch(null)` BECAUSE THIS ONE CAN NEVER BE AUDITED COMPLETE
    * ════════════════════════════════════════════════════════════════════════
-   * Every other enum in these contracts has ground truth — a Prisma enum, a
-   * TS union, or an `as const` array — and all 53 were checked against it
+   * Every other enum in these contracts has ground truth - a Prisma enum, a
+   * TS union, or an `as const` array - and all 53 were checked against it
    * after `roles.2.source` took screen 14 off the page.
    *
    * This one has none. `curation_verdict` is `String?` in the schema, and
    * the only writer picks between "live_data" and "rewritten" inline. There
    * is no declared domain to compare against, so "our enum is complete" is
-   * not a statement anybody can make today or keep true tomorrow — the next
+   * not a statement anybody can make today or keep true tomorrow - the next
    * writer to add a verdict would take down the ENTIRE candidate list, not
    * this field, because one invalid member fails the whole parse.
    *
@@ -131,7 +131,7 @@ export const candidateSchema = z.object({
    *
    * ⚠ This is NOT a pattern to spread. `.catch()` on `riskLevel`, an
    * approval status or a connection state would turn an unknown value into a
-   * reassuring one — the calm wrong value, in the places where it costs
+   * reassuring one - the calm wrong value, in the places where it costs
    * most. It is right here only because the honest fallback for a missing
    * verdict is nothing at all.
    */
@@ -142,7 +142,7 @@ export const candidateSchema = z.object({
   customerCount: z.number().default(0),
   /**
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ THE TWO ANSWERS THEMSELVES — NAMED AT LAST
+   * ★★ THE TWO ANSWERS THEMSELVES - NAMED AT LAST
    * ════════════════════════════════════════════════════════════════════════
    * `conflict` was named and **this was not**, so `z.object` stripped it and
    * screen 08's conflict panel looked impossible to build. It has been on
@@ -153,7 +153,7 @@ export const candidateSchema = z.object({
    * turns "we have this" into "this does not exist."** Fourth field today
    * that we needed and were already being sent.
    *
-   * `null` on every unconflicted row, by that same ternary — so absence here
+   * `null` on every unconflicted row, by that same ternary - so absence here
    * means "not a conflict", not "we could not read it".
    */
   variants: z.array(variantSchema).nullable().default(null),
@@ -162,7 +162,7 @@ export const candidateSchema = z.object({
    *
    * ★ THIS IS WHERE A PER-VARIANT DATE COMES FROM. `variants` carries no
    * timestamp, and the schema's comment above the column promises an
-   * `exampleEvidenceIds[]` that **nothing in the platform writes** — the
+   * `exampleEvidenceIds[]` that **nothing in the platform writes** - the
    * string appears in that comment and nowhere else. What does exist is
    * `variantKey` on each example, which joins an exchange to the answer it
    * is an instance of. See `lastHeardFor`.
@@ -171,7 +171,7 @@ export const candidateSchema = z.object({
   firstSeenAt: z.string().nullable().default(null),
   lastSeenAt: z.string().nullable().default(null),
   /**
-   * An existing document this duplicates. Its ORIGIN is not recorded — so it
+   * An existing document this duplicates. Its ORIGIN is not recorded - so it
    * is "what is already in your knowledge base", never "your website".
    * Calling it the website would assert a provenance the schema does not
    * carry, which is the industry-from-a-login-page error again.
@@ -196,14 +196,14 @@ export type Candidate = z.infer<typeof candidateSchema>;
  *
  * **The UI stripped it and recomputed it.** The field added specifically to
  * stop the two from disagreeing was thrown away, and `bulkWouldTake` derived
- * its own answer from a threshold it could not see either — so 13f would have
+ * its own answer from a threshold it could not see either - so 13f would have
  * had to hardcode a confidence floor to render a count of what the server
  * would take.
  */
 export const candidateListSchema = z.object({
   candidates: z.array(candidateSchema).default([]),
   /**
-   * `{ PENDING: 12, APPROVED: 3, … }` — by status, from the route's own
+   * `{ PENDING: 12, APPROVED: 3, … }` - by status, from the route's own
    * `groupBy`. `.default({})` because a service that stops sending it is
    * reporting nothing rather than reporting zero of each.
    */
@@ -241,8 +241,8 @@ export function inGroup(
 /**
  * Can this be approved with one press?
  *
- * No when it conflicts: there is no "the" answer to approve — that is what
- * conflicted means — so the owner has to say which one is right, and the API
+ * No when it conflicts: there is no "the" answer to approve - that is what
+ * conflicted means - so the owner has to say which one is right, and the API
  * returns `conflict_requires_answer` rather than picking.
  */
 export function approvableAsIs(candidate: Candidate): boolean {
@@ -254,7 +254,7 @@ export function approvableAsIs(candidate: Candidate): boolean {
  *
  * The eligible set is computed SERVER-SIDE and the client cannot pass a list:
  * `PENDING`, not conflicted, at or above a confidence floor, capped at 100.
- * So the button cannot approve a conflict however it is pressed — which is a
+ * So the button cannot approve a conflict however it is pressed - which is a
  * promise worth rendering rather than a footnote, because a merchant who does
  * not know it will approve fifty things one at a time.
  */
@@ -263,8 +263,8 @@ export function bulkWouldTake(
   /**
    * The server's floor, or `undefined` when it did not send one.
    *
-   * ★★ AND `undefined` IS NOT ZERO. A floor of `0` passes EVERYTHING — every
-   * confidence is `>= 0` — so defaulting it would count every unconflicted
+   * ★★ AND `undefined` IS NOT ZERO. A floor of `0` passes EVERYTHING - every
+   * confidence is `>= 0` - so defaulting it would count every unconflicted
    * suggestion as bulk-approvable and overstate what pressing the button does.
    * That is the opposite of the cautious reading, and it was in a first draft
    * of the caller with a comment claiming it meant the cautious one.
@@ -280,12 +280,12 @@ export function bulkWouldTake(
    * `bulkApprovable` is on every candidate and the route says why it is there:
    * *"so the bulk endpoint and the button can never disagree about what 'safe'
    * means."* Recomputing it from a threshold is the disagreement it exists to
-   * prevent — the client's rule would drift the moment the server's floor
+   * prevent - the client's rule would drift the moment the server's floor
    * moved, and the number on the button is a promise about what pressing it
    * will do.
    *
    * The fallback is for a service that predates the field. `undefined` there is
-   * "we were not told", so it is the one case where deriving is right — and it
+   * "we were not told", so it is the one case where deriving is right - and it
    * is derived from the floor the server SENT, not from a constant mirrored
    * here.
    */
@@ -298,14 +298,14 @@ export function bulkWouldTake(
 }
 
 /**
- * 13f's "Ready to add": waiting, and safe to add with one press — by the
+ * 13f's "Ready to add": waiting, and safe to add with one press - by the
  * server's own verdict (`bulkApprovable`), or, from a service that predates
  * it, by the floor it sent.
  *
  * A live lookup is ready too, because the route takes it: `bulk-approve` asks
  * only for no conflict and the floor, and writes "check before promising" into
  * the document itself. Holding it back here made the tab say 2 while the
- * button — and the route — added 3. Its "live" chip still says so on the card.
+ * button - and the route - added 3. Its "live" chip still says so on the card.
  */
 export function readyToAdd(candidate: Candidate, minConfidence: number | undefined): boolean {
   if (groupOf(candidate) !== 'needs_a_look') return false;
@@ -327,7 +327,7 @@ export function hasEvidence(candidate: Candidate): boolean {
 /**
  * The competing answers, most-often-observed first.
  *
- * Empty for anything that is not a conflict — the route sends `null` there
+ * Empty for anything that is not a conflict - the route sends `null` there
  * rather than an array, and the two mean the same thing to this screen.
  */
 export function variantsOf(candidate: Candidate): readonly Variant[] {
@@ -339,7 +339,7 @@ export function variantsOf(candidate: Candidate): readonly Variant[] {
  *
  * ★ RECONSTRUCTED FROM EVIDENCE, AND IT CAN LEGITIMATELY BE ABSENT.
  * The route returns at most **three** representative examples per candidate,
- * so a third or fourth variant may have none — and `occurredAt` is itself
+ * so a third or fourth variant may have none - and `occurredAt` is itself
  * nullable. A variant with no dated example gets no date, and the screen
  * says nothing rather than borrowing the candidate's own `lastSeenAt`, which
  * belongs to whichever answer happened to be most recent.
@@ -360,7 +360,7 @@ export function lastHeardFor(
  *
  * ⚠ SCOPED TO ONE IMPORT, AND THE SCREEN MUST SAY SO.
  * `knowledge-clustering.stage.ts` queries
- * `where: { importId, tenantId, status: "PENDING" }` — it runs **inside the
+ * `where: { importId, tenantId, status: "PENDING" }` - it runs **inside the
  * historical-import pipeline only**. Not continuously over live
  * conversations, and not over a document uploaded next week. A panel that
  * showed these without that sentence would read as "GOTCHA has two
@@ -375,7 +375,7 @@ export function conflictsIn(candidates: readonly Candidate[]): readonly Candidat
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * RESOLVING A CONFLICT — the write, and what the response does and does not say
+ * RESOLVING A CONFLICT - the write, and what the response does and does not say
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -391,7 +391,7 @@ export function conflictsIn(candidates: readonly Candidate[]): readonly Candidat
  * the button exists for.
  *
  * Worth saying plainly because the wrong name is the one written on the field
- * at both ends of the route — request handler variable and database column —
+ * at both ends of the route - request handler variable and database column -
  * and the only place the real one appears is the line that reads it.
  */
 export const APPROVE_BODY_KEY = 'answer' as const;
@@ -403,7 +403,7 @@ export const APPROVE_BODY_KEY = 'answer' as const;
  * ★ SILENT TRUNCATION, WHICH IS WHY THE CLIENT REFUSES INSTEAD.
  * A 4100-character answer does not fail: it is stored cut off mid-sentence and
  * becomes the answer the AI gives customers. Half a returns policy is worse
- * than no returns policy, because nobody will look at it again — it was
+ * than no returns policy, because nobody will look at it again - it was
  * approved. So a variant this long is refused here by name, and the person is
  * told to shorten it themselves rather than having it done to them.
  */
@@ -416,7 +416,7 @@ export function answerTooLong(answer: string): boolean {
 /**
  * What the approve route answers on success.
  *
- * `alreadyApproved` arrives on the idempotent replay — a second press returns
+ * `alreadyApproved` arrives on the idempotent replay - a second press returns
  * the document the first one made instead of writing the knowledge twice.
  * It is `.optional()` and never defaulted: on the normal path the route omits
  * it, and defaulting it to `false` would be a claim we made the document.
@@ -425,7 +425,7 @@ export const approveResultSchema = z.object({
   ok: z.boolean(),
   /**
    * Present on both paths. Nullable because the idempotent branch returns
-   * `candidate.approvedDocumentId`, which is a nullable column — an APPROVED
+   * `candidate.approvedDocumentId`, which is a nullable column - an APPROVED
    * row written before that column existed returns `ok: true` with no id, and
    * then there is nothing to confirm against.
    */
@@ -435,7 +435,7 @@ export const approveResultSchema = z.object({
 export type ApproveResult = z.infer<typeof approveResultSchema>;
 
 /**
- * Whether the AI can actually answer with a document — the third state the
+ * Whether the AI can actually answer with a document - the third state the
  * approve response does not carry.
  *
  * ════════════════════════════════════════════════════════════════════════════
@@ -453,7 +453,7 @@ export type ApproveResult = z.infer<typeof approveResultSchema>;
  * not have.
  *
  * Retrieval reads Qdrant and filters on tenant and knowledge base, **not on
- * `status`** — so `status` is not what gates the answer, it is the only record
+ * `status`** - so `status` is not what gates the answer, it is the only record
  * of whether the vectors got written. `ready` is the one value that says they
  * did.
  */
@@ -463,7 +463,7 @@ export function documentUseOf(status: string | null | undefined): DocumentUse {
   /*
    * Only `ready` is a positive statement. `processing` is mid-flight,
    * `pending` is the value the row is created with, and anything else is a
-   * value this build has not seen — all three are "we do not know yet", never
+   * value this build has not seen - all three are "we do not know yet", never
    * "it is live". `error` is the one case we can promise is not working.
    */
   if (status === 'ready') return 'in_use';

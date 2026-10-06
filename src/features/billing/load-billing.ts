@@ -26,8 +26,8 @@ import { logger } from '@/observability/logger';
  * What screen 17 shows.
  *
  * Four reads, independent. The invoices and the usage breakdown are
- * deliberately separate: they change on completely different cadences — one on
- * invoice issue, the other continuously — and a failure in either must not
+ * deliberately separate: they change on completely different cadences - one on
+ * invoice issue, the other continuously - and a failure in either must not
  * blank the other.
  *
  * Two of the four are contracted and not yet served, so they arrive `null` and
@@ -41,7 +41,7 @@ type AutoPurchaseData = Awaited<ReturnType<typeof autoPurchaseResponseSchema.par
 export interface BillingData {
   readonly subscription: Subscription | null;
   /**
-   * Plan names by key. The subscription carries `planKey` — `ai_voice` — and a
+   * Plan names by key. The subscription carries `planKey` - `ai_voice` - and a
    * machine identifier must never be the most prominent line on a billing
    * screen. The list is also where the Hebrew name lives.
    */
@@ -49,26 +49,26 @@ export interface BillingData {
   /**
    * The tenant's invoices.
    *
-   * Replaces the old `summary`, which pointed at `/api/billing/summary` —
+   * Replaces the old `summary`, which pointed at `/api/billing/summary` -
    * annotated "contracted, not yet served" while `/api/billing/invoices` was
    * mounted and returning four FAILED charges worth $5,996.
    */
   readonly invoices: readonly Invoice[] | null;
   readonly breakdown: UsageBreakdown | null;
   /**
-   * What happens when the credit runs out — screen 17d.
+   * What happens when the credit runs out - screen 17d.
    *
    * `null` policy means nothing has been configured, which is NOT the same
    * as a policy of defaults: the difference decides whether "buys more at
    * 10%" is a fact about this tenant or a guess about one.
    */
   readonly autoPurchase: AutoPurchaseData | null;
-  /** Who the bill is made out to — screen 17e. Null means no row at all. */
+  /** Who the bill is made out to - screen 17e. Null means no row at all. */
   readonly profile: BillingProfile | null;
   /** What it charges against. Empty means there is nothing to charge. */
   readonly paymentMethods: readonly PaymentMethod[] | null;
   /**
-   * Credits and what they buy — screen 17c.
+   * Credits and what they buy - screen 17c.
    *
    * Bare, not enveloped. Carries TWO estimates of remaining capacity from
    * different bases, which the route insists must never be substituted for
@@ -97,7 +97,7 @@ export async function loadBilling(): Promise<BillingData> {
       .get({
         endpoint: billingEndpoints.subscription(),
         payload: subscriptionResponseSchema,
-        // Bare `{ subscription }`, not `{ data }` — unlike its siblings.
+        // Bare `{ subscription }`, not `{ data }` - unlike its siblings.
         raw: true,
       })
       .catch((cause: unknown) => {
@@ -116,7 +116,7 @@ export async function loadBilling(): Promise<BillingData> {
       .get({
         endpoint: billingEndpoints.invoices(),
         payload: invoiceListSchema,
-        // `{ invoices }` — a fifth envelope shape, so the transform needs the
+        // `{ invoices }` - a fifth envelope shape, so the transform needs the
         // response whole.
         raw: true,
       })
@@ -154,7 +154,7 @@ export async function loadBilling(): Promise<BillingData> {
       .get({
         endpoint: billingEndpoints.paymentMethods(),
         payload: paymentMethodListSchema,
-        // `{ paymentMethods }` — a sixth envelope shape.
+        // `{ paymentMethods }` - a sixth envelope shape.
         raw: true,
       })
       .catch((cause: unknown) => {
@@ -165,7 +165,7 @@ export async function loadBilling(): Promise<BillingData> {
       .get({
         endpoint: billingEndpoints.creditSummary(),
         payload: creditSummarySchema,
-        // Bare, like the subscription. A seventh shape would be a stretch —
+        // Bare, like the subscription. A seventh shape would be a stretch -
         // this one simply has no envelope at all.
         raw: true,
       })
@@ -176,15 +176,15 @@ export async function loadBilling(): Promise<BillingData> {
     /*
      * Screen 17d. Read HERE rather than on the plan page, although the plan
      * page already reads it: buying belongs beside the balance somebody has
-     * just read, and the two facts that decide whether the button can work —
-     * the billing profile and the payment methods — are already loaded on
+     * just read, and the two facts that decide whether the button can work -
+     * the billing profile and the payment methods - are already loaded on
      * this page. Fetching packages here costs one extra request; doing it the
      * other way round would cost two, against a 1,000-per-fifteen-minutes
      * window that a billing page already spends six of per load.
      *
      * ★ AND THIS IS `pricing/packages`, NOT `credits/packages`. The second
-     * route filters on `active` alone — no `customerVisible`, no `status`, no
-     * plan-eligibility gate — so it can list packages a customer must not see
+     * route filters on `active` alone - no `customerVisible`, no `status`, no
+     * plan-eligibility gate - so it can list packages a customer must not see
      * or cannot buy. Two routes, similar paths, different answers: the shape
      * that made /api/knowledge look alive for a whole screen.
      */

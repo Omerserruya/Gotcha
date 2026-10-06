@@ -2,7 +2,7 @@
   "keys": {
     "title": "API keys",
     "new": "New key",
-    "none": "GOTCHA has no API keys yet — nothing issues or checks one."
+    "none": "GOTCHA has no API keys yet - nothing issues or checks one."
   },
   "webhooks": {
     "title": "Webhooks",

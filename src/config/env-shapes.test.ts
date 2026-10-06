@@ -40,7 +40,7 @@ describe('★★ what each shape does with an empty string, measured', () => {
   });
 
   it('★★ an optional url THROWS on empty', () => {
-    // Same blank app, and it is the realtime variable — so the failure would
+    // Same blank app, and it is the realtime variable - so the failure would
     // have arrived on the one we had just finished proving works.
     expect(shapes['url, optional'].safeParse('').success).toBe(false);
     expect(shapes['url, optional'].parse(undefined)).toBeUndefined();
@@ -49,7 +49,7 @@ describe('★★ what each shape does with an empty string, measured', () => {
   it('★★ a coerced number with a default SILENTLY BECOMES 0, which is the worst of the four', () => {
     /*
      * `Number('')` is 0, and 0 passes `min(0)`. So an empty value does not
-     * throw and does not default — it turns the sample rate off and nothing
+     * throw and does not default - it turns the sample rate off and nothing
      * anywhere says so. No error, no warning, no missing field.
      */
     expect(shapes['coerced number with a default'].parse('')).toBe(0);
@@ -62,10 +62,10 @@ describe('★★ what each shape does with an empty string, measured', () => {
     expect(shapes['string, optional'].parse('')).toBe('');
   });
 
-  it('★★ `min(1).optional()` throws on empty — optional permits MISSING, not EMPTY', () => {
+  it('★★ `min(1).optional()` throws on empty - optional permits MISSING, not EMPTY', () => {
     /*
-     * The server-side one. A compose `${SECRET:-}` — the documented way to
-     * make a variable optional — supplies empty, every request reading the
+     * The server-side one. A compose `${SECRET:-}` - the documented way to
+     * make a variable optional - supplies empty, every request reading the
      * server config fails validation, and pages that do not read it still
      * return 200. A container that looks healthy with a login route that 500s.
      */
@@ -116,7 +116,7 @@ describe('★★ the real client config, through the module the app loads', () =
     /*
      * THE DEFECT, END TO END. Before `emptyIsUnset` this threw "Invalid public
      * environment configuration" at module load, in the browser, for anybody
-     * who built the image without passing the variable — which the Dockerfile
+     * who built the image without passing the variable - which the Dockerfile
      * made the default by giving the ARG an empty default.
      */
     const { clientEnv } = await load({

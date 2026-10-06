@@ -37,7 +37,7 @@ const employee = (over: Partial<Employee> = {}): Employee => ({
 describe('there is no fourth verb', () => {
   it('has exactly three statuses', () => {
     // The design says "Hire, edit, pause, fire". AIAgentStatus is
-    // ACTIVE | DRAFT | PAUSED — firing is not a state this platform has.
+    // ACTIVE | DRAFT | PAUSED - firing is not a state this platform has.
     expect([...EMPLOYEE_STATUSES]).toEqual(['ACTIVE', 'DRAFT', 'PAUSED']);
   });
 
@@ -67,7 +67,7 @@ describe('pause and resume are the only transitions', () => {
   });
 });
 
-describe('aloneRate — never handled and never succeeded are different', () => {
+describe('aloneRate - never handled and never succeeded are different', () => {
   it('is the share finished without a person stepping in', () => {
     expect(aloneRate(employee({ handledConversations: 40, resolvedAlone: 31 }))).toBeCloseTo(0.775);
   });
@@ -87,13 +87,13 @@ describe('an employee carries no field that could become a false claim', () => {
   it('exposes no escalation count and no rating', () => {
     /*
      * `isHandedOver` has six-plus writers sharing only "a person ended up
-     * driving", and the CAUSE would need ConversationHandover.reason — which
+     * driving", and the CAUSE would need ConversationHandover.reason - which
      * holds zero rows while five conversations carry the flag. A cause column
      * would be a confident zero for every employee.
      */
     /*
      * `escalationRules` is exempt by name: it is the employee's CONFIGURED
-     * handover triggers ("asks for a person"), not a count of handovers — a
+     * handover triggers ("asks for a person"), not a count of handovers - a
      * setting someone wrote, which makes no claim about what happened.
      */
     const surface = Object.keys(employeeSchema.parse(employee())).filter(
@@ -103,7 +103,7 @@ describe('an employee carries no field that could become a false claim', () => {
   });
 
   it('keeps openConversations, which includes WAITING', () => {
-    // OPEN + WAITING, and WAITING is usually waiting on the CUSTOMER — so
+    // OPEN + WAITING, and WAITING is usually waiting on the CUSTOMER - so
     // nothing may caption this as live activity.
     expect(employeeSchema.parse(employee()).openConversations).toBe(3);
   });

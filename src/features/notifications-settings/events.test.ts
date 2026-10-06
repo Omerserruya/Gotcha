@@ -41,7 +41,7 @@ describe('notifiable events', () => {
 
   it('keeps the three events whose meaning the source qualifies', () => {
     // Their emitters carry comments explaining what they do NOT mean, and
-    // those comments are the copy — the design's wording for at least one of
+    // those comments are the copy - the design's wording for at least one of
     // them promises monitoring that does not exist.
     const caveated = NOTIFIABLE_EVENTS.filter((e) => e.hasSourceCaveat).map((e) => e.type);
     expect(caveated).toEqual([

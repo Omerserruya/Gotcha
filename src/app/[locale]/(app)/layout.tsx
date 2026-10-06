@@ -45,7 +45,7 @@ export default async function AuthenticatedLayout({
   /*
     ★★ A 401 IS "SIGN IN AGAIN", NEVER A SCREEN OF "COULDN'T READ" (Omer,
     2026-10-04). Every page waits behind this layout, and its first read uses
-    the same token the page's reads do — so a token the platform refuses is
+    the same token the page's reads do - so a token the platform refuses is
     caught here, once, and the visitor goes to sign-in with the way back.
     A 403 is not this: no permission is not signed out.
   */
@@ -54,7 +54,7 @@ export default async function AuthenticatedLayout({
   /*
    * ★★ THE FULL CATALOGUE, AND ONLY BEHIND THE SESSION CHECK ABOVE.
    * The locale layout now provides only what the error boundary needs, so the
-   * product's vocabulary is attached here — inside the authenticated area —
+   * product's vocabulary is attached here - inside the authenticated area -
    * rather than to every page in the app including sign-in.
    */
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
@@ -79,7 +79,7 @@ export default async function AuthenticatedLayout({
  *
  * A failure does NOT degrade to an empty set. With exact matching an empty set
  * hides every gated destination, which is indistinguishable from having had
- * access revoked — an operator would be left staring at a product with no
+ * access revoked - an operator would be left staring at a product with no
  * navigation and no explanation.
  *
  * Instead the status is `unavailable` and the interface stops gating. The

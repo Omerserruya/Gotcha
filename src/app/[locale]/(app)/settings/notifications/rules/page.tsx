@@ -6,7 +6,7 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Notifications · the workspace's rules — who is told at all.
+ * Settings · Notifications · the workspace's rules - who is told at all.
  *
  * Not drawn in 02. 15's matrix only filters what reaches one person; this is
  * what the dispatcher reads, so it is reached from the matrix's foot line and

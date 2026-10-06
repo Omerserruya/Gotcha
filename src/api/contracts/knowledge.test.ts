@@ -33,7 +33,7 @@ const source = (over: Partial<KnowledgeSource> = {}): KnowledgeSource => ({
   ...over,
 });
 
-describe('lastRefreshed — a date, never a verdict', () => {
+describe('lastRefreshed - a date, never a verdict', () => {
   it('is the newest document timestamp', () => {
     const s = source({
       documents: [
@@ -51,8 +51,8 @@ describe('lastRefreshed — a date, never a verdict', () => {
   it('exposes no freshness verdict anywhere in the shape', () => {
     /*
      * The design labels sources "Fresh" and counts "Out of date · 4". There
-     * is NO staleness policy in the platform — no threshold, no field, no
-     * job — so a verdict here would be invented, and wrong in exactly the
+     * is NO staleness policy in the platform - no threshold, no field, no
+     * job - so a verdict here would be invented, and wrong in exactly the
      * case that matters: this tenant's sources were last touched two months
      * ago.
      */

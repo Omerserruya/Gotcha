@@ -17,11 +17,11 @@ import { Drawer } from '@/shell/Drawer';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · People & teams — screen 12.
+ * Settings · People & teams - screen 12.
  *
  * *"Humans and AI employees in one list, because operationally they are the
  * same resource."* One list, three reads, and a failure in one does not blank
- * the others — an admin who can still see their colleagues is better served
+ * the others - an admin who can still see their colleagues is better served
  * than one shown a single error for the whole page.
  *
  * The description line is DATA, not copy: how many people, employees and teams
@@ -115,7 +115,7 @@ export default async function Page({
 
       {/*
         12d over People, and 12e over 12d. A person who cannot be read opens
-        nothing — the roster stays, rather than a drawer of dashes about
+        nothing - the roster stays, rather than a drawer of dashes about
         somebody unknown.
       */}
       {person ? (

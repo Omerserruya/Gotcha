@@ -306,7 +306,7 @@
   /* ── Work surface ──────────────────────────────────────────────────── */
   /*
    * Positioned: a drawer is `absolute; inset: 0` and must sit inside the
-   * frame — 12px in, with the frame's rounding — on a screen that does not
+   * frame - 12px in, with the frame's rounding - on a screen that does not
    * position a wrapper of its own (05, 05c). Nearer positioned wrappers win.
    */
   .surface {
@@ -326,15 +326,15 @@
    * ════════════════════════════════════════════════════════════════════════
    * Measured by RENDERING the design rather than reading its markup: 02's
    * frame computes to `rgb(18,18,18)` and the three columns are `#FAF8F4`
-   * cards floating on it. **Light on near-black — that is the separation.**
+   * cards floating on it. **Light on near-black - that is the separation.**
    *
    * ★ This surface is one big light card holding everything, which is right
    *   for every screen that is a document. It is wrong for the inbox, where
-   *   light panels on a light surface made the separation invisible — and a
+   *   light panels on a light surface made the separation invisible - and a
    *   reviewer asked "what separated????".
    *
    * ★ `:has()` rather than a prop threaded through `AppShell`: the fact
-   *   belongs to the CONTENT — "I draw my own panels" — and the shell should
+   *   belongs to the CONTENT - "I draw my own panels" - and the shell should
    *   not need to know which screens those are. One rule, and a screen opts
    *   in by saying so about itself.
    */
@@ -354,8 +354,8 @@
    * ⚠⚠ "EVERY CONTAINER SHOULD BE A WINDOW YOU SCROLL INSIDE, NOT OUTSIDE"
    * ════════════════════════════════════════════════════════════════════════
    * Measured on the rendered 02: the frame is a FIXED 900px with
-   * `overflow:hidden`, and each panel is exactly `876px` — 900 less its 12px
-   * padding top and bottom — also `overflow:hidden`, also `display:flex`.
+   * `overflow:hidden`, and each panel is exactly `876px` - 900 less its 12px
+   * padding top and bottom - also `overflow:hidden`, also `display:flex`.
    *
    * ★ A fixed-height flex column that hides its overflow has one purpose: it
    *   is a window whose INNER region scrolls. The mock reports no scrollers
@@ -363,7 +363,7 @@
    *   structure.
    *
    * ⚠ So this stops scrolling for such a screen. The page itself must never
-   *   scroll — only the regions inside the panels do. Leaving `overflow-y:
+   *   scroll - only the regions inside the panels do. Leaving `overflow-y:
    *   auto` here is what produced panels with no bottom edge.
    */
   .main:has([data-owns-panels]) {

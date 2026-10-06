@@ -53,7 +53,7 @@ const MEASURED = {
 const sub = (over: Record<string, unknown> = {}) =>
   subscriptionSchema.parse({ ...MEASURED, ...over });
 
-describe('★ 17 — "a month" only when the period agrees', () => {
+describe('★ 17 - "a month" only when the period agrees', () => {
   it('MONTHLY over a year says nothing; over a month, "a month"', () => {
     expect(pricePer(sub())).toBeNull();
     expect(
@@ -83,8 +83,8 @@ describe('★ 17 — "a month" only when the period agrees', () => {
   });
 });
 
-describe('★ 17 — where credits went: 02’s four rows, "—" where nothing counts', () => {
-  it('counts where the breakdown has them, "—" (never 0) where it does not', async () => {
+describe('★ 17 - where credits went: 02’s four rows, "-" where nothing counts', () => {
+  it('counts where the breakdown has them, "-" (never 0) where it does not', async () => {
     render(
       await CreditsWent({
         breakdown: usageBreakdownSchema.parse({ handledByAi: 690, outboundMessages: 0 }),
@@ -92,19 +92,19 @@ describe('★ 17 — where credits went: 02’s four rows, "—" where nothing c
     );
     expect(screen.getByTestId('breakdown-ai-count')).toHaveTextContent(/^690$/);
     expect(screen.getByTestId('breakdown-outbound-count')).toHaveTextContent(/^0$/);
-    expect(screen.getByTestId('breakdown-team-count')).toHaveTextContent(/^—$/);
-    expect(screen.getByTestId('breakdown-voice-count')).toHaveTextContent(/^—$/);
+    expect(screen.getByTestId('breakdown-team-count')).toHaveTextContent(/^-$/);
+    expect(screen.getByTestId('breakdown-voice-count')).toHaveTextContent(/^-$/);
   });
 
   it('a failed read still draws the four rows', async () => {
     render(await CreditsWent({ breakdown: null }));
     for (const key of ['ai', 'team', 'outbound', 'voice']) {
-      expect(screen.getByTestId(`breakdown-${key}-count`)).toHaveTextContent(/^—$/);
+      expect(screen.getByTestId(`breakdown-${key}-count`)).toHaveTextContent(/^-$/);
     }
   });
 });
 
-describe('★ 17 — when credits run low', () => {
+describe('★ 17 - when credits run low', () => {
   it('unset says what happens; a cap is its ceiling; pay-as-you-go is warned in red', async () => {
     const { unmount } = render(await RunningLow({ policy: null, currency: 'USD' }));
     expect(screen.getByTestId('running-low-rule')).toHaveTextContent(/AI stops answering/);
@@ -132,7 +132,7 @@ describe('★ 17 — when credits run low', () => {
   });
 });
 
-describe('★ 17 — the Billing card', () => {
+describe('★ 17 - the Billing card', () => {
   const failed = (id: string) =>
     invoiceSchema.parse({
       id,
@@ -163,9 +163,9 @@ describe('★ 17 — the Billing card', () => {
     );
   });
 
-  it('an unread payment method is "—", never "None on file"', async () => {
+  it('an unread payment method is "-", never "None on file"', async () => {
     render(await BillingCard({ profile: null, methods: null, invoices: null }));
-    const card = within(screen.getByTestId('billing-row-card')).getByText('—');
+    const card = within(screen.getByTestId('billing-row-card')).getByText('-');
     expect(card).toHaveAttribute('title', expect.stringMatching(/couldn't check/));
     expect(screen.queryByTestId('billing-alert')).toBeNull();
   });
@@ -191,7 +191,7 @@ describe('★ 17 — the Billing card', () => {
   });
 });
 
-describe('★ 17 — a change already applied is not announced (ported from PlanLine)', () => {
+describe('★ 17 - a change already applied is not announced (ported from PlanLine)', () => {
   const SCHEDULED = {
     changeType: 'DOWNGRADE',
     targetPlanKey: 'foundation',

@@ -30,8 +30,8 @@ const show = async (list: readonly InboxMessage[] | null, channel: string | null
 describe('★★ a reply whose quote we never stored is still a reply', () => {
   it('★★ says so rather than showing an ordinary message', async () => {
     /*
-     * `replyToMessageId` can fail to resolve — the quoted message may
-     * predate GOTCHA or have been deleted — while `replyToExternalId` is the
+     * `replyToMessageId` can fail to resolve - the quoted message may
+     * predate GOTCHA or have been deleted - while `replyToExternalId` is the
      * provider's and survives. Rendering it plain loses the fact that the
      * customer was answering something, which is often what makes the
      * message legible at all.
@@ -70,7 +70,7 @@ describe('★★ an unconstrained type gets no label we would be guessing at', (
   it('★★ sets no data-type for a value nobody has accounted for', async () => {
     /*
      * `messageType` is a free String. A styling hook that said "system" for
-     * the next type somebody writes would mislabel it silently — the
+     * the next type somebody writes would mislabel it silently - the
      * `KnowledgeDocument.status` trap in a DOM attribute.
      */
     await show([message({ messageType: 'shopify_product' })]);
@@ -131,8 +131,8 @@ describe('★★ the read receipt belongs to the customer', () => {
 describe('★ what the design draws and the stream does not', () => {
   it('★★ renders no reaction, no intent edge and no photo analysis', async () => {
     /*
-     * Reactions have no model. Per-message intent does not persist — it is
-     * per CONVERSATION — so the 3px edge has no data. And nothing looks at
+     * Reactions have no model. Per-message intent does not persist - it is
+     * per CONVERSATION - so the 3px edge has no data. And nothing looks at
      * an image, so "GOTCHA saw damage in this photo" is aspirational.
      */
     const { container } = await show([message({ messageType: 'image' })]);
@@ -154,7 +154,7 @@ describe('★★ a message the customer never received', () => {
    * ════════════════════════════════════════════════════════════════════════════
    * The stream read `readAt`, then `deliveredAt`, then showed nothing. So an
    * outbound reply the provider rejected looked exactly like one sent a second
-   * ago — and the operator, told nothing, stops watching.
+   * ago - and the operator, told nothing, stops watching.
    *
    * `Message.status` was on the wire the whole time and our `z.object` stripped
    * it. These are the assertions that make the difference visible.
@@ -180,7 +180,7 @@ describe('★★ a message the customer never received', () => {
 
   it('★★ distinguishes still-sending from handed-to-the-channel', async () => {
     /*
-     * Two different promises. `PENDING` is ours — the row is in a queue we own.
+     * Two different promises. `PENDING` is ours - the row is in a queue we own.
      * `SENT` means the provider has it and has not confirmed delivery, which is
      * as far as our knowledge goes and is therefore what it says.
      */
@@ -195,7 +195,7 @@ describe('★★ a message the customer never received', () => {
   it('★★ says it cannot tell, rather than falling through to silence', async () => {
     /*
      * A status from a newer platform than this catalogue. Silence here is what
-     * hid every failure, so an unrecognised value says so out loud — the safe
+     * hid every failure, so an unrecognised value says so out loud - the safe
      * default for "did this arrive" is no.
      */
     await show([message({ id: 'm1', direction: 'OUTBOUND', status: 'SOMETHING_NEW' })]);
@@ -221,7 +221,7 @@ describe('★★ a message the customer never received', () => {
   });
 });
 
-describe('★★ Wave 4 — 02’s bubble, and its time line under it', () => {
+describe('★★ Wave 4 - 02’s bubble, and its time line under it', () => {
   it('★★ the time line is OUTSIDE the bubble, as 02 draws it', async () => {
     await show([message()]);
     const item = screen.getByTestId('message-m1');
@@ -231,7 +231,7 @@ describe('★★ Wave 4 — 02’s bubble, and its time line under it', () => {
     expect(item.firstElementChild?.contains(time)).toBe(false);
   });
 
-  it('⚠ the time is 24-hour in the configured zone — 02’s `09:12`, not "12:14 PM"', async () => {
+  it('⚠ the time is 24-hour in the configured zone - 02’s `09:12`, not "12:14 PM"', async () => {
     await show([message({ createdAt: '2026-09-25T09:14:00.000Z' })]);
     expect(screen.getByTestId('message-m1').querySelector('time')?.textContent).toBe('12:14');
   });
@@ -247,13 +247,13 @@ describe('★★ Wave 4 — 02’s bubble, and its time line under it', () => {
     expect(screen.getByTestId('message-m1').textContent).not.toContain('@');
   });
 
-  it('★ and the customer’s own messages carry no sender — the header names them', async () => {
+  it('★ and the customer’s own messages carry no sender - the header names them', async () => {
     await show([message({ direction: 'INBOUND', senderName: 'Dana Cohen' })]);
     expect(screen.queryByTestId('sender-m1')).toBeNull();
   });
 });
 
-describe('★★ the quote travels with the reply — drawn even when it is not on the page', () => {
+describe('★★ the quote travels with the reply - drawn even when it is not on the page', () => {
   const replying = (replyTo: Record<string, unknown>) =>
     message({ replyToMessageId: 'm0', replyTo: { id: 'm0', ...replyTo } });
 
@@ -335,7 +335,7 @@ describe('★ every message offers Reply, describing itself to the composer', ()
   });
 });
 
-describe('★★ media in the stream, as 02 draws it — never "A photo." when the photo is here', () => {
+describe('★★ media in the stream, as 02 draws it - never "A photo." when the photo is here', () => {
   it('a photo: the picture itself, opening whole in a new tab; the adapter’s "[Image]" not printed', async () => {
     await show([
       message({ messageType: 'image', mediaUrl: '/api/uploads/a.jpg', body: '[Image]' }),
@@ -359,7 +359,7 @@ describe('★★ media in the stream, as 02 draws it — never "A photo." when t
     expect(screen.getByTestId('message-m1')).toHaveTextContent('Look at the corner of the box.');
   });
 
-  it('a voice note plays — and still says it can’t be read out', async () => {
+  it('a voice note plays - and still says it can’t be read out', async () => {
     await show([
       message({ messageType: 'audio', mediaUrl: '/api/uploads/v.ogg', body: '[Voice message]' }),
     ]);
@@ -387,11 +387,11 @@ describe('★★ media in the stream, as 02 draws it — never "A photo." when t
     const file = screen.getByTestId('file-m1');
     expect(file).toHaveTextContent('Terms.pdf');
     expect(file).toHaveAttribute('download', 'Terms.pdf');
-    // The file's own name as caption is the label already — not printed twice.
+    // The file's own name as caption is the label already - not printed twice.
     expect(screen.getByTestId('message-m1').textContent?.match(/Terms\.pdf/g)).toHaveLength(1);
   });
 
-  it('★ media that could not be fetched says so — never a blank bubble or "[Document]"', async () => {
+  it('★ media that could not be fetched says so - never a blank bubble or "[Document]"', async () => {
     await show([
       message({
         messageType: 'document',
@@ -430,7 +430,7 @@ describe('★★ media in the stream, as 02 draws it — never "A photo." when t
     expect(card).toHaveTextContent('AviCarrier');
     expect(card.querySelector('a[href="tel:+972501234567"]')).not.toBeNull();
     expect(card.querySelector('a[href="https://wa.me/972501234567"]')).not.toBeNull();
-    // The name is the card's head — not printed above it again.
+    // The name is the card's head - not printed above it again.
     expect(screen.getByTestId('message-m1').textContent?.match(/Avi/g)).toHaveLength(1);
   });
 

@@ -25,7 +25,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * campaign for ten minutes.
  *
  * So the function is called what it does, and the UI confirmation names what
- * is lost rather than asking whether the person is sure — "are you sure?"
+ * is lost rather than asking whether the person is sure - "are you sure?"
  * tests conviction, not understanding.
  */
 
@@ -47,7 +47,7 @@ export type OutreachWriteResult =
  * Stops a campaign permanently. Not a pause.
  *
  * Everyone still queued is marked skipped and will not receive the message,
- * and the campaign cannot be restarted — only copied with `resend`.
+ * and the campaign cannot be restarted - only copied with `resend`.
  */
 export async function stopCampaign(id: string): Promise<OutreachWriteResult> {
   try {
@@ -74,7 +74,7 @@ export type SendResult =
   | { readonly ok: false; readonly reason: 'refused'; readonly why: string | null }
   | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
 
-/** Sends a DRAFT campaign — to real people, after the owner's second press. */
+/** Sends a DRAFT campaign - to real people, after the owner's second press. */
 export async function sendCampaign(id: string): Promise<SendResult> {
   try {
     await serverApi().post({
@@ -91,7 +91,7 @@ export async function sendCampaign(id: string): Promise<SendResult> {
     if (isApiError(cause)) {
       if (cause.status === 403) return { ok: false, reason: 'forbidden' };
       // The route's own reason ("No recipients to send to…") is the platform's
-      // words, kept for the title only — the sentence shown is ours.
+      // words, kept for the title only - the sentence shown is ours.
       if (cause.status === 400)
         return { ok: false, reason: 'refused', why: cause.developerMessage ?? null };
     }

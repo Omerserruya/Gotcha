@@ -13,9 +13,9 @@ import { WhatsAppNumbers } from './WhatsAppNumbers';
  *
  * `whatsapp_numbers` has ZERO rows on the whole database and
  * `whatsapp_number_events` has zero too, so a capture can only ever
- * photograph the unprofiled card. Every state that matters — outbound
+ * photograph the unprofiled card. Every state that matters - outbound
  * blocked, a repair we can run, a fix that belongs to Meta, the registration
- * case — exists only here.
+ * case - exists only here.
  *
  * An absence assertion on the live screen would pass against a blank page, so
  * the absences are asserted HERE, where the thing could have appeared.
@@ -197,7 +197,7 @@ describe('★ three places a problem can be fixed, and no button that cannot wor
   });
 });
 
-describe('★ templates paused — the state Omer asked to be warned about', () => {
+describe('★ templates paused - the state Omer asked to be warned about', () => {
   const templateBlock = (over = {}) => ({
     entities: [
       {
@@ -247,7 +247,7 @@ describe('★ templates paused — the state Omer asked to be warned about', () 
 
   it("★ quotes Meta's reason instead of asserting the cause itself", async () => {
     /*
-     * The design's copy says "has no payment method". That is ONE cause —
+     * The design's copy says "has no payment method". That is ONE cause -
      * quality ratings and policy violations pause templates too. We report
      * the block, which we know, and quote Meta for the cause, which they know.
      */
@@ -282,7 +282,7 @@ describe('★ templates paused — the state Omer asked to be warned about', () 
     /*
      * A number can be sending and receiving ordinary replies AND have its
      * templates paused. The badge sits beside the verdict, never instead of
-     * it — the same rule as `ready` not replacing receiving/sending.
+     * it - the same rule as `ready` not replacing receiving/sending.
      */
     await renderNumbers({
       data: [number({ receiving: true, sending: true, healthSnapshot: templateBlock() })],
@@ -346,7 +346,7 @@ describe('the card this tenant actually has', () => {
       ],
     });
     const card = screen.getByTestId('whatsapp-unprofiled');
-    // S2: 02's card — the state as a grey chip, its explanation on the chip.
+    // S2: 02's card - the state as a grey chip, its explanation on the chip.
     const chip = screen.getByText('No health data');
     expect(card).toContainElement(chip);
     expect(chip).toHaveAttribute('title', expect.stringMatching(/connected and working/i));
@@ -387,8 +387,8 @@ describe('a failed read is not an empty workspace', () => {
   });
 });
 
-describe('★ 13b — what is configured on a number, in 02’s rows', () => {
-  it('AI mode comes from the channel; the rest are "—" in their shape', async () => {
+describe('★ 13b - what is configured on a number, in 02’s rows', () => {
+  it('AI mode comes from the channel; the rest are "-" in their shape', async () => {
     render(
       await WhatsAppNumbers({
         numbers: {
@@ -407,11 +407,11 @@ describe('★ 13b — what is configured on a number, in 02’s rows', () => {
     );
     // 02's two segments, live, on the account, set to what it is now.
     expect(screen.getByTestId('mode-switch-ca1')).toHaveAttribute('data-current', 'AI_AUTO_REPLY');
-    expect(screen.getByTestId('whatsapp-unprofiled')).toHaveTextContent(/Answered by—/);
+    expect(screen.getByTestId('whatsapp-unprofiled')).toHaveTextContent(/Answered by-/);
   });
 });
 
-describe('★ 13c starts from 13b: "Add another number" — Meta’s launcher', () => {
+describe('★ 13c starts from 13b: "Add another number" - Meta’s launcher', () => {
   it('at the foot of the list, and under the empty state', async () => {
     const { unmount } = await renderNumbers({ data: [number()] });
     const add = screen.getByTestId('whatsapp-add-number');
@@ -426,8 +426,8 @@ describe('★ 13c starts from 13b: "Add another number" — Meta’s launcher', 
   });
 });
 
-describe('★★ 13c — "Add another number" opens the Connect WhatsApp sheet, not Meta', () => {
-  it('set up: a link to the sheet — Meta opens only from the sheet’s Continue', async () => {
+describe('★★ 13c - "Add another number" opens the Connect WhatsApp sheet, not Meta', () => {
+  it('set up: a link to the sheet - Meta opens only from the sheet’s Continue', async () => {
     render(
       await WhatsAppNumbers({
         numbers: numbersResponseSchema.parse({ data: [number()] }),

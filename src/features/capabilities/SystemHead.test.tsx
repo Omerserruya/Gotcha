@@ -41,7 +41,7 @@ const usage = [
 ] as never;
 
 describe('★ 10’s system header', () => {
-  it('★★ sums its actions’ runs and NAMES the window — 30 days, never "this week"', async () => {
+  it('★★ sums its actions’ runs and NAMES the window - 30 days, never "this week"', async () => {
     render(await SystemHead({ integration: shopify, capabilities: caps, usage }));
     expect(screen.getByTestId('system-line')).toHaveTextContent(
       'Used 1,840 times in the last 30 days',
@@ -50,7 +50,7 @@ describe('★ 10’s system header', () => {
     expect(screen.getByTestId('system-state')).toHaveTextContent('Connected');
   });
 
-  it('⚠ a failed usage read prints no count — it says how many actions instead', async () => {
+  it('⚠ a failed usage read prints no count - it says how many actions instead', async () => {
     render(await SystemHead({ integration: shopify, capabilities: caps, usage: null }));
     expect(screen.getByTestId('system-line')).toHaveTextContent('2 actions');
   });

@@ -40,7 +40,7 @@ export async function loadOutreach(): Promise<OutreachData> {
 
     return {
       inFlight: campaigns.filter(isInFlight),
-      // Everything that is no longer going anywhere — completed, cancelled,
+      // Everything that is no longer going anywhere - completed, cancelled,
       // failed and drafts. Newest first by whatever ended them.
       finished: campaigns
         .filter((c) => !isInFlight(c))
@@ -61,7 +61,7 @@ export async function loadOutreach(): Promise<OutreachData> {
  * analytics } }`; the client unwraps `data`, and `analytics` repeats the
  * counters the row already carries.
  *
- * Three answers: the campaign, `missing` (a 404 — no such campaign here, a
+ * Three answers: the campaign, `missing` (a 404 - no such campaign here, a
  * fact) and `failed` (we could not read it, ours).
  */
 export type CampaignRead =

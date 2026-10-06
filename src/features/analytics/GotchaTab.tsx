@@ -11,20 +11,20 @@ import type { GotchaData } from './load-analytics';
 import styles from './Analytics.module.css';
 
 /**
- * Screen 06b — what GOTCHA did, and where it stopped. Measured.
+ * Screen 06b - what GOTCHA did, and where it stopped. Measured.
  *
  * The dark card and "Where it stopped" (824 + 300), a five-figure strip, then
  * "Alone, or with a person" (794) and "What it actually did" (330).
  * `padding:24px 40px 30px`, `gap:16px`.
  *
  * ── WHAT EACH PART IS MADE OF ──
- *   the dark card      `aiHandledCount` — conversations whose FIRST reply was
+ *   the dark card      `aiHandledCount` - conversations whose FIRST reply was
  *                      GOTCHA's. Not "closed without anyone reading them":
  *                      nothing records that, and the sentence says what is.
  *                      Hours saved from /time-saved.
  *   where it stopped   needed your approval (/ai-performance); did not know
- *                      (/unanswered-questions — at most 50 rows, so "50+");
- *                      asked for a person: "—", no handover cause is stored
+ *                      (/unanswered-questions - at most 50 rows, so "50+");
+ *                      asked for a person: "-", no handover cause is stored
  *   the strip          handled first by GOTCHA %, actions run, needed
  *                      approval, failed, time saved. No week-before figures
  *                      exist for most, so no deltas are invented.
@@ -45,15 +45,15 @@ export function failedCount(tools: readonly ToolUsage[]): number | null {
 }
 
 /**
- * ★ WHY THEY FAILED, WHEN ONE CONNECTION ACCOUNTS FOR THEM — 02's "Both
+ * ★ WHY THEY FAILED, WHEN ONE CONNECTION ACCOUNTS FOR THEM - 02's "Both
  * failures were the same payment method. Fix the automation." on real data.
  *
  * `/tool-usage` carries counts, not errors, so the reason comes from the
  * connections: a failing tool belongs to an integration by its prefix
  * (`shopify.…` → `shopify`), and that integration is failing with a
  * connection-class error (the same classes as 03b). Two facts, said as two
- * facts — "the failures were Shopify actions, and Shopify's connection is
- * down" — not more causation than the data holds.
+ * facts - "the failures were Shopify actions, and Shopify's connection is
+ * down" - not more causation than the data holds.
  */
 export function failuresByDownConnection(
   tools: readonly ToolUsage[],
@@ -89,7 +89,7 @@ export async function GotchaHero({ data }: { readonly data: GotchaData }) {
   const t = await getTranslations('analytics');
   const format = await getFormatter();
   const hours = hoursSaved(data.timeSaved);
-  // No conversations: nothing to credit GOTCHA with — said, not "0 … 0 hours".
+  // No conversations: nothing to credit GOTCHA with - said, not "0 … 0 hours".
   const quiet = data.overview !== null && !hadConversations(data.overview);
   return (
     <section className={styles.gHero} data-testid="gotcha-hero">
@@ -103,7 +103,7 @@ export async function GotchaHero({ data }: { readonly data: GotchaData }) {
                 n: format.number(data.overview.aiHandledCount),
                 figure: (chunks) => <span className={styles.gHeroFigure}>{chunks}</span>,
               })
-            : '—'}
+            : '-'}
       </p>
       {hours !== null && !quiet ? (
         <p className={styles.gHeroLine}>
@@ -131,8 +131,8 @@ export async function WhereStopped({ data }: { readonly data: GotchaData }) {
       : format.number(data.unanswered.data.length)
     : null;
   /*
-    `null` is a figure we do not have, and it gets its own sentence: a "—"
-    dropped into "— asked for a person outright." does not read.
+    `null` is a figure we do not have, and it gets its own sentence: a "-"
+    dropped into "- asked for a person outright." does not read.
   */
   const rows: readonly {
     key: 'person' | 'unknown' | 'approval';
@@ -176,17 +176,17 @@ export async function GotchaStrip({ data }: { readonly data: GotchaData }) {
   const cells = [
     {
       key: 'alone',
-      // No percentage of nothing: with no conversations, "—", never "0%".
+      // No percentage of nothing: with no conversations, "-", never "0%".
       value: hadConversations(data.overview)
         ? `${format.number(data.overview!.aiHandledPct)}%`
-        : '—',
+        : '-',
     },
-    { key: 'actions', value: actions === null ? '—' : format.number(actions) },
-    { key: 'approval', value: data.ai ? format.number(data.ai.approvals.requested) : '—' },
-    { key: 'failed', value: failed === null ? '—' : format.number(failed) },
+    { key: 'actions', value: actions === null ? '-' : format.number(actions) },
+    { key: 'approval', value: data.ai ? format.number(data.ai.approvals.requested) : '-' },
+    { key: 'failed', value: failed === null ? '-' : format.number(failed) },
     {
       key: 'saved',
-      value: hours === null ? '—' : t('gotcha.strip.hours', { hours: format.number(hours) }),
+      value: hours === null ? '-' : t('gotcha.strip.hours', { hours: format.number(hours) }),
     },
   ] as const;
   return (
@@ -203,7 +203,7 @@ export async function GotchaStrip({ data }: { readonly data: GotchaData }) {
   );
 }
 
-/** The last seven days, oldest first — the chart's axis. */
+/** The last seven days, oldest first - the chart's axis. */
 export function lastSevenDayDates(now: Date): readonly Date[] {
   return Array.from({ length: 7 }, (_, index) => {
     const day = new Date(now);

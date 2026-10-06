@@ -43,7 +43,7 @@ export function useCarousel(count: number, start = 0) {
       const dx = event.clientX - from.current;
       from.current = null;
       if (Math.abs(dx) < SWIPE_PX) return;
-      // A leftward drag pulls the next card in from the right — in LTR.
+      // A leftward drag pulls the next card in from the right - in LTR.
       go(dx < 0 === (direction === 'ltr') ? 1 : -1);
     },
   };

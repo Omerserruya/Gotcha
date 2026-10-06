@@ -22,7 +22,7 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Usage & billing — screen 17.
+ * Settings · Usage & billing - screen 17.
  *
  * *"Your plan up front, credits in conversations."* 02's layout: the plan,
  * dark, across the top; then credits left and where they went on the left,
@@ -33,7 +33,7 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * page (`./invoices`), behind the Billing card's All.
  *
  * Not drawn, because nothing reads them: 02's "3 AI employees · All
- * channels", the run-out projection ("Lasts until renewal" is "—"), credits
+ * channels", the run-out projection ("Lasts until renewal" is "-"), credits
  * per kind of work, and the value line (hours saved, outreach revenue).
  *
  * The conversations allowance ("Conversations this period") is not on 02's
@@ -84,7 +84,7 @@ export default async function Page({
             packages={packages}
             /*
               `buyCredits()` checks `no_billable_entity` FIRST, so these are
-              the server's own two gates read back in the same order — two
+              the server's own two gates read back in the same order - two
               booleans, because "nobody to invoice" and "nothing to charge"
               have different repairs.
             */
@@ -94,8 +94,8 @@ export default async function Page({
             receiptTo={profile?.billingEmail ?? null}
           />
           {/*
-            Nothing to buy says why — the plan cannot, the shelf is empty, or
-            we could not find out — rather than leaving the dialog blank.
+            Nothing to buy says why - the plan cannot, the shelf is empty, or
+            we could not find out - rather than leaving the dialog blank.
           */}
           {packages === null ? (
             <BuyUnavailable methods={paymentMethods} />
@@ -156,7 +156,7 @@ export default async function Page({
             profile={profile}
             methods={paymentMethods}
             /*
-              `null` when the invoices read failed, NOT zero — defaulting to an
+              `null` when the invoices read failed, NOT zero - defaulting to an
               empty array is what once silently removed "and 4 charges have
               already failed" from the warning.
             */

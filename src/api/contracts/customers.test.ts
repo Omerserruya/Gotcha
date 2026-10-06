@@ -96,7 +96,7 @@ describe('the total is the count, not the page', () => {
   });
 });
 
-describe('customerLabel — a handle beats a placeholder', () => {
+describe('customerLabel - a handle beats a placeholder', () => {
   it('prefers the name when there is one', () => {
     expect(customerLabel(row)).toBe('Dana Cohen');
   });
@@ -137,7 +137,7 @@ describe('an unrecognised channel still renders', () => {
   });
 });
 
-describe('collapseToPeople — the design first line, now that it is backed', () => {
+describe('collapseToPeople - the design first line, now that it is backed', () => {
   const at = (over: Partial<typeof row>) => ({ ...row, ...over });
 
   it('collapses one human on two channels into one person', () => {
@@ -176,7 +176,7 @@ describe('collapseToPeople — the design first line, now that it is backed', ()
      *
      * The real two contacts on this tenant both had distinct identities, so
      * the count and the list agreed BY ACCIDENT. Giving two fixtures a shared
-     * `personId` — to make the collapse visible in evidence — is what exposed
+     * `personId` - to make the collapse visible in evidence - is what exposed
      * it. The fixture proved something nothing was asserting.
      */
     const rows = [

@@ -22,7 +22,7 @@ export function CustomerSelection({ children }: { readonly children: ReactNode }
   const area = useRef<HTMLDivElement>(null);
   const [picked, setPicked] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
 
-  /* The list's foot — the bar stands in its place, inside the card. */
+  /* The list's foot - the bar stands in its place, inside the card. */
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
     setSlot(area.current?.querySelector<HTMLElement>('[data-select-slot]') ?? null);
@@ -95,7 +95,7 @@ export function CustomerSelection({ children }: { readonly children: ReactNode }
   );
 }
 
-/** "Tag": a small field and Add — one tag on everyone picked, all or nothing. */
+/** "Tag": a small field and Add - one tag on everyone picked, all or nothing. */
 function TagPicked({
   contactIds,
   onDone,

@@ -60,7 +60,7 @@ describe('★★ the way back: said once, then the query is cleaned', () => {
   it('denied is the person cancelling, not a failure of ours', () => {
     land('denied');
     expect(screen.getByTestId('oauth-landing')).toHaveTextContent(
-      'You cancelled at HubSpot — nothing was connected.',
+      'You cancelled at HubSpot - nothing was connected.',
     );
   });
 
@@ -89,7 +89,7 @@ describe('★★ the sentence outlives the tidied URL', () => {
     </NextIntlClientProvider>
   );
 
-  it('after the replace re-renders without the query, it is still there — until closed', async () => {
+  it('after the replace re-renders without the query, it is still there - until closed', async () => {
     const { rerender } = render(tree('denied'));
     // What the page renders once the URL holds only ?system=hubspot.
     rerender(tree(null));

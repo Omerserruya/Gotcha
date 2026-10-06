@@ -85,16 +85,16 @@ async function toNumbers(candidates: unknown[]) {
   });
 }
 
-describe('★★ 13c — one question before Meta', () => {
+describe('★★ 13c - one question before Meta', () => {
   it('step 1: two paths, "You’ll need", and nothing opened until Continue', async () => {
     show();
     expect(
       screen.getByTestId('connect-steps').querySelector('[aria-current="step"]'),
     ).toHaveTextContent('Where it lives');
     expect(screen.getByTestId('path-business_app')).toHaveAttribute('aria-checked', 'true');
-    // Omer: Meta asks the same thing again — said once, quietly, under the two.
+    // Omer: Meta asks the same thing again - said once, quietly, under the two.
     expect(screen.getByTestId('paths-again')).toHaveTextContent(
-      'Meta asks this again in its window — pick the same answer there.',
+      'Meta asks this again in its window - pick the same answer there.',
     );
     await userEvent.click(screen.getByTestId('path-new'));
     expect(screen.getByTestId('path-new')).toHaveAttribute('aria-checked', 'true');
@@ -179,7 +179,7 @@ describe('★★ 13c — one question before Meta', () => {
     expect(await screen.findByTestId('connect-none')).toBeInTheDocument();
   });
 
-  it('closed without a code: back on step 1, nothing inspected — and SAID, never silent', async () => {
+  it('closed without a code: back on step 1, nothing inspected - and SAID, never silent', async () => {
     show();
     await userEvent.click(screen.getByTestId('continue-meta'));
     act(() => login.mock.calls[0]![0]({ authResponse: null, status: 'unknown' }));
@@ -189,7 +189,7 @@ describe('★★ 13c — one question before Meta', () => {
   });
 });
 
-describe('★★ 13d — exactly one number per pass', () => {
+describe('★★ 13d - exactly one number per pass', () => {
   it('the numbers Meta shared; one already here is shown and off; Connect waits for a choice', async () => {
     await toNumbers([
       candidate({ phoneNumberId: 'p1', usesBusinessApp: true, scenario: 'COEXISTENCE' }),

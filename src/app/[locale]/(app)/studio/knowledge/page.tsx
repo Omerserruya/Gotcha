@@ -16,25 +16,25 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Studio · Knowledge — screen 08.
+ * Studio · Knowledge - screen 08.
  *
  * ── WHAT IS ABSENT, AND WHY ──
  * **No "Fresh" or "Out of date" labels, and no count of either.** `updatedAt`
- * is real, but there is **no staleness policy anywhere in the platform** — no
+ * is real, but there is **no staleness policy anywhere in the platform** - no
  * threshold, no field, no job. The screen states when each source was last
  * refreshed and leaves the verdict to the reader, who knows whether two
  * months is fine for their business.
  *
- * **No topic strength.** *"Answers confidently · 34 topics"* and *"Thin —
+ * **No topic strength.** *"Answers confidently · 34 topics"* and *"Thin -
  * guesses sometimes · 6"* have no source at all.
  *
- * **No conflict panel yet.** The mechanism is real — `IntelligenceReview`,
- * with both values and a resolve action — and this tenant has zero rows, so
+ * **No conflict panel yet.** The mechanism is real - `IntelligenceReview`,
+ * with both values and a resolve action - and this tenant has zero rows, so
  * there is nothing to show and nothing is invented.
  *
  * ── AND WHAT IS REAL ──
  * The questions GOTCHA could not answer, with `timesAsked` and
- * `distinctAskers` kept apart — which is better than the design's single
+ * `distinctAskers` kept apart - which is better than the design's single
  * *"asked 23 times"*, because one person asking twenty times and twenty
  * people asking once need different fixes.
  */
@@ -56,8 +56,8 @@ export default async function Page({
     await loadKnowledge();
 
   /*
-    02's line is a SUMMARY from data — "Learned four ways: … Two things need
-    your answer." — as 07's is. Built from what was read; when a read failed
+    02's line is a SUMMARY from data - "Learned four ways: … Two things need
+    your answer." - as 07's is. Built from what was read; when a read failed
     it would have to guess, so the description stays.
   */
   const format = await getFormatter();
@@ -79,7 +79,7 @@ export default async function Page({
 
   /*
     08, measured: 02's header with "Add knowledge" on the right, and no
-    split — the body is 02's screen body (`24px 40px 30px`, gap 16), filling
+    split - the body is 02's screen body (`24px 40px 30px`, gap 16), filling
     the frame and scrolling inside it.
   */
   return (
@@ -140,7 +140,7 @@ function baseOf(sources: readonly KnowledgeSource[] | null): KnowledgeBaseRef {
 
 /**
  * The way back from a Drive or Confluence connect: which, and how it ended.
- * Confluence has no card of its own — it lives on the Drive card.
+ * Confluence has no card of its own - it lives on the Drive card.
  */
 function landingOf(params: {
   readonly way?: string;

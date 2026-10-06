@@ -6,14 +6,14 @@ import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
- * Sending a file — 02's image and paperclip.
+ * Sending a file - 02's image and paperclip.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THE UPLOAD IS THE SEND
  * ════════════════════════════════════════════════════════════════════════════
  * `POST …/messages/media` writes the row and enqueues it in the same request;
  * there is no draft on the server. So this runs only from the composer's Send,
- * never from choosing a file — choosing one only holds it in the box.
+ * never from choosing a file - choosing one only holds it in the box.
  *
  * ★ FROM THE BROWSER, THROUGH THE BFF, NOT THROUGH A SERVER ACTION. A server
  *   action's body is capped at 1MB by default, and a photo is bigger than
@@ -23,11 +23,11 @@ import { logger } from '@/observability/logger';
  */
 
 /**
- * The route's cap — `MAX_FILE_SIZE` in `services/conversation/src/routes/messages.ts`.
+ * The route's cap - `MAX_FILE_SIZE` in `services/conversation/src/routes/messages.ts`.
  *
  * ⚠⚠ REFUSED HERE BECAUSE THE ROUTE DOES NOT REFUSE IT. busboy's `fileSize`
  *    limit TRUNCATES the stream, and the route then saves and sends what it
- *    received with a 201 — the customer would get a file cut short.
+ *    received with a 201 - the customer would get a file cut short.
  */
 export const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 

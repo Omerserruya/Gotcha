@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { CHANNEL_TYPES } from './channels';
 
 /**
- * Screens 02 and 02b — the Inbox.
+ * Screens 02 and 02b - the Inbox.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * FOUR THINGS THE DESIGN DRAWS THAT HAVE NO DATA BEHIND THEM
@@ -11,16 +11,16 @@ import { CHANNEL_TYPES } from './channels';
  * Recorded here rather than discovered per component, because each is a
  * visible element a reader will look for:
  *
- *   voice-note transcript   *"Read what she said"* — an inbound voice note is
+ *   voice-note transcript   *"Read what she said"* - an inbound voice note is
  *                           stored as a file and nothing transcribes it. The
  *                           only audio-specific code in the worker is
  *                           `case "audio": return ".ogg"`, an extension for a
  *                           filename. **The Deepgram credential is present and
  *                           the client is not**, which is worth saying because
  *                           "we have the key" reads like "we have the feature"
- *   image understanding     *"GOTCHA saw damage in this photo"* — no vision
+ *   image understanding     *"GOTCHA saw damage in this photo"* - no vision
  *                           path anywhere, no `image_url` content parts
- *   cost per reply          *"Replace it now · costs ₪179"* — nothing prices an
+ *   cost per reply          *"Replace it now · costs ₪179"* - nothing prices an
  *                           action before proposing it. The only `estimatedCost`
  *                           in the platform is a broadcast's per-recipient send
  *                           cost, which is a different thing entirely
@@ -30,8 +30,8 @@ import { CHANNEL_TYPES } from './channels';
  * ── AND TWO THAT LOOK PRESENT AND ARE NOT ──
  *
  * **Agent-unread does not exist.** Nothing on `Conversation` records read
- * state for the agent side. `Message.readAt` is the CUSTOMER's receipt — the
- * same word for a different fact — and using it would show an agent's queue
+ * state for the agent side. `Message.readAt` is the CUSTOMER's receipt - the
+ * same word for a different fact - and using it would show an agent's queue
  * as read because the customer read our reply. See `agentUnreadIsUnknown`.
  *
  * **Per-message intent does not persist YET, and it is authorized.**
@@ -45,7 +45,7 @@ import { CHANNEL_TYPES } from './channels';
  * around it, which is how a temporary absence becomes a fixed shape.
  *
  * Until the column lands the marker is not drawn, and **absent will not mean
- * "no intent" — it means nobody recorded one.** The stream renders per
+ * "no intent" - it means nobody recorded one.** The stream renders per
  * message with its own attributes, so adding the edge is an attribute and a
  * style rather than a restructure.
  */
@@ -57,8 +57,8 @@ import { CHANNEL_TYPES } from './channels';
  *
  * `ConversationStatus` is `OPEN | WAITING | CLOSED`. Waiting-on-customer and
  * waiting-on-business are one undifferentiated `WAITING`, and
- * waiting-on-an-external-system does not exist at all — so 02b's *"11
- * exchanges held — returns system down"* has no state to hang on.
+ * waiting-on-an-external-system does not exist at all - so 02b's *"11
+ * exchanges held - returns system down"* has no state to hang on.
  */
 export const CONVERSATION_STATUSES = ['OPEN', 'WAITING', 'CLOSED'] as const;
 export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number];
@@ -86,7 +86,7 @@ export const conversationRowSchema = z.object({
    *
    * This said `contactName`, a field the platform has never sent. `z.object`
    * stripped the real one, the invented one defaulted to `null`, and **every
-   * row in the queue read "Someone"** — ten of ten in the capture, which read
+   * row in the queue read "Someone"** - ten of ten in the capture, which read
    * as redaction by the security fixtures and was neither redaction nor
    * fixtures.
    *
@@ -96,7 +96,7 @@ export const conversationRowSchema = z.object({
    */
   customerName: z.string().nullable().default(null),
   /**
-   * The handle this conversation arrived on — a phone number on WhatsApp, a
+   * The handle this conversation arrived on - a phone number on WhatsApp, a
    * PSID on Messenger. Required on the model, so nullable only for a route
    * that does not send it.
    *
@@ -107,14 +107,14 @@ export const conversationRowSchema = z.object({
    */
   customerExternalId: z.string().nullable().default(null),
   /**
-   * The person this conversation is with — Backend is adding it (asked
+   * The person this conversation is with - Backend is adding it (asked
    * 2026-10-06, read-only, merged → target). Named now so it is not stripped
-   * the day it arrives; `null` until then, and the wall says "—" with why.
+   * the day it arrives; `null` until then, and the wall says "-" with why.
    */
   contactId: z.string().min(1).nullable().catch(null).default(null),
   /**
    * The last message the CUSTOMER could have seen, flattened by the route
-   * from a `take: 1` — and excluding FAILED sends, deliberately: *"a failed
+   * from a `take: 1` - and excluding FAILED sends, deliberately: *"a failed
    * outbound is a message the customer never received"*, so previewing it
    * would make the row read as answered.
    */
@@ -124,8 +124,8 @@ export const conversationRowSchema = z.object({
    *
    * `agentUnreadIsUnknown()` remains true: there is no per-user read marker in
    * the schema and `Message.readAt` is the customer's receipt. But the route
-   * projects this, and INBOUND-last is a fact — **the customer spoke and
-   * nobody has answered** — which is the thing the queue is actually for.
+   * projects this, and INBOUND-last is a fact - **the customer spoke and
+   * nobody has answered** - which is the thing the queue is actually for.
    *
    * It is not "you have not read this". Two people looking at the same queue
    * see the same value, and that is correct for what it claims.
@@ -149,7 +149,7 @@ export type ConversationRow = z.infer<typeof conversationRowSchema>;
  * ★★ `47061m` WAS ON SCREEN, AND IT IS THIRTY-TWO DAYS
  * ════════════════════════════════════════════════════════════════════════════
  * The row printed `{minutes}m` unconditionally, so the capture showed `47061m`,
- * `86110m`, `86409m` — and the wait column is the thing an agent triages on.
+ * `86110m`, `86409m` - and the wait column is the thing an agent triages on.
  * It was not even legible as a duration: read quickly, `47061m` looks like an
  * identifier, which is how it was first reported.
  *
@@ -169,7 +169,7 @@ export function waitingScale(minutes: number): { scale: WaitingScale; value: num
  * The channel's own name, or `null` when the platform sends one we do not know.
  *
  * ★ `Conversation.channel` IS AN UNCONSTRAINED STRING and the capture showed
- * `SHOPIFY_LIVE_CHAT` and `WHATSAPP` on screen — a screaming-snake enum on the
+ * `SHOPIFY_LIVE_CHAT` and `WHATSAPP` on screen - a screaming-snake enum on the
  * operational screen, where `channels.name.*` has carried both labels in both
  * languages all along.
  *
@@ -206,7 +206,7 @@ export function channelName(
   /*
    * Typed as the two keys this function can ask for. next-intl's namespace
    * translator accepts every key in `channels.json`, and a function that
-   * accepts more is assignable where one accepting fewer is wanted — so callers
+   * accepts more is assignable where one accepting fewer is wanted - so callers
    * pass `channelNames` straight in, with no cast at the call site. The cast
    * that used to sit at each of those sites is the thing being removed.
    */
@@ -254,7 +254,7 @@ export function waitingMinutes(row: ConversationRow, now: Date): number | null {
  *
  * `Message.readAt` is the customer's read receipt. Reading it as "the agent
  * has seen this" would mark a queue read because the CUSTOMER read our
- * reply — the same word for the opposite party's fact.
+ * reply - the same word for the opposite party's fact.
  */
 export function agentUnreadIsUnknown(): true {
   return true;
@@ -303,7 +303,7 @@ export type KnownMessageType = (typeof KNOWN_MESSAGE_TYPES)[number];
  * ════════════════════════════════════════════════════════════════════════════
  * The schema has carried `deliveredAt` and `readAt` all along, so a delivered
  * message could be told from an undelivered one. **A FAILED message has no
- * timestamp either** — it looks exactly like one still on its way. So an
+ * timestamp either** - it looks exactly like one still on its way. So an
  * outbound reply that the customer never received rendered identically to one
  * sent a second ago.
  *
@@ -314,7 +314,7 @@ export type KnownMessageType = (typeof KNOWN_MESSAGE_TYPES)[number];
  * ── WHY `z.string()` AND NOT `z.enum(...).catch('PENDING')` ──
  * The house pattern for a status column is an enum with a catch, and it is wrong
  * here. Catching an unrecognised value to `PENDING` would render a failure we do
- * not recognise as **"on its way"** — the reassuring direction, on the one field
+ * not recognise as **"on its way"** - the reassuring direction, on the one field
  * whose entire job is to stop somebody believing a message arrived. So the raw
  * value is kept, never rendered, and `deliveryOf` maps it to a closed set with
  * an explicit `unknown`.
@@ -335,7 +335,7 @@ export type Delivery = 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'u
  *
  *   · `FAILED` wins over any timestamp. A failure is not undone by a `sentAt`
  *     recorded before the provider rejected it.
- *   · then `readAt`, then `deliveredAt` — a specific timestamp beats a column
+ *   · then `readAt`, then `deliveredAt` - a specific timestamp beats a column
  *     that may not have caught up.
  *   · then the status itself, if we recognise it.
  *   · then `unknown`, which the stream says out loud rather than treating as
@@ -366,12 +366,12 @@ export const messageSchema = z.object({
   /** Free string. Use `renderableType`, never a bare switch. */
   messageType: z.string().default('text'),
   mediaUrl: z.string().nullable().default(null),
-  /** The sender's own name for a file — the download's label. */
+  /** The sender's own name for a file - the download's label. */
   fileName: z.string().nullish().catch(null).default(null),
   createdAt: z.string(),
   /**
    * `PENDING · SENT · DELIVERED · READ · FAILED`. Read through `deliveryOf`,
-   * never directly — see the note above `MESSAGE_STATUSES`.
+   * never directly - see the note above `MESSAGE_STATUSES`.
    *
    * `.optional()` rather than `.default('PENDING')`: a deploy that does not send
    * it must not be indistinguishable from one reporting a message on its way.
@@ -384,7 +384,7 @@ export const messageSchema = z.object({
    * ★★ BOTH REPLY COLUMNS, AND THAT IS THE POINT.
    *
    * `replyToExternalId` is the provider's id and is always present on a
-   * reply. `replyToMessageId` is ours and **can fail to resolve** — the
+   * reply. `replyToMessageId` is ours and **can fail to resolve** - the
    * quoted message may predate GOTCHA or have been deleted.
    *
    * Keeping the external id when the lookup misses is what lets the stream
@@ -394,12 +394,12 @@ export const messageSchema = z.object({
   replyToExternalId: z.string().nullable().default(null),
   replyToMessageId: z.string().nullable().default(null),
   /**
-   * The provider's own id for this message. What a reaction points at — Meta
+   * The provider's own id for this message. What a reaction points at - Meta
    * names the target by `wamid`, never by ours.
    */
   externalMessageId: z.string().nullable().default(null),
   /**
-   * Who sent it, as the writer put it — and writers disagree. A human agent's
+   * Who sent it, as the writer put it - and writers disagree. A human agent's
    * send writes their LOGIN EMAIL (`req.user.email`); an AI employee writes
    * its name; the platform writes "System", a storefront shopper "Shopper".
    * So it is shown only through `senderLabel`, which knows that.
@@ -409,7 +409,7 @@ export const messageSchema = z.object({
    * ★★ THE QUOTED MESSAGE, WHICH TRAVELLED WITH THE REPLY ALL ALONG.
    * `listByConversation` includes `replyTo { id, body, direction,
    * messageType, senderName, mediaUrl, fileName }` precisely so a quote from
-   * last week can be drawn without being on this page — and this schema
+   * last week can be drawn without being on this page - and this schema
    * stripped it. `null` when the reply's target is not stored.
    */
   replyTo: z
@@ -430,7 +430,7 @@ export const messageSchema = z.object({
    *
    * `createSystemMessage` writes `body: ""` and puts everything in metadata:
    * `{ systemEvent, ...eventData }`. So a claim, a transfer and a return to
-   * the AI are all the same empty INBOUND row until this is read — and
+   * the AI are all the same empty INBOUND row until this is read - and
    * rendered as messages they look like the customer sending nothing.
    *
    * Only the keys we draw are named. The rest are stripped, which is right
@@ -438,7 +438,7 @@ export const messageSchema = z.object({
    * printed an unknown field would be guessing at what happened.
    *
    * On the wire because `listByConversation` puts no `select` on the message
-   * itself — it takes the whole row. Checked rather than assumed: the
+   * itself - it takes the whole row. Checked rather than assumed: the
    * conversation payload one route along **does** strip metadata.
    */
   metadata: z
@@ -449,7 +449,7 @@ export const messageSchema = z.object({
       /** `agent_transferred`. */
       fromAgentName: z.string().optional(),
       toAgentName: z.string().optional(),
-      /** The attachment could not be fetched (WhatsApp media expires) — said, never blank. */
+      /** The attachment could not be fetched (WhatsApp media expires) - said, never blank. */
       mediaError: z.string().optional().catch(undefined),
       /** A shared contact card: who, and the numbers to reach them. */
       contacts: z
@@ -528,7 +528,7 @@ export type QuotedState = 'resolved' | 'unresolved' | 'none';
  * ⚠ A human agent's send stores their LOGIN EMAIL as `senderName`. An email
  *   is an identifier, not a name, and printing a colleague's address under
  *   every reply is not what 02's "Support AI" slot is for. The platform tells
- *   them apart the same way — `live-voice.service` counts humans by
+ *   them apart the same way - `live-voice.service` counts humans by
  *   `senderName contains "@"`.
  *
  * Outbound only: an inbound sender is the customer, whom the header names.
@@ -554,7 +554,7 @@ export function quotedState(message: InboxMessage): QuotedState {
  * Always `false`. Nothing transcribes a stored audio message: the worker's
  * only audio-specific line is a filename extension.
  *
- * ★★ AND A DEEPGRAM CLIENT DOES EXIST — IT IS THE WRONG ONE.
+ * ★★ AND A DEEPGRAM CLIENT DOES EXIST - IT IS THE WRONG ONE.
  * This note used to say *"the Deepgram credential exists without a client"*,
  * and that stopped being true. `services/voice-copilot/src/stt/`
  * instantiates `@deepgram/sdk` with `LiveTranscriptionEvents`: **streaming
@@ -564,11 +564,11 @@ export function quotedState(message: InboxMessage): QuotedState {
  *
  * Stated carefully on purpose. A reader who greps for a Deepgram client finds
  * one, concludes the comment is stale, and wires the live provider to a
- * stored file — a different API and a different failure. **The conclusion did
+ * stored file - a different API and a different failure. **The conclusion did
  * not change; the reason for it did, and a stale reason is how a true note
  * gets overturned.**
  *
- * A function rather than a constant so the stream says *"a voice note — we
+ * A function rather than a constant so the stream says *"a voice note - we
  * can't read it out for you"* from one place, and so the day a transcriber
  * exists there is one thing to change.
  */
@@ -579,13 +579,13 @@ export function hasTranscript(_message: InboxMessage): false {
 /* ── Ordering, and what the column it depends on is worth ────────────────── */
 
 /**
- * The queue, newest first — and the rows whose place we cannot determine.
+ * The queue, newest first - and the rows whose place we cannot determine.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠ THIS SPLIT IS PER PAGE, AND THE SERVER SORTS NULLS LAST
  * ════════════════════════════════════════════════════════════════════════════
  * `orderBy` is `{ lastMessageAt: { sort: "desc", nulls: "last" } }`, so every
- * undated row is **at the very end of the whole queue** — after every dated
+ * undated row is **at the very end of the whole queue** - after every dated
  * one, on the last page.
  *
  * So on a tenant with more conversations than one page holds, this function
@@ -595,14 +595,14 @@ export function hasTranscript(_message: InboxMessage): false {
  *
  * Answering "how many conversations have no `lastMessageAt`" properly needs
  * a count of its own, which no endpoint offers. Until one does, the caption
- * carries the scope — see `ConversationList`.
+ * carries the scope - see `ConversationList`.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ `lastMessageAt` IS A DENORMALISED CACHE MAINTAINED BY CONVENTION
  * ════════════════════════════════════════════════════════════════════════════
  * It is written at ten call sites, and **ten or more writers bypass
  * `message.service` entirely.** One conversation on dev has it null while
- * being open, not a test, and carrying two real messages — the sandbox
+ * being open, not a test, and carrying two real messages - the sandbox
  * writer never sets it.
  *
  * So the column the queue sorts by is maintained by everybody remembering,
@@ -610,13 +610,13 @@ export function hasTranscript(_message: InboxMessage): false {
  * message arrived through a forgetful writer sinks down the list while
  * somebody waits, and the list looks entirely normal.
  *
- * We cannot detect staleness from here — a plausible-but-old timestamp is
+ * We cannot detect staleness from here - a plausible-but-old timestamp is
  * indistinguishable from a correct one. What we CAN do is refuse to bury the
  * rows that admit they do not know.
  *
  * ── SO NULL GOES IN ITS OWN GROUP, NOT AT THE BOTTOM ──
  * Sorted naively, a null sinks to the floor of a recency-ordered list and is
- * never seen — which is the same defect as the offset-pagination skip, and
+ * never seen - which is the same defect as the offset-pagination skip, and
  * the reason the capped list exists. Sorted to the top it would claim to be
  * the most recent, which it does not know either.
  *
@@ -645,7 +645,7 @@ export function queueOrder(rows: readonly ConversationRow[]): {
  *
  * All four are `messageType: "system"`, `direction: "INBOUND"` and
  * `body: ""`. The direction is the service's, not a statement about who
- * acted — rendering them as inbound bubbles puts a colleague's action on the
+ * acted - rendering them as inbound bubbles puts a colleague's action on the
  * customer's side of the thread.
  */
 export const SYSTEM_EVENTS = [
@@ -653,7 +653,7 @@ export const SYSTEM_EVENTS = [
   'agent_transferred',
   'department_transferred',
   'returned_to_ai',
-  // stop-ai (3e7bae17): written with no name — nothing says who stopped it.
+  // stop-ai (3e7bae17): written with no name - nothing says who stopped it.
   'ai_stopped',
 ] as const;
 export type SystemEvent = (typeof SYSTEM_EVENTS)[number];
@@ -667,7 +667,7 @@ export type SystemEvent = (typeof SYSTEM_EVENTS)[number];
  * exactly where somebody needs to know the conversation moved.
  *
  * Unknown events return `null` and fall to the stream's "we cannot show
- * this" line — **not** to a generic "something happened", which would be the
+ * this" line - **not** to a generic "something happened", which would be the
  * `messageType` trap one level down: an unconstrained string read through an
  * exhaustive switch, where the default branch names something it does not
  * know.
@@ -688,7 +688,7 @@ export function systemEventOf(message: InboxMessage): SystemEvent | null {
  * ════════════════════════════════════════════════════════════════════════════
  * No table, no column, no handler. A WhatsApp reaction arrives as a type the
  * adapter does not model, so it becomes a text message whose body is the
- * literal string `"[reaction message]"` — which is what an agent sees today —
+ * literal string `"[reaction message]"` - which is what an agent sees today -
  * with the emoji and the target's id kept on `metadata.unsupported.raw`.
  *
  * So this is a derived reading of a payload nobody modelled, and it is worth
@@ -722,7 +722,7 @@ export function reactionOf(message: InboxMessage): Reaction | null {
  * The provider's name for a message we could not be given properly, or null.
  *
  * Everything the adapter cannot model lands as `[<providerType> message]` in
- * the body — `[revoke message]`, `[edit message]`, `[unsupported message]`.
+ * the body - `[revoke message]`, `[edit message]`, `[unsupported message]`.
  * An agent reading a bracketed token has no idea whether that is the
  * customer's text or ours.
  *
@@ -748,8 +748,8 @@ export function resolveExternal(
 /**
  * A colleague, from `GET /api/agents`.
  *
- * `looseObject` because the route sends a good deal more — departments,
- * counts, phone — and none of it is wanted here. A strict object would strip
+ * `looseObject` because the route sends a good deal more - departments,
+ * counts, phone - and none of it is wanted here. A strict object would strip
  * silently and a required field we do not need would fail the whole read.
  */
 export const colleagueSchema = z.looseObject({
@@ -760,7 +760,7 @@ export const colleagueSchema = z.looseObject({
    * ★★ THE FILTER THE PLATFORM DOES NOT APPLY.
    *
    * `reassign` checks only that the user exists in the tenant, so a transfer
-   * to a deactivated colleague SUCCEEDS — and leaves the conversation
+   * to a deactivated colleague SUCCEEDS - and leaves the conversation
    * assigned to somebody who cannot sign in, with no unassign to recover it.
    * Required, not defaulted: a route that stopped sending this must fail the
    * read rather than quietly treat everybody as available.
@@ -773,7 +773,7 @@ export const colleagueListSchema = z.array(colleagueSchema);
 /**
  * The people this viewer may hand a conversation to.
  *
- * Excludes themselves — "transfer to me" is what holding it already means —
+ * Excludes themselves - "transfer to me" is what holding it already means -
  * and anybody deactivated. Named rather than displayed nameless: the route's
  * `name` is optional and a blank option in a select is a transfer to nobody
  * in particular.
@@ -791,7 +791,7 @@ export function transferableTo(
 /**
  * `GET /api/agents/settings/auto-greeting`.
  *
- * `template` is required and `""` is a real answer — the route writes
+ * `template` is required and `""` is a real answer - the route writes
  * `(await readDurableSetting(...)) || ""`, so "no greeting configured" and
  * "a greeting configured" are the same field with different contents. A
  * default here would turn a route that stopped sending it into a confident

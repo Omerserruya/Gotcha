@@ -44,7 +44,7 @@ const page = async (query: Record<string, string> = {}) => {
   return Page({ searchParams: Promise.resolve(query) });
 };
 
-describe('★ 08b — Add knowledge opens by query', () => {
+describe('★ 08b - Add knowledge opens by query', () => {
   it('not without ?add=1', async () => {
     expect(find(await page(), AddKnowledge)).toBeNull();
   });
@@ -90,7 +90,7 @@ describe('★★ where an added source goes', () => {
     expect(await base()).toBe('none');
   });
 
-  it('★★ the read failed: unknown — never "none", which would make a second base', async () => {
+  it('★★ the read failed: unknown - never "none", which would make a second base', async () => {
     sources.value = null;
     expect(await base()).toBe('unknown');
     sources.value = [];

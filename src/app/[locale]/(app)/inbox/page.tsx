@@ -22,7 +22,7 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { channelName } from '@/api/contracts/inbox';
 
 /**
- * Inbox — screen 02.
+ * Inbox - screen 02.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * FOUR PANELS AS PEERS, AND FOUR INDEPENDENT FAILURES
@@ -42,7 +42,7 @@ import { channelName } from '@/api/contracts/inbox';
  * are what it can see.
  *
  * ⚠ CORRECTED: this used to say a nested async component "renders nothing".
- *   It does not — React Server Components render them, and the stream below
+ *   It does not - React Server Components render them, and the stream below
  *   is exactly that, inside `<Suspense>` (measured in a browser, 8bb92d6).
  *
  * ── AND `CustomerOrders` IS 04d's PANEL, GIVEN ITS DATA ──
@@ -57,7 +57,7 @@ export default async function Page({
    * ⚠⚠ `view` WAS NOT HERE, AND THAT WAS THE WHOLE BUG. The rail writes
    *    `?view=resolved` and highlights the right item; this type declared only
    *    `c` and `cursor`, so the page ignored it and every view showed the same
-   *    ten rows — "Resolved" listing open conversations, "Assigned to me"
+   *    ten rows - "Resolved" listing open conversations, "Assigned to me"
    *    listing nine that were not.
    */
   readonly searchParams: Promise<{
@@ -74,7 +74,7 @@ export default async function Page({
   const channel = parseChannelFilter(rawChannel);
   const data = await loadInbox(c, cursor, view, channel);
   /*
-    02b: the queue is clear — the default view, unfiltered, read and empty.
+    02b: the queue is clear - the default view, unfiltered, read and empty.
     Its own reads only then, so a busy inbox pays for nothing.
   */
   const clear =
@@ -89,7 +89,7 @@ export default async function Page({
       : null;
   /*
    * One `now` for the whole render. Computed per row, two conversations a
-   * second apart could age differently within one screenshot — and the
+   * second apart could age differently within one screenshot - and the
    * capture runs at three viewports.
    */
   const now = new Date();
@@ -101,14 +101,14 @@ export default async function Page({
       ════════════════════════════════════════════════════════════════════════
       We drew "Inbox" and "Every conversation, and what GOTCHA knows about the
       person on the other end." above the three columns. 02 starts the queue
-      at the top of the frame — the sidebar already says which screen this is,
+      at the top of the frame - the sidebar already says which screen this is,
       and the space goes to conversations.
 
       ★ `title` and `description` are optional on `PageContainer`, so this is
         a deletion rather than a new variant.
     */
     /*
-      ★ `bleed` — whose own comment names the Inbox as "the obvious one".
+      ★ `bleed` - whose own comment names the Inbox as "the obvious one".
         It removes the 40px gutters and the 1120px cap so the three panels
         reach the dark frame's edges, as 02 draws them. Without it they sit
         inside a document's margins and the frame shows as a border rather
@@ -121,7 +121,7 @@ export default async function Page({
         /*
           ⚠⚠ THIS SCREEN DRAWS ITS OWN PANELS, SO THE SHELL'S LIGHT SURFACE
              STEPS ASIDE. 02's page is `rgb(18,18,18)` and the three columns
-             are `#FAF8F4` cards on it — light on near-black is the
+             are `#FAF8F4` cards on it - light on near-black is the
              separation. On the shell's light surface they were invisible.
 
           ★ Declared by the content about itself rather than threaded as a
@@ -144,7 +144,7 @@ export default async function Page({
             */
             /*
               ⚠ THE OPEN CONVERSATION, NOT THE `c` PARAMETER. With no `?c=` the
-                loader opens the first row, and passing `c` marked nothing —
+                loader opens the first row, and passing `c` marked nothing -
                 a conversation on screen with no row saying it was the one.
             */
             openId={data.open?.id ?? null}
@@ -160,7 +160,7 @@ export default async function Page({
 
         {/*
           ════════════════════════════════════════════════════════════════════
-          ⚠⚠ TWO PANELS, NOT THREE — AND THE COPILOT IS THIS ONE’S WALL
+          ⚠⚠ TWO PANELS, NOT THREE - AND THE COPILOT IS THIS ONE’S WALL
           ════════════════════════════════════════════════════════════════════
           From 02’s computed tree: the chat panel is `[856x876] bg:#FAF8F4
           r:18px ovf:hidden`, and INSIDE it a `[856x809]` flex ROW holds
@@ -169,12 +169,12 @@ export default async function Page({
 
           ★★ That radius is the giveaway: the Copilot inherits the PANEL’s
              bottom-right corner, which only a CHILD can do. It is not a card
-             beside the conversation — it is the right-hand wall of the same
+             beside the conversation - it is the right-hand wall of the same
              card, dark against the panel’s light.
 
           ⚠ And the branch below is one SECTION with two bodies, not two
             sections. It was two, and moving the Copilot into the open one
-            silently dropped it from the empty one — the panel vanished on
+            silently dropped it from the empty one - the panel vanished on
             the state where somebody has nothing selected.
         */}
         <section className={styles.conversationColumn} aria-label={t('open.label')}>
@@ -204,17 +204,17 @@ export default async function Page({
                 The column used to begin at the verbs and go straight into
                 messages, so an agent arriving from the queue read a wall of text
                 with no statement of who it is with, on what channel, or how long
-                they have waited — the three facts that decide how the first
+                they have waited - the three facts that decide how the first
                 sentence should be written.
 
-                A sibling, not a parent — which keeps both visible to the
+                A sibling, not a parent - which keeps both visible to the
                 structural test (it does not run nested async components).
               */}
               {/*
                 ★★ ONE BAR, WHICH IS WHAT I SAID AND NOT WHAT SHIPPED.
                 I described the header and the verbs as "one bordered bar". They
                 were siblings: the header had the border and the verbs sat outside
-                it, so "Take control" still read as detached — a walk said so, and
+                it, so "Take control" still read as detached - a walk said so, and
                 it was right. The description was of the intent, not the markup.
 
                 A plain `div` again, so both stay siblings of each other and of
@@ -253,7 +253,7 @@ export default async function Page({
                   colleagues={data.colleagues}
                   /*
                    * ⚠ `CLOSED` is the only status that means resolved. `OPEN`
-                   *   and `WAITING` are both live — and `WAITING` most of all,
+                   *   and `WAITING` are both live - and `WAITING` most of all,
                    *   since somebody is waiting for a reply.
                    */
                   resolved={data.open.status === 'CLOSED'}
@@ -289,8 +289,8 @@ export default async function Page({
                     ════════════════════════════════════════════════════════
                     It waited for the whole page before; now the frame, the
                     queue, the header and the composer paint, and the stream
-                    — with the Copilot's strip under it and the pin to its
-                    latest message — arrives when its read does.
+                    - with the Copilot's strip under it and the pin to its
+                    latest message - arrives when its read does.
 
                     ★ Keyed by the conversation, so opening another one shows
                       the skeleton again rather than the last one's messages
@@ -324,7 +324,7 @@ export default async function Page({
               )}
             </div>
             {/*
-              02b: on a clear queue there is no conversation and no wall — the
+              02b: on a clear queue there is no conversation and no wall - the
               pane is the whole panel, and the wall's reads are not made.
             */}
             {clear ? null : (

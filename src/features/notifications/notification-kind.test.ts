@@ -6,7 +6,7 @@ import { groupOf, isKind, kindOf } from './notification-kind';
 
 const n = (over: Record<string, unknown>) => notificationSchema.parse({ id: 'x', ...over });
 
-describe('★ 01d — kinds from the catalogue’s keys, never guessed', () => {
+describe('★ 01d - kinds from the catalogue’s keys, never guessed', () => {
   it.each([
     ['tool.approval_required', 'decision'],
     ['conversation.escalated', 'decision'],
@@ -26,7 +26,7 @@ describe('★ 01d — kinds from the catalogue’s keys, never guessed', () => {
   });
 });
 
-describe('★ 01d — groups: the last hour, the rest of today, before', () => {
+describe('★ 01d - groups: the last hour, the rest of today, before', () => {
   const now = new Date(2026, 9, 3, 12, 0);
   it.each([
     [new Date(2026, 9, 3, 11, 58), 'now'],

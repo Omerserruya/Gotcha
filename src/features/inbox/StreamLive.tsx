@@ -11,8 +11,8 @@ import { useRealtimeEvent } from '@/realtime/realtime-provider';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE COMPOSER SAYS "IT WILL SAY SO IF IT FAILS". THIS IS WHAT MAKES THAT SO.
  * ════════════════════════════════════════════════════════════════════════════
- * A send answers 201 with the row at `PENDING`. Everything after that —
- * `SENT`, `DELIVERED`, `FAILED` — happens asynchronously, in the outgoing worker
+ * A send answers 201 with the row at `PENDING`. Everything after that -
+ * `SENT`, `DELIVERED`, `FAILED` - happens asynchronously, in the outgoing worker
  * and the provider webhook. `revalidatePath` re-reads once, at send time, when
  * there is nothing new to see.
  *
@@ -24,7 +24,7 @@ import { useRealtimeEvent } from '@/realtime/realtime-provider';
  * `router.refresh()` re-runs the server render, so the stream, the queue row and
  * the header all come from one read. Patching a status into client state would be
  * a second source of truth for delivery, on the screen where being wrong about
- * delivery is the whole hazard — and it would be a status this app decided rather
+ * delivery is the whole hazard - and it would be a status this app decided rather
  * than one the platform reported.
  *
  * ── FILTERED AND DEBOUNCED, BECAUSE THE EVENT IS TENANT-WIDE ──
@@ -32,7 +32,7 @@ import { useRealtimeEvent } from '@/realtime/realtime-provider';
  * that is every message everywhere, and a refresh each time would re-render this
  * screen continuously. Two guards: the conversation must match, and refreshes
  * coalesce into one per interval. A burst of four status changes for one message
- * — `SENT`, then `DELIVERED`, then `READ` — is one re-read.
+ * - `SENT`, then `DELIVERED`, then `READ` - is one re-read.
  */
 
 /**

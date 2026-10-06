@@ -43,7 +43,7 @@ describe('the deferred date leads, and it carries the year', () => {
     /*
      * Every change available to this tenant lands in September 2027. A bare
      * "8 September" is read as this year by everybody, so the year is
-     * asserted PRESENT — not in any particular format.
+     * asserted PRESENT - not in any particular format.
      */
     expect(note).toHaveTextContent(/2027/);
   });
@@ -58,14 +58,14 @@ describe('★ a scheduled change can be replaced but never cleared', () => {
   it('says so before the choice, not after it', () => {
     /*
      * `resumeSubscription` is the only revoke path and its cleanup is gated
-     * on `changeType: "CANCEL"`. A scheduled downgrade cannot be removed —
+     * on `changeType: "CANCEL"`. A scheduled downgrade cannot be removed -
      * `changePlan` upserts the same row, so another change REPLACES it, and
      * nothing returns the subscription to having none scheduled.
      */
     renderGate();
     const note = screen.getByTestId('change-irreversible');
     expect(note).toHaveTextContent(/cannot be called off here/i);
-    // Replaceable, not merely irreversible — the distinction is the useful part.
+    // Replaceable, not merely irreversible - the distinction is the useful part.
     expect(note).toHaveTextContent(/choosing a different plan replaces it/i);
     // And it names the asymmetry, because a cancellation CAN be reversed.
     expect(note).toHaveTextContent(/only a cancellation can be reversed/i);
@@ -112,7 +112,7 @@ describe('the permission is explained, not hidden', () => {
   it('does NOT refuse when permissions could not be loaded', () => {
     /*
      * `unavailable` is not an empty set. The backend remains the security
-     * authority, so the worst case here is a refusal with an explanation —
+     * authority, so the worst case here is a refusal with an explanation -
      * which beats telling someone they lack a permission we never read.
      */
     renderGate({ permissions: [], status: 'unavailable' });

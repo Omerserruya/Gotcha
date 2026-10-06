@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { pendingChangeSchema } from './pricing';
 
 /**
- * Settings · Usage & billing — screen 17.
+ * Settings · Usage & billing - screen 17.
  *
  * *"Usage as runway, not credits. The user should know how long they are good
  * for, not do arithmetic."*
@@ -17,13 +17,13 @@ import { pendingChangeSchema } from './pricing';
  *     without the number would still assert billing behaviour from a mockup,
  *     which on the billing screen is the worst possible place to guess.
  *   - **"Set a spending cap."** No such field. `/api/billing/auto-purchase` is
- *     the AI-Units auto-purchase ceiling — a different resource with different
- *     consequences — and presenting it as a spending cap would be this
+ *     the AI-Units auto-purchase ceiling - a different resource with different
+ *     consequences - and presenting it as a spending cap would be this
  *     screen's version of the per-person money limits.
  */
 
 /**
- * `GET /api/usage/allowance` — enveloped in `data`.
+ * `GET /api/usage/allowance` - enveloped in `data`.
  *
  * **The projection is computed server-side and must not be re-derived here.**
  * The route's own comment gives the reason: *"A client working out its own
@@ -32,7 +32,7 @@ import { pendingChangeSchema } from './pricing';
  * Home already draws from this; the two surfaces must agree because they read
  * the same answer, not because they run the same formula.
  *
- * Path taken from the mount (`usage-allowance.ts:30`), not from the filename —
+ * Path taken from the mount (`usage-allowance.ts:30`), not from the filename -
  * this is one of the three routes in the platform that split a compound name
  * with a slash rather than a hyphen.
  */
@@ -40,7 +40,7 @@ export const allowanceSchema = z.object({
   /** Conversations counted in this period, excluding test conversations. */
   used: z.number().default(0),
   /**
-   * `null` when the plan carries no conversation allowance — which is the case
+   * `null` when the plan carries no conversation allowance - which is the case
    * on the demo tenant, whose subscription has no chat volume option selected.
    *
    * Not zero, and not "unlimited": the plan simply does not meter this. The
@@ -65,7 +65,7 @@ export type Allowance = z.infer<typeof allowanceSchema>;
  * touch it will meet the inconsistency before they meet any message about it.
  *
  * `snapshotPrice` and `snapshotCurrency` are what the tenant is actually
- * charged — the demo tenant is `$1,499.00 USD`. The screen renders that
+ * charged - the demo tenant is `$1,499.00 USD`. The screen renders that
  * currency and does not convert: a symbol the row does not carry is a number
  * nobody agreed to.
  */
@@ -82,7 +82,7 @@ export const subscriptionSchema = z.object({
   cancelAtPeriodEnd: z.boolean().default(false),
   billingInterval: z.string().nullable().optional(),
   /**
-   * A plan change scheduled for renewal — loaded by `getSubscriptionForTenant`,
+   * A plan change scheduled for renewal - loaded by `getSubscriptionForTenant`,
    * whose comment says it is included *"so the Billing page can show 'changes
    * to X at renewal' honestly"*.
    *
@@ -90,7 +90,7 @@ export const subscriptionSchema = z.object({
    * anything honest with. It omitted **`changeType`**, so a scheduled CANCEL
    * was indistinguishable from a downgrade; **`effectiveAt`**, so the screen
    * could name the plan but not the date; and **`appliedAt`**, without which
-   * a change the scheduler ran months ago still reads as pending — the row is
+   * a change the scheduler ran months ago still reads as pending - the row is
    * marked, never deleted. See `pricing.ts`.
    */
   pendingChange: pendingChangeSchema.nullable().optional(),
@@ -103,17 +103,17 @@ export const subscriptionResponseSchema = z.object({
 export type Subscription = z.infer<typeof subscriptionSchema>;
 
 /**
- * `GET /api/billing/plans` — bare `{ plans }`, like its sibling.
+ * `GET /api/billing/plans` - bare `{ plans }`, like its sibling.
  *
  * **The subscription carries `planKey`, not a plan name.** `ai_voice` is a
  * machine identifier and must never be the most prominent line on a billing
- * screen — the same class of error as rendering a cuid as an object name.
+ * screen - the same class of error as rendering a cuid as an object name.
  *
  * `Plan` carries `name` and `nameHe`, so the name is also TRANSLATABLE, which
  * a key can never be. Resolving it here rather than asking the backend to join
  * it is deliberate: this route already exists, is already tenant-scoped, and
  * its own comment says it deliberately includes RETIRED plans *"so a customer
- * still on one keeps seeing their own plan's name"* — it was built for exactly
+ * still on one keeps seeing their own plan's name"* - it was built for exactly
  * this lookup.
  *
  * **`object`, not `looseObject`:** the route returns whole `Plan` rows with
@@ -135,7 +135,7 @@ export type Plan = z.infer<typeof planSchema>;
 /**
  * The plan's name in the reader's language, falling back honestly.
  *
- * A plan the list does not contain returns `null` rather than its key — the
+ * A plan the list does not contain returns `null` rather than its key - the
  * caller decides whether showing a machine identifier is better than showing
  * nothing, and on this screen it is: an unrecognised plan is still the plan
  * they are paying for.
@@ -155,7 +155,7 @@ export function planNameFor(
 }
 
 /**
- * An invoice — **contracted, not yet served.**
+ * An invoice - **contracted, not yet served.**
  *
  * `Invoice` carries everything the design draws, including `providerPdfUrl`
  * for the PDF link, and there is no tenant-facing list route: the billing
@@ -172,7 +172,7 @@ export const invoiceSchema = z.object({
   providerPdfUrl: z.string().nullable().optional(),
 });
 
-/** `PaymentMethod` — `brand` and `last4` give the design's "Visa · 4417". */
+/** `PaymentMethod` - `brand` and `last4` give the design's "Visa · 4417". */
 export const paymentMethodSchema = z.object({
   brand: z.string().nullable().optional(),
   last4: z.string().nullable().optional(),
@@ -187,11 +187,11 @@ export type Invoice = z.infer<typeof invoiceSchema>;
 export type BillingSummary = z.infer<typeof billingSummarySchema>;
 
 /**
- * *"Where the month went"* — **contracted, not yet served.**
+ * *"Where the month went"* - **contracted, not yet served.**
  *
  * Every piece exists separately: `Conversation.handledBy` gives the AI/human
  * split, `Broadcast`/`BroadcastRecipient` the outbound count, and
- * `VoiceCallSession` the minutes — with `Subscription.voiceVolumeOptionKey`
+ * `VoiceCallSession` the minutes - with `Subscription.voiceVolumeOptionKey`
  * showing minutes are metered with an allowance of their own. Nothing
  * aggregates them.
  *
@@ -211,7 +211,7 @@ export const usageBreakdownSchema = z.object({
 export type UsageBreakdown = z.infer<typeof usageBreakdownSchema>;
 
 /**
- * What the price is per — said only when the period agrees with the interval.
+ * What the price is per - said only when the period agrees with the interval.
  *
  * The demo tenant's ACTIVE row reads `billingInterval: MONTHLY` over a period
  * from 2026-09-08 to 2027-09-08. "$1,499 a month" beside a year-long period

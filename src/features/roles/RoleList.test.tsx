@@ -31,7 +31,7 @@ import { RoleList } from './RoleList';
 const role = (over: Record<string, unknown>) =>
   roleSchema.parse({ id: 'r', name: 'Agent', features: ['inbox:read'], ...over });
 
-describe('★ 12b — the roles as one table', () => {
+describe('★ 12b - the roles as one table', () => {
   it('a built-in role: its description, a lock, and Duplicate → the form, from it', async () => {
     render(
       await RoleList({
@@ -62,7 +62,7 @@ describe('★ 12b — the roles as one table', () => {
   });
 });
 
-describe('★ 12b’s PEOPLE — 02’s faces, from the roster', () => {
+describe('★ 12b’s PEOPLE - 02’s faces, from the roster', () => {
   const owner = role({
     id: 'owner',
     name: 'Owner',
@@ -71,7 +71,7 @@ describe('★ 12b’s PEOPLE — 02’s faces, from the roster', () => {
     memberCount: 1,
   });
 
-  it('a face per person who holds it — by id, or by the built-in key — named on hover', async () => {
+  it('a face per person who holds it - by id, or by the built-in key - named on hover', async () => {
     render(
       await RoleList({
         roles: [owner],
@@ -87,7 +87,7 @@ describe('★ 12b’s PEOPLE — 02’s faces, from the roster', () => {
     expect(people.querySelector('[title]')).toHaveAttribute('title', 'Maya Levi');
   });
 
-  it('roster unread: the count, as before — never an empty row of faces', async () => {
+  it('roster unread: the count, as before - never an empty row of faces', async () => {
     render(await RoleList({ roles: [owner], members: null }));
     expect(screen.getByTestId('members-owner')).toHaveTextContent('One person');
   });

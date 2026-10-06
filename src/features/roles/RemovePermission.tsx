@@ -7,11 +7,11 @@ import { removePermission } from './actions';
 import styles from './Roles.module.css';
 
 /**
- * Taking a permission away from one person — screen 12e's second path.
+ * Taking a permission away from one person - screen 12e's second path.
  *
  * ── WHY THIS IS NOT THE ADD FORM WITH A TOGGLE ──
  * Adding and removing are **two actions with opposite visibility**, not two
- * directions of one. An addition is self-evidencing — someone has a
+ * directions of one. An addition is self-evidencing - someone has a
  * capability their role does not give, and it shows the moment they use it.
  *
  * **A removal is invisible everywhere except the person panel.** The role
@@ -22,7 +22,7 @@ import styles from './Roles.module.css';
  *
  * ── THE CONFIRMATION SAYS WHERE IT WILL BE VISIBLE AFTERWARDS ──
  * Not in the abstract. **An admin creating something only they will be able
- * to find is entitled to be told that** — it is the one fact they cannot work
+ * to find is entitled to be told that** - it is the one fact they cannot work
  * out from the screen.
  *
  * ── AND THE REASON IS REQUIRED ──

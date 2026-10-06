@@ -38,7 +38,7 @@ import { logger } from '@/observability/logger';
  * What screen 04b reads.
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ORDERED, NOT PARALLEL — AND THAT IS THE DATA'S FAULT, NOT A PREFERENCE
+ * ORDERED, NOT PARALLEL - AND THAT IS THE DATA'S FAULT, NOT A PREFERENCE
  * ════════════════════════════════════════════════════════════════════════════
  * Three reads describing one person, each keyed differently:
  *
@@ -75,7 +75,7 @@ export interface CustomerDetail {
   readonly crm: CrmContext | null;
   /**
    * Screen 04d. `null` when the read failed or there was no conversation to
-   * enter through — distinct from the response's own eight states, which are
+   * enter through - distinct from the response's own eight states, which are
    * all successful answers about why there are no orders to show.
    */
   readonly orders: CommerceContextResponse | null;
@@ -99,12 +99,12 @@ export interface CustomerDetail {
   /** Screen 04e. Three answers, because "not allowed" is not "broken". */
   readonly actions: AuditRead;
   /**
-   * Screen 04f. `null` when the read failed — distinct from an empty list,
+   * Screen 04f. `null` when the read failed - distinct from an empty list,
    * which means nobody has written anything and is a perfectly good screen.
    */
   readonly notes: readonly Note[] | null;
   /**
-   * GOTCHA's actions on this person — 02's violet rows in "Everything".
+   * GOTCHA's actions on this person - 02's violet rows in "Everything".
    *
    * ★ THE TIMELINE CARRIES NONE OF THEM. `identity/:id/timeline` returned
    * only messages for a customer with 28 approval requests in their
@@ -112,7 +112,7 @@ export interface CustomerDetail {
    * the screen. They are read from the approvals list, one read per status,
    * and kept when their conversation is one of this person's or their
    * `contactId` is. `contactId` is optional at the write site, and on dev
-   * it was set on 0 of that customer's 28 rows — so the conversation is the
+   * it was set on 0 of that customer's 28 rows - so the conversation is the
    * join that holds, and `?contactId=` alone would return nothing.
    *
    * ⚠ The list route caps each status at 100, tenant-wide: on a busy tenant
@@ -122,7 +122,7 @@ export interface CustomerDetail {
   readonly approvals: readonly Approval[] | null;
   /**
    * 04e's "What GOTCHA may do for them": the tenant's business rules for
-   * refunds, cancels, discounts and the rest — the same for every customer,
+   * refunds, cancels, discounts and the rest - the same for every customer,
    * read here because this is where 02 shows them. `null` when the read
    * failed or the viewer may not read them (`settings:business-policies:read`
    * or ADMIN); a 403 is an answer and is not reported as a failed read.
@@ -148,21 +148,21 @@ export interface CustomerDetail {
    * ★★ THIS EXISTS BECAUSE THE CAPTURE FIXTURE HID A READ THAT RETURNED
    *    NOTHING, AND EVERY TEST PASSED OVER IT
    * ════════════════════════════════════════════════════════════════════════
-   * On 2026-09-25 the 04e read failed on all six capture runs — a contract
-   * and an envelope disagreeing — and the spec's own tripwire for exactly
+   * On 2026-09-25 the 04e read failed on all six capture runs - a contract
+   * and an envelope disagreeing - and the spec's own tripwire for exactly
    * that (`customer-actions-failed` must not appear) never fired.
    * `withDetailFixtures` had already replaced the whole detail with the
    * fixture, whose audit state is `ok`. The screen photographed healthy, the
    * log said otherwise, and 84 assertions agreed with the screen.
    *
    * The fixture file's own header says it "must not hide a broken screen",
-   * and the guard it wrote for that checks `timeline === null` only —
+   * and the guard it wrote for that checks `timeline === null` only -
    * correct when the timeline was the only read that could fail, and
    * silently insufficient from the moment a sibling read was added.
    *
    * ── AND `null` COULD NOT CARRY THIS ──
    * `brief`, `memory`, `crm` and `orders` are all `null` both when the read
-   * failed and when it was never attempted — no conversation to ask
+   * failed and when it was never attempted - no conversation to ask
    * through, no external id to key on. The fixture gate cannot tell those
    * apart, and preserving the wrong one would report a failure that never
    * happened. So the loader, which DOES know, says so here.
@@ -184,7 +184,7 @@ export interface CustomerDetail {
  *
  *   ok         we read it. `data: []` then means nothing was done, which is
  *              a fact about the customer and a perfectly good screen
- *   forbidden  403 — this account may not read the workspace's audit log.
+ *   forbidden  403 - this account may not read the workspace's audit log.
  *              A permission to ask for, not a fault to report
  *   failed     we could not read it. Ours, and it says so
  *
@@ -198,7 +198,7 @@ export type AuditRead =
       /**
        * The optional parameters we actually sent.
        *
-       * `coverage` is a CONSTANT on the wire — it declares what is
+       * `coverage` is a CONSTANT on the wire - it declares what is
        * attributable in principle, not what this request achieved. Without
        * this the screen would print *"pass ?shopifyCustomerId= to include
        * them"* directly beneath the rows that parameter fetched.
@@ -211,7 +211,7 @@ export type AuditRead =
    * We never made the read.
    *
    * ★ ADDED BECAUSE THE COMMENT BESIDE THE FIRST VERSION SAID SO AND THE
-   * CODE RETURNED `failed` ANYWAY — the exact costume this project has now
+   * CODE RETURNED `failed` ANYWAY - the exact costume this project has now
    * caught four times in one day: a comment that describes the right
    * behaviour sitting above code that does not have it.
    *
@@ -224,7 +224,7 @@ export type AuditRead =
 export async function loadCustomer(
   contactId: string,
   /**
-   * Events per page — 04c's "older conversations below" asks for more. The
+   * Events per page - 04c's "older conversations below" asks for more. The
    * route's default is 50 and its cap 200; omitted, the route decides.
    */
   options: { readonly limit?: number } = {},
@@ -274,13 +274,13 @@ export async function loadCustomer(
 
   /*
    * ONE shared helper, so four screens cannot each choose differently. Reads
-   * only — see the note in `conversation-key.ts` for why a write must not
+   * only - see the note in `conversation-key.ts` for why a write must not
    * use it.
    */
   const conversationId = readKeyFor(timeline.events);
   /*
    * The phone is the memory's key. `identity/:id/timeline` returns the
-   * EFFECTIVE contact — the survivor of any merge — so this is the right
+   * EFFECTIVE contact - the survivor of any merge - so this is the right
    * identifier even when the page was opened by a merged-away id.
    */
   const externalId = timeline.contact?.externalId?.trim() ?? '';
@@ -353,7 +353,7 @@ export async function loadCustomer(
   const [brief, memory, crm, orders, notes, viewerUserId, approvals, policies, conversationStatus] =
     await Promise.all([
       /*
-       * ★ BY CONTACT, NOT BY CONVERSATION — Backend added the entry point
+       * ★ BY CONTACT, NOT BY CONVERSATION - Backend added the entry point
        * after this screen reported the door problem.
        *
        * It resolves the person internally, follows the soft-merge pointer, and
@@ -363,7 +363,7 @@ export async function loadCustomer(
        * conversation on its behalf.
        *
        * ⚠ STILL NO `refresh`. The route falls back to inline generation when
-       * that flag is set, which is a live model call on a page load — on a
+       * that flag is set, which is a live model call on a page load - on a
        * screen somebody opens to read, not to regenerate.
        */
       api
@@ -396,7 +396,7 @@ export async function loadCustomer(
                * ★★ FOUND BY SWEEPING THE NAME, AND IT WAS DORMANT FOR THE
                *    SAME REASON THE VOICE COLLAPSE WAS
                * ════════════════════════════════════════════════════════════
-               * The route answers the union UNENVELOPED — `res.json(result)`
+               * The route answers the union UNENVELOPED - `res.json(result)`
                * where `result` is `{ state, data }` for `ok`. The client sees
                * a top-level `data` key, unwraps it, and hands the bare
                * `CommerceContext` to a schema that requires `state`. The
@@ -420,7 +420,7 @@ export async function loadCustomer(
       /*
        * ★ 04f JOINS THE FAN-OUT, AND 04e COULD NOT.
        *
-       * Notes are CONTACT-keyed — the stub they replaced was conversation-keyed
+       * Notes are CONTACT-keyed - the stub they replaced was conversation-keyed
        * and that was the defect. So this needs nothing from the other three
        * answers and costs no extra round trip, unlike the audit read, which
        * waits on the commerce read for `shopifyCustomerId`.
@@ -431,7 +431,7 @@ export async function loadCustomer(
         .catch(failing<readonly Note[]>('notes', 'customer.notes_failed')),
       /*
        * Who is reading, so the edit control appears for the author and nobody
-       * else. A failure leaves it `null` and hides the control — safe, and
+       * else. A failure leaves it `null` and hides the control - safe, and
        * recorded as a failed read so the capture fixture cannot mask it.
        */
       api
@@ -454,7 +454,7 @@ export async function loadCustomer(
    * the brief: the key comes out of the previous answer.
    *
    * Issuing it in parallel without the id would be cheaper and would quietly
-   * drop every row keyed to the customer rather than the conversation —
+   * drop every row keyed to the customer rather than the conversation -
    * which the endpoint would then correctly declare as a gap, and the screen
    * would correctly print. Correct, and a worse screen than the one we can
    * have for one more request.
@@ -469,8 +469,8 @@ export async function loadCustomer(
        * ★★ `data` IS A SIBLING HERE, NOT THE PAYLOAD.
        *
        * The answer is `{ contact, data, nextCursor, coverage, scope }`.
-       * Without this the client unwraps the envelope and hands `.data` — an
-       * ARRAY — to a schema expecting an object, so the parse fails at
+       * Without this the client unwraps the envelope and hands `.data` - an
+       * ARRAY - to a schema expecting an object, so the parse fails at
        * `(root)` on a perfectly good 200.
        *
        * The flag's own doc names this case for `/api/notifications`
@@ -485,7 +485,7 @@ export async function loadCustomer(
     .catch((cause: unknown): AuditRead => {
       /*
        * A 403 is an answer, not a failure. The route is gated on
-       * `crm:contacts:read` or ADMIN — whoever can open screen 04 — so this
+       * `crm:contacts:read` or ADMIN - whoever can open screen 04 - so this
        * should not happen for anyone who reached this page, and if it does,
        * the repair is a permission rather than a retry.
        */
@@ -502,7 +502,7 @@ export async function loadCustomer(
    * ★ SUBSTITUTED LAST, AND ONLY UNDER THE GATE.
    *
    * This page renders the BODIES of a real person's messages, a written
-   * character study of them and the durable facts GOTCHA has learned — far
+   * character study of them and the durable facts GOTCHA has learned - far
    * more exposure than the list, which already justified a fixture.
    *
    * Applied to what the real reads returned, so a failure stays a failure.

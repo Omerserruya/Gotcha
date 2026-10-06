@@ -18,8 +18,8 @@ import type { PermissionString } from '@/permissions/permission-set';
  * in the product and must read natively in every locale.
  *
  * `permission` now carries the platform's real strings, confirmed against the
- * backend's canonical set. Matching is EXACT — `conversation:messages` grants
- * nothing, only `conversation:messages:read` does — so each entry names the
+ * backend's canonical set. Matching is EXACT - `conversation:messages` grants
+ * nothing, only `conversation:messages:read` does - so each entry names the
  * precise key that its area needs to be worth opening.
  *
  * Home carries none: it is the landing page and must stay reachable for
@@ -68,7 +68,7 @@ const under = (pathname: string, href: string) =>
 
 /**
  * Whether an `href` child is the current one. Prefix match, so a campaign's
- * own page keeps Campaigns current — but the most specific sibling wins:
+ * own page keeps Campaigns current - but the most specific sibling wins:
  * `/outreach/calls` sits under Campaigns' `/outreach` too, and marking both
  * says you are in two places.
  */
@@ -109,7 +109,7 @@ const INBOX_VIEWS: readonly NavigationChild[] = [
  * Outreach's areas.
  *
  * Campaigns and templates are separate screens with separate data, so
- * separate routes — the same reasoning as Studio's four. Templates is not a
+ * separate routes - the same reasoning as Studio's four. Templates is not a
  * filter over campaigns: it is a different object with its own lifecycle, and
  * the provider reviews it rather than the tenant sending it.
  */
@@ -175,7 +175,7 @@ export const STUDIO_SECTIONS: readonly NavigationChild[] = [
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ AND IT IS ONE SCREEN, BECAUSE FOUR OF THE FIVE SECTIONS HAVE NO DATA
  * ════════════════════════════════════════════════════════════════════════════
- * This listed five children, each pointing at an untouched placeholder route —
+ * This listed five children, each pointing at an untouched placeholder route -
  * five navigable rooms with a heading and nothing in them, which is what
  * screen 06 was until it was assembled.
  *
@@ -193,7 +193,7 @@ export const STUDIO_SECTIONS: readonly NavigationChild[] = [
  *
  * So the entry has no children and `/analytics` is the destination. A link to
  * a room with nothing in it is the same promise as an empty tab, made in the
- * navigation instead of on the page — and it survives longer there, because
+ * navigation instead of on the page - and it survives longer there, because
  * nobody opens every item in a sub-nav.
  */
 const ANALYTICS_SECTIONS: readonly NavigationChild[] = [];

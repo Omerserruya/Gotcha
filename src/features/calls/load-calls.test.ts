@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * a failed settings read returned `voiceEnabled: false`, and nothing asserted
  * on the difference between "no voice" and "we could not find out".
  *
- * It was harmless for as long as voice was off on all thirteen tenants — the
+ * It was harmless for as long as voice was off on all thirteen tenants - the
  * wrong answer and the right one were the same answer. The moment the flag
  * flipped, the same code began telling a merchant with voice to go and ask
  * somebody to enable it.
@@ -21,7 +21,7 @@ const get = vi.hoisted(() => vi.fn());
  * ★ THE MOCK BYPASSES ZOD, SO THE FIXTURE HAS TO CARRY ITS OWN HONESTY.
  * `api.get` is stubbed, which means `payload: voiceAvailabilitySchema` never
  * runs here. A fixture naming only the field a test cares about would be a
- * claim the platform can send that object — and after these three became
+ * claim the platform can send that object - and after these three became
  * required it cannot. `tenant-settings` sends all three unconditionally.
  */
 const settings = (over: Record<string, boolean> = {}) => ({
@@ -43,12 +43,12 @@ describe('★★ three answers, because "we could not ask" is one of them', () =
      * THE DEFECT THIS FILE GUARDS.
      *
      * `voiceCopilotGate` 404s the whole voice router, byte-identically to a
-     * missing route — so the settings read is what resolves the ambiguity.
+     * missing route - so the settings read is what resolves the ambiguity.
      * When IT fails there is no answer, and `false` is a claim about the
      * workspace made from a failed request.
      *
      * Rendered, it says "Nothing here will show calls until voice is
-     * enabled. Ask whoever set up GOTCHA for you" — to somebody who has it.
+     * enabled. Ask whoever set up GOTCHA for you" - to somebody who has it.
      */
     get.mockRejectedValueOnce(new Error('settings unreachable'));
     const { loadCalls } = await import('./load-calls');
@@ -106,7 +106,7 @@ describe('★★ three answers, because "we could not ask" is one of them', () =
 
   it('★★ an unknown availability leaves the number unknown too', async () => {
     // Not `false`. We never got to ask, and "no number connected" would be
-    // the same manufactured claim as "no voice" — one field along.
+    // the same manufactured claim as "no voice" - one field along.
     get.mockRejectedValueOnce(new Error('settings unreachable'));
     const { loadCalls } = await import('./load-calls');
     expect((await loadCalls()).hasNumber).toBeNull();
@@ -118,7 +118,7 @@ describe('★★ the contract refuses to default the answer', () => {
     /*
      * `voiceCopilotEnabled` was `.default(false)`. A payload that stopped
      * carrying it parsed cleanly and rendered "voice is not switched on for
-     * this workspace" — the loader's repaired collapse, committed one level
+     * this workspace" - the loader's repaired collapse, committed one level
      * down where nothing logs.
      *
      * Required, absence throws, the loader catches, and the screen says we
@@ -141,7 +141,7 @@ describe('★★ the contract refuses to default the answer', () => {
 });
 
 describe('★ the week’s summary', () => {
-  it('★ summaryDays reaches the route as `from` — so "this week" is the week’s figure', async () => {
+  it('★ summaryDays reaches the route as `from` - so "this week" is the week’s figure', async () => {
     get
       .mockResolvedValueOnce(settings({ voiceCopilotEnabled: true }))
       .mockResolvedValueOnce({ data: [], nextCursor: null })
@@ -157,7 +157,7 @@ describe('★ the week’s summary', () => {
     expect(before - from).toBeLessThanOrEqual(7 * 86_400_000 + 1000);
   });
 
-  it('omitted, the summary is all-time — no `from`', async () => {
+  it('omitted, the summary is all-time - no `from`', async () => {
     get
       .mockResolvedValueOnce(settings({ voiceCopilotEnabled: true }))
       .mockResolvedValueOnce({ data: [], nextCursor: null })
@@ -171,7 +171,7 @@ describe('★ the week’s summary', () => {
   });
 });
 
-describe("★★ loadLiveCall — the caller's name, beside the transcript", () => {
+describe("★★ loadLiveCall - the caller's name, beside the transcript", () => {
   const call = (over: Record<string, unknown> = {}) => ({
     id: 'v1',
     conversationId: 'c1',
@@ -195,7 +195,7 @@ describe("★★ loadLiveCall — the caller's name, beside the transcript", () 
     expect((await loadLiveCall()).contactName).toBe('Dana Cohen');
   });
 
-  it('⚠ the contact read failing is not the call failing — the number stands in', async () => {
+  it('⚠ the contact read failing is not the call failing - the number stands in', async () => {
     route(async () => {
       throw new Error('500');
     });
@@ -205,7 +205,7 @@ describe("★★ loadLiveCall — the caller's name, beside the transcript", () 
     expect(read.contactName).toBeNull();
   });
 
-  it('a contact with no name, or an unmatched call: null — and no contact read for the latter', async () => {
+  it('a contact with no name, or an unmatched call: null - and no contact read for the latter', async () => {
     route(async () => ({ id: 'k1', displayName: '   ' }));
     const { loadLiveCall } = await import('./load-calls');
     expect((await loadLiveCall()).contactName).toBeNull();

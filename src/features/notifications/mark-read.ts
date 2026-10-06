@@ -13,7 +13,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  *
  * Both endpoints take no body and answer `{ ok: true }`. A single mark is
  * scoped server-side to `(id, tenantId, userId)`, so another user's id answers
- * 404 rather than leaking that the notification exists — worth knowing when
+ * 404 rather than leaking that the notification exists - worth knowing when
  * reading the failure path below: a 404 here is a normal outcome, not a bug.
  */
 export async function markRead(id: string): Promise<{ ok: boolean }> {

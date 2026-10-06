@@ -11,11 +11,11 @@ import type { KnowledgeBaseRef } from './add-way';
 export type { KnowledgeLanding } from './add-way';
 
 /**
- * 08b's three live ways in — a document, a page, a typed fact — (Omer,
+ * 08b's three live ways in - a document, a page, a typed fact - (Omer,
  * 2026-10-04). From the browser, as `send-media` is: a 10 MB file does not
  * belong in a server action's body.
  *
- * Every one lands in the tenant's knowledge base — the newest active one, as
+ * Every one lands in the tenant's knowledge base - the newest active one, as
  * ChatCenter's own screen picks; dev has one per tenant. With none, one is
  * made first, which is the only extra write here.
  */
@@ -29,8 +29,8 @@ export type AddResult =
   | {
       readonly ok: false;
       /**
-       * `too_large` · `wrong_type` · `bad_url` — refused here, nothing sent;
-       * `unreadable` — the platform could not get text out of it (400);
+       * `too_large` · `wrong_type` · `bad_url` - refused here, nothing sent;
+       * `unreadable` - the platform could not get text out of it (400);
        * `entitlement` · `forbidden` · `failed`.
        */
       readonly reason:
@@ -72,7 +72,7 @@ export async function addKnowledge(
   input: AddInput,
   newBaseName: string,
 ): Promise<AddResult> {
-  // Refused here, before anything is written — a base included.
+  // Refused here, before anything is written - a base included.
   if (base === 'unknown') return { ok: false, reason: 'failed' };
   if (input.way === 'page' && pageAddress(input.url) === null)
     return { ok: false, reason: 'bad_url' };
@@ -135,7 +135,7 @@ export type ConnectStart =
   | { readonly ok: false; readonly reason: 'not_configured' | 'forbidden' | 'failed' };
 
 /**
- * 08b's Drive and Confluence — live (backend df9ee4cd). The provider's page
+ * 08b's Drive and Confluence - live (backend df9ee4cd). The provider's page
  * is asked for here, then the browser goes there; the way back lands on this
  * sheet with `connected=1` or `error=<code>`. Nothing is connected until the
  * person approves at the provider. A base is needed first, as for any source.

@@ -15,18 +15,18 @@ import { ConversationList } from './ConversationList';
 import { QUEUE_CHANNEL_FILTERS } from './inbox-views';
 
 /*
- * ★ The established mock for this app's locale-aware `Link` — see
+ * ★ The established mock for this app's locale-aware `Link` - see
  *   `TeamPanel.test.tsx`. It renders a real anchor so `href` and the
  *   element TYPE can both be asserted, which is the point here: the rows
  *   were `div`s and the defect was that they were not links at all.
  *
  * ⚠ `href` is an object for a query-carrying route, so it is serialised the
- *   way `next/link` would rather than dropped — a mock that stringified it
+ *   way `next/link` would rather than dropped - a mock that stringified it
  *   as "[object Object]" would pass a test for "has an href".
  */
 /*
  * ★ The rows sit inside `QueueMenu`, a client component with its own
- *   translations — so every render here is inside the provider the app has.
+ *   translations - so every render here is inside the provider the app has.
  */
 const render = (ui: ReactNode) =>
   rtlRender(ui, {
@@ -61,7 +61,7 @@ vi.mock('@/i18n/navigation', () => ({
 /*
  * ★ BOTH NAMESPACES, BECAUSE THE ROW READS BOTH.
  * The channel's display name lives in `channels`, where screen 13 already
- * maintains it in two languages — copying ten names into `inbox` would be a
+ * maintains it in two languages - copying ten names into `inbox` would be a
  * second set of words for one set of things.
  */
 vi.mock('next-intl/server', () => ({
@@ -90,8 +90,8 @@ const row = (over: Record<string, unknown> = {}): ConversationRow =>
      * ★★ `customerName`, AND THE OLD FIXTURE SAID `contactName`.
      *
      * A fixture is a claim that the platform can produce this object. This one
-     * claimed a field the platform has never sent — the same invention the
-     * contract carried — and **no assertion looked at the rendered name**, so
+     * claimed a field the platform has never sent - the same invention the
+     * contract carried - and **no assertion looked at the rendered name**, so
      * the row printed "Someone" and every test passed. Ten of ten rows in the
      * capture, read as redaction by the security fixtures.
      */
@@ -142,7 +142,7 @@ describe('★★ the undated group is per PAGE, because nulls sort last', () => 
    * The server orders `{ lastMessageAt: desc, nulls: last }`, so every
    * undated row is at the very END of the whole queue. On a tenant with
    * more conversations than one page holds, the group I built to make a
-   * hidden problem visible is itself empty on every page but the last —
+   * hidden problem visible is itself empty on every page but the last -
    * hidden by the ordering, for exactly the tenants big enough to have the
    * problem.
    *
@@ -168,7 +168,7 @@ describe('★★ rows the ordering cannot place are shown, not sunk', () => {
   it('★★ puts a null `lastMessageAt` in its own group rather than the floor', async () => {
     /*
      * `lastMessageAt` is a denormalised cache maintained by convention at
-     * ten call sites, and writers bypass it — one conversation on dev is
+     * ten call sites, and writers bypass it - one conversation on dev is
      * open with two real messages and no value.
      *
      * Sorted naively it sinks to the bottom of a recency list and is never
@@ -186,7 +186,7 @@ describe('★★ rows the ordering cannot place are shown, not sunk', () => {
 
   it('★ an unparseable timestamp is undated too, never sorted as though valid', () => {
     // `Date.parse` of rubbish is NaN, and a NaN comparator silently leaves
-    // the array in whatever order it arrived — an ordering nobody chose,
+    // the array in whatever order it arrived - an ordering nobody chose,
     // presented as one somebody did.
     const { dated, undated } = queueOrder([row({ id: 'bad', lastMessageAt: 'soon' })]);
     expect(dated).toHaveLength(0);
@@ -237,7 +237,7 @@ describe('★★ what the row actually says about the customer', () => {
      * ⚠ THE NAME MOVED, THE RULE DID NOT. It used to print in the tag row;
      *   the avatar now carries a tinted channel badge, so the word would be a
      *   duplicate spending the row's one coloured slot. It is the badge's
-     *   accessible name instead — because a tint and a glyph say nothing to
+     *   accessible name instead - because a tint and a glyph say nothing to
      *   somebody who cannot see them.
      */
     expect(screen.getByTitle(/shopify live chat/i)).toBeInTheDocument();
@@ -247,7 +247,7 @@ describe('★★ what the row actually says about the customer', () => {
   it('★★ no screaming-snake value reaches the screen, whatever the channel is', async () => {
     /*
      * The durable form of the rule: an unconstrained column can hold a value
-     * this build has never seen, and the answer is "another channel" — not the
+     * this build has never seen, and the answer is "another channel" - not the
      * raw string, which every other screen here strips.
      */
     await show([row({ channel: 'SOME_NEW_CHANNEL' })]);
@@ -255,7 +255,7 @@ describe('★★ what the row actually says about the customer', () => {
 
     /*
      * ⚠ THE SWEEP NOW READS ATTRIBUTES TOO, AND THAT IS THE POINT. The rule
-     *   is that a raw enum never reaches a person — moving the name into a
+     *   is that a raw enum never reaches a person - moving the name into a
      *   `title` would have slipped past a check that only read text, and the
      *   guard would have stayed green while the thing it guards moved out of
      *   its view.
@@ -269,7 +269,7 @@ describe('★★ a wait at a scale somebody can read', () => {
     /*
      * THE DEFECT THE CAPTURE FOUND. The row printed raw minutes, so a
      * thirty-two-day wait rendered as `47061m` on the column an agent triages
-     * on — and it was illegible enough to be reported as a possible
+     * on - and it was illegible enough to be reported as a possible
      * identifier rather than a duration.
      */
     await show([row({ lastMessageAt: '2026-09-25T09:00:00.000Z' })]);
@@ -311,7 +311,7 @@ describe('★ waiting time, and the row that has none', () => {
   it('★★ shows no waiting time at all for an undated row, rather than 0m', async () => {
     /*
      * Zero would put a conversation nobody can age alongside the freshest
-     * thing in the queue — a fabricated recency, the same shape as the 0s
+     * thing in the queue - a fabricated recency, the same shape as the 0s
      * reply average that made the idlest person fastest.
      */
     await show([row({ id: 'lost', lastMessageAt: null })]);
@@ -340,7 +340,7 @@ describe('★★ the view-wide undated count, and its three states', () => {
    * additive and absent on a service that predates it.
    *
    * Defaulting it to 0 would have the screen assert "no undated
-   * conversations" on a service that cannot answer — **the instrument
+   * conversations" on a service that cannot answer - **the instrument
    * reporting all-clear because it is not there.** That is the second time
    * today this same group would have hidden the thing it exists to show.
    */
@@ -393,7 +393,7 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
    *     right-click    0 menu elements
    *
    * ★ The only way into a conversation was typing `?c=<id>` in the address
-   *   bar. That is not a styling gap — it is the screen's primary function
+   *   bar. That is not a styling gap - it is the screen's primary function
    *   missing, and it explains "light years from the target" better than any
    *   spacing value.
    */
@@ -409,7 +409,7 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
     /*
      * ★ The prototype draws `<button onClick>` because a static mock has no
      *   routing. An anchor gives middle-click, open-in-new-tab, the browser's
-     *   own context menu — which the reviewer asked about by name — keyboard
+     *   own context menu - which the reviewer asked about by name - keyboard
      *   focus and a status-bar preview. A button reimplements those badly or
      *   not at all.
      *
@@ -428,7 +428,7 @@ describe('⚠⚠ the rows were not clickable, on the screen whose job is clickin
   it('⚠⚠ uses `c`, the parameter this app actually reads', async () => {
     /*
      * ★ `inbox/page.tsx` destructures `c`, and it is the only reader. A walk
-     *   quoted `?conversation=` — that was the harness's URL, not ours, and
+     *   quoted `?conversation=` - that was the harness's URL, not ours, and
      *   building the link on it would have produced rows that navigate to a
      *   page which opens nothing.
      */
@@ -472,7 +472,7 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
    * `lastMessageBody` WAS IN THE CONTRACT AND RENDERED NOWHERE
    * ════════════════════════════════════════════════════════════════════════
    * Parsed by `conversationRowSchema` on every page load and discarded. The
-   * row's whole purpose — what the person actually said — was being fetched
+   * row's whole purpose - what the person actually said - was being fetched
    * and thrown away, which is the fourth value today that existed and had no
    * reader.
    */
@@ -488,7 +488,7 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
     expect(screen.getByTestId('preview-c1')).toHaveTextContent("My package still hasn't arrived");
   });
 
-  it('⚠ keeps an EMPTY line when there is no body — no text invented', async () => {
+  it('⚠ keeps an EMPTY line when there is no body - no text invented', async () => {
     // A media message has no body and the list sends no type. Dropping the
     // line made those rows 69 tall among 82s; 02 has three lines on every row.
     render(
@@ -508,7 +508,7 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
     /*
      * ★ The design puts last-message time here and waiting-age in the tag
      *   row. Both facts kept, each in its own slot, rather than one standing
-     *   in for the other — which is what we were doing.
+     *   in for the other - which is what we were doing.
      *
      * ⚠ 06:29 UTC is 09:29 in Asia/Jerusalem, which is the configured zone
      *   and the time the design's own screenshot shows. A formatter using the
@@ -527,7 +527,7 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
   });
 
   it('★ and waiting-age is still there, moved to the tag row', async () => {
-    // It is what the queue is sorted by. The design keeps it — as a tag.
+    // It is what the queue is sorted by. The design keeps it - as a tag.
     render(
       await ConversationList({
         rows: [row({ lastMessageAt: '2026-09-25T06:29:00.000Z' })],
@@ -542,7 +542,7 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
   it('⚠⚠ initials come from WORDS, never a slice of the raw name', async () => {
     /*
      * ★ `customerName` is not always a person. A Shopify live-chat row reads
-     *   "Shopper on urban-supply-gotcha-demo.myshopify.com" — slicing that
+     *   "Shopper on urban-supply-gotcha-demo.myshopify.com" - slicing that
      *   would put a fragment of a shop domain in the avatar circle.
      */
     render(
@@ -586,7 +586,7 @@ describe('⚠⚠ the channel badge I said could not be built', () => {
    * brand images we do not have. `GOTCHA Directions.dc.html` renders the same
    * badge as `<i data-lucide="message-circle">`.
    *
-   * ★ Two files, two representations of one design — and I read the one whose
+   * ★ Two files, two representations of one design - and I read the one whose
    *   templating happened to express the icon as a URL variable. The fourth
    *   wrong negative today, and the one that cost the most visible element in
    *   the row.
@@ -614,7 +614,7 @@ describe('⚠⚠ the channel badge I said could not be built', () => {
 
   it('⚠⚠ an unrecognised channel gets the globe, never nothing', async () => {
     /*
-     * `channel` is an unconstrained column — the same reason `channelName`
+     * `channel` is an unconstrained column - the same reason `channelName`
      * answers "another channel" rather than echoing a raw enum. A row with no
      * mark would read as a different KIND of row rather than an unknown one.
      */
@@ -635,7 +635,7 @@ describe('⚠⚠ a settled row is drawn quieter, and every row looked the same',
   /*
    * 02 draws a resolved conversation softer in five separate ways: name
    * weight, name colour, preview colour, time colour, avatar tint. We drew
-   * every row identically — which is why the column read flat, and it is not
+   * every row identically - which is why the column read flat, and it is not
    * a spacing problem.
    */
   it('★★ marks CLOSED rows, and leaves live ones alone', async () => {
@@ -654,8 +654,8 @@ describe('⚠⚠ a settled row is drawn quieter, and every row looked the same',
     expect(screen.getByTestId('conversation-c1')).toHaveAttribute('data-settled');
     expect(screen.getByTestId('conversation-c2')).not.toHaveAttribute('data-settled');
     /*
-     * ⚠ WAITING IS NOT SETTLED. It is the most live state in the queue —
-     *   somebody is waiting for a reply — and reading it as "done" would
+     * ⚠ WAITING IS NOT SETTLED. It is the most live state in the queue -
+     *   somebody is waiting for a reply - and reading it as "done" would
      *   quiet exactly the rows that need attention most.
      */
     expect(screen.getByTestId('conversation-c3')).not.toHaveAttribute('data-settled');
@@ -668,10 +668,10 @@ describe('⚠⚠ two tags on real data, not six where four are fiction', () => {
    * THE DESIGN RENDERS NINE TAG TEXTS. THEY SPLIT THREE WAYS.
    * ════════════════════════════════════════════════════════════════════════
    *   buildable   "You" (assignedAgentId === me) · "Flow" (handledBy)
-   *   needs a     "Support AI" / "Sales AI" — the row carries
+   *   needs a     "Support AI" / "Sales AI" - the row carries
    *   name          `assignedAiAgentId`, an id with no name
    *   no field    "Shipping issue" · "High intent" · "Waiting on returns" ·
-   *               "Approval needed" — a classification nobody stores
+   *               "Approval needed" - a classification nobody stores
    *
    * ⚠ The last four are NOT approximations of `status`. "Waiting on returns"
    *   is not `WAITING`, and a mapping that looks right on three rows is the
@@ -693,7 +693,7 @@ describe('⚠⚠ two tags on real data, not six where four are fiction', () => {
 
   it('⚠⚠ and never when the viewer is unknown', async () => {
     /*
-     * ★ `meId` is null when `/auth/me` failed — a real state, handled
+     * ★ `meId` is null when `/auth/me` failed - a real state, handled
      *   elsewhere in this feature by withholding controls. A row claiming to
      *   be "yours" when we do not know who you are is worse than no tag:
      *   every row would claim it.
@@ -705,7 +705,7 @@ describe('⚠⚠ two tags on real data, not six where four are fiction', () => {
           /*
            * ⚠⚠ THE CASE A SURVIVING MUTATION FOUND, AND IT IS THE COMMON ONE.
            *   An UNASSIGNED row has `assignedAgentId: null`. With `meId` also
-           *   null, `null === null` is true — so without the explicit guard
+           *   null, `null === null` is true - so without the explicit guard
            *   **every unassigned row in the queue would claim to be yours**,
            *   which on a triage column is the worst possible lie.
            *
@@ -726,7 +726,7 @@ describe('⚠⚠ two tags on real data, not six where four are fiction', () => {
 
   it('★★ says "Flow" on flow-handled rows, and not on the other two', async () => {
     // `HANDLED_BY` is ['ai_agent','flow','human'] and the design's tag is the
-    // literal word "Flow" — an exact match, which is why it is buildable and
+    // literal word "Flow" - an exact match, which is why it is buildable and
     // "Support AI" is not.
     render(
       await ConversationList({
@@ -757,7 +757,7 @@ describe('★★ the cap caption found the home the design gave it', () => {
      *   Neither is built, so printing it would be the screen describing a
      *   feature it does not have.
      *
-     * ★ But the BAR is the home the cap caption never had — it used to sit
+     * ★ But the BAR is the home the cap caption never had - it used to sit
      *   where the design puts the column header.
      */
     render(await ConversationList({ rows: [row()], cap: 10, now: NOW, hasMore: false }));
@@ -766,7 +766,7 @@ describe('★★ the cap caption found the home the design gave it', () => {
     expect(footer.textContent).not.toMatch(/right-click|shift-click/i);
     /*
      * ⚠ ASSERTED AS THE SENTENCE, NOT AS "CONTAINS A DIGIT". My first version
-     *   wanted `/\d/` — and the catalogue spells "One conversation" for a
+     *   wanted `/\d/` - and the catalogue spells "One conversation" for a
      *   count of one, so the proxy failed on correct copy. Fourth time today.
      */
     expect(footer.textContent).toMatch(/conversation/i);
@@ -780,7 +780,7 @@ describe('⚠⚠ 24-hour time, because the zone and the format are two defaults'
      * PINNING THE ZONE WAS RIGHT AND WAS NOT ENOUGH
      * ════════════════════════════════════════════════════════════════════════
      * `hour12` follows the LOCALE by default. The deployed build rendered
-     * "07:48 PM" in `en` while `he` would render "19:48" — the two locales
+     * "07:48 PM" in `en` while `he` would render "19:48" - the two locales
      * disagreeing about a thing 02 states once, on every row, as `09:29`.
      *
      * ★ Two separate defaults, and only one of them was wrong at a time.
@@ -797,18 +797,18 @@ describe('⚠⚠ 24-hour time, because the zone and the format are two defaults'
 
     expect(time).toMatch(/^\d{2}:\d{2}$/);
     expect(time).not.toMatch(/AM|PM/i);
-    // 16:48 UTC is 19:48 in Asia/Jerusalem — zone AND format together.
+    // 16:48 UTC is 19:48 in Asia/Jerusalem - zone AND format together.
     expect(time).toBe('19:48');
   });
 });
 
-describe('⚠⚠ "every thing in its own container" — the panel, and how a row is marked', () => {
+describe('⚠⚠ "every thing in its own container" - the panel, and how a row is marked', () => {
   it('★★ the open row is marked, and the mark is on the ROW not the list', async () => {
     /*
      * ════════════════════════════════════════════════════════════════════════
      * 02: WHITE ROW, BLACK LEFT EDGE, NO TOP HAIRLINE
      * ════════════════════════════════════════════════════════════════════════
-     * Two signals, not one — and the 3px slot is on EVERY row at transparent,
+     * Two signals, not one - and the 3px slot is on EVERY row at transparent,
      * so nothing shifts by three pixels when selection moves. That is the
      * reasoning I wrote by hand for `aria-current`; the design had it as
      * geometry.
@@ -829,7 +829,7 @@ describe('⚠⚠ "every thing in its own container" — the panel, and how a row
   it('★★ the panel has a header, counting what this page holds', async () => {
     /*
      * ⚠ THE COUNT IS THIS PAGE, NOT THE QUEUE. The design shows 14 beside the
-     *   heading; we do not know the total when `hasMore` is true — the route
+     *   heading; we do not know the total when `hasMore` is true - the route
      *   pages by keyset and reports no grand count. Printing a page size as a
      *   queue size would be the cap defect the footer sentence exists to
      *   prevent, moved into a number.
@@ -850,8 +850,8 @@ describe('⚠⚠ "every thing in its own container" — the panel, and how a row
     /*
      * ⚠ A MUTATION SURVIVED HERE AND THE REASON IS WORTH RECORDING RATHER
      *   THAN PAPERING OVER: replacing `rows?.length ?? 0` with `rows?.length`
-     *   breaks nothing, because `[].length` is 0 and the only other case —
-     *   `rows === null` — RETURNS EARLY with the unavailable panel.
+     *   breaks nothing, because `[].length` is 0 and the only other case -
+     *   `rows === null` - RETURNS EARLY with the unavailable panel.
      *
      * ★ So the `?? 0` is reachable only through the type, not through the
      *   program. It stays because `rows` is nullable in the signature, and
@@ -869,8 +869,8 @@ describe('⚠⚠ "a WINDOW YOU SCROLL INSIDE, not outside"', () => {
    * THE PANELS RAN OFF THE BOTTOM AND THE PAGE SCROLLED INSTEAD
    * ════════════════════════════════════════════════════════════════════════
    * Measured on the rendered 02: the frame is a fixed 900px with
-   * `overflow:hidden`, and each panel is exactly 876px — 900 less its 12px
-   * padding — also hidden, also a flex column. A fixed-height flex column
+   * `overflow:hidden`, and each panel is exactly 876px - 900 less its 12px
+   * padding - also hidden, also a flex column. A fixed-height flex column
    * that hides overflow is a window whose INNER region scrolls.
    *
    * ★ And the footer bar is the proof the structure is right: 02 welds it to
@@ -924,11 +924,11 @@ describe('⚠⚠ "a WINDOW YOU SCROLL INSIDE, not outside"', () => {
     expect(rule('queueColumn')).toMatch(/line-height:\s*normal/);
   });
 
-  it('⚠⚠ a name is 500, not 600 — 600 is 02’s UNREAD, and we cannot say that', () => {
+  it('⚠⚠ a name is 500, not 600 - 600 is 02’s UNREAD, and we cannot say that', () => {
     expect(rule('who')).toMatch(/font-weight:\s*var\(--font-weight-medium\)/);
   });
 
-  it('★ the open row drops its top line — width 0, not a transparent 1px', () => {
+  it('★ the open row drops its top line - width 0, not a transparent 1px', () => {
     const open = /\.queueRow\[data-open\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(open).toMatch(/border-block-start-width:\s*0/);
   });
@@ -963,7 +963,7 @@ describe('★★ the Copilot wall is dark, and inherits only the panel’s botto
     expect(tokens).toMatch(/--copilot-surface:\s*#171717/i);
   });
 
-  it('⚠⚠ its body scrolls and can SHRINK — the third of 02\u2019s three scrollers', () => {
+  it('⚠⚠ its body scrolls and can SHRINK - the third of 02\u2019s three scrollers', () => {
     // Same three declarations as the queue list and the message stream, and
     // the same one that matters: without `min-block-size: 0` the body pushes
     // the wall taller than the panel it is part of.
@@ -985,7 +985,7 @@ describe('⚠⚠ the queue is 352px at the width the design was drawn at', () =>
      * ════════════════════════════════════════════════════════════════════════
      * IT WAS 21%, AND IT RENDERED 260px
      * ════════════════════════════════════════════════════════════════════════
-     * A percentage width resolves against its containing block — the content
+     * A percentage width resolves against its containing block - the content
      * area beside the rail, `[1218x876]` in 02's computed tree. 21% of 1218 is
      * 256, the floor caught it, and the queue came out 92px narrower than
      * drawn. Both of us had reasoned about 21% of 1440.
@@ -1004,7 +1004,7 @@ describe('⚠⚠ the queue is 352px at the width the design was drawn at', () =>
 describe('⚠⚠ the heading names the view it is heading', () => {
   it('★★ says Resolved over the resolved list, not "Waiting in queue"', async () => {
     /*
-     * ⚠ THE HEADING SAID "Waiting in queue" ON EVERY VIEW — including
+     * ⚠ THE HEADING SAID "Waiting in queue" ON EVERY VIEW - including
      *   Resolved, whose rows are by definition not waiting. A surviving
      *   mutation found that the only test used the default view, where the
      *   right heading and the wrong one are the same words.
@@ -1024,7 +1024,7 @@ describe('⚠⚠ the heading names the view it is heading', () => {
   });
 });
 
-describe("★★ Wave 2 — 02's filter row, and every chip in it filters", () => {
+describe("★★ Wave 2 - 02's filter row, and every chip in it filters", () => {
   const queue = () => [row({ id: 'c1' }), row({ id: 'c2' })];
   const chips = () => within(screen.getByTestId('queue-filters')).getAllByRole('link');
   const params = (el: Element) =>
@@ -1060,7 +1060,7 @@ describe("★★ Wave 2 — 02's filter row, and every chip in it filters", () =
     expect(params(screen.getByTestId('filter-all')).get('view')).toBe('resolved');
   });
 
-  it('★ the filter in force is the one marked current — exactly one', async () => {
+  it('★ the filter in force is the one marked current - exactly one', async () => {
     render(
       await ConversationList({
         rows: queue(),
@@ -1095,7 +1095,7 @@ describe("★★ Wave 2 — 02's filter row, and every chip in it filters", () =
     ).not.toBeNull();
   });
 
-  it('⚠ "Filters" is absent — its panel does not exist', async () => {
+  it('⚠ "Filters" is absent - its panel does not exist', async () => {
     render(await ConversationList({ rows: queue(), cap: 10, now: NOW, hasMore: false }));
     expect(screen.getByTestId('queue-filters').textContent).not.toMatch(/filters/i);
   });
@@ -1144,8 +1144,8 @@ describe('★ the list hands the menu what it needs', () => {
   });
 });
 
-describe('★ 02b — on a clear queue the bar at the column’s foot carries what the queue is', () => {
-  it('one foot, the sentence, in the bar — never an empty band', async () => {
+describe('★ 02b - on a clear queue the bar at the column’s foot carries what the queue is', () => {
+  it('one foot, the sentence, in the bar - never an empty band', async () => {
     render(
       await ConversationList({
         rows: [],

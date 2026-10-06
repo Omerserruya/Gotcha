@@ -53,7 +53,7 @@ const emptyQueue = async () => {
   return Page();
 };
 
-describe('★★ 03c — nothing waiting', () => {
+describe('★★ 03c - nothing waiting', () => {
   it('★★ the title is the state, not the page’s name', async () => {
     const props = propsOf<{ title: string; layout: string }>(await emptyQueue(), PageContainer);
     expect(props?.title).toBe('rest.title');
@@ -71,7 +71,7 @@ describe('★★ 03c — nothing waiting', () => {
   });
 });
 
-describe('★★ 03 — things need your decision', () => {
+describe('★★ 03 - things need your decision', () => {
   const withPending = async () => {
     const at = Date.parse('2026-09-19T10:00:00.000Z');
     loadApprovals.mockResolvedValue({
@@ -118,7 +118,7 @@ describe('★★ 03 — things need your decision', () => {
   });
 });
 
-describe('★ the history is reachable while items are pending — `?view=decided`', () => {
+describe('★ the history is reachable while items are pending - `?view=decided`', () => {
   it('shows the decisions card, titled as the history, with the way back', async () => {
     loadApprovals.mockResolvedValue({
       pending: [
@@ -148,7 +148,7 @@ describe('★ the history is reachable while items are pending — `?view=decide
   });
 });
 
-describe('★★ 03c — what GOTCHA handled leads, and the subline says only what is true', () => {
+describe('★★ 03c - what GOTCHA handled leads, and the subline says only what is true', () => {
   const rest = async (over: Record<string, unknown>) => {
     loadApprovals.mockResolvedValue({
       pending: [],
@@ -193,7 +193,7 @@ describe('★★ 03c — what GOTCHA handled leads, and the subline says only wh
   });
 });
 
-describe('★ "Requested by Support AI" — named only where one employee could have asked', () => {
+describe('★ "Requested by Support AI" - named only where one employee could have asked', () => {
   const ask = async (aiEmployees: unknown[]) => {
     loadApprovals.mockResolvedValue({
       // Parsed, as the loader hands it over: a real row has its facts.
@@ -228,7 +228,7 @@ describe('★ "Requested by Support AI" — named only where one employee could 
     expect(props?.aiAsked).toEqual([]);
   });
 
-  it('two: no guess — "your AI employee"', async () => {
+  it('two: no guess - "your AI employee"', async () => {
     const props = await ask([
       { id: 'ai1', name: 'Support AI', status: 'ACTIVE' },
       { id: 'ai2', name: 'Sales AI', status: 'ACTIVE' },

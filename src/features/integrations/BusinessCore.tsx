@@ -17,7 +17,7 @@ import { UseCaseSwitch } from './UseCaseSwitch';
 import styles from './BusinessCore.module.css';
 
 /**
- * Business core — screens 14b and 14c.
+ * Business core - screens 14b and 14c.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * BUILT FOR THE STATE THE PLATFORM PRODUCES, NOT THE ONE THE DESIGN DRAWS
@@ -75,7 +75,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
   return (
     <section className={styles.core} data-testid="business-core">
       {/*
-        14b. The use case decides which parts are asked about at all — "a lead
+        14b. The use case decides which parts are asked about at all - "a lead
         business is not asked about shipping or returns, and asking would be
         the invented-gap bug the discovery engine already learned".
       */}
@@ -86,10 +86,10 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
       </section>
 
       {/*
-        02's 14: the parts as ONE table, grouped by what they serve — the
+        02's 14: the parts as ONE table, grouped by what they serve - the
         online store, leads and sales, and what runs across both (write-back).
       */}
-      {/* Who plays "customer records" — also who is asked first and written to. */}
+      {/* Who plays "customer records" - also who is asked first and written to. */}
       <section className={styles.table} data-testid="core-table">
         {PART_GROUPS.map((group) => {
           const parts = core.roles.filter((part) =>
@@ -116,7 +116,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
         })}
         {/*
           ══════════════════════════════════════════════════════════════════════
-          14e — WHAT GOTCHA WRITES BACK, AS A PARAGRAPH AND NOT AS A FRAME
+          14e - WHAT GOTCHA WRITES BACK, AS A PARAGRAPH AND NOT AS A FRAME
           ══════════════════════════════════════════════════════════════════════
           The design draws a panel of write-back settings. There are none. A
           panel of empty controls would say "you have not configured this yet",
@@ -126,7 +126,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
           ★ WHICH IS THE WHOLE POINT, AND IT IS ONE SENTENCE.
 
           ABSENT IS NOT UNSET. When a thing is not listed here as a setting,
-          that does not mean nobody has filled it in — it means the connected
+          that does not mean nobody has filled it in - it means the connected
           system is the source of truth and GOTCHA follows it. A merchant who
           reads an absence as an omission goes looking for the screen that
           turns it on, and there is no such screen, because there is no such
@@ -143,8 +143,8 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
           </p>
 
           {/*
-            02's two rows across both — who this customer is (the first system
-            asked) and what is written back — in the parts' own shape. The
+            02's two rows across both - who this customer is (the first system
+            asked) and what is written back - in the parts' own shape. The
             facts below them are whole, for a screen reader; to the eye they
             ride on the row they explain (`title`).
           */}
@@ -163,7 +163,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                       {crm.elected.name}
                     </span>
                   ) : (
-                    <span className={styles.systemNone}>—</span>
+                    <span className={styles.systemNone}>-</span>
                   )}
                 </div>
                 <span aria-hidden="true" />
@@ -193,7 +193,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
                       {crm.elected.name}
                     </span>
                   ) : (
-                    <span className={styles.systemNone}>—</span>
+                    <span className={styles.systemNone}>-</span>
                   )}
                 </div>
                 <span aria-hidden="true" />
@@ -223,8 +223,8 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             `crm-adapter-resolver.ts:146-191`. `config.useAsCrm` has THREE
             readings and the third is the one nobody is told about:
 
-              true    Shopify wins over any dedicated CRM — explicitly chosen
-              false   never used as CRM — an explicit opt-out
+              true    Shopify wins over any dedicated CRM - explicitly chosen
+              false   never used as CRM - an explicit opt-out
               ABSENT  a connected Shopify is the DEFAULT CRM, whenever no
                       dedicated CRM-category integration is connected
 
@@ -232,7 +232,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             was never set, not because anybody decided. The resolver's own
             comment says the opt-in-only model was abandoned precisely because
             losing the flag "silently killed identity-link + timeline writeback
-            while Shopify sat there connected as the obvious source of truth" —
+            while Shopify sat there connected as the obvious source of truth" -
             a fix for one silent failure that produced a quieter one.
 
             ★ AND IT IS CONDITIONAL. "Absent means Shopify is the CRM" is FALSE
@@ -241,7 +241,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             records are somewhere they are not, so the condition is on screen.
 
             Not in the list below, because those are things that cannot be
-            configured. This one IS configured — by absence.
+            configured. This one IS configured - by absence.
           */}
             <p className={styles.writebackLead} data-testid="core-writeback-crm-default">
               {t('writeback.crmDefault')}
@@ -258,13 +258,13 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             Stated as reassurance rather than as alarm, because that is what it
             is. The resolver includes ERROR so an OAuth integration whose token
             merely expired still resolves to its real adapter instead of the
-            NoOp stub — otherwise the adapter is never used, the token is never
+            NoOp stub - otherwise the adapter is never used, the token is never
             refreshed, and the connection deadlocks.
 
             A merchant watching a failing Shopify would reasonably assume the
             opposite: that their records had quietly moved, or stopped being
             written. They have not. This is the only page that can say so, and
-            the last clause says the cost too — the system being written to is
+            the last clause says the cost too - the system being written to is
             the one that is down.
           */}
             <p className={styles.writebackLead} data-testid="core-writeback-still-source">
@@ -284,7 +284,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
 
               ★ NOT WRITTEN AS A MONDAY RULE. Omer has no Monday connected, and
               a page built around a connector this workspace does not have asks
-              somebody to reason about a system they have never seen — which is
+              somebody to reason about a system they have never seen - which is
               why the two-board question in the design could not be answered.
               Monday is named as an EXAMPLE, and named as absent.
             */}
@@ -302,14 +302,14 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
             merchant would most want to know:
 
               0    create a new lead
-              1    ENRICH the existing record with missing strong identifiers —
+              1    ENRICH the existing record with missing strong identifiers -
                    phone, email, PSID, IGSID, username
               2+   auto-merge only with a strong signal AND vendor support;
                    otherwise `needs_approval` with the candidate list
 
             The one-match case is a WRITE to a customer record that nobody
             asked for. The 2+ case is approval-gated because a wrong merge is
-            irreversible — the same Approvals queue as 14d and screen 03.
+            irreversible - the same Approvals queue as 14d and screen 03.
 
             Three sentences rather than one: they are three different things
             that happen to somebody, and a merged sentence would hide that the
@@ -332,7 +332,7 @@ export async function BusinessCore({ core }: { readonly core: Core | null }) {
 
             Held back for a day because "everything written back is in the
             workspace language" was unverified, and it turns out to be half
-            right — which is the half that matters.
+            right - which is the half that matters.
 
             `post-chat-pipeline.service.ts` calls `resolveEffectiveLocale({
             tenantId })` with NO userId, deliberately: the post-chat summary
@@ -416,7 +416,7 @@ function Part({
     part.available && part.source === 'unmapped' && part.reason ? part.reason : null;
 
   /*
-    The three-state sentence — what the state IS and where its repair lives —
+    The three-state sentence - what the state IS and where its repair lives -
     is kept whole. 02's row has no room for prose (states, not explanations),
     so it rides on the chip (`title`) and stays in the row for a screen reader.
   */
@@ -469,7 +469,7 @@ function Part({
 
       {/*
         The system playing the part: the choice ONLY where the server would
-        accept it (14c); otherwise who plays it, or "—" when nobody does.
+        accept it (14c); otherwise who plays it, or "-" when nobody does.
       */}
       <div className={styles.partControl}>
         {electable(part) ? (

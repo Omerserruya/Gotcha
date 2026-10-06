@@ -9,14 +9,14 @@ import en from '@/i18n/messages/en/security.json';
 import { SessionList } from './SessionList';
 
 /**
- * Where this account is signed in — screen 16's first section.
+ * Where this account is signed in - screen 16's first section.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠ NOTHING HERE PRESSES A REVOKE
  * ════════════════════════════════════════════════════════════════════════════
  * `revokeSession` and `revokeOtherSessions` end real sessions on a real
  * identity provider, and the sessions on the dev tenant belong to people who
- * are using them right now — including the capture runner. Both are mocked for
+ * are using them right now - including the capture runner. Both are mocked for
  * this whole file and both throw.
  *
  * So what is tested is which controls exist in which state, and **what the
@@ -65,7 +65,7 @@ describe('★★ a long list does not bury its own bulk action', () => {
      * put "sign out all other devices" past the bottom of the viewport.
      *
      * The hidden count is asserted because a collapsed list that does not say
-     * how much it is holding reads as the whole list — and on a security screen
+     * how much it is holding reads as the whole list - and on a security screen
      * that is the difference between "these are my devices" and "these are five
      * of my devices".
      */
@@ -113,7 +113,7 @@ describe('★★ a long list does not bury its own bulk action', () => {
 });
 
 describe('★★ signing out everywhere asks first, and says what survives', () => {
-  it('★★ the first press only opens the confirm — it does not revoke', async () => {
+  it('★★ the first press only opens the confirm - it does not revoke', async () => {
     show(many(37));
     await userEvent.click(screen.getByTestId('sessions-revoke-others'));
     expect(screen.getByTestId('sessions-revoke-others-confirm')).toBeInTheDocument();
@@ -184,7 +184,7 @@ describe('★★ the list states its totals, because counting its rows gives thr
      * ════════════════════════════════════════════════════════════════════════
      * A probe counting rendered rows got the true number of sessions before the
      * pagination and gets five after. Somebody checking that a bulk revoke did
-     * what it said would read five, then five, and conclude nothing happened —
+     * what it said would read five, then five, and conclude nothing happened -
      * and a supervisor's script did report a wrong number off this screen for a
      * neighbouring reason.
      *
@@ -222,7 +222,7 @@ describe('★★ the list states its totals, because counting its rows gives thr
   });
 });
 
-describe('★ 16 — a device’s sub-line is one line: this device, the city, when', () => {
+describe('★ 16 - a device’s sub-line is one line: this device, the city, when', () => {
   it('the address rides on the title; "Yesterday" for yesterday', () => {
     const y = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     show([

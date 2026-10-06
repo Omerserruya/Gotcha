@@ -75,7 +75,7 @@ beforeEach(() => {
 });
 
 describe('★★ three reads, each with one cause', () => {
-  it('★★ once on open — and a re-render does not read again', async () => {
+  it('★★ once on open - and a re-render does not read again', async () => {
     read.mockResolvedValue(ok([s('a')]));
     const { rerender } = show();
     await screen.findByTestId('wall-suggestion-a');
@@ -106,7 +106,7 @@ describe('★★ three reads, each with one cause', () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
-  it('★★ refresh only from the button — and a 429 says how long', async () => {
+  it('★★ refresh only from the button - and a 429 says how long', async () => {
     read.mockResolvedValue(ok([], { stale: true }));
     show();
     const retry = await screen.findByTestId('wall-suggestions-retry');
@@ -198,7 +198,7 @@ describe('★★ the carousel', () => {
   });
 });
 
-describe('★★ Use this and Edit put text in the box — and send nothing', () => {
+describe('★★ Use this and Edit put text in the box - and send nothing', () => {
   it('Use this: the text, caret at the end; Edit: the text, selected', async () => {
     read.mockResolvedValue(ok([s('a')]));
     const fills: ComposerFill[] = [];
@@ -249,7 +249,7 @@ describe('★ the card’s head, as 02 draws it', () => {
     expect(head?.textContent).toBe('Recommended · escalate');
   });
 
-  it('★★ top right is the why — confidence in its title; folded cards too', async () => {
+  it('★★ top right is the why - confidence in its title; folded cards too', async () => {
     read.mockResolvedValue(
       ok([s('a', { rationale: 'no refund yet' }), s('b', { rationale: 'costs ₪179' }), s('c')]),
     );

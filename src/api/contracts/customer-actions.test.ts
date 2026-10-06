@@ -25,7 +25,7 @@ describe('★★ four outcomes, and the NAME never decides', () => {
      * THE DEFECT THIS FILE'S FIRST VERSION SHIPPED.
      *
      * `outcomeOf` used to fall back to the `adapter.err.` prefix when
-     * `succeeded` was null — and described that in its own comment as
+     * `succeeded` was null - and described that in its own comment as
      * preserving "unknown". It did not. **A fallback IS resolution by naming
      * convention**, which the same sentence said not to do.
      *
@@ -69,7 +69,7 @@ describe('★★ four outcomes, and the NAME never decides', () => {
       'named_err',
     );
     expect(unrecordedHint(event({ succeeded: null, nameImpliesSucceeded: true }))).toBe('named_ok');
-    // Nothing to hint at when the outcome IS recorded — the verdict speaks.
+    // Nothing to hint at when the outcome IS recorded - the verdict speaks.
     expect(unrecordedHint(event({ succeeded: false, nameImpliesSucceeded: false }))).toBeNull();
     expect(unrecordedHint(event({ succeeded: null, nameImpliesSucceeded: null }))).toBeNull();
   });
@@ -88,7 +88,7 @@ describe('★★ four outcomes, and the NAME never decides', () => {
  * ★ THESE FIXTURES USED TO BE PARTIAL AND PARSED ANYWAY, because every key
  * at this level carried a default. `{}` was a valid `CustomerAudit`, which
  * meant a stale or renamed response rendered as "nothing has been recorded
- * against this person" with no caveats — a confident claim about somebody's
+ * against this person" with no caveats - a confident claim about somebody's
  * history built from a response that said nothing.
  *
  * The defaults are gone, and these had to be completed to keep passing. That
@@ -109,7 +109,7 @@ describe('★★ coverage declares what the log cannot account for', () => {
     /*
      * `targetId` on a customer-keyed row is a SHOPIFY customer id, not a
      * Contact id, so the endpoint cannot derive it. Order rows cannot be
-     * attributed at all — same id space, no local Order table.
+     * attributed at all - same id space, no local Order table.
      *
      * An empty list cannot say why it is empty, and "no orders" is the wrong
      * thing for a screen to imply about somebody who may have many.
@@ -171,7 +171,7 @@ describe('★ the shape is the platform’s, including what it will not promote'
   it('★ has no `flow` actor, because the column does not', () => {
     // The design asks for AI, user and flow. The column is user|ai|system,
     // so a flow-driven action arrives as one of those three and the
-    // distinction cannot be made — named on screen rather than approximated.
+    // distinction cannot be made - named on screen rather than approximated.
     expect(() => auditEventSchema.parse({ ...event(), actorType: 'flow' })).toThrow();
   });
 
@@ -179,7 +179,7 @@ describe('★ the shape is the platform’s, including what it will not promote'
     /*
      * The screen this guards: `{}` used to parse, and rendered "nothing has
      * been recorded against this person yet" with no coverage caveats
-     * underneath — from a response that carried no rows and no declarations.
+     * underneath - from a response that carried no rows and no declarations.
      * A stale service produces exactly that body.
      */
     expect(() => customerAuditSchema.parse({})).toThrow();

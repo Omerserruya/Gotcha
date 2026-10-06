@@ -180,7 +180,7 @@ describe('outcome copy is translated', () => {
      * catalogue by namespace, so the file IS the `whatsappNumbers` branch and
      * the key's first segment names it.
      *
-     * The property is unchanged and it is the one worth carrying across —
+     * The property is unchanged and it is the one worth carrying across -
      * `outcomeMessageKey` can emit four keys including a fallback, and a
      * missing one renders as the key itself, which looks deliberate.
      */
@@ -188,7 +188,7 @@ describe('outcome copy is translated', () => {
      * `unknown` rather than `any`, walked one level at a time. `any` here turned
      * the checking off for the whole reduce, so a key that resolved to an object
      * instead of a string would still have satisfied `acc?.[k]` at every step and
-     * only the final `typeof` would have noticed — which is the assertion, so it
+     * only the final `typeof` would have noticed - which is the assertion, so it
      * happened to work. The narrower form fails at the level that is wrong.
      */
     const at = (root: unknown, key: string): unknown =>

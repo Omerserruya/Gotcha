@@ -1,14 +1,14 @@
 import { z } from 'zod';
 
 /**
- * The tenant's business rules for sensitive actions — what GOTCHA may do on
+ * The tenant's business rules for sensitive actions - what GOTCHA may do on
  * its own. `GET /api/business-policies` answers `{ data: { actionKinds,
  * policies } }`, the latest version per kind.
  *
  * Read for 04e's "What GOTCHA may do for them". The ENGINE is the platform's
  * (`packages/shared/src/lib/business-policy.ts`); this contract only names
  * the fields its sentences use, and `describePolicy` says what the engine
- * does with them — no more:
+ * does with them - no more:
  *
  *   enabled: false              → DENIED, always ("action_disabled")
  *   maxAmount / maxPercentOfOrder → the stricter one caps the amount
@@ -32,7 +32,7 @@ export const POLICY_KINDS = [
 ] as const;
 export type PolicyKind = (typeof POLICY_KINDS)[number];
 
-/** Denied when no policy row exists — `defaultDecisionWithoutPolicy`. */
+/** Denied when no policy row exists - `defaultDecisionWithoutPolicy`. */
 const DENIED_WITHOUT_POLICY: ReadonlySet<string> = new Set(['COMPENSATION', 'COUPON', 'DISCOUNT']);
 
 const amount = z.number().finite().nonnegative().nullish().default(null);

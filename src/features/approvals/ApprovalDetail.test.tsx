@@ -115,7 +115,7 @@ describe('★★ 03’s queue row', () => {
 });
 
 describe('★★ 03’s detail', () => {
-  it('eyebrow, title with the customer, the facts line — and no risk pills under it', () => {
+  it('eyebrow, title with the customer, the facts line - and no risk pills under it', () => {
     show([refund()], { aiAsked: ['a1'] });
     expect(screen.getByTestId('requested-by')).toHaveTextContent(
       /^Requested by your AI employee · \d{2}:\d{2}$/,
@@ -146,12 +146,12 @@ describe('★★ 03’s detail', () => {
     ]);
   });
 
-  it('the customer: what is known, "—" for the rest', () => {
+  it('the customer: what is known, "-" for the rest', () => {
     show([refund()]);
     expect(screen.getByTestId('customer-since')).toHaveTextContent('March 2024');
     expect(screen.getByTestId('customer-refunds')).toHaveTextContent('None');
-    expect(screen.getByTestId('customer-orders')).toHaveTextContent('—');
-    expect(screen.getByTestId('customer-mood')).toHaveTextContent('—');
+    expect(screen.getByTestId('customer-orders')).toHaveTextContent('-');
+    expect(screen.getByTestId('customer-mood')).toHaveTextContent('-');
   });
 
   it('★ what approving does: no conversation, nobody is told; nothing claims "resolved"', () => {
@@ -166,7 +166,7 @@ describe('★★ 03’s detail', () => {
   });
 });
 
-describe('★★ Edit amount — drawn until the platform can carry it, then a checked field', () => {
+describe('★★ Edit amount - drawn until the platform can carry it, then a checked field', () => {
   it('not live: drawn, with why, and Approve sends the amount as asked', async () => {
     approve.mockResolvedValue({ ok: false, reason: 'stale' });
     show([refund()]);
@@ -226,7 +226,7 @@ describe('★ the rules behind the words', () => {
   });
 });
 
-describe('★★ backend 05979604 — the allow-list, the units, the refusals', () => {
+describe('★★ backend 05979604 - the allow-list, the units, the refusals', () => {
   it('a tool the platform will not edit: no Edit amount at all', () => {
     show(
       [
@@ -283,7 +283,7 @@ describe('★★ backend 05979604 — the allow-list, the units, the refusals', 
   it.each([
     ['amount_above_original', 'An edited amount has to be less than what was asked.'],
     ['edit_not_allowed', "This action can't be approved with a different amount."],
-  ])('a %s refusal is said in words — nothing decided', async (reason, words) => {
+  ])('a %s refusal is said in words - nothing decided', async (reason, words) => {
     approve.mockResolvedValue({ ok: false, reason });
     show([refund()], { editAmountLive: true });
     await userEvent.click(screen.getByTestId('edit-amount'));
@@ -300,7 +300,7 @@ describe('★★ backend 05979604 — the allow-list, the units, the refusals', 
   });
 });
 
-describe('★★ backend f16a5afa — a discount is edited by its percentage', () => {
+describe('★★ backend f16a5afa - a discount is edited by its percentage', () => {
   const coupon = () =>
     refund({
       tool: 'shopify.create_discount_code',
@@ -354,7 +354,7 @@ describe('★★ backend f16a5afa — a discount is edited by its percentage', (
 });
 
 describe('★★ 03, this round', () => {
-  it('E opens the edit field — and A’s key sits apart from the word', async () => {
+  it('E opens the edit field - and A’s key sits apart from the word', async () => {
     show([refund()], { editAmountLive: true });
     expect(screen.queryByTestId('edit-amount-input')).toBeNull();
     await userEvent.keyboard('e');
@@ -363,7 +363,7 @@ describe('★★ 03, this round', () => {
     expect(screen.getByTestId('approve').querySelector('kbd')).toHaveTextContent('A');
   });
 
-  it('E on a request nothing can edit does nothing — nor on a full refund with no amount', async () => {
+  it('E on a request nothing can edit does nothing - nor on a full refund with no amount', async () => {
     const one = show([refund({ tool: 'shopify.cancel_order' })], { editAmountLive: true });
     await userEvent.keyboard('e');
     expect(screen.queryByTestId('edit-amount-input')).toBeNull();
@@ -389,7 +389,7 @@ describe('★★ 03, this round', () => {
     expect(screen.getByTestId('decided-link')).toHaveTextContent('Decided earlier29');
   });
 
-  it('a quiet day says so beside the link — the link never stands alone', () => {
+  it('a quiet day says so beside the link - the link never stands alone', () => {
     show([refund()], { handledToday: 0 });
     expect(screen.getByTestId('queue-foot')).toHaveTextContent(
       'GOTCHA handled nothing on its own today. Change what needs asking',

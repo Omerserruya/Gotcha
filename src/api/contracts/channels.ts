@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Settings · Channels — screen 13.
+ * Settings · Channels - screen 13.
  *
  * *"Where customers reach you. Connecting is a two-step task, not an
  * integration form."*
@@ -20,7 +20,7 @@ import { z } from 'zod';
  *   - **Per-channel greeting, hours and auto-assignment.**
  *     `autoGreetingEnabled`, `autoGreetingMessage` and `workingHours` are
  *     fields on `Department`. A channel has none of them.
- *   - **"Phone calls — Connect".** `VOICE` is a `ChannelType`, but the
+ *   - **"Phone calls - Connect".** `VOICE` is a `ChannelType`, but the
  *     channels router has no voice provisioning route: the voice service
  *     handles live calls, not connecting a number. So the row is absent
  *     rather than offering a button that reaches nothing.
@@ -60,7 +60,7 @@ export const OAUTH_PLATFORMS = {
  * The six OAuth platforms plus the two that need no authorisation handshake:
  * `EMAIL` (its own IMAP/SMTP route) and `WEBCHAT` (created outright).
  *
- * `VOICE` is deliberately absent — see the note at the top of this file — and
+ * `VOICE` is deliberately absent - see the note at the top of this file - and
  * `SHOPIFY_LIVE_CHAT` too: it is provisioned by installing the Shopify app,
  * not from here, so a Connect button would send someone to the wrong place.
  */
@@ -83,10 +83,10 @@ export const RESPONSE_MODES = ['HUMAN_WITH_COPILOT', 'AI_AUTO_REPLY'] as const;
 export type ResponseMode = (typeof RESPONSE_MODES)[number];
 
 /**
- * `GET /api/channels` — enveloped in `data`, needs `channels:manage:read`.
+ * `GET /api/channels` - enveloped in `data`, needs `channels:manage:read`.
  *
  * **`object`, not `looseObject`, deliberately.** The route does not return
- * `credentials`, which is the important thing — but it does return
+ * `credentials`, which is the important thing - but it does return
  * `platformMeta`, a free-form blob that holds a widget's entire appearance
  * config for Shopify and platform identifiers (an Outlook subscription id, an
  * Instagram page id) for others. None of it is needed to render a row, so
@@ -118,14 +118,14 @@ export const channelSchema = z.object({
    * Conversations that STARTED on this account inside the requested window.
    *
    * By `createdAt`, so a conversation running since August is not in a
-   * September window. It counts what arrived, not what was open — which is
+   * September window. It counts what arrived, not what was open - which is
    * why it sits beside `_count.conversations` rather than replacing it. The
    * two are different measures, not one measure at two zoom levels, and the
    * copy must not caption them as the same thing.
    *
    * Optional, and absent is NOT zero: the route omits the key entirely when
    * no window is asked for, so "you did not ask" never renders as "there were
-   * none". Checked with `typeof`, never for truthiness — 0 is a real answer.
+   * none". Checked with `typeof`, never for truthiness - 0 is a real answer.
    */
   conversationsInWindow: z.number().optional(),
 });
@@ -138,13 +138,13 @@ export type Channel = z.infer<typeof channelSchema>;
  *
  * `GET /api/analytics/channel-performance` also serves per-channel counts, and
  * this screen deliberately does not use it. It groups by channel TYPE, so two
- * WhatsApp numbers collapse into one figure — and it counts conversations
+ * WhatsApp numbers collapse into one figure - and it counts conversations
  * whose account is gone or never existed.
  *
  * Those orphans are two different stories that look identical:
- * `Conversation.channelAccountId` is `onDelete: SetNull` — deliberately,
+ * `Conversation.channelAccountId` is `onDelete: SetNull` - deliberately,
  * because it was `Cascade` once and removing a WhatsApp number silently
- * deleted every conversation on it — so an unmatched row means EITHER "these
+ * deleted every conversation on it - so an unmatched row means EITHER "these
  * conversations outlived their account" or "no such account was ever created".
  * This tenant has both shapes: WEBCHAT conversations with no WEBCHAT account.
  *
@@ -157,13 +157,13 @@ export type Channel = z.infer<typeof channelSchema>;
 // ── Voice, which is a different spine entirely ──────────────────────
 
 /**
- * `GET /api/voice-channels` — enveloped in `data`, ADMIN only.
+ * `GET /api/voice-channels` - enveloped in `data`, ADMIN only.
  *
  * Voice is NOT a `ChannelAccount`. It is `CommunicationChannel` →
  * `VoiceChannel`, served by the conversation service, and the two share the
  * `ChannelType` enum and nothing else:
  *
- *   - status is `PENDING | ACTIVE | DISABLED | ERROR` — note `ACTIVE`, not
+ *   - status is `PENDING | ACTIVE | DISABLED | ERROR` - note `ACTIVE`, not
  *     `CONNECTED`, and `DISABLED`, not `DISCONNECTED`. Mapped explicitly
  *     rather than unified: one type over two enums would invent a
  *     correspondence that does not exist.
@@ -173,7 +173,7 @@ export type Channel = z.infer<typeof channelSchema>;
  * **404 is a real answer, not a failure.** The router is gated on
  * `Tenant.voiceCopilotEnabled`, which answers `404 not_found` when voice is
  * not offered to this tenant at all. So the Phone calls row appears only when
- * the product says voice exists here — the product decides, not us.
+ * the product says voice exists here - the product decides, not us.
  *
  * **`object`, not `looseObject`:** the route serialises `webhookSecret`, a
  * per-channel HMAC used to authenticate inbound webhooks. It must not cross

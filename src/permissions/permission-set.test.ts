@@ -15,7 +15,7 @@ describe('PermissionSet', () => {
   });
 
   /*
-   * The two that matter. The backend does exact matching only — an earlier
+   * The two that matter. The backend does exact matching only - an earlier
    * version of this class implemented prefix implication and wildcards, which
    * would have shown controls to people who cannot use them.
    */
@@ -61,7 +61,7 @@ describe('PermissionSet', () => {
   });
 });
 
-describe('canSee — the unavailable case', () => {
+describe('canSee - the unavailable case', () => {
   /*
    * These assert the behaviour of the context helper, which is where the
    * loaded/unavailable distinction lives. The rule: uncertainty must not

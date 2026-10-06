@@ -17,20 +17,20 @@ import { AUTHENTICATION_FLOW, readChallenge, type FlowStep } from '../contracts/
  * collapses entirely.
  *
  * The argument is that our nginx already fronts `auth-dev.gotcha.co.il`, so
- * every password typed on the existing login page already crosses this proxy —
+ * every password typed on the existing login page already crosses this proxy -
  * a same-origin path under `/v2` adds no new exposure. That holds only while the
  * request goes browser → nginx → Authentik with nothing of ours in between.
  *
  * ★ To be precise about what is and is not claimed: **our server never receives
  *   the password, never logs it, and it never enters Node.** Our JavaScript does
- *   render the field, so an XSS in our bundle could read it — true of any
+ *   render the field, so an XSS in our bundle could read it - true of any
  *   first-party login form, and why this route gets a narrowed CSP. Saying "our
  *   application is not in the credential path" would be a stronger claim than
  *   the architecture supports.
  *
  * ★★ AND THE SECOND CLAUSE DEPENDS ON SOMETHING NOT WRITTEN HERE: that no code
- *   in this app replaces `window.fetch`. The legacy product does exactly that —
- *   `installTenantFetchInterceptor` wraps it to attach a tenant header — and it
+ *   in this app replaces `window.fetch`. The legacy product does exactly that -
+ *   `installTenantFetchInterceptor` wraps it to attach a tenant header - and it
  *   is a reasonable thing for somebody to add here too. A wrapper would sit in
  *   this call's path, reading the URL and possibly the body, while **this file
  *   would look completely unchanged**. A `console.log` of its arguments in
@@ -39,7 +39,7 @@ import { AUTHENTICATION_FLOW, readChallenge, type FlowStep } from '../contracts/
  *
  * ── WHY IT LIVES IN `api/client` AND NOT BESIDE THE PANEL ──
  * `no-restricted-globals` forbids `fetch` in UI code, and the rule is right:
- * network access belongs in `src/api`. This is an API client — it is simply a
+ * network access belongs in `src/api`. This is an API client - it is simply a
  * client for somebody else's API, which is why it does **not** go through
  * `HttpClient` beside `browserApi`. That client adds our envelope, our contracts
  * and our `ApiError` taxonomy, none of which describe Authentik, and it would
@@ -49,7 +49,7 @@ import { AUTHENTICATION_FLOW, readChallenge, type FlowStep } from '../contracts/
  * ── AND `appPath`, BECAUSE FETCH IS NOT PREFIXED ──
  * Next prefixes `next/link` and `redirect()` with `basePath`. It does not touch
  * `fetch`. A bare `/auth-api/...` here would leave `/v2` and hit the legacy
- * app's origin — the same defect that sent the sign-in button to the wrong
+ * app's origin - the same defect that sent the sign-in button to the wrong
  * application's login route.
  */
 
@@ -64,7 +64,7 @@ import { AUTHENTICATION_FLOW, readChallenge, type FlowStep } from '../contracts/
  * served from the PRODUCT’s origin and Authentik is not.
  *
  * Served from the identity provider’s own origin, the panel and the API are
- * already same-origin and the proxy is **not needed at all** — `/api/v3/…` is
+ * already same-origin and the proxy is **not needed at all** - `/api/v3/…` is
  * the real path. Keeping the proxy there would be a hop invented to preserve a
  * URL shape.
  *
@@ -76,7 +76,7 @@ import { AUTHENTICATION_FLOW, readChallenge, type FlowStep } from '../contracts/
  * ★★ AND THE BASE-PATH LESSON APPLIES TO IT, WHICH IS WHY THE DEFAULT IS THE
  *   CURRENT BEHAVIOUR AND NOT A VALUE. Unset, this composes exactly the string
  *   it has always composed. A build that forgets it is the product’s build,
- *   not a broken one — the failure mode of the base path was that an absent
+ *   not a broken one - the failure mode of the base path was that an absent
  *   value silently produced a DIFFERENT working URL, and that is what an
  *   explicit fallback to today’s behaviour avoids.
  *
@@ -93,7 +93,7 @@ const EXECUTOR_BASE = process.env.NEXT_PUBLIC_FLOW_EXECUTOR_BASE ?? '';
  * `appPath` when nothing overrides it, because `fetch` is not prefixed: Next
  * prefixes `next/link` and `redirect()` with `basePath` and does not touch
  * this. A bare `/auth-api/…` would leave `/v2` and hit the legacy app’s
- * origin — the same defect that sent the sign-in button to the wrong
+ * origin - the same defect that sent the sign-in button to the wrong
  * application’s login route.
  *
  * An override is used verbatim, because a value naming another origin’s layout
@@ -115,12 +115,12 @@ const executorUrl = (flow: string) =>
  * `Set-Cookie` would break this "in a way that looks exactly like a wrong
  * password". **It would not**, on this path: DRF's `SessionAuthentication`
  * enforces CSRF only for requests carrying an **authenticated session**, and
- * every stage of the login flow — identification, authenticator-validate,
- * user-login — runs *before* anybody is signed in. Measured 2026-09-28: our
+ * every stage of the login flow - identification, authenticator-validate,
+ * user-login - runs *before* anybody is signed in. Measured 2026-09-28: our
  * POSTs succeed whether or not the cookie is there, and always have.
  *
  * So the header is sent because it is correct and free, not because this path
- * depends on it. **Enrolment is where it is enforced** — that stage runs after
+ * depends on it. **Enrolment is where it is enforced** - that stage runs after
  * sign-in, and a POST to it without the pair fails with `CSRF cookie not set`,
  * surfaced as an opaque `ak-stage-flow-error`. Anybody building 00b's second
  * half needs the cookie and the header; anybody debugging a failed sign-in
@@ -138,7 +138,7 @@ function csrfToken(): string {
  * What a submit produced.
  *
  * `ok: false` is deliberately NOT a handover. A network blip while somebody is
- * signing in should let them press the button again — not throw away what they
+ * signing in should let them press the button again - not throw away what they
  * typed and move them to a different screen.
  */
 export type SubmitOutcome = { readonly ok: true; readonly step: FlowStep } | { readonly ok: false };
@@ -152,7 +152,7 @@ async function call(
       /*
        * The flow is stateful and its state is a cookie. Without this the
        * executor issues a fresh flow on every request and the second stage never
-       * arrives — with the symptom being an identification stage that repeats.
+       * arrives - with the symptom being an identification stage that repeats.
        */
       credentials: 'same-origin',
       headers: {
@@ -164,7 +164,7 @@ async function call(
     /*
      * A non-2xx is not a stage. Authentik answers **200** with `response_errors`
      * for a refused submit, so a 4xx or 5xx here is the transport or the proxy
-     * failing — and must never be rendered as "wrong password".
+     * failing - and must never be rendered as "wrong password".
      */
     if (!response.ok) return null;
     return readChallenge(await response.json());
@@ -177,7 +177,7 @@ async function call(
  * The first challenge, or `null` when the executor could not be reached.
  *
  * ★ `flow` defaults to the one this application authorises against, so every
- *   existing caller is unchanged. Recovery passes its own — a DIFFERENT flow,
+ *   existing caller is unchanged. Recovery passes its own - a DIFFERENT flow,
  *   with its own cookie and its own stages, driven through the same executor.
  */
 export async function startFlow(flow?: string): Promise<FlowStep | null> {
@@ -188,7 +188,7 @@ export async function startFlow(flow?: string): Promise<FlowStep | null> {
  * Answer the current stage.
  *
  * ⚠ The flow must match the one `startFlow` opened. Submitting to the wrong
- *   slug does not error — it starts a fresh flow of that kind and answers ITS
+ *   slug does not error - it starts a fresh flow of that kind and answers ITS
  *   first stage, so the symptom is a stage that repeats rather than a failure.
  */
 export async function submitStage(
@@ -206,7 +206,7 @@ export async function submitStage(
  * ★★ THE SLUG IS THE WHOLE DIFFERENCE, AND IT IS WHY THIS EXISTS
  * ════════════════════════════════════════════════════════════════════════════
  * Started BY SLUG, as `startFlow()` does, a flow has no continuation and
- * completes to the provider's root — `to: "/"`. Started through
+ * completes to the provider's root - `to: "/"`. Started through
  * `/application/o/authorize/`, the plan carries the OAuth continuation and
  * completes to **our callback with the code**.
  *
@@ -215,10 +215,10 @@ export async function submitStage(
  * own flow.
  *
  * ── THE THREE CALLS, AS MEASURED 2026-09-30 ──
- *   1. the authorize URL is minted by our own login route — PKCE and state
+ *   1. the authorize URL is minted by our own login route - PKCE and state
  *      are its secrets and this function never constructs one
  *   2. `fetch(authorizeUrl)` answers a 302 the fetch FOLLOWS. The HTML of
- *      `/if/flow/` comes back in the body and is simply never rendered —
+ *      `/if/flow/` comes back in the body and is simply never rendered -
  *      no navigation, nothing displayed. `response.url` is how the slug and
  *      the query are learned.
  *   3. the executor for that slug, with the `/if/flow/` URL's query
@@ -228,18 +228,18 @@ export async function submitStage(
  *
  * ⚠ PRECONDITION: a completed sign-in, so a provider session exists. Without
  *   one this lands on the authentication flow instead and answers a stage
- *   rather than a redirect — which is not an error here, it is `null`, and
+ *   rather than a redirect - which is not an error here, it is `null`, and
  *   the caller hands over exactly as it does for anything else it cannot use.
  *
  * ⚠⚠ IT REPORTS WHY IT FAILED, AND THE FIRST VERSION DID NOT. Four different
  *    outcomes returned `null`: no slug, a non-OK executor, a stage instead of
  *    a redirect, and a thrown fetch. On the first live walk the hop fell back
  *    correctly and **there was no way to tell which of the four had happened**
- *    — empty, absent and literal collapsed into one nothing, on the one path
+ *    - empty, absent and literal collapsed into one nothing, on the one path
  *    a walk cannot otherwise see into.
  *
  * @returns `{ to }` on success, or `{ reason }` naming which step gave up.
- *          `to` is UNVALIDATED — the caller decides whether it is somewhere a
+ *          `to` is UNVALIDATED - the caller decides whether it is somewhere a
  *          browser may be sent. See `followableCompletion`.
  */
 export type AuthorizationOutcome =
@@ -258,7 +258,7 @@ export async function completeAuthorization(authorizeUrl: string): Promise<Autho
      * `credentials: 'include'`, not `same-origin`: the authorize endpoint is
      * on the provider's origin and the whole point is to carry the session
      * cookie there. It is the same request the browser would make by
-     * navigating — we simply keep the answer instead of rendering it.
+     * navigating - we simply keep the answer instead of rendering it.
      */
     const planned = await fetch(authorizeUrl, { credentials: 'include' });
 
@@ -283,8 +283,8 @@ export async function completeAuthorization(authorizeUrl: string): Promise<Autho
     /*
      * ⚠ A STAGE, NOT A REDIRECT. The most likely one here is consent: this
      *   deployment's flow is `…-explicit-consent`, and an account without a
-     *   standing grant is asked. That is not a defect in this function — it
-     *   is a screen we do not render — but it is the difference between
+     *   standing grant is asked. That is not a defect in this function - it
+     *   is a screen we do not render - but it is the difference between
      *   "the mechanism is broken" and "the mechanism worked and the flow
      *   wants something", and the first walk could not tell them apart.
      */
@@ -320,17 +320,17 @@ export async function completeAuthorization(authorizeUrl: string): Promise<Autho
  * ★★ THE REQUIREMENT IS A TOP-LEVEL BROWSING CONTEXT, NOT A VISIBLE PAGE.
  *    An iframe is a NESTED context and fails; a popup is a top-level context
  *    of its own and succeeds. That distinction is the whole thing, and it is
- *    why "it must be rendered" looked true for three attempts — every
+ *    why "it must be rendered" looked true for three attempts - every
  *    mechanism tried happened to be nested or contextless.
  *
  * ★ So sign-out does NOT go through this module. It opens a popup from the
- *   click handler — see `src/auth/sign-out.ts`, where the gesture is.
+ *   click handler - see `src/auth/sign-out.ts`, where the gesture is.
  *
  * ★ Framing is not the obstacle: Authentik sends
  *   `frame-ancestors 'self' https://*.gotcha.co.il` and our CSP permits it.
  *   The invalidation simply does not occur outside a top-level navigation.
  *
- * ⚠ THREE DESIGNS — a server-side call, this fetch, and an iframe — each
+ * ⚠ THREE DESIGNS - a server-side call, this fetch, and an iframe - each
  *   looked like an obvious shortcut and each produced a clean-looking
  *   sign-out that did not sign out. The fourth works because it changes the
  *   CONTEXT rather than the request.

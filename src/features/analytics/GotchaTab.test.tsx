@@ -94,8 +94,8 @@ describe('★ the rules', () => {
   });
 });
 
-describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
-  it('★★ the dark card says GOTCHA answered FIRST — not that it closed them unread', async () => {
+describe('★★ 06b - what GOTCHA did, said as what is recorded', () => {
+  it('★★ the dark card says GOTCHA answered FIRST - not that it closed them unread', async () => {
     render(await GotchaHero({ data: data() }));
     const hero = screen.getByTestId('gotcha-hero');
     expect(hero).toHaveTextContent('It answered first in 2,490 conversations.');
@@ -107,13 +107,13 @@ describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
     render(await WhereStopped({ data: data() }));
     expect(screen.getByTestId('stopped-approval')).toHaveTextContent('54 needed your approval.');
     expect(screen.getByTestId('stopped-unknown')).toHaveTextContent("1 it didn't know");
-    // Measured: "— asked for a person outright." A dash mid-sentence does not read.
+    // Measured: "- asked for a person outright." A dash mid-sentence does not read.
     expect(screen.getByTestId('stopped-person')).toHaveTextContent(
       "Asking for a person outright isn't counted yet.",
     );
   });
 
-  it('★★ no dash inside a sentence — a figure it could not read gets its own sentence', async () => {
+  it('★★ no dash inside a sentence - a figure it could not read gets its own sentence', async () => {
     render(await WhereStopped({ data: data({ ai: null, unanswered: null }) }));
     expect(screen.getByTestId('stopped-unknown')).toHaveTextContent(
       "We couldn't count what it didn't know just now.",
@@ -121,13 +121,13 @@ describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
     expect(screen.getByTestId('stopped-approval')).toHaveTextContent(
       "We couldn't count what needed your approval just now.",
     );
-    expect(screen.getByTestId('gotcha-stopped')).not.toHaveTextContent('—');
+    expect(screen.getByTestId('gotcha-stopped')).not.toHaveTextContent('-');
   });
 
   it('★★ nor in the foot of what it did, when failures are not split for every tool', async () => {
     const tools = data().tools!.map((tool) => ({ ...tool, erroredCount: undefined }));
     render(await WhatItDid({ tools }));
-    expect(screen.getByTestId('did-foot')).not.toHaveTextContent('—');
+    expect(screen.getByTestId('did-foot')).not.toHaveTextContent('-');
     expect(screen.getByTestId('did-foot')).toHaveTextContent(
       "3 were stopped by a rule, which is the rule working. Failures aren't told apart",
     );
@@ -143,7 +143,7 @@ describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
     expect(screen.getByTestId('stopped-unknown')).toHaveTextContent('50+');
   });
 
-  it('the strip: each figure its source; a failed read "—"', async () => {
+  it('the strip: each figure its source; a failed read "-"', async () => {
     const { unmount } = render(await GotchaStrip({ data: data() }));
     expect(screen.getByTestId('gotcha-alone')).toHaveTextContent('88%');
     expect(screen.getByTestId('gotcha-actions')).toHaveTextContent('945');
@@ -163,7 +163,7 @@ describe('★★ 06b — what GOTCHA did, said as what is recorded', () => {
         },
       }),
     );
-    expect(screen.getByTestId('gotcha-strip').textContent?.match(/—/g)).toHaveLength(5);
+    expect(screen.getByTestId('gotcha-strip').textContent?.match(/-/g)).toHaveLength(5);
   });
 
   it('★ what it did: by tool, in words; failures and refusals said apart', async () => {
@@ -269,7 +269,7 @@ describe('★★ measured on dev: 977 actions, 441 failed, all of them Shopify o
     ).toBe(441);
   });
 
-  it('⚠ a healthy connection is no cause — the plain foot stays', async () => {
+  it('⚠ a healthy connection is no cause - the plain foot stays', async () => {
     render(await WhatItDid({ tools: failing, integrations: [shopify('CONNECTED', null)] }));
     expect(screen.queryByTestId('did-cause')).toBeNull();
     expect(screen.getByTestId('did-foot')).toHaveTextContent('441 failed');
@@ -291,7 +291,7 @@ describe('★★ measured on dev: 977 actions, 441 failed, all of them Shopify o
     ).toBeNull();
   });
 
-  it('★ no conversations: "—", never "0%" — no percentage of nothing', async () => {
+  it('★ no conversations: "-", never "0%" - no percentage of nothing', async () => {
     render(
       await GotchaStrip({
         data: data({
@@ -299,7 +299,7 @@ describe('★★ measured on dev: 977 actions, 441 failed, all of them Shopify o
         }),
       }),
     );
-    expect(screen.getByTestId('gotcha-alone')).toHaveTextContent('—');
+    expect(screen.getByTestId('gotcha-alone')).toHaveTextContent('-');
     expect(screen.getByTestId('gotcha-alone')).not.toHaveTextContent('0%');
   });
 });

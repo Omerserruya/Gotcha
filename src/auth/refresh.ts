@@ -6,18 +6,18 @@ import { oidcConfiguration, refreshTokenGrant } from './oidc';
 import type { Session } from './session';
 
 /**
- * Spending a refresh token — the one place it happens.
+ * Spending a refresh token - the one place it happens.
  *
  * ★★ AUTHENTIK ROTATES: every refresh issues a new refresh token and the old
  * one dies (`refresh_token_threshold = 0`). So a refresh whose result is not
- * PERSISTED ends the session — the cookie keeps the spent token, and the next
- * refresh is refused. That is what signed people out every 30–60 minutes:
+ * PERSISTED ends the session - the cookie keeps the spent token, and the next
+ * refresh is refused. That is what signed people out every 30-60 minutes:
  * `activeSession()` refreshed inside a Server Component render, where a
  * cookie cannot be written. The proxy now refreshes before the render, where
  * it can (`src/proxy.ts`); a render never spends the token.
  *
  * In-flight refreshes are keyed by the token being spent, so six parallel
- * reads at expiry spend it once. Per server instance — the self-inflicted race.
+ * reads at expiry spend it once. Per server instance - the self-inflicted race.
  */
 const refreshesInFlight = new Map<string, Promise<Session | null>>();
 

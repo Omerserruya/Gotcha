@@ -30,7 +30,7 @@ const chips = () =>
     .map((b) => b.textContent ?? '')
     .filter((text) => text.endsWith('↗'));
 
-describe('★ 01b — the chips shift with the day', () => {
+describe('★ 01b - the chips shift with the day', () => {
   it('busy: triage', () => {
     box({ tone: 'busy' });
     expect(screen.getByText('Try')).toBeInTheDocument();
@@ -60,7 +60,7 @@ describe('★ 01b — the chips shift with the day', () => {
   });
 });
 
-describe('★ 01c — day-one chips', () => {
+describe('★ 01c - day-one chips', () => {
   it('what was learned, a test, the store', () => {
     box({ tone: 'dayOne' });
     expect(chips()).toEqual([
@@ -71,7 +71,7 @@ describe('★ 01c — day-one chips', () => {
   });
 });
 
-describe('★ 19 — ASK fills the box, and never sends', () => {
+describe('★ 19 - ASK fills the box, and never sends', () => {
   it('the question is in the box; nothing ran', () => {
     box({ tone: 'busy', initial: 'How many refunds?' });
     expect(screen.getByRole('textbox')).toHaveValue('How many refunds?');

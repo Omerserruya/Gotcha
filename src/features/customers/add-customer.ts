@@ -1,8 +1,8 @@
 /**
- * 04's "Add a customer" — the pure half (Omer, 2026-10-04): a person by name
+ * 04's "Add a customer" - the pure half (Omer, 2026-10-04): a person by name
  * and phone, created as the WhatsApp identity they will write from.
  *
- * ★ The id is Meta's `wa_id` FORM — digits, no "+" (`972541234567`) — because
+ * ★ The id is Meta's `wa_id` FORM - digits, no "+" (`972541234567`) - because
  *   that is what the inbound path stores (`ensure-contact`: externalId = the
  *   sender's wa_id, phone = the same). "+972…" would be a second contact the
  *   moment that person writes.

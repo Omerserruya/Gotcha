@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
  * The editorial panel and the footnote were server-rendered siblings of
  * `SignInPanel`, which owns the flow stage in client state. Nothing connected
  * them, so the second-factor screen wore sign-in's figures **and** its
- * footnote — *"New here? Ask your workspace admin for an invitation."* to
+ * footnote - *"New here? Ask your workspace admin for an invitation."* to
  * somebody already halfway signed in.
  *
  * ★ `page.test.tsx` mocks the panel, so it renders the first screen and can
@@ -94,7 +94,7 @@ describe('⚠⚠ the editorial panel follows the screen', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('★★ the shell does not move — same brand, same ticks, on both', async () => {
+  it('★★ the shell does not move - same brand, same ticks, on both', async () => {
     /*
      * Both directions. A switch that swapped the whole aside would satisfy
      * every assertion above and rebuild the panel on each stage, losing the
@@ -113,11 +113,11 @@ describe('⚠⚠ the editorial panel follows the screen', () => {
 describe('⚠⚠ the form column is not the same width on both screens', () => {
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 400px ON 00a, 430px ON 00b — AND THE SLOTS DIVIDE IT
+   * 400px ON 00a, 430px ON 00b - AND THE SLOTS DIVIDE IT
    * ════════════════════════════════════════════════════════════════════════
    * Thirty pixels, read out of each screen's own mock. It is not only the
    * column that changes: the six code boxes are `flex: 1`, so they divide
-   * whatever this is —
+   * whatever this is -
    *
    *     400px → 60px each        430px → 65px each
    *
@@ -137,7 +137,7 @@ describe('⚠⚠ the form column is not the same width on both screens', () => {
 
   it('★★ and the stylesheet gives each screen its own width', () => {
     /*
-     * The attribute is only half of it — a marker nothing styles would pass
+     * The attribute is only half of it - a marker nothing styles would pass
      * the assertion above and change no pixel. Asserted against the rule that
      * consumes it, and against the arithmetic the slots depend on.
      */

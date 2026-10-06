@@ -62,7 +62,7 @@ const template = (over: Record<string, unknown> = {}): Template =>
     name: 'Back in stock',
     language: 'en',
     channel: 'WHATSAPP',
-    body: 'Hi {{1}} — the {{2}} is back in stock.',
+    body: 'Hi {{1}} - the {{2}} is back in stock.',
     status: 'APPROVED',
     buttons: [{ type: 'QUICK_REPLY', text: 'See it' }, { text: 'Not now' }],
     variables: [
@@ -72,14 +72,14 @@ const template = (over: Record<string, unknown> = {}): Template =>
     ...over,
   });
 
-describe('★★ the table — every state drawn in the same frame', () => {
-  it('★ a row per name: the body with its variables in braces, "—" for what nothing counts', async () => {
+describe('★★ the table - every state drawn in the same frame', () => {
+  it('★ a row per name: the body with its variables in braces, "-" for what nothing counts', async () => {
     const groups = templateGroups([template()]);
     render(await TemplateTable({ groups, selectedId: 't1' }));
     const row = screen.getByTestId('template-t1');
     expect(row).toHaveTextContent('Back in stock');
-    expect(row).toHaveTextContent('Hi {Dana} — the {linen lamp} is back in stock.');
-    expect(row.textContent?.match(/—/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(row).toHaveTextContent('Hi {Dana} - the {linen lamp} is back in stock.');
+    expect(row.textContent?.match(/-/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(row).toHaveAttribute('aria-current', 'true');
     expect(row).toHaveAttribute('href', '/outreach/templates?template=t1');
   });
@@ -138,7 +138,7 @@ describe('★★ the table — every state drawn in the same frame', () => {
   });
 });
 
-describe('★★ the preview — the message as the customer sees it', () => {
+describe('★★ the preview - the message as the customer sees it', () => {
   it('★ the bubble: variables highlighted by their sample, the real buttons under it', async () => {
     render(await TemplatePreview({ group: templateGroups([template()])[0]! }));
     const bubble = screen.getByTestId('template-bubble');
@@ -157,15 +157,15 @@ describe('★★ the preview — the message as the customer sees it', () => {
     expect(screen.getByTestId('template-languages')).toHaveTextContent('English, Hebrew');
   });
 
-  it('★ the facts: filled in from the descriptions; who may send "—"; approved, unchanged', async () => {
+  it('★ the facts: filled in from the descriptions; who may send "-"; approved, unchanged', async () => {
     render(await TemplatePreview({ group: templateGroups([template()])[0]! }));
     const preview = screen.getByTestId('template-preview');
     expect(preview).toHaveTextContent('The customer and the product');
-    expect(preview).toHaveTextContent('Who may send it—');
+    expect(preview).toHaveTextContent('Who may send it-');
     expect(screen.getByTestId('template-approved')).toHaveTextContent('never changed since');
   });
 
-  it('⚠ approved and since changed says so — no date is invented', async () => {
+  it('⚠ approved and since changed says so - no date is invented', async () => {
     render(await TemplatePreview({ group: templateGroups([template({ version: 3 })])[0]! }));
     expect(screen.getByTestId('template-approved')).toHaveTextContent('now version 3');
   });
@@ -197,7 +197,7 @@ describe('★★ the preview — the message as the customer sees it', () => {
     expect(screen.getByTestId(`submit-live-${'t1'}`)).toBeInTheDocument();
   });
 
-  it('a template for every channel never goes to WhatsApp for review — said', async () => {
+  it('a template for every channel never goes to WhatsApp for review - said', async () => {
     const all = templateGroups([template({ status: 'DRAFT', channel: null })])[0]!;
     render(await TemplatePreview({ group: all, waba: true }));
     expect(screen.getByTestId('template-submit').getAttribute('title')).toMatch(
@@ -207,7 +207,7 @@ describe('★★ the preview — the message as the customer sees it', () => {
 
   it('no template: the card keeps its place', async () => {
     render(await TemplatePreview({ group: null }));
-    expect(screen.getByTestId('template-preview')).toHaveTextContent('—');
+    expect(screen.getByTestId('template-preview')).toHaveTextContent('-');
   });
 });
 
@@ -231,7 +231,7 @@ describe('★ the rejection, and what is worth knowing', () => {
     expect(card).toHaveTextContent('Promotional content in a utility template');
   });
 
-  it('⚠ nothing rejected: no card — a pink card announcing nothing would alarm', async () => {
+  it('⚠ nothing rejected: no card - a pink card announcing nothing would alarm', async () => {
     const { container } = render(
       <>{await RejectedCard({ groups: templateGroups([template()]) })}</>,
     );
@@ -245,7 +245,7 @@ describe('★ the rejection, and what is worth knowing', () => {
 });
 
 describe('★★ switched off is not ready (measured: "Ready to send" on an inactive template)', () => {
-  it('★★ approved and inactive says "Switched off" — the bot’s own gate is isActive AND APPROVED', async () => {
+  it('★★ approved and inactive says "Switched off" - the bot’s own gate is isActive AND APPROVED', async () => {
     render(
       await TemplateTable({
         groups: templateGroups([template({ isActive: false })]),
@@ -268,7 +268,7 @@ describe('★★ switched off is not ready (measured: "Ready to send" on an inac
     expect(screen.getByTestId('stance-t1')).toHaveTextContent('Switched off');
   });
 
-  it('⚠ rejected and inactive keeps saying rejected — that is the reason it cannot send', async () => {
+  it('⚠ rejected and inactive keeps saying rejected - that is the reason it cannot send', async () => {
     render(
       await TemplateTable({
         groups: templateGroups([template({ status: 'REJECTED', isActive: false })]),

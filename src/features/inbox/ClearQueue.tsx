@@ -7,16 +7,16 @@ import styles from './Inbox.module.css';
 import type { ClearQueue } from './load-clear-queue';
 
 /**
- * 02b, measured: the queue is clear — empty, but not blank.
+ * 02b, measured: the queue is clear - empty, but not blank.
  *
  * In the list: ✓, "The queue is clear", a line from today's counts, and
- * STILL GOING ON — what GOTCHA is in the middle of (live), and the two
+ * STILL GOING ON - what GOTCHA is in the middle of (live), and the two
  * kinds of nothing the platform does not record: items held by a broken
- * system, and conversations waiting on the customer. Both "—", with why.
+ * system, and conversations waiting on the customer. Both "-", with why.
  *
  * The foot says what the queue is: the route's default lists everything but
  * what an automation owns, so new conversations land here unless one is
- * running them — not "the moment GOTCHA needs a person".
+ * running them - not "the moment GOTCHA needs a person".
  */
 export async function ClearQueueList({ clear }: { readonly clear: ClearQueue }) {
   const t = await getTranslations('inbox.clear');
@@ -44,7 +44,7 @@ export async function ClearQueueList({ clear }: { readonly clear: ClearQueue }) 
                 ? clear.inFlight.conversationsHandling > 0
                   ? t('on', { count: clear.inFlight.conversationsHandling })
                   : t('onNone')
-                : '—'}
+                : '-'}
             </span>
             {clear.inFlight && clear.inFlight.conversationsHandling > 0 ? (
               <span className={styles.goingMeta}>{t('live')}</span>
@@ -52,11 +52,11 @@ export async function ClearQueueList({ clear }: { readonly clear: ClearQueue }) 
           </li>
           <li className={styles.goingRow} title={t('heldNone')} data-testid="going-held">
             <span className={styles.goingDot} data-kind="held" aria-hidden="true" />
-            <span className={styles.goingText}>{t('held')} —</span>
+            <span className={styles.goingText}>{t('held')} -</span>
           </li>
           <li className={styles.goingRow} title={t('waitingNone')} data-testid="going-waiting">
             <span className={styles.goingDot} aria-hidden="true" />
-            <span className={styles.goingText}>{t('waiting')} —</span>
+            <span className={styles.goingText}>{t('waiting')} -</span>
           </li>
         </ul>
       </div>
@@ -105,13 +105,13 @@ export async function ClearQueuePane({ clear }: { readonly clear: ClearQueue }) 
       <dl className={styles.clearStrip} data-testid="clear-strip">
         <div className={styles.clearCell}>
           <dt>{t('stat.answered')}</dt>
-          <dd>{nothingToday ? '—' : format.number(o.aiHandledCount)}</dd>
+          <dd>{nothingToday ? '-' : format.number(o.aiHandledCount)}</dd>
         </div>
         <div className={styles.clearCell}>
           <dt>{t('stat.reply')}</dt>
           <dd>
             {seconds === null
-              ? '—'
+              ? '-'
               : seconds < 60
                 ? t('stat.seconds', { count: seconds })
                 : t('stat.minutes', { count: Math.round(seconds / 60) })}
@@ -119,10 +119,10 @@ export async function ClearQueuePane({ clear }: { readonly clear: ClearQueue }) 
         </div>
         <div className={styles.clearCell}>
           <dt>{t('stat.passed')}</dt>
-          <dd>{nothingToday ? '—' : format.number(o.humanHandledCount)}</dd>
+          <dd>{nothingToday ? '-' : format.number(o.humanHandledCount)}</dd>
         </div>
         <div className={styles.clearCellNote} title={t('stat.whyNone')}>
-          —
+          -
         </div>
       </dl>
     </div>

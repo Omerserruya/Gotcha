@@ -48,7 +48,7 @@ describe('★★ the intent cookie, read off Set-Cookie', () => {
   });
 });
 
-describe('★★ start — the intent is handed on to the browser, or nothing opens', () => {
+describe('★★ start - the intent is handed on to the browser, or nothing opens', () => {
   const answer = (setCookie: string[]) =>
     get.mockImplementation(
       async ({ onResponseHeaders }: { onResponseHeaders?: (h: Headers) => void }) => {
@@ -77,14 +77,14 @@ describe('★★ start — the intent is handed on to the browser, or nothing op
     });
   });
 
-  it('no intent came back: refused — Shopify would return to a workspace nobody named', async () => {
+  it('no intent came back: refused - Shopify would return to a workspace nobody named', async () => {
     answer([]);
     expect(await startShopifyInstall()).toEqual({ ok: false, reason: 'failed' });
     expect(jar.set).not.toHaveBeenCalled();
   });
 });
 
-describe('★★ claim — the browser’s pending install, sent on', () => {
+describe('★★ claim - the browser’s pending install, sent on', () => {
   it('replace: true with the cookie; the cookie cleared after', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
     post.mockResolvedValue({ data: { planSelectionUrl: null } });
@@ -126,8 +126,8 @@ const intl = (node: React.ReactNode) =>
     </NextIntlClientProvider>,
   );
 
-describe('★★ 10 — Shopify before and after', () => {
-  it('not published: a sentence and the help link — no button that does nothing', () => {
+describe('★★ 10 - Shopify before and after', () => {
+  it('not published: a sentence and the help link - no button that does nothing', () => {
     intl(<ShopifyConnect mode="not_published" helpUrl="https://help.example/install" />);
     expect(screen.queryByTestId('shopify-start')).toBeNull();
     expect(screen.getByTestId('shopify-not-published')).toHaveTextContent(
@@ -168,7 +168,7 @@ const another = () =>
     errorData: { currentShopDomain: 'old.myshopify.com' },
   });
 
-describe('★★ reason=claim — an App Store install, to this workspace', () => {
+describe('★★ reason=claim - an App Store install, to this workspace', () => {
   it('asks first; another store here → "Replace it?" naming it, and only then replace: true', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
     intl(<ShopifyPending shopDomain="new.myshopify.com" replace={false} />);
@@ -204,7 +204,7 @@ describe('★★ reason=claim — an App Store install, to this workspace', () =
   });
 });
 
-describe('★★ billing=verify — only what the server read from Shopify', () => {
+describe('★★ billing=verify - only what the server read from Shopify', () => {
   const snapshot = (over: Record<string, unknown> = {}) => ({
     grantsAccess: false,
     requiresPlanSelection: false,
@@ -245,7 +245,7 @@ describe('★★ billing=verify — only what the server read from Shopify', () 
     expect(await verifyShopifyBilling('a')).toEqual({ ok: false, reason: 'mismatch' });
   });
 
-  it('the screen: checking, then connected and refreshed — once, not per render', async () => {
+  it('the screen: checking, then connected and refreshed - once, not per render', async () => {
     post.mockResolvedValue(snapshot({ grantsAccess: true }));
     intl(<ShopifyBillingVerify shop="urban.myshopify.com" />);
     expect(screen.getByTestId('shopify-billing-checking')).toHaveTextContent(
@@ -284,10 +284,10 @@ describe('★★ billing=verify — only what the server read from Shopify', () 
 });
 
 describe('★★ measured on dev: an arrival is always said', () => {
-  it('pending=1 with nothing to claim: expired, said — and the listing when there is one', () => {
+  it('pending=1 with nothing to claim: expired, said - and the listing when there is one', () => {
     intl(<ShopifyPendingGone read helpUrl="https://apps.shopify.com/gotcha" />);
     expect(screen.getByTestId('shopify-pending-gone')).toHaveTextContent(
-      'That approval has expired or was already used — install GOTCHA again from Shopify.',
+      'That approval has expired or was already used - install GOTCHA again from Shopify.',
     );
     expect(screen.getByTestId('shopify-pending-help')).toHaveAttribute(
       'href',
@@ -301,7 +301,7 @@ describe('★★ measured on dev: an arrival is always said', () => {
     expect(screen.queryByTestId('shopify-pending-help')).toBeNull();
   });
 
-  it('★ billing=verify on a store that needs fixing: "needs reconnecting", not "no store" — and no second Reconnect', async () => {
+  it('★ billing=verify on a store that needs fixing: "needs reconnecting", not "no store" - and no second Reconnect', async () => {
     post.mockRejectedValue(
       new ApiError({ kind: 'conflict', status: 409, developerMessage: 'shopify_not_connected' }),
     );
@@ -323,7 +323,7 @@ describe('★★ measured on dev: an arrival is always said', () => {
   });
 });
 
-describe('★★ the pending approval: a shop, gone, or unread — three different sentences', () => {
+describe('★★ the pending approval: a shop, gone, or unread - three different sentences', () => {
   it('no cookie: gone, nothing asked; a 404: gone; a 500: unread', async () => {
     jar.get.mockReturnValue(undefined);
     expect(await loadShopifyPending()).toBe('gone');

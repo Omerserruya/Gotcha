@@ -15,7 +15,7 @@ import {
 import styles from './Capabilities.module.css';
 
 /**
- * 10's "Connect Shopify" (backend 98676242). No store is typed — Shopify
+ * 10's "Connect Shopify" (backend 98676242). No store is typed - Shopify
  * picks it. Read BEFORE the button: a listing that is not public yet is a
  * sentence (and the operator's help link), never a button that does nothing.
  */
@@ -73,7 +73,7 @@ export function ShopifyConnect({
 }
 
 /**
- * Back from Shopify with a store waiting to be claimed — to replace the one
+ * Back from Shopify with a store waiting to be claimed - to replace the one
  * connected now, or one that did not finish. No design yet (Omer): a
  * sentence and a button, in 10's existing shape. Nothing is replaced before
  * the press.
@@ -157,7 +157,7 @@ export function ShopifyBillingVerify({
   readonly shop: string | null;
   /**
    * The integration exists but is not working: "not connected" means
-   * "reconnect it" — said here; the button is the card's, below (one per screen).
+   * "reconnect it" - said here; the button is the card's, below (one per screen).
    */
   readonly needsReconnect?: boolean;
 }) {
@@ -172,7 +172,7 @@ export function ShopifyBillingVerify({
       setCheck(done);
       if (done.ok && done.grantsAccess) router.refresh();
     });
-  // Once, on arrival — a development double-mount must not ask Shopify twice.
+  // Once, on arrival - a development double-mount must not ask Shopify twice.
   const asked = useRef(false);
   useEffect(() => {
     if (asked.current) return;
@@ -256,7 +256,7 @@ function stateKey(state: string, declined: boolean) {
 
 /**
  * Back with `pending=1` and nothing to claim: the approval expired or was
- * used (`read`), or it could not be checked. Said either way — an arrival
+ * used (`read`), or it could not be checked. Said either way - an arrival
  * that draws nothing looks like the install never happened.
  */
 export function ShopifyPendingGone({

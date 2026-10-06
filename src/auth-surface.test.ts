@@ -13,13 +13,13 @@ import { AUTH_SURFACE_ROUTES, PUBLIC_PATH_PATTERN } from './auth-surface';
  *   first time   it permitted `/sign-in`, the app redirected to `/en/sign-in`,
  *                and the screen 404'd behind a redirect that looked fine
  *   this time    the recovery screen was added to `(auth)` and the pattern
- *                still said `(?:sign-in)` — an alternation with one branch
+ *                still said `(?:sign-in)` - an alternation with one branch
  *
  * The first fix taught it about locales; it did not make it a list. Both
  * times the href, the source and the compiled route were all correct, and the
  * origin refused the screen anyway.
  *
- * ★ So this does not assert the list's contents — that would be the same
+ * ★ So this does not assert the list's contents - that would be the same
  *   hardcoded fact written twice, agreeing with itself. It reads the route
  *   directory and requires the allowlist to cover what is actually there.
  *   The next screen someone adds fails this until they permit it.
@@ -36,17 +36,17 @@ describe('⚠⚠ the auth origin serves every screen of the auth surface', () =>
   it('★★ permits every route in the (auth) group, whatever it is called', () => {
     /*
      * Read from disk, not listed here. A test that repeated the names would
-     * pass on the day somebody adds a screen and forgets the allowlist —
+     * pass on the day somebody adds a screen and forgets the allowlist -
      * which is the exact failure it exists to catch.
      */
-    expect(routesOnDisk.length, 'no routes found — the path is probably wrong').toBeGreaterThan(0);
+    expect(routesOnDisk.length, 'no routes found - the path is probably wrong').toBeGreaterThan(0);
     expect([...AUTH_SURFACE_ROUTES].sort()).toEqual([...routesOnDisk].sort());
   });
 
   it('⚠ and permits nothing that is not a screen', () => {
     /*
      * Both directions. An allowlist that had drifted the other way would open
-     * a path on the origin whose entire purpose is to serve almost nothing —
+     * a path on the origin whose entire purpose is to serve almost nothing -
      * a security control, not a convenience.
      */
     for (const permitted of AUTH_SURFACE_ROUTES) {
@@ -62,7 +62,7 @@ describe('⚠⚠ and the pattern matches every one of them, prefixed or not', ()
    * ════════════════════════════════════════════════════════════════════════
    * It permitted `/sign-in`; the app answered 307 to `/en/sign-in`; the screen
    * 404'd behind a redirect that looked fine. The names being right is only
-   * half of it — the shape around them is the other half, and each half has
+   * half of it - the shape around them is the other half, and each half has
    * now broken once on its own.
    */
   it('★★ bare, locale-prefixed, and with a trailing path', () => {
@@ -79,7 +79,7 @@ describe('⚠⚠ and the pattern matches every one of them, prefixed or not', ()
   it('⚠⚠ and refuses the product, which is the point of the gate', () => {
     /*
      * Both directions. A pattern that matched everything would satisfy every
-     * assertion above and turn the auth origin into the whole product — the
+     * assertion above and turn the auth origin into the whole product - the
      * outage this gate exists to prevent, inverted.
      */
     for (const denied of [

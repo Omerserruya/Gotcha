@@ -7,13 +7,13 @@ import { Link } from '@/i18n/navigation';
 import styles from './Channels.module.css';
 
 /**
- * 13b — WhatsApp's settings as a PANEL over Channels, measured: a scrim over
- * the Settings frame, and a white drawer (640) at its end — the channel's
+ * 13b - WhatsApp's settings as a PANEL over Channels, measured: a scrim over
+ * the Settings frame, and a white drawer (640) at its end - the channel's
  * tile, "WhatsApp" (18/600), its line and a close; then its tabs.
  *
  * Numbers is the panel's live tab (its numbers, the history import, the
  * suggestions to review). Templates, Private contacts and Activity are drawn
- * and not live yet — said on each.
+ * and not live yet - said on each.
  */
 export async function WhatsAppPanel({
   line,
@@ -75,7 +75,7 @@ export async function WhatsAppPanel({
         <div className={styles.panelBody}>{children}</div>
         {/*
           02's foot: Refresh from Meta · Activity log, and Disconnect in red.
-          None is wired from here yet — drawn, each saying so.
+          None is wired from here yet - drawn, each saying so.
         */}
         <footer className={styles.panelFoot}>
           <span className={styles.panelFootLink} aria-disabled="true" title={t('footNotYet')}>

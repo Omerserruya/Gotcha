@@ -6,7 +6,7 @@ import type { Campaign } from '@/api/contracts/outreach';
 import styles from './Outreach.module.css';
 
 /**
- * Screen 05b — after it went out, measured.
+ * Screen 05b - after it went out, measured.
  *
  * A dark card (what it brought in) and a violet one (who read it and said
  * nothing) side by side; a six-figure strip; then "When people replied" and
@@ -16,10 +16,10 @@ import styles from './Outreach.module.css';
  * ★★ ONLY THE SEND IS RECORDED
  * ════════════════════════════════════════════════════════════════════════════
  * The worker writes a recipient `queued`, `sent` (with `sentAt`), `failed` or
- * `skipped` — and nothing writes `delivered`, `read` or `replied`, per
+ * `skipped` - and nothing writes `delivered`, `read` or `replied`, per
  * recipient or in the campaign's counters. Revenue is not attributed, replies
  * are not linked to the campaign, and nothing classifies them. So every part
- * of 05b is drawn, and the parts made of those are "—" in their shape:
+ * of 05b is drawn, and the parts made of those are "-" in their shape:
  * a figure is a figure or a dash, never a confident zero.
  *
  * ⚠ "Send this again", "Pause the rest" and "Let it follow up" would create
@@ -37,7 +37,7 @@ export function sendFigures(campaign: Campaign): {
 }
 
 /**
- * The hours the campaign went out over, one column each — from the hour it
+ * The hours the campaign went out over, one column each - from the hour it
  * started to the hour it finished, at most twelve. Empty when either time is
  * missing: an axis needs both ends.
  */
@@ -62,7 +62,7 @@ export async function BroughtIn({ campaign }: { readonly campaign: Campaign }) {
       <p className={styles.resBroughtEyebrow}>{t('results.brought.eyebrow')}</p>
       <p className={styles.resBroughtFigure}>
         {/* Revenue is not attributed to campaigns. */}
-        <span className={styles.resBroughtValue}>—</span>
+        <span className={styles.resBroughtValue}>-</span>
         <span className={styles.resBroughtFrom}>
           {t('results.brought.from', { count: format.number(campaign.sentCount) })}
         </span>
@@ -109,11 +109,11 @@ export async function ResultStrip({ campaign }: { readonly campaign: Campaign })
       note: failed > 0 ? t('results.strip.failed', { count: format.number(failed) }) : null,
     },
     // Nothing writes these: per recipient or in the counters.
-    { key: 'delivered', value: '—', note: null },
-    { key: 'opened', value: '—', note: null },
-    { key: 'replied', value: '—', note: null },
-    { key: 'bought', value: '—', note: null },
-    { key: 'optedOut', value: '—', note: null },
+    { key: 'delivered', value: '-', note: null },
+    { key: 'opened', value: '-', note: null },
+    { key: 'replied', value: '-', note: null },
+    { key: 'bought', value: '-', note: null },
+    { key: 'optedOut', value: '-', note: null },
   ] as const;
   return (
     <dl className={styles.resStrip} data-testid="results-strip">
@@ -132,7 +132,7 @@ export async function ResultStrip({ campaign }: { readonly campaign: Campaign })
 
 /**
  * 02's "When people replied": a bar per hour the campaign went out over.
- * The axis is real — the hours it was sending — and the bars are empty,
+ * The axis is real - the hours it was sending - and the bars are empty,
  * because nothing records a reply against the campaign.
  */
 export async function RepliesByHour({ campaign }: { readonly campaign: Campaign }) {
@@ -175,7 +175,7 @@ export async function WroteBack() {
     <section className={styles.resReplies} data-testid="results-replies">
       <header className={styles.resRepliesHead}>
         <h2 className={styles.resCardTitle}>{t('results.replies.title')}</h2>
-        <span className={styles.resCardMeta}>—</span>
+        <span className={styles.resCardMeta}>-</span>
       </header>
       <p className={styles.resRepliesNone}>{t('results.replies.none')}</p>
       <p className={styles.resRepliesFoot}>{t('results.replies.foot')}</p>

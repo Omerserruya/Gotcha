@@ -1,7 +1,7 @@
 import type { QuietDayItem } from '@/api/contracts/analytics';
 
 /**
- * 01b's rows — "Worth an hour, while it is quiet" — ONE PER SOURCE.
+ * 01b's rows - "Worth an hour, while it is quiet" - ONE PER SOURCE.
  *
  * The ranker (`packages/shared/src/lib/quiet-day-ranking.ts`) emits an item
  * per question, per term, per conflict. 02 draws one row per kind of work:
@@ -24,8 +24,8 @@ import type { QuietDayItem } from '@/api/contracts/analytics';
  * missing ICU argument renders as nothing in production, and the row was an
  * empty line with a button. A source this list does not know gets no row.
  *
- * Counts across items: `askCount` adds up; `askedBy` does not — the same
- * person can ask two questions — so a group says "asked N times".
+ * Counts across items: `askCount` adds up; `askedBy` does not - the same
+ * person can ask two questions - so a group says "asked N times".
  */
 
 export const QUIET_SOURCES = [
@@ -142,7 +142,7 @@ export function quietRows(items: readonly QuietDayItem[]): readonly QuietRow[] {
   });
 }
 
-/** How many questions the list holds — 01b's "Answer the N open questions". */
+/** How many questions the list holds - 01b's "Answer the N open questions". */
 export function openQuestionCount(items: readonly QuietDayItem[]): number {
   return items.filter((i) => i.source === 'unanswered_question').length;
 }

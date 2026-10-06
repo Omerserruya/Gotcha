@@ -46,7 +46,7 @@ const approved = (tool: string, decidedAt: string, executionState = 'SUCCEEDED')
     createdAt: decidedAt,
   });
 
-describe('★★ handled without asking you — counted, never invented', () => {
+describe('★★ handled without asking you - counted, never invented', () => {
   it('today’s successful runs, less the ones you approved today that ran', () => {
     const handled = handledToday(
       [
@@ -75,7 +75,7 @@ describe('★★ handled without asking you — counted, never invented', () => 
     });
   });
 
-  it('never below zero; without either read, unknown — not zero', () => {
+  it('never below zero; without either read, unknown - not zero', () => {
     expect(
       handledToday([usage('cancel_order', 0)], [approved('cancel_order', TODAY)], NOW)?.total,
     ).toBe(0);
@@ -172,10 +172,10 @@ describe('★★ 02’s sentence, from what the record knows', () => {
 });
 
 describe('★★ the dark card in its three states', () => {
-  it('unread: in its shape, every figure "—"', async () => {
+  it('unread: in its shape, every figure "-"', async () => {
     render(await HandledCard({ handled: null }));
-    expect(screen.getByTestId('handled-unread')).toHaveTextContent('—');
-    expect(screen.getByTestId('handled-refunds')).toHaveTextContent('Refunds—');
+    expect(screen.getByTestId('handled-unread')).toHaveTextContent('-');
+    expect(screen.getByTestId('handled-refunds')).toHaveTextContent('Refunds-');
   });
 
   it('nothing today: said, not a zero', async () => {
@@ -188,7 +188,7 @@ describe('★★ the dark card in its three states', () => {
     expect(screen.queryByTestId('handled-total')).toBeNull();
   });
 
-  it('a count and its three figures — and no value nobody recorded', async () => {
+  it('a count and its three figures - and no value nobody recorded', async () => {
     render(
       await HandledCard({
         handled: { total: 31, refunds: 18, lookups: 9, returns: 4, failed: 0, failingSystems: [] },
@@ -229,7 +229,7 @@ describe('★★ 03c’s rows: when, the sentence with the customer, how it ende
       }),
     );
     expect(screen.getByTestId('decided-a1')).toHaveTextContent('Refunded 179 to Dana Cohen');
-    // No name: the order instead — never "to undefined".
+    // No name: the order instead - never "to undefined".
     expect(screen.getByTestId('decided-a2')).toHaveTextContent('Refunded 179 on order #1011');
     expect(screen.getByTestId('when-a2')).toHaveTextContent('Yesterday');
     expect(screen.getByTestId('when-a3')).toHaveTextContent('Sep 20');
@@ -242,13 +242,13 @@ describe('★★ 03c’s rows: when, the sentence with the customer, how it ende
     expect(screen.getByTestId('nothing-waiting')).not.toHaveTextContent(/teaches|Undo/);
   });
 
-  it('the average decision is "—" when none can be timed, not hidden', async () => {
+  it('the average decision is "-" when none can be timed, not hidden', async () => {
     render(await DecisionStats({ stats: { approvedThisWeek: 0, avgDecisionSeconds: null } }));
-    expect(screen.getByTestId('decision-stats')).toHaveTextContent('Avg decision —');
+    expect(screen.getByTestId('decision-stats')).toHaveTextContent('Avg decision -');
   });
 });
 
-describe('★★ Edited — what ran, and what was asked', () => {
+describe('★★ Edited - what ran, and what was asked', () => {
   it('modifiedParams gives only its amount; the row says "Edited" and "(was …)"', async () => {
     const edited = approvalSchema.parse({
       id: 'e1',
@@ -313,13 +313,13 @@ describe('★★ "nothing ran" never hides a broken connection', () => {
     expect(screen.queryByTestId('handled-none')).toBeNull();
     expect(screen.getByTestId('handled-total')).toHaveTextContent('0');
     expect(screen.getByTestId('handled-failed')).toHaveTextContent(
-      '356 tried and failed — Shopify needs fixing. Reconnect it',
+      '356 tried and failed - Shopify needs fixing. Reconnect it',
     );
     expect(screen.getByTestId('handled-failed').querySelector('a')).toHaveAttribute(
       'href',
       JSON.stringify({ pathname: '/studio/capabilities', query: { system: 'shopify' } }),
     );
-    expect(screen.getByTestId('handled-lookups')).toHaveTextContent('—');
+    expect(screen.getByTestId('handled-lookups')).toHaveTextContent('-');
   });
 
   it('several systems: the systems page', async () => {
@@ -336,7 +336,7 @@ describe('★★ "nothing ran" never hides a broken connection', () => {
       }),
     );
     expect(screen.getByTestId('handled-failed')).toHaveTextContent(
-      '5 tried and failed — a connection needs fixing.',
+      '5 tried and failed - a connection needs fixing.',
     );
     expect(screen.getByTestId('handled-failed').querySelector('a')).toHaveAttribute(
       'href',

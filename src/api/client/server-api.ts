@@ -24,7 +24,7 @@ export function serverApi(): HttpClient {
     fetchOptions: { cache: 'no-store' },
     /*
      * The platform's own session cookie if this app can see it, otherwise this
-     * app's session. Same precedence as the BFF — the two must agree, or a
+     * app's session. Same precedence as the BFF - the two must agree, or a
      * Server Component and a browser fetch would authenticate as different
      * principals on the same page.
      */

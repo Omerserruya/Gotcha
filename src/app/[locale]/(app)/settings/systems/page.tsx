@@ -13,7 +13,7 @@ import { Drawer } from '@/shell/Drawer';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Business systems — screen 14.
+ * Settings · Business systems - screen 14.
  *
  * *"Platform config, no AI behaviour."*
  *
@@ -51,7 +51,7 @@ export default async function Page({
   /*
     14, measured: which system plays which part. The connections themselves
     are 10's (Studio · Integrations); the inventory that stood below the parts
-    duplicated it and is gone — the footer says where connecting lives.
+    duplicated it and is gone - the footer says where connecting lives.
   */
   return (
     <SettingsSection title={t('title')} description={t('description')}>

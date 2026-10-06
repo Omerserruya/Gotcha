@@ -14,15 +14,15 @@ import styles from './Capabilities.module.css';
 const RISK = new Set(['LOW', 'MEDIUM', 'HIGH']);
 
 /**
- * 10 for a system that is not connected (Omer, 2026-10-04): its own screen —
+ * 10 for a system that is not connected (Omer, 2026-10-04): its own screen -
  * the mark, the name, what it is, what it would bring, and Connect.
  *
  * How it connects is the catalogue's to say:
- *   · fields  — a credentials form, live.
- *   · OAuth   — at the provider. Live where the way back comes here
+ *   · fields  - a credentials form, live.
+ *   · OAuth   - at the provider. Live where the way back comes here
  *               (backend 381a5d1b: HubSpot, Salesforce, Monday); drawn, with
  *               why, where it still leads to the previous app.
- *   · neither — `custom_api`: set up with GOTCHA, not by a form; drawn.
+ *   · neither - `custom_api`: set up with GOTCHA, not by a form; drawn.
  */
 export async function AvailableSystem({
   integration,
@@ -93,7 +93,7 @@ export async function AvailableSystem({
         <h2 className={styles.groupHeading}>{t('available.brings')}</h2>
         {integration.catalogTools.length === 0 ? (
           <p className={styles.bringsNone} title={t('available.bringsNone')}>
-            —
+            -
           </p>
         ) : (
           <ul className={styles.capabilities}>

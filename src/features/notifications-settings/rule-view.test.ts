@@ -13,7 +13,7 @@ import { eventStatus, groupRulesByEvent, toRuleView } from './rule-view';
 
 /**
  * This tenant has no notification rules at all, so no capture can exercise any
- * of this. These tests are the only place the list's judgements are checked —
+ * of this. These tests are the only place the list's judgements are checked -
  * which of them is why they assert consequences (nobody is told) rather than
  * shapes.
  */

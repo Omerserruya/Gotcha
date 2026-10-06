@@ -3,12 +3,12 @@ import { getTranslations } from 'next-intl/server';
 import styles from './Developer.module.css';
 
 /**
- * 18 — API keys, webhooks, and access for someone outside the team, in 02's
+ * 18 - API keys, webhooks, and access for someone outside the team, in 02's
  * shape: a full-width keys card, then webhooks beside the dark access card.
  *
  * Nothing serves any of the three. There is no API-key store, the only
  * webhook table holds INCOMING automation triggers (not endpoints GOTCHA
- * calls), and no role is "API only". So each card is drawn with its "—"
+ * calls), and no role is "API only". So each card is drawn with its "-"
  * and its control present and not live, with why on the title. 02's two
  * foot lines ("Failed deliveries retry for 24 hours…", "Everything they do
  * appears in the security log…") are promises about behaviour that does not
@@ -32,7 +32,7 @@ export async function DeveloperScreen() {
           </span>
         </header>
         <p className={styles.none} title={t('keys.none')} data-testid="developer-keys-none">
-          —
+          -
         </p>
       </section>
 
@@ -54,7 +54,7 @@ export async function DeveloperScreen() {
             title={t('webhooks.none')}
             data-testid="developer-webhooks-none"
           >
-            —
+            -
           </p>
         </section>
 
@@ -65,7 +65,7 @@ export async function DeveloperScreen() {
             title={t('access.none')}
             data-testid="developer-access-none"
           >
-            —
+            -
           </p>
         </section>
       </div>

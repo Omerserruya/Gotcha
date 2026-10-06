@@ -13,7 +13,7 @@ import styles from './Workspace.module.css';
  * How the business sounds, and what that actually produces.
  *
  * Guidance rather than adjective chips, by decision: the sample is the whole
- * point of the control — "judged by output" — and a chip cannot be judged by
+ * point of the control - "judged by output" - and a chip cannot be judged by
  * anything. Instructions to a writer can.
  *
  * The 40-character minimum is enforced HERE as well as on the server. A round
@@ -120,7 +120,7 @@ export function VoiceEditor({ voice }: { voice: WorkspaceVoice }) {
   );
 
   /*
-    11 draws a READ state — the setting, the sample, its caption — and edits
+    11 draws a READ state - the setting, the sample, its caption - and edits
     in place (11e). The voice is stored as words, so the words are what the
     read state shows where 02 has tone chips.
   */

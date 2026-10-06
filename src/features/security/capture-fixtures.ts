@@ -13,11 +13,11 @@ import type { LoginEvent, SecuritySession } from '@/api/contracts/security';
  * into files.
  *
  * **Correction, 2026-09-20.** This used to say those screenshots "are
- * committed". They are not, and never have been — `e2e/evidence/` has been
+ * committed". They are not, and never have been - `e2e/evidence/` has been
  * gitignored since the commit that introduced it. The gate is unchanged
  * because it was never about git: the files are written to disk, opened by
  * whoever runs the capture, and relayed between sessions. *Not committed is
- * not not disclosed*, and being ignored is worse — a committed file has a
+ * not not disclosed*, and being ignored is worse - a committed file has a
  * history someone could purge and a review that would have seen it. See
  * `e2e/README.md`, gate 2.
  *
@@ -46,21 +46,21 @@ import type { LoginEvent, SecuritySession } from '@/api/contracts/security';
  * ── WHY NOT `NODE_ENV !== 'production'` ──
  * That was the first guard and it was broken: `next start` IS production mode,
  * Next sets `NODE_ENV` itself, so the clause was always false and the fixtures
- * could never engage. The capture caught it — 42 tests refused rather than
- * photographing live data — but the intent was wrong as well as the code.
+ * could never engage. The capture caught it - 42 tests refused rather than
+ * photographing live data - but the intent was wrong as well as the code.
  * Build mode describes how the bundle was compiled; it says nothing about
  * whose machine is serving it.
  *
  * ── WHY THE ORIGIN ──
  * `APP_ORIGIN` is the address this app answers on, and a host serving real
- * people cannot be on a loopback address — a browser elsewhere could never
+ * people cannot be on a loopback address - a browser elsewhere could never
  * reach it. So "am I only reachable from this machine?" is the question that
  * actually distinguishes a capture run from a deployment, and it holds
  * whatever `NODE_ENV` says.
  *
  * **Fail closed.** A missing, malformed or non-loopback origin yields `false`.
- * Someone setting `E2E_SECURITY_FIXTURES=1` on the real app — by accident or
- * otherwise — gets live behaviour, which is the property this guard exists to
+ * Someone setting `E2E_SECURITY_FIXTURES=1` on the real app - by accident or
+ * otherwise - gets live behaviour, which is the property this guard exists to
  * preserve.
  */
 export function captureFixturesEnabled(): boolean {
@@ -72,7 +72,7 @@ export function captureFixturesEnabled(): boolean {
    * `.env.local` into it at runtime under `next start` as well as in dev.
    *
    * The value is only ever compared, never rendered, so an unvalidated read
-   * costs nothing here — and `isLoopbackOrigin` fails closed on anything it
+   * costs nothing here - and `isLoopbackOrigin` fails closed on anything it
    * cannot parse.
    */
   return isLoopbackOrigin(process.env.APP_ORIGIN);
@@ -89,7 +89,7 @@ export function isLoopbackOrigin(origin: string | undefined): boolean {
     return false;
   }
   /*
-   * `hostname` KEEPS the brackets on an IPv6 literal — `http://[::1]:3000`
+   * `hostname` KEEPS the brackets on an IPv6 literal - `http://[::1]:3000`
    * yields `[::1]`, not `::1`. I had that backwards in a comment and the test
    * caught it, which is the reason this predicate has one.
    */

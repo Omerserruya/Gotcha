@@ -1,14 +1,14 @@
 import type { InboxMessage } from '@/api/contracts/inbox';
 
 /**
- * What a message's attachment is, as the stream draws it — and the two
+ * What a message's attachment is, as the stream draws it - and the two
  * guards that keep it honest: a media address is followed only over https
  * or on this host, and a caption the adapter wrote for us ("[Image]") is
  * never printed as if the customer typed it.
  */
 export type MediaKind = 'image' | 'video' | 'audio' | 'sticker' | 'document';
 
-/** https, or a path on this host (`/api/uploads/…`); anything else — `javascript:`, `//evil` — is no address. */
+/** https, or a path on this host (`/api/uploads/…`); anything else - `javascript:`, `//evil` - is no address. */
 export function safeMediaUrl(raw: string | null): string | null {
   const url = raw?.trim();
   if (!url) return null;

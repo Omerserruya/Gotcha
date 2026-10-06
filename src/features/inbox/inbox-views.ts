@@ -4,24 +4,24 @@
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THE VIEWS DID NOT FILTER. AT ALL. THE PAGE NEVER READ `view`.
  * ════════════════════════════════════════════════════════════════════════════
- * The rail wrote `?view=resolved`, highlighted the right item, and the page —
- * whose `searchParams` declared only `c` and `cursor` — ignored it. "Resolved"
+ * The rail wrote `?view=resolved`, highlighted the right item, and the page -
+ * whose `searchParams` declared only `c` and `cursor` - ignored it. "Resolved"
  * showed open conversations; "Assigned to me" showed nine that were not.
  * Not a styling defect; it predates the redesign.
  *
  * ★★ AND THE ROUTE COULD ALWAYS FILTER. The OpenAPI lists no query parameters
- *    for `GET /api/conversations` — but it lists neither `limit` nor `cursor`
+ *    for `GET /api/conversations` - but it lists neither `limit` nor `cursor`
  *    either, and we send both. The handler destructures its query by hand:
  *
  *      status, assignedAgentId, channel, departmentId, search, page, limit,
  *      cursor, includeAutomated, automatedOnly
- *      — services/conversation/src/routes/conversations.ts:71
+ *      - services/conversation/src/routes/conversations.ts:71
  *
  *    Trusting the spec's silence would have meant filtering client-side, over
  *    ONE page of ten, silently missing every match on the pages after it.
  *
- * ⚠ THE ROUTE CANNOT SEPARATE AI FROM FLOW. `automatedOnly` returns both —
- *   `AUTOMATED_HANDLERS = ["ai_agent", "flow"]` — and there is no `handledBy`
+ * ⚠ THE ROUTE CANNOT SEPARATE AI FROM FLOW. `automatedOnly` returns both -
+ *   `AUTOMATED_HANDLERS = ["ai_agent", "flow"]` - and there is no `handledBy`
  *   parameter. So the two views send `handledBy` anyway: the route ignores an
  *   unknown key today, and the view becomes exact the moment it accepts one,
  *   with no change here. Until then both show the union. Filtering on the
@@ -40,7 +40,7 @@ export function parseInboxView(raw: string | undefined): InboxView {
  * The query for one view.
  *
  * ⚠ `mine` needs the viewer's platform id, which only `/auth/me` knows. It is
- *   the one view whose list genuinely depends on another read — see
+ *   the one view whose list genuinely depends on another read - see
  *   `loadInbox`, which waits for `me` for this view and no other.
  *
  * @returns null for `mine` when the viewer is unknown: there is no honest
@@ -74,7 +74,7 @@ export function viewQuery(view: InboxView, meId: string | null): Record<string, 
  * ★ 02's own rule: "Channel filters are icons; advanced filters (intent,
  *   team, agent, owner type, wait time, customer attributes) stay behind
  *   'Filters' and are off by default." So these five are real filters, sent
- *   as the route's `channel` — not decoration over an unfiltered list.
+ *   as the route's `channel` - not decoration over an unfiltered list.
  *
  * ⚠ The route matches ONE exact value. "Email" is `EMAIL` and does not
  *   include `GMAIL` or `OUTLOOK`; "Web chat" is `WEBCHAT` and does not include
@@ -107,7 +107,7 @@ export function parseChannelFilter(raw: string | undefined): QueueChannelFilter 
  *
  * ⚠⚠ A ROW'S LINK WAS `{ c }` AND NOTHING ELSE. Opening a conversation from
  *    "Resolved" dropped `view`, so the list behind it snapped back to the
- *    queue — the view the reader had just chosen, undone by the click that
+ *    queue - the view the reader had just chosen, undone by the click that
  *    used it. Every inbox link goes through here so none can forget one.
  *
  * ★ `cursor` is never carried: a new filter or a new view starts at page one.

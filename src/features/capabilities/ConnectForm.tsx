@@ -11,7 +11,7 @@ import { credentialsFor } from './connect-form';
 import styles from './Capabilities.module.css';
 
 /**
- * 10's Connect for a system that connects with credentials — live (Omer,
+ * 10's Connect for a system that connects with credentials - live (Omer,
  * 2026-10-04). The fields are the catalogue's own (`authSchema.fields`), in
  * its words; a secret is a password field and is never shown back. Nothing is
  * sent until the button is pressed.

@@ -34,7 +34,7 @@ const page = async (query: Record<string, string> = {}) => {
   return Page({ searchParams: Promise.resolve(query) });
 };
 
-describe('★ 01d — the panel over Home, by query', () => {
+describe('★ 01d - the panel over Home, by query', () => {
   it('only with ?notifications=1', async () => {
     expect(find(await page(), NotificationsPanel)).toBeNull();
     expect(find(await page({ notifications: '1' }), NotificationsPanel)).not.toBeNull();
@@ -54,7 +54,7 @@ describe('★ 01d — the panel over Home, by query', () => {
   });
 });
 
-describe('★ 19 — ?ask= reaches the command box, capped', () => {
+describe('★ 19 - ?ask= reaches the command box, capped', () => {
   it('passes the question; absent is empty', async () => {
     expect(find<{ ask: string }>(await page({ ask: 'refunds?' }), HomeScreen)?.ask).toBe(
       'refunds?',
@@ -66,7 +66,7 @@ describe('★ 19 — ?ask= reaches the command box, capped', () => {
   });
 });
 
-describe('★ 01c — "Book a setup call" comes from SETUP_CALL_URL, server side', () => {
+describe('★ 01c - "Book a setup call" comes from SETUP_CALL_URL, server side', () => {
   it('set: passed down; unset: null, so no link is drawn', async () => {
     const { default: Page } = await import('./page');
     env.SETUP_CALL_URL = 'https://cal.example/gotcha-setup';

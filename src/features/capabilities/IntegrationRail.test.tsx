@@ -42,7 +42,7 @@ const entry = (over: Record<string, unknown> = {}): Integration =>
  * ★ THE PROVIDER IS NOT DECORATION. The rail's lists moved into
  * `IntegrationFinder`, a client component, because only the filter needs state.
  * A client component inside a server tree with no `NextIntlClientProvider`
- * throws on its first `useTranslations` — the seventh time that has happened in
+ * throws on its first `useTranslations` - the seventh time that has happened in
  * this project, and the reason it is noted here rather than silently added.
  */
 const show = async (integrations: readonly Integration[] | null) =>
@@ -56,8 +56,8 @@ describe('★★ the list is whatever the table holds', () => {
   it('★★ counts what is really there, not the design’s 58', async () => {
     /*
      * The design draws "Available · 58" over ten named providers, most of
-     * which have no catalogue row. Printing 58 above a list of 17 — or
-     * padding the list — would imply coverage the product does not have,
+     * which have no catalogue row. Printing 58 above a list of 17 - or
+     * padding the list - would imply coverage the product does not have,
      * which is the same defect as a knowledge counter made of candidates
      * nobody accepted.
      */
@@ -69,7 +69,7 @@ describe('★★ the list is whatever the table holds', () => {
   it('★★ a BROKEN connection stays connected, with its state', async () => {
     /*
      * `status: "ERROR"` is still a connection. Moving it to "available"
-     * would offer a Connect button for something already connected — the
+     * would offer a Connect button for something already connected - the
      * distinction 14c, 04d and 05d each had to make on their own.
      */
     await show([entry({ slug: 'shopify', tenantConnection: { id: 'c1', status: 'ERROR' } })]);
@@ -79,7 +79,7 @@ describe('★★ the list is whatever the table holds', () => {
     /*
      * ★★ THE STATE'S NAME, AND THIS ASSERTION USED TO REQUIRE THE ENUM.
      *
-     * It read `toHaveTextContent('ERROR')` — so the raw code on screen was
+     * It read `toHaveTextContent('ERROR')` - so the raw code on screen was
      * pinned by a test, and a browser walk found it there. The rule this test
      * means is that a broken connection stays in the connected group AND says
      * what is wrong with it; the code was never the point.
@@ -123,7 +123,7 @@ describe('★★ the list is whatever the table holds', () => {
     expect(screen.getByTestId('rail-available')).toHaveTextContent(/Shipping/);
   });
 
-  it('★ an entry with no category is not assigned one — no chip, no label', async () => {
+  it('★ an entry with no category is not assigned one - no chip, no label', async () => {
     // Inventing a category is how a filter starts lying about what it holds.
     await show([
       entry({ slug: 'a', name: 'A', category: 'ECOMMERCE' }),
@@ -191,8 +191,8 @@ describe('★★ finding one of seventeen', () => {
   it('★★ filters by what it does and by its category, which the label promises', async () => {
     /*
      * The search matches name, description and category. 02's placeholder
-     * ("Search 17 integrations") says WHAT is searched and how many — the
-     * integrations — not which of their fields; this test holds the fields.
+     * ("Search 17 integrations") says WHAT is searched and how many - the
+     * integrations - not which of their fields; this test holds the fields.
      */
     await show(CATALOGUE);
     await type('deals');
@@ -266,7 +266,7 @@ describe('★★ finding one of seventeen', () => {
   it('★★ offers no filter at all when the catalogue could not be read', async () => {
     /*
      * The failure branch stays on the server, so there is no filter over a list
-     * that does not exist — a search box above "we could not read this" invites
+     * that does not exist - a search box above "we could not read this" invites
      * somebody to conclude their integration is missing.
      */
     await show(null);
@@ -325,7 +325,7 @@ describe('★★ 10’s rail selects a system', () => {
 });
 
 describe('★★ every integration has its own screen (Omer, 2026-10-04)', () => {
-  it('an available row opens it — the way to Connect, with its mark', async () => {
+  it('an available row opens it - the way to Connect, with its mark', async () => {
     await show([entry({ slug: 'woocommerce', name: 'WooCommerce' })]);
     const row = screen.getByTestId('available-woocommerce');
     expect(row).toHaveAttribute('href', '?system=woocommerce');

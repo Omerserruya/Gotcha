@@ -36,7 +36,7 @@ describe('★★ a file goes as multipart, with the text as its caption', () => 
   });
 });
 
-describe('⚠⚠ over the cap is refused HERE — the route would send it truncated', () => {
+describe('⚠⚠ over the cap is refused HERE - the route would send it truncated', () => {
   it('makes no request at all', async () => {
     expect(await sendMedia('c1', fileOf(MAX_MEDIA_BYTES + 1), '')).toEqual({
       ok: false,

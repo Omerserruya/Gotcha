@@ -7,10 +7,10 @@ import { z } from 'zod';
  *
  * The four states are not interchangeable:
  *
- *   `done`    — finished, with a timestamp
- *   `next`    — the single step to do now. Exactly one is ever next
- *   `waiting` — available, but not the thing to do yet
- *   `blocked` — cannot start until the steps in `blockedBy` finish
+ *   `done`    - finished, with a timestamp
+ *   `next`    - the single step to do now. Exactly one is ever next
+ *   `waiting` - available, but not the thing to do yet
+ *   `blocked` - cannot start until the steps in `blockedBy` finish
  *
  * `next` is the SERVER's decision. Two surfaces computing "what should I do
  * now" from the same booleans will disagree the moment either changes, and the
@@ -58,7 +58,7 @@ export type SetupStep = z.infer<typeof setupStepSchema>;
 export type SetupStatus = z.infer<typeof setupStatusSchema>;
 
 /**
- * `GET /api/knowledge/ingest/latest` — what came back from pointing GOTCHA at
+ * `GET /api/knowledge/ingest/latest` - what came back from pointing GOTCHA at
  * a website.
  *
  * The whole response is `null` when no scan has ever run: "we read nothing" and

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * `?c=` opens its conversation even when this view's rows do not hold it —
+ * `?c=` opens its conversation even when this view's rows do not hold it -
  * a link from Cmd-K, a notification or Approvals (measured on dev: a
  * Shopify conversation outside the queue view read "Nothing is open").
  */
@@ -56,7 +56,7 @@ describe('★★ a link opens its conversation, whatever the view', () => {
     expect(data.detail).not.toBeNull();
   });
 
-  it.each([404, 403])('★ %i: "isn’t available" — not "Nothing is open"', async (status) => {
+  it.each([404, 403])('★ %i: "isn’t available" - not "Nothing is open"', async (status) => {
     byId = () => new ApiError({ kind: status === 404 ? 'not_found' : 'authorization', status });
     const data = await loadInbox('gone');
     expect(data.open).toBeNull();

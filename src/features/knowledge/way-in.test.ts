@@ -13,7 +13,7 @@ const source = (id: string, types: string[]) =>
     documents: types.map((sourceType, i) => ({ id: `${id}-${i}`, sourceType })),
   });
 
-describe('★ how a source came in — the writers’ own sourceType', () => {
+describe('★ how a source came in - the writers’ own sourceType', () => {
   it('maps each written value to its way in', () => {
     expect(
       [
@@ -56,7 +56,7 @@ describe('★ how a source came in — the writers’ own sourceType', () => {
 import { knowledgeSummary } from './KnowledgeScreen';
 
 describe('★ 08’s header line is a summary from data', () => {
-  it('counts the ways in and what needs an answer — conflicts plus unanswered', () => {
+  it('counts the ways in and what needs an answer - conflicts plus unanswered', () => {
     const summary = knowledgeSummary(
       [source('w', ['onboarding_scan']), source('u', ['file'])],
       [{} as never],
@@ -65,7 +65,7 @@ describe('★ 08’s header line is a summary from data', () => {
     expect(summary).toEqual({ ways: ['website', 'uploaded'], needAnswer: 3 });
   });
 
-  it('★ a failed read gives no summary — the line would have to guess', () => {
+  it('★ a failed read gives no summary - the line would have to guess', () => {
     expect(knowledgeSummary(null, [], [])).toBeNull();
     expect(knowledgeSummary([], null, [])).toBeNull();
     expect(knowledgeSummary([], [], null)).toBeNull();

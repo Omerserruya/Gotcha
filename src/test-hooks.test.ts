@@ -7,13 +7,13 @@ import { describe, expect, it } from 'vitest';
  * A hook must not RETURN a mock.
  *
  * `beforeEach(() => spy.mockReset())` returns the spy, and vitest runs a
- * function returned from `beforeEach` as that test's teardown — so the spy is
+ * function returned from `beforeEach` as that test's teardown - so the spy is
  * called bare after every test. A spy set to throw then fails a test whose
  * assertions all passed ("Error: down", at the line that built the error);
  * one that resolves records a call nobody made. It cost an hour on 05e's
  * call actions, and three more files had the same shape.
  *
- * Granularity: by line, in test files — a hook whose arrow body is an
+ * Granularity: by line, in test files - a hook whose arrow body is an
  * expression ending in `.mockReset()`, `.mockClear()` or `.mockRestore()`.
  * Blind spot: other returned functions (any arrow body that yields one).
  */

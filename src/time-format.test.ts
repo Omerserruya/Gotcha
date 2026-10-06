@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * Every time the product writes is 24-hour, in every language: 02 writes
  * `09:12`. An `Intl` time option follows the LOCALE by default, so `en`
- * renders "9:12 AM" — on Security, on 07e and on Home's activity card it
+ * renders "9:12 AM" - on Security, on 07e and on Home's activity card it
  * did, and no screenshot test caught it because nothing reads the text.
  *
  * Granularity: by object literal. Any `{ … }` that gives `hour:` or

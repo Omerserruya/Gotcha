@@ -23,7 +23,7 @@ import { LiveCall } from './LiveCall';
  * Screen 05e, tested rather than photographed.
  *
  * **A live call cannot be captured.** This tenant has voice disabled, zero
- * sessions and zero voice messages — and originating a call means dialling a
+ * sessions and zero voice messages - and originating a call means dialling a
  * real phone number through Twilio, which is further outside what evidence
  * justifies than sending a campaign or submitting a template to Meta, both of
  * which were declined.
@@ -40,7 +40,7 @@ const listeners = new Map<RealtimeEventType, (event: RealtimeEvent) => void>();
  * Delivers a frame the way the socket would.
  *
  * Wrapped in `act` because the transport calls listeners outside React's
- * batching — so without it the state update lands after the assertion and
+ * batching - so without it the state update lands after the assertion and
  * every one of these tests fails for a reason that has nothing to do with the
  * component.
  */
@@ -149,14 +149,14 @@ describe('frames for another call never reach this one', () => {
   it('ignores a transcript line from a different conversation', () => {
     /*
      * The tenant-broadcast leak was fixed server-side, so this filter is
-     * defence in depth and NOT the protection — if it were, the data would
+     * defence in depth and NOT the protection - if it were, the data would
      * still be arriving in every other agent's browser. It is here because a
      * screen should not render what it cannot attribute.
      */
     renderCall();
     // Delivered through `deliver` so the state actually flushes. Firing the
     // listener directly would leave React un-rendered, and the assertion
-    // below would pass whether or not the component filters — a negative
+    // below would pass whether or not the component filters - a negative
     // assertion that cannot fail is not a test.
     deliver(transcript({ conversationId: 'someone-elses-call', text: 'not for us' }));
 
@@ -193,7 +193,7 @@ describe('frames for another call never reach this one', () => {
 });
 
 describe('the controls are the two that exist', () => {
-  it('★★ End call is live: one click ends this session — and nothing fires without it', async () => {
+  it('★★ End call is live: one click ends this session - and nothing fires without it', async () => {
     calls.endCall.mockResolvedValue({ ok: true });
     renderCall();
     expect(calls.endCall).not.toHaveBeenCalled();
@@ -215,7 +215,7 @@ describe('the controls are the two that exist', () => {
     /*
      * The design puts Mute in the header beside two controls that work.
      * Nothing in the platform implements it. A greyed button still says one
-     * exists — and on a live call the failure is silent while somebody is
+     * exists - and on a live call the failure is silent while somebody is
      * speaking, which is the "Pause the rest" class.
      */
     renderCall();
@@ -223,7 +223,7 @@ describe('the controls are the two that exist', () => {
     expect(document.body.textContent).not.toMatch(/\bmute\b/i);
   });
 
-  it('when the call ends, it says so — the controls were never live', () => {
+  it('when the call ends, it says so - the controls were never live', () => {
     renderCall();
     expect(screen.getByTestId('live-state')).toHaveTextContent('On the call');
     deliver({
@@ -237,7 +237,7 @@ describe('the controls are the two that exist', () => {
   });
 });
 
-describe('★★ 05e — Transfer, as the old app does it', () => {
+describe('★★ 05e - Transfer, as the old app does it', () => {
   const open = async () => {
     renderCall();
     await userEvent.click(screen.getByTestId('transfer'));
@@ -270,7 +270,7 @@ describe('★★ 05e — Transfer, as the old app does it', () => {
     await userEvent.click(screen.getByTestId('transfer-hold'));
     expect(calls.holdCustomer).toHaveBeenCalledWith('s-1', true);
     expect(screen.getByTestId('transfer-hold')).toHaveAttribute('aria-pressed', 'true');
-    // A second press takes them off hold — the toggle, not "hold" twice.
+    // A second press takes them off hold - the toggle, not "hold" twice.
     await userEvent.click(screen.getByTestId('transfer-hold'));
     expect(calls.holdCustomer).toHaveBeenLastCalledWith('s-1', false);
     expect(screen.getByTestId('transfer-hold')).toHaveAttribute('aria-pressed', 'false');
@@ -298,9 +298,9 @@ describe('nothing on this screen claims what the platform cannot do', () => {
     deliver(transcript());
 
     const text = document.body.textContent ?? '';
-    // "Hebrew · translating as she speaks" — no translation anywhere.
+    // "Hebrew · translating as she speaks" - no translation anywhere.
     expect(text).not.toMatch(/translat/i);
-    // "Refund asked for" / "Gift · date passed" — no live intent extraction.
+    // "Refund asked for" / "Gift · date passed" - no live intent extraction.
     expect(text).not.toMatch(/refund asked for|date passed/i);
     // Nothing on the voice path creates an ApprovalRequest.
     expect(text).not.toMatch(/approval|approve/i);
@@ -321,7 +321,7 @@ describe('nothing on this screen claims what the platform cannot do', () => {
   });
 });
 
-describe('★★ 05e — the call as a page', () => {
+describe('★★ 05e - the call as a page', () => {
   function renderFull(over: Partial<Parameters<typeof LiveCall>[0]> = {}) {
     listeners.clear();
     return render(
@@ -371,20 +371,20 @@ describe('★★ 05e — the call as a page', () => {
     expect(screen.getByTestId('line-1')).toHaveTextContent('1:18');
   });
 
-  it('⚠ a time before the start, or no start, is no time — never a negative', () => {
+  it('⚠ a time before the start, or no start, is no time - never a negative', () => {
     renderFull({ startedAt: null });
     deliver(transcript({ seq: 1, at: Date.parse('2026-10-02T09:01:18.000Z') }));
-    // The time cell is empty — not "NaN:NaN", which a \d:\d\d check would let through.
+    // The time cell is empty - not "NaN:NaN", which a \d:\d\d check would let through.
     expect(screen.getByTestId('line-1').querySelector('span')?.textContent).toBe('');
   });
 
-  it('⚠ a line stamped before the start has no time — never "-0:03"', () => {
+  it('⚠ a line stamped before the start has no time - never "-0:03"', () => {
     renderFull();
     deliver(transcript({ seq: 2, at: Date.parse('2026-10-02T08:59:57.000Z') }));
     expect(screen.getByTestId('line-2').querySelector('span')?.textContent).toBe('');
   });
 
-  it('Copilot: every block drawn — found, say this, do now — empty in its shape', () => {
+  it('Copilot: every block drawn - found, say this, do now - empty in its shape', () => {
     renderFull();
     expect(screen.getByTestId('copilot-found')).toHaveTextContent('Nothing found yet.');
     expect(screen.getByTestId('suggestions-block')).toHaveTextContent('Nothing to suggest yet.');
@@ -392,7 +392,7 @@ describe('★★ 05e — the call as a page', () => {
     expect(screen.getByPlaceholderText('Ask Copilot something…')).toBeDisabled();
   });
 
-  it('★★ a matched caller is named in all three places — disc, header, and their lines', () => {
+  it('★★ a matched caller is named in all three places - disc, header, and their lines', () => {
     renderFull({ contactName: 'Dana Cohen' });
     deliver(transcript({ seq: 1, at: Date.parse('2026-10-02T09:00:04.000Z') }));
     const head = screen.getByTestId('live-call').querySelector('header')!;
@@ -402,7 +402,7 @@ describe('★★ 05e — the call as a page', () => {
     expect(screen.getByTestId('line-1')).not.toHaveTextContent('Them');
   });
 
-  it('unmatched, the number is the name and the disc says so — "#", never invented initials', () => {
+  it('unmatched, the number is the name and the disc says so - "#", never invented initials', () => {
     renderFull({ contactName: null, customerId: null });
     deliver(transcript({ seq: 1 }));
     expect(screen.getByTestId('live-call').querySelector('header')).toHaveTextContent(
@@ -411,7 +411,7 @@ describe('★★ 05e — the call as a page', () => {
     expect(screen.getByTestId('line-1')).toHaveTextContent('Them');
   });
 
-  it('★ Copilot\'s "stop" is drawn and not live — nothing pauses it on a call', () => {
+  it('★ Copilot\'s "stop" is drawn and not live - nothing pauses it on a call', () => {
     renderFull();
     expect(screen.getByTestId('copilot-stop')).toBeDisabled();
     expect(screen.getByTestId('copilot-stop')).toHaveAttribute(
@@ -420,7 +420,7 @@ describe('★★ 05e — the call as a page', () => {
     );
   });
 
-  it('★ the "Careful" card is drawn in its shape — nothing produces a warning yet', () => {
+  it('★ the "Careful" card is drawn in its shape - nothing produces a warning yet', () => {
     renderFull();
     expect(screen.getByTestId('copilot-careful')).toHaveTextContent(
       'CarefulNothing to watch for yet.',

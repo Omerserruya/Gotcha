@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * `GET /api/intelligence-reviews`.
  *
- * The review queue behind the design's "two sources still disagree" card —
+ * The review queue behind the design's "two sources still disagree" card -
  * things GOTCHA learned about the business that need a person to settle.
  *
  * Note the envelope: `{ ok, pending, reviews }`, not `{ data }`. The platform

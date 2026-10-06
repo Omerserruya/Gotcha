@@ -13,8 +13,8 @@ vi.mock('@/i18n/navigation', () => ({
 import { SETTINGS_SECTIONS } from './navigation';
 import { SettingsSection } from './SettingsSection';
 
-describe('★★ S0 — the Settings frame, as 11–18 draw it', () => {
-  it('★ the nav is exactly 02’s eight — 13b and 17b are not sections', () => {
+describe('★★ S0 - the Settings frame, as 11-18 draw it', () => {
+  it('★ the nav is exactly 02’s eight - 13b and 17b are not sections', () => {
     expect(SETTINGS_SECTIONS.map((section) => section.id)).toEqual([
       'workspace',
       'people',

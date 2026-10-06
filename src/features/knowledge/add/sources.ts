@@ -8,7 +8,7 @@ import { logger } from '@/observability/logger';
 /**
  * 08b after connecting (backend's knowledge integrations): what a connected
  * Drive or Confluence holds, and learning the parts chosen. 02 draws no
- * picker — "A Drive folder · new files learned automatically" — so this is a
+ * picker - "A Drive folder · new files learned automatically" - so this is a
  * list in the sheet's own shape, and nothing is learned before a press.
  */
 export const FOLDER = 'application/vnd.google-apps.folder';
@@ -23,7 +23,7 @@ export type KnowledgeIntegration = z.infer<typeof integrationSchema>;
 
 const fileSchema = z.object({
   id: z.string().min(1),
-  name: z.string().catch('—'),
+  name: z.string().catch('-'),
   mimeType: z.string().catch('').default(''),
 });
 export type DriveFile = z.infer<typeof fileSchema>;
@@ -80,7 +80,7 @@ export function readSpaces(intId: string): Promise<readonly ConfluenceSpace[] | 
 export type LearnResult =
   { readonly ok: true } | { readonly ok: false; readonly reason: 'busy' | 'mixed' | 'failed' };
 
-/** Learns the chosen Drive items — all folders, or all files: the route takes one kind a time. */
+/** Learns the chosen Drive items - all folders, or all files: the route takes one kind a time. */
 export async function learnDrive(
   intId: string,
   picked: readonly DriveFile[],

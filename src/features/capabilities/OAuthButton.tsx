@@ -8,7 +8,7 @@ import { SALESFORCE_HOSTS } from './oauth';
 import styles from './Capabilities.module.css';
 
 /**
- * Connect (or Reconnect) at the provider — live where the way back comes here
+ * Connect (or Reconnect) at the provider - live where the way back comes here
  * (backend 381a5d1b). The click asks our server for the provider's address,
  * then the browser goes there. Nothing is connected until the person
  * approves at the provider.

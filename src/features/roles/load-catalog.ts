@@ -6,7 +6,7 @@ import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
 
 /**
- * The permission catalogue — screen 12c.
+ * The permission catalogue - screen 12c.
  *
  * `raw` because the transform reads `permissions` and `scopes` out of the
  * `{ data }` envelope together.

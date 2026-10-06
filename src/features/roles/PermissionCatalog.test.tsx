@@ -14,17 +14,17 @@ import { PermissionCatalog } from './PermissionCatalog';
  * Permissions showed `Crm` and `Ai` as headings. Three instruments could not
  * see it and each for a different, sound reason:
  *
- *   · a source sweep — `group.domain` is lowercase `crm` in the source, and the
+ *   · a source sweep - `group.domain` is lowercase `crm` in the source, and the
  *     capital came from `text-transform: capitalize` in `Roles.module.css`;
- *   · a screaming-identifier probe — `crm` has no underscore and no capitals;
- *   · any value-side helper — `humaniseCode` was never called on this path.
+ *   · a screaming-identifier probe - `crm` has no underscore and no capitals;
+ *   · any value-side helper - `humaniseCode` was never called on this path.
  *
  * ★ A PRESENTATIONAL TRANSFORM THAT CHANGES WHAT A WORD SAYS IS NOT
  *   PRESENTATIONAL. CSS can capitalise `crm`; only code knows it is CRM.
  *
  * These assertions read the rendered text, which is where the humaniser can be
- * checked. They CANNOT see the stylesheet — a CSS module is inert in this
- * renderer — so the transform itself is guarded repo-wide in
+ * checked. They CANNOT see the stylesheet - a CSS module is inert in this
+ * renderer - so the transform itself is guarded repo-wide in
  * `features/home/raw-values.test.ts`, beside the other disguises of this shape.
  */
 
@@ -51,7 +51,7 @@ describe('★★ a domain heading is a name, not an identifier', () => {
     /*
      * The exact strings a browser walk read off the page. `getByText` is exact
      * by default, so these are the assertions that go red if the capitalising
-     * moves back into the stylesheet AND the humaniser is dropped — which is
+     * moves back into the stylesheet AND the humaniser is dropped - which is
      * how the defect was composed.
      */
     expect(screen.queryByText('Crm')).toBeNull();
@@ -107,7 +107,7 @@ describe('★★ the scope note is a marker, not the explanation repeated per ro
      * `catalog.scopeIsPerRole`.
      *
      * Asserted as an absence of the SENTENCE rather than a count of the marker,
-     * because a count cannot tell one long caption from six short ones — and a
+     * because a count cannot tell one long caption from six short ones - and a
      * count is what I would have reached for.
      */
     render(await PermissionCatalog({ permissions: scopedRows() }));

@@ -26,7 +26,7 @@
     color: var(--text-primary);
     /*
      * `--action-base`, the token that means "the colour of the primary
-     * action". It was `--accent-default`, which is defined nowhere — so the
+     * action". It was `--accent-default`, which is defined nowhere - so the
      * declaration was dropped and the underline fell back to `currentColor`.
      * Identical value, so nothing moves on screen; the difference is that it
      * is now the token, and a change to the action colour reaches the

@@ -79,7 +79,7 @@ describe('★ the wildcard semantic, as the catalogue states it', () => {
   });
 });
 
-describe('★ 12e — what is already covered is shown and cannot be picked', () => {
+describe('★ 12e - what is already covered is shown and cannot be picked', () => {
   it('"Already given" for an extra permission, "In Agent" for one the role carries', () => {
     picker();
     const given = screen.getByTestId('grant-option-approvals:refund:approve');
@@ -147,7 +147,7 @@ describe('★ 12e corrections (measurement of 9121d4f)', () => {
     await userEvent.click(screen.getByTestId('grant-add'));
     expect(await screen.findByTestId('grant-done')).toBeInTheDocument();
     expect(calls).toEqual(['conversation:assign:any', 'customer:export:run']);
-    // No end date: `null`, sent — the PUT replaces the override whole.
+    // No end date: `null`, sent - the PUT replaces the override whole.
     expect(addPermission).toHaveBeenCalledWith('u1', 'customer:export:run', 'Friday shifts', null);
   });
 

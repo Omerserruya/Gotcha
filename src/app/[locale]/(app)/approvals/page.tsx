@@ -13,20 +13,20 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Approvals — screen 03.
+ * Approvals - screen 03.
  *
  * *"Understand a request and decide in seconds. The cleanest screen in the
  * product, and the one that should shrink itself over time."*
  *
  * ── WHAT IS ABSENT, AND WHY ──
- * **"Reversible · Yes — within 24h"** is gone, not softened. There is no undo
- * anywhere in this platform — no route, no gateway path, no `undoneAt` or
+ * **"Reversible · Yes - within 24h"** is gone, not softened. There is no undo
+ * anywhere in this platform - no route, no gateway path, no `undoneAt` or
  * `reversalOf` field, enumerated across the repository. That sentence is read
  * **before** the irreversible act, and it would make someone approve a refund
  * they would otherwise have questioned.
  *
  * **Edit amount / `E`** is gone. `TenantToolPermission.allowModification`
- * governs it, defaults to false, and is read by nobody — so building it would
+ * governs it, defaults to false, and is read by nobody - so building it would
  * make an unenforced permission routinely exercised rather than theoretical.
  *
  * **The customer card is not built, and this is settled rather than pending.**
@@ -37,7 +37,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  *     `services/conversation`, so this is a new endpoint plus a cross-service
  *     hop, not a join anyone can ask for.
  *   - the facts resolve to `shopify.get_customer` + `shopify.get_customer_orders`
- *     — **two live vendor calls per customer, uncached**. A queue of twenty is
+ *     - **two live vendor calls per customer, uncached**. A queue of twenty is
  *     forty Shopify round trips, so the card can never live in the list.
  *   - **"Previous refunds: None" must not ship at all.** Refunds exist only
  *     per order, and three states collapse into that one word: we asked and
@@ -45,7 +45,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  *     a refund that is the fact most likely to swing the decision, and the
  *     failure mode renders identically to the reassuring answer.
  *   - **tenure** is the store relationship (`firstSeenOrderAt`), not
- *     `Contact.createdAt` — which is when *we* first saw them in a
+ *     `Contact.createdAt` - which is when *we* first saw them in a
  *     conversation, and reads a year late for a long-standing customer.
  *   - **sentiment** is per-conversation, absent for 90% of this tenant's
  *     conversations and 48+ days old where present, and structurally absent
@@ -60,7 +60,7 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  /** `?view=decided` — the history, reachable while items are pending too. */
+  /** `?view=decided` - the history, reachable while items are pending too. */
   readonly searchParams?: Promise<{ readonly view?: string }>;
 } = {}) {
   const t = await getTranslations('approvals');
@@ -122,7 +122,7 @@ export default async function Page({
 
   /*
    * Screen 03c. An empty queue is the delegation WORKING, so this is a
-   * first-class state rather than a blank — and it is where the record of
+   * first-class state rather than a blank - and it is where the record of
    * what you already decided lives.
    */
   const now = new Date(readAt);
@@ -136,8 +136,8 @@ export default async function Page({
   if (pending.length === 0) {
     return (
       /*
-        ★ 03c's title is the STATE, not the page's name — "Nothing waiting on
-          you" — with 02's figures on the right.
+        ★ 03c's title is the STATE, not the page's name - "Nothing waiting on
+          you" - with 02's figures on the right.
       */
       <PageContainer
         layout="screen"
@@ -164,7 +164,7 @@ export default async function Page({
   }
 
   /*
-   * ★ 03's subline names the soonest deadline — `expiresAt` is real on every
+   * ★ 03's subline names the soonest deadline - `expiresAt` is real on every
    *   row. Measured from the moment the queue was read, as the screen is.
    */
   const soonest = pending
@@ -208,13 +208,13 @@ export default async function Page({
         <>
           <DecisionStats stats={decisionStats(decided, decidedMayBeIncomplete)} />
           {/*
-            The legend lists exactly the keys the screen honours — no `E`,
+            The legend lists exactly the keys the screen honours - no `E`,
             because editing is not built, and `A` only focuses Approve. A
             legend that advertises a key that does nothing is the same defect
             as offering an event that nothing raises.
           */}
           <p className={styles.keys} data-testid="approvals-keys">
-            {/* E only where a waiting request can be edited — never a dead key. */}
+            {/* E only where a waiting request can be edited - never a dead key. */}
             {pending.some((a) => editTarget(a)?.original != null) ? t('keysEdit') : t('keys')}
           </p>
         </>
@@ -230,11 +230,11 @@ export default async function Page({
         editAmountLive
         refundLimit={refundLimit}
         decidedTotal={decided?.length ?? 0}
-        // The moment the queue was read, not the moment this rendered —
+        // The moment the queue was read, not the moment this rendered -
         // and it starts the client's clock at exactly the server's value, so
         // the first client render cannot disagree about what has lapsed.
         serverNow={readAt}
-        /* 03b's "That's the twelfth like it" — counted from the history, by tool. */
+        /* 03b's "That's the twelfth like it" - counted from the history, by tool. */
         decidedHistory={(decided ?? []).map(({ id, tool, status }) => ({ id, tool, status }))}
         /* 02's "Decided earlier today · N", counted where the history is. */
         decidedToday={

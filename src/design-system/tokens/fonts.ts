@@ -25,19 +25,19 @@ import {
  * `weight` (or give a range) and the whole axis is served from one file per
  * subset.
  *
- * Heebo had `weight: ['400','500','600','700']` and is variable — `wght`
- * 100–900 — so Next generated a static face per weight per subset, **twenty of
+ * Heebo had `weight: ['400','500','600','700']` and is variable - `wght`
+ * 100-900 - so Next generated a static face per weight per subset, **twenty of
  * them**, and every one failed Turbopack's import map with *"next/font/google
  * queries have exactly one entry"*. Twenty errors, twenty faces. Removing the
  * array builds clean and emits five faces, one per subset, with the two named
  * in `subsets` preloaded.
  *
  * Archivo is variable with the same array and did NOT fail, so the array alone
- * is not the trigger — something about Heebo's face set differs, and it has two
+ * is not the trigger - something about Heebo's face set differs, and it has two
  * subsets the others do not (`math`, `symbols`). **The precise mechanism is not
  * established here.** What is established is that the configuration was wrong
  * against the documented API for every variable font in this file, and it built
- * only until a `.next` cache was cleared — so the next clean build anywhere,
+ * only until a `.next` cache was cleared - so the next clean build anywhere,
  * including CI, would have hit it.
  *
  * Which is why the two other variable fonts are corrected too rather than left
@@ -45,8 +45,8 @@ import {
  * three.
  *
  * ── AND TWO ARE LEFT WITH THEIR ARRAYS ON PURPOSE ──
- * `Instrument_Serif` and `IBM_Plex_Mono` are **not** variable — no `axes` in
- * Next's own font data — so an array is the correct and only way to ask for
+ * `Instrument_Serif` and `IBM_Plex_Mono` are **not** variable - no `axes` in
+ * Next's own font data - so an array is the correct and only way to ask for
  * their weights. The asymmetry in this file is the fonts differing, not an
  * oversight.
  */
@@ -54,8 +54,8 @@ import {
 /** The workhorse. Everything that is not a display line or a label. */
 export const archivo = Archivo({
   subsets: ['latin'],
-  /* Variable: `wght` 100–900 and `wdth` 62–125. No `axes`, so only `wght`
-     travels — the width axis is never varied here. */
+  /* Variable: `wght` 100-900 and `wdth` 62-125. No `axes`, so only `wght`
+     travels - the width axis is never varied here. */
   variable: '--font-archivo',
   display: 'swap',
 });
@@ -91,7 +91,7 @@ export const heebo = Heebo({
  */
 export const instrumentSerif = Instrument_Serif({
   subsets: ['latin'],
-  /* NOT a variable font — no axes in Next's font data — so the array stays. */
+  /* NOT a variable font - no axes in Next's font data - so the array stays. */
   weight: ['400'],
   style: ['normal', 'italic'],
   variable: '--font-instrument-serif',
@@ -123,7 +123,7 @@ export const instrumentSerif = Instrument_Serif({
  */
 export const frankRuhlLibre = Frank_Ruhl_Libre({
   subsets: ['hebrew', 'latin'],
-  /* Variable: `wght` 300–900, which covers the 400 and 500 this asked for. */
+  /* Variable: `wght` 300-900, which covers the 400 and 500 this asked for. */
   variable: '--font-frank-ruhl-libre',
   display: 'swap',
 });

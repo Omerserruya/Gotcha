@@ -12,20 +12,20 @@ import { AutomationDetail } from './AutomationDetail';
  * The populated branch of screen 09, which this tenant cannot render.
  *
  * `page.tsx` returns the empty state because there are zero automations, so
- * every claim this screen makes — the all-time count, the never-run sentence,
- * null-as-"every channel" — is **unreachable by a capture**. The capture's
+ * every claim this screen makes - the all-time count, the never-run sentence,
+ * null-as-"every channel" - is **unreachable by a capture**. The capture's
  * own absence assertions therefore prove nothing: *"the words 'this week' do
  * not appear"* is trivially true of four lines of empty state, and **would
  * pass against a blank page.**
  *
  * **An absence assertion is only worth running where the thing could have
- * appeared.** That is here, with rows in props — and it is why seeding was
+ * appeared.** That is here, with rows in props - and it is why seeding was
  * refused: creating a real automation means wiring a rule that acts on live
  * conversations without anyone watching.
  *
  * ── WHAT CHANGED (S2, 2026-10-03) ──
  * The list became 09's detail: ONE automation, the selected one, and the
- * `no-history` caveat is gone — "—" in the outcome figures and the stops
+ * `no-history` caveat is gone - "-" in the outcome figures and the stops
  * card carry that absence in 02's shape. The list's rules hold for the one.
  */
 
@@ -112,7 +112,7 @@ describe('one channel, or all of them', () => {
      * ── AND THE OLD ASSERTION WAS NOT A PIN, WHICH IS WORTH RECORDING ──
      * It read `toHaveTextContent(/runs on WHATSAPP/i)`. The `/i` makes it match
      * "Runs on WhatsApp" just as happily, so it permitted both behaviours
-     * rather than requiring the broken one. It did not pin the defect — it was
+     * rather than requiring the broken one. It did not pin the defect - it was
      * simply unable to see it, which is a different fault with a different fix:
      * a case-insensitive match on a value whose CASE is the whole question.
      *
@@ -143,7 +143,7 @@ describe('one channel, or all of them', () => {
 
 describe('nothing in a populated row could become a false claim', () => {
   it('renders no currency anywhere', async () => {
-    // "₪12,400 recovered" is attributed revenue — fifth appearance across
+    // "₪12,400 recovered" is attributed revenue - fifth appearance across
     // five screens, still with no inputs anywhere in the platform.
     await renderList([automation({ runCount: 188 })]);
     expect(document.body.textContent).not.toMatch(/₪|recovered|revenue/i);
@@ -158,7 +158,7 @@ describe('nothing in a populated row could become a false claim', () => {
   });
 });
 
-describe('★★ WHEN / THEN — from what the flow actually holds', () => {
+describe('★★ WHEN / THEN - from what the flow actually holds', () => {
   const graph = (nodes: [string, string][], edges: [string, string][]) => ({
     nodes: nodes.map(([id, type]) => ({ id, type })),
     edges: edges.map(([source, target]) => ({ source, target })),
@@ -172,7 +172,7 @@ describe('★★ WHEN / THEN — from what the flow actually holds', () => {
     expect(screen.getByTestId('flow-when')).toHaveTextContent("isn't written down");
   });
 
-  it('★ THEN walks the graph from its start, in run order — not array order', async () => {
+  it('★ THEN walks the graph from its start, in run order - not array order', async () => {
     await renderList([
       automation(
         graph(
@@ -198,7 +198,7 @@ describe('★★ WHEN / THEN — from what the flow actually holds', () => {
     ]);
   });
 
-  it('★★ where it branches it SAYS so and stops — no guessed "case"', async () => {
+  it('★★ where it branches it SAYS so and stops - no guessed "case"', async () => {
     await renderList([
       automation(
         graph(
@@ -237,7 +237,7 @@ describe('★★ WHEN / THEN — from what the flow actually holds', () => {
     expect(screen.getByTestId('flow-then')).toHaveTextContent('Wait for reply');
   });
 
-  it('★ outcomes nothing records are "—", and the stops card says why', async () => {
+  it('★ outcomes nothing records are "-", and the stops card says why', async () => {
     await renderList([automation()]);
     expect(screen.getByTestId('stops')).toHaveTextContent('Nothing records why a run stopped');
     expect(document.body.textContent).toMatch(/finished alone/);
@@ -245,7 +245,7 @@ describe('★★ WHEN / THEN — from what the flow actually holds', () => {
 });
 
 describe('★ 09 corrections (measurement of fa773e6)', () => {
-  it('★★ a single channel is named when the flow is OFF too — the enum value', async () => {
+  it('★★ a single channel is named when the flow is OFF too - the enum value', async () => {
     await renderList([automation({ channel: 'WHATSAPP', isActive: false })]);
     expect(screen.getByTestId('where-f1')).toHaveTextContent('Runs on WhatsApp · Off');
   });

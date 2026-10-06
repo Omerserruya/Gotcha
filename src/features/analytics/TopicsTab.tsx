@@ -9,14 +9,14 @@ import type { TopicsData } from './load-analytics';
 import styles from './Analytics.module.css';
 
 /**
- * Screen 06e — what people are asking about. Measured.
+ * Screen 06e - what people are asking about. Measured.
  *
  * The dark card ("What changed") and a side card (824 + 300); then the topic
  * table (794) beside "by day" and "How people sound" (330).
  *
  * ── WHAT EACH PART IS MADE OF ──
  *   topics       `/top-questions` grouped by intent, this week and the week
- *                before — so "Change" is real, and a topic with none the week
+ *                before - so "Change" is real, and a topic with none the week
  *                before is "new". Rows the route made from raw message
  *                bodies (no intents in range) are customers' words, not
  *                topics: listed as what people asked, in their words (Omer,
@@ -24,11 +24,11 @@ import styles from './Analytics.module.css';
  *                "no result" (`unknown`, `general`) is counted in the foot as
  *                questions GOTCHA couldn't place.
  *   what changed the biggest rise among topics asked at least 5 times the
- *                week before — a rise from 1 to 3 is not news
+ *                week before - a rise from 1 to 3 is not news
  *   the side     the question GOTCHA most often could not answer
- *                (`/unanswered-questions`) — "Answer it once" goes to
+ *                (`/unanswered-questions`) - "Answer it once" goes to
  *                Knowledge, where it is answered
- *   "—"          GOTCHA alone and how it ends per topic, a topic by day, and
+ *   "-"          GOTCHA alone and how it ends per topic, a topic by day, and
  *                how people sound: nothing counts them
  */
 
@@ -107,7 +107,7 @@ export async function TopicsHero({ data }: { readonly data: TopicsData }) {
       <p className={styles.gHeroEyebrow}>{t('topics.hero.eyebrow')}</p>
       <p className={styles.gHeroTitle}>
         {data.week === null
-          ? '—'
+          ? '-'
           : rise
             ? t.rich('topics.hero.rise', {
                 topic: rise.label,
@@ -138,7 +138,7 @@ export async function UnansweredCard({ data }: { readonly data: TopicsData }) {
       <h2 className={styles.gCardTitle}>{t('topics.unanswered.title')}</h2>
       <p className={styles.gCardBody}>
         {data.unanswered === null
-          ? '—'
+          ? '-'
           : top
             ? t('topics.unanswered.body', {
                 question: top.question,
@@ -203,9 +203,9 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
                   <UserText>{row.question}</UserText>
                 </span>
                 <span className={styles.eCount}>{format.number(row.count)}</span>
-                <span className={styles.eMuted}>—</span>
-                <span className={styles.eMuted}>—</span>
-                <span className={styles.eMuted}>—</span>
+                <span className={styles.eMuted}>-</span>
+                <span className={styles.eMuted}>-</span>
+                <span className={styles.eMuted}>-</span>
               </li>
             ))}
           </ul>
@@ -230,14 +230,14 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
                   }
                 >
                   {row.change === null
-                    ? '—'
+                    ? '-'
                     : row.change === 'new'
                       ? t('topics.table.new')
                       : t('topics.table.pct', { pct: row.change })}
                 </span>
                 {/* Nothing counts GOTCHA-alone or the ending per topic. */}
-                <span className={styles.eMuted}>—</span>
-                <span className={styles.eMuted}>—</span>
+                <span className={styles.eMuted}>-</span>
+                <span className={styles.eMuted}>-</span>
               </li>
             ))}
           </ul>
@@ -257,7 +257,7 @@ export async function TopicTable({ data }: { readonly data: TopicsData }) {
   );
 }
 
-/** "By day" for the top topic: the axis, 3px baselines — nothing counts a topic per day. */
+/** "By day" for the top topic: the axis, 3px baselines - nothing counts a topic per day. */
 export async function TopicByDay({
   data,
   days,
@@ -286,7 +286,7 @@ export async function TopicByDay({
   );
 }
 
-/** 02's "How people sound": the three rows, "—", and why. */
+/** 02's "How people sound": the three rows, "-", and why. */
 export async function HowTheySound() {
   const t = await getTranslations('analytics');
   const tones = ['fine', 'impatient', 'angry'] as const;
@@ -298,7 +298,7 @@ export async function HowTheySound() {
           <li key={tone} className={styles.gDidRow}>
             <span className={styles.gDidTop}>
               <span className={styles.gDidName}>{t(`topics.sound.${tone}`)}</span>
-              <span className={styles.gDidCount}>—</span>
+              <span className={styles.gDidCount}>-</span>
             </span>
             <span className={styles.gDidTrack} aria-hidden="true" />
           </li>

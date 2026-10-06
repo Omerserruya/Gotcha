@@ -21,7 +21,7 @@ import { SecondFactor } from './SecondFactor';
 import styles from './SignInPanel.module.css';
 
 /**
- * Screen 00a — sign in, in our own panel.
+ * Screen 00a - sign in, in our own panel.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THIS IS AN OPTIMISATION OVER A PATH THAT STILL EXISTS
@@ -32,18 +32,18 @@ import styles from './SignInPanel.module.css';
  *
  * ⚠ It used to read "still works and is still wired". **Wired is checked;
  *   works was not.** See `SecondFactor.tsx` for what is and is not observed
- *   about where that navigation lands — written once there rather than
+ *   about where that navigation lands - written once there rather than
  *   restated here, because this claim existed in three files and all three
  *   aged at the same time.
  *
  * **Everything it cannot handle, it hands back.** An unknown stage, an
- * unreadable body, an identification stage that does not want a password — all
+ * unreadable body, an identification stage that does not want a password - all
  * of them navigate to `/api/auth/login`, which is exactly what the button on
  * this screen did before this panel existed.
  *
  * ★★ AND THE SUCCESS PATH IS THE SAME NAVIGATION, WHICH IS WHY THIS IS SAFE.
  * Completing the flow leaves the provider holding a session **on the
- * provider's own origin**, which is where `authorize` is served from — that,
+ * provider's own origin**, which is where `authorize` is served from - that,
  * and not any particular cookie domain, is what makes the next hop silent.
  * (This line used to name `.gotcha.co.il`. Since sign-in moved to its own
  * host the shared domain is no longer what the handover depends on, and
@@ -67,7 +67,7 @@ import styles from './SignInPanel.module.css';
  *
  * Driven on 2026-09-28 for a user with no enrolled device, the flow is two
  * stages and reports `device_challenges: []`. That is consistent with the flow
- * having no authenticator stage AND with it having one this user skips — the
+ * having no authenticator stage AND with it having one this user skips - the
  * endpoints that would settle it answer 403 without admin credentials. Recovery
  * has only been observed as far as its first stage, because driving it further
  * sends somebody a real password-reset email.
@@ -86,18 +86,18 @@ import styles from './SignInPanel.module.css';
  *   other reason.**
  *
  *   The design is explicit that this is wrong: *"Two-step sign-in, where the
- *   workspace requires it, happens in this same panel — never on a new page with
+ *   workspace requires it, happens in this same panel - never on a new page with
  *   a different layout"*, and *"where two-step is required and not yet set up,
  *   this same panel becomes enrolment"*.
  *
  *   ★ THE ONLY BLOCKER IS THAT NOBODY HAS AN ENROLLED ACCOUNT, so nobody has
  *     seen the challenge shape. Not the API, not the architecture, not the
- *     proxy — one missing observation. Enrolling TOTP on the dev test account
+ *     proxy - one missing observation. Enrolling TOTP on the dev test account
  *     removes it, and TOTP needs no SMS gateway and no WhatsApp.
  *
  *   ⚠ Building the renderer from Authentik's documentation instead would be
  *     inventing a challenge shape for the one screen where being wrong locks
- *     somebody out of their own account — and `ak-stage-user-login` already
+ *     somebody out of their own account - and `ak-stage-user-login` already
  *     proved the payload does not describe its own inputs: `remember_me` is
  *     REQUIRED and is named by none of the four keys the challenge returns. A
  *     renderer written from docs would be a guess wearing a schema.
@@ -128,7 +128,7 @@ export function SignInPanel({
    */
   readonly recoverPath: string;
   /**
-   * Our OIDC callback, absolute — the ONE destination a completed flow is
+   * Our OIDC callback, absolute - the ONE destination a completed flow is
    * allowed to send the browser to directly.
    *
    * ★ Passed in rather than composed here. It must equal the `redirect_uri`
@@ -151,7 +151,7 @@ export function SignInPanel({
   const [password, setPassword] = useState('');
 
   /*
-   * ★ Hidden by default and reset on every submit. Never persisted — see the
+   * ★ Hidden by default and reset on every submit. Never persisted - see the
    *   button below for why.
    */
   const [revealed, setRevealed] = useState(false);
@@ -182,7 +182,7 @@ export function SignInPanel({
   /*
    * `void` and a plain effect rather than a transition: this runs once on mount
    * and nothing depends on its timing. A failure to start is a handover, not an
-   * error message — the panel has nothing to show if it never got a stage.
+   * error message - the panel has nothing to show if it never got a stage.
    */
   useEffect(() => {
     let live = true;
@@ -204,7 +204,7 @@ export function SignInPanel({
    * ★★ WHICH SCREEN IS SHOWING, TOLD UPWARDS
    * ════════════════════════════════════════════════════════════════════════
    * The editorial panel and the footnote are server-rendered siblings of this
-   * component, so neither could know which stage was on screen — which is why
+   * component, so neither could know which stage was on screen - which is why
    * 00b wore 00a's figures and 00a's "New here? Ask your workspace admin…",
    * a sentence that is actively wrong to somebody already halfway signed in.
    *
@@ -220,7 +220,7 @@ export function SignInPanel({
    * person has already answered it. Showing them a second screen to ask again
    * is the flow's shape leaking into the design's.
    *
-   * ⚠ ONCE. If the stage comes back — an error, a changed configuration —
+   * ⚠ ONCE. If the stage comes back - an error, a changed configuration -
    *   the screen renders and they answer it themselves. An effect that
    *   resubmits on every arrival is a loop on the last step of sign-in, and it
    *   would look like a hang rather than like a failure.
@@ -249,18 +249,18 @@ export function SignInPanel({
      * `xak-flow-redirect` means the flow finished, and its `to` means two
      * different things depending on which flow produced it:
      *
-     *     authentication flow   "/"                      — Authentik's root
+     *     authentication flow   "/"                      - Authentik's root
      *     authorization flow    ".../api/auth/callback?code=…&state=…"
      *
      * `followableCompletion` answers null for everything that is not the
-     * callback we registered — including `/`, which is same-origin, relative
+     * callback we registered - including `/`, which is same-origin, relative
      * and harmless-looking, and is exactly the value that must not be
      * followed.
      *
      * ⚠ AND THE FALLBACK IS THE POINT, NOT A SAFETY NET. Today the
      *   authentication flow returns `/`, so this refuses and we go to
      *   `/api/auth/login` exactly as before. This branch is INERT until the
-     *   flow is driven from the authorize endpoint — which is the other half
+     *   flow is driven from the authorize endpoint - which is the other half
      *   of the change and is not in this commit.
      *
      * ★ Every unknown or unfollowable outcome lands on the same line. That is
@@ -291,7 +291,7 @@ export function SignInPanel({
       /*
        * ★ NOT A HANDOVER AND NOT "WRONG PASSWORD". The executor answers 200 with
        * `response_errors` when it refuses, so a transport failure means the proxy
-       * or the network — and moving somebody to another screen would throw away
+       * or the network - and moving somebody to another screen would throw away
        * what they typed for a problem that a second press often fixes.
        */
       setProblem(t('signIn.unreachable'));
@@ -326,14 +326,14 @@ export function SignInPanel({
 
   if (step.kind === 'chooseFactor') {
     /*
-      ★★ THE SECOND FACTOR, IN THIS PANEL — which is what the design asks for and
+      ★★ THE SECOND FACTOR, IN THIS PANEL - which is what the design asks for and
       what the handover was a deviation from. It renders `totp` and `static`;
       `webauthn`, `duo` and `sms` call `onHandOver`, because each is a different
       journey nobody has observed and the schema agrees by giving them separate
       fields.
 
-      `email` rather than `pending_user`: the server sends a username — observed
-      as `akadmin` — and a screen that names an internal account halfway through
+      `email` rather than `pending_user`: the server sends a username - observed
+      as `akadmin` - and a screen that names an internal account halfway through
       sign-in is where somebody wonders whether they are in the right place.
       What they typed a moment ago is in this component's state already.
     */
@@ -377,7 +377,7 @@ export function SignInPanel({
         {/*
           ★★ THIS CHECKBOX IS NOT DECORATIVE, AND NOTHING IN THE CHALLENGE SAYS
           SO. `ak-stage-user-login` returns four keys and REQUIRES `remember_me`,
-          which none of them mention — posting an empty body answers "This field
+          which none of them mention - posting an empty body answers "This field
           is required." So the flow cannot complete without the person's answer,
           and the answer is theirs.
 
@@ -385,7 +385,7 @@ export function SignInPanel({
           because whether `false` shortens the session, and what the configured
           length actually is, are Authentik settings nobody has read. A number in
           this sentence would be a promise about session length that nothing in
-          our codebase enforces — the same rule that keeps a lockout count off
+          our codebase enforces - the same rule that keeps a lockout count off
           the failed-password message.
         */}
         <label className={styles.remember}>
@@ -409,7 +409,7 @@ export function SignInPanel({
    * ════════════════════════════════════════════════════════════════════════
    * ★★ A THIRD PARTY'S STRING, ON THE ONE PAGE WITH A PASSWORD FIELD
    * ════════════════════════════════════════════════════════════════════════
-   * `recovery_url` is `z.string().nullable()` in a LOOSE contract — the shape
+   * `recovery_url` is `z.string().nullable()` in a LOOSE contract - the shape
    * is Authentik's, not ours, and by design we do not bound it. This rendered
    * it straight into an `href`.
    *
@@ -420,7 +420,7 @@ export function SignInPanel({
    *
    * ★ Not a claim that Authentik would send one. It is that the contract
    *   permits any string and the sink is the most sensitive one in the app,
-   *   and those two facts together are the whole argument — the same reason
+   *   and those two facts together are the whole argument - the same reason
    *   the loose contract was right and also why it cannot be the last word.
    *
    * ★ `safeLinkUrl` and not `safeInternalPath`, because this value is a path
@@ -432,7 +432,7 @@ export function SignInPanel({
    * ═════════════════════════════════════════════════════════════════════════
    * ★★ "FORGOT IT?" NOW GOES TO OUR SCREEN, CARRYING THE PROVIDER'S OWN SLUG
    * ═════════════════════════════════════════════════════════════════════════
-   * It used to be `href={recovery_url}` — a real link to `/if/flow/…`, which
+   * It used to be `href={recovery_url}` - a real link to `/if/flow/…`, which
    * is Authentik's own UI. That is the "old UI" in the report.
    *
    * ★ The slug still comes from the challenge and is never a constant of ours:
@@ -512,7 +512,7 @@ export function SignInPanel({
             ★★ THE MOCK'S GREEN CHECK, AND THE BROWSER DECIDES WHEN.
             `<i data-lucide="check" width=15 height=15 stroke-width=2.4>` in
             `#4F7A2E`. Whether an address is well-formed is asked of the input
-            itself — `type="email"` already carries the platform's rule, and a
+            itself - `type="email"` already carries the platform's rule, and a
             regex of mine would be a second, worse opinion that disagrees with
             the browser's own validation on submit.
 
@@ -562,11 +562,11 @@ export function SignInPanel({
           />
           {/*
             ═════════════════════════════════════════════════════════════════
-            ★★ THE MOCK'S EYE — `<i data-lucide="eye" width=15 height=15
+            ★★ THE MOCK'S EYE - `<i data-lucide="eye" width=15 height=15
                stroke-width=2>` in `#A8A39A`
             ═════════════════════════════════════════════════════════════════
-            It was read as an addition and refused twice — by me and by the
-            supervisor — because the prose does not mention it. It is in the
+            It was read as an addition and refused twice - by me and by the
+            supervisor - because the prose does not mention it. It is in the
             mock. Omer reported an omission; we heard a request.
 
             ★ A BUTTON, NOT AN ICON. The mock draws a glyph; a glyph nobody can
@@ -601,11 +601,11 @@ export function SignInPanel({
 
       {/*
         ═══════════════════════════════════════════════════════════════════
-        ★★ BELOW THE BUTTON, AS THE MOCK DRAWS IT — AND IT IS NOT DECORATIVE
+        ★★ BELOW THE BUTTON, AS THE MOCK DRAWS IT - AND IT IS NOT DECORATIVE
         ═══════════════════════════════════════════════════════════════════
         00a, verbatim: `margin-top:12px; display:flex; align-items:center;
         gap:9px; font-size:12px; color:#8C887F`, with a 15×15 box at
-        `border-radius:4px` — drawn CHECKED.
+        `border-radius:4px` - drawn CHECKED.
 
         ★ The answer it collects is `remember_me` on `ak-stage-user-login`, a
           field that stage REQUIRES: post an empty body and it replies "This
@@ -614,7 +614,7 @@ export function SignInPanel({
         ⚠ THE DESIGN'S LABEL SAYS "for 30 days" AND OURS DOES NOT. Whether
           `false` shortens the session, and what the configured length is, are
           Authentik settings nobody has read. A number here would be a promise
-          about session length that nothing in our codebase enforces — the
+          about session length that nothing in our codebase enforces - the
           same rule that keeps a lockout count off the failed-password message.
           Ruled on 2026-09-30: show the control, drop the number.
 

@@ -29,7 +29,7 @@ import type { AuditRead } from './load-customer';
  * ── WHAT A CAPTURE CAN AND CANNOT REACH ──
  * Everything here is reachable on the demo tenant EXCEPT `contradicts` and
  * the `unrecordedHint` branches, which no writer in the platform can
- * currently produce — see the last describe block, which says why rather
+ * currently produce - see the last describe block, which says why rather
  * than leaving the gap to look like coverage.
  */
 
@@ -71,7 +71,7 @@ const event = (over: Partial<AuditEvent> = {}): AuditEvent => ({
   actorType: 'ai',
   actorId: null,
   // A tool GOTCHA used: an action on the account, with an outcome to report.
-  // (A reply is the conversation, and collapses — see its own tests.)
+  // (A reply is the conversation, and collapses - see its own tests.)
   action: 'ai.tool_call.lookup_order',
   targetType: 'conversation',
   targetId: 'c1',
@@ -154,7 +154,7 @@ describe('★★ the outcome column, and the name that never decides it', () => 
     await show(ok([row]));
 
     expect(screen.getByTestId('action-outcome-e1')).toHaveTextContent(/outcome not recorded/i);
-    // And the name IS shown — a screen that hid it would drop the only
+    // And the name IS shown - a screen that hid it would drop the only
     // signal the row carries.
     expect(screen.getByTestId('action-e1')).toHaveTextContent(/sent to the store/i);
   });
@@ -177,7 +177,7 @@ describe('★★ the outcome column, and the name that never decides it', () => 
     expect(screen.getByTestId('action-t')).toHaveTextContent(/shopify\.process_refund/);
   });
 
-  it('★ an action it has no words for is KEPT — in words, with the key as its tooltip', async () => {
+  it('★ an action it has no words for is KEPT - in words, with the key as its tooltip', async () => {
     /*
      * An unknown event is still something that happened. Hiding it would
      * shorten somebody's record silently, which is the failure the coverage
@@ -194,11 +194,11 @@ describe('★★ the outcome column, and the name that never decides it', () => 
     expect(row.querySelector('[title="something.nobody_mapped"]')).not.toBeNull();
   });
 
-  it('★★ GOTCHA’s guards are said as what they do — a claim flagged is not a claim stopped', async () => {
+  it('★★ GOTCHA’s guards are said as what they do - a claim flagged is not a claim stopped', async () => {
     /*
      * `ai.unsupported_outcome_claim` strips the claim only when the reply can
      * be cleaned; otherwise the reply goes out as written. So the sentence
-     * is that the reply CLAIMED it — never that GOTCHA was stopped.
+     * is that the reply CLAIMED it - never that GOTCHA was stopped.
      */
     await show(
       ok([
@@ -256,7 +256,7 @@ describe('★★ what the log cannot account for', () => {
     /*
      * THE DEFECT `supplied` EXISTS FOR.
      *
-     * `coverage` is a CONSTANT — the endpoint returns the same object
+     * `coverage` is a CONSTANT - the endpoint returns the same object
      * whether or not `?shopifyCustomerId=` was sent. Read as a report, the
      * screen prints "pass ?shopifyCustomerId= to include them" directly
      * underneath the rows that parameter fetched.
@@ -267,7 +267,7 @@ describe('★★ what the log cannot account for', () => {
 
     await show(ok([event()], { coverage: COVERAGE }, ['shopifyCustomerId']));
     expect(screen.queryByTestId('actions-gap-customer')).toBeNull();
-    // And the gap we did NOT satisfy is still there — this must narrow the
+    // And the gap we did NOT satisfy is still there - this must narrow the
     // list, not silence it.
     expect(screen.getByTestId('actions-gap-order')).toBeInTheDocument();
   });
@@ -296,7 +296,7 @@ describe('★★ two branches nothing in the platform can currently reach', () =
    * `nameImpliesSucceeded` is non-null only for an action with an `ok.` or
    * `err.` segment, and the ONLY writer of one is `auditAdapterCall`, which
    * derives the name and `metadata.ok` from the same `opts.ok`. One
-   * variable, two fields — they cannot differ.
+   * variable, two fields - they cannot differ.
    *
    * So on today's platform `outcomeDisagrees` is always false and
    * `unrecordedHint` always returns null. Both are kept because the contract
@@ -339,7 +339,7 @@ const approval = (over: Record<string, unknown> = {}) =>
     ...over,
   });
 
-describe('★★ 04e — one spine: what was done, and what GOTCHA asked for', () => {
+describe('★★ 04e - one spine: what was done, and what GOTCHA asked for', () => {
   it('★★ a waiting approval: the sentence, "Waiting on you", the reasoning, and where to decide', async () => {
     render(await CustomerActions({ actions: ok([event()]), approvals: [approval()] }));
     const row = screen.getByTestId('action-approval-p1');
@@ -427,7 +427,7 @@ describe('★ 04e’s filters: All, GOTCHA, Team, Money', () => {
     expect(ids().sort()).toEqual(['action-approval-p1', 'action-shop']);
   });
 
-  it('⚠ a filter that keeps nothing says so — not the empty-log sentence', async () => {
+  it('⚠ a filter that keeps nothing says so - not the empty-log sentence', async () => {
     render(await CustomerActions({ actions: ok([events[0]!]), approvals: [], filter: 'team' }));
     expect(screen.getByTestId('actions-empty')).toHaveTextContent('Nothing here.');
   });
@@ -444,7 +444,7 @@ describe('★ 04e’s filters: All, GOTCHA, Team, Money', () => {
   });
 });
 
-describe('★★ 04e’s side — counts of what was read, "—" for what was not', () => {
+describe('★★ 04e’s side - counts of what was read, "-" for what was not', () => {
   it('who did what, what waits on money, where to change what GOTCHA may do', async () => {
     render(
       await ActionsSide({
@@ -462,7 +462,7 @@ describe('★★ 04e’s side — counts of what was read, "—" for what was no
     expect(who).toHaveTextContent('by automations2');
     const money = screen.getByTestId('actions-money');
     expect(money).toHaveTextContent('Waiting on approval1 request');
-    expect(money).toHaveTextContent('Refunded—');
+    expect(money).toHaveTextContent('Refunded-');
     expect(screen.getByTestId('actions-may').querySelector('a')).toHaveAttribute(
       'href',
       '/studio/capabilities',
@@ -470,17 +470,17 @@ describe('★★ 04e’s side — counts of what was read, "—" for what was no
     expect(screen.getByTestId('promise-card')).toBeInTheDocument();
   });
 
-  it('⚠ unread records are "—", never 0', async () => {
+  it('⚠ unread records are "-", never 0', async () => {
     render(await ActionsSide({ actions: { state: 'failed' }, approvals: null }));
-    expect(screen.getByTestId('actions-who').textContent?.match(/—/g)).toHaveLength(3);
-    expect(screen.getByTestId('actions-money')).toHaveTextContent('Waiting on approval—');
+    expect(screen.getByTestId('actions-who').textContent?.match(/-/g)).toHaveLength(3);
+    expect(screen.getByTestId('actions-money')).toHaveTextContent('Waiting on approval-');
   });
 });
 
 describe('★★ the conversation is not an action on the account (measured: drowned in replies)', () => {
   const day = (h: number) => `2026-09-18T${String(h).padStart(2, '0')}:00:00.000Z`;
 
-  it('★★ a day of replies is one row — "GOTCHA replied 3 times" — with no outcome chip', async () => {
+  it('★★ a day of replies is one row - "GOTCHA replied 3 times" - with no outcome chip', async () => {
     render(
       await CustomerActions({
         actions: ok([
@@ -513,7 +513,7 @@ describe('★★ the conversation is not an action on the account (measured: dro
     expect(screen.getByTestId(/^action-day-sent-/)).toHaveTextContent('Your team sent 2 messages');
   });
 
-  it('⚠ a day of turns with no recorded reply still counts — never a silent zero', async () => {
+  it('⚠ a day of turns with no recorded reply still counts - never a silent zero', async () => {
     render(
       await CustomerActions({
         actions: ok([
@@ -541,7 +541,7 @@ describe('★★ the conversation is not an action on the account (measured: dro
 });
 
 describe('★★ no internal key reaches the screen', () => {
-  it('★ the budget stop says which budget, in words — not "tenant_day"', async () => {
+  it('★ the budget stop says which budget, in words - not "tenant_day"', async () => {
     render(
       await CustomerActions({
         actions: ok([
@@ -594,7 +594,7 @@ describe('★ the outcome chip only where an outcome is expected', () => {
     expect(expectsOutcome(event({ action: 'commerce.customer_action_executed' }))).toBe(true);
   });
 
-  it('⚠ a pause, a refusal and a budget stop ARE the outcome — no chip', async () => {
+  it('⚠ a pause, a refusal and a budget stop ARE the outcome - no chip', async () => {
     render(
       await CustomerActions({
         actions: ok([
@@ -619,7 +619,7 @@ describe('★ the outcome chip only where an outcome is expected', () => {
   });
 });
 
-describe('★★ What GOTCHA may do — the tenant’s rules, in words', () => {
+describe('★★ What GOTCHA may do - the tenant’s rules, in words', () => {
   const policies = businessPoliciesSchema.parse({
     actionKinds: ['REFUND', 'CANCEL_ORDER', 'DISCOUNT', 'CUSTOMER_WRITE', 'COUPON'],
     policies: [
@@ -635,10 +635,10 @@ describe('★★ What GOTCHA may do — the tenant’s rules, in words', () => {
       /^Refunds: up to ₪300(\.00)?; a person approves above ₪100(\.00)?\.$/,
     );
     expect(screen.getByTestId('policy-CANCEL_ORDER')).toHaveTextContent(
-      'Cancelling an order: never — switched off.',
+      'Cancelling an order: never - switched off.',
     );
     expect(screen.getByTestId('policy-DISCOUNT')).toHaveTextContent(
-      'Discounts: never — no rule set.',
+      'Discounts: never - no rule set.',
     );
     expect(screen.getByTestId('policy-CUSTOMER_WRITE')).toHaveTextContent(
       'Changes to their record: no rule set.',
@@ -649,19 +649,19 @@ describe('★★ What GOTCHA may do — the tenant’s rules, in words', () => {
     );
   });
 
-  it('⚠ no sentence claims GOTCHA acts "on its own" — the tool catalog may still ask', async () => {
+  it('⚠ no sentence claims GOTCHA acts "on its own" - the tool catalog may still ask', async () => {
     render(await ActionsSide({ actions: ok([]), approvals: [], policies, currency: 'ILS' }));
     expect(screen.getByTestId('actions-policies')).not.toHaveTextContent(/on its own/i);
   });
 
-  it('without a currency, amounts are plain numbers — no symbol invented', async () => {
+  it('without a currency, amounts are plain numbers - no symbol invented', async () => {
     render(await ActionsSide({ actions: ok([]), approvals: [], policies }));
     expect(screen.getByTestId('policy-REFUND')).toHaveTextContent('Refunds: up to 300;');
   });
 
-  it('⚠ unread, or not readable by this viewer: "—", with the place to change them', async () => {
+  it('⚠ unread, or not readable by this viewer: "-", with the place to change them', async () => {
     render(await ActionsSide({ actions: ok([]), approvals: [], policies: null }));
-    expect(screen.getByTestId('actions-may')).toHaveTextContent('—');
+    expect(screen.getByTestId('actions-may')).toHaveTextContent('-');
     expect(screen.queryByTestId('actions-policies')).toBeNull();
   });
 });

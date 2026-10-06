@@ -9,7 +9,7 @@ import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
 
 /**
- * WhatsApp numbers — screen 13.
+ * WhatsApp numbers - screen 13.
  *
  * One read, and the failure is NOT degraded into an empty list. An empty list
  * on this screen means "you have no WhatsApp numbers", which is a statement
@@ -29,8 +29,8 @@ export interface ChannelsConfig {
 }
 
 /**
- * One read of `/api/channels/config`: both of 13c's launches — up front,
- * since FB.login must run inside the click — and which OAuth providers are
+ * One read of `/api/channels/config`: both of 13c's launches - up front,
+ * since FB.login must run inside the click - and which OAuth providers are
  * set up at all.
  */
 export async function loadChannelsConfig(): Promise<ChannelsConfig> {
@@ -54,7 +54,7 @@ export async function loadWhatsAppNumbers(): Promise<NumbersResponse | null> {
     .get({
       endpoint: channelEndpoints.whatsappNumbers(),
       payload: numbersResponseSchema,
-      // `{ data, unprofiled }` — the second array has no envelope of its own,
+      // `{ data, unprofiled }` - the second array has no envelope of its own,
       // so the response is needed whole.
       raw: true,
     })
@@ -65,19 +65,19 @@ export async function loadWhatsAppNumbers(): Promise<NumbersResponse | null> {
 }
 
 /**
- * Screens 13e and 13f — the history import, and the suggestions it produced.
+ * Screens 13e and 13f - the history import, and the suggestions it produced.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ "NO IMPORT" AND "UNAVAILABLE" ARE DIFFERENT FACTS
  * ════════════════════════════════════════════════════════════════════════════
  * `stage: 'unavailable'` comes from a real row whose status is `NOT_AVAILABLE`
- * — **an import exists and the platform reported it cannot be done.** An empty
+ * - **an import exists and the platform reported it cannot be done.** An empty
  * `imports: []` is nobody ever starting one.
  *
  * So `status` is `null` for "there is no import", and 13e (`ImportPanel`) is not
  * rendered at all in that case. Synthesising an `unavailable` status would put
  * *"we can't import your history"* on the screen of a workspace that never
- * asked — a confident refusal invented out of an empty list.
+ * asked - a confident refusal invented out of an empty list.
  *
  * ── AND THE CANDIDATES BELONG TO AN IMPORT, NOT TO THE TENANT ──
  * `knowledge-clustering.stage.ts` queries `where: { importId, tenantId }`, so
@@ -86,7 +86,7 @@ export async function loadWhatsAppNumbers(): Promise<NumbersResponse | null> {
  * for a reason of its own.
  */
 export interface HistoryImportData {
-  /** The newest import, or `null` — there is none, or the read failed. */
+  /** The newest import, or `null` - there is none, or the read failed. */
   readonly status: ImportStatus | null;
   /** Its suggestions. `null` when unread; `[]` when the import produced none. */
   readonly candidates: readonly Candidate[] | null;
@@ -114,7 +114,7 @@ export async function loadHistoryImport(importId?: string): Promise<HistoryImpor
 
   /*
    * Newest first per the route, so the first row is the current import. `null`
-   * covers both a failed read and an empty list — and the difference does not
+   * covers both a failed read and an empty list - and the difference does not
    * change what the screen can say, because neither gives it an import to
    * report on.
    */

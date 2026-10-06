@@ -86,7 +86,7 @@
     line-height: normal;
   }
 
-  /* A group's head: `#F5F2EC`, `padding:6px 16px` — a mono name and a note. */
+  /* A group's head: `#F5F2EC`, `padding:6px 16px` - a mono name and a note. */
   .groupHead {
     display: flex;
     align-items: baseline;
@@ -163,9 +163,9 @@
     list-style: none;
   }
 
-  /* A part, as a row: `padding:6px 16px`, gap 16 — what it is, who serves it, its state. */
+  /* A part, as a row: `padding:6px 16px`, gap 16 - what it is, who serves it, its state. */
   /*
-    Three fixed columns — name, the 240 tile, the chip — so every row's tile
+    Three fixed columns - name, the 240 tile, the chip - so every row's tile
     starts at one x, whatever the chip says and whether there is one.
   */
   .part {
@@ -207,7 +207,7 @@
 
   /* ── 14e · what is written back, and what is not a setting ───────────── */
 
-  /* ACROSS BOTH: what runs over both — the write-back facts. */
+  /* ACROSS BOTH: what runs over both - the write-back facts. */
   /* No gap: the two rows across both sit as the groups' rows above do. */
   .writeback {
     display: flex;
@@ -244,7 +244,7 @@
 
   /* ── 14 / 14c · the system pill and its menu ───────────────────────────── */
 
-  /* 02: 240 wide, a hairline, radius 10, `4px 10px 4px 4px` — the row's height. */
+  /* 02: 240 wide, a hairline, radius 10, `4px 10px 4px 4px` - the row's height. */
   .pickBox {
     position: relative;
   }
@@ -383,7 +383,7 @@
     color: var(--text-subtle);
   }
 
-  /* Nobody plays the part: the pill holds "—". */
+  /* Nobody plays the part: the pill holds "-". */
   .systemNone {
     flex: 1;
     padding-inline-start: 6px;

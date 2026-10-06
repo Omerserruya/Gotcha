@@ -11,12 +11,12 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Studio · Automations — screen 09.
+ * Studio · Automations - screen 09.
  *
  * ── A COUNT, AND NO HISTORY ──
  * `runCount` is an `Int` and **there are no run-record models of any kind**.
  * So the screen can say how many times an automation ran and never which
- * times or what happened — and it **says so**, above the list, because a
+ * times or what happened - and it **says so**, above the list, because a
  * reader who is not told will assume the history is one click away.
  *
  * That also means *"stop-reason clustering → suggested branch"* has nothing
@@ -30,7 +30,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  * **No "paused by you on 12 Aug".** `isActive` is a boolean with no actor and
  * no timestamp.
  *
- * **No "₪12,400 recovered"** — attributed revenue, its fifth appearance
+ * **No "₪12,400 recovered"** - attributed revenue, its fifth appearance
  * across five screens, still with no inputs anywhere.
  *
  * **No dry-run, no natural-language rule assembly, no watch-only mode.**
@@ -53,8 +53,8 @@ export default async function Page({
   /*
     09, measured: 02's header with "New automation" on the right, then the
     list (330) beside the selected automation (`28px 36px`, gap 18). With
-    none, the frame is still drawn — the list empty in its shape, the
-    detail saying so — rather than one sentence on an empty page.
+    none, the frame is still drawn - the list empty in its shape, the
+    detail saying so - rather than one sentence on an empty page.
   */
   return (
     <PageContainer
@@ -66,7 +66,7 @@ export default async function Page({
         /*
           02's line is a summary from data ("Five running. They handled
           1,204 things this week…"). From what is read: how many are on and
-          off, and how often they ran — in all, never "this week".
+          off, and how often they ran - in all, never "this week".
         */
         automations && automations.length > 0
           ? t('summary', {

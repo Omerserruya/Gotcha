@@ -69,7 +69,7 @@ describe('what stops messages today leads, and the rest is not discarded', () =>
 describe('three remediation buckets, not two', () => {
   it('offers a control only for the one the customer can clear HERE', () => {
     /*
-     * Error 141000 — Meta has the number, it was never registered for Cloud
+     * Error 141000 - Meta has the number, it was never registered for Cloud
      * API. `resume` runs the register step from inside GOTCHA. Everything
      * else in a blocked report is resolved in Meta's own settings.
      */
@@ -109,7 +109,7 @@ describe('the two arrays are not the same kind of thing', () => {
     /*
      * This tenant's real response: no lifecycle rows at all, and one WhatsApp
      * channel connected before per-number health existed. It is working, and
-     * NOTHING is known about it — which is not the same as healthy and not
+     * NOTHING is known about it - which is not the same as healthy and not
      * the same as broken.
      */
     const r = numbersResponseSchema.parse({

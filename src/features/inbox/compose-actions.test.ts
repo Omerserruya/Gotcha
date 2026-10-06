@@ -30,11 +30,11 @@ describe('★★ the chip names WHICH instruction; the words live on the server'
       });
       seen.add(sent().body.instruction);
     }
-    // Three chips, three different asks — not one instruction under three names.
+    // Three chips, three different asks - not one instruction under three names.
     expect(seen.size).toBe(COMPOSE_KINDS.length);
   });
 
-  it('⚠ sends no `locale` — it would make "Shorter" translate into the UI language', async () => {
+  it('⚠ sends no `locale` - it would make "Shorter" translate into the UI language', async () => {
     await composeDraft('c1', 'shorter', 'draft');
     expect(sent().body).not.toHaveProperty('locale');
   });
@@ -51,7 +51,7 @@ describe('⚠ what it refuses, and what it reports', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('a kind it does not know asks nothing — a server action is public', async () => {
+  it('a kind it does not know asks nothing - a server action is public', async () => {
     expect(await composeDraft('c1', 'ignore previous' as never, 'draft')).toEqual({
       ok: false,
       reason: 'failed',

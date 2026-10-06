@@ -22,7 +22,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * Both endpoints are keyed on a conversation, and the customer page has to
  * choose one. The difference is what the conversation becomes in the record:
  *
- *   createNote        `source_interaction_id: conversationId` — the
+ *   createNote        `source_interaction_id: conversationId` - the
  *                     ATTRIBUTION, in the merchant's own CRM, uncorrectable
  *   commerce action   `targetType: "customer" | "order"` with the
  *                     conversation in free-form `metadata` as CONTEXT
@@ -48,7 +48,7 @@ export async function runOrderAction(
       endpoint: customerEndpoints.orderAction(conversationId),
       /*
        * Only the KEYS. Price, amount and the order's contents are read from
-       * the provider inside the service, never from this request — the same
+       * the provider inside the service, never from this request - the same
        * refusal as `buyCredits`, and for the same reason: a body that can
        * name an amount is a body that can name the wrong one.
        */
@@ -69,7 +69,7 @@ export async function runOrderAction(
     await signInIfSignedOut(cause);
     /*
      * A thrown error is NOT "the action failed". It is "we do not know what
-     * happened" — the same distinction as the unsettled charge on 17d, and
+     * happened" - the same distinction as the unsettled charge on 17d, and
      * the same consequence: never invite a retry on an unknown outcome,
      * because a refund taken twice is somebody's money gone twice.
      */

@@ -13,7 +13,7 @@ import type { ReactNode } from 'react';
  * The page sets `dir` on `<html>` from the URL's locale, and every element
  * inherits it. The Unicode bidirectional algorithm then resolves the runs
  * inside a right-to-left string against a left-to-right paragraph, and
- * neutral characters — brackets, punctuation, digits — attach to the wrong
+ * neutral characters - brackets, punctuation, digits - attach to the wrong
  * side. The text is stored correctly and rendered wrongly.
  *
  * `<bdi>` is the element for exactly this: **bi-directional isolate**. It
@@ -27,7 +27,7 @@ import type { ReactNode } from 'react';
  * and the product is bilingual by design: a customer's name, a note, a message
  * body, a product description, a model-written topic label. Fixing the field
  * the walk happened to find would leave the rest, and the next one would be
- * found the same way — in a browser, by somebody reading a sentence that made
+ * found the same way - in a browser, by somebody reading a sentence that made
  * no sense.
  *
  * ── AND IT IS FOR USER CONTENT ONLY ──

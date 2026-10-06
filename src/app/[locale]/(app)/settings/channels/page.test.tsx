@@ -12,7 +12,7 @@ import channels from '@/i18n/messages/en/channels.json';
 
 /*
  * ★★ THE HEAD AND THE CARD READ THE SAME OBJECT.
- * ec2aaf9 said the head counted both lists; it still counted `data` only — a
+ * ec2aaf9 said the head counted both lists; it still counted `data` only - a
  * text replacement had matched nothing after formatting, and the claim went
  * into the commit message anyway. Dev's one number is UNPROFILED, so the head
  * read "no numbers yet" over its card. This renders the page with dev's shape.
@@ -73,7 +73,7 @@ function find<P>(node: ReactNode, type: unknown): P | null {
   return null;
 }
 
-describe('★★ 13b — the head counts what the card shows', () => {
+describe('★★ 13b - the head counts what the card shows', () => {
   it('dev’s one unprofiled number: "one number", and the card gets that same list', async () => {
     const { default: Page } = await import('./page');
     const tree = await Page({ searchParams: Promise.resolve({ panel: 'whatsapp' }) });

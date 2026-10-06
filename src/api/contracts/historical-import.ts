@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Importing and learning from a number's history — screen 13e.
+ * Importing and learning from a number's history - screen 13e.
  *
  * `GET /api/historical-imports/:id`, polled.
  *
@@ -13,7 +13,7 @@ import { z } from 'zod';
  *   platform  transferring | analyzing | ready   (+ failed, unavailable)
  *
  * `analyzing` covers the design's last three. A five-segment bar would show
- * three that never light independently — they flip together, and simultaneity
+ * three that never light independently - they flip together, and simultaneity
  * reads as *"those took no time"* rather than *"we cannot see inside this"*.
  * The merchant cannot tell the difference and will draw the flattering
  * conclusion, which is the wrong one.
@@ -25,13 +25,13 @@ import { z } from 'zod';
  * ════════════════════════════════════════════════════════════════════════════
  * AND THE "EARLY FINDINGS" ARE COUNTS, NOT FINDINGS
  * ════════════════════════════════════════════════════════════════════════════
- * `topTopics` is written by the analytics stage — **eight of nine**. By the
+ * `topTopics` is written by the analytics stage - **eight of nine**. By the
  * time there are topics, the work is done: they cannot fill the wait, they
  * end it, and presenting them as early findings would claim a progressive
  * discovery that never happened.
  *
  * What genuinely moves is counts, and the schema calls them *"counts of rows
- * the pipeline actually finished"* — which is the licence to say **read**
+ * the pipeline actually finished"* - which is the licence to say **read**
  * rather than "processed".
  */
 

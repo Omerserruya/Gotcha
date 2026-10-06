@@ -8,7 +8,7 @@ import { useRouter } from '@/i18n/navigation';
 import { duplicateTemplate } from './create-actions';
 import styles from './Outreach.module.css';
 
-/** 05c's "Duplicate" — a local DRAFT copy (POST …/duplicate), then opened. */
+/** 05c's "Duplicate" - a local DRAFT copy (POST …/duplicate), then opened. */
 export function DuplicateTemplate({ id }: { readonly id: string }) {
   const t = useTranslations('templates');
   const router = useRouter();

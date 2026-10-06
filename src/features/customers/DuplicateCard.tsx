@@ -10,7 +10,7 @@ import { mergeContacts, type MergeResult } from './identity-actions';
 import styles from './Customers.module.css';
 
 /**
- * 02's "Two accounts look like one person" — suggested, never silent. Merge
+ * 02's "Two accounts look like one person" - suggested, never silent. Merge
  * asks once more, then `POST /api/identity/merge`; nothing happens before
  * that second press. "Not the same" has no route to remember it: drawn.
  */

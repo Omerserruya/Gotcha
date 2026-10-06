@@ -5,7 +5,7 @@ import type { ProductDemand } from '@/api/contracts/analytics';
 import styles from './Analytics.module.css';
 
 /**
- * Screen 06d — what conversations were worth. Measured.
+ * Screen 06d - what conversations were worth. Measured.
  *
  * The dark card and "What you lost" (824 + 300), a five-figure strip, then
  * "Where the money came from" (724) and "What people ask for and don't get"
@@ -16,12 +16,12 @@ import styles from './Analytics.module.css';
  * ════════════════════════════════════════════════════════════════════════════
  * No revenue is attributed to a conversation, a source or a campaign, and no
  * purchase intent or cart recovery is recorded. So the money parts of 06d are
- * drawn and say so; the figures are "—", never a confident zero.
+ * drawn and say so; the figures are "-", never a confident zero.
  *
- * What IS recorded is the other half of 02's argument — lost opportunity:
+ * What IS recorded is the other half of 02's argument - lost opportunity:
  * `/product-demand`, the catalogue searches this ISO week that found nothing.
  * Shown as ASKS (`askCount`), never as people: the writer's `askedBy` is not
- * de-duplicated by asker. No value is put on them — nothing prices a miss.
+ * de-duplicated by asker. No value is put on them - nothing prices a miss.
  */
 
 /** "navy towels" → "Navy towels": terms are stored lowercased. */
@@ -59,7 +59,7 @@ export async function WhatYouLost({ demand }: { readonly demand: ProductDemand |
       <p className={styles.sLostTitle}>{t('sales.lost.title')}</p>
       <p className={styles.sLostBody}>
         {demand === null
-          ? '—'
+          ? '-'
           : misses.length === 0
             ? t('sales.lost.none')
             : t('sales.lost.body', {
@@ -67,7 +67,7 @@ export async function WhatYouLost({ demand }: { readonly demand: ProductDemand |
                 terms: misses.length,
               })}
       </p>
-      {/* Writing to them would create outreach — waits on Omer. */}
+      {/* Writing to them would create outreach - waits on Omer. */}
       <span className={styles.sLostLink} aria-disabled="true">
         {t('sales.lost.write')}
       </span>
@@ -84,7 +84,7 @@ export async function SalesStrip() {
         <div key={key} className={styles.gCell} data-testid={`sales-${key}`}>
           <dt>{t(`sales.strip.${key}`)}</dt>
           {/* Nothing records it: not attributed, not counted. */}
-          <dd>—</dd>
+          <dd>-</dd>
         </div>
       ))}
     </dl>
@@ -139,7 +139,7 @@ export async function AskedNotGot({ demand }: { readonly demand: ProductDemand |
                   {t('sales.asked.asks', { count: row.askCount, n: format.number(row.askCount) })}
                 </span>
                 {/* Nothing prices a miss. */}
-                <span className={styles.sAskedValue}>—</span>
+                <span className={styles.sAskedValue}>-</span>
               </li>
             ))}
           </ul>

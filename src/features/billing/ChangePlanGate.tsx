@@ -29,7 +29,7 @@ import styles from './Billing.module.css';
  * rather than navigation, so it takes the workflow side.
  *
  * When permissions could not be loaded at all, `canSee` answers true and the
- * control renders. The backend is still the authority — the worst case is a
+ * control renders. The backend is still the authority - the worst case is a
  * refusal with an explanation, which beats a product that looks like it lost
  * a feature.
  */
@@ -63,7 +63,7 @@ export function ChangePlanGate({
              *
              * This was `new Intl.DateTimeFormat(undefined, …)` in a CLIENT
              * component, so the date followed the reader's browser rather than
-             * the page — a Hebrew user with an English browser got one English
+             * the page - a Hebrew user with an English browser got one English
              * date inside a Hebrew page, and it differed per user rather than
              * per deploy. Every other formatter in this directory already
              * passes the locale.
@@ -84,7 +84,7 @@ export function ChangePlanGate({
 
         So a scheduled CANCEL can be called off and a scheduled DOWNGRADE or
         VOLUME_CHANGE cannot. `changePlan` upserts the same row, so choosing
-        something else REPLACES the scheduled change — but nothing returns the
+        something else REPLACES the scheduled change - but nothing returns the
         subscription to having none.
 
         "Cannot be undone" would be too blunt and slightly wrong. The true
@@ -105,7 +105,7 @@ export function ChangePlanGate({
           {/*
             Said as a path, not a warning. The idempotency key is scoped to the
             payment method deliberately, "so a failed attempt must not
-            permanently block a retry after the customer adds a valid card" —
+            permanently block a retry after the customer adds a valid card" -
             so add-a-card-then-upgrade genuinely works.
           */}
           {t('change.noCard')}

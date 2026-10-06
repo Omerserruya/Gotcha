@@ -11,7 +11,7 @@ beforeEach(() => {
   get.mockReset();
 });
 
-describe('★ loadCampaign — three answers', () => {
+describe('★ loadCampaign - three answers', () => {
   it('the campaign, read through the real contract', async () => {
     get.mockImplementation(async (req: { payload: { parse: (x: unknown) => unknown } }) =>
       req.payload.parse({
@@ -27,13 +27,13 @@ describe('★ loadCampaign — three answers', () => {
     expect(read.state === 'ok' && read.campaign.name).toBe('Restock');
   });
 
-  it('★ a 404 is "missing" — a fact about the id, not our failure', async () => {
+  it('★ a 404 is "missing" - a fact about the id, not our failure', async () => {
     get.mockRejectedValue(new ApiError({ kind: 'not_found', status: 404 }));
     const { loadCampaign } = await import('./load-outreach');
     expect(await loadCampaign('nope')).toEqual({ state: 'missing' });
   });
 
-  it('⚠ anything else is "failed" — never "missing"', async () => {
+  it('⚠ anything else is "failed" - never "missing"', async () => {
     get.mockRejectedValue(new ApiError({ kind: 'server', status: 500 }));
     const { loadCampaign } = await import('./load-outreach');
     expect(await loadCampaign('b1')).toEqual({ state: 'failed' });

@@ -38,7 +38,7 @@ describe('the count is for all time', () => {
     /*
      * The design says "Ran 46 times THIS WEEK" and "handled 1,204 things this
      * week". `runCount` is cumulative with no clock, and there are no run
-     * records to derive a period from — so a weekly field here would be
+     * records to derive a period from - so a weekly field here would be
      * inventing one.
      */
     const surface = Object.keys(automationSchema.parse(automation()));
@@ -48,7 +48,7 @@ describe('the count is for all time', () => {
 
   it('separates never-run from a count of zero', () => {
     // An automation that is on and has never fired usually means its trigger
-    // never matches — the interesting row on this screen, and a bare 0 in a
+    // never matches - the interesting row on this screen, and a bare 0 in a
     // column would not be noticed.
     expect(hasEverRun(automation({ runCount: 0 }))).toBe(false);
     expect(hasEverRun(automation({ runCount: 1 }))).toBe(true);
@@ -62,7 +62,7 @@ describe('a flow covers one channel or all of them', () => {
 
   it('reports null for all channels rather than enumerating them', () => {
     // The model says "all", not "these eight". Listing every known channel
-    // would invent a specificity the flow does not have — and would go stale
+    // would invent a specificity the flow does not have - and would go stale
     // the moment a channel is added.
     expect(appliesToChannel(automation({ channel: null }))).toBeNull();
   });
@@ -71,7 +71,7 @@ describe('a flow covers one channel or all of them', () => {
 describe('an automation carries nothing that could become a false claim', () => {
   it('exposes no revenue, no actor, no pause timestamp', () => {
     /*
-     * "₪12,400 recovered" is attributed revenue — FIFTH appearance across
+     * "₪12,400 recovered" is attributed revenue - FIFTH appearance across
      * five screens, still with no inputs. "Paused by you on 12 Aug" needs an
      * actor and a timestamp; `isActive` is a bare boolean.
      */
@@ -83,7 +83,7 @@ describe('an automation carries nothing that could become a false claim', () => 
 
   it('exposes no run history', () => {
     // There are no run-record models of any kind, so stop-reason clustering
-    // has nothing to cluster — a consequence of the absence, not a second
+    // has nothing to cluster - a consequence of the absence, not a second
     // finding.
     const surface = Object.keys(automationSchema.parse(automation()));
     expect(surface.filter((k) => /runs$|history|executions/i.test(k))).toEqual([]);

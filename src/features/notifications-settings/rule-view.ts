@@ -11,7 +11,7 @@ import { NOTIFIABLE_EVENTS, UNFIRING_EVENTS } from './events';
  * Turning stored rules into what the screen says about them.
  *
  * Pure, and separate from the component, because almost everything worth
- * getting right here is a judgement about the data rather than about markup —
+ * getting right here is a judgement about the data rather than about markup -
  * whether an event can fire, whether a channel is delivered, whether one rule
  * silently displaces another. This tenant has no rules at all, so a capture
  * cannot exercise any of it and these are the only tests that can.
@@ -20,9 +20,9 @@ import { NOTIFIABLE_EVENTS, UNFIRING_EVENTS } from './events';
 /**
  * What the platform will do with this rule's event.
  *
- *   `known`    — in the vocabulary; something raises it
- *   `unfiring` — a real, templated type that **nothing emits**
- *   `unknown`  — not a type this platform declares at all, almost certainly a
+ *   `known`    - in the vocabulary; something raises it
+ *   `unfiring` - a real, templated type that **nothing emits**
+ *   `unknown`  - not a type this platform declares at all, almost certainly a
  *                typo, and the route accepted it because it validates
  *                `eventType` against nothing
  *
@@ -45,7 +45,7 @@ export function eventStatus(eventType: string): EventStatus {
 export interface RuleView {
   readonly id: string;
   readonly enabled: boolean;
-  /** `null` is tenant-wide — every team. */
+  /** `null` is tenant-wide - every team. */
   readonly departmentId: string | null;
   /** Resolved team name, or `null` when tenant-wide or unresolvable. */
   readonly departmentName: string | null;
@@ -117,7 +117,7 @@ export function toRuleView(
     departmentId: rule.departmentId,
     departmentName: department?.name ?? null,
     // A rule scoped to a team we cannot name is not a tenant-wide rule, and
-    // must never be drawn as one — that would overstate its reach.
+    // must never be drawn as one - that would overstate its reach.
     departmentMissing: rule.departmentId !== null && department === null,
     recipientType: rule.recipients.type,
     recipientNames: names,
@@ -134,7 +134,7 @@ export function toRuleView(
  * Rules grouped by the event they answer to.
  *
  * The event is the grouping and not an axis, because a `(tenant, department,
- * event)` triple holds **several** rules and all of them apply — the two
+ * event)` triple holds **several** rules and all of them apply - the two
  * partial unique indexes were dropped on purpose. A grid of one cell per
  * event would have to pick one of N to display, and would therefore lie about
  * what is configured.

@@ -14,13 +14,13 @@ import { OrderActions } from './OrderActions';
 import styles from './Customers.module.css';
 
 /**
- * Screen 04d — her orders.
+ * Screen 04d - her orders.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ EIGHT STATES, RENDERED AS EIGHT. THE PLATFORM ASKED FOR THIS.
  * ════════════════════════════════════════════════════════════════════════════
  * `CommerceContextResponse`'s own comment says the frontend *"renders an
- * explicit UI for each state — it never guesses from a bare error"*, and the
+ * explicit UI for each state - it never guesses from a bare error"*, and the
  * union is built so it can. Collapsing them into "we couldn't load orders"
  * would throw away five different repairs:
  *
@@ -32,14 +32,14 @@ import styles from './Customers.module.css';
  *   missing_scopes        grant them, IN SHOPIFY   (the connection is fine)
  *   unavailable           try again                (retryable, and says so)
  *
- * The first two are the distinction this project has made on 13, 14 and 17 —
+ * The first two are the distinction this project has made on 13, 14 and 17 -
  * made here by Backend before we arrived.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ AND THIS SCREEN TAKES NO ORDER ACTIONS, THOUGH THEY WOULD WORK
  * ════════════════════════════════════════════════════════════════════════════
  * `POST /api/commerce-context/:conversationId/actions` is the best-guarded
- * write in the platform — permission, ownership re-validation, business
+ * write in the platform - permission, ownership re-validation, business
  * policy, optional approval, idempotent adapter call, provider-result
  * validation, post-action verify, audit. *"There is NO second
  * frontend-to-Shopify execution path."*
@@ -47,11 +47,11 @@ import styles from './Customers.module.css';
  * And it is conversation-keyed. `commerce-actions.service.ts:190` writes the
  * audit with `metadata: { conversationId }`, so an action taken from the
  * customer page would be recorded against whichever conversation this page
- * entered through — **a wrong audit trail, on the actions whose whole
+ * entered through - **a wrong audit trail, on the actions whose whole
  * purpose is leaving a right one.**
  *
  * So eligibility is SHOWN and nothing is offered. A merchant learns what
- * could be done to this order, by them, with their permissions — and does it
+ * could be done to this order, by them, with their permissions - and does it
  * in the conversation, where the record will be true.
  */
 export async function CustomerOrders({
@@ -61,7 +61,7 @@ export async function CustomerOrders({
   readonly orders: CommerceContextResponse | null;
   /**
    * Where the actions post. `null` when this person has no conversation to
-   * act through — and then the controls are absent rather than broken,
+   * act through - and then the controls are absent rather than broken,
    * because the endpoint has nowhere to route.
    */
   readonly conversationId: string | null;
@@ -143,7 +143,7 @@ export async function CustomerOrders({
               {/*
                 ★ THE CHIPS ARE THEIRS. Rendered verbatim, already localised,
                 with their tone. A paraphrase would be a second, vaguer copy
-                of a sentence they wrote — and re-deciding the tone would make
+                of a sentence they wrote - and re-deciding the tone would make
                 this screen disagree with the Inbox about the same order.
               */}
               <div className={styles.chips}>
@@ -166,7 +166,7 @@ export async function CustomerOrders({
               </div>
 
               {/*
-                The design opens ONE order — the open or troubled one — and
+                The design opens ONE order - the open or troubled one - and
                 leaves the rest as a line each. More than one expanded is none
                 expanded.
               */}
@@ -217,7 +217,7 @@ export async function CustomerOrders({
 
               {/*
                 ══════════════════════════════════════════════════════════════
-                ★★ WHAT COULD BE DONE — SAID, NOT OFFERED.
+                ★★ WHAT COULD BE DONE - SAID, NOT OFFERED.
                 ══════════════════════════════════════════════════════════════
                 Eligibility is computed from the VIEWER's own permissions:
                 the service's cache key carries a permission signature so two
@@ -236,8 +236,8 @@ export async function CustomerOrders({
               ) : anythingPossible(order) ? (
                 /*
                  * No conversation to act through, so the actions have nowhere
-                 * to route. What COULD be done is still said — it is a fact
-                 * about the order — and nothing is drawn that would fail.
+                 * to route. What COULD be done is still said - it is a fact
+                 * about the order - and nothing is drawn that would fail.
                  */
                 <p className={styles.orderCan} data-testid={`order-possible-${order.orderId}`}>
                   {t('orders.possible', {
@@ -263,7 +263,7 @@ export async function CustomerOrders({
 
       {/*
         Said once, under the list, in every state that has one. A merchant who
-        reads "a refund is possible" and finds no button is owed the reason —
+        reads "a refund is possible" and finds no button is owed the reason -
         and the reason is ours, not theirs.
       */}
       {/*

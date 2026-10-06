@@ -60,7 +60,7 @@ export type RealtimeEvent =
     })
   /**
    * The conversation's stored ready replies changed (Backend: generated on an
-   * inbound message, kept). The wall re-reads them — never on every render.
+   * inbound message, kept). The wall re-reads them - never on every render.
    */
   | (RealtimeEventBase & { type: 'copilot.suggestions.updated'; conversationId: string })
   | (RealtimeEventBase & { type: 'presence.changed'; userId: string })
@@ -110,12 +110,12 @@ export type RealtimeEventType = RealtimeEvent['type'];
  * the one to consume, in the words of the person who fixed it:
  *
  *   *"The legacy suggestions pipeline below was deleted with Phase 4 but its
- *   replacement turned out to be incomplete — the frontend kept showing zero
+ *   replacement turned out to be incomplete - the frontend kept showing zero
  *   copilot suggestions. Restored as a safety net."*
  *
  * So consuming only the structured channel reproduces a documented bug by
- * name. `voice.frame.updated` is not dead — `voice-flow-runner.ts` consumes
- * it to fire flow triggers — it simply is not yet the channel that reliably
+ * name. `voice.frame.updated` is not dead - `voice-flow-runner.ts` consumes
+ * it to fire flow triggers - it simply is not yet the channel that reliably
  * produces user-facing suggestions. **Do not "upgrade" to it without checking
  * that comment again.**
  */
@@ -137,7 +137,7 @@ export const translators: readonly EventTranslator[] = [
   /*
    * The wall's suggestions changed (Backend 9c5e96cc). Sent to `conv:{id}`
    * only, as the bus's `data`: `{tenantId, conversationId, basedOnMessageId,
-   * generatedAt, channel}` — never the text, so the screen re-reads.
+   * generatedAt, channel}` - never the text, so the screen re-reads.
    */
   // One step of the AI's work, as the orchestrator emits it (`data` of the bus).
   (wireEvent, payload) => {
@@ -178,7 +178,7 @@ export const translators: readonly EventTranslator[] = [
    * `message.received` and `message.delivery_changed` have been in the union at
    * the top of this file since it was written. **Nothing translated them and
    * nothing subscribed to them**, so the socket delivered the frames and this
-   * layer dropped every one — a reader with no writer, which is the same shape as
+   * layer dropped every one - a reader with no writer, which is the same shape as
    * an endpoint whose declared events are written nowhere.
    *
    * It only became load-bearing when the composer shipped: its copy says *"it
@@ -190,7 +190,7 @@ export const translators: readonly EventTranslator[] = [
    * ── AND THE WIRE NAMES ARE COLON-SEPARATED, NOT DOTTED ──
    * `message:status` and `message:new`, from `message.service.ts`. Our own type
    * names are dotted, and matching our name against the wire would have compiled
-   * and never fired — the same trap as matching `cause.code` on a route that
+   * and never fired - the same trap as matching `cause.code` on a route that
    * sends none. Read from the emitter, not from our own vocabulary.
    */
   (wireEvent, payload) => {
@@ -202,7 +202,7 @@ export const translators: readonly EventTranslator[] = [
     const messageId = str(data, 'messageId');
     /*
      * A frame we cannot attribute to a conversation could refresh the wrong one.
-     * Dropped rather than guessed — the same rule the transcript translator
+     * Dropped rather than guessed - the same rule the transcript translator
      * applies, and for the same reason.
      */
     if (!tenantId || !conversationId || !messageId) return null;

@@ -78,14 +78,14 @@ describe('★ the imbalance is the queue’s', () => {
   });
 });
 
-describe('★★ the cards — the report’s, and the busiest hour in the workspace’s zone', () => {
+describe('★★ the cards - the report’s, and the busiest hour in the workspace’s zone', () => {
   it('★★ a UTC histogram moved to Israel before its peak is taken: 09Z is 12:00', () => {
     const hours = new Array(24).fill(0);
     hours[9] = 7;
     hours[13] = 5;
     const october = new Date('2026-10-05T12:00:00Z');
     expect(busiestLocalHour(hours, 'Asia/Jerusalem', october)).toBe(12);
-    // ★ Winter: the same 09Z is 11:00 — the offset is the day's, not a constant.
+    // ★ Winter: the same 09Z is 11:00 - the offset is the day's, not a constant.
     expect(busiestLocalHour(hours, 'Asia/Jerusalem', new Date('2026-12-15T12:00:00Z'))).toBe(11);
     expect(busiestLocalHour(new Array(24).fill(0), 'Asia/Jerusalem')).toBeNull();
   });
@@ -111,7 +111,7 @@ describe('★★ the cards — the report’s, and the busiest hour in the works
     expect(screen.getByTestId('team-firstReply')).toHaveTextContent('3m');
     expect(screen.getByTestId('team-resolved')).toHaveTextContent('94%');
     expect(screen.getByTestId('team-handedBack')).toHaveTextContent('4');
-    // Today's offset (12:00 in summer, 11:00 in winter) — the unit test above pins both.
+    // Today's offset (12:00 in summer, 11:00 in winter) - the unit test above pins both.
     const local = busiestLocalHour(hours, 'Asia/Jerusalem')!;
     expect([11, 12]).toContain(local);
     expect(screen.getByTestId('team-busiest')).toHaveTextContent(
@@ -119,15 +119,15 @@ describe('★★ the cards — the report’s, and the busiest hour in the works
     );
   });
 
-  it('unread: "—" in every card, never zeros', async () => {
+  it('unread: "-" in every card, never zeros', async () => {
     render(await TeamStrip({ data: { agents: null, report: null } }));
     for (const key of ['people', 'firstReply', 'resolved', 'handedBack', 'busiest']) {
-      expect(screen.getByTestId(`team-${key}`)).toHaveTextContent('—');
+      expect(screen.getByTestId(`team-${key}`)).toHaveTextContent('-');
     }
   });
 });
 
-describe('★★ 06c’s table — 02’s columns, people then AI employees, alphabetical', () => {
+describe('★★ 06c’s table - 02’s columns, people then AI employees, alphabetical', () => {
   const REPORT = report([
     {
       id: 'z',
@@ -175,7 +175,7 @@ describe('★★ 06c’s table — 02’s columns, people then AI employees, alp
     expect(screen.getByTestId('team-row-c')).toHaveTextContent('AI employee2,02018s91%');
   });
 
-  it('★ the week’s bars scale within their kind — the AI’s thousands never flatten a person', async () => {
+  it('★ the week’s bars scale within their kind - the AI’s thousands never flatten a person', async () => {
     render(await TeamTable({ report: REPORT }));
     const bars = (id: string) =>
       [...screen.getByTestId(`team-row-${id}`).querySelectorAll<HTMLElement>('[data-ai], span')]
@@ -187,9 +187,9 @@ describe('★★ 06c’s table — 02’s columns, people then AI employees, alp
     expect(screen.getByTestId('team-row-c').querySelector('[data-ai]')).not.toBeNull();
   });
 
-  it('nothing handled: a rate of nothing is "—", and a quiet day has no bar', async () => {
+  it('nothing handled: a rate of nothing is "-", and a quiet day has no bar', async () => {
     render(await TeamTable({ report: report([{ id: 'q', name: 'Quiet' }]) }));
-    expect(screen.getByTestId('team-row-q')).toHaveTextContent('Quiet0——');
+    expect(screen.getByTestId('team-row-q')).toHaveTextContent('Quiet0--');
     expect(screen.getByTestId('team-row-q').querySelectorAll('[style]')).toHaveLength(0);
   });
 
@@ -214,7 +214,7 @@ describe('★★ 06c’s table — 02’s columns, people then AI employees, alp
   });
 });
 
-describe('★★ measured on dev: no Agent-role people — the card says what is true', () => {
+describe('★★ measured on dev: no Agent-role people - the card says what is true', () => {
   it.each([
     [[], 'tooFew', "There aren't two people counted here"],
     [[agent('a', 'A', 3)], 'tooFew', "There aren't two people counted here"],
@@ -241,7 +241,7 @@ describe('★★ measured on dev: no Agent-role people — the card says what is
   });
 });
 
-describe('★ the header says what the table counts — 02\'s "three people, two teams"', () => {
+describe('★ the header says what the table counts - 02\'s "three people, two teams"', () => {
   const team = (agents: unknown, ais: string[] | null) =>
     ({
       agents,
@@ -259,7 +259,7 @@ describe('★ the header says what the table counts — 02\'s "three people, two
     expect(await teamSubline(team([agent('p1', 'Dana', 1)], []))).toBe('Last 7 days · 1 person');
   });
 
-  it('nothing counted, or nothing read: the period alone — never "0 people"', async () => {
+  it('nothing counted, or nothing read: the period alone - never "0 people"', async () => {
     expect(await teamSubline(team([], []))).toBe('Last 7 days');
     expect(await teamSubline(team(null, null))).toBe('Last 7 days');
   });
@@ -286,7 +286,7 @@ const WIRE = [
   },
 ];
 
-describe('★★ 06c — the queue is compared between people', () => {
+describe('★★ 06c - the queue is compared between people', () => {
   it('one person is "too few", whatever the AI holds', async () => {
     render(await TeamHero({ agents: agentLoadListSchema.parse(WIRE) }));
     expect(screen.getByTestId('team-hero')).toHaveTextContent(

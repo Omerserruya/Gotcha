@@ -8,12 +8,12 @@ import signIn from '../sign-in/SignIn.module.css';
 import { RecoverPanel } from './RecoverPanel';
 
 /**
- * Password recovery — the screen "Forgot it?" now reaches.
+ * Password recovery - the screen "Forgot it?" now reaches.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THE FLOW SLUG COMES FROM THE PROVIDER, VIA THE URL, AND IS CHECKED HERE
  * ════════════════════════════════════════════════════════════════════════════
- * `recovery_url` on the sign-in challenge names the recovery flow — the
+ * `recovery_url` on the sign-in challenge names the recovery flow - the
  * contract's own note says it "is a flow slug an administrator can change, and
  * a stale path here sends somebody who has forgotten their password to a 404",
  * so it must not be a constant in our source.

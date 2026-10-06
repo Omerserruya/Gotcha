@@ -12,7 +12,7 @@ beforeEach(() => {
   post.mockResolvedValue({ sessionId: 's', candidates: [] });
 });
 
-describe('★★ inspect at the wire — the popup’s assets ride along, and only those that exist', () => {
+describe('★★ inspect at the wire - the popup’s assets ride along, and only those that exist', () => {
   const body = () => (post.mock.calls.at(-1)![0] as { body: unknown }).body;
 
   it('code, business and WABA ids', async () => {
@@ -48,7 +48,7 @@ describe('★★ connect and resume at the wire', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('★ resume sends `twoStepPin` — the field the route reads (`pin` was stripped)', async () => {
+  it('★ resume sends `twoStepPin` - the field the route reads (`pin` was stripped)', async () => {
     post.mockResolvedValue({});
     await resumeNumber('n1', '123456');
     expect(body()).toStrictEqual({ twoStepPin: '123456' });

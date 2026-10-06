@@ -31,16 +31,16 @@ const basis = (conversationsHandled: number) => ({
   method: 'x',
 });
 
-describe('★ 01 — time saved is derived from what GOTCHA handled', () => {
-  it('nothing handled today: "—", and no basis line', async () => {
+describe('★ 01 - time saved is derived from what GOTCHA handled', () => {
+  it('nothing handled today: "-", and no basis line', async () => {
     await card({ secondsSaved: 0, basis: basis(0) });
-    expect(screen.getByTestId('time-saved')).toHaveTextContent(/^—$/);
+    expect(screen.getByTestId('time-saved')).toHaveTextContent(/^-$/);
     expect(screen.queryByText(/platform average/i)).toBeNull();
   });
 
   it('handled some: the figure, with its basis', async () => {
     await card({ secondsSaved: 3600, basis: basis(20) });
-    expect(screen.getByTestId('time-saved')).not.toHaveTextContent('—');
+    expect(screen.getByTestId('time-saved')).not.toHaveTextContent('-');
     expect(screen.getByTestId('time-saved').textContent).toMatch(/1h/);
   });
 });

@@ -27,7 +27,7 @@ import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
  * ★★ NONE OF THEM MAY BE STORED. The success path carries a `Set-Cookie`
  * holding a sealed session; the failure paths carry a reason for one specific
  * attempt. A replayed copy of either is a stale answer to a question the
- * browser thinks it just asked — somebody who has signed out being sent onward
+ * browser thinks it just asked - somebody who has signed out being sent onward
  * by a redirect recorded while they were signed in, or a stale
  * `?error=expired` shown after a sign-in that actually worked.
  *
@@ -45,7 +45,7 @@ function uncached(response: NextResponse): NextResponse {
 export async function GET(request: NextRequest): Promise<NextResponse> {
   /*
    * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
-   * see this file — its matcher excludes `/api` — so this route was covered
+   * see this file - its matcher excludes `/api` - so this route was covered
    * there by the gateway allowlist and by nothing else, while every page route
    * had two independent refusals.
    */
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
        * ⚠ The rollback direction is the asymmetric one: an authorize from
        *   THIS build landing on an older callback would be refused, because
        *   the token carries a nonce that callback does not expect. It fails
-       *   closed — back to sign-in with `exchange_failed` — rather than
+       *   closed - back to sign-in with `exchange_failed` - rather than
        *   issuing a session, which is the correct direction to fail in.
        */
       ...(loginState.n ? { expectedNonce: loginState.n } : {}),
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * is PER COOKIE and the session already uses 2.6 KB of one.
    *
    * ⚠ ITS FAILURE IS NOT THE SIGN-IN'S FAILURE. If it will not fit, or there
-   *   is no id token in the grant, the person still gets a session — they
+   *   is no id token in the grant, the person still gets a session - they
    *   simply see the provider's confirmation screen when they later sign out.
    *   Failing the sign-in over a logout convenience would be absurd.
    */
@@ -162,7 +162,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * ★★ AND THIS ONE IS WHERE THE USER ACTUALLY LANDS AFTER SIGNING IN.
    *
    * `NextResponse.redirect` builds a raw `Response` and **does not apply the
-   * base path** — unlike `redirect()` from `next/navigation`. `loginState.r`
+   * base path** - unlike `redirect()` from `next/navigation`. `loginState.r`
    * is an unprefixed in-app path (`safeReturnPath` guarantees a leading slash
    * or `/`), so under a mount point this sent people to the root after a
    * successful sign-in: the legacy product, with a valid session for this one.

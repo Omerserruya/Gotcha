@@ -18,11 +18,11 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Customers — screen 04.
+ * Customers - screen 04.
  *
  * ── WHAT IS ABSENT, AND WHY ──
- * **No segment bar.** Of the design's five — *talking to you now, unhappy
- * lately, best, gone quiet, wholesale* — three need sources that do not exist
+ * **No segment bar.** Of the design's five - *talking to you now, unhappy
+ * lately, best, gone quiet, wholesale* - three need sources that do not exist
  * (conversation state, sentiment, commerce value), one needs a writer that
  * does not run, and *wholesale* needs tags no contact carries. Five chips that
  * all return zero would be five controls that do nothing. Omer dropped them.
@@ -35,7 +35,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  * **Value, orders, situation and mood are read in bulk** (backend 63985641,
  * 01bb7b6e): one commerce read and one insights read per hundred people
  * shown, never a vendor call per row. A store that is absent or unreachable
- * is "—" with its reason, never "no orders yet".
+ * is "-" with its reason, never "no orders yet".
  *
  * **No "GOTCHA remembers", no notes.** `AgentCustomerMemory` is per-agent,
  * last-turn-only and advisory by its own comment; there is no `Note` model at
@@ -62,12 +62,12 @@ export default async function Page({
   const now = new Date();
   const everyone = rows === null ? [] : peopleToday(rows, conversations, quiet?.ids ?? null, now);
   const shown = everyone.filter((person) => inSegment(person, segment));
-  // What each shown person is worth and what is going on — every identity, in bulk.
+  // What each shown person is worth and what is going on - every identity, in bulk.
   const shownIds = shown.flatMap((person) => person.members.map((member) => member.id));
   const [commerce, insights] = await Promise.all([loadCommerce(shownIds), loadInsights(shownIds)]);
 
   /*
-   * ★ 04: the count IS the title — "4,180 customers". People, counted from
+   * ★ 04: the count IS the title - "4,180 customers". People, counted from
    *   the rows collapsed by `personId`, and only when the list is whole: a
    *   truncated list's `total` counts records, and attaching it to "customers"
    *   is the mismatch this screen once had.
@@ -104,7 +104,7 @@ export default async function Page({
               data-testid="customer-search-input"
             />
           </form>
-          {/* 02's "Add a customer" — live: name and phone, never a duplicate. Outside the search form, so Enter there never searches. */}
+          {/* 02's "Add a customer" - live: name and phone, never a duplicate. Outside the search form, so Enter there never searches. */}
           <AddCustomer />
         </div>
       }

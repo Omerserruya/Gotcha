@@ -6,16 +6,16 @@ import { groupByDomain, takesScope, type PermissionDef } from '@/api/contracts/p
 import styles from './Roles.module.css';
 
 /**
- * Screen 12c — what a role allows, as the catalogue.
+ * Screen 12c - what a role allows, as the catalogue.
  *
  * ── NOT THE DESIGN'S GRID, AND THE REASON IS A WRITE ──
  * The design draws one row per area with None/View/Edit/Manage. The platform
- * has `conversation:messages:read · reply · takeover · assign · close` —
+ * has `conversation:messages:read · reply · takeover · assign · close` -
  * **five independent keys, where the action is the level.**
  *
  * A four-way radio must pick one of four values to stand for five booleans,
  * so **saving an untouched role would drop whatever the levels cannot
- * express** — no error, no warning, and the role now differs from what its
+ * express** - no error, no warning, and the role now differs from what its
  * owner believes. **A control that cannot represent a state the system can be
  * in will eventually be used to destroy that state.**
  *
@@ -25,7 +25,7 @@ import styles from './Roles.module.css';
  * second thing to drift.
  *
  * ── AND SCOPE APPEARS ONLY WHERE IT APPLIES ──
- * `PermissionDef.scoped` is a boolean — whether the dimension applies at all.
+ * `PermissionDef.scoped` is a boolean - whether the dimension applies at all.
  * A permission without it gets no scope marker, because a greyed control on a
  * row that has none is the same lie in miniature.
  */
@@ -73,7 +73,7 @@ export async function PermissionCatalog({
                   imply a setting exists and is turned off.
 
                   ════════════════════════════════════════════════════════════
-                  ★★ A MARKER, NOT A SENTENCE — THE SENTENCE IS ALREADY ON THE
+                  ★★ A MARKER, NOT A SENTENCE - THE SENTENCE IS ALREADY ON THE
                      PAGE, ONCE
                   ════════════════════════════════════════════════════════════
                   This read *"How far this reaches depends on the role's
@@ -84,7 +84,7 @@ export async function PermissionCatalog({
                   applies to everything the role does."
 
                   So the row no longer explains; it MARKS. An explanation
-                  repeated per row is not emphasis — it becomes wallpaper, and
+                  repeated per row is not emphasis - it becomes wallpaper, and
                   the reader stops seeing the rows it is attached to, which are
                   the ones it is trying to distinguish.
 

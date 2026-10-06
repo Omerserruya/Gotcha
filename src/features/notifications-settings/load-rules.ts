@@ -18,12 +18,12 @@ import { logger } from '@/observability/logger';
 /**
  * Everything screen 15 shows.
  *
- * `GET /api/notification-preferences` — ADMIN only, `{ data }` enveloped. This
+ * `GET /api/notification-preferences` - ADMIN only, `{ data }` enveloped. This
  * is the table the dispatcher reads; the per-user store the design drew is
  * read by nothing but its own route.
  *
  * Departments and members are fetched because a rule names neither. It stores
- * a `departmentId` and, for `type: 'users'`, an array of user ids — so without
+ * a `departmentId` and, for `type: 'users'`, an array of user ids - so without
  * these two reads the screen would render cuids where a team and a person
  * belong, which is the defect that shipped `ai_voice` onto the billing screen.
  *

@@ -28,13 +28,13 @@ export function parseNoteFilter(raw: string | undefined): NoteFilter {
 }
 
 /**
- * Screen 04f — what your team wrote about this person.
+ * Screen 04f - what your team wrote about this person.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * CLASSIC NOTES, PER OMER'S CUT
  * ════════════════════════════════════════════════════════════════════════════
  * Who wrote it, what it says, when, and edit or delete by the author. **No
- * pinning, no revision history, no AI-suggestion accept flow** — `pinned`,
+ * pinning, no revision history, no AI-suggestion accept flow** - `pinned`,
  * `editHistory` and `status: AI_SUGGESTED` all exist on the table and are
  * left unused rather than given surfaces.
  *
@@ -43,7 +43,7 @@ export function parseNoteFilter(raw: string | undefined): NoteFilter {
  * between "this was corrected" and a revisions UI.
  *
  * ── THE ONE CONTROL THAT SURVIVED THE CUT, AND WHY ──
- * `aiUsable` — *"GOTCHA may use this"* versus *"team only"*, default off.
+ * `aiUsable` - *"GOTCHA may use this"* versus *"team only"*, default off.
  * It is the only axis a merchant cannot infer from anything else on screen,
  * and it decides whether the note leaves our database at all:
  *
@@ -54,7 +54,7 @@ export function parseNoteFilter(raw: string | undefined): NoteFilter {
  *
  * ── AND `visibility` IS NOT THE SAME QUESTION ──
  * TEAM versus PRIVATE is who may READ it. The column's own comment:
- * *"conflating the two is a bug either way round — a note can be readable by
+ * *"conflating the two is a bug either way round - a note can be readable by
  * the whole team and still be something the bot must never repeat."* 04f
  * shows no control for it and sends no value, so the column keeps its
  * default. Both axes nonetheless gate the CRM push, which is why the
@@ -140,7 +140,7 @@ export async function CustomerNotes({
                     {/*
                     THAT it was edited, never what it said before. A note that
                     can be corrected silently is a record of whatever it says
-                    now — but the previous bodies are a revisions UI, which
+                    now - but the previous bodies are a revisions UI, which
                     this screen does not have.
                   */}
                     {wasEdited(note) ? (
@@ -156,7 +156,7 @@ export async function CustomerNotes({
                   ★★ WHERE THIS NOTE LIVES, IN THE SERVER'S WORDS.
                   Eight outcomes, because `NOT_APPLICABLE` alone reaches the
                   screen by five different paths and two of them are
-                  different repairs — "no CRM connected" and "this person is
+                  different repairs - "no CRM connected" and "this person is
                   not linked to a record in the one you have" send somebody
                   to two different places.
                 */}
@@ -227,7 +227,7 @@ export async function NoteFilters({
 /**
  * 04f's side: the counts, and what GOTCHA reads from here.
  *
- * "What GOTCHA reads" is the notes marked for it — the same rule as
+ * "What GOTCHA reads" is the notes marked for it - the same rule as
  * `promptSafeNotes` on the platform (`aiUsable: true`), so the list is what
  * the model can see, not a summary of it. 02's "Shown in the Inbox" block is
  * the pinned notes, and waits with Pin.
@@ -236,7 +236,7 @@ export async function NotesSide({ notes }: { readonly notes: readonly Note[] | n
   const t = await getTranslations('customers');
   const format = await getFormatter();
   const live = notes?.filter((note) => note.deletedAt === null) ?? null;
-  const count = (n: number | null) => (n === null ? '—' : format.number(n));
+  const count = (n: number | null) => (n === null ? '-' : format.number(n));
   const reads = live?.filter((note) => note.aiUsable) ?? [];
 
   return (
@@ -269,7 +269,7 @@ export async function NotesSide({ notes }: { readonly notes: readonly Note[] | n
             ))}
           </ul>
         ) : (
-          <p className={styles.sideNone}>{live === null ? '—' : t('teamNotes.side.readsNone')}</p>
+          <p className={styles.sideNone}>{live === null ? '-' : t('teamNotes.side.readsNone')}</p>
         )}
         <p className={styles.notesCaption}>{t('teamNotes.side.readsCaption')}</p>
       </section>

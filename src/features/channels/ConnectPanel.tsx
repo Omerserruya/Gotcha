@@ -31,11 +31,11 @@ import { channelName } from '@/api/contracts/inbox';
  * mechanism. Three shapes, and which one a channel gets is a property of the
  * channel:
  *
- *   - **provisioned** — web chat. Nothing is authorised anywhere; the backend
+ *   - **provisioned** - web chat. Nothing is authorised anywhere; the backend
  *     creates the widget as `PENDING`, a draft until it is on a page. The only
  *     connect path with no third party in it.
- *   - **credentials** — email. SMTP and IMAP details typed in and stored.
- *   - **authorised** — the six OAuth platforms, and voice, neither of which
+ *   - **credentials** - email. SMTP and IMAP details typed in and stored.
+ *   - **authorised** - the six OAuth platforms, and voice, neither of which
  *     can complete from this app today. See `unavailable` below.
  *
  * A panel shows ONE of these. Pretending they share a wizard would mean a
@@ -49,7 +49,7 @@ function shapeOf(channel: ChannelType): ConnectShape {
   if (channel === 'EMAIL') return 'credentials';
   // Phone calls with the merchant's own Twilio: fields, then its numbers.
   if (channel === 'VOICE') return 'twilio';
-  // 13c: WhatsApp has its own sheet — the question, then Meta.
+  // 13c: WhatsApp has its own sheet - the question, then Meta.
   if (channel === 'WHATSAPP') return 'whatsapp';
   // Live (backend ecd64c4d): the provider's page, and back to this list.
   if (channel in OAUTH_PLATFORMS) return 'oauth';
@@ -100,7 +100,7 @@ export function ConnectPanel({
          * Stated, not hidden and not faked.
          *
          * The six OAuth platforms authorise at the provider and the provider
-         * returns the browser to whichever app `FRONTEND_URL` names — which is
+         * returns the browser to whichever app `FRONTEND_URL` names - which is
          * not this one. So the handshake would start here and finish somewhere
          * else, leaving a person authorised, confused, and looking at a
          * different product.
@@ -159,7 +159,7 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
                * Step 2, applied to the channel step 1 just created.
                *
                * Two calls, and the second can fail after the first has
-               * succeeded — which on screen 12 was the reason NOT to build a
+               * succeeded - which on screen 12 was the reason NOT to build a
                * role selector. It is acceptable here because the failure is
                * repairable: the channel exists and visibly carries the wrong
                * mode, and the same control is on the row. Nobody has been
@@ -168,7 +168,7 @@ function WebChatStep({ onClose }: { readonly onClose: () => void }) {
               await setResponseMode(outcome.data.id, mode);
               /*
                * Created: the row this panel lives in leaves the list (the
-               * channel is connected now), so the code opens on the NEW row —
+               * channel is connected now), so the code opens on the NEW row -
                * held in the URL, so the refresh keeps it, and Settings reopens it.
                */
               if (outcome.data.externalId) {
@@ -289,7 +289,7 @@ function EmailStep({ onClose }: { readonly onClose: () => void }) {
 }
 
 /**
- * Step 2 — *"Who should answer it?"*
+ * Step 2 - *"Who should answer it?"*
  *
  * The design offers a choice of AI employees and human teams. A
  * `ChannelAccount` stores neither: it has no `aiAgentId`, no `departmentId`
@@ -385,7 +385,7 @@ function OAuthStep({ channel, name }: { readonly channel: ChannelType; readonly 
 }
 
 /**
- * The web chat's embed code (the old app's snippet, HTML): identity only —
+ * The web chat's embed code (the old app's snippet, HTML): identity only -
  * the widget id and where to load it from. Colours and words live in the
  * dashboard, not in a snippet pasted months ago.
  */
@@ -432,7 +432,7 @@ export function EmbedSnippet({
   );
 }
 
-/** The snippet itself — pure, so the exact text is tested. */
+/** The snippet itself - pure, so the exact text is tested. */
 export function embedCode(widgetId: string, apiUrl: string): string {
   // JSON, with `<` escaped: a value can never end the merchant's <script>.
   const literal = (value: string) => JSON.stringify(value).replace(/</g, '\\u003c');

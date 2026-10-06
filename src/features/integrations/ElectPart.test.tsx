@@ -69,7 +69,7 @@ const choose = async (user: ReturnType<typeof userEvent.setup>, slug: string) =>
   await user.click(screen.getByTestId(`core-elect-option-ecommerce-${slug}`));
 };
 
-describe('what is offered — 02’s pill, "the dropdown, never a connect form"', () => {
+describe('what is offered - 02’s pill, "the dropdown, never a connect form"', () => {
   it('★ offers the connected systems, each with its mark; the broken one disabled, with why', async () => {
     /*
      * The write refuses a system that is not CONNECTED. A broken system in
@@ -97,7 +97,7 @@ describe('what is offered — 02’s pill, "the dropdown, never a connect form"'
     ).toHaveAttribute('data-logo', 'shopify');
   });
 
-  it('nothing chosen reads "Not chosen" — never the first system', async () => {
+  it('nothing chosen reads "Not chosen" - never the first system', async () => {
     // The calm wrong value: somebody else's decision wearing the merchant's.
     show(part());
     expect(screen.getByTestId('core-elect-open-ecommerce')).toHaveTextContent('Not chosen');
@@ -123,7 +123,7 @@ describe('what is offered — 02’s pill, "the dropdown, never a connect form"'
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('says where connecting happens — at the foot of the menu, never a dead link', async () => {
+  it('says where connecting happens - at the foot of the menu, never a dead link', async () => {
     const user = userEvent.setup();
     show(part());
     await open(user);

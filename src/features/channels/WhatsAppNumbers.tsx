@@ -21,7 +21,7 @@ import { ModeSwitch } from './ModeSwitch';
 /**
  * The resolved translator and locale, passed down rather than re-fetched.
  *
- * The children used to be `async` and call `getTranslations` each — which is
+ * The children used to be `async` and call `getTranslations` each - which is
  * one await per number, and, more to the point, makes them async CHILD
  * components. React cannot resolve those outside a server renderer, so the
  * whole subtree was untestable: `render(await WhatsAppNumbers(...))` produced
@@ -33,7 +33,7 @@ import { ModeSwitch } from './ModeSwitch';
 type T = Awaited<ReturnType<typeof getTranslations<'channels.whatsapp'>>>;
 
 /**
- * WhatsApp numbers — screen 13.
+ * WhatsApp numbers - screen 13.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * "IS IT WORKING" HAS FOUR ANSWERS, AND `ready` GIVES TWO
@@ -48,7 +48,7 @@ type T = Awaited<ReturnType<typeof getTranslations<'channels.whatsapp'>>>;
  * > attention' to a customer whose inbox was filling up."*
  *
  * `ready` is in the same object, and it is the field a card binds to by
- * default — which is what makes it the trap. Nothing here reads it.
+ * default - which is what makes it the trap. Nothing here reads it.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * THREE PLACES A PROBLEM CAN BE FIXED, AND THE SCREEN SAYS WHICH
@@ -105,7 +105,7 @@ export async function WhatsAppNumbers({
     Meta reports `can_send_message` per entity, and MESSAGE_TEMPLATE is its
     own. So a number can be taking customer messages and answering them inside
     the 24-hour window while every reminder, cart recovery and campaign is
-    refused — `receiving`/`sending` one level finer, and the state Omer asked
+    refused - `receiving`/`sending` one level finer, and the state Omer asked
     to be warned about by name.
 
     Only numbers with a lifecycle row can report it; an unprofiled channel has
@@ -131,7 +131,7 @@ export async function WhatsAppNumbers({
           {/*
             The sentence that stops this reading as "WhatsApp is down", and it
             is gated on the number actually receiving rather than stated as a
-            general fact about WhatsApp — because it is only true while it is.
+            general fact about WhatsApp - because it is only true while it is.
           */}
           {paused.some((x) => repliesStillFlow(x.number.health)) ? (
             <p className={styles.templatesPausedBody} data-testid="templates-paused-replies">
@@ -141,7 +141,7 @@ export async function WhatsAppNumbers({
 
           {/*
             Meta's words, verbatim. The design's copy asserts "no payment
-            method", which is ONE cause among several — quality ratings and
+            method", which is ONE cause among several - quality ratings and
             policy violations pause templates too. We report the block, which
             we know, and quote Meta for the cause, which they know and we do
             not.
@@ -311,7 +311,7 @@ function CheckList({ checks, t }: { readonly checks: readonly HealthCheck[]; rea
           {c.detail ? <span className={styles.checkDetail}>{c.detail}</span> : null}
           {/*
             Meta's own remediation text, VERBATIM. Never rewritten and never
-            translated — a paraphrase of a platform's fix instructions is a new
+            translated - a paraphrase of a platform's fix instructions is a new
             instruction nobody tested.
           */}
           {c.metaSolution ? (
@@ -328,7 +328,7 @@ function CheckList({ checks, t }: { readonly checks: readonly HealthCheck[]; rea
 /**
  * A WhatsApp channel with no lifecycle row.
  *
- * Connected and working, with **nothing known about it** — which is neither
+ * Connected and working, with **nothing known about it** - which is neither
  * healthy nor broken, and the card must not imply either. It states what is
  * true, says why there is nothing more, and offers no repair, because every
  * repair verb addresses a number record that does not exist.
@@ -347,7 +347,7 @@ function UnprofiledCard({
   /*
     02's number card, in its shape: the number over its state; then what is
     configured on it. A number set up before per-number health existed has
-    no health data — said as a grey chip, not a paragraph — and its raw
+    no health data - said as a grey chip, not a paragraph - and its raw
     `connectionStatus` is never printed.
   */
   return (
@@ -365,7 +365,7 @@ function UnprofiledCard({
   );
 }
 
-/** What is configured on a number — 02's four rows; "—" where nothing stores it. */
+/** What is configured on a number - 02's four rows; "-" where nothing stores it. */
 function NumberRows({
   t,
   mode,
@@ -380,24 +380,24 @@ function NumberRows({
       <div>
         <dt>{t('rows.answeredBy')}</dt>
         {/* A channel account has no AI employee or team of its own. */}
-        <dd>—</dd>
+        <dd>-</dd>
       </div>
       <div>
         <dt>{t('rows.aiMode')}</dt>
         <dd data-testid="number-ai-mode">
-          {/* 02's two segments, live — where the account and its mode are known. */}
+          {/* 02's two segments, live - where the account and its mode are known. */}
           {channelAccountId && (mode === 'AI_AUTO_REPLY' || mode === 'HUMAN_WITH_COPILOT') ? (
             <ModeSwitch channelAccountId={channelAccountId} current={mode} />
           ) : mode === 'AI_AUTO_REPLY' || mode === 'HUMAN_WITH_COPILOT' ? (
             t(`rows.mode.${mode}`)
           ) : (
-            '—'
+            '-'
           )}
         </dd>
       </div>
       <div>
         <dt>{t('rows.greeting')}</dt>
-        <dd>—</dd>
+        <dd>-</dd>
       </div>
       <div>
         <dt>{t('rows.hours')}</dt>
@@ -413,7 +413,7 @@ function NumberRows({
 }
 
 /**
- * 02's dashed "Add another number" at the foot of the list — where 13c
+ * 02's dashed "Add another number" at the foot of the list - where 13c
  * starts: it opens the Connect WhatsApp sheet. Only the sheet's "Continue
  * with Meta" opens Meta. Not set up on the server: drawn, with why.
  */

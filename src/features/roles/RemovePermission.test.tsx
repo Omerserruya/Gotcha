@@ -7,7 +7,7 @@ import messages from '@/i18n/messages/en/roles.json';
 import { RemovePermission } from './RemovePermission';
 
 /**
- * Taking a permission away — the path that is not a toggle.
+ * Taking a permission away - the path that is not a toggle.
  *
  * Adding and removing have **opposite visibility**. An addition shows the
  * moment it is used. A removal is invisible everywhere except the person
@@ -19,7 +19,7 @@ const { remove } = vi.hoisted(() => ({ remove: vi.fn() }));
 vi.mock('./actions', () => ({ removePermission: remove }));
 
 beforeEach(() => {
-  // Reset HERE, not inside `renderRemove` — a test that sets a resolved
+  // Reset HERE, not inside `renderRemove` - a test that sets a resolved
   // value before rendering would otherwise have it wiped by the render, and
   // the action would resolve `undefined`. That is what produced two
   // unhandled rejections and a failure that looked like the component's.

@@ -36,7 +36,7 @@ beforeEach(() => {
   refresh.mockReset();
 });
 
-describe('★★ 04e — a pending action decided where it is read', () => {
+describe('★★ 04e - a pending action decided where it is read', () => {
   it('Approve asks first; yes approves, and says whether it RAN', async () => {
     approveRequest.mockResolvedValue({ ok: true, dispatched: false, dispatchError: 'x' });
     const user = userEvent.setup();

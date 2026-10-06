@@ -22,7 +22,7 @@ export type EditMayDo = {
 const STANCES = ['on_its_own', 'ask_first', 'never'] as const;
 
 /**
- * 07f, measured: "Edit {name}" — a 1000 sheet over Studio, the same
+ * 07f, measured: "Edit {name}" - a 1000 sheet over Studio, the same
  * sentences as the profile, now editable, with a dark column on the right
  * and Save at its foot.
  *
@@ -33,7 +33,7 @@ const STANCES = ['on_its_own', 'ask_first', 'never'] as const;
  *   What it handles       nothing groups conversations by topic
  *   Signs off as          no field holds a signature
  *   Says it is AI         no field holds a disclosure rule
- *   What it may do        the business's, the same for every employee — set
+ *   What it may do        the business's, the same for every employee - set
  *                         in Integrations, not here
  *   Hands to              no handover target is stored
  *   Preview               nothing replays a conversation under new rules
@@ -121,7 +121,7 @@ export function EditSheet({
               <h3 className={styles.cardTitle}>{t('handles')}</h3>
               <div className={styles.chips}>
                 <span className={styles.none} title={t('handlesNone')}>
-                  —
+                  -
                 </span>
                 <span className={styles.add} aria-disabled="true" title={t('handlesNone')}>
                   {t('add')}
@@ -179,13 +179,13 @@ export function EditSheet({
                 <div className={styles.pair}>
                   <dt>{t('signsOff')}</dt>
                   <dd className={styles.none} title={t('signsOffNone')}>
-                    —
+                    -
                   </dd>
                 </div>
                 <div className={styles.pair}>
                   <dt>{t('saysAi')}</dt>
                   <dd className={styles.none} title={t('saysAiNone')}>
-                    —
+                    -
                   </dd>
                 </div>
               </dl>
@@ -197,11 +197,11 @@ export function EditSheet({
               </h3>
               {mayDo === null ? (
                 <p className={styles.none} title={td('mayDo.unavailable')}>
-                  —
+                  -
                 </p>
               ) : mayDo.length === 0 ? (
                 <p className={styles.none} title={td('mayDo.none')}>
-                  —
+                  -
                 </p>
               ) : (
                 <ul className={`${styles.rows} ${styles.scroll}`} data-testid="edit-may-rows">
@@ -235,7 +235,7 @@ export function EditSheet({
               <h3 className={styles.cardTitle}>{td('handover.title')}</h3>
               {employee.escalationRules.length === 0 ? (
                 <p className={styles.none} title={td('handover.none')}>
-                  —
+                  -
                 </p>
               ) : (
                 <ul className={styles.rows}>
@@ -252,7 +252,7 @@ export function EditSheet({
                             })
                           }
                         />
-                        {rule.label.trim() ? <UserText>{rule.label}</UserText> : '—'}
+                        {rule.label.trim() ? <UserText>{rule.label}</UserText> : '-'}
                       </label>
                     </li>
                   ))}
@@ -261,7 +261,7 @@ export function EditSheet({
               <p className={styles.handsTo}>
                 {t('handsTo')}{' '}
                 <span className={styles.none} title={t('handsToNone')}>
-                  —
+                  -
                 </span>
               </p>
             </section>
@@ -280,7 +280,7 @@ export function EditSheet({
                   ))}
                 </ul>
               ) : (
-                <p className={styles.none}>—</p>
+                <p className={styles.none}>-</p>
               )}
             </section>
 
@@ -302,7 +302,7 @@ export function EditSheet({
                   className={styles.none}
                   title={tools === null ? td('tools.unavailable') : td('tools.none')}
                 >
-                  —
+                  -
                 </p>
               )}
             </section>
@@ -311,7 +311,7 @@ export function EditSheet({
           <aside className={styles.side}>
             <h3 className={styles.sideTitle}>{t('preview')}</h3>
             <p className={styles.sideNone} title={t('previewNone')} data-testid="edit-preview">
-              —
+              -
             </p>
             <div className={styles.sideFoot}>
               <span

@@ -37,7 +37,7 @@ export function RealtimeProvider({
       /*
        * A fresh ticket per connection attempt. Tickets are single-use and
        * expire in 60 seconds, so one cannot be cached or reused across a
-       * reconnect — every attempt mints its own.
+       * reconnect - every attempt mints its own.
        */
       credentials: async () => {
         try {
@@ -86,7 +86,7 @@ export function useRealtimeEvent(type: RealtimeEventType, listener: RealtimeList
  * the server render right for free - there is no socket during SSR, so the
  * server snapshot is always `idle`.
  */
-/** Be in this conversation's room while mounted — where its own events are sent. */
+/** Be in this conversation's room while mounted - where its own events are sent. */
 export function useConversationRoom(conversationId: string | null): void {
   const transport = useContext(RealtimeContext);
   useEffect(

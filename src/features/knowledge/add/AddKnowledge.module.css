@@ -255,7 +255,7 @@
     text-decoration: none;
   }
 
-  /* What was added: its title, and that it is being read — 02's row, `13px 18px`. */
+  /* What was added: its title, and that it is being read - 02's row, `13px 18px`. */
   .added {
     display: flex;
     flex-wrap: wrap;
@@ -389,7 +389,7 @@
     gap: var(--space-8);
   }
 
-  /* The source cards' buttons: one size, a pair — the dark one to act. */
+  /* The source cards' buttons: one size, a pair - the dark one to act. */
   .sourceBtn,
   .sourceBtnPrimary {
     align-self: flex-start;

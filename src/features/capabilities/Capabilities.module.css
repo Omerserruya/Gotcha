@@ -1,9 +1,9 @@
 @layer features {
   /*
-   * Screen 10 · Studio · What GOTCHA is allowed to do — measured.
+   * Screen 10 · Studio · What GOTCHA is allowed to do - measured.
    *
    * Grouped by CATEGORY, which is stored, and never by `riskGroup`, which is
-   * a regex over the tool's name with a catch-all fallback — grouping by it
+   * a regex over the tool's name with a catch-all fallback - grouping by it
    * would render "matched no pattern" as "create/update risk".
    *
    * 02 sets no line-height anywhere on this screen.
@@ -44,7 +44,7 @@
   }
 
   /* A mark inside its tile; the tile's own ground shows around it. */
-  /* 14's pill tile: 26px, white, a hairline — the mark at 14px. */
+  /* 14's pill tile: 26px, white, a hairline - the mark at 14px. */
   .pillTile {
     display: grid;
     place-items: center;
@@ -153,7 +153,7 @@
     color: var(--text-primary);
   }
 
-  /* How often it has run. Quiet — evidence beside a setting, not a headline. */
+  /* How often it has run. Quiet - evidence beside a setting, not a headline. */
   .used {
     grid-column: 1;
     font-size: var(--font-size-micro);
@@ -161,7 +161,7 @@
   }
 
   /*
-   * Do it / Ask me / Never — 02's segmented control: `#F3F0EA`, radius 8,
+   * Do it / Ask me / Never - 02's segmented control: `#F3F0EA`, radius 8,
    * `padding:3px`, gap 3; the stored one dark. Dark, not green: `never` is
    * as correct a state as `do it`, and a colour would congratulate whichever
    * one an admin happened to have.
@@ -245,7 +245,7 @@
   }
 
   /*
-   * The facts identical on every row, said once — seventeen identical
+   * The facts identical on every row, said once - seventeen identical
    * toggles would read as seventeen decisions. Not in 02: kept, quiet, at
    * the foot.
    */
@@ -559,7 +559,7 @@
     color: var(--text-subtle);
   }
 
-  /* The catalogue's own risk level — stored, not inferred from a name. */
+  /* The catalogue's own risk level - stored, not inferred from a name. */
   .risk {
     margin-inline-start: var(--space-8);
     padding: 2px var(--space-8);
@@ -580,7 +580,7 @@
     color: var(--intent-urgent-text);
   }
 
-  /* One line for a connection that is down — said once, not on every row. */
+  /* One line for a connection that is down - said once, not on every row. */
   .down {
     margin: 0;
     padding: var(--space-10) var(--space-14);

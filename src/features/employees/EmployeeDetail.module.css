@@ -96,7 +96,7 @@
   /* Three columns of cards, 12 apart. */
   /*
    * The grid takes the rest of the pane, and each column's LAST card takes
-   * the rest of its column — 02's cards end at the frame's bottom, 30 above.
+   * the rest of its column - 02's cards end at the frame's bottom, 30 above.
    */
   .grid {
     flex: 1;
@@ -213,7 +213,7 @@
     color: var(--text-secondary);
   }
 
-  /* 02's last chip: dashed, faint — here, the whole of what is known. */
+  /* 02's last chip: dashed, faint - here, the whole of what is known. */
   .chipEmpty {
     padding: 5px var(--space-10);
     border: 1px dashed var(--border-strong);

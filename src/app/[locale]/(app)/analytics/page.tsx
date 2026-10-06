@@ -45,14 +45,14 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Analytics — screen 06.
+ * Analytics - screen 06.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THIS SCREEN DID NOT EXIST UNTIL NOW, AND EVERY TEST PASSED
  * ════════════════════════════════════════════════════════════════════════════
  * `TeamLoad` and `AskedAbout` were built, tested and **imported by nothing**;
  * this route was still the placeholder stub. The panels render correctly when
- * a test renders them, and nothing anywhere asked whether a page did — the
+ * a test renders them, and nothing anywhere asked whether a page did - the
  * same shape as three i18n catalogues that no loader enumerated. Both were
  * complete artefacts, absent at runtime.
  *
@@ -62,8 +62,8 @@ import { pageMetadata } from '@/shell/page-metadata';
  *
  *   Sales     cancelled.
  *   GOTCHA    held on an escalation aggregation that does not exist.
- *             `ConversationHandover.reason` is a four-value code — escalation,
- *             takeover, assignment, routing — with no route over it, and
+ *             `ConversationHandover.reason` is a four-value code - escalation,
+ *             takeover, assignment, routing - with no route over it, and
  *             nothing counts machine causes. **An empty tab inside an
  *             assembled screen is the defect this commit removes**, so it is
  *             left out and said here instead of drawn.
@@ -72,8 +72,8 @@ import { pageMetadata } from '@/shell/page-metadata';
  *             so rename and merge have nowhere to persist.
  *   Team      here, as a panel.
  *
- * (Superseded 2026-10-02: 06b–06e exist now, each its own tab, and the tab
- * row is drawn — a tab that leads somewhere is not ceremony.)
+ * (Superseded 2026-10-02: 06b-06e exist now, each its own tab, and the tab
+ * row is drawn - a tab that leads somewhere is not ceremony.)
  *
  * ── AND NO HEADLINE NUMBERS ──
  * `MetricStrip` is live on screen 01. A second rendering of the same figures
@@ -81,7 +81,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  * the other contradicts it.
  *
  * ★ Both panels are async server components and they are SIBLINGS, which
- *   keeps both visible to the structural test — it does not run a nested
+ *   keeps both visible to the structural test - it does not run a nested
  *   async component. (React does: the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).)
  */
 export default async function Page({
@@ -92,12 +92,12 @@ export default async function Page({
   const t = await getTranslations('analytics');
   const tab = parseAnalyticsTab((await searchParams)?.tab);
   /*
-    02's tabs — drawn now that each leads somewhere, which was the only
+    02's tabs - drawn now that each leads somewhere, which was the only
     reason they were not. The same row on every tab.
   */
   const tabs = <AnalyticsTabs current={tab} />;
 
-  /* 06b — what GOTCHA did, and where it stopped. Its own reads. */
+  /* 06b - what GOTCHA did, and where it stopped. Its own reads. */
   if (tab === 'gotcha') {
     const [data, daily] = await Promise.all([loadGotcha(), loadDaily(7)]);
     return (
@@ -123,7 +123,7 @@ export default async function Page({
     );
   }
 
-  /* 06c — the team, without a leaderboard. */
+  /* 06c - the team, without a leaderboard. */
   if (tab === 'team') {
     const data = await loadTeam();
     return (
@@ -146,7 +146,7 @@ export default async function Page({
     );
   }
 
-  /* 06d — what conversations were worth; only unmet demand is recorded. */
+  /* 06d - what conversations were worth; only unmet demand is recorded. */
   if (tab === 'sales') {
     const { demand } = await loadSales();
     return (
@@ -172,7 +172,7 @@ export default async function Page({
     );
   }
 
-  /* 06e — what people ask about, this week against the week before. */
+  /* 06e - what people ask about, this week against the week before. */
   if (tab === 'topics') {
     const data = await loadTopics();
     return (
@@ -207,8 +207,8 @@ export default async function Page({
 
   return (
     /*
-      06, measured: the title is a question answered — "How the operation is
-      doing" — over the period it covers, with 02's tabs on its right.
+      06, measured: the title is a question answered - "How the operation is
+      doing" - over the period it covers, with 02's tabs on its right.
     */
     <PageContainer
       layout="screen"
@@ -221,8 +221,8 @@ export default async function Page({
         <WhatChanged insights={insights} />
         <KpiStrip overview={overview} timeSaved={timeSaved} />
         {/*
-          02's bottom row: "Conversations a day" — a day's `overview`, so the
-          bars split as the strip above does — and "What people ask about".
+          02's bottom row: "Conversations a day" - a day's `overview`, so the
+          bars split as the strip above does - and "What people ask about".
           Who holds what is the Team tab's (06c), not this one's.
 
           Siblings, not nested: the structural test cannot see inside a nested

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ACTIVITY_STATUSES } from '@/lib/ai-activity-status';
 
 /**
- * The AI's steps in one conversation — Backend ed0f1c9c.
+ * The AI's steps in one conversation - Backend ed0f1c9c.
  *
  * `GET /api/ai-assist/:conversationId/ai-activity?limit=` reads the
  * orchestrator's own rows (one per tool call) and projects them without the
@@ -16,7 +16,7 @@ export { ACTIVITY_STATUSES, type ActivityStatus } from '@/lib/ai-activity-status
 
 /**
  * Every `labelKey` `labelKeyFor` can return (ai-activity.service.ts). A key
- * not in this list is drawn as `working` — the service's own fallback.
+ * not in this list is drawn as `working` - the service's own fallback.
  */
 export const ACTIVITY_LABELS = [
   'looking_up_order',

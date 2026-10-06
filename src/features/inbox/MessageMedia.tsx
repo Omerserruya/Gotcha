@@ -10,7 +10,7 @@ import styles from './Inbox.module.css';
  * A message's attachment in the stream, as 02 draws it: a photo as a picture
  * inside the bubble (open it to see it whole), a voice note as something to
  * play, a video with its controls, a file by its name to download. Media that
- * could not be fetched says so — WhatsApp's expire — never a blank bubble.
+ * could not be fetched says so - WhatsApp's expire - never a blank bubble.
  */
 /** The stream's own translator, narrowed to what this needs. */
 type T = (
@@ -102,7 +102,7 @@ export function MessageMedia({ message, t }: { readonly message: InboxMessage; r
   );
 }
 
-/** A shared contact: who, and each number — to ring, or to write on WhatsApp when Meta knows it. */
+/** A shared contact: who, and each number - to ring, or to write on WhatsApp when Meta knows it. */
 export function ContactCards({ message, t }: { readonly message: InboxMessage; readonly t: T }) {
   const contacts = message.metadata?.contacts ?? [];
   if (contacts.length === 0) return null;
@@ -140,7 +140,7 @@ export function ContactCards({ message, t }: { readonly message: InboxMessage; r
 
 /**
  * Nothing transcribes audio yet (the Deepgram key exists without a client),
- * so a voice note says it cannot be read out — never an empty transcript an
+ * so a voice note says it cannot be read out - never an empty transcript an
  * agent would take for a failed one.
  */
 function VoiceNote({ id, t }: { readonly id: string; readonly t: T }) {

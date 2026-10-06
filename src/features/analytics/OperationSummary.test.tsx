@@ -33,8 +33,8 @@ const insight = (id: string, impact: string, over: Record<string, unknown> = {})
     ...over,
   });
 
-describe('★★ "What changed" holds only a CHANGE — and today the platform emits none', () => {
-  it('⚠⚠ a standing fact is not drawn as a change — the dark card says nothing changed', async () => {
+describe('★★ "What changed" holds only a CHANGE - and today the platform emits none', () => {
+  it('⚠⚠ a standing fact is not drawn as a change - the dark card says nothing changed', async () => {
     // "68 conversations came through WhatsApp in the last 30 days" sat over a
     // strip reading 0 for the week. It is a level, not a change.
     render(
@@ -62,10 +62,10 @@ describe('★★ "What changed" holds only a CHANGE — and today the platform e
     expect(screen.getByTestId('also-worth')).toHaveTextContent('Nothing stands out this week.');
   });
 
-  it('a failed read: the dark card says so, the side card "—"', async () => {
+  it('a failed read: the dark card says so, the side card "-"', async () => {
     render(await WhatChanged({ insights: null }));
     expect(screen.getByTestId('what-changed')).toHaveTextContent("We couldn't read what changed");
-    expect(screen.getByTestId('insights-unavailable')).toHaveTextContent('—');
+    expect(screen.getByTestId('insights-unavailable')).toHaveTextContent('-');
   });
 
   it('★ standing facts are "Also worth a look", strongest first, each naming its own period', async () => {
@@ -90,7 +90,7 @@ describe('★★ "What changed" holds only a CHANGE — and today the platform e
   });
 });
 
-describe('★★ the strip — and a delta only where the platform computes one', () => {
+describe('★★ the strip - and a delta only where the platform computes one', () => {
   const overview = analyticsOverviewSchema.parse({
     totalConversations: 2840,
     aiHandledPct: 88,
@@ -124,19 +124,19 @@ describe('★★ the strip — and a delta only where the platform computes one'
     expect(
       screen.getByTestId('kpi-timeSaved').querySelector('[title]')?.getAttribute('title'),
     ).toBe(
-      'An estimate: 2,380 conversations × the platform’s average of 62s each — not measured in this workspace yet.',
+      'An estimate: 2,380 conversations × the platform’s average of 62s each - not measured in this workspace yet.',
     );
     one.unmount();
     render(await KpiStrip({ overview, timeSaved: saved('measured') }));
     expect(screen.getByTestId('kpi-timeSaved').querySelector('[title]')).toBeNull();
   });
 
-  it('★★ +12% on conversations — the one delta `overview` returns', async () => {
+  it('★★ +12% on conversations - the one delta `overview` returns', async () => {
     render(await KpiStrip({ overview, timeSaved: null }));
     expect(screen.getByTestId('kpi-conversations')).toHaveTextContent('+12%');
   });
 
-  it('⚠⚠ and no invented delta — not "flat", not a dash — on the four it does not', async () => {
+  it('⚠⚠ and no invented delta - not "flat", not a dash - on the four it does not', async () => {
     render(await KpiStrip({ overview, timeSaved: null }));
     for (const key of ['handledByGotcha', 'resolved', 'avgReply', 'timeSaved']) {
       const cell = screen.getByTestId(`kpi-${key}`);
@@ -162,7 +162,7 @@ describe('★★ the strip — and a delta only where the platform computes one'
   });
 });
 
-describe('⚠⚠ a share of nothing is "—", not 0%', () => {
+describe('⚠⚠ a share of nothing is "-", not 0%', () => {
   it('no conversations in the week: no percentage, and no time saved', async () => {
     const empty = analyticsOverviewSchema.parse({
       totalConversations: 0,
@@ -172,7 +172,7 @@ describe('⚠⚠ a share of nothing is "—", not 0%', () => {
     render(await KpiStrip({ overview: empty, timeSaved: { secondsSaved: 0 } as never }));
     for (const key of ['handledByGotcha', 'resolved', 'timeSaved']) {
       const cell = screen.getByTestId(`kpi-${key}`);
-      expect(cell, key).toHaveTextContent('—');
+      expect(cell, key).toHaveTextContent('-');
       expect(cell.textContent, key).not.toMatch(/0%|0s/);
     }
   });

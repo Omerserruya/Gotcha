@@ -11,7 +11,7 @@ import styles from './Outreach.module.css';
  *
  * ── IT DOES NOT SAY PAUSE ──
  * There is no `PAUSED` status and no resume route. `cancel` removes the queued
- * jobs, marks every pending recipient `"skipped"`, and sets `completedAt` —
+ * jobs, marks every pending recipient `"skipped"`, and sets `completedAt` -
  * terminal, with no path back to `SENDING`.
  *
  * "Pause" promises two things: that it halts, and that it resumes. Only the
@@ -21,7 +21,7 @@ import styles from './Outreach.module.css';
  * label gets trusted.**
  *
  * ── THE CONFIRMATION NAMES WHAT IS LOST ──
- * Not *"are you sure?"* — that tests conviction, not understanding, and the
+ * Not *"are you sure?"* - that tests conviction, not understanding, and the
  * answer is always yes. It states the two consequences the route actually
  * produces: the people still queued will not receive it, and the campaign
  * cannot be restarted. Both are read straight off what `cancel` does.

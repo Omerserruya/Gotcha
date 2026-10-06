@@ -7,7 +7,7 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · People & teams · New role — screen 12c, a page of its own, as
+ * Settings · People & teams · New role - screen 12c, a page of its own, as
  * 02 draws it: "← Roles" above "New role". `?from=` is 12b's Duplicate.
  *
  * Without the catalogue there is nothing to grant, so the page says so

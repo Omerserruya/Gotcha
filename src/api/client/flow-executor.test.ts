@@ -15,7 +15,7 @@ import { startFlow, submitStage, completeAuthorization } from './flow-executor';
  *
  * **An absolute path on the identity provider's own root.** `fetch` follows
  * redirects, the browser resolves that against OUR origin, it misses
- * `/v2/auth-api/`, and the Next app answers — so the panel would have received
+ * `/v2/auth-api/`, and the Next app answers - so the panel would have received
  * **a 404 HTML page as a stage response.** Read as a broken or unknown stage,
  * with the real cause two layers away.
  *
@@ -55,7 +55,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('⚠⚠ a body that is not a stage is a transport failure, never a refusal', () => {
-  it('⚠⚠ a 404 HTML page — the proxy incident — does not become a stage', async () => {
+  it('⚠⚠ a 404 HTML page - the proxy incident - does not become a stage', async () => {
     /*
      * The exact failure that a missing `proxy_redirect` produces. If this
      * returned a parsed anything, the panel would render it or hand over, and the
@@ -72,7 +72,7 @@ describe('⚠⚠ a body that is not a stage is a transport failure, never a refu
      * THE ASSERTION ABOVE COULD NOT SEE ITS OWN SUBJECT
      * ════════════════════════════════════════════════════════════════════════
      * That 404 carries an HTML body, so it fails the JSON parse as well as the
-     * status check — and deleting `if (!response.ok) return null` left it
+     * status check - and deleting `if (!response.ok) return null` left it
      * passing. **The fixture failed for a second reason, so it proved nothing
      * about the first.** Fourth time this week a fixture of mine has been aimed
      * at a case where both behaviours agree.
@@ -91,7 +91,7 @@ describe('⚠⚠ a body that is not a stage is a transport failure, never a refu
     /*
      * DRF's own shape. Without the status check this parses to `handOver`, and
      * the person is moved to the identity provider's page for what is actually a
-     * proxy misconfiguration — the one failure they cannot do anything about and
+     * proxy misconfiguration - the one failure they cannot do anything about and
      * the one we most want named as ours.
      */
     fetchMock.mockResolvedValue(jsonResponse({ detail: 'Not found.' }, 404));
@@ -102,7 +102,7 @@ describe('⚠⚠ a body that is not a stage is a transport failure, never a refu
     /*
      * The nastier shape of the same incident: a proxy or a captive portal
      * answering 200 with HTML. `response.ok` is true, so only the parse catches
-     * it — and a thrown parse mid-sign-in must not surface as a crash.
+     * it - and a thrown parse mid-sign-in must not surface as a crash.
      */
     fetchMock.mockResolvedValue(new Response('<html>hello</html>', { status: 200 }));
     expect(await startFlow()).toBeNull();
@@ -141,13 +141,13 @@ describe('★★ how the request is made', () => {
      * ════════════════════════════════════════════════════════════════════════
      * Next prefixes `next/link` and `redirect()`. It does **not** touch `fetch`.
      * A bare `/auth-api/…` leaves `/v2` and hits the legacy application's
-     * origin — which is how this app's own sign-in button once started the
+     * origin - which is how this app's own sign-in button once started the
      * wrong product's OIDC flow, and the shape of the proxy's `/api/v3/`
      * redirect that made the executor answer with Next's 404 page.
      *
      * ★ The env var is stubbed and the module re-imported, because `BASE_PATH`
      *   is read once at module load. The first version of this test asserted the
-     *   URL did not start with `/auth-api/` — which is FALSE under the test
+     *   URL did not start with `/auth-api/` - which is FALSE under the test
      *   environment's empty base path, so it was checking that the helper had
      *   not been used rather than that it had. Asserting the absence of a
      *   prefix that is empty by default proves nothing.
@@ -176,7 +176,7 @@ describe('★★ how the request is made', () => {
      * origin the page and the API are already same-origin, and the proxy is a
      * hop invented to preserve a URL shape.
      *
-     * ★ The override is used VERBATIM — not passed through `appPath`. It names
+     * ★ The override is used VERBATIM - not passed through `appPath`. It names
      *   another origin’s layout, so prefixing it with where THIS app is mounted
      *   would reproduce the exact defect the line above guards against, in the
      *   other direction. That is the assertion here: `/v2` must NOT appear.
@@ -201,7 +201,7 @@ describe('★★ how the request is made', () => {
      * The base-path failure was that an absent value silently produced a
      * DIFFERENT working URL. An explicit fallback to today’s behaviour is what
      * keeps a build that never heard of this variable correct rather than
-     * quietly wrong — so this asserts the default composes the proxy path, at
+     * quietly wrong - so this asserts the default composes the proxy path, at
      * a real base path where the two answers differ.
      */
     vi.resetModules();
@@ -222,7 +222,7 @@ describe('★★ how the request is made', () => {
     /*
      * The flow is stateful and its state is a cookie. Without credentials the
      * executor issues a fresh flow per request and the symptom is an
-     * identification stage that repeats — which reads as a rejected password.
+     * identification stage that repeats - which reads as a rejected password.
      */
     fetchMock.mockResolvedValue(jsonResponse(identification));
     await startFlow();
@@ -233,7 +233,7 @@ describe('★★ how the request is made', () => {
     /*
      * `X-authentik-CSRF`, not `X-CSRFToken`. And only on a write: sending it on
      * the opening GET would be harmless but would hide that the cookie has to
-     * exist first — the GET is what sets it.
+     * exist first - the GET is what sets it.
      */
     fetchMock.mockResolvedValue(jsonResponse(identification));
     await startFlow();
@@ -253,7 +253,7 @@ describe('★★ how the request is made', () => {
 
   it('★ an absent CSRF cookie sends an empty token rather than the string "undefined"', async () => {
     /*
-     * ★ NOT because sign-in depends on it — it does not. DRF enforces CSRF only
+     * ★ NOT because sign-in depends on it - it does not. DRF enforces CSRF only
      * for authenticated sessions, and every login stage runs before there is one,
      * so a missing cookie does not break this path. It is enforced on
      * **enrolment**, which runs after sign-in.
@@ -298,8 +298,8 @@ describe('⚠⚠ nothing in this app intercepts fetch, because that would be in 
      *
      * **This app has no such thing, and that is a security property rather than
      * a style preference.** `flow-executor.ts` calls `fetch` with the password in
-     * its body. A global interceptor would sit in that path — reading the URL,
-     * possibly the body, possibly logging — and `flow-executor.ts` would look
+     * its body. A global interceptor would sit in that path - reading the URL,
+     * possibly the body, possibly logging - and `flow-executor.ts` would look
      * completely unchanged. The claim in that file is "our server never receives
      * it, never logs it, and it never enters Node", and a wrapper that
      * `console.log`s its arguments in development would make the second clause
@@ -362,7 +362,7 @@ describe('⚠⚠ finishing the OAuth hop without rendering the provider’s page
      * ════════════════════════════════════════════════════════════════════════
      * THE QUERY IS THE ONE FROM `/if/flow/`, NOT FROM THE AUTHORIZE URL
      * ════════════════════════════════════════════════════════════════════════
-     * They differ — `nonce` is present on the landed URL and not on the one we
+     * They differ - `nonce` is present on the landed URL and not on the one we
      * asked for. This is the detail inference would have got wrong, so it is
      * asserted on the exact string.
      */
@@ -387,7 +387,7 @@ describe('⚠⚠ finishing the OAuth hop without rendering the provider’s page
   it('⚠⚠ answers null when the fetch did not land on a flow at all', async () => {
     /*
      * The precondition is a completed sign-in. Without a provider session this
-     * lands somewhere else entirely — and that is not an error, it is "not the
+     * lands somewhere else entirely - and that is not an error, it is "not the
      * situation we are in". The caller hands over.
      */
     const fetchMock = vi.fn().mockResolvedValueOnce({
@@ -405,8 +405,8 @@ describe('⚠⚠ finishing the OAuth hop without rendering the provider’s page
     /*
      * ★★ AND IT NAMES THE COMPONENT. This deployment's flow is
      *   `…-explicit-consent`, so an account without a standing grant is asked
-     *   here. That is not this function failing — it is a screen we do not
-     *   render — and the first version could not say which of four things had
+     *   here. That is not this function failing - it is a screen we do not
+     *   render - and the first version could not say which of four things had
      *   happened, on the one path a walk cannot see into.
      */
     plannedThen({ component: 'ak-stage-consent' });
@@ -431,7 +431,7 @@ describe('⚠⚠ the four ways it gives up are four different facts', () => {
    * THE FIRST VERSION RETURNED `null` FOR ALL OF THEM
    * ════════════════════════════════════════════════════════════════════════
    * On the first live walk the hop fell back correctly and landed on the
-   * conversation — and nothing distinguished "the executor answered a consent
+   * conversation - and nothing distinguished "the executor answered a consent
    * stage" from "the fetch never found a flow". Landing on the provider's
    * page is what happens when this works AND when it gives up, so the
    * fallback is invisible by design.
@@ -456,7 +456,7 @@ describe('⚠⚠ the four ways it gives up are four different facts', () => {
   it('★★ and every reason is distinct, or the report is no better than null', async () => {
     /*
      * Asserted as a SET. Four branches all reporting `stage` would satisfy
-     * every individual test above and tell a walk nothing — which is exactly
+     * every individual test above and tell a walk nothing - which is exactly
      * what the version being replaced did.
      */
     const reasons = new Set(['no-flow', 'executor-refused', 'stage', 'threw']);
@@ -472,6 +472,6 @@ describe('⚠⚠ the four ways it gives up are four different facts', () => {
  *   SURVIVES. Only a top-level navigation invalidates.
  *
  * ★ The tests were right about the code and the code was wrong about the
- *   provider. No amount of mocking `response.url` could have found that — it
+ *   provider. No amount of mocking `response.url` could have found that - it
  *   took signing out and then asking for a code.
  */

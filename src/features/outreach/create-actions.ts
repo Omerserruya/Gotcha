@@ -10,7 +10,7 @@ import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
- * 05 / 05c — creating outreach (Omer, 2026-10-04): a campaign as a DRAFT, and
+ * 05 / 05c - creating outreach (Omer, 2026-10-04): a campaign as a DRAFT, and
  * a template as a local DRAFT. Sending a campaign and submitting a template
  * to Meta are separate writes and stay drawn until they are approved.
  */
@@ -51,7 +51,7 @@ export interface CampaignDraft {
   readonly contactIds?: readonly string[];
 }
 
-/** POST /api/broadcasts — a DRAFT. Nothing is sent. */
+/** POST /api/broadcasts - a DRAFT. Nothing is sent. */
 export async function createCampaignDraft(draft: CampaignDraft): Promise<CreateResult> {
   if (!draft.name.trim() || !draft.channelAccountId || (!draft.templateId && !draft.body?.trim())) {
     return { ok: false, reason: 'missing' };
@@ -89,7 +89,7 @@ export interface TemplateDraft {
   readonly footer?: string;
 }
 
-/** POST /api/templates — a local DRAFT. Not submitted to Meta. */
+/** POST /api/templates - a local DRAFT. Not submitted to Meta. */
 export async function createTemplate(draft: TemplateDraft): Promise<CreateResult> {
   if (!draft.name.trim() || !draft.body.trim()) return { ok: false, reason: 'missing' };
   try {
@@ -113,7 +113,7 @@ export async function createTemplate(draft: TemplateDraft): Promise<CreateResult
   }
 }
 
-/** POST /api/templates/:id/duplicate — a copy, as a local DRAFT. */
+/** POST /api/templates/:id/duplicate - a copy, as a local DRAFT. */
 export async function duplicateTemplate(id: string): Promise<CreateResult> {
   try {
     const result = await serverApi().post({

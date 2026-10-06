@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Globe, Mail, MessageCircle, MessagesSquare, Phone, type LucideProps } from 'lucide-react';
 
 /*
- * The channel marks — which glyph and which tint each channel wears. Lifted
+ * The channel marks - which glyph and which tint each channel wears. Lifted
  * out of the inbox's queue so Customers (04) draws the same badge: one mark
  * per channel across the product, not one per screen.
  */
@@ -52,7 +52,7 @@ export function InstagramGlyph({
  * ⚠⚠ I REPORTED THIS AS UNBUILDABLE. IT WAS A MISREADING OF WHICH FILE.
  * ════════════════════════════════════════════════════════════════════════════
  * `GOTCHA Prototype.dc.html` is a TEMPLATE and draws the badge as
- * `background: url({{ c.chIcon }})` — so I concluded the design wanted brand
+ * `background: url({{ c.chIcon }})` - so I concluded the design wanted brand
  * images we do not have. `GOTCHA Directions.dc.html` renders the same badge
  * as `<i data-lucide="message-circle">`, and we have lucide.
  *
@@ -60,7 +60,7 @@ export function InstagramGlyph({
  *   two documents; the prototype and the directions are two more.
  *
  * ⚠ AN UNKNOWN CHANNEL GETS THE GLOBE, not nothing and not a guess. `channel`
- *   is an unconstrained column — the same reason `channelName` answers
+ *   is an unconstrained column - the same reason `channelName` answers
  *   "another channel" rather than echoing a raw enum.
  */
 const CHANNEL_MARKS = {

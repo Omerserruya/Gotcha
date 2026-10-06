@@ -30,13 +30,13 @@ const show = (open: boolean) =>
     </NextIntlClientProvider>,
   );
 
-describe('★ 12 — the invite is one inline row, opened from the header', () => {
-  it('closed, it is nothing — the header holds "Invite someone"', () => {
+describe('★ 12 - the invite is one inline row, opened from the header', () => {
+  it('closed, it is nothing - the header holds "Invite someone"', () => {
     const { container } = show(false);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('open: email, name, role, team, Send invite, Cancel — on one row', () => {
+  it('open: email, name, role, team, Send invite, Cancel - on one row', () => {
     show(true);
     const row = screen.getByTestId('invite-form').firstElementChild!;
     expect(row).toContainElement(screen.getByLabelText('Email'));
@@ -46,7 +46,7 @@ describe('★ 12 — the invite is one inline row, opened from the header', () =
     expect(screen.getByTestId('invite-cancel')).toHaveAttribute('href', '/settings/people');
   });
 
-  it('★ the role is the one the route gives — Agent, fixed — and says why', () => {
+  it('★ the role is the one the route gives - Agent, fixed - and says why', () => {
     show(true);
     const role = screen.getByTestId('invite-role');
     expect(role).toHaveAttribute('aria-disabled', 'true');
@@ -62,10 +62,10 @@ describe('★ 12 — the invite is one inline row, opened from the header', () =
   });
 });
 
-describe('★★ 12 — invited into several teams at once (Omer)', () => {
+describe('★★ 12 - invited into several teams at once (Omer)', () => {
   it('ticked teams all go with the invite; the summary counts them', async () => {
     const { inviteMember } = await import('./actions');
-    // This one invite is answered, so the press can be watched — it still reaches no one.
+    // This one invite is answered, so the press can be watched - it still reaches no one.
     vi.mocked(inviteMember)
       .mockReset()
       .mockResolvedValue({ ok: true, data: {} } as never);

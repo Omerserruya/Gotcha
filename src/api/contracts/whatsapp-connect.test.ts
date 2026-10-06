@@ -37,7 +37,7 @@ describe('★ the PIN is known before anything is submitted', () => {
 
 describe('★ two kinds of impossibility', () => {
   it('refuses to connect a BLOCKED row', () => {
-    // "Not you, not now" — a blocker the customer can clear.
+    // "Not you, not now" - a blocker the customer can clear.
     const blocked = candidate({
       scenario: 'BLOCKED',
       blockers: ['This number belongs to another GOTCHA workspace.'],

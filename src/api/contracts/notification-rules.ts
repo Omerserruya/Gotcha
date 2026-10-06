@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Settings · Notifications — the tenant's notification rules (screen 15).
+ * Settings · Notifications - the tenant's notification rules (screen 15).
  *
  * Shapes read from `services/notifications/src/routes/
  * notification-preferences-admin.ts` and the dispatcher that consumes them,
@@ -12,7 +12,7 @@ import { z } from 'zod';
  * `(tenant, department, event)` were created and then dropped by
  * `20260507400000_notification_pref_allow_multiple`, deliberately, so that one
  * event can carry several rules with different recipients and channels and all
- * of them apply. The Prisma model's comment still claims the uniqueness — it
+ * of them apply. The Prisma model's comment still claims the uniqueness - it
  * is stale by one migration, and reading the model without the migrations
  * gives you the opposite of the truth.
  *
@@ -21,7 +21,7 @@ import { z } from 'zod';
  * comment, because the screen is the only thing standing between an admin and
  * a rule that silently does nothing.
  *
- *  1. **`eventType` is validated against no list at all** — `POST` requires
+ *  1. **`eventType` is validated against no list at all** - `POST` requires
  *     only a non-empty string (`:105`) and `PATCH` does not even trim (`:180`).
  *     Every other field in the payload has a closed set behind it. So the API
  *     will never refuse a row this screen draws; it will also happily store
@@ -35,7 +35,7 @@ import { z } from 'zod';
  *     rate or display anywhere. It is not offered as a control.
  *
  * ── AND ONE INTERACTION BETWEEN RULES ──
- * `engine:138` — if any department-scoped rule matches an event, **every
+ * `engine:138` - if any department-scoped rule matches an event, **every
  * tenant-wide rule for that event is dropped**, not merged. Both rows read as
  * enabled in any list of them. See `shadowedRuleIds`.
  *
@@ -49,7 +49,7 @@ import { z } from 'zod';
  * that is discovered from a contract rather than from a screenshot.
  */
 
-/** Stored and validated. Consumed by nothing — never offered as a control. */
+/** Stored and validated. Consumed by nothing - never offered as a control. */
 export const RULE_PRIORITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
 export type RulePriority = (typeof RULE_PRIORITIES)[number];
 
@@ -83,7 +83,7 @@ const recipientsSchema = z.object({
  *
  * `object`, not `looseObject`: the row comes straight off Prisma and carries
  * `tenantId`, `createdAt` and `updatedAt` that no part of this screen needs.
- * Stripping them is the point — nothing unnamed crosses the boundary.
+ * Stripping them is the point - nothing unnamed crosses the boundary.
  *
  * `channels` is `string[]` and not an enum on purpose. The stored value is
  * whatever passed the route's validator, which includes three channels that
@@ -124,7 +124,7 @@ export function deliversNothing(rule: NotificationRule): boolean {
 /**
  * Tenant-wide rules that a department-scoped rule for the same event displaces.
  *
- * `engine:138` does not merge the two — if any department row matches, the
+ * `engine:138` does not merge the two - if any department row matches, the
  * tenant-wide rows are filtered out entirely, so their recipients are told
  * nothing about that department's events. Both rows still read as enabled,
  * which is why the screen has to say which is which.

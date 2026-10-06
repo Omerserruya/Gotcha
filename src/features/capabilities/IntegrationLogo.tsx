@@ -5,14 +5,14 @@ import { appPath } from '@/lib/base-path';
 import styles from './Capabilities.module.css';
 
 /**
- * Each provider's mark, shipped with the app in `public/integrations/` —
+ * Each provider's mark, shipped with the app in `public/integrations/` -
  * copied from ChatCenter's `integration-logos.ts` (Omer, 2026-10-04), so a
  * logo never depends on a third party's CDN path and `img-src 'self'` covers
  * it. Wordmarks (PayPal, HubSpot, Stripe, Zoho) were swapped for the square
  * mark: a wordmark in a 22px tile is a sliver.
  *
- * A provider with no entry — `custom_api`, or one added to the catalogue
- * later — gets the plug, never a wrong logo.
+ * A provider with no entry - `custom_api`, or one added to the catalogue
+ * later - gets the plug, never a wrong logo.
  */
 export const INTEGRATION_LOGOS: Readonly<Record<string, string>> = {
   shopify: 'shopify.svg',
@@ -34,7 +34,7 @@ export const INTEGRATION_LOGOS: Readonly<Record<string, string>> = {
   google_drive: 'google_drive.svg',
 };
 
-/** The tile 10 draws for a system: its mark, or the plug. Decorative — the name is beside it. */
+/** The tile 10 draws for a system: its mark, or the plug. Decorative - the name is beside it. */
 export function IntegrationLogo({
   slug,
   size,
@@ -54,7 +54,7 @@ export function IntegrationLogo({
       data-logo={file ? slug : 'none'}
     >
       {file ? (
-        // A 1–9 KB local mark: `next/image` would optimise nothing here.
+        // A 1-9 KB local mark: `next/image` would optimise nothing here.
         // eslint-disable-next-line @next/next/no-img-element
         <img className={styles.logo} src={appPath(`/integrations/${file}`)} alt="" />
       ) : (

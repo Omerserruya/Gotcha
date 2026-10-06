@@ -2,7 +2,7 @@
  * 11e's time zone, as 02 writes it: the city and its offset in front
  * ("London (GMT+1)"), the IANA name behind ("Europe/London").
  *
- * The offset is the one in force today, from `Intl` — so it moves with
+ * The offset is the one in force today, from `Intl` - so it moves with
  * daylight saving, as a person reads it, and nothing here keeps a table.
  */
 
@@ -36,7 +36,7 @@ export function zoneOptions(locale: string, at: Date = new Date()): readonly Zon
 
 /**
  * What was typed, back to IANA: a label from the list, or an IANA name typed
- * as is — the server stores a string, and a zone this browser does not list
+ * as is - the server stores a string, and a zone this browser does not list
  * must still be savable. Anything else is null, and is not sent.
  */
 export function zoneFromInput(text: string, options: readonly Zone[]): string | null {
@@ -48,7 +48,7 @@ export function zoneFromInput(text: string, options: readonly Zone[]): string | 
   return null;
 }
 
-/** 02's currency option: the symbol, then the code — "₪ ILS". */
+/** 02's currency option: the symbol, then the code - "₪ ILS". */
 export function currencyLabel(code: string, locale: string): string {
   try {
     const symbol =

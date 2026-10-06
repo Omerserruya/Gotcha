@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { queuePageSchemaForTests as queuePageSchema } from './load-inbox';
 
 /**
- * The queue page's shape — and `undatedCount`'s third state.
+ * The queue page's shape - and `undatedCount`'s third state.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THIS FILE EXISTS BECAUSE A MUTATION PASSED
@@ -12,7 +12,7 @@ import { queuePageSchemaForTests as queuePageSchema } from './load-inbox';
  * nothing: every test of this behaviour passed the value straight into the
  * component, so none of them touched the parse.
  *
- * That is the forgiving-double problem in its smallest form — the tests were
+ * That is the forgiving-double problem in its smallest form - the tests were
  * written by somebody who knew what the contract was supposed to say, and
  * they asserted the belief rather than the contract. The distinction lives
  * in the schema, so it is asserted in the schema.
@@ -31,7 +31,7 @@ describe('★★ `undatedCount` has three states and absent is not zero', () => 
      *
      * `undatedCount` is additive and missing from any service older than
      * it. Defaulting to 0 would have the screen assert "no undated
-     * conversations" on a service that cannot answer the question — the
+     * conversations" on a service that cannot answer the question - the
      * instrument reporting all-clear because it is not there, on the one
      * instrument built to detect a problem that is otherwise invisible.
      */

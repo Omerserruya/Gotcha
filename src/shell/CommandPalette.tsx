@@ -18,7 +18,7 @@ import {
   type PersonHit,
 } from './command-search';
 
-/** The rail's ⌘K button opens the palette by this event — its look unchanged. */
+/** The rail's ⌘K button opens the palette by this event - its look unchanged. */
 export const OPEN_COMMAND_PALETTE = 'gotcha:command-palette';
 
 type Item = {
@@ -31,7 +31,7 @@ type Item = {
   readonly title?: string;
   /** DO THIS: the action's state, 02's chip ("Needs approval"). */
   readonly chip?: string;
-  /** What tells it apart from its neighbours — their last word, and when. Theirs: isolated. */
+  /** What tells it apart from its neighbours - their last word, and when. Theirs: isolated. */
   readonly detail?: string;
 };
 
@@ -42,16 +42,16 @@ const STORE_NAMES: Readonly<Record<string, string>> = {
 };
 
 /**
- * 19, measured: ⌘K — a 720 dialog over any screen, at the studio overlays'
+ * 19, measured: ⌘K - a 720 dialog over any screen, at the studio overlays'
  * 72% scrim. One input; DO THIS, GO TO, ASK; a foot of keys.
  *
  *   GO TO   real: customers (the contacts search, and an order number's
  *           customer), conversations by name or channel id, and the screens
  *           the person may see.
  *   DO THIS only what can be acted on: an approval PENDING for a customer
- *           found — opening Approvals, where it is decided. Nothing is
+ *           found - opening Approvals, where it is decided. Nothing is
  *           invented from the words; with none, no section.
- *   ASK     goes to Home with the question in its box — FILLED, never sent:
+ *   ASK     goes to Home with the question in its box - FILLED, never sent:
  *           sending runs the assistant.
  *
  * Opens on ⌘K / Ctrl K anywhere, and from the rail's button; Esc closes.
@@ -329,7 +329,7 @@ export function CommandPalette() {
   );
 }
 
-/** "14:05" today, else "3 Oct" — day first, 24-hour. */
+/** "14:05" today, else "3 Oct" - day first, 24-hour. */
 function shortWhen(iso: string, locale: string): string | null {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return null;

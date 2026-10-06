@@ -22,7 +22,7 @@ const note = (over: Partial<Note> = {}): Note =>
     ...over,
   });
 
-describe('★★ where the note lives — five roads to NOT_APPLICABLE', () => {
+describe('★★ where the note lives - five roads to NOT_APPLICABLE', () => {
   it('★★ tells "no CRM connected" apart from "this person is not in it"', async () => {
     /*
      * ════════════════════════════════════════════════════════════════════════
@@ -46,7 +46,7 @@ describe('★★ where the note lives — five roads to NOT_APPLICABLE', () => {
   });
 
   it('★ an unrecognised reason is still "kept here", never invented', () => {
-    // `null` covers two causes the wire cannot separate — no conversation to
+    // `null` covers two causes the wire cannot separate - no conversation to
     // resolve a CRM contact from, and no forwarded authorization. To a
     // merchant they are the same fact, and a reason we do not know is not a
     // reason to guess at a better one.
@@ -71,7 +71,7 @@ describe('★★ where the note lives — five roads to NOT_APPLICABLE', () => {
 
   it('★ PENDING is "we do not know yet", not a synced note in a hurry', () => {
     // Written before the fetch. A reader can see it mid-push, and if the
-    // process died between the two writes it stays PENDING for good — so
+    // process died between the two writes it stays PENDING for good - so
     // neither optimistic answer is available.
     expect(destinationOf(note({ externalSyncStatus: 'PENDING' }))).toBe('pending');
   });
@@ -97,7 +97,7 @@ describe('★★ only the author may change a note', () => {
   it('★★ an unknown viewer edits nothing, rather than everything', () => {
     /*
      * `viewerUserId` is null when `/api/auth/me` failed. Comparing null to a
-     * null `authorUserId` — which is what an AI-written note carries —
+     * null `authorUserId` - which is what an AI-written note carries -
      * would hand every reader the controls for every AI note.
      */
     expect(canEdit(note({ authorUserId: null }), null)).toBe(false);
@@ -115,8 +115,8 @@ describe('★★ only the author may change a note', () => {
 describe('★ the shape is the platform’s', () => {
   it('★★ carries all three statuses, not the two this screen asks for', () => {
     /*
-     * 04f requests only PUBLISHED. `REJECTED` — a suggestion somebody
-     * declined, kept so the AI stops re-proposing it — is still in the enum,
+     * 04f requests only PUBLISHED. `REJECTED` - a suggestion somebody
+     * declined, kept so the AI stops re-proposing it - is still in the enum,
      * and one missing `z.enum` member rejects the whole response rather than
      * the one row.
      */
@@ -135,7 +135,7 @@ describe('★ the shape is the platform’s', () => {
   it('★★ a list response missing `notes` FAILS rather than reading as empty', () => {
     /*
      * "Nobody has written a note about this person yet" is a claim, and a
-     * defaulted `[]` would make it from a response that said nothing — the
+     * defaulted `[]` would make it from a response that said nothing - the
      * `customerAuditSchema` defect, on a screen that makes the same kind of
      * statement.
      */

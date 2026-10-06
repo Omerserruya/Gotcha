@@ -11,7 +11,7 @@ import styles from './SettingsSection.module.css';
  * rather than decorating - "GOTCHA never pings you for an incoming message"
  * tells someone what this page will not do before they look for the switch.
  *
- * Measured against 11-18: a ROW across the section's 888 — the title at 02's
+ * Measured against 11-18: a ROW across the section's 888 - the title at 02's
  * screen size (26/600, tracked) over a 13px muted line that does not wrap
  * early, and the section's action on the right, on the row's bottom edge
  * ("Invite someone", "Create role", "Read the docs ↗"). A sub-page carries
@@ -36,7 +36,7 @@ export function SettingsSection({
   /**
    * 02's window you scroll inside: the body takes the rest of the frame's
    * height, so a card in it can run to the frame's bottom (`fillCard`) with
-   * its list scrolling (`fillScroll`) — 16's audit.
+   * its list scrolling (`fillScroll`) - 16's audit.
    */
   fill?: boolean;
   children?: ReactNode;

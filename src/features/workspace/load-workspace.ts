@@ -23,7 +23,7 @@ import { logger } from '@/observability/logger';
  * share a page, and an owner who can still fix their opening hours is better
  * served than one shown a single error for all three.
  *
- * Null means the call failed. It is never conflated with empty — a workspace
+ * Null means the call failed. It is never conflated with empty - a workspace
  * with no prohibited claims and one whose claims would not load look the same
  * on screen otherwise, and only one of them is safe to leave alone.
  */
@@ -63,9 +63,9 @@ export interface WebsiteScan {
   readonly pagesRead: number;
   /** Whole days since it finished, counted on the server; `null` while it runs. */
   readonly daysAgo: number | null;
-  /** The categories it found answers in — "products, shipping". */
+  /** The categories it found answers in - "products, shipping". */
   readonly topics: readonly string[];
-  /** "Shopify store", "Instagram", "WhatsApp" — the platform and the channels found. */
+  /** "Shopify store", "Instagram", "WhatsApp" - the platform and the channels found. */
   readonly alsoFound: readonly { readonly kind: 'store' | 'channel'; readonly name: string }[];
 }
 
@@ -105,7 +105,7 @@ const CHANNEL_NAMES: Readonly<Record<string, string>> = {
   tiktok: 'TikTok',
 };
 
-/** `null` when neither read answered — the line is then not drawn at all. */
+/** `null` when neither read answered - the line is then not drawn at all. */
 export async function loadWebsiteScan(): Promise<WebsiteScan | null> {
   const api = serverApi();
   const [ingest, found] = await Promise.all([

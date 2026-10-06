@@ -19,7 +19,7 @@ import { appPath } from '@/lib/base-path';
 export const browserApi = new HttpClient({
   /*
    * ★★ EVERY CLIENT-SIDE REQUEST THIS APP MAKES. Unprefixed under a base
-   * path, all of them would go to `/api/bff/…` at the root — carrying this
+   * path, all of them would go to `/api/bff/…` at the root - carrying this
    * app's session cookie, since it is scoped to `/`, to an origin serving a
    * different application.
    */

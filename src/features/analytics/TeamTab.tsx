@@ -12,10 +12,10 @@ import type { TeamData } from './load-analytics';
 import styles from './Analytics.module.css';
 
 /**
- * Screen 06c — how the team is doing, without a leaderboard. Measured.
+ * Screen 06c - how the team is doing, without a leaderboard. Measured.
  *
  * The dark card and "The handover works" (824 + 300), a five-figure strip,
- * then one table: people AND AI employees, as 02 wants them — colleagues in
+ * then one table: people AND AI employees, as 02 wants them - colleagues in
  * the workload, not a separate report.
  *
  * ── THE RULES 06c's PANEL ALREADY KEEPS, KEPT ──
@@ -23,7 +23,7 @@ import styles from './Analytics.module.css';
  *   · NO REPLY-TIME COLUMN FROM `avgResponseTimeMs`: it measures distance
  *     from the claim, so it grows with how long a conversation runs, and it
  *     would make whoever takes the hard ones look slowest. "First reply"
- *     and "Resolved" per person are "—" — nothing measures either fairly.
+ *     and "Resolved" per person are "-" - nothing measures either fairly.
  *   · TODAY'S NUMBERS SAY THEY ARE TODAY'S: open now, taken today.
  *
  * ── THE IMBALANCE IS THE QUEUE'S, NOT A PERSON'S ──
@@ -33,7 +33,7 @@ import styles from './Analytics.module.css';
 
 /**
  * Who holds the most open conversations against who holds the fewest, among
- * people holding any — or null when the spread is under two to one.
+ * people holding any - or null when the spread is under two to one.
  */
 export function imbalance(
   agents: readonly AgentLoad[],
@@ -48,7 +48,7 @@ export function imbalance(
 }
 
 /**
- * What the dark card can truthfully say about the queue — five cases, not
+ * What the dark card can truthfully say about the queue - five cases, not
  * two: "spread evenly" across fewer than two people, or across one who holds
  * everything, is true of nothing (measured on dev: one AI employee, no
  * Agent-role people, "spread evenly").
@@ -75,7 +75,7 @@ export function queueState(agents: readonly AgentLoad[]): QueueState {
 }
 
 /**
- * The header's line says what the table counts — 02's "Last 7 days · three
+ * The header's line says what the table counts - 02's "Last 7 days · three
  * people, two teams". Teams are not modelled; people and AI employees are,
  * and a kind with none is left out rather than said as "0 people".
  */
@@ -111,7 +111,7 @@ export async function TeamHero({ agents }: { readonly agents: readonly AgentLoad
       <p className={styles.gHeroEyebrow}>{t('teamTab.hero.eyebrow')}</p>
       <p className={styles.gHeroTitle}>
         {state === null
-          ? '—'
+          ? '-'
           : state.kind === 'uneven'
             ? t.rich('teamTab.hero.uneven', {
                 heavy: nameOf(state.heavy),
@@ -160,17 +160,17 @@ export async function TeamStrip({ data }: { readonly data: TeamData }) {
   const zone = await getTimeZone();
   const cards = data.report?.cards ?? null;
   const peak = cards ? busiestLocalHour(cards.inboundByHourUtc, zone) : null;
-  // A week nobody wrote in: its counts are counts of nothing — "—", as on every tab.
+  // A week nobody wrote in: its counts are counts of nothing - "-", as on every tab.
   const quiet =
     cards !== null && cards.handledByPeople === 0 && cards.inboundByHourUtc.every((n) => n === 0);
   const count = (n: number | undefined) =>
-    cards === null || quiet || n === undefined ? '—' : format.number(n);
+    cards === null || quiet || n === undefined ? '-' : format.number(n);
   const cells = [
     { key: 'people', value: count(cards?.handledByPeople) },
     { key: 'firstReply', value: replyTime(cards?.firstReplyMedianMs ?? null, t) },
     { key: 'resolved', value: rate(cards?.resolvedRate ?? null) },
     { key: 'handedBack', value: count(cards?.handedBackToGotcha) },
-    { key: 'busiest', value: peak === null ? '—' : `${String(peak).padStart(2, '0')}:00` },
+    { key: 'busiest', value: peak === null ? '-' : `${String(peak).padStart(2, '0')}:00` },
   ] as const;
   return (
     <dl className={styles.gStrip} data-testid="team-strip">
@@ -184,12 +184,12 @@ export async function TeamStrip({ data }: { readonly data: TeamData }) {
   );
 }
 
-/** "3m", "18s", "1h" — or "—" with nothing measured. */
+/** "3m", "18s", "1h" - or "-" with nothing measured. */
 export function replyTime(
   ms: number | null,
   t: Awaited<ReturnType<typeof getTranslations<'analytics'>>>,
 ): string {
-  if (ms === null) return '—';
+  if (ms === null) return '-';
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return t('kpi.seconds', { n: seconds });
   const minutes = Math.round(seconds / 60);
@@ -198,9 +198,9 @@ export function replyTime(
     : t('kpi.hours', { n: Math.round(minutes / 60) });
 }
 
-/** A fraction as 02 writes it: "94%"; `null` (nothing handled) is "—". */
+/** A fraction as 02 writes it: "94%"; `null` (nothing handled) is "-". */
 export function rate(fraction: number | null): string {
-  return fraction === null ? '—' : `${Math.round(fraction * 100)}%`;
+  return fraction === null ? '-' : `${Math.round(fraction * 100)}%`;
 }
 
 function initials(name: string | null): string {
@@ -215,7 +215,7 @@ function initials(name: string | null): string {
 /**
  * 06c's table, 02's columns: Person · Handled · First reply · Resolved · Load
  * through the week. People first, then AI employees (violet, with no reply
- * target — decided), each alphabetical. A week's bars are scaled within their
+ * target - decided), each alphabetical. A week's bars are scaled within their
  * kind: an AI employee's thousands would flatten every person's week.
  */
 export async function TeamTable({ report }: { readonly report: TeamReport | null }) {

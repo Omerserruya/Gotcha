@@ -26,7 +26,7 @@ vi.mock('@/i18n/navigation', () => ({
 import { FactRows } from './FactRows';
 
 /*
- * `saveWorkspaceFacts` — the name the component imports.
+ * `saveWorkspaceFacts` - the name the component imports.
  *
  * The first version of this mock exported `saveWorkspace`, which the module
  * does not have, so submitting threw inside FactRows and the run reported
@@ -42,7 +42,7 @@ const saveWorkspace = saveWorkspaceFacts;
  * Reset here, NOT in the render helper.
  *
  * Without it the first test's call leaked into the next two and made
- * `not.toHaveBeenCalled()` fail against a call from a different test — which
+ * `not.toHaveBeenCalled()` fail against a call from a different test - which
  * reads as the component saving when it should not.
  *
  * In the helper it would be the opposite mistake: screen 12e wiped a resolved
@@ -57,7 +57,7 @@ beforeEach(() => {
  * The fact rows, against the design's list.
  *
  * The screen had `Currency & language` and `Time zone` as two rows; the
- * design has `Language` and `Currency & time zone` — the same two rows
+ * design has `Language` and `Currency & time zone` - the same two rows
  * recombined the other way. That is structural rather than cosmetic: 11d is a
  * dedicated Edit language panel, and a row that shares a label with Currency
  * has nothing to open it from.
@@ -103,7 +103,7 @@ describe("the rows are the design's rows", () => {
   });
 });
 
-describe('★ 11b / 11c / 11d — the rows open 02’s drawers', () => {
+describe('★ 11b / 11c / 11d - the rows open 02’s drawers', () => {
   it.each([
     ['name', 'business'],
     ['website', 'business'],
@@ -238,7 +238,7 @@ describe('★ 11e · the time zone picker is searchable', () => {
 
 describe('★ a missing key renders as NOTHING in production, not as a key', () => {
   /*
-   * `getMessageFallback` is `''` in production — the capture build — so a
+   * `getMessageFallback` is `''` in production - the capture build - so a
    * broken key does not shout, it disappears. Only a POSITIVE assertion sees
    * it; these pin the mechanism.
    */
@@ -271,7 +271,7 @@ describe('★ a missing key renders as NOTHING in production, not as a key', () 
 });
 
 describe('★ the hours row says "Set" only when there is a week', () => {
-  it('{ enabled: false } with no schedule — dev’s — is "Not set"', () => {
+  it('{ enabled: false } with no schedule - dev’s - is "Not set"', () => {
     renderRows({ hours: { enabled: false } });
     expect(screen.getByTestId('fact-value-hours')).toHaveTextContent(/not set/i);
   });

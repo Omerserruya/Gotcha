@@ -15,7 +15,7 @@ export const errorEnvelopeSchema = z.object({
   /**
    * ★★ OPTIONAL, BECAUSE A REFUSAL DOES NOT ALWAYS CARRY ONE.
    *
-   * This was required, and a body without it failed the parse — which
+   * This was required, and a body without it failed the parse - which
    * `readErrorBody` turns into `{}`, so **every field was lost, not just this
    * one**. `POST /billing/credits/buy` refuses with
    * `{ success: false, failureCode, detail }` and no `error` key at all, so
@@ -28,7 +28,7 @@ export const errorEnvelopeSchema = z.object({
    */
   error: z.string().optional(),
   /**
-   * A sentence written FOR the merchant — only where a route says so (backend
+   * A sentence written FOR the merchant - only where a route says so (backend
    * 1aaaefe4: `422 { error: 'validation_failed', message }` from a key form).
    */
   message: z.string().optional(),
@@ -47,8 +47,8 @@ export const errorEnvelopeSchema = z.object({
    * ★★ THE ENTITLEMENT GATE SENDS `upgradePath`, NOT `checkoutPath`
    * ════════════════════════════════════════════════════════════════════════
    * Two different 402s share this envelope and they do not share field names.
-   * The TENANT gate sends `checkoutPath`; `EntitlementDeniedError` — the
-   * feature-level refusal in `packages/shared` — sends `upgradePath`, `feature`,
+   * The TENANT gate sends `checkoutPath`; `EntitlementDeniedError` - the
+   * feature-level refusal in `packages/shared` - sends `upgradePath`, `feature`,
    * `currentPlan`, and `limit`/`current` on a limit breach.
    *
    * None of those were declared, so `z.object` stripped every one of them. The
@@ -69,22 +69,22 @@ export const errorEnvelopeSchema = z.object({
   /**
    * The billing services' machine-readable reason, which is **not** `code`.
    *
-   * `purchase.service.ts` returns `failureCode` on every refusal —
+   * `purchase.service.ts` returns `failureCode` on every refusal -
    * `quantity_exceeds_maximum`, `plan_not_eligible_for_packages`,
    * `package_expired`, and the payment provider's own decline code. The route
    * sends that object as the 402 body verbatim.
    */
   failureCode: z.string().optional(),
   /**
-   * Per-code payload for `failureCode`. Its shape depends on the code —
+   * Per-code payload for `failureCode`. Its shape depends on the code -
    * `{ max }` for `quantity_exceeds_maximum`, `{ balance, thresholdUnits }`
-   * for `no_shortage` — so it is read through a narrow accessor at the point
+   * for `no_shortage` - so it is read through a narrow accessor at the point
    * of use and never rendered as it stands.
    */
   /*
    * ★ Some routes send `detail` as a SENTENCE (Shopify's claim: "This
    * workspace is connected to …"). Typed as a record only, a string here
-   * failed the whole envelope — `error` and all. Kept as a record when it is
+   * failed the whole envelope - `error` and all. Kept as a record when it is
    * one; a string reaches the screen as nothing rather than breaking the rest.
    */
   detail: z.record(z.string(), z.unknown()).optional().catch(undefined),
@@ -99,7 +99,7 @@ export const errorEnvelopeSchema = z.object({
    * `buyCredits` sets it solely from `chargeFor`'s result, so on a refusal it
    * is the difference between *"we declined to charge you"* and *"your card
    * was charged and the charge failed"*. It is also the reference a merchant
-   * needs when ringing about a payment whose outcome is unknown — which the
+   * needs when ringing about a payment whose outcome is unknown - which the
    * screen previously could not give them, because this field was stripped.
    */
   invoiceId: z.string().nullish(),

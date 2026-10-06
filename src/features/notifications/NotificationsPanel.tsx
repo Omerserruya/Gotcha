@@ -18,22 +18,22 @@ import styles from './Notifications.module.css';
 const GROUPS: readonly NotificationGroup[] = ['now', 'today', 'earlier'];
 
 /**
- * 01d, measured: a 440 panel floating over Home — right 22, top 18 inside
+ * 01d, measured: a 440 panel floating over Home - right 22, top 18 inside
  * the work surface, which fades behind it. Opened from the signals pill
  * (`/home?notifications=1`); `/notifications` lands here too.
  *
  *   head      "Notifications", "{n} new", Mark all read, Settings
- *   filters   Everything · Needs a decision · Broken — sorted by the
+ *   filters   Everything · Needs a decision · Broken - sorted by the
  *             catalogue's own event keys (`notification-kind.ts`)
  *   groups    NOW (the last hour) · EARLIER TODAY · EARLIER
- *   a row     a dot by priority, title, body, time; the one action — "Open
- *             it" where the link is ours — and "Mark read" while unread
+ *   a row     a dot by priority, title, body, time; the one action - "Open
+ *             it" where the link is ours - and "Mark read" while unread
  *   foot      no notification exists for an incoming message: the
  *             catalogue has no such event
  *
  * `link` is somebody's string, so it goes through `safeInternalPath`.
  * "Dismiss" is drawn as "Mark read": that is all the platform can do to a
- * notification — it has no dismissed state.
+ * notification - it has no dismissed state.
  */
 export async function NotificationsPanel({
   kind = null,
@@ -139,7 +139,7 @@ export async function NotificationsPanel({
   );
 }
 
-/** "2m", "1h", "3d" — 02's mono column. */
+/** "2m", "1h", "3d" - 02's mono column. */
 function time(
   notification: Notification,
   now: Date,
@@ -173,7 +173,7 @@ function Row({
       <span className={styles.dot} data-priority={notification.priority} aria-hidden="true" />
       <span className={styles.text}>
         <span className={styles.rowTitle}>
-          {notification.title ?? notification.eventType ?? '—'}
+          {notification.title ?? notification.eventType ?? '-'}
         </span>
         {notification.body ? <span className={styles.rowBody}>{notification.body}</span> : null}
         {href || !notification.read ? (

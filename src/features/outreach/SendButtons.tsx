@@ -9,7 +9,7 @@ import { sendCampaign, submitTemplate, type SendResult } from './actions';
 import styles from './Outreach.module.css';
 
 /**
- * Send and Submit to Meta — live (Omer: only with a real WhatsApp Business
+ * Send and Submit to Meta - live (Omer: only with a real WhatsApp Business
  * account, which the page checked). Both reach outside: the first press
  * asks, the second acts.
  */

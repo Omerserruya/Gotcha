@@ -17,8 +17,8 @@ vi.mock('@/i18n/navigation', () => ({
 
 import { PeopleTabs } from './PeopleTabs';
 
-describe('★ 12 / 12b — People · Roles · Teams', () => {
-  it('marks the open one and counts each — a failed read shows no count, never 0', async () => {
+describe('★ 12 / 12b - People · Roles · Teams', () => {
+  it('marks the open one and counts each - a failed read shows no count, never 0', async () => {
     render(await PeopleTabs({ current: 'roles', counts: { people: 4, roles: 4, teams: null } }));
     expect(screen.getByTestId('people-tab-roles')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('people-tab-people')).toHaveTextContent(/^People4$/);

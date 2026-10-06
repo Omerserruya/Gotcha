@@ -14,7 +14,7 @@ import {
 import styles from './Billing.module.css';
 
 /**
- * Screen 17b — the plan, what it costs, and what is already scheduled.
+ * Screen 17b - the plan, what it costs, and what is already scheduled.
  *
  * Three things this section refuses to simplify, each for a measured reason:
  *
@@ -62,7 +62,7 @@ export async function CurrentPlanSection({
         ════════════════════════════════════════════════════════════════════
         This read *"Prices are before מע\"מ."* in English, and it was the same
         `label` from the same platform, localised to the ACCOUNT and not to the
-        reader — the defect Wave 1 reasoned about at length and fixed in one of
+        reader - the defect Wave 1 reasoned about at length and fixed in one of
         its two renderers. It was also OUTSIDE an isolate, so the Hebrew
         reordered the English sentence around it: two defects on one line.
 
@@ -70,7 +70,7 @@ export async function CurrentPlanSection({
         isolate and the second defect goes with the first.
 
         ── AND THE TRIGGER CHANGED, WHICH IS THE PART TO READ ──
-        The guard was `tax?.label` — the platform's string doubled as the
+        The guard was `tax?.label` - the platform's string doubled as the
         signal that tax applies. Dropping the string would have dropped the
         whole sentence for a tenant whose rate we know and whose label we do
         not. So the guard is now "the platform said SOMETHING about tax", and
@@ -88,7 +88,7 @@ export async function CurrentPlanSection({
           {/*
             A fallback rate is not a rate. When the conversion rests on one,
             the sentence says so AND names the charged amount as the one that
-            will match the statement — because that is the number a person can
+            will match the statement - because that is the number a person can
             actually check.
           */}
           {rateIsFallback(currency)
@@ -108,7 +108,7 @@ export async function CurrentPlanSection({
           <p className={styles.pendingLine} data-testid="pricing-pending-line">
             {/*
               Typed. `CANCEL` says the subscription ends; rendering it as a
-              plan change would produce "changes to —" for a customer who is
+              plan change would produce "changes to -" for a customer who is
               leaving, on the screen about their money.
 
               And the date carries the YEAR: every change available here lands
@@ -116,13 +116,13 @@ export async function CurrentPlanSection({
             */}
             {pending.changeType === 'CANCEL' || pending.changeType === 'VOLUME_CHANGE'
               ? t(`pending.${pending.changeType}`, {
-                  date: pending.effectiveAt ? day.format(new Date(pending.effectiveAt)) : '—',
+                  date: pending.effectiveAt ? day.format(new Date(pending.effectiveAt)) : '-',
                 })
               : t(`pending.${pending.changeType}`, {
                   plan: pending.targetPlanKey
                     ? (planNameFor(plans, pending.targetPlanKey, locale) ?? pending.targetPlanKey)
-                    : '—',
-                  date: pending.effectiveAt ? day.format(new Date(pending.effectiveAt)) : '—',
+                    : '-',
+                  date: pending.effectiveAt ? day.format(new Date(pending.effectiveAt)) : '-',
                 })}
           </p>
           <p className={styles.pendingReassurance} data-testid="pricing-pending-holds">
@@ -135,7 +135,7 @@ export async function CurrentPlanSection({
       {disclaimer ? (
         <p className={styles.pricingDisclaimer} data-testid="pricing-disclaimer">
           {/*
-            The PLATFORM's sentence, per locale — the same one the public
+            The PLATFORM's sentence, per locale - the same one the public
             pricing pages render. A second translation of a commercial claim
             could drift from it with nothing failing.
           */}
@@ -204,7 +204,7 @@ export async function CreditPackagesSection({
           {/*
             The ONLY place a customer ever learns when bought credits die.
             `/billing/credit-summary` selects `expiresAt` from the lots and
-            uses only `grantType`, so per-lot expiry never reaches the wire —
+            uses only `grantType`, so per-lot expiry never reaches the wire -
             after the purchase, nothing can tell them. Before it, this can.
           */}
           <span className={styles.packageExpiry} data-testid="package-expiry">

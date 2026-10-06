@@ -40,7 +40,7 @@ describe('★ impossible is not the same as nothing connected', () => {
     /*
      * "'Nothing exists to choose' and 'nothing connected yet' need different
      * sentences and an empty list reads as the second." Shipping has a
-     * category and zero integrations — empty for every tenant, forever.
+     * category and zero integrations - empty for every tenant, forever.
      */
     expect(partState(part({ available: false, reason: 'no_integrations_exist' }))).toBe(
       'impossible',
@@ -61,7 +61,7 @@ describe('★ impossible is not the same as nothing connected', () => {
     expect(partState(chosen)).toBe('chosen');
   });
 
-  it('★ measured on dev: chosen, and the chosen system is in ERROR — "chosen_failing", never "Working"', () => {
+  it('★ measured on dev: chosen, and the chosen system is in ERROR - "chosen_failing", never "Working"', () => {
     // crm elected=shopify, shopify connected:false status:ERROR.
     const crm = part({
       role: 'crm',
@@ -94,7 +94,7 @@ describe('★ the CRM is the one part this endpoint refuses', () => {
      *
      * And RETURNS joined it at 2d1abf88. `config.returnProvider` is an
      * explicit switch the AI already reads, whose own header says "explicit
-     * selection wins over inference" — so `config.roles` carries only the
+     * selection wins over inference" - so `config.roles` carries only the
      * parts that had no elector at all.
      *
      * ★ The two refusals point at DIFFERENT screens, so they are different
@@ -119,13 +119,13 @@ describe('★ the CRM is the one part this endpoint refuses', () => {
      * ════════════════════════════════════════════════════════════════════
      * THE REGRESSION. THIS TOOK THE WHOLE SECTION OFF THE LIVE PAGE.
      * ════════════════════════════════════════════════════════════════════
-     * `shipping` resolves to `source: "unavailable"` — returned by the
+     * `shipping` resolves to `source: "unavailable"` - returned by the
      * availability guard, above the resolution logic. The enum had three of
      * its four members, and `.default()` does not rescue that: a default
      * applies to an ABSENT key, and this one arrives present and invalid.
      *
      * So the parse failed, `loadBusinessCore` returned null, and all five
-     * parts vanished behind "could not be read" — on a 200 with a valid
+     * parts vanished behind "could not be read" - on a 200 with a valid
      * body. Nine capture failures.
      *
      * ★ Asserted on the WHOLE RESPONSE, not on one part. A per-part test
@@ -138,7 +138,7 @@ describe('★ the CRM is the one part this endpoint refuses', () => {
      *
      * The first version of this test built its fixture with
      * `PART_SOURCES.map(...)`. Shrinking the constant back to three members
-     * shrank the fixture with it, and **the test still passed** — a
+     * shrank the fixture with it, and **the test still passed** - a
      * regression test parameterised by the thing it is testing, inert
      * against precisely the defect it was written for.
      *
@@ -148,8 +148,8 @@ describe('★ the CRM is the one part this endpoint refuses', () => {
      * and now a fixture that moves with the subject.
      *
      * A contract test asserts what the PRODUCER sends. Its expected values
-     * have to be copied from the producer's own type declaration — read to
-     * its end — and frozen here, where changing them is a deliberate edit.
+     * have to be copied from the producer's own type declaration - read to
+     * its end - and frozen here, where changing them is a deliberate edit.
      */
     const FROM_PART_SYSTEMS_TS = ['elected', 'inferred', 'unmapped', 'unavailable'] as const;
 
@@ -173,7 +173,7 @@ describe('★ the CRM is the one part this endpoint refuses', () => {
     /*
      * `unavailable` is not a fourth thing to render. `available: false` plus
      * `detail` already carry the fact, and `partState()` keys on `available`
-     * — so the contract must ACCEPT the value without the screen growing a
+     * - so the contract must ACCEPT the value without the screen growing a
      * branch for it. Accepting is not the same as displaying.
      */
     const shipping = part({
@@ -194,7 +194,7 @@ describe('★ the CRM is the one part this endpoint refuses', () => {
      * business)".
      *
      * `elected` alone cannot tell these apart, which is why the route serves
-     * `source` — and why our schema, being `object` rather than
+     * `source` - and why our schema, being `object` rather than
      * `looseObject`, was stripping it at the boundary until now. The UI
      * could not have drawn the distinction even in principle.
      */
@@ -239,7 +239,7 @@ describe('★ connected, never connected, and connected-but-failing are three', 
   it('tells a broken connection from an absent one', () => {
     /*
      * The merchant has already done the work on a failing one, so "connect
-     * it" is the wrong instruction — "fix it" is. `status: null` means they
+     * it" is the wrong instruction - "fix it" is. `status: null` means they
      * never started.
      */
     expect(connectedButFailing({ connected: false, status: 'ERROR' })).toBe(true);
@@ -267,7 +267,7 @@ describe('★ connected, never connected, and connected-but-failing are three', 
 describe('the marketplace is where connecting happens', () => {
   it('★ names exactly the parts worth going there for', () => {
     /*
-     * Not shipping — nothing exists to connect. Not ecommerce — its Shopify
+     * Not shipping - nothing exists to connect. Not ecommerce - its Shopify
      * has been connected and is failing, so the marketplace is where it gets
      * FIXED, not where it gets added.
      *

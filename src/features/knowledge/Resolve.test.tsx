@@ -24,7 +24,7 @@ import type { ResolveResult } from './resolve-actions';
  * ════════════════════════════════════════════════════════════════════════════
  * `resolveConflict` writes the tenant knowledge base that every AI employee
  * answers customers from. The module is mocked for this whole file and the
- * default implementation **throws** — so a test that presses through to a
+ * default implementation **throws** - so a test that presses through to a
  * write fails instead of writing.
  *
  * Where an outcome sentence is under test the mock is given a return value.
@@ -48,7 +48,7 @@ const two = [variant(), variant({ key: 'k550', answer: '₪550', occurrenceCount
  * ★ THE CLIENT COMPONENT NEEDS ITS OWN PROVIDER.
  * `getTranslations` is mocked for the server tree; `useTranslations` inside a
  * client component reads context and finds nothing without this. The symptom
- * is not a missing string — it is a thrown render, which is the good case.
+ * is not a missing string - it is a thrown render, which is the good case.
  */
 const show = (variants: readonly Variant[] = two) =>
   render(
@@ -87,7 +87,7 @@ describe('★★ the first press writes nothing', () => {
   it('★★ arms, and does NOT call the action', async () => {
     /*
      * THE GUARANTEE THIS FILE EXISTS FOR. If the first press wrote, this
-     * assertion would not merely fail — the mock throws, so the test would
+     * assertion would not merely fail - the mock throws, so the test would
      * fail loudly at the press rather than at the expectation.
      */
     show();
@@ -102,7 +102,7 @@ describe('★★ the first press writes nothing', () => {
      * These two variants differ by one character. Two adjacent buttons under
      * two answers that look alike is a misclick that sets the wrong price
      * permanently, and nobody re-reads an approved answer. So the second
-     * press is spent on the text itself — "Save "₪550" as the answer?" —
+     * press is spent on the text itself - "Save "₪550" as the answer?" -
      * rather than on the word "confirm", which reads the same whichever one
      * was hit.
      */
@@ -173,7 +173,7 @@ describe('★★ "saved" is three different facts', () => {
     /*
      * `revalidatePath` replaces the card, but not instantly. Until it does,
      * a live button on the other variant is one press from a second document
-     * that contradicts the first — which is the exact failure the route's
+     * that contradicts the first - which is the exact failure the route's
      * duplicate check exists to prevent, arriving from our side of it.
      */
     await settle({ ok: true, use: 'in_use', alreadyApproved: false });
@@ -226,7 +226,7 @@ describe('★★ an answer the route would truncate is refused before it is offe
     /*
      * The route does `.slice(0, 4000)` with no complaint. A returns policy cut
      * off mid-sentence becomes the answer the AI gives customers, and it will
-     * never be looked at again — it was approved.
+     * never be looked at again - it was approved.
      */
     const long = variant({ key: 'klong', answer: 'x'.repeat(4001) });
     show([variant(), long]);
@@ -251,7 +251,7 @@ describe('★★ only "ready" means the AI can answer with it', () => {
     expect(documentUseOf('ready')).toBe('in_use');
     expect(documentUseOf('error')).toBe('not_retrievable');
     // `pending` is the value the row is CREATED with, so it is the one most
-    // likely to be seen — and it is not a statement that anything works.
+    // likely to be seen - and it is not a statement that anything works.
     expect(documentUseOf('pending')).toBe('unknown');
     expect(documentUseOf('processing')).toBe('unknown');
     expect(documentUseOf(null)).toBe('unknown');
@@ -276,7 +276,7 @@ describe('★★ the approve response carries what it carries', () => {
   it('★ tolerates a null documentId, which the idempotent branch can return', () => {
     // `candidate.approvedDocumentId` is nullable. An APPROVED row written
     // before that column was populated answers ok with no id, and then there
-    // is nothing to confirm against — which is `unknown`, not a parse failure.
+    // is nothing to confirm against - which is `unknown`, not a parse failure.
     expect(approveResultSchema.parse({ ok: true, documentId: null }).documentId).toBeNull();
     expect(approveResultSchema.parse({ ok: true }).documentId).toBeNull();
   });
@@ -286,7 +286,7 @@ describe('★★ both languages say all of it', () => {
   it('★★ every sentence this control can render exists in en and he', () => {
     /*
      * A wrong key renders as MISSING_MESSAGE in dev and as an empty element in
-     * the capture build — so a refusal with no sentence is exactly the shape
+     * the capture build - so a refusal with no sentence is exactly the shape
      * that reaches a screenshot.
      */
     const keys = [

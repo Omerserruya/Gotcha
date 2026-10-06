@@ -17,15 +17,15 @@ import { KnowledgeScreen } from './KnowledgeScreen';
  * ════════════════════════════════════════════════════════════════════════════
  * WHAT THIS PANEL IS, AND THE TWO THINGS IT REFUSES TO BE
  * ════════════════════════════════════════════════════════════════════════════
- * The design draws two NAMED SOURCES disagreeing — a website page against an
+ * The design draws two NAMED SOURCES disagreeing - a website page against an
  * uploaded PDF. That comparison has no left-hand side and no right-hand side
  * in this platform: `KnowledgeCandidate` has exactly one writer, the
  * historical-import extraction stage, and `importId` is a required column.
  * An uploaded document becomes a `KnowledgeDocument` and never produces
  * fact-level rows at all.
  *
- * So this panel is built on the axis that exists — the business answering
- * one question in more than one way, across past conversations — and says so.
+ * So this panel is built on the axis that exists - the business answering
+ * one question in more than one way, across past conversations - and says so.
  */
 
 vi.mock('next-intl/server', () => ({
@@ -65,7 +65,7 @@ const candidate = (over: Record<string, unknown> = {}): Candidate =>
 
 /*
  * ★ THE PROVIDER, BECAUSE THE PANEL NOW CONTAINS A CLIENT COMPONENT.
- * `ResolveConflict` calls `useTranslations`, which reads React context —
+ * `ResolveConflict` calls `useTranslations`, which reads React context -
  * mocking `next-intl/server` does nothing for it. Without this the render
  * throws rather than rendering an empty string, which is the good failure:
  * the seventh time this has come up, and the only one that was loud.
@@ -101,7 +101,7 @@ describe('★★ both answers, and neither is preferred', () => {
 
   it('★★ dates each answer from its OWN evidence, never from the candidate', async () => {
     /*
-     * `variants` carries no timestamp. `KnowledgeCandidateEvidence` does —
+     * `variants` carries no timestamp. `KnowledgeCandidateEvidence` does -
      * `variantKey` ties an exchange to the answer it demonstrates, and
      * `occurredAt` dates it. That is what makes "₪550 in March, ₪850 in
      * July" answerable rather than a design aspiration.
@@ -159,7 +159,7 @@ describe('★★ what the scan covered, which an empty list cannot say', () => {
      *
      * Conflict detection runs inside the historical-import pipeline. With no
      * import it has never run at all, so an empty list carries no
-     * information — and "no contradictions" would be the most misleading
+     * information - and "no contradictions" would be the most misleading
      * sentence on the screen.
      */
     await show({ conflicts: [], everImported: false });
@@ -183,7 +183,7 @@ describe('★★ what the scan covered, which an empty list cannot say', () => {
     /*
      * A reader looking at two conflicts needs to know what was compared as
      * much as a reader looking at none. The design implies website-versus-PDF;
-     * what this is, is your team's own answers over time — and the screen
+     * what this is, is your team's own answers over time - and the screen
      * says that rather than letting the design's framing be assumed.
      */
     await show();
@@ -202,7 +202,7 @@ describe('★ the two sentences this screen must not say', () => {
      * The design prints *"GOTCHA never invents an answer. If it doesn't
      * know, it says so and passes the conversation to a person."*
      *
-     * `knowledge.service.ts` records the reason and returns `[]` — the reply
+     * `knowledge.service.ts` records the reason and returns `[]` - the reply
      * proceeds with no passages and nothing tells the model retrieval
      * failed. A settings screen cannot assert a runtime guarantee the
      * runtime does not make.
@@ -229,7 +229,7 @@ describe('★★ the header counts what it can, and names what it cannot', () =>
      * THE DESIGN'S FIRST TWO COUNTERS CANNOT BE COMPUTED AT ALL.
      * ════════════════════════════════════════════════════════════════════════
      * `confidence` is a column on `KnowledgeCandidate` and on no other
-     * knowledge model — checked against every confidence field in the
+     * knowledge model - checked against every confidence field in the
      * schema. A candidate is a SUGGESTION awaiting approval, and approving
      * one creates a `KnowledgeDocument`, which has no confidence column.
      *
@@ -240,7 +240,7 @@ describe('★★ the header counts what it can, and names what it cannot', () =>
      */
     /*
      * Superseded in part (S2, 2026-10-03): 02's strip is drawn, so its two
-     * labels are on the screen — over "—", never over a number. The rule that
+     * labels are on the screen - over "-", never over a number. The rule that
      * survives is the one that mattered: NO COUNT. The absence still explains
      * itself, on the figure that is absent.
      */
@@ -248,7 +248,7 @@ describe('★★ the header counts what it can, and names what it cannot', () =>
     const text = container.textContent ?? '';
     expect(text).not.toMatch(/\b\d+ topics\b/i);
     const cell = screen.getByTestId('counter-no-confidence');
-    expect(cell).toHaveTextContent(/^Answers confidently—$/);
+    expect(cell).toHaveTextContent(/^Answers confidently-$/);
     expect(cell.querySelector('dd')).toHaveAttribute(
       'title',
       expect.stringMatching(/only on suggestions, before you accept/i),
@@ -267,20 +267,20 @@ describe('★★ the header counts what it can, and names what it cannot', () =>
     // The counter is a claim about the workspace. `null` is a claim about us.
     await show({ conflicts: null });
     const figure = screen.getByTestId('counter-conflicts').querySelector('dd');
-    expect(figure).toHaveTextContent(/^—$/);
+    expect(figure).toHaveTextContent(/^-$/);
     expect(figure).toHaveAttribute('title', expect.stringMatching(/couldn't check/i));
   });
 
-  it('★ a failed sources read is "—" in the strip, never a zero', async () => {
+  it('★ a failed sources read is "-" in the strip, never a zero', async () => {
     // A header of zeroes over a failed read is the most confident thing on
-    // the page. Superseded in form (S2): the strip stays, its figure is "—".
+    // the page. Superseded in form (S2): the strip stays, its figure is "-".
     await show({ sources: null });
-    expect(screen.getByTestId('counter-stale').querySelector('dd')).toHaveTextContent(/^—$/);
+    expect(screen.getByTestId('counter-stale').querySelector('dd')).toHaveTextContent(/^-$/);
   });
 });
 
 describe('★ with nothing to show, the card keeps its shape and loses its alarm', () => {
-  it('neutral, a title row and one line — what it compared on the card itself', async () => {
+  it('neutral, a title row and one line - what it compared on the card itself', async () => {
     await show({ conflicts: [], everImported: true });
     const card = screen.getByTestId('conflicts-section');
     expect(card).toHaveAttribute('data-state', 'empty');

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Settings · Workspace — screen 11.
+ * Settings · Workspace - screen 11.
  *
  * Shapes read from `services/auth/src/routes/workspace.ts` in full, not from
  * the OpenAPI document: the generator cannot extract response schemas, and an
@@ -58,7 +58,7 @@ export const workspaceSchema = z.looseObject({
    * A list by contract, even though storage holds one.
    *
    * PATCH used to accept up to six and keep `languages[0]`, so a caller adding
-   * English beside Hebrew got a 200 and lost English — and the response is a
+   * English beside Hebrew got a 200 and lost English - and the response is a
    * re-read, so the loss was visible only to a caller that diffed the reply
    * against what it sent, and invisible to anything that did the normal thing
    * and trusted the success.
@@ -67,8 +67,8 @@ export const workspaceSchema = z.looseObject({
    * dropped silently. The array shape stays, because it is the contract for
    * when a second column exists.
    *
-   * The UI is still single-select — one stored language is still one stored
-   * language — but the reason has changed from "a control here would lose
+   * The UI is still single-select - one stored language is still one stored
+   * language - but the reason has changed from "a control here would lose
    * data" to "there is nothing to put in a second slot". That matters for
    * whoever builds the multi-select later: the blocker is storage now, not a
    * silent failure, and the endpoint will tell them so.
@@ -87,7 +87,7 @@ export const workspaceSchema = z.looseObject({
    */
   updatedAt: z.string().nullable().optional(),
   /**
-   * Who last wrote each field — screen 11b.
+   * Who last wrote each field - screen 11b.
    *
    * `"scan"` · `"human"` · **`null`, which means UNKNOWN and NOT "from the
    * website"**. The route repeats that warning where it builds the map,
@@ -95,7 +95,7 @@ export const workspaceSchema = z.looseObject({
    * a rescan overwrite somebody's correction.
    *
    * Stored in `TenantSetting` under `profileFieldProvenance`, not in a column
-   * — which is why a schema search says this does not exist. It was written
+   * - which is why a schema search says this does not exist. It was written
    * for this screen: *"Screen 11b's mechanic is: Scan again re-reads the site
    * and only touches fields marked From website; anything typed stays."*
    */
@@ -137,8 +137,8 @@ export function fieldOrigin(workspace: Workspace, field: string): FieldOrigin {
  * zero rows across the whole database, so a rescan currently applies nothing
  * and offers everything.
  *
- * The map is self-healing — once a scan writes a field through the service,
- * that field is marked and refreshes silently forever after — so the true
+ * The map is self-healing - once a scan writes a field through the service,
+ * that field is marked and refreshes silently forever after - so the true
  * sentence is *"the first scan will ask about everything; after that it
  * refreshes what it owns"*. That is a statement about a system that improves,
  * not an apology, and it is the only honest thing to put beside a set of
@@ -152,7 +152,7 @@ export function anyFieldAttributed(workspace: Workspace): boolean {
  * `country` arrives as the literal string `"unknown"` on this tenant.
  *
  * Rendered as-is it reads as a country called "unknown". Treated as blank it
- * reads as a field nobody filled in — which is also wrong, and differently:
+ * reads as a field nobody filled in - which is also wrong, and differently:
  * we DID look, and what we found was unusable.
  */
 export function isUnusableValue(value: string | null | undefined): boolean {
@@ -177,9 +177,9 @@ export const workspaceVoiceSchema = z.looseObject({
   source: z.enum(VOICE_SOURCES).catch('none'),
   editedAt: z.string().nullable().optional(),
   /**
-   * Provenance for the guidance. Still a hardcoded stub server-side —
+   * Provenance for the guidance. Still a hardcoded stub server-side -
    * `workspace.ts:303`, `:336` and `:366` all send
-   * `{ messagesAnalysed: null, importedAt: null }` — so the screen renders
+   * `{ messagesAnalysed: null, importedAt: null }` - so the screen renders
    * `source` and omits these. A provenance claim built from a placeholder is
    * worse than none.
    *
@@ -187,7 +187,7 @@ export const workspaceVoiceSchema = z.looseObject({
    * The stub used to send `0`. Backend's `6a9ffa58` changed it to `null`,
    * which is **more truthful**: zero messages analysed is a claim, and null
    * is "we do not know". This schema said `z.number().default(0)`, which
-   * fills `undefined` and REJECTS an explicit null — so the guard refused an
+   * fills `undefined` and REJECTS an explicit null - so the guard refused an
    * improvement, because the less truthful shape had been encoded as
    * required.
    *
@@ -195,7 +195,7 @@ export const workspaceVoiceSchema = z.looseObject({
    * disappeared behind "the voice could not be loaded just now" rather than
    * rendering against a payload it did not understand. **A contract that
    * fails closed will sometimes fail on good news.** That is the price, and
-   * it is the right one — but it is worth knowing the direction it can come
+   * it is the right one - but it is worth knowing the direction it can come
    * from, because a backend making its own payload more honest is not the
    * change anyone watches for.
    *
@@ -245,8 +245,8 @@ export type ScanOffer = z.infer<typeof scanOfferSchema>;
 /**
  * What the crawl could SEE, which decides whether its findings mean anything.
  *
- * `distinctTextPages === 1` means every path answered with the same page — a
- * login wall — so the screen says the site could not be read instead of
+ * `distinctTextPages === 1` means every path answered with the same page - a
+ * login wall - so the screen says the site could not be read instead of
  * quoting `pagesRead`. A caveat that appears because a measurement says so is
  * information; one that is always there is wallpaper.
  */
@@ -301,7 +301,7 @@ export type AcceptResult = z.infer<typeof acceptResultSchema>;
 /**
  * Could the site be read at all?
  *
- * One distinct page means the crawl fetched many URLs and saw one — the
+ * One distinct page means the crawl fetched many URLs and saw one - the
  * password-protected case, measured on this very tenant at 17 requested, 17
  * returned, 1 distinct. Everything the scan proposes from such a crawl is
  * inferred from a login screen.
@@ -311,7 +311,7 @@ export function siteWasReadable(reach: CrawlReach | null): boolean {
 }
 
 /**
- * A website as 02 writes it: the host alone — "avivco.il", never
+ * A website as 02 writes it: the host alone - "avivco.il", never
  * "https://www.avivco.il/". The field arrives as a full URL; the scheme and
  * `www.` are noise beside a name, and the full URL wrapped 11's banner onto
  * two lines. A value that does not parse is shown without its scheme.
@@ -330,7 +330,7 @@ export function displayHost(value: string): string {
 }
 
 /**
- * The crawler's `businessType` codes — every value `site-crawl.service.ts`
+ * The crawler's `businessType` codes - every value `site-crawl.service.ts`
  * returns (`classify…`), which is how `industry` gets written by a scan.
  * Onboarding writes free text instead ("SaaS / Customer Communication").
  */

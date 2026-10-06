@@ -24,7 +24,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * So `unsettled` is a third outcome, not a kind of failure. It must not say
  * "failed", must not offer "try again", and must say that a charge may have
  * gone through. Collapsing three outcomes into "Something went wrong, try
- * again" — which is exactly what a redesign does to error states — takes
+ * again" - which is exactly what a redesign does to error states - takes
  * money from somebody twice.
  */
 export type BuyOutcome =
@@ -39,13 +39,13 @@ export type BuyOutcome =
   | { readonly ok: false; readonly kind: 'too_many'; readonly max: number | null }
   /**
    * The pack cannot be bought on this plan, or is no longer sold. Nothing was
-   * charged and trying again will not help — a different repair from either.
+   * charged and trying again will not help - a different repair from either.
    */
   | { readonly ok: false; readonly kind: 'not_purchasable' }
   /**
    * ★★ WE DO NOT KNOW WHAT HAPPENED, WHICH IS NOT "NOTHING HAPPENED".
    *
-   * This used to render `buy.declined` — *"The payment didn't go through,
+   * This used to render `buy.declined` - *"The payment didn't go through,
    * and nothing was charged."* A network drop, a 500, or a response that
    * failed its contract all land here, and **a contract failure can happen
    * after a 200 in which the card was charged and the credits granted**.
@@ -59,8 +59,8 @@ export type BuyOutcome =
  *
  * Four of them are the package's own availability window
  * (`checkPackageAvailability`) and two are the plan's eligibility. They share
- * a repair — the list the customer is looking at is out of date, or this plan
- * cannot buy packs — and none of them is helped by trying again.
+ * a repair - the list the customer is looking at is out of date, or this plan
+ * cannot buy packs - and none of them is helped by trying again.
  */
 const NOT_PURCHASABLE: ReadonlySet<string> = new Set([
   'unknown_package',
@@ -74,7 +74,7 @@ const NOT_PURCHASABLE: ReadonlySet<string> = new Set([
 /**
  * `intentKey` identifies ONE purchase the customer decided on, so the server
  * turns a double-click into a single charge. It is minted by the caller when
- * the CHOICE is made — passing one generated per click would defeat the
+ * the CHOICE is made - passing one generated per click would defeat the
  * whole mechanism while looking identical from here.
  */
 export async function buyCreditPack(
@@ -94,7 +94,7 @@ export async function buyCreditPack(
      *
      * The route is `res.status(result.success ? 200 : 402).json(result)`, so
      * every refusal is a 402 and every 402 throws. The branches that used to
-     * follow this one — `outcomeUnknown`, `no_billable_entity`, `declined` —
+     * follow this one - `outcomeUnknown`, `no_billable_entity`, `declined` -
      * read the body of a 200 that cannot be a failure, and **all three were
      * unreachable**, including the sentence about a declined card, which is
      * the one this screen most needs to be able to say. They live in the
@@ -108,11 +108,11 @@ export async function buyCreditPack(
      * The 409 arrives as a thrown API error, so the unsettled case has TWO
      * paths into this function and both must reach the same outcome. Handling
      * only the body would leave the most dangerous answer falling through to
-     * "failed" — which renders a retry.
+     * "failed" - which renders a retry.
      */
     if (isApiError(cause)) {
       /*
-       * `ApiError` carries status, code and field errors — NOT the response
+       * `ApiError` carries status, code and field errors - NOT the response
        * body. So the invoice id that the 409 payload holds cannot be
        * recovered here, and the screen says "a charge may have been made"
        * without a reference rather than printing a null one.
@@ -127,7 +127,7 @@ export async function buyCreditPack(
         // ★ AND NOW WITH THE REFERENCE. The 409 body carries `invoiceId` and
         // the error envelope used to strip it, so a merchant ringing about a
         // charge whose outcome is unknown could not be given anything to
-        // quote. `null` stays null — an absent id is not printed as one.
+        // quote. `null` stays null - an absent id is not printed as one.
         return { ok: false, kind: 'unsettled', invoiceId: cause.invoiceId ?? null };
       }
 
@@ -135,7 +135,7 @@ export async function buyCreditPack(
        * ★★ `failureCode`, NOT `code`. This was `cause.code`, the idiom every
        * other action here uses, and it could not fire: the billing services
        * answer `{ success: false, failureCode, detail }` with no `code` and
-       * no `error` — and `error` being required meant the envelope parse
+       * no `error` - and `error` being required meant the envelope parse
        * failed outright, so the whole body was discarded. Every refusal on
        * the screen that charges a card rendered as the same generic sentence.
        */
@@ -151,7 +151,7 @@ export async function buyCreditPack(
       /*
        * ★★ THE CARD WAS REACHED, SO THIS IS A DECLINE AND NOT A REFUSAL.
        * `buyCredits` sets `invoiceId` on a failure only from `chargeFor`'s
-       * result — every earlier refusal returns without one. So its presence
+       * result - every earlier refusal returns without one. So its presence
        * is the platform's own record that the charge was attempted, which is
        * the difference between "we declined to charge you" and "your card
        * said no". `unsettled` has already been taken out above.
@@ -162,7 +162,7 @@ export async function buyCreditPack(
       }
       /*
        * A refusal this build has not seen. It falls through to `failed`,
-       * which no longer claims nothing was charged — and the code is logged,
+       * which no longer claims nothing was charged - and the code is logged,
        * so the next one is a name rather than a mystery.
        */
       if (failure !== undefined) {

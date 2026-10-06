@@ -1,23 +1,23 @@
 import { z } from 'zod';
 
 /**
- * Outreach — screens 05 and 05b.
+ * Outreach - screens 05 and 05b.
  *
  * Shapes read from `services/conversation/src/routes/broadcasts.ts` and the
  * `Broadcast` model.
  *
  * ── THERE IS NO PAUSE, AND THAT IS THE SCREEN'S MOST IMPORTANT FACT ──
  * The design puts *"Pause the rest"* on a running campaign. `BroadcastStatus`
- * is `DRAFT | SCHEDULED | SENDING | COMPLETED | FAILED | CANCELLED` — **no
- * PAUSED** — and the routes are send, validate, cancel, resend. No pause, no
+ * is `DRAFT | SCHEDULED | SENDING | COMPLETED | FAILED | CANCELLED` - **no
+ * PAUSED** - and the routes are send, validate, cancel, resend. No pause, no
  * resume.
  *
  * `cancel` is terminal and destructive. It removes the queued jobs, marks
  * every pending recipient `"skipped"` with the reason *"Broadcast cancelled"*,
  * and sets `completedAt`. **There is no path back to SENDING.**
  *
- * So the control says *stop*, never *pause*. "Pause" implies two things — it
- * halts, and it resumes — and only the first is true. The second is the half
+ * So the control says *stop*, never *pause*. "Pause" implies two things - it
+ * halts, and it resumes - and only the first is true. The second is the half
  * someone relies on when they hold a campaign for ten minutes.
  *
  * **An absent control leaves a visible gap. A control that exists and does
@@ -28,7 +28,7 @@ import { z } from 'zod';
  * ── WHAT IS NOT MODELLED, AND WHY ──
  * `converted` is not a concept anywhere in this platform, so *"41 bought"*,
  * *"63 people bought"* and the `Bought · 5%` row have no field to read.
- * Attributed revenue has no inputs at all — its third appearance across three
+ * Attributed revenue has no inputs at all - its third appearance across three
  * screens. There is no per-campaign opt-out counter, no reply classification,
  * no stock projection, no approval field on `Broadcast`, and **no fallback
  * channel**: one `channel`, one `channelAccountId`, so *"WhatsApp, falls back
@@ -48,9 +48,9 @@ export type BroadcastStatus = (typeof BROADCAST_STATUSES)[number];
 /**
  * One campaign.
  *
- * `object`, not `looseObject`. The row carries `audience` and `variables` —
+ * `object`, not `looseObject`. The row carries `audience` and `variables` -
  * arbitrary JSON, the first of which describes who is being messaged and is
- * not needed to render a card — plus `channelAccountId`, `flowId` and
+ * not needed to render a card - plus `channelAccountId`, `flowId` and
  * `createdBy`. None crosses into the UI.
  */
 export const campaignSchema = z.object({
@@ -78,12 +78,12 @@ export const campaignSchema = z.object({
   failedCount: z.number().default(0),
   /**
    * Why a campaign halted. The model's own comment: *"Last error message when
-   * broadcast halted (channel API failure, billing issue, etc.)"* — so a
+   * broadcast halted (channel API failure, billing issue, etc.)"* - so a
    * stopped campaign can say why instead of just being stopped.
    */
   lastError: z.string().nullable().default(null),
   /**
-   * Who it was meant for — `Broadcast.audience`, a Json column, turned into
+   * Who it was meant for - `Broadcast.audience`, a Json column, turned into
    * its DESCRIPTION here and never kept raw: the raw value carries contact
    * ids and CRM snapshots (names, phones, emails) that no card needs. Read
    * as `unknown` so a shape nobody foresaw is "a saved audience", never a
@@ -104,7 +104,7 @@ export type Campaign = z.infer<typeof campaignSchema>;
  * The vocabulary, from the write sites: every write goes through the
  * broadcasts route's `parseAudience` (the AI's `create_broadcast` posts to
  * the same route; a resend copies the value verbatim), which keeps four forms
- * — `manual`, `filter`, `saved`, `composite` — or `null`, when recipients
+ * - `manual`, `filter`, `saved`, `composite` - or `null`, when recipients
  * were added to the campaign directly (the builder's import mode).
  *
  * ★ NO RULE IS PUT INTO WORDS. Filter fields are CRM property names,
@@ -115,7 +115,7 @@ export type Campaign = z.infer<typeof campaignSchema>;
  * platform does not make. Any rule makes the audience "a saved audience".
  *
  * Measured on dev: one broadcast in the table, its audience a hand-written
- * `{"note":"ui test"}` with no `type` — the unrecognised form.
+ * `{"note":"ui test"}` with no `type` - the unrecognised form.
  */
 export type AudienceWords =
   | { readonly kind: 'direct' }
@@ -165,13 +165,13 @@ export function isStoppable(campaign: Campaign): boolean {
  * It computed `readCount - repliedCount` and its comment called them "two
  * numbers that genuinely exist" and "the best line on screen 05b".
  *
- * Neither counter is ever incremented — the only write in the monorepo is
+ * Neither counter is ever incremented - the only write in the monorepo is
  * `broadcast.worker.ts:209`, on `sentCount` and `failedCount`. So the
  * function returned 0 for every campaign that has ever existed and described
  * it as a segment somebody could act on.
  *
  * Its only caller was its own test, whose fixture used `readCount: 904,
- * repliedCount: 188` — values the platform cannot produce. **A test that
+ * repliedCount: 188` - values the platform cannot produce. **A test that
  * asserts arithmetic on data the system never emits passes forever and says
  * nothing about the product.**
  *
@@ -187,7 +187,7 @@ export function isStoppable(campaign: Campaign): boolean {
  * dividing by the intended audience would understate every rate on a campaign
  * that is still sending.
  *
- * `null` rather than zero when nothing has been sent — 0% and "not yet" are
+ * `null` rather than zero when nothing has been sent - 0% and "not yet" are
  * different facts, and a run of 0% on a campaign that has not started is the
  * kind of number somebody screenshots.
  */

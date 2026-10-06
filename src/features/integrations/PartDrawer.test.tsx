@@ -94,7 +94,7 @@ const inIntl = (node: ReactNode) =>
     </NextIntlClientProvider>,
   );
 
-describe('★ 14 — every row has its ›', () => {
+describe('★ 14 - every row has its ›', () => {
   it('a part opens ?part=, both across rows open ?panel=across', async () => {
     inIntl(await BusinessCore({ core }));
     expect(screen.getByTestId('core-open-ecommerce')).toHaveAttribute(
@@ -108,7 +108,7 @@ describe('★ 14 — every row has its ›', () => {
   });
 });
 
-describe('★ 14c / 14d — a part’s drawer', () => {
+describe('★ 14c / 14d - a part’s drawer', () => {
   const cap = (toolName: string, integration: string) =>
     capabilitySchema.parse({ toolName, integration, enabled: true });
 
@@ -130,12 +130,12 @@ describe('★ 14c / 14d — a part’s drawer', () => {
     expect(screen.queryByTestId('choice-create_deal')).toBeNull();
   });
 
-  it('what it reads is "—": nothing serves it', async () => {
+  it('what it reads is "-": nothing serves it', async () => {
     inIntl(await PartDrawer({ part: store, capabilities: [] }));
-    expect(screen.getByTestId('part-reads')).toHaveTextContent(/^—$/);
+    expect(screen.getByTestId('part-reads')).toHaveTextContent(/^-$/);
   });
 
-  it('a failed actions read is "—", never "no actions"', async () => {
+  it('a failed actions read is "-", never "no actions"', async () => {
     inIntl(await PartDrawer({ part: store, capabilities: null }));
     expect(screen.getByTestId('part-actions-unread')).toHaveAttribute(
       'title',
@@ -144,11 +144,11 @@ describe('★ 14c / 14d — a part’s drawer', () => {
   });
 });
 
-describe('★ 14e — across both', () => {
+describe('★ 14e - across both', () => {
   it('asks the customer-records system first, then GOTCHA makes a record', async () => {
     inIntl(await AcrossDrawer({ crm: core.roles[1]! }));
     expect(screen.getByTestId('across-order')).toHaveTextContent(
-      /^1ShopifyAsked first2GOTCHAAnyone else — a new record is made$/,
+      /^1ShopifyAsked first2GOTCHAAnyone else - a new record is made$/,
     );
   });
 
@@ -193,7 +193,7 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
   }).roles[0]!;
 
   // Backend 3cee674f: every catalogue action of the connection, provisioned or
-  // not, with its state and risk — an ERROR connection still lists them.
+  // not, with its state and risk - an ERROR connection still lists them.
   const row = (slug: string, over: Record<string, unknown> = {}) =>
     capabilitySchema.parse({
       toolName: `shopify.${slug}`,
@@ -221,7 +221,7 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
       'Hidden while Shopify needs fixing.',
     );
     expect(screen.getByTestId('part-actions')).toHaveTextContent('Refund an order');
-    // 10's control, disabled, with the reason as its title — no "—" in its place.
+    // 10's control, disabled, with the reason as its title - no "-" in its place.
     expect(screen.getByTestId('choice-shopify.process_refund')).toHaveAttribute(
       'data-blocked',
       'yes',
@@ -247,7 +247,7 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
         integration: shopify as never,
       }),
     );
-    // Not provisioned, on a connected system: settable — the PUT provisions it.
+    // Not provisioned, on a connected system: settable - the PUT provisions it.
     expect(screen.getByTestId('choice-shopify.process_refund')).toBeInTheDocument();
     expect(screen.getByTestId('choice-shopify.get_order')).toBeInTheDocument();
     expect(screen.getByTestId('part-risk-shopify.get_order')).toHaveTextContent('Low risk');
@@ -261,7 +261,7 @@ describe('★ 14d corrections (measurement of 052d0c2)', () => {
   });
 });
 
-describe('★ 14e corrections — no paragraphs', () => {
+describe('★ 14e corrections - no paragraphs', () => {
   it('the matching rules ride on GOTCHA’s card; the row says "AI summary, in Hebrew"', async () => {
     inIntl(await AcrossDrawer({ crm: core.roles[1]!, language: 'Hebrew' }));
     expect(screen.getByTestId('across-gotcha')).toHaveAttribute(

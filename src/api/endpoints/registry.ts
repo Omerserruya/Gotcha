@@ -49,7 +49,7 @@ export const permissionEndpoints = {
   catalog: () => endpoint('/api/permissions/catalog'),
   features: () => endpoint('/api/permissions/features'),
   /**
-   * The permission catalogue — screen 12c. 63 permissions, 29 of them scoped.
+   * The permission catalogue - screen 12c. 63 permissions, 29 of them scoped.
    *
    * `scopes` is `own · team · department · workspace`, and the VALUE lives on
    * the role, not on a permission: `PermissionDef.scoped` is a boolean saying
@@ -60,14 +60,14 @@ export const permissionEndpoints = {
    * assigned role and team memberships. ADMIN only.
    *
    * Not to be confused with `/api/agents`, which filters `role: "AGENT"` and
-   * therefore returns nothing on a tenant whose members are all admins — an
+   * therefore returns nothing on a tenant whose members are all admins - an
    * empty array there is indistinguishable from an empty tenant. Settings ·
    * People reads THIS one.
    */
   users: () => endpoint('/api/permissions/users'),
 
   /**
-   * Roles — screens 12b and 12c. Every verb ADMIN only.
+   * Roles - screens 12b and 12c. Every verb ADMIN only.
    *
    * A role is a name plus a set of feature keys. `TenantRoleFeature` is a
    * composite key with no other columns, so **the money limits the design
@@ -81,15 +81,15 @@ export const permissionEndpoints = {
   /** One person: profile, role assignments with scope, and overrides. */
   user: (userId: string) => endpoint('/api/permissions/users/{userId}', { userId }),
 
-  /** A person's primary role — screen 12d. */
+  /** A person's primary role - screen 12d. */
   userRole: (userId: string) => endpoint('/api/permissions/users/{userId}/role', { userId }),
 
   /**
-   * One person's exceptions — screen 12e.
+   * One person's exceptions - screen 12e.
    *
    * `granted: true` adds a permission their role lacks; **`granted: false`
    * takes away one their role gives.** Same endpoint, same table, opposite
-   * meanings — and the design describes only the first.
+   * meanings - and the design describes only the first.
    */
   userGrants: (userId: string) => endpoint('/api/permissions/users/{userId}/grants', { userId }),
   userGrant: (userId: string, feature: string) =>
@@ -104,12 +104,12 @@ export const permissionEndpoints = {
  */
 export const analyticsEndpoints = {
   /**
-   * The language mix of recent conversations — screen 11d.
+   * The language mix of recent conversations - screen 11d.
    *
    * `{ windowDays, total, rows: [{ locale, conversations, share }] }`,
    * grouped on `Conversation.detectedLocale` over the same billable
    * population the allowance bar counts, and normalised to the language
-   * rather than the tag — *"he-IL and he are one language to a person
+   * rather than the tag - *"he-IL and he are one language to a person
    * choosing which languages to answer in"*.
    *
    * `locale: null` is a conversation whose language was never detected. It
@@ -118,8 +118,8 @@ export const analyticsEndpoints = {
   languageShare: () => endpoint('/api/analytics/language-share'),
   overview: () => endpoint('/api/analytics/overview'),
   /**
-   * The per-day series (backend c054c811): `?days=` 1–90, UTC days, oldest
-   * first — gotcha/team answered, alone/passedOver started. At its own path:
+   * The per-day series (backend c054c811): `?days=` 1-90, UTC days, oldest
+   * first - gotcha/team answered, alone/passedOver started. At its own path:
    * it was first mounted on `/daily`, where the old app's Redis volumes route
    * answers first; Backend moves it here. Until then this 404s and the
    * charts say they couldn't read the days.
@@ -130,7 +130,7 @@ export const analyticsEndpoints = {
   channelPerformance: () => endpoint('/api/analytics/channel-performance'),
   /** Two scalars: `{ waiting, avgWaitTimeMs }`. Not the list. */
   queue: () => endpoint('/api/analytics/queue'),
-  /** The ranked list itself. `{ data, nextCursor, totalWaiting }` — use `raw`. */
+  /** The ranked list itself. `{ data, nextCursor, totalWaiting }` - use `raw`. */
   queueItems: () => endpoint('/api/analytics/queue/items'),
   /** Completed AI actions merged with pending approvals. `raw`. */
   activity: () => endpoint('/api/analytics/activity'),
@@ -138,7 +138,7 @@ export const analyticsEndpoints = {
   timeSaved: () => endpoint('/api/analytics/time-saved'),
   /** What GOTCHA is doing right now, as opposed to what it has done. */
   inFlight: () => endpoint('/api/analytics/in-flight'),
-  /** "Worth knowing" — `kind` + `values`, translated by us. */
+  /** "Worth knowing" - `kind` + `values`, translated by us. */
   insights: () => endpoint('/api/analytics/insights'),
   /** The quiet day's ranked list, merged from four sources server-side. */
   quietDay: () => endpoint('/api/analytics/quiet-day'),
@@ -146,7 +146,7 @@ export const analyticsEndpoints = {
   /** Per-agent open counts and reply times. Carries no presence. */
   agents: () => endpoint('/api/analytics/agents'),
   /**
-   * Screen 06's "what people ask about" — `analytics:dashboard:read`.
+   * Screen 06's "what people ask about" - `analytics:dashboard:read`.
    *
    * ★ A "TOPIC" IS A `groupBy`, NOT A THING THE PRODUCT HOLDS.
    * `getTopQuestions` groups `conversationIntelligence` by `detectedIntent`
@@ -155,23 +155,23 @@ export const analyticsEndpoints = {
    * to persist and the next request regroups from the raw column.
    */
   topQuestions: () => endpoint('/api/analytics/top-questions'),
-  /** Catalogue searches by ISO week; misses by default. `{ weekKey, data }` — so `raw`. */
+  /** Catalogue searches by ISO week; misses by default. `{ weekKey, data }` - so `raw`. */
   productDemand: () => endpoint('/api/analytics/product-demand'),
   /** One UTC day's messages by UTC hour (Redis, kept 7 days). `{ data }`; `?date=YYYY-MM-DD`. */
   hourly: () => endpoint('/api/analytics/hourly'),
   /** AI vs human messages, resolution, and the approval governance figures. `{ data }`. */
   aiPerformance: () => endpoint('/api/analytics/ai-performance'),
-  /** Questions GOTCHA could not answer. `{ period, data }` — `data` a sibling, so `raw`. */
+  /** Questions GOTCHA could not answer. `{ period, data }` - `data` a sibling, so `raw`. */
   unansweredQuestions: () => endpoint('/api/analytics/unanswered-questions'),
   /**
-   * Screen 10 — how often each tool has actually run.
+   * Screen 10 - how often each tool has actually run.
    *
    * ★ IT UNIONS TWO TABLES AND THAT IS THE POINT. `getToolUsageStats` reads
    * `ToolExecution` AND the `adapter.*` audit rows, because *"the dev estate
    * holds 0 ToolExecution rows and 3,475 adapter records… the connector
    * executions were never missing; they were in the other table."* A panel
    * built on a `ToolExecution` groupBy would be silently blind to every
-   * adapter-run tool — a Shopify refund among them.
+   * adapter-run tool - a Shopify refund among them.
    *
    * Gated on `analytics:dashboard:read`, which the permissions list itself
    * does not need, so this can 403 on a screen that otherwise works.
@@ -183,18 +183,18 @@ export const analyticsEndpoints = {
    * from, not by contact. `analytics:workspace:read`.
    */
   dormantCustomers: () => endpoint('/api/analytics/dormant-customers?limit=100'),
-  /** The same, from an instant (ISO) to now — 03c's "today". */
+  /** The same, from an instant (ISO) to now - 03c's "today". */
   toolUsageFrom: (from: string) => endpoint('/api/analytics/tool-usage?from={from}', { from }),
 } as const;
 
 /**
  * Things GOTCHA learned about the business that need a person to settle.
  *
- * Answers `{ ok, pending, reviews }` — a third envelope shape, so requests
+ * Answers `{ ok, pending, reviews }` - a third envelope shape, so requests
  * against it are made with `raw`.
  */
 /**
- * Day one. Reachable while the workspace is still onboarding — these are the
+ * Day one. Reachable while the workspace is still onboarding - these are the
  * endpoints for a workspace that is not live yet, so they must not require it.
  */
 export const setupEndpoints = {
@@ -202,7 +202,7 @@ export const setupEndpoints = {
   knowledgeIngest: () => endpoint('/api/knowledge/ingest/latest'),
   /**
    * What the website scan found (ADMIN). 11b reads two parts: the store
-   * platform and the contact channels — "Also found". The rest is
+   * platform and the contact channels - "Also found". The rest is
    * onboarding's.
    */
   discovery: () => endpoint('/api/onboarding/discovery'),
@@ -226,7 +226,7 @@ export const workspaceEndpoints = {
    */
   scan: () => endpoint('/api/workspace/scan'),
   /**
-   * Take the site's value for offered fields — stamps them `scan`-owned.
+   * Take the site's value for offered fields - stamps them `scan`-owned.
    *
    * A plain PATCH cannot do this: PATCH means "a human set this". Without
    * this endpoint `scan` ownership was unreachable and every scan offered
@@ -238,7 +238,7 @@ export const workspaceEndpoints = {
 /**
  * Conversation headroom for the period. Served by billing, not analytics.
  *
- * `/api/usage/allowance` — path taken from the MOUNT (`usage-allowance.ts:30`),
+ * `/api/usage/allowance` - path taken from the MOUNT (`usage-allowance.ts:30`),
  * not from the filename. It is one of only three routes in the platform that
  * split a compound name with a slash rather than a hyphen, and the same
  * mistake on `/api/tenant/security` cost six capture runs.
@@ -250,44 +250,44 @@ export const usageEndpoints = {
 } as const;
 
 /**
- * Plan, price, invoices and payment method — screen 17.
+ * Plan, price, invoices and payment method - screen 17.
  *
  * `subscription` answers **bare `{ subscription }`**, not `{ data }`. Its
  * siblings are enveloped; this one is not.
  */
 export const billingEndpoints = {
   subscription: () => endpoint('/api/billing/subscription'),
-  /** Plan names by key — the subscription carries only the key. Bare `{ plans }`. */
+  /** Plan names by key - the subscription carries only the key. Bare `{ plans }`. */
   plans: () => endpoint('/api/billing/plans'),
   changePlan: () => endpoint('/api/billing/subscription/change-plan'),
   /**
-   * Invoices — and this route was here the whole time.
+   * Invoices - and this route was here the whole time.
    *
    * The registry used to point at `/api/billing/summary`, annotated
    * *"contracted, not yet served"*, while the screen said *"We can't show
-   * your invoices yet."* **`/api/billing/invoices` is mounted and serving** —
+   * your invoices yet."* **`/api/billing/invoices` is mounted and serving** -
    * at bare `/api`, like every billing router, which is why a search for an
    * `/api/billing` mount finds nothing.
    *
    * What that hid was not cosmetic: **four invoices on this tenant, every one
    * FAILED, $5,996 in total.**
    *
-   * Answers **`{ invoices }`** — a fifth envelope shape.
+   * Answers **`{ invoices }`** - a fifth envelope shape.
    */
   invoices: () => endpoint('/api/billing/invoices'),
   /**
-   * Topping up and what happens at the limit — screen 17d.
+   * Topping up and what happens at the limit - screen 17d.
    *
    * Answers `{ policy, currency, paygRate }`, and the currency travels even
    * when `policy` is null so an amount can be named before anything is set.
    */
   autoPurchase: () => endpoint('/api/billing/auto-purchase'),
-  /** Who the bill is made out to — screen 17e. `{ data }`, and it may be null. */
+  /** Who the bill is made out to - screen 17e. `{ data }`, and it may be null. */
   profile: () => endpoint('/api/billing/profile'),
-  /** What it charges against. Answers `{ paymentMethods }` — a sixth shape. */
+  /** What it charges against. Answers `{ paymentMethods }` - a sixth shape. */
   paymentMethods: () => endpoint('/api/billing/payment-methods'),
   /**
-   * Credits, and what happens to them — screen 17c.
+   * Credits, and what happens to them - screen 17c.
    *
    * Carries TWO estimates of what the balance buys: `estimatedRemaining` from
    * the public commercial ratio, and `observedRemaining` from this tenant's
@@ -297,7 +297,7 @@ export const billingEndpoints = {
    */
   creditSummary: () => endpoint('/api/billing/credit-summary'),
 
-  /* ── Screen 17b — plan, price and changing it ──────────────────────────── */
+  /* ── Screen 17b - plan, price and changing it ──────────────────────────── */
 
   /** The catalogue, the display-currency options and the FX behind an ILS price. */
   pricing: () => endpoint('/api/billing/pricing'),
@@ -307,7 +307,7 @@ export const billingEndpoints = {
    * Buyable credit packages for THIS plan.
    *
    * `{ packages: [], eligible: false }` means the plan cannot buy them at all
-   * — a different fact from an empty catalogue, and not the customer's fault.
+   * - a different fact from an empty catalogue, and not the customer's fault.
    */
   pricingPackages: () => endpoint('/api/billing/pricing/packages'),
   /** Prices a selection from KEYS. Never accepts a price from the client. */
@@ -316,14 +316,14 @@ export const billingEndpoints = {
    * Apply a change. Owner-gated on `settings:billing:manage`.
    *
    * `/api/billing/subscription/change-plan` above is the SAME service behind a
-   * second path — identical body, permission and result, differing only in the
+   * second path - identical body, permission and result, differing only in the
    * error string. Not a dead route this time; a duplicate. This screen uses
    * one of them and the registry records that they are the same thing, so
    * nobody later concludes they are two features.
    */
   pricingChange: () => endpoint('/api/billing/pricing/change'),
   /**
-   * Screen 17d — buy a credit pack. REAL MONEY.
+   * Screen 17d - buy a credit pack. REAL MONEY.
    *
    * Owner-gated on `settings:billing:manage`. Accepts only a package KEY, a
    * quantity and an intent key: price and credit amount are read from the
@@ -332,7 +332,7 @@ export const billingEndpoints = {
    *
    * ★ `intentKey` IDENTIFIES ONE PURCHASE THE CUSTOMER DECIDED ON, so a
    * double-click is one charge. It must therefore be minted when the CHOICE
-   * is made and not when the button is pressed — a key generated per click
+   * is made and not when the button is pressed - a key generated per click
    * is not an idempotency key, it is a new purchase each time.
    *
    * ★ AND A FAILURE HERE IS 409, NOT 402, when the provider has not settled:
@@ -343,8 +343,8 @@ export const billingEndpoints = {
    * tenant.
    *
    * NOTE: `/api/billing/credits/packages` is a SECOND packages route and it
-   * is NOT this screen's. It filters on `active` alone — no `customerVisible`,
-   * no `status`, no plan-eligibility gate — so it can list packages a
+   * is NOT this screen's. It filters on `active` alone - no `customerVisible`,
+   * no `status`, no plan-eligibility gate - so it can list packages a
    * customer must not see or cannot buy. `pricingPackages` above is the
    * filtered one. Recorded so nobody later reads them as interchangeable.
    */
@@ -358,7 +358,7 @@ export const intelligenceReviewEndpoints = {
 } as const;
 
 /**
- * Notifications. Cursor-paginated, and the page is `{ data, nextCursor }` —
+ * Notifications. Cursor-paginated, and the page is `{ data, nextCursor }` -
  * `data` sits beside the cursor rather than wrapping it, so `raw` is required.
  */
 export const notificationEndpoints = {
@@ -367,7 +367,7 @@ export const notificationEndpoints = {
   markRead: (id: string) => endpoint('/api/notifications/{id}/mark-read', { id }),
   markAllRead: () => endpoint('/api/notifications/mark-all-read'),
   /**
-   * The signed-in person's own notification preferences — screen 15.
+   * The signed-in person's own notification preferences - screen 15.
    *
    * Four booleans and a quiet-hours window. NOT the design's 8×3 matrix: the
    * matrix that exists (`NotificationPreference`) is scoped to a tenant and a
@@ -375,7 +375,7 @@ export const notificationEndpoints = {
    */
   preferences: () => endpoint('/api/notification-preferences/me'),
   /**
-   * The TENANT's notification rules — event type × channels × recipients,
+   * The TENANT's notification rules - event type × channels × recipients,
    * scoped to a department. ADMIN only.
    *
    * This is the table the dispatcher actually reads
@@ -425,7 +425,7 @@ export const agentEndpoints = {
 } as const;
 
 /**
- * AI employees — the non-human half of Settings · People.
+ * AI employees - the non-human half of Settings · People.
  *
  * `list` answers the entire `AIAgent` row, system prompts included; the
  * contract narrows it deliberately rather than passing it through. See
@@ -464,7 +464,7 @@ export const memberEndpoints = {
 } as const;
 
 /**
- * Channels — screen 13.
+ * Channels - screen 13.
  *
  * `disconnect` is listed but is NOT a soft local toggle: the route revokes at
  * the platform first (deletes Meta `subscribed_apps`, stops Gmail push, drops
@@ -492,7 +492,7 @@ export const channelEndpoints = {
     endpoint('/api/channels/oauth/init?platform={platform}', { platform }),
   /**
    * The callable variant (backend ecd64c4d): asked server side with our
-   * session, answers `200 { url }` — the provider's page — or `409
+   * session, answers `200 { url }` - the provider's page - or `409
    * { error: 'not_configured' }`, or 403 for a non-admin. The way back lands
    * on `/v2/settings/channels?connected=<p>&count=N` or `?platform=<p>&error=<code>`.
    */
@@ -500,17 +500,17 @@ export const channelEndpoints = {
     endpoint('/api/channels/oauth/init-url?platform={platform}&flow=redesign_studio', {
       platform,
     }),
-  /** Creates the widget as PENDING — a draft, not a connected channel. */
+  /** Creates the widget as PENDING - a draft, not a connected channel. */
   createWebChat: () => endpoint('/api/channels/webchat/create'),
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
   connectEmail: () => endpoint('/api/channels/connect/email'),
   responseMode: (id: string) => endpoint('/api/channels/{id}/response-mode', { id }),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
 
-  /* ── Screen 13 — WhatsApp numbers ──────────────────────────────────────
+  /* ── Screen 13 - WhatsApp numbers ──────────────────────────────────────
    *
    * Mounted at `/api/channels/whatsapp`, which is a DIFFERENT router from the
-   * `/api/channels` list above — the same prefix relationship that made
+   * `/api/channels` list above - the same prefix relationship that made
    * `/api/knowledge` look alive for a whole screen. Both are checked by
    * `scripts/check-routes.sh`.
    *
@@ -521,14 +521,14 @@ export const channelEndpoints = {
    */
   whatsappNumbers: () => endpoint('/api/channels/whatsapp/numbers'),
   /**
-   * Pre-flight — screens 13c/13d. Takes a Meta authorization CODE.
+   * Pre-flight - screens 13c/13d. Takes a Meta authorization CODE.
    *
    * Read-only against the customer's assets, and NOT side-effect-free: it
    * spends the single-use code and replaces the tenant's signup session.
    */
   whatsappInspect: () => endpoint('/api/channels/whatsapp/inspect'),
   /**
-   * 13c's launch parameters for Meta's Embedded Signup — the server is the
+   * 13c's launch parameters for Meta's Embedded Signup - the server is the
    * single source (app id, config id, response type, extras); a guessed
    * config id is what once produced the wrong signup experience.
    */
@@ -536,7 +536,7 @@ export const channelEndpoints = {
     mode
       ? endpoint('/api/channels/config?mode={mode}', { mode })
       : endpoint('/api/channels/config'),
-  /** ★ WRITES at Meta — subscribeApp + register. Never fired automatically. */
+  /** ★ WRITES at Meta - subscribeApp + register. Never fired automatically. */
   whatsappConnect: () => endpoint('/api/channels/whatsapp/connect'),
   /** Deliberate re-read from Meta. The list is built from stored state. */
   whatsappRefresh: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/refresh', { id }),
@@ -544,12 +544,12 @@ export const channelEndpoints = {
    * Run ONE repair we can actually perform.
    *
    * Only for `availableRepairs`. Never for `customerActions`, which are
-   * resolved in Meta — "offering one and having it fail is worse than saying
+   * resolved in Meta - "offering one and having it fail is worse than saying
    * plainly that this one is theirs to fix."
    */
   whatsappRepair: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/repair', { id }),
   /**
-   * Supply what the customer was asked for — the register step for error
+   * Supply what the customer was asked for - the register step for error
    * 141000, with their two-step PIN. The ONE blocked state clearable here.
    */
   whatsappResume: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/resume', { id }),
@@ -557,14 +557,14 @@ export const channelEndpoints = {
   whatsappEvents: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}/events', { id }),
   /**
    * Inbound exclusions. `value` is what was typed, `normalized` is what it
-   * matches on — both, because showing only the normalised form makes a
+   * matches on - both, because showing only the normalised form makes a
    * person think their rule was rewritten.
    */
   whatsappExclusions: () => endpoint('/api/channels/whatsapp/exclusions'),
 } as const;
 
 /**
- * Voice — a different spine from `channelEndpoints`.
+ * Voice - a different spine from `channelEndpoints`.
  *
  * Served by the conversation service at `/api/voice-channels`, backed by
  * `CommunicationChannel` → `VoiceChannel` rather than `ChannelAccount`.
@@ -577,7 +577,7 @@ export const channelEndpoints = {
 /**
  * 01c's Go live (Omer, decision 01): the workspace leaves setup mode and
  * GOTCHA answers real customers. `POST /api/onboarding/complete`, ADMIN.
- * `{ skipEmployee: true }` — Go live opens only once an employee is hired,
+ * `{ skipEmployee: true }` - Go live opens only once an employee is hired,
  * and without it the route hires ANOTHER. Refuses 400 for a missing profile,
  * admin, or `core_system_required`.
  */
@@ -599,7 +599,7 @@ export const voiceChannelEndpoints = {
 } as const;
 
 /**
- * Business systems — screen 14.
+ * Business systems - screen 14.
  *
  * `detail` is listed but NOT used: it selects and returns
  * `TenantIntegration.credentials`, the stored integration secret, while the
@@ -637,7 +637,7 @@ export const integrationEndpoints = {
           endpoint('/api/integrations/oauth/{slug}/init?flow=redesign_studio', { slug })
         : endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio', { slug }),
   /**
-   * B: WooCommerce through the store's own approval — the store address only,
+   * B: WooCommerce through the store's own approval - the store address only,
    * answered `{ url }` (`format=json`); 400 `invalid_store_url`. Lands on
    * `?system=woocommerce&connected=1|error=<code>`.
    */
@@ -666,7 +666,7 @@ export const integrationEndpoints = {
       { storeUrl },
     ),
   /**
-   * Screens 14b/14c — the use case, the parts, who CAN serve each and who
+   * Screens 14b/14c - the use case, the parts, who CAN serve each and who
    * DOES. Never connects anything; connecting stays in the marketplace.
    *
    * A part nothing could ever serve reports `available: false` with a
@@ -674,23 +674,23 @@ export const integrationEndpoints = {
    */
   businessCore: () => endpoint('/api/integrations/business-core'),
   /**
-   * Screen 14c — elect the system that plays a part.
+   * Screen 14c - elect the system that plays a part.
    *
    * DISPLACES rather than refusing when the part is already taken, and
    * answers with what it replaced so the screen can name it. Refuses a
    * system that is not CONNECTED, and refuses the CRM outright with
-   * `CRM_ELECTED_ELSEWHERE` — that one is `PUT /:slug/crm-source`.
+   * `CRM_ELECTED_ELSEWHERE` - that one is `PUT /:slug/crm-source`.
    */
   electRole: () => endpoint('/api/integrations/business-core/role'),
   /**
-   * 14b: what the business runs on — `PUT { useCase }`, one of ecommerce /
+   * 14b: what the business runs on - `PUT { useCase }`, one of ecommerce /
    * leads / both; 422 otherwise. Same permission as electing a part.
    */
   useCase: () => endpoint('/api/integrations/business-core/use-case'),
 } as const;
 
 /**
- * The tenant's tool policy — AUTHORITATIVE over an integration's activation.
+ * The tenant's tool policy - AUTHORITATIVE over an integration's activation.
  *
  * A separate resource because it is keyed by tool NAME across every
  * integration, not by integration. Also returns raw OAuth scopes, which this
@@ -702,7 +702,7 @@ export const toolPermissionEndpoints = {
 } as const;
 
 /**
- * Security — screen 16.
+ * Security - screen 16.
  *
  * Sessions and login history are served from AUTHENTIK, not from our
  * `UserSession` table, so they carry a real IP and a GeoIP city where our own
@@ -711,7 +711,7 @@ export const toolPermissionEndpoints = {
  */
 export const securityEndpoints = {
   /**
-   * The signed-in person and their workspace — screen 11d.
+   * The signed-in person and their workspace - screen 11d.
    *
    * Carries `tenantDefaultLocale` (the language GOTCHA itself runs in) and
    * `user.locale` (this person's own interface language). They are two
@@ -724,7 +724,7 @@ export const securityEndpoints = {
   revokeOtherSessions: () => endpoint('/api/account/sessions'),
   loginHistory: () => endpoint('/api/account/login-history'),
   /**
-   * `/api/tenant/security` — a SLASH, and it is an exception.
+   * `/api/tenant/security` - a SLASH, and it is an exception.
    *
    * Compound paths in this platform are hyphenated **38 to 3**. Only
    * `/api/tenant/security`, `/api/usage/allowance` and `/api/voice/incoming`
@@ -735,33 +735,33 @@ export const securityEndpoints = {
    * So the convention does not tell you, and neither does the route file
    * (`routes/tenant-security.ts`, hyphenated). **Only `app.use` does.** This
    * was wrong for six capture runs and cost nothing but time because the
-   * section now says when it cannot read its data — which is the other half of
+   * section now says when it cannot read its data - which is the other half of
    * the fix.
    */
   tenantSecurity: () => endpoint('/api/tenant/security'),
   auditLogs: () => endpoint('/api/audit-logs'),
-  /** The real action vocabulary with counts — not a taxonomy we invented. */
+  /** The real action vocabulary with counts - not a taxonomy we invented. */
   auditActions: () => endpoint('/api/audit-logs/actions'),
 } as const;
 
 /**
- * Approvals — screen 03. `conversation_service` in both gateway templates
+ * Approvals - screen 03. `conversation_service` in both gateway templates
  * (`gateway/…:752`, `nginx/…:636`).
  *
  * The route file holds seven handlers; **two of them are not ours.**
  * `/:id/dispatch-approved` and `/:id/dispatch-rejected` sit above the
- * `authenticate` middleware behind `requireInternalKey` — service-to-service
+ * `authenticate` middleware behind `requireInternalKey` - service-to-service
  * dispatch hooks, deliberately unreachable from a browser session. They are
  * absent here on purpose, the way the five dev-only gateway routes are.
  *
  * `list` takes **one** status and defaults to PENDING (`where = { tenantId,
  * status }`), with no date filter of any kind, `take: 100`, newest first. So
  * "what you decided today" is one call per status, narrowed on our side, and
- * only as far back as the most recent 100 rows of each — a real ceiling on a
+ * only as far back as the most recent 100 rows of each - a real ceiling on a
  * busy tenant, and not one the screen may pretend away.
  *
  * `detail` answers a bare `{ approval, conversation, contact, recentMessages }`
- * — not `{ data }`. Third envelope shape in this platform.
+ * - not `{ data }`. Third envelope shape in this platform.
  */
 export const approvalEndpoints = {
   list: (status?: string) =>
@@ -770,7 +770,7 @@ export const approvalEndpoints = {
   approve: (id: string) => endpoint('/api/approvals/{id}/approve', { id }),
   reject: (id: string) => endpoint('/api/approvals/{id}/reject', { id }),
   /**
-   * Re-runs a dispatch that ran and FAILED. It runs the action **forward** —
+   * Re-runs a dispatch that ran and FAILED. It runs the action **forward** -
    * on a refund that is the opposite of an undo, and it is the affordance the
    * design drew an Undo in place of.
    */
@@ -793,7 +793,7 @@ export const businessPolicyEndpoints = {
 } as const;
 
 /**
- * Customers — screen 04. `conversation_service` in both gateway templates.
+ * Customers - screen 04. `conversation_service` in both gateway templates.
  *
  * **`list` is deliberately the segment route, not `GET /api/contacts`.** That
  * one is a CRM proxy search: it requires a connected CRM *and* a non-empty
@@ -803,7 +803,7 @@ export const businessPolicyEndpoints = {
  *
  * `segment` queries the local `Contact` table, answers a real
  * `prisma.contact.count`, and has a `countOnly` mode. Its rule vocabulary has
- * thirteen cases and **no name case** — searching by name is not currently
+ * thirteen cases and **no name case** - searching by name is not currently
  * possible against the local table, and is requested.
  */
 export const customerEndpoints = {
@@ -818,7 +818,7 @@ export const customerEndpoints = {
   /**
    * 04's rows in bulk (backend 63985641 / 01bb7b6e). Each takes at most 100
    * ids. The commerce three answer `source: null` + `reason` when there is no
-   * store to read — never zeros — and `data` sits BESIDE `source`, so they
+   * store to read - never zeros - and `data` sits BESIDE `source`, so they
    * are read `raw`.
    *   commerceSummary  ?contactIds= → { source, truncated, data: {[id]: summary} }
    *   commerceSegments              → { source, truncated, total, counts }
@@ -829,7 +829,7 @@ export const customerEndpoints = {
   commerceSummary: () => endpoint('/api/commerce-context/customers/commerce-summary'),
   commerceSegments: () => endpoint('/api/commerce-context/customers/segments'),
   byOrder: () => endpoint('/api/commerce-context/customers/by-order'),
-  /** Backend e30900fd — one person's orders, Woo or Shopify. See `customerOrdersSchema`. */
+  /** Backend e30900fd - one person's orders, Woo or Shopify. See `customerOrdersSchema`. */
   contactOrders: (contactId: string) =>
     endpoint('/api/commerce-context/customers/{contactId}/orders', { contactId }),
   insights: () => endpoint('/api/contacts/insights'),
@@ -840,7 +840,7 @@ export const customerEndpoints = {
    * reads that takes the id the list hands us.
    *
    * Follows `mergedIntoId`, gathers sibling contacts and aliases preserved
-   * from prior merges — so this genuinely is every channel on one spine.
+   * from prior merges - so this genuinely is every channel on one spine.
    * What it is NOT is complete: 50 conversations, newest 5 messages each,
    * and `type: "message"` is the whole event union. See
    * `contracts/customer-detail.ts`.
@@ -848,13 +848,13 @@ export const customerEndpoints = {
   timeline: (id: string) => endpoint('/api/identity/{id}/timeline', { id }),
   /**
    * The person's conversations with their status (and much else, unread
-   * here) — UNENVELOPED: `{ contact, conversations, … }`. 04b colours its
+   * here) - UNENVELOPED: `{ contact, conversations, … }`. 04b colours its
    * timeline by it: open and theirs last is "needs attention", closed is
    * resolved.
    */
   identityInsights: (id: string) => endpoint('/api/identity/{id}/insights', { id }),
   /**
-   * Backend ed8f3e1f — every channel's conversations for one person, newest
+   * Backend ed8f3e1f - every channel's conversations for one person, newest
    * first, each with its stored one-line summary. `?limit=&current=<id>` marks
    * the open one `isCurrent`. `{ data, total, hasMore }`; `total` counts only
    * what this viewer may see. 404: no such contact.
@@ -863,7 +863,7 @@ export const customerEndpoints = {
     endpoint('/api/identity/{contactId}/conversations', { contactId }),
   /**
    * The written character summary. A **POST**, and it requires a
-   * `conversationId` — customer-level intelligence behind a
+   * `conversationId` - customer-level intelligence behind a
    * conversation-shaped door, so 04b passes this person's most recent
    * conversation and a person with none has no brief.
    *
@@ -876,7 +876,7 @@ export const customerEndpoints = {
    * rather than an import-internal id, with both-shapes phone normalisation.
    *
    * It exists because the import's memory "went into the bot prompt and
-   * nowhere else, so a human agent opening the same chat saw nothing" —
+   * nowhere else, so a human agent opening the same chat saw nothing" -
    * which is the failure this whole redesign exists to stop repeating.
    *
    * Returns facts as `{ text, category, confidence }` only:
@@ -885,7 +885,7 @@ export const customerEndpoints = {
   memory: (externalId: string) =>
     endpoint('/api/historical-imports/customer-context?externalId={externalId}', { externalId }),
   /**
-   * The CRM panel for one conversation — 04b reads `recent_crm_notes` from it.
+   * The CRM panel for one conversation - 04b reads `recent_crm_notes` from it.
    *
    * ⚠ CONVERSATION-KEYED, so the customer page enters through
    * `readKeyFor(events)`. READ ONLY from here: the sibling write sets
@@ -896,7 +896,7 @@ export const customerEndpoints = {
   crmContext: (conversationId: string) =>
     endpoint('/api/crm/conversation/{conversationId}/context', { conversationId }),
   /**
-   * Screen 04d — this customer's orders from the connected store.
+   * Screen 04d - this customer's orders from the connected store.
    *
    * Conversation-keyed like the CRM panel, so the customer page enters
    * through `readKeyFor(events)`. Permission-gated on
@@ -910,13 +910,13 @@ export const customerEndpoints = {
    *
    * ⚠ READ ONLY from this screen. The sibling `POST /:conversationId/actions`
    * writes an audit record carrying that conversation id, so an order action
-   * taken from a customer page would leave a wrong audit trail — and the
+   * taken from a customer page would leave a wrong audit trail - and the
    * audit trail is the thing those actions exist to leave behind.
    */
   orders: (conversationId: string) =>
     endpoint('/api/commerce-context/{conversationId}', { conversationId }),
   /**
-   * Screen 04d's order actions — cancel, refund, return, exchange. REAL MONEY.
+   * Screen 04d's order actions - cancel, refund, return, exchange. REAL MONEY.
    *
    * The best-guarded write in the platform: permission, ownership
    * re-validation, business policy, optional approval, idempotent adapter
@@ -933,34 +933,34 @@ export const customerEndpoints = {
   orderAction: (conversationId: string) =>
     endpoint('/api/commerce-context/{conversationId}/actions', { conversationId }),
   /**
-   * Screen 04e — what was done in this customer's context.
+   * Screen 04e - what was done in this customer's context.
    *
    * ★ A DIFFERENT GATE FROM ITS THREE SIBLINGS, ON PURPOSE.
-   * `crm:contacts:read` **or** `ADMIN` — whoever can open screen 04. The
+   * `crm:contacts:read` **or** `ADMIN` - whoever can open screen 04. The
    * other three `/audit-logs` routes keep `settings:workspace:update` or
    * ADMIN, and the export deliberately stays there: one constant gated all
    * four, and widening it in place would have handed every agent a CSV of
    * the whole workspace log.
    *
-   * `?shopifyCustomerId=` is what makes customer-keyed rows attributable —
+   * `?shopifyCustomerId=` is what makes customer-keyed rows attributable -
    * `targetId` on those is the PROVIDER's customer id and this endpoint
    * cannot derive one from a contact. The value comes from the verified
    * commerce context, never from anything client-supplied.
    *
    * Answers `{ contact, data, nextCursor, coverage, scope }`. `coverage` is
-   * a CONSTANT describing what is attributable in principle — see
+   * a CONSTANT describing what is attributable in principle - see
    * `coverageGaps`, which is why it takes what we actually sent.
    */
   audit: (contactId: string) => endpoint('/api/audit-logs/customer/{contactId}', { contactId }),
   /**
-   * Screen 04f — the team's notes about this person.
+   * Screen 04f - the team's notes about this person.
    *
    * ★ CONTACT-KEYED, which is the whole reason the stub was replaced: it was
    * keyed on a conversation, and *"a note is about a person, and the person
    * outlives the thread."* So this does NOT go through `readKeyFor`, and the
    * write prohibition recorded there does not reach it.
    *
-   * Answers `{ notes, contactId }` — **no `data` envelope**, checked at the
+   * Answers `{ notes, contactId }` - **no `data` envelope**, checked at the
    * route rather than assumed either way.
    *
    * ⚠ NO PERMISSION GATE ON THE ROUTER. `authenticate, resolveTenant,
@@ -969,7 +969,7 @@ export const customerEndpoints = {
    */
   notes: (contactId: string) => endpoint('/api/identity/{contactId}/notes', { contactId }),
   /**
-   * One note. PATCH edits it, DELETE soft-deletes it — the row stays, because
+   * One note. PATCH edits it, DELETE soft-deletes it - the row stays, because
    * *"a customer's history should not develop holes."*
    *
    * ⚠ AUTHOR ONLY. Both answer 403 `not_the_author` for anybody else, so the
@@ -981,7 +981,7 @@ export const customerEndpoints = {
 } as const;
 
 /**
- * Cross-channel identity — the merge the design shows as *suggested, never
+ * Cross-channel identity - the merge the design shows as *suggested, never
  * silent*. `resolve` proposes, `merge` acts, and a person confirms in between.
  */
 export const identityEndpoints = {
@@ -991,7 +991,7 @@ export const identityEndpoints = {
 } as const;
 
 /**
- * Outreach — screens 05 and 05b. `conversation_service` in both templates.
+ * Outreach - screens 05 and 05b. `conversation_service` in both templates.
  *
  * **There is no pause and no resume.** `cancel` is the only thing that stops a
  * send: it removes the queued jobs, marks every pending recipient `"skipped"`,
@@ -1000,7 +1000,7 @@ export const identityEndpoints = {
  * otherwise.
  *
  * `validate` is a real pre-send check against the actual audience and channel.
- * It is what the design drew as *"Waiting for your approval"* — a state with
+ * It is what the design drew as *"Waiting for your approval"* - a state with
  * no field on `Broadcast`, and one that cannot borrow `ApprovalRequest`, whose
  * own schema comment says it is exclusively the bot path.
  */
@@ -1015,7 +1015,7 @@ export const outreachEndpoints = {
   cancel: (id: string) => endpoint('/api/broadcasts/{id}/cancel', { id }),
   resend: (id: string) => endpoint('/api/broadcasts/{id}/resend', { id }),
   /**
-   * SENDS — to real people. Only a DRAFT or SCHEDULED one; 400 with why
+   * SENDS - to real people. Only a DRAFT or SCHEDULED one; 400 with why
    * (no recipients, no channel…). A WhatsApp campaign only with a real WABA
    * (Omer's ruling), which the screen checks before offering it.
    */
@@ -1023,13 +1023,13 @@ export const outreachEndpoints = {
 } as const;
 
 /**
- * Message templates — screen 05c. ADMIN on every verb.
+ * Message templates - screen 05c. ADMIN on every verb.
  *
  * `list` paginates properly: `{ data, total, page, limit }` with a real
  * `prisma.messageTemplate.count`, and filters on channel, status and category.
  *
  * **No `include` for the `broadcasts` relation**, so usage count and reply
- * rate are unserved rather than impossible — the join exists on the model.
+ * rate are unserved rather than impossible - the join exists on the model.
  */
 export const templateEndpoints = {
   /** GET the list; POST creates a local template (a DRAFT; not sent to Meta). */
@@ -1041,12 +1041,12 @@ export const templateEndpoints = {
 } as const;
 
 /**
- * Phone calls — screens 05d and 05e.
+ * Phone calls - screens 05d and 05e.
  *
  * **Every route here is behind `voiceCopilotGate`**, which answers 404 for the
  * whole router when `tenant.voiceCopilotEnabled` is false. A 404 from the gate
  * is indistinguishable from a missing route, so the screen asks
- * `tenantSettings` — which is NOT behind the gate — before interpreting one.
+ * `tenantSettings` - which is NOT behind the gate - before interpreting one.
  */
 export const callEndpoints = {
   /** Cursor-paginated. Filters on `direction` and `status`. */
@@ -1066,9 +1066,9 @@ export const callEndpoints = {
   /** `{ to, conversationId?, notes? }` → `{ mode: IN_PLATFORM | AGENT_FIRST, … }`. */
   startOutbound: () => endpoint('/api/voice-sessions/start-outbound'),
   hangup: (id: string) => endpoint('/api/voice-sessions/{id}/hangup', { id }),
-  /** `{ to, label? }` — a third party into the conference. */
+  /** `{ to, label? }` - a third party into the conference. */
   addParticipant: (id: string) => endpoint('/api/voice-sessions/{id}/add-participant', { id }),
-  /** `{ hold }` — the customer on hold music while you consult. */
+  /** `{ hold }` - the customer on hold music while you consult. */
   customerHold: (id: string) => endpoint('/api/voice-sessions/{id}/customer-hold', { id }),
   /** Cold transfer: the agent's leg drops; customer and third party stay. */
   agentLeave: (id: string) => endpoint('/api/voice-sessions/{id}/agent-leave', { id }),
@@ -1078,21 +1078,21 @@ export const callEndpoints = {
  * Tenant feature flags, deliberately OUTSIDE the voice gate.
  *
  * This is how the screen tells *"voice is not switched on here"* from *"the
- * route is missing"* — two conditions that answer 404 identically.
+ * route is missing"* - two conditions that answer 404 identically.
  */
 export const tenantSettingsEndpoints = {
   read: () => endpoint('/api/tenant-settings'),
 } as const;
 
 /**
- * AI employees — Studio, screen 07.
+ * AI employees - Studio, screen 07.
  *
  * `list` returns each employee enriched with three conversation counts, its
  * knowledge sources, its department and when it was last tested. The counts
  * exclude sandbox rows and setup rehearsals; imported history is excluded by
  * the platform's own default rather than restated.
  *
- * **`PATCH /:id` is how pause and resume happen** — `{ status }`. There is no
+ * **`PATCH /:id` is how pause and resume happen** - `{ status }`. There is no
  * retire: `AIAgentStatus` is ACTIVE | DRAFT | PAUSED.
  */
 export const employeeEndpoints = {
@@ -1100,31 +1100,31 @@ export const employeeEndpoints = {
   detail: (id: string) => endpoint('/api/ai-agents/{id}', { id }),
   /** Pause and resume both go through here, as `{ status }`. */
   update: (id: string) => endpoint('/api/ai-agents/{id}', { id }),
-  /** `{ hasCanvas, reachable }` — is this employee wired into the routing? */
+  /** `{ hasCanvas, reachable }` - is this employee wired into the routing? */
   reachability: (id: string) => endpoint('/api/ai-agents/{id}/reachability', { id }),
 } as const;
 
 /**
- * What GOTCHA knows — Studio, screen 08.
+ * What GOTCHA knows - Studio, screen 08.
  *
  * `sources` (at `/api/knowledge-bases`) returns each knowledge base with its documents, including
  * `updatedAt`, which the route's comment says *"drives last refreshed"*.
  *
  * `unanswered` is the newer of two routes over the same `UnansweredQuestion`
- * table — the other lives in analytics. Both read the same rows; this one has
+ * table - the other lives in analytics. Both read the same rows; this one has
  * the naming fixes, `timesAsked` and `distinctAskers`, and filters on reason
  * and resolved-versus-open.
  */
 export const knowledgeEndpoints = {
   /**
    * **`/api/knowledge-bases`, not `/api/knowledge`.** Both are mounted in
-   * `services/ai/src/index.ts` — `:109` carries the list router and `:111`
+   * `services/ai/src/index.ts` - `:109` carries the list router and `:111`
    * carries Confluence/Drive OAuth, which declares no `GET /`.
    *
    * Both are in the gateway allowlist, so both proxy cleanly and **both
    * answer 401 unauthenticated**: the service authenticates before it routes.
    * A 401 proves the upstream resolved. It does not prove the route exists,
-   * and only an authenticated request tells them apart — this one was wrong
+   * and only an authenticated request tells them apart - this one was wrong
    * for a whole screen before a capture found it.
    */
   sources: () => endpoint('/api/knowledge-bases'),
@@ -1133,10 +1133,10 @@ export const knowledgeEndpoints = {
    * 08b's "Add knowledge" (Omer, 2026-10-04). Writes the knowledge every AI
    * employee answers from; each document is embedded in the background.
    *
-   *   createBase  `POST /api/knowledge-bases` `{ name }` — only when the
+   *   createBase  `POST /api/knowledge-bases` `{ name }` - only when the
    *               tenant has none to add to (entitlement + capacity gated).
    *   addDocument `{ title, content, sourceType: 'text' }`, or
-   *               `{ sourceType: 'url', sourceUrl }` — the server reads the
+   *               `{ sourceType: 'url', sourceUrl }` - the server reads the
    *               page (SSRF-hardened) and refuses 400 when it cannot.
    *   upload      multipart `file` (+ `title`): PDF, DOCX, DOC, MD, TXT, 10 MB.
    */
@@ -1156,7 +1156,7 @@ export const knowledgeEndpoints = {
           folderId,
         })
       : endpoint('/api/knowledge/integrations/{intId}/drive/files', { intId }),
-  /** `{ sources: [{ id, kind, name, mimeType }] }` — folders and files not mixed. Learns them. */
+  /** `{ sources: [{ id, kind, name, mimeType }] }` - folders and files not mixed. Learns them. */
   driveSync: (intId: string) =>
     endpoint('/api/knowledge/integrations/{intId}/drive/sync', { intId }),
   /** What is kept in sync, with its state. */
@@ -1164,7 +1164,7 @@ export const knowledgeEndpoints = {
     endpoint('/api/knowledge/integrations/{intId}/drive/sources', { intId }),
   confluenceSpaces: (intId: string) =>
     endpoint('/api/knowledge/integrations/{intId}/confluence/spaces', { intId }),
-  /** `{ spaceKeys }` — learns those spaces' pages. */
+  /** `{ spaceKeys }` - learns those spaces' pages. */
   confluenceSync: (intId: string) =>
     endpoint('/api/knowledge/integrations/{intId}/confluence/sync', { intId }),
   oauthInit: (provider: 'google-drive' | 'confluence', kbId: string) =>
@@ -1180,7 +1180,7 @@ export const knowledgeEndpoints = {
    *
    * ★ CONFLICT DETECTION RUNS INSIDE THE HISTORICAL-IMPORT PIPELINE ONLY.
    * `knowledge-clustering.stage.ts` queries
-   * `where: { importId, tenantId, status: "PENDING" }` — so conflicts belong
+   * `where: { importId, tenantId, status: "PENDING" }` - so conflicts belong
    * to an import, not to the tenant, and there is no tenant-wide read of
    * them. Nothing looks at live conversations or at a document uploaded
    * afterwards, which the screen has to say rather than imply.
@@ -1191,44 +1191,44 @@ export const knowledgeEndpoints = {
   /**
    * One import's knowledge candidates. Answers `{ candidates, counts }`.
    *
-   * Conflicts are ordered first by the route itself — *"they are the only
-   * items where doing nothing is the wrong answer"* — and `variants` is sent
+   * Conflicts are ordered first by the route itself - *"they are the only
+   * items where doing nothing is the wrong answer"* - and `variants` is sent
    * only on a conflicted row (`c.conflict ? c.variants : null`).
    */
   candidates: (importId: string) =>
     endpoint('/api/historical-imports/{importId}/candidates', { importId }),
   /**
-   * Resolve a conflict — screen 08's hero.
+   * Resolve a conflict - screen 08's hero.
    *
    * ⚠ THIS WRITES THE TENANT KNOWLEDGE BASE EVERY AI EMPLOYEE ANSWERS FROM.
    * Gated on `ai:knowledge:write` or ADMIN, so a 403 is a real state rather
    * than a fault.
    *
    * A conflicted candidate is refused with `conflict_requires_answer` unless
-   * the body names the chosen answer — the route will not *"silently enshrine
+   * the body names the chosen answer - the route will not *"silently enshrine
    * whichever variant happened to be most common"*. Which is what makes
    * resolving it a one-tap act: the tap supplies the answer.
    *
    * ★★ THE BODY KEY IS `answer`, NOT `editedAnswer`. `editedAnswer` is the
    * handler's local variable and the column it lands in; the line that reads
-   * the request says `req.body?.answer`. See `APPROVE_BODY_KEY` — the wrong
+   * the request says `req.body?.answer`. See `APPROVE_BODY_KEY` - the wrong
    * key makes this route refuse every conflicted row, which is every row the
    * button exists for.
    *
    * Three other refusals, each a different repair: `no_knowledge_base` (there
    * is nowhere to write), `already_covered` with a 409 (the base already
-   * answers this — not a failure, and it marks the candidate), and the 403
+   * answers this - not a failure, and it marks the candidate), and the 403
    * above. `force` skips the duplicate check and **this product never sends
    * it**.
    *
-   * ⚠ `{ ok: true }` does not mean the AI can answer with it — the embedding
+   * ⚠ `{ ok: true }` does not mean the AI can answer with it - the embedding
    * failure is caught and discarded inside the route. See `documentUseOf`.
    */
   approveCandidate: (candidateId: string) =>
     endpoint('/api/historical-imports/candidates/{candidateId}/approve', { candidateId }),
   /**
    * 13f's "Add the N ready ones" (Omer): every waiting, unconflicted answer at
-   * the server's floor, up to 100 — `{ approved, skipped }`.
+   * the server's floor, up to 100 - `{ approved, skipped }`.
    */
   bulkApprove: (importId: string) =>
     endpoint('/api/historical-imports/{importId}/bulk-approve', { importId }),
@@ -1246,9 +1246,9 @@ export const knowledgeEndpoints = {
 } as const;
 
 /**
- * Automations — Studio, screen 09. Served by `chatbot_service`.
+ * Automations - Studio, screen 09. Served by `chatbot_service`.
  *
- * **`list` answers a BARE ARRAY** — the fourth response shape on this
+ * **`list` answers a BARE ARRAY** - the fourth response shape on this
  * platform, so it is read with `raw`.
  *
  * `validate` is a real pre-flight check, the same shape that replaced the
@@ -1264,13 +1264,13 @@ export const automationEndpoints = {
 } as const;
 
 /**
- * What GOTCHA is allowed to do — Studio, screen 10.
+ * What GOTCHA is allowed to do - Studio, screen 10.
  *
  * `list` merges adapter tool specs with the tenant's stored permissions.
  * Seventeen rows here, every one a platform default.
  *
  * **`riskGroup` on those rows is a regex over the tool's NAME**, computed at
- * response time by `riskGroupFor` — not stored, not assessed, and
+ * response time by `riskGroupFor` - not stored, not assessed, and
  * `create_update` is its no-match fallback.
  */
 export const capabilityEndpoints = {
@@ -1284,18 +1284,18 @@ export const capabilityEndpoints = {
  *
  * ★ PASS `cursor` TO GET KEYSET. Without it the route paginates by OFFSET,
  * and on a recency ordering a new message between pages shows a duplicate
- * and **silently skips one** — somebody waiting who never appears.
+ * and **silently skips one** - somebody waiting who never appears.
  *
  * With a cursor it orders `{ lastMessageAt: desc, nulls: last }` with a
  * `(timestamp, id)` tiebreak and answers `{ data, page: { limit, hasMore,
  * nextCursor } }`. The cursor encodes the literal string "null" for a row
- * with no timestamp, and the predicate has a branch for the null tail — so
+ * with no timestamp, and the predicate has a branch for the null tail - so
  * the undated rows at the end of the queue are paged through correctly
  * rather than repeating or vanishing.
  */
 export const inboxEndpoints = {
   list: () => endpoint('/api/conversations'),
-  /** One conversation, every column — 03c reads its `customerName`. */
+  /** One conversation, every column - 03c reads its `customerName`. */
   conversation: (conversationId: string) =>
     endpoint('/api/conversations/{conversationId}', { conversationId }),
   messages: (conversationId: string) =>
@@ -1305,7 +1305,7 @@ export const inboxEndpoints = {
    * The AI's suggested replies for one conversation.
    *
    * ⚠ ENTITLEMENT-GATED on `ai.copilot`, so a **402** here is an ordinary state
-   * and not a fault — Foundation denies Copilot. Its neighbour `/summary` is
+   * and not a fault - Foundation denies Copilot. Its neighbour `/summary` is
    * gated on a DIFFERENT key (`communication.crm_summaries`), so having one and
    * not the other is a plan combination the product sells.
    *
@@ -1315,17 +1315,17 @@ export const inboxEndpoints = {
   suggestions: (conversationId: string) =>
     endpoint('/api/ai-assist/{conversationId}/suggestions', { conversationId }),
   /**
-   * POST `{ locale? }` — the agent's "Try again", and nothing else ever calls
+   * POST `{ locale? }` - the agent's "Try again", and nothing else ever calls
    * it (Backend 9c5e96cc). 15s per conversation, 20 per agent per 10 min:
    * 429 `REFRESH_RATE_LIMITED` with `retryAfterSeconds`.
    */
   /**
-   * Backend cd504002 — what the AI is GIVEN about this customer, from the
+   * Backend cd504002 - what the AI is GIVEN about this customer, from the
    * same loaders the prompt renders from: `{ data: { conversationId, facts:
    * [{key, value, confidence, source, observedAt}], historical: { summary,
    * facts } | null } }`. Keyed on the conversation; 404 outside the tenant.
    */
-  /** Backend ed0f1c9c — the AI's steps here, newest first. See `contracts/ai-activity.ts`. */
+  /** Backend ed0f1c9c - the AI's steps here, newest first. See `contracts/ai-activity.ts`. */
   aiActivity: (conversationId: string) =>
     endpoint('/api/ai-assist/{conversationId}/ai-activity', { conversationId }),
   customerMemory: (conversationId: string) =>
@@ -1355,7 +1355,7 @@ export const inboxEndpoints = {
    * becomes `SENT`/`DELIVERED`/`FAILED` afterwards, which is why `Message.status`
    * had to reach the contract before this endpoint was worth having.
    *
-   * ★★ AND THE ROUTE CHECKS LESS THAN YOU WOULD EXPECT. No assignment check —
+   * ★★ AND THE ROUTE CHECKS LESS THAN YOU WOULD EXPECT. No assignment check -
    * an agent who has not taken the conversation can send. No send-window check;
    * WhatsApp's 24-hour rule is enforced by the provider, after the queue, so a
    * refusal for it never reaches the caller of this endpoint.
@@ -1370,7 +1370,7 @@ export const inboxEndpoints = {
    * ⚠⚠ SENDS A FILE TO A REAL PERSON, AND IT SENDS ON UPLOAD.
    *
    * `multipart/form-data`: one `file`, and `body` (or `caption`) as its
-   * caption. There is no draft step on the server — the request IS the send —
+   * caption. There is no draft step on the server - the request IS the send -
    * so the composer holds the chosen file and posts it only when Send is
    * pressed.
    *
@@ -1379,7 +1379,7 @@ export const inboxEndpoints = {
    *   with a 201. The composer refuses above the cap before posting.
    *
    * ⚠ It also requires `credentials.accessToken` on the channel account and
-   *   answers 400 "Channel not configured" without one — so channels that
+   *   answers 400 "Channel not configured" without one - so channels that
    *   authenticate otherwise may refuse files while accepting text.
    */
   sendMedia: (conversationId: string) =>
@@ -1388,7 +1388,7 @@ export const inboxEndpoints = {
   /* ── Screen 02's three verbs ─────────────────────────────────────────── */
 
   /**
-   * Take control — *"קבל שליטה"*.
+   * Take control - *"קבל שליטה"*.
    *
    * ════════════════════════════════════════════════════════════════════════
    * ⚠ THIS CAN SEND A MESSAGE TO THE CUSTOMER
@@ -1401,7 +1401,7 @@ export const inboxEndpoints = {
    * traffic.
    *
    * 409 when somebody else already holds it. Re-claiming your own is allowed
-   * and is a no-op for the assignment — but it greets the customer again, so
+   * and is a no-op for the assignment - but it greets the customer again, so
    * the control is not drawn when the conversation is already yours.
    *
    * Sets `isHandedOver: true` and writes an `agent_claimed` system message.
@@ -1411,7 +1411,7 @@ export const inboxEndpoints = {
 
   /**
    * Return to the AI. The inverse of a takeover, and the only thing that
-   * clears the `isHandedOver` latch — *"which nothing else in the system ever
+   * clears the `isHandedOver` latch - *"which nothing else in the system ever
    * clears"*.
    *
    * 409 when no AI employee is bound to the conversation: there is nobody to
@@ -1422,7 +1422,7 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/return-to-ai', { conversationId }),
 
   /**
-   * Stop the AI without assigning anyone (backend 3e7bae17) — the right-click's
+   * Stop the AI without assigning anyone (backend 3e7bae17) - the right-click's
    * "Stop AI". Sets `isHandedOver`, assigns nobody, records an `ai_stopped`
    * handover and writes an `ai_stopped` system message with no name in it.
    * Unlike `claim`, it greets nobody. 404 when there is no such conversation.
@@ -1431,12 +1431,12 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/stop-ai', { conversationId }),
 
   /**
-   * Put a conversation back in the queue — the design's *"requeue"*.
+   * Put a conversation back in the queue - the design's *"requeue"*.
    *
    * ★★ ADDED FOR THE RIGHT-CLICK MENU, AND MEASURED RATHER THAN ASSUMED.
    * `POST /api/conversations/{id}/release`, `conversationService.release`.
-   * Its OpenAPI entry is BYTE-IDENTICAL to `claim`'s on the request body —
-   * `required: false`, no Zod schema, `additionalProperties: true` — and
+   * Its OpenAPI entry is BYTE-IDENTICAL to `claim`'s on the request body -
+   * `required: false`, no Zod schema, `additionalProperties: true` - and
    * `claim` is called with `{}` in production today. Same route family, same
    * declared shape, one of them proven.
    *
@@ -1447,7 +1447,7 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/release', { conversationId }),
 
   /**
-   * Mark a conversation resolved — the design's *"resolve"*.
+   * Mark a conversation resolved - the design's *"resolve"*.
    *
    * `POST /api/conversations/{id}/close`, `conversationService.close`, and the
    * same request-body story as `release` above.
@@ -1462,7 +1462,7 @@ export const inboxEndpoints = {
    * `conv.assignedAgentId !== userId` for non-admins, so the control belongs
    * on a conversation the viewer holds and nowhere else.
    *
-   * Also accepts `{ departmentId }`, which this product does not send — Omer
+   * Also accepts `{ departmentId }`, which this product does not send - Omer
    * ruled transfers go to a named person. The platform writes a
    * `department_transferred` divider for that path, which the stream renders,
    * because another client can cause it.
@@ -1476,7 +1476,7 @@ export const inboxEndpoints = {
    * ⚠⚠ DELETES THE CONVERSATION AND EVERY MESSAGE IN IT. No undo.
    *
    * ADMIN and SYSTEM_ADMIN only (403 otherwise). A conversation that is not
-   * CLOSED is refused with 400 unless `?force=true` — Omer's ruling is that
+   * CLOSED is refused with 400 unless `?force=true` - Omer's ruling is that
    * deleting an active one forces, so the menu sends it for those.
    */
   remove: (conversationId: string) =>
@@ -1486,19 +1486,19 @@ export const inboxEndpoints = {
    * The people a conversation can be transferred to.
    *
    * ★ UNGATED BEYOND SIGNING IN. `services/auth/src/routes/agents.ts:29` has
-   * no `requirePermission` — only `authenticate`, `resolveTenant` and MFA. So
+   * no `requirePermission` - only `authenticate`, `resolveTenant` and MFA. So
    * unlike `/api/analytics/agents` (which needs `analytics:workspace:read`
    * and would be empty for most of the people who need to transfer), every
    * member can read it.
    *
    * ⚠ TWO THINGS IT DOES AND DOES NOT CONTAIN.
-   * `where: { role: "AGENT" }` — **admins are not in this list**, so a
+   * `where: { role: "AGENT" }` - **admins are not in this list**, so a
    * conversation cannot be transferred to one from screen 02, although
    * `reassign` would accept them.
    *
    * And it includes DEACTIVATED people. `reassign` checks only that the user
    * exists in the tenant, so transferring to somebody who cannot sign in
-   * succeeds and strands the conversation — assigned to nobody who can act,
+   * succeeds and strands the conversation - assigned to nobody who can act,
    * with no unassign to recover it. The screen filters on `isActive`; the
    * platform will not.
    *
@@ -1510,7 +1510,7 @@ export const inboxEndpoints = {
    * Is an auto-greeting configured? ADMIN only (`requireRole("ADMIN")`).
    *
    * Read so screen 02 can tell an agent whether taking control will message
-   * the customer — and a 403 here is the ordinary case, not a fault, because
+   * the customer - and a 403 here is the ordinary case, not a fault, because
    * most people pressing that button are agents. It becomes "we could not
    * ask", which is its own sentence.
    */
@@ -1524,7 +1524,7 @@ export const inboxEndpoints = {
    * named colleague, never drop it.
    *
    * The platform agrees, by accident. `release()` clears `assignedAgentId`
-   * and **does not clear `isHandedOver`** — so a released conversation has no
+   * and **does not clear `isHandedOver`** - so a released conversation has no
    * human and the AI is still latched off it. Nobody is driving, and nothing
    * on any screen says so. The rule prevents a real defect rather than
    * expressing a preference.

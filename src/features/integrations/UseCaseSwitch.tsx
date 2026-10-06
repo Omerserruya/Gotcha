@@ -11,8 +11,8 @@ import styles from './BusinessCore.module.css';
 
 /**
  * 14b's "Your business runs on": three segments, the chosen one dark. It
- * decides which parts are asked about — a leads business is never asked about
- * shipping — so the page is re-read once it lands. Nothing moves before the
+ * decides which parts are asked about - a leads business is never asked about
+ * shipping - so the page is re-read once it lands. Nothing moves before the
  * server says so: the parts below change with it.
  */
 export function UseCaseSwitch({ current }: { readonly current: UseCase | null }) {

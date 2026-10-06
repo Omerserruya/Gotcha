@@ -187,7 +187,7 @@
       },
       "fallback": {
         "completed": "{action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
-        "failed": "{action} — נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
+        "failed": "{action} - נכשל{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}",
         "awaiting_approval": "ממתין: {action}{amount, select, none {} other { {amount}}}{customer, select, none {} other { ל־{customer}}}{subject, select, none {} other { · {subject}}}"
       }
     },
@@ -235,12 +235,12 @@
     "item": {
       "gaps": {
         "title": "{count, plural, one {שאלה שלא ידע לענות עליה} other {# שאלות שלא ידע לענות עליהן}}",
-        "body": "{questions} — {asked, plural, one {נשאלה פעם אחת} other {נשאלו # פעמים}}",
+        "body": "{questions} - {asked, plural, one {נשאלה פעם אחת} other {נשאלו # פעמים}}",
         "action": "{count, plural, one {לענות עליה} other {לענות עליהן}}"
       },
       "conflicts": {
         "title": "{count, plural, one {שני מקורות עדיין חלוקים לגבי {fields}} other {מקורות חלוקים לגבי # דברים}}",
-        "body": "{count, plural, one {עד שתבחר, GOTCHA מעביר כל שאלה בנושא לאדם.} other {{fields} — עד שתבחר, GOTCHA מעביר את השאלות האלה לאדם.}}",
+        "body": "{count, plural, one {עד שתבחר, GOTCHA מעביר כל שאלה בנושא לאדם.} other {{fields} - עד שתבחר, GOTCHA מעביר את השאלות האלה לאדם.}}",
         "action": "לפתור"
       },
       "demandOne": {
@@ -250,7 +250,7 @@
       },
       "demandMany": {
         "title": "{count} דברים שביקשו ואין לך במלאי",
-        "body": "{terms} — {asked, plural, one {בקשה אחת} other {# בקשות}}",
+        "body": "{terms} - {asked, plural, one {בקשה אחת} other {# בקשות}}",
         "action": "לראות מי"
       },
       "dormant": {
@@ -272,7 +272,7 @@
     "online": "{count, plural, =0 {אף אחד לא מחובר} one {אחד מחובר} two {# מחוברים} many {# מחוברים} other {# מחוברים}}",
     "load": "{open} פתוחות · משיב תוך {reply}",
     "awayUntil": "חוזר ב-{time}",
-    "imbalance": "{name} נושא את רוב התור —",
+    "imbalance": "{name} נושא את רוב התור -",
     "rebalance": "פתחו את תיבת ההודעות",
     "none": "עדיין אין אף אחד בצוות.",
     "unavailable": "לא הצלחנו לקרוא את הצוות כרגע.",
@@ -303,10 +303,10 @@
         "multiple_automatable": "<b>{count}</b> נושאים חוזרים הופיעו לפחות {minOccurrences} פעמים כל אחד ב-{days} הימים האחרונים. כל אחד מהם הוא תהליך שממתין שייכתב."
       },
       "escalation": {
-        "rate_high": "<b>{percent}%</b> מהשיחות שנותחו הועברו לאדם ב-{days} הימים האחרונים — {escalated} מתוך {analyzed}."
+        "rate_high": "<b>{percent}%</b> מהשיחות שנותחו הועברו לאדם ב-{days} הימים האחרונים - {escalated} מתוך {analyzed}."
       },
       "confidence": {
-        "below_threshold": "GOTCHA לא הייתה בטוחה ב-<b>{percent}%</b> מהשיחות שנותחו ב-{days} הימים האחרונים — {count} מתוך {analyzed}, מתחת ל-{threshold}% ביטחון."
+        "below_threshold": "GOTCHA לא הייתה בטוחה ב-<b>{percent}%</b> מהשיחות שנותחו ב-{days} הימים האחרונים - {count} מתוך {analyzed}, מתחת ל-{threshold}% ביטחון."
       },
       "channel": {
         "highest_volume": "<b>{count}</b> שיחות הגיעו דרך {channel} ב-{days} הימים האחרונים, יותר מכל ערוץ אחר."
@@ -321,7 +321,7 @@
     "title": "צעדים ראשונים",
     "progress": "{done, plural, one {אחד הושלם} two {# הושלמו} other {# הושלמו}} · נותרו כ-{minutes, plural, one {דקה} two {# דקות} other {# דקות}}",
     "allDone": "הכול הושלם",
-    "hide": "הסתירו — אפשר לסיים אחר כך בהגדרות",
+    "hide": "הסתירו - אפשר לסיים אחר כך בהגדרות",
     "next": "השלב הבא",
     "estimate": "{minutes} דק׳",
     "unavailable": "לא הצלחנו לטעון את התקדמות ההגדרה כרגע.",
@@ -329,7 +329,7 @@
     "step": {
       "connect_channel": {
         "title": "חברו ערוץ",
-        "body": "וואטסאפ, אינסטגרם או אימייל — איפה שהלקוחות שלכם כבר כותבים לכם.",
+        "body": "וואטסאפ, אינסטגרם או אימייל - איפה שהלקוחות שלכם כבר כותבים לכם.",
         "action": "חברו",
         "after": "אחרי שתחבר ערוץ."
       },
@@ -353,7 +353,7 @@
       },
       "handover_rules": {
         "title": "הגדירו כללי העברה",
-        "body": "מתי אדם לוקח פיקוד — כעס, כסף, סיטונאות — ומה קורה מחוץ לשעות הפעילות.",
+        "body": "מתי אדם לוקח פיקוד - כעס, כסף, סיטונאות - ומה קורה מחוץ לשעות הפעילות.",
         "action": "הגדירו כללים",
         "after": "אחרי שתגדיר את כללי ההעברה."
       },
@@ -390,11 +390,11 @@
       "cancel": "עוד לא",
       "connectStore": "לחיבור החנות",
       "failed": {
-        "store": "קודם מחברים את החנות — GOTCHA צריך אותה כדי לפעול על הזמנות.",
+        "store": "קודם מחברים את החנות - GOTCHA צריך אותה כדי לפעול על הזמנות.",
         "profile": "קודם צריך למלא את פרופיל העסק.",
         "admin": "סביבת העבודה צריכה קודם מנהל פעיל.",
         "forbidden": "רק מנהל יכול להעלות את סביבת העבודה לאוויר.",
-        "failed": "העלייה לאוויר לא הצליחה — אפשר לנסות שוב."
+        "failed": "העלייה לאוויר לא הצליחה - אפשר לנסות שוב."
       },
       "opensOnce": "נפתח כש{steps} מוגדרים."
     },
@@ -402,7 +402,7 @@
     "blockedBy": "מחכה ל: {step}",
     "and": "ו",
     "testMessage": "שליחת הודעת ניסיון לעצמך",
-    "testMessageNotYet": "שליחת הודעת ניסיון מכאן תגיע בהמשך — בינתיים אפשר לכתוב למספר ה-WhatsApp מהטלפון שלך."
+    "testMessageNotYet": "שליחת הודעת ניסיון מכאן תגיע בהמשך - בינתיים אפשר לכתוב למספר ה-WhatsApp מהטלפון שלך."
   },
   "dayOne": {
     "eyebrow": "היום הראשון",

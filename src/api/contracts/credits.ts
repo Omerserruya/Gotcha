@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Credits — screen 17c.
+ * Credits - screen 17c.
  *
  * `GET /api/billing/credit-summary`.
  *
@@ -15,14 +15,14 @@ import { z } from 'zod';
  * > *"Two buckets: INCLUDED (monthly, **expires at renewal**) and PURCHASED
  * > (**never expires**, FIFO)."*
  *
- * `deriveBalanceFromLots` enforces half of it structurally — an INCLUDED lot
+ * `deriveBalanceFromLots` enforces half of it structurally - an INCLUDED lot
  * counts only while `lot.periodKey === currentPeriodKey`. A tenant with 900
  * included and 300 purchased has 1,200 today and 300 on renewal day. A single
  * total is arithmetically correct and answers none of the question that makes
  * somebody open this screen.
  *
  * The other half of that comment is a DEFAULT, not a rule: purchased credits
- * can be sold to expire — see {@link purchasedBalance}. So this screen names
+ * can be sold to expire - see {@link purchasedBalance}. So this screen names
  * what the plan bucket does and declines to promise anything about the rest.
  *
  * ── 2. "CONSUMED" IS A SUBTRACTION, NOT A MEASUREMENT ──
@@ -42,7 +42,7 @@ import { z } from 'zod';
  * | `EXPIRE`  | 2026-08-28 | −6,659.99 |
  *
  * The snapshot `tenant_ai_balances` therefore holds `includedAllowance 7000`,
- * `includedRemaining 0` — and the route reports **`consumedCredits: 7000`,
+ * `includedRemaining 0` - and the route reports **`consumedCredits: 7000`,
  * `consumedPct: 100`**. The truth is that 340 were used and 6,660 lapsed
  * unused: **5% consumption rendered as 100%**.
  *
@@ -53,7 +53,7 @@ import { z } from 'zod';
  *
  * **So this screen does not draw the bar.** `consumedCredits` and
  * `consumedPct` are parsed and deliberately left unrendered until the route
- * separates spend from expiry — see {@link consumptionIsTrustworthy}, which
+ * separates spend from expiry - see {@link consumptionIsTrustworthy}, which
  * detects the specific contradiction rather than assuming it.
  *
  * ── 3. AND THE CURRENT PERIOD HAS NO GRANT AT ALL ──
@@ -61,13 +61,13 @@ import { z } from 'zod';
  * contracted for 7,000. The balance snapshot's `periodKey` is **`2026-07`**,
  * last written 2026-08-28. One lot has ever existed and it expired.
  *
- * So `includedCredits: 7000` is the **contract**, not a grant — the route says
+ * So `includedCredits: 7000` is the **contract**, not a grant - the route says
  * as much at `:59`, *"the CONTRACTED allowance, from the subscription's own
  * snapshot"*. Saying "7,000 included" beside "0 remaining" without saying
  * which is promised and which is held would read as a loss.
  *
  * ── 4. TWO ESTIMATES, AND THEY MAY NOT BE SWAPPED ──
- * `estimatedRemaining` uses the **public commercial ratio** — what the plan
+ * `estimatedRemaining` uses the **public commercial ratio** - what the plan
  * promises. `observedRemaining` uses **this tenant's own measured burn**. The
  * route is emphatic that both ship, *"each labelled with its basis"*, because
  * *"a screen that silently swapped them would make a pricing claim out of one
@@ -110,20 +110,20 @@ export const creditSummarySchema = z.object({
   plan: z
     .object({
       name: z.string().nullable().default(null),
-      /** CONTRACTED, from the subscription snapshot — not a grant. */
+      /** CONTRACTED, from the subscription snapshot - not a grant. */
       includedCredits: z.number().default(0),
     })
     .default({ name: null, includedCredits: 0 }),
   usage: z
     .object({
-      /** Allowance minus remaining. Expiry lands here too — see the header. */
+      /** Allowance minus remaining. Expiry lands here too - see the header. */
       consumedCredits: z.number().default(0),
-      /** The INCLUDED bucket — the half that lapses at renewal. */
+      /** The INCLUDED bucket - the half that lapses at renewal. */
       remainingPlanCredits: z.number().default(0),
       consumedPct: z.number().default(0),
     })
     .default({ consumedCredits: 0, remainingPlanCredits: 0, consumedPct: 0 }),
-  /** The PURCHASED bucket — never expires, FIFO. */
+  /** The PURCHASED bucket - never expires, FIFO. */
   purchasedCredits: z.object({ balance: z.number().default(0) }).default({ balance: 0 }),
   totalAvailableCredits: z.number().default(0),
   creditSources: z
@@ -184,7 +184,7 @@ export function expiringAtRenewal(summary: CreditSummary): number {
 }
 
 /**
- * The PURCHASED balance — which this screen does NOT call permanent.
+ * The PURCHASED balance - which this screen does NOT call permanent.
  *
  * The `ai_unit_lots` comment says *"PURCHASED (never expires, FIFO)"* and
  * that is the **default**, not an invariant. `CreditExpiryPolicy` has three
@@ -202,8 +202,8 @@ export function expiringAtRenewal(summary: CreditSummary): number {
  *
  * The credit-summary response cannot settle it either way: the route selects
  * `expiresAt` from the lots and uses only `grantType`, so per-lot expiry never
- * reaches the wire. **So the screen says what expires — the plan bucket, which
- * `deriveBalanceFromLots` gates on `periodKey` structurally — and says nothing
+ * reaches the wire. **So the screen says what expires - the plan bucket, which
+ * `deriveBalanceFromLots` gates on `periodKey` structurally - and says nothing
  * about the purchased bucket lasting forever.** The expiry a buyer needs is on
  * the package itself, where `/billing/pricing/packages` does carry it.
  */
@@ -216,7 +216,7 @@ export function purchasedBalance(summary: CreditSummary): number {
  *
  * The contracted allowance is positive and nothing is held, against a period
  * that has started. Distinguishes *"you spent it"* from *"it was never
- * issued"* — which for this tenant is the difference between an owner
+ * issued"* - which for this tenant is the difference between an owner
  * believing their AI is expensive and their credits not having been granted.
  */
 export function awaitingGrant(summary: CreditSummary): boolean {
@@ -238,7 +238,7 @@ export function awaitingGrant(summary: CreditSummary): boolean {
  *
  * Deliberately narrow. It reports untrustworthy only on evidence carried in
  * the response itself, so it stops reporting it the moment the route starts
- * separating spend from expiry — rather than suppressing the bar forever.
+ * separating spend from expiry - rather than suppressing the bar forever.
  */
 export function consumptionIsTrustworthy(summary: CreditSummary, now: Date): boolean {
   if (summary.usage.consumedCredits <= 0) return true;
@@ -249,7 +249,7 @@ export function consumptionIsTrustworthy(summary: CreditSummary, now: Date): boo
 
   const windowOpened = now.getTime() - OBSERVED_WINDOW_DAYS * 24 * 60 * 60 * 1000;
   // The period began after the window opened, so everything spent in it was
-  // measurable — and nothing was measured. The consumption is not spend.
+  // measurable - and nothing was measured. The consumption is not spend.
   return startsAt < windowOpened;
 }
 

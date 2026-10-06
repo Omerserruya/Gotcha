@@ -6,7 +6,7 @@ import { permissionEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
- * The tenant's roles — screen 12b.
+ * The tenant's roles - screen 12b.
  *
  * `{ data }` with Prisma rows, so the contract flattens `_count.assignments`
  * into `memberCount` here rather than letting a Prisma aggregate shape reach

@@ -29,7 +29,7 @@ describe('safeReturnPath', () => {
 
     /*
      * ★★ AND THIS ONE DEFEATED THE FIX, NOT THE ORIGINAL.
-     * It resolves to our own origin — the smuggled host is not in the URL when
+     * It resolves to our own origin - the smuggled host is not in the URL when
      * it is parsed. `.` collapses to nothing and the pathname comes back as
      * `//evil.example`: an authority MANUFACTURED by normalisation, which the
      * origin comparison cannot see because it happened afterwards.
@@ -41,7 +41,7 @@ describe('safeReturnPath', () => {
     ['', 'an empty value'],
     [null, 'null'],
     /*
-     * Not hostile — it resolves to this origin — but every caller produces an
+     * Not hostile - it resolves to this origin - but every caller produces an
      * absolute in-app path, so accepting it would widen the shape for nothing.
      * Pinned because resolution alone would let it through.
      */
@@ -73,7 +73,7 @@ describe('safeReturnPath', () => {
 
   it('★ a stripped character that does NOT move the origin still goes nowhere off-site', () => {
     /*
-     * `/\tevil.example` — one slash — is a path on this origin, not an
+     * `/\tevil.example` - one slash - is a path on this origin, not an
      * authority. It is not hostile and does not need rejecting; what matters is
      * only that it cannot leave. Asserting the exact output here rather than
      * `'/'` records which side of the line it falls on, because a guard that
@@ -84,7 +84,7 @@ describe('safeReturnPath', () => {
 
   /*
    * ══════════════════════════════════════════════════════════════════════════
-   * ★★ THE PROPERTY, NOT THE LIST — AND THE BASE PATH THAT WAS HIDING IT
+   * ★★ THE PROPERTY, NOT THE LIST - AND THE BASE PATH THAT WAS HIDING IT
    * ══════════════════════════════════════════════════════════════════════════
    * The list above can only ever hold the spellings somebody wrote down. This
    * asks the question the value exists to answer: after `appUrl` composes it
@@ -92,8 +92,8 @@ describe('safeReturnPath', () => {
    *
    * ★ It runs at BOTH mount points on purpose. Under `/v2` the prefix absorbs
    *   a smuggled authority (`/v2\t/evil` -> `/v2/evil`), so the defect was
-   *   invisible in the only deployment anyone looks at. At `''` — local dev,
-   *   and a root-mounted build of this source for a separate auth origin —
+   *   invisible in the only deployment anyone looks at. At `''` - local dev,
+   *   and a root-mounted build of this source for a separate auth origin -
    *   nothing absorbs it. A test at one mount point would have passed all day.
    */
   describe('★★ composed the way the callback composes it, at either mount point', () => {
@@ -145,7 +145,7 @@ describe('safeReturnPath', () => {
 
   it('★★ what it returns is already canonical, so a second parse cannot move it', () => {
     /*
-     * The original defect was not only the missing spellings — it was checking
+     * The original defect was not only the missing spellings - it was checking
      * one string and redirecting to a different one. Resolving the output again
      * must be a no-op, or some later `new URL` can still reinterpret a value
      * this function approved.

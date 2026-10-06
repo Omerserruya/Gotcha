@@ -18,13 +18,13 @@ import { safeLinkUrl } from '@/lib/safe-url';
 import styles from './SecondFactor.module.css';
 
 /**
- * The second factor, in the same panel — screen 00b's first half.
+ * The second factor, in the same panel - screen 00b's first half.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHAT IS BUILT, AND WHAT DELIBERATELY IS NOT
  * ════════════════════════════════════════════════════════════════════════════
- * The flow permits five device classes. **Two are a code somebody types —
- * `totp` and `static` — and those are built here.** `webauthn` is a browser
+ * The flow permits five device classes. **Two are a code somebody types -
+ * `totp` and `static` - and those are built here.** `webauthn` is a browser
  * credential prompt, `duo` is a push waiting for approval, `sms` is an
  * out-of-band message; the schema agrees by giving each its own field
  * (`code` string, `webauthn` object, `duo` integer) rather than one polymorphic
@@ -33,7 +33,7 @@ import styles from './SecondFactor.module.css';
  * None of those three is configured on this tenant, none has been observed on
  * the wire, and each is a different journey. Choosing one hands over to the
  * identity provider's page. **That is deliberate and reversible, not an
- * oversight** — the handover is narrowed from "any stage we do not recognise"
+ * oversight** - the handover is narrowed from "any stage we do not recognise"
  * to "three named classes we have chosen not to build blind".
  *
  * ═════════════════════════════════════════════════════════════════════════════
@@ -52,7 +52,7 @@ import styles from './SecondFactor.module.css';
  *
  * ★★ THE QUESTION HAS BEEN WALKED, AND THE ANSWER IS THE FAVOURABLE ONE.
  *   Driven through this panel to the second-factor stage and handed over from
- *   exactly that state, `authorize` **resumes the in-progress flow** — it does
+ *   exactly that state, `authorize` **resumes the in-progress flow** - it does
  *   not start a new one:
  *
  *       after handover   /if/flow/default-authentication-flow/
@@ -64,7 +64,7 @@ import styles from './SecondFactor.module.css';
  *   established, not a restart. Nobody types a password twice.
  *
  * ⚠ THE SCOPE, BECAUSE OVER-BROADNESS IS WHAT WAS WRONG HERE BEFORE. That was
- *   measured with **`totp`** — still no `webauthn`, `duo` or `sms` device
+ *   measured with **`totp`** - still no `webauthn`, `duo` or `sms` device
  *   exists on this tenant. What is established is the MECHANIC the three
  *   journeys depend on: `authorize`, re-entered mid-flow, resumes. Strong
  *   evidence for them; not a walk of them.
@@ -75,9 +75,9 @@ import styles from './SecondFactor.module.css';
  *
  * ★★ AND IT IS NOW THE ONLY PATH IN THIS APP THAT DELIBERATELY SHOWS THE
  *   IDENTITY PROVIDER'S OWN UI. Five entrances were closed so that nobody
- *   meets it by accident; this one meets it on purpose. That is defensible —
+ *   meets it by accident; this one meets it on purpose. That is defensible -
  *   the alternative is guessing at three credential journeys nobody here can
- *   test — but it should be a standing decision rather than a leftover, and
+ *   test - but it should be a standing decision rather than a leftover, and
  *   it is the first thing to re-examine if a device of one of these classes
  *   is ever enrolled.
  *
@@ -88,7 +88,7 @@ import styles from './SecondFactor.module.css';
  *
  * ★ **A recovery code is not six digits.** Nothing has been observed about its
  *   length or alphabet, and six boxes would silently truncate one. It gets a
- *   single field, no auto-submit, and no claim about its shape — the same rule
+ *   single field, no auto-submit, and no claim about its shape - the same rule
  *   that keeps a lockout number off the failed-password message.
  */
 
@@ -96,7 +96,7 @@ import styles from './SecondFactor.module.css';
  * Measured from this deployment's own `otpauth://` URL: `digits=6`.
  *
  * ★★ AND NO USER-FACING STRING MAY NAME IT. The hint used to read "the moment
- * the **sixth** digit lands" — a number owned by this constant, written out in
+ * the **sixth** digit lands" - a number owned by this constant, written out in
  * prose in two catalogues, where changing the constant would leave both
  * sentences confidently wrong and nothing would disagree. The count reaches the
  * screen through `code.digit`'s `{of}` parameter and through the boxes
@@ -116,7 +116,7 @@ export function SecondFactor({
   readonly challenge: AuthenticatorValidateChallenge;
   /**
    * ★★ WHAT THEY TYPED A MOMENT AGO, NOT `pending_user`.
-   * The server sends a username — observed as `akadmin` — which reads as an
+   * The server sends a username - observed as `akadmin` - which reads as an
    * internal system account to somebody halfway through signing in. The address
    * they entered is always recognisable to them, is already in the panel's
    * state, and cannot put an internal account name on the screen.
@@ -142,7 +142,7 @@ export function SecondFactor({
 
   /*
    * Every device is one we cannot drive. Handing over immediately is better than
-   * showing a list whose every entry leaves — the person has one way in and a
+   * showing a list whose every entry leaves - the person has one way in and a
    * menu of one is a decision nobody needs to make.
    */
   if (usable.length === 0) {
@@ -189,7 +189,7 @@ export function SecondFactor({
       return;
     }
     /*
-     * Pasting a whole code into any box fills all of them — 00b asks for it, and
+     * Pasting a whole code into any box fills all of them - 00b asks for it, and
      * a person copying from an authenticator app pastes into whichever box the
      * cursor is in rather than the first.
      */
@@ -203,7 +203,7 @@ export function SecondFactor({
     boxes.current[landed]?.focus();
 
     /*
-     * ★ SUBMITS ITSELF THE MOMENT THE SIXTH DIGIT LANDS — 00b's own words. Safe
+     * ★ SUBMITS ITSELF THE MOMENT THE SIXTH DIGIT LANDS - 00b's own words. Safe
      *   here in a way it would not be on the approvals queue: a wrong code costs
      *   a retry, and making somebody press a button after typing the last digit
      *   of a code that expires is friction with nothing behind it.
@@ -244,13 +244,13 @@ export function SecondFactor({
 
         ── AND "BACK" IS A REAL ACTION, NOT A LINK TO THE PREVIOUS PAGE ──
         The stage lives in a server-side flow, so navigating back to
-        `/sign-in` RESUMES this same stage — the browser's own back button does
+        `/sign-in` RESUMES this same stage - the browser's own back button does
         nothing useful here. Authentik supplies the way out on the challenge
         itself: `flow_info.cancel_url`, which our contract has parsed since the
         day it was written and **nothing has ever read**.
 
         ⚠ It is `.default('')`, and its value has never been observed. So the
-          control renders only when the provider actually offers one — three
+          control renders only when the provider actually offers one - three
           states, never two. A back arrow that silently does nothing on a
           screen somebody is stuck on is worse than no arrow.
 
@@ -274,19 +274,19 @@ export function SecondFactor({
           ════════════════════════════════════════════════════════════════════
           ⚠⚠ RENDERED "Signing in as " WITH NOTHING AFTER IT
           ════════════════════════════════════════════════════════════════════
-          Their own address, from stage one — never the server's `pending_user`,
+          Their own address, from stage one - never the server's `pending_user`,
           which is `akadmin` here and reads as an internal account to somebody
           halfway through signing in.
 
           **But the stage outlives the address.** `startFlow()` on mount resumes
-          whatever stage the flow cookie holds, so a reload — or a link opened
-          fresh — lands straight on this screen with the panel's `email` state
+          whatever stage the flow cookie holds, so a reload - or a link opened
+          fresh - lands straight on this screen with the panel's `email` state
           empty, because nobody typed it in this page load. The stage lives on
           the server; the typed value lived only in React.
 
           ★ A label with an empty value is the reassuring-looking failure: it
             reads as a broken screen rather than as a missing fact, and it was
-            the first thing the reviewer saw. Three states, never two — we have
+            the first thing the reviewer saw. Three states, never two - we have
             it, or we say nothing. Omitting loses a reassurance; a dangling
             "Signing in as" loses trust in the screen.
 
@@ -364,7 +364,7 @@ export function SecondFactor({
       {/*
         ★★ ONE DEVICE MEANS NO CHOOSER. The common path is a person with an
         authenticator app, and a list of one is a decision nobody needs. The way
-        out is present from the start — quiet, and phrased as the situation
+        out is present from the start - quiet, and phrased as the situation
         somebody is actually in rather than as a menu label.
       */}
       {devices.length > 1 ? (
@@ -397,7 +397,7 @@ export function SecondFactor({
               TODAY. "No access to your phone?" is the right sentence to somebody
               holding an authenticator app. Once they have answered it and
               switched to a recovery code, asking again is asking a question they
-              have already answered — and the admin account has exactly those two
+              have already answered - and the admin account has exactly those two
               devices, so it is one click away rather than hypothetical.
             */}
             {active.device_class.trim().toLowerCase() === 'totp' ? t('noAccess') : t('otherMethod')}
@@ -411,7 +411,7 @@ export function SecondFactor({
 /**
  * The message key for a device class.
  *
- * `static` is **"a recovery code"** and never "static" — that is Authentik's
+ * `static` is **"a recovery code"** and never "static" - that is Authentik's
  * word for its own storage and means nothing to somebody who was shown ten codes
  * once and told to keep them safe.
  */

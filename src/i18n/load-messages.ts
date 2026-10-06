@@ -26,7 +26,7 @@ async function loadNamespace(locale: string, namespace: Namespace): Promise<Mess
  * ★★ THE ARGUMENT IS WHAT KEEPS THE PRODUCT'S COPY OFF THE SIGN-IN PAGE.
  * `NextIntlClientProvider` serialises whatever it is given into the client
  * payload, so "all of them" is not a neutral default on a page nobody has
- * authenticated to reach — it published feature names, warnings and limits to
+ * authenticated to reach - it published feature names, warnings and limits to
  * anyone who opened it. See `CREDENTIAL_SURFACE_NAMESPACES`.
  */
 export async function loadMessages(

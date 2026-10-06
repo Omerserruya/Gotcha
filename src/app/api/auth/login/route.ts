@@ -25,7 +25,7 @@ import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
  * over after it has already created the provider session.
  *
  * Exported so the page that builds the hand-over URL uses the same string.
- * Two spellings of a routing hint is one spelling too many — the failure would
+ * Two spellings of a routing hint is one spelling too many - the failure would
  * be a redirect loop between this route and the panel, on the front door.
  */
 export const HANDOVER_PARAM = 'handover';
@@ -49,7 +49,7 @@ export const AUTHORIZE_PARAM = 'authorize';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   /*
    * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
-   * see this file — its matcher excludes `/api` — so this route was covered
+   * see this file - its matcher excludes `/api` - so this route was covered
    * there by the gateway allowlist and by nothing else, while every page route
    * had two independent refusals.
    */
@@ -62,13 +62,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * ═════════════════════════════════════════════════════════════════════════
    * ⚠⚠ THE SECOND DOOR TO THE PURPLE PAGE, AND NOTHING WAS IN FRONT OF IT
    * ═════════════════════════════════════════════════════════════════════════
-   * This route IS the OIDC start, so it goes straight to `authorize` — and with
+   * This route IS the OIDC start, so it goes straight to `authorize` - and with
    * no identity-provider session the provider renders **its own login page**,
    * which is the screen the whole separation exists to stop anyone seeing.
    * The middleware cannot help: its matcher excludes `/api`.
    *
    * Omer reached it twice from a bookmark carrying
-   * `?next=/application/o/authorize/`. It is not only bookmarks —
+   * `?next=/application/o/authorize/`. It is not only bookmarks -
    * `SessionExpiryWatcher` comes here too, so a session expiring mid-work
    * handed somebody the provider's UI rather than ours.
    *
@@ -80,8 +80,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * ── THE MARKER IS A ROUTING HINT, NOT A SECURITY CONTROL ──
    * Anyone can append it, and that is fine: the worst a forged one achieves is
    * seeing the provider's page, which is what happened before. What it buys is
-   * that the ONE legitimate direct caller — our panel, handing over after it
-   * has already created the provider session — keeps working, while every
+   * that the ONE legitimate direct caller - our panel, handing over after it
+   * has already created the provider session - keeps working, while every
    * other arrival is sent to the panel first.
    *
    * ⚠ IT CHANGES SESSION EXPIRY, DELIBERATELY AND NOT COSTLESSLY. Before, an
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    *   when the provider session was still alive. Now it shows our sign-in
    *   screen. That is the design's behaviour and it is consistent with the
    *   front door, but it is a real regression for the common case and it
-   *   should be a decision rather than a side effect — the cure is a silent
+   *   should be a decision rather than a side effect - the cure is a silent
    *   attempt from the panel itself, which is not built.
    */
   const signInElsewhere = process.env.SIGN_IN_URL;
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * ★★ THE HOP BACK, SO THE PROVIDER'S PAGE IS NEVER RENDERED
    * ════════════════════════════════════════════════════════════════════════════
    * Sending the browser to `authorize` makes it RENDER `/if/flow/` for the
-   * last hop. The panel can finish that hop with two fetches instead — but
+   * last hop. The panel can finish that hop with two fetches instead - but
    * only if it holds the authorize URL, and it cannot mint one: this route
    * 404s on the sign-in origin, and the PKCE verifier has to be sealed into a
    * `SameSite=lax` cookie that only a top-level navigation here can set.
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    *   URL is public; the verifier stays in the cookie.
    *
    * ⚠ ONLY WHEN THE PANEL ASKED. Without `?finish=1` this redirects to
-   *   `authorize` as it always has — so the front door, an expiring session
+   *   `authorize` as it always has - so the front door, an expiring session
    *   and any other arrival are untouched, and a panel that cannot finish the
    *   hop has somewhere to fall back TO.
    *

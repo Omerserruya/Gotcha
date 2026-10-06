@@ -18,7 +18,7 @@ import styles from './Employees.module.css';
  *
  * A manager pausing an employee would reasonably assume the conversations go
  * somewhere. They do not. So the confirmation **names what happens to the
- * people currently talking to it** — with the number, when there is one —
+ * people currently talking to it** - with the number, when there is one -
  * rather than asking whether the person is sure.
  *
  * Resuming has no such consequence and needs no confirmation.
@@ -103,7 +103,7 @@ export function PauseEmployee({
       {/*
         The consequence, with a number when there is one. "Three people are
         mid-conversation" lands where "open conversations will be affected"
-        does not — and the warning stands at zero too, because a conversation
+        does not - and the warning stands at zero too, because a conversation
         can arrive between reading this and clicking.
       */}
       <p className={styles.confirmBody} data-testid={`pause-consequence-${id}`}>

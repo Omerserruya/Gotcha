@@ -54,7 +54,7 @@ describe('★ topics against the week before', () => {
     expect(topicRows(fallback, null)).toEqual([]);
   });
 
-  it('the biggest rise, on a base worth saying — a rise from 2 is not news', () => {
+  it('the biggest rise, on a base worth saying - a rise from 2 is not news', () => {
     expect(biggestRise(WEEK, BEFORE)?.key).toBe('order_status');
     expect(biggestRise([topic('rare', 10)], [topic('rare', MIN_BASE - 1)])).toBeNull();
     expect(biggestRise(WEEK, null)).toBeNull();
@@ -81,18 +81,18 @@ describe('★★ 06e on screen', () => {
     );
   });
 
-  it('nothing moved: said so — no percentage of nothing', async () => {
+  it('nothing moved: said so - no percentage of nothing', async () => {
     render(await TopicsHero({ data: data({ before: WEEK }) }));
     expect(screen.getByTestId('topics-hero')).toHaveTextContent('No topic moved much');
   });
 
-  it('★ the table: topic, asked, change (+43%, new); "—" for what nothing counts', async () => {
+  it('★ the table: topic, asked, change (+43%, new); "-" for what nothing counts', async () => {
     render(await TopicTable({ data: data() }));
-    expect(screen.getByTestId('topic-order_status')).toHaveTextContent('Order status966+43%——');
+    expect(screen.getByTestId('topic-order_status')).toHaveTextContent('Order status966+43%--');
     expect(screen.getByTestId('topic-does_it_shrink')).toHaveTextContent('new');
   });
 
-  it('⚠ a failed read; no topics; questions not grouped — three different sentences', async () => {
+  it('⚠ a failed read; no topics; questions not grouped - three different sentences', async () => {
     const one = render(await TopicTable({ data: data({ week: null }) }));
     expect(screen.getByTestId('topics-unavailable')).toBeInTheDocument();
     one.unmount();
@@ -128,10 +128,10 @@ describe('★★ 06e on screen', () => {
     expect(screen.getByText('Rename')).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('how people sound: the rows kept, "—", and why', async () => {
+  it('how people sound: the rows kept, "-", and why', async () => {
     render(await HowTheySound());
     const card = screen.getByTestId('topics-sound');
-    expect(card.textContent?.match(/—/g)).toHaveLength(3);
+    expect(card.textContent?.match(/-/g)).toHaveLength(3);
     expect(card).toHaveTextContent("Tone isn't counted yet.");
   });
 });
@@ -141,7 +141,7 @@ describe('★★ the classifier\'s "no result" is not a topic', () => {
   const DEV = data({ week: [topic('unknown', 5)], before: [] });
   const DAYS = [new Date('2026-10-01T00:00:00Z')];
 
-  it('★★ "unknown" and "general" are not rows — and never "new"', () => {
+  it('★★ "unknown" and "general" are not rows - and never "new"', () => {
     expect(topicRows([topic('unknown', 5), topic('General', 3)], [])).toEqual([]);
     expect(topicRows([...WEEK, topic('general', 9)], BEFORE).map((r) => r.key)).not.toContain(
       'general',
@@ -188,7 +188,7 @@ describe('★★ the classifier\'s "no result" is not a topic', () => {
   });
 });
 
-describe('★★ 06e — what the classifier could not place, in the customers’ words (backend 8d9d09ec)', () => {
+describe('★★ 06e - what the classifier could not place, in the customers’ words (backend 8d9d09ec)', () => {
   it('the unknown group’s examples are what people asked; the label itself is never a topic', async () => {
     const unknown = askedAboutSchema.parse({
       intent: 'unknown',

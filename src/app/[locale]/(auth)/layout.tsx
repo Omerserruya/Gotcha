@@ -13,7 +13,7 @@ import { isLocale, DEFAULT_LOCALE } from '@/i18n/locales';
  * ════════════════════════════════════════════════════════════════════════════
  * Everything else about sign-in already worked without a layout here. What did
  * not work is that the page shipped the product's whole translation catalogue
- * — feature names, queue warnings, refund copy — to anyone who opened it.
+ * - feature names, queue warnings, refund copy - to anyone who opened it.
  *
  * `NextIntlClientProvider` serialises whatever it is handed, so the fix is to
  * hand it less. `CREDENTIAL_SURFACE_NAMESPACES` is the measured set: the

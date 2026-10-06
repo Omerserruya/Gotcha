@@ -18,7 +18,7 @@
   }
 
   /*
-   * Columns rather than prose. The cap above is a READING measure — right for a
+   * Columns rather than prose. The cap above is a READING measure - right for a
    * settings page, wrong for a screen that is three panels side by side, where
    * it left the middle one at about 500px on a 1440 display.
    *
@@ -51,7 +51,7 @@
   }
 
   /*
-   * `layout="screen"` — 02's page, measured on four screens. See the prop.
+   * `layout="screen"` - 02's page, measured on four screens. See the prop.
    * The divider under the header was missed at first: the trees recorded only
    * `border-top`. Measured on all four sides since.
    */
@@ -69,7 +69,7 @@
     gap: var(--space-24);
     flex-wrap: wrap;
     padding: 30px var(--space-40) var(--space-20);
-    /* 02: `border-bottom: 1px #EDE9E1` on all four — measured on all four sides. */
+    /* 02: `border-bottom: 1px #EDE9E1` on all four - measured on all four sides. */
     border-block-end: 1px solid var(--border-subtle);
   }
 
@@ -85,7 +85,7 @@
     margin: 0;
     font-size: var(--font-size-screen-title);
     font-weight: var(--font-weight-semibold);
-    /* 02: `letter-spacing:-0.025em` on all 50 of its screen titles — missed until measured. */
+    /* 02: `letter-spacing:-0.025em` on all 50 of its screen titles - missed until measured. */
     letter-spacing: var(--letter-spacing-display);
     color: var(--text-primary);
   }
@@ -115,7 +115,7 @@
   }
 
   /*
-   * `fill` / `flush`: the panel's height exactly — so the header stays put
+   * `fill` / `flush`: the panel's height exactly - so the header stays put
    * and the body below it is a window, not a document that runs past the
    * bottom of the screen.
    */

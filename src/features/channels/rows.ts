@@ -12,7 +12,7 @@ import {
  * The list: what is connected, then what could be.
  *
  * A pure function of what the read returned. No fetching, no translation, no
- * formatting — the component decides how a row reads in Hebrew; this decides
+ * formatting - the component decides how a row reads in Hebrew; this decides
  * what a row IS.
  */
 
@@ -24,14 +24,14 @@ export interface ConnectedRow {
   readonly identity: string | null;
   readonly status: ConnectionState;
   /**
-   * Null for voice, which has no `responseMode` — it routes by
+   * Null for voice, which has no `responseMode` - it routes by
    * `defaultAgentId` and `fallbackDepartmentId` instead, on its own spine.
    * Rendering "a person answers" for it would assert a field it does not have.
    */
   readonly responseMode: ResponseMode | null;
-  /** The platform's own words. Present on a healthy row too — see below. */
+  /** The platform's own words. Present on a healthy row too - see below. */
   readonly error: string | null;
-  /** Open RIGHT NOW — not CLOSED, no window. */
+  /** Open RIGHT NOW - not CLOSED, no window. */
   readonly openConversations: number | null;
   /**
    * STARTED inside the window, any status. A different measure from the one
@@ -40,7 +40,7 @@ export interface ConnectedRow {
    * `null` = not served, never coerced to 0.
    */
   readonly windowConversations: number | null;
-  /** Web chat's widget id — what its embed code carries. `null` on the rest. */
+  /** Web chat's widget id - what its embed code carries. `null` on the rest. */
   readonly widgetId?: string | null;
 }
 
@@ -57,7 +57,7 @@ export type ChannelRow = ConnectedRow | ConnectableRow;
  * `connectionStatus` and `lastError` disagree in practice: this tenant's
  * Shopify channel is CONNECTED and carries *"Shopify Chat app was uninstalled
  * from the store."* Trusting the status alone would show it as healthy, which
- * is exactly the failure a health check exists to prevent — so an error text
+ * is exactly the failure a health check exists to prevent - so an error text
  * is treated as a problem on its own.
  */
 export function isTroubled(row: ConnectedRow): boolean {
@@ -81,7 +81,7 @@ export function buildChannelRows(
     openConversations: channel._count?.conversations ?? null,
     /*
      * Checked with `typeof`, not truthiness: the route OMITS the key when no
-     * window was asked for, and 0 is a real answer — a channel that received
+     * window was asked for, and 0 is a real answer - a channel that received
      * nothing in 30 days is exactly what a health check needs to show.
      */
     windowConversations:
@@ -92,8 +92,8 @@ export function buildChannelRows(
   /*
    * Voice, folded in from the other spine.
    *
-   * It carries no volume and no open count — those live on `Conversation`,
-   * keyed to a `ChannelAccount` that a voice channel does not have — so both
+   * It carries no volume and no open count - those live on `Conversation`,
+   * keyed to a `ChannelAccount` that a voice channel does not have - so both
    * stay null and the row simply shows fewer facts rather than inventing any.
    */
   for (const vc of voice) {
@@ -110,7 +110,7 @@ export function buildChannelRows(
       status: voiceStateAsConnection(vc.status),
       responseMode: null,
       // `healthStatus` is a free-form string on this spine, not an error
-      // message — it is only a problem when the status already says so.
+      // message - it is only a problem when the status already says so.
       error: null,
       openConversations: null,
       windowConversations: null,
@@ -136,8 +136,8 @@ export function buildChannelRows(
    * Only kinds with a real provisioning path: the six OAuth platforms, plus
    * email and web chat, plus VOICE when the product offers it to this tenant.
    *
-   * `VOICE` is conditional rather than excluded. It IS connectable — `POST
-   * /api/voice-channels`, with typed-in Twilio credentials rather than OAuth —
+   * `VOICE` is conditional rather than excluded. It IS connectable - `POST
+   * /api/voice-channels`, with typed-in Twilio credentials rather than OAuth -
    * but its router is gated on `Tenant.voiceCopilotEnabled` and answers 404
    * when voice is not sold here. So the product decides whether to offer the
    * row, and `voiceOffered` carries that answer.

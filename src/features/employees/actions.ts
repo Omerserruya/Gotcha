@@ -19,7 +19,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  *
  * `AIAgentStatus` is `ACTIVE | DRAFT | PAUSED`, so this function takes only
  * the two transitions the platform has. **Naming a `retire` action that set
- * some other status would be inventing a lifecycle** — the screen says
+ * some other status would be inventing a lifecycle** - the screen says
  * plainly that firing is not something the product does.
  */
 export type EmployeeWriteResult =
@@ -53,12 +53,12 @@ export async function setEmployeeStatus(
  *
  * The route runs one transaction: it neutralises the routing node that pointed
  * at the employee, clears the tenant default and any knowledge-base scope,
- * removes its tool grants, **releases its LIVE conversations** — clearing both
- * `assignedAiAgentId` and `handledBy` — and deletes the row.
+ * removes its tool grants, **releases its LIVE conversations** - clearing both
+ * `assignedAiAgentId` and `handledBy` - and deletes the row.
  *
  * `handledBy` matters more than it looks. Nulling the employee id alone would
- * leave `isAiManaged()` true — it reads *handledBy in [ai_agent, flow] AND
- * !isHandedOver AND !assignedAgentId* — so a released conversation would file
+ * leave `isAiManaged()` true - it reads *handledBy in [ai_agent, flow] AND
+ * !isHandedOver AND !assignedAgentId* - so a released conversation would file
  * itself under **"the AI is handling this"** and sit there unanswered while
  * the inbox told a human it was covered. Clearing both returns it to the
  * unrouted state the worker documents as "stays in inbox for manual pickup",

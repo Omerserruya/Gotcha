@@ -4,7 +4,7 @@
  * ── WHY THIS LIST IS 22 AND NOT 28 ──
  * An event type is drawable only when it is **both templated and emitted**.
  * Templates alone answer *"is this a valid type?"*; what a settings screen must
- * ask is *"can this actually reach someone?"* — because a rule written against
+ * ask is *"can this actually reach someone?"* - because a rule written against
  * a type nothing raises is a control that does nothing, and the admin would
  * believe they had configured something.
  *
@@ -19,9 +19,9 @@
  * declared, it has a template, and nothing emits it.
  *
  * ── WHY THIS LIST IS HERE AND NOT DERIVED ──
- * The platform declares its event vocabulary in **three** separate unions —
+ * The platform declares its event vocabulary in **three** separate unions -
  * `services/ai/.../notifications-emit.ts`, `services/notifications/.../
- * event-emitter.service.ts` and `services/billing/src/lib/events.ts` — and the
+ * event-emitter.service.ts` and `services/billing/src/lib/events.ts` - and the
  * source comment warning that they have drifted says there are two. Nothing
  * reconciles them, so no single file can be followed as the authority.
  *
@@ -38,8 +38,8 @@ export interface NotifiableEvent {
   readonly family: EventFamily;
   /**
    * `true` where the platform's own source comment explains what the event
-   * does and does NOT mean. Those comments are the copy — see the i18n
-   * catalogue — because the person who wrote the emitter had already thought
+   * does and does NOT mean. Those comments are the copy - see the i18n
+   * catalogue - because the person who wrote the emitter had already thought
    * about exactly the misreading the design's wording invites.
    */
   readonly hasSourceCaveat?: boolean;
@@ -52,7 +52,7 @@ export const NOTIFIABLE_EVENTS: readonly NotifiableEvent[] = [
   /*
    * Emitted only on REASSIGNMENT, never on a self-claim. The emitter's own
    * comment: "telling someone they picked up the conversation they just
-   * clicked is the noise this screen exists to prevent" — which names this
+   * clicked is the noise this screen exists to prevent" - which names this
    * screen's purpose better than the design does.
    */
   { type: 'conversation.assigned', family: 'work', hasSourceCaveat: true },
@@ -60,7 +60,7 @@ export const NOTIFIABLE_EVENTS: readonly NotifiableEvent[] = [
   // ── Systems ───────────────────────────────────────────────────────
   /*
    * NOT "a connected system stops responding", which is what the design draws.
-   * The emitter's comment: "we checked and the credentials were rejected" —
+   * The emitter's comment: "we checked and the credentials were rejected" -
    * not that the provider is down, and not continuous monitoring. It fires
    * only when somebody runs a test. The design's wording would promise a watch
    * that does not exist.
@@ -69,7 +69,7 @@ export const NOTIFIABLE_EVENTS: readonly NotifiableEvent[] = [
 
   // ── Commerce ──────────────────────────────────────────────────────
   /*
-   * "Not 'campaign succeeded' — failures count toward completion, so the body
+   * "Not 'campaign succeeded' - failures count toward completion, so the body
    * states both numbers."
    */
   { type: 'broadcast.completed', family: 'commerce', hasSourceCaveat: true },
@@ -103,14 +103,14 @@ export const NOTIFIABLE_EVENTS: readonly NotifiableEvent[] = [
  *
  * ── THIS LIST IS THE ONLY VALIDATION THERE IS ──
  * `POST /api/notification-preferences` validates `eventType` against **no set
- * at all** — a non-empty string is the whole check, and `PATCH` does not even
+ * at all** - a non-empty string is the whole check, and `PATCH` does not even
  * trim. Every other field in that payload has a closed set behind it.
  *
  * So `conversaton.escalated` is accepted, answers `201`, appears in the list,
  * reads as enabled, and matches nothing for as long as it exists. Nothing at
  * write time or read time says otherwise. **The frontend is the only place in
  * the system where this can be caught**, which makes the vocabulary above a
- * safety property rather than a convenience — and means the screen also has
+ * safety property rather than a convenience - and means the screen also has
  * to flag the rows it did not create. See `eventStatus` in `rule-view.ts`,
  * which separates "nothing raises this" from "no such event": different
  * causes, different remedies, and an admin sent to the wrong one either way.

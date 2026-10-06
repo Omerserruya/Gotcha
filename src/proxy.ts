@@ -34,7 +34,7 @@ const intlMiddleware = createIntlMiddleware(routing);
  *
  *   kept     nothing to do (no session cookie, a public path, or a token with
  *            time left)
- *   renewed  refreshed here: `sealed` replaces the cookie — on the response,
+ *   renewed  refreshed here: `sealed` replaces the cookie - on the response,
  *            so the browser keeps the new refresh token, and on the forwarded
  *            request, so this very render uses the new access token
  *   ended    the identity provider refused the refresh: the cookie is cleared
@@ -63,7 +63,7 @@ export const RENEW_AHEAD_SECONDS = 300;
 /**
  * ★★ WHERE THE SESSION IS RENEWED, AND WHY HERE.
  * Authentik rotates refresh tokens, so a refresh that is not persisted ends
- * the session. A Server Component cannot write a cookie; the proxy can — on
+ * the session. A Server Component cannot write a cookie; the proxy can - on
  * the response for the browser, and on the request for the render that
  * follows. See `src/auth/refresh.ts`.
  */
@@ -81,13 +81,13 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
   return gate(request, await renew(request));
 }
 
-/** Locale, the coarse gate and the CSP — after `renew` has run. */
+/** Locale, the coarse gate and the CSP - after `renew` has run. */
 export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }): NextResponse {
   const { pathname } = request.nextUrl;
 
   /*
     The render reads the session from the REQUEST's cookies: give it the
-    renewed one, or none — before anything copies the request's headers.
+    renewed one, or none - before anything copies the request's headers.
   */
   if (renewal.kind === 'renewed') request.cookies.set(renewal.name, renewal.sealed);
   else if (renewal.kind === 'ended') request.cookies.delete(renewal.name);
@@ -101,15 +101,15 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
      * ★★ THE SIGN-IN ROUTE NOW HOLDS A PASSWORD FIELD IN OUR OWN BUNDLE.
      * Until screen 00a, the credential was typed on the identity provider's
      * origin and an injected script here could not reach it. It narrows
-     * `img-src`, `media-src`, `connect-src` and `frame-src` — the ways a value
-     * leaves a page — on exactly the route that has one to lose.
+     * `img-src`, `media-src`, `connect-src` and `frame-src` - the ways a value
+     * leaves a page - on exactly the route that has one to lose.
      *
      * The same pattern already decides which routes are public, and it is reused
      * rather than copied: two lists of "which pages are the sign-in" would be
      * one list too many, and the one that drifts would be this one.
      */
     credentialSurface: PUBLIC_PATH_PATTERN.test(pathname),
-    // 13c: Meta's Embedded Signup frames facebook.com — on the channels pages only.
+    // 13c: Meta's Embedded Signup frames facebook.com - on the channels pages only.
     metaSignupSurface: META_SIGNUP_PATH.test(pathname),
   });
 
@@ -123,7 +123,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
   requestHeaders.set(NONCE_HEADER, nonce);
   requestHeaders.set('content-security-policy', csp);
   /*
-    Where the visitor is, without the mount (`nextUrl` has none) — so the
+    Where the visitor is, without the mount (`nextUrl` has none) - so the
     layout can send someone signed out back here after sign-in.
   */
   requestHeaders.set(RETURN_TO_HEADER, `${pathname}${request.nextUrl.search}`);
@@ -147,7 +147,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
    * A root-mounted build of this source compiles EVERY route, so an auth host
    * that serves it has the whole product available behind a gateway allowlist.
    * That allowlist is a real security control and it was wrong on its first
-   * version — it permitted `/sign-in`, the app answered 307 to `/en/sign-in`,
+   * version - it permitted `/sign-in`, the app answered 307 to `/en/sign-in`,
    * and the screen 404’d behind a redirect that looked fine. One rule, one
    * place, one mistake away.
    *
@@ -166,7 +166,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
    *
    * ★ A BARE 404, NOT THE PRODUCT’S NOT-FOUND PAGE. Rendering that here would
    *   ship the product’s chrome and its vocabulary to the origin whose entire
-   *   purpose is to carry neither — the same mistake as the translation
+   *   purpose is to carry neither - the same mistake as the translation
    *   catalogue, one layer out. An empty refusal is the correct body.
    */
   const signInElsewhere = process.env.SIGN_IN_URL;
@@ -182,18 +182,18 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
    * Pointing the gate at another origin RELOCATES the panel; it does not remove
    * this one. `/v2/en/sign-in` would go on rendering a password field, working
    * perfectly, reachable by bookmark, by an old link, or by the callback's own
-   * error redirect — **on the origin the move exists to get the password off.**
+   * error redirect - **on the origin the move exists to get the password off.**
    *
    * ★ That origin is measured to allow `'unsafe-inline' 'unsafe-eval'` and a
    *   third-party script host. Moving the panel to a clean origin while leaving
    *   a working copy on the dirty one collects none of the benefit and keeps
-   *   every cost: it is the same defect as an orphaned route, inverted — not a
+   *   every cost: it is the same defect as an orphaned route, inverted - not a
    *   screen nothing points at, but a screen that still answers after
    *   everything stopped pointing at it.
    *
    * ★ The query is carried whole rather than named field by field. `returnTo`
-   *   and `error` both arrive here — the callback sends `?error=expired` to
-   *   THIS path — and a list of the parameters we thought of is the shape that
+   *   and `error` both arrive here - the callback sends `?error=expired` to
+   *   THIS path - and a list of the parameters we thought of is the shape that
    *   drops the next one silently.
    *
    * ⚠ A SAME-ORIGIN TARGET IS IGNORED, BECAUSE IT IS AN INFINITE LOOP ON THE
@@ -206,7 +206,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
    * ★★ AND IT ASKS TWO SOURCES FOR "THIS HOST", BECAUSE ONE OF THEM IS THE
    *   CONNECTION'S AND NOT THE VISITOR'S. Measured against the built image:
    *   `nextUrl.host` is the host the request ARRIVED on and **ignores
-   *   `x-forwarded-host` entirely** — a probe reaching the container directly
+   *   `x-forwarded-host` entirely** - a probe reaching the container directly
    *   saw `127.0.0.1:3999` and a redirect emitted to `127.0.0.1:3996`.
    *
    *   Behind the gateway that is usually the public host, because nginx passes
@@ -215,7 +215,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
    *
    * ★ Worth being exact about which way this fails. If `nextUrl.host` is the
    *   INTERNAL host and the forwarded header is absent, the comparison cannot
-   *   match and the guard does not fire — but the only configuration that
+   *   match and the guard does not fire - but the only configuration that
    *   reaches it is one where `SIGN_IN_URL` names this same product, which is
    *   already broken. **A wrong host weakens the loop guard; it never breaks
    *   the correct configuration**, where the target is a different origin and
@@ -238,7 +238,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
 
   if (!PUBLIC_PATH_PATTERN.test(pathname)) {
     /*
-     * Either session counts. This is a redirect, not a security control — it
+     * Either session counts. This is a redirect, not a security control - it
      * only avoids rendering a shell that is about to 401, and the real check
      * happens where the data is.
      */
@@ -259,19 +259,19 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
        * ════════════════════════════════════════════════════════════════════
        * This used to redirect to `/api/auth/login`, which begins the OIDC flow
        * immediately and lands on the identity provider's own page. So **no
-       * visitor ever reached the sign-in screen this application has** — it was
+       * visitor ever reached the sign-in screen this application has** - it was
        * reachable only by typing its URL, and `PUBLIC_PATH_PATTERN` letting
        * `/sign-in` through made it look wired when nothing pointed at it.
        *
        * Omer opened `/v2` and landed on a purple Authentik page. Every walk had
        * navigated straight to `/v2/en/sign-in`, photographed the panel, and
-       * reported it working — **entering through a door no user uses.** The
+       * reported it working - **entering through a door no user uses.** The
        * screen was never wrong; the route to it did not exist, and no amount of
        * looking at the screen could show that.
        *
        * ★ The extra hop costs nothing: the panel's own Continue button, and its
        *   fallback when the executor cannot be reached, both go to
-       *   `/api/auth/login` — which is exactly where this line used to send
+       *   `/api/auth/login` - which is exactly where this line used to send
        *   people. Nothing is bypassed; something is put in front of it.
        *
        * ── `PLATFORM_LOGIN_URL` STILL WINS ──
@@ -280,7 +280,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
        *
        * ── ★★ AND `SIGN_IN_URL` IS THE SAME SCREEN, SOMEWHERE ELSE ──
        * Once sign-in is served from its own origin, our panel is still the
-       * destination — it is simply not on this host. That is a different fact
+       * destination - it is simply not on this host. That is a different fact
        * from `PLATFORM_LOGIN_URL`, which means "do not use our panel at all",
        * so it gets its own variable rather than borrowing one whose meaning is
        * the opposite.
@@ -300,7 +300,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
        * override the visitor's own `Accept-Language` with a guess.
        *
        * ★ That applies to the same-host form only. A configured URL is used
-       *   exactly as given — the negotiation then happens on the OTHER origin,
+       *   exactly as given - the negotiation then happens on the OTHER origin,
        *   by its own middleware, from the browser's own `Accept-Language`. So
        *   the configured value should name the un-prefixed path for the same
        *   reason, and this file cannot enforce that.
@@ -310,7 +310,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
        * ★★ THE MOUNT POINT, FROM THE REQUEST ITSELF.
        *
        * `new URL('/api/auth/login', request.url)` resolves an ABSOLUTE path
-       * against the request, which discards the prefix — so under `/v2` this
+       * against the request, which discards the prefix - so under `/v2` this
        * redirected to `/api/auth/login` at the root, which beside the legacy
        * product is another application's login rather than a 404.
        *
@@ -332,7 +332,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
        *
        * (An earlier draft of this comment said the callback used `redirect()`,
        * which prefixes on its own. It uses `NextResponse.redirect`, which does
-       * not — checked, because the difference is the whole behaviour.)
+       * not - checked, because the difference is the whole behaviour.)
        */
       loginUrl.searchParams.set('returnTo', `${pathname}${request.nextUrl.search}`);
 
@@ -343,15 +343,15 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
        * Where `/v2` sends somebody is a function of whether they have a
        * session. A stored redirect is a redirect that has stopped asking: a
        * user who signs out can be sent onward by an entry recorded while they
-       * were signed in, and a change to this destination — which happened
-       * today, in `7801fe7` — can go on being replayed from a browser after
+       * were signed in, and a change to this destination - which happened
+       * today, in `7801fe7` - can go on being replayed from a browser after
        * the server has moved on.
        *
        * ★ AND THE PRECISE CLAIM, BECAUSE THE LOOSE ONE IS WRONG. A bare 307
        *   is NOT heuristically cacheable: RFC 9111 §4.2.2 lists 200, 203,
        *   204, 206, 300, 301, 308, 404, 405, 410, 414 and 501, and 307 is
        *   absent. So this header is not what fixes a stale redirect somebody
-       *   is looking at right now — a browser that replays one is doing it
+       *   is looking at right now - a browser that replays one is doing it
        *   from its back/forward cache or its in-memory cache for the tab, and
        *   `no-store` is the thing that tells it not to.
        *
@@ -370,7 +370,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
   /*
    * A redirect renders nothing: its own headers are enough. Otherwise next-intl
    * either rewrites or passes through (`localePrefix: 'always'` passes through
-   * every already-prefixed path) — and BOTH carry the request headers it built
+   * every already-prefixed path) - and BOTH carry the request headers it built
    * from the original request. Re-issued here with ours, which carry the
    * nonce, where the visitor is, and the renewed session cookie: forwarding
    * next-intl's would hand the render the spent refresh token.
@@ -381,7 +381,7 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
     return withSecurityHeaders(intlResponse);
   }
 
-  // next-intl's own request header — the locale it resolved — rides along.
+  // next-intl's own request header - the locale it resolved - rides along.
   const locale = intlResponse.headers.get(`x-middleware-request-${INTL_LOCALE_HEADER}`);
   if (locale) requestHeaders.set(INTL_LOCALE_HEADER, locale);
 
@@ -405,7 +405,7 @@ export const META_SIGNUP_PATH = /^\/[a-z]{2}\/settings\/channels(\/|$)/;
 
 /** next-intl's request header for the resolved locale. */
 const INTL_LOCALE_HEADER = 'x-next-intl-locale';
-/** How a proxy response says what to forward — ours, never next-intl's copy. */
+/** How a proxy response says what to forward - ours, never next-intl's copy. */
 const FORWARDING_HEADERS =
   /^x-middleware-(rewrite|next|override-headers|request-.*)$|^set-cookie$/i;
 
@@ -424,14 +424,14 @@ export const config = {
    *     /en/customers/plain        404   refused
    *     /en/customers/a.b@c.com    307   ★ skipped the middleware entirely
    *
-   * Everything in this file was skipped with it — the credential-surface
+   * Everything in this file was skipped with it - the credential-surface
    * refusal, the auth gate, and the narrowed CSP. On the sign-in origin that
    * left the gateway allowlist as the ONLY guard on that shape, while every
    * other product path had two.
    *
    * ★ `/en/settings/…/roles/u.1` looks like a second witness and is not: it has
    *   no route, so Next refuses it for an unrelated reason. **One live example,
-   *   not two** — worth stating, because a hole with two witnesses and a hole
+   *   not two** - worth stating, because a hole with two witnesses and a hole
    *   with one get triaged differently.
    *
    * ── WHY AN EXTENSION LIST RATHER THAN A NARROWER DOT RULE ──
@@ -454,20 +454,20 @@ export const config = {
    *     q.icourt@c.com   SKIPPED  ⚠   `.ico` + `urt`
    *
    * ★★ `a.jsmith@company.com` is what "J. Smith" looks like. Not a contrived
-   *   probe — one of the likeliest strings in that column.
+   *   probe - one of the likeliest strings in that column.
    *
    * ★ My own probes missed it because every one of them had a dot followed by
    *   something that starts no extension: `a.b`, `v1.2`, `u.1`. **The probe set
    *   was built from the shapes I had already seen**, which is the failure this
    *   file documents three times over, and it caught the fix for it.
    *
-   * ★ The anchored form is also what Next's own guide shows —
-   *   `'/((?!api|_next/static|_next/image|.*\.png$).*)'` — so the unanchored
+   * ★ The anchored form is also what Next's own guide shows -
+   *   `'/((?!api|_next/static|_next/image|.*\.png$).*)'` - so the unanchored
    *   version was not a variant of the documented pattern, it was a mistake
    *   against it. Matcher paths carry no query string, so `$` is the end of
    *   the path.
    *
-   * ★ And `public/` holds nothing but `.gitkeep` — measured, not assumed — so
+   * ★ And `public/` holds nothing but `.gitkeep` - measured, not assumed - so
    *   this exclusion currently protects no file that exists. It is kept narrow
    *   rather than removed because the day somebody adds `favicon.ico` should
    *   not be the day the auth gate starts redirecting it.
@@ -479,7 +479,7 @@ export const config = {
    * which is why nothing was wrong for months.
    *
    * Under a base path Next prefixes each matcher, so the second entry becomes
-   * `/v2/((?!…).*)` — and **`/v2` has no slash after `v2`, so it does not
+   * `/v2/((?!…).*)` - and **`/v2` has no slash after `v2`, so it does not
    * match.** The middleware never ran, nothing redirected the base-path root
    * to a locale, and `/v2` returned a bare 404: the exact URL somebody would
    * type.
@@ -490,7 +490,7 @@ export const config = {
    *
    *   before                     /v2 → 404
    *   after, no session          /v2 → 307 /v2/api/auth/login?returnTo=%2F
-   *                              — the same for any Accept-Language, because
+   *                              - the same for any Accept-Language, because
    *                                the gate answers first
    *   after, with a session      /v2 → 307 /v2/en
    *                              Accept-Language: he → 307 /v2/he
@@ -505,7 +505,7 @@ export const config = {
    * nginx could rewrite `/v2` to `/v2/en` and it would be wrong twice: it
    * would put locale policy in the gateway and hardcode a default language
    * for a bilingual product, and the app would still 404 at its own root for
-   * anyone arriving another way. Here, next-intl negotiates — a Hebrew
+   * anyone arriving another way. Here, next-intl negotiates - a Hebrew
    * browser lands on `/v2/he`.
    */
   matcher: [

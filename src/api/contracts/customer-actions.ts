@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Screen 04e — what happened in this customer's context.
+ * Screen 04e - what happened in this customer's context.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * THE READ EXISTS NOW, AND IT DECLARES WHAT IT CANNOT ATTRIBUTE
@@ -15,7 +15,7 @@ import { z } from 'zod';
  *
  * The new read resolves the soft join behind `findSiblingContacts` and the
  * preserved `metadata.aliases`, so a merged contact resolves to the survivor,
- * and **it names both origins** — otherwise a customer whose WhatsApp history
+ * and **it names both origins** - otherwise a customer whose WhatsApp history
  * was imported has that history missing from the record of what was done for
  * them. `applyLiveByDefault` has now quietly emptied a customer read in five
  * separate places, and this is the fifth.
@@ -26,7 +26,7 @@ import { z } from 'zod';
  *
  * ── TWO OF THE THREE TARGET TYPES ARE NOT ATTRIBUTABLE ──
  * `targetId` on a customer-keyed row is a **Shopify** customer id, not a
- * Contact id, so the endpoint cannot derive it — the commerce panel holds it
+ * Contact id, so the endpoint cannot derive it - the commerce panel holds it
  * and passes `?shopifyCustomerId=`. Order-keyed rows cannot be attributed at
  * all: same id space, and no local Order table to enumerate a person's orders
  * from.
@@ -63,7 +63,7 @@ export const auditEventSchema = z.object({
    * THEM IS NOT WRITTEN ANYWHERE.
    *
    * That header lists `ai.responded`, `adapter.ok/err.shopify.*` and
-   * `crm.link.linked` as "the rich set". The first two are real — checked at
+   * `crm.link.linked` as "the rich set". The first two are real - checked at
    * `ai.service.ts:501` and `integration-framework.ts:581`. **No code in the
    * platform writes `crm.link.linked`**; it exists in that comment and in
    * one test's query string, and nowhere else.
@@ -94,7 +94,7 @@ export const auditEventSchema = z.object({
    */
   succeeded: z.boolean().nullable().default(null),
   /**
-   * The WEAKER signal, from the action name — `adapter.ok.*` / `adapter.err.*`.
+   * The WEAKER signal, from the action name - `adapter.ok.*` / `adapter.err.*`.
    * Also tri-state: `null` when the name says neither.
    *
    * Carried separately so a screen can show it AS a weaker signal. It is not
@@ -120,12 +120,12 @@ export type AuditPage = z.infer<typeof auditPageSchema>;
  * ★★ THE FIRST VERSION OF THIS FUNCTION HAD THE DEFECT IT WAS WRITTEN AGAINST
  * ════════════════════════════════════════════════════════════════════════════
  * It returned three states and fell back to the `adapter.err.` prefix when
- * `succeeded` was null — described in its own comment as "the fallback, and
+ * `succeeded` was null - described in its own comment as "the fallback, and
  * only then, so an unrecorded verdict is still unknown".
  *
  * It was not. **A fallback IS resolution by naming convention**, which is the
  * thing that comment said not to do, in the same sentence. A row with no
- * recorded verdict and a name containing `err` came out as `failed` — turning
+ * recorded verdict and a name containing `err` came out as `failed` - turning
  * *"nobody wrote down whether this refund happened"* into *"this refund
  * failed"*, which is a claim about a customer's money that nobody made.
  *
@@ -143,8 +143,8 @@ export type AuditPage = z.infer<typeof auditPageSchema>;
  *
  * ── AND THE NAME IS STILL WORTH SHOWING, JUST NOT WORTH OBEYING ──
  * On a `not_recorded` row, `nameImpliesSucceeded` is the only hint there is.
- * The screen renders it as a hint — "named as a failure, though the outcome
- * was never recorded" — which informs without asserting. That is a different
+ * The screen renders it as a hint - "named as a failure, though the outcome
+ * was never recorded" - which informs without asserting. That is a different
  * act from resolving the state with it, and it is the one this contract
  * allows.
  */
@@ -160,7 +160,7 @@ export function outcomeOf(event: AuditEvent): ActionOutcome {
 /**
  * The hint on a row whose outcome was never recorded, or null.
  *
- * Returns the NAME's implication only where there is no verdict to state —
+ * Returns the NAME's implication only where there is no verdict to state -
  * so a screen can say what the action is called without claiming what it did.
  */
 export function unrecordedHint(event: AuditEvent): 'named_ok' | 'named_err' | null {
@@ -179,7 +179,7 @@ export function toolOf(event: AuditEvent): string | null {
 /* ── What the log can and cannot account for ─────────────────────────────── */
 
 /**
- * ★★ DECLARED, NOT INFERRED — the same shape as the timeline's `coverage`.
+ * ★★ DECLARED, NOT INFERRED - the same shape as the timeline's `coverage`.
  *
  * `attributable: false` on orders is not a failure and not an empty result:
  * it is the endpoint saying it has no way to find those rows for this person.
@@ -188,7 +188,7 @@ export function toolOf(event: AuditEvent): string | null {
  */
 export const coverageEntrySchema = z.object({
   attributable: z.boolean().default(false),
-  /** e.g. `shopifyCustomerId` — what would make this type attributable. */
+  /** e.g. `shopifyCustomerId` - what would make this type attributable. */
   requires: z.string().nullish().default(null),
   reason: z.string().nullish().default(null),
   detail: z.string().nullish().default(null),
@@ -205,8 +205,8 @@ export type AuditCoverage = z.infer<typeof auditCoverageSchema>;
 /**
  * Everything the log cannot account for, in one list.
  *
- * Both kinds together — not attributable at all, and attributable only with
- * something we did not pass — because to a merchant they are the same fact:
+ * Both kinds together - not attributable at all, and attributable only with
+ * something we did not pass - because to a merchant they are the same fact:
  * a reason not to read this as the whole record.
  *
  * ════════════════════════════════════════════════════════════════════════════
@@ -215,7 +215,7 @@ export type AuditCoverage = z.infer<typeof auditCoverageSchema>;
  * The endpoint returns the same `CUSTOMER_AUDIT_COVERAGE` object on every
  * response, whether or not `?shopifyCustomerId=` was sent. So `requires:
  * "shopifyCustomerId"` means *"this is what would make customer-keyed rows
- * attributable"* — **not** *"you did not send it"*.
+ * attributable"* - **not** *"you did not send it"*.
  *
  * Read as the second thing, a screen that DID send it would print *"Pass
  * ?shopifyCustomerId= to include them"* underneath the very rows that
@@ -239,7 +239,7 @@ export function coverageGaps(
 /**
  * How wide the resolution went, and whether it was bounded.
  *
- * `conversationScanTruncated` is the 500-conversation `IN` cap — the same
+ * `conversationScanTruncated` is the 500-conversation `IN` cap - the same
  * distinction as the timeline's: a bounded read that discloses its bound is
  * fine, one that quietly drops the oldest is the defect.
  */
@@ -256,7 +256,7 @@ export type AuditScope = z.infer<typeof auditScopeSchema>;
  * ★★ NOTHING AT THIS LEVEL IS DEFAULTED, AND THE REASON IS A SCREEN
  * ════════════════════════════════════════════════════════════════════════════
  * Every key here used to carry a default, which meant **`{}` parsed
- * cleanly** — and rendered as *"nothing has been recorded against this
+ * cleanly** - and rendered as *"nothing has been recorded against this
  * person yet"* with no coverage caveats underneath it. A stale service, a
  * renamed field or a half-deployed route would all have produced that
  * screen, and it is a confident statement about somebody's history made
@@ -264,11 +264,11 @@ export type AuditScope = z.infer<typeof auditScopeSchema>;
  *
  * The route sends all five unconditionally. Required, so a disagreement
  * fails the parse, the loader records it, and the screen says we could not
- * read it — which is true, unlike the empty log.
+ * read it - which is true, unlike the empty log.
  *
  * Found because a test wrote `{ nonsense: true }` expecting a failure and
  * got a valid `CustomerAudit`. **A required field proves itself; a
- * defaulted one cannot** — third application of that rule today.
+ * defaulted one cannot** - third application of that rule today.
  *
  * The defaults INSIDE `auditEventSchema` stay: one odd row degrading is
  * better than a whole log vanishing, and the row still has a required `id`,

@@ -160,7 +160,7 @@ describe('★★ the safe default for "is this unknown" is `true`', () => {
      * THE DEFECT, AND IT WAS ON MONEY
      * ════════════════════════════════════════════════════════════════════════
      * `outcomeUnknown` defaulted to `false`, so a body that arrived without
-     * it asserted that we KNOW what happened — on the one field built to
+     * it asserted that we KNOW what happened - on the one field built to
      * admit that we do not. `buyCreditPack` then fell through to `declined`,
      * and the screen offered a retry on a charge that may already have gone
      * through.
@@ -168,7 +168,7 @@ describe('★★ the safe default for "is this unknown" is `true`', () => {
      * The comment four lines above the field says exactly this: *"A
      * payment-required response invites the customer to try again, and they
      * may already have been charged."* The comment was CORRECT and the line
-     * underneath armed the danger it named — which is worse than a wrong
+     * underneath armed the danger it named - which is worse than a wrong
      * comment, because a reader checking the field would agree with it and
      * move on.
      */
@@ -185,7 +185,7 @@ describe('★★ the safe default for "is this unknown" is `true`', () => {
   it('★★ a revoke response missing `ok` is NOT a completed sign-out', async () => {
     /*
      * `ok` defaulted to `true`, so an unreadable answer reported a successful
-     * session revoke — somebody signing out a stolen session told it was
+     * session revoke - somebody signing out a stolen session told it was
      * done on the strength of a field that never arrived.
      *
      * `false` is safe because revoking twice is idempotent: an unconfirmed
@@ -199,7 +199,7 @@ describe('★★ the safe default for "is this unknown" is `true`', () => {
   });
 });
 
-describe('★ 17d — a package priced as the route sends it now (DisplayPrice)', () => {
+describe('★ 17d - a package priced as the route sends it now (DisplayPrice)', () => {
   /** As `GET /billing/pricing/packages` builds it: `price: await toDisplayPrice(...)`. */
   const wire = (key: string, amount: string) => ({
     key,

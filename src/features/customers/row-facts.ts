@@ -5,13 +5,13 @@ import type { PersonToday } from './people-today';
 
 /**
  * 04's right-hand column, as two lines: what they are worth over how many
- * orders. Pure, so every "—" is tested for the reason it carries.
+ * orders. Pure, so every "-" is tested for the reason it carries.
  *
  * ★ Four nothings, never one:
- *   unread       the commerce read failed            "—", why in the title
- *   no store     `source: null` + a reason           "—", the reason
- *   no orders    the store was read, none matched     "—" over "no orders yet"
- *   capped       none matched in a CAPPED read        "—", not "no orders yet":
+ *   unread       the commerce read failed            "-", why in the title
+ *   no store     `source: null` + a reason           "-", the reason
+ *   no orders    the store was read, none matched     "-" over "no orders yet"
+ *   capped       none matched in a CAPPED read        "-", not "no orders yet":
  *                an older order could be past the cap, and "no orders yet"
  *                would be a claim about the customer we did not check.
  */
@@ -70,7 +70,7 @@ export function valueCell(
   };
 }
 
-/** "₪2,140" — or the bare number when the store named no currency we can print. */
+/** "₪2,140" - or the bare number when the store named no currency we can print. */
 export function money(amount: number, currency: string, locale: string): string {
   if (currency) {
     try {

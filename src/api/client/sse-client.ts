@@ -13,7 +13,7 @@ import { ApiError, kindFromStatus } from './api-error';
  *     data: {"type":"token","text":"Check"}
  *     ⏎
  *
- * Comment lines beginning `:` are heartbeats — the backend sends `: ping`
+ * Comment lines beginning `:` are heartbeats - the backend sends `: ping`
  * every 25 seconds precisely because the proxy in front of it closes an idle
  * stream at 60. They are dropped here, but their arrival is what keeps the
  * connection open, so no timeout below about two minutes is safe.
@@ -36,7 +36,7 @@ export interface StreamOptions {
 /**
  * Yields one frame per event until the server closes the stream.
  *
- * An async generator rather than a callback so the caller can `break` — and
+ * An async generator rather than a callback so the caller can `break` - and
  * because `for await` makes cancellation on unmount fall out naturally.
  */
 export async function* streamServerSentEvents({

@@ -9,10 +9,10 @@ import { estimateBasis } from './figures';
 import styles from './Analytics.module.css';
 
 /**
- * 06's top row — "What changed", dark, beside "Also worth a look".
+ * 06's top row - "What changed", dark, beside "Also worth a look".
  *
  * ★ The findings are the platform's own `insights`, ranked and worded exactly
- *   as Home's "Worth knowing" words them — one set of sentences for one set
+ *   as Home's "Worth knowing" words them - one set of sentences for one set
  *   of findings. The strongest is the statement; the next three are the list.
  *
  * Not drawn: 02's "Send proactive update" and "See the conversations". An
@@ -21,11 +21,11 @@ import styles from './Analytics.module.css';
  */
 /*
  * ════════════════════════════════════════════════════════════════════════════
- * ⚠⚠ WHICH INSIGHTS ARE CHANGES — TODAY, NONE
+ * ⚠⚠ WHICH INSIGHTS ARE CHANGES - TODAY, NONE
  * ════════════════════════════════════════════════════════════════════════════
  * 02's dark card is an anomaly: "Shipping questions are up 43%", a change
  * against the period before. Every kind the platform emits is a LEVEL over
- * its own window — `channel.highest_volume` is "68 conversations came through
+ * its own window - `channel.highest_volume` is "68 conversations came through
  * WhatsApp in the last 30 days", a standing fact. Put under "What changed" on
  * a week with zero conversations, it told a different story from the strip
  * below it (and its 68 were an import, counted by creation date).
@@ -53,7 +53,7 @@ export async function WhatChanged({ insights }: { readonly insights: readonly In
   return (
     <div className={styles.changedRow}>
       {/*
-        ★★ Always drawn, in 02's shape (824 beside the 300) — Omer's rule:
+        ★★ Always drawn, in 02's shape (824 beside the 300) - Omer's rule:
         missing data is shown in its shape. It holds only a CHANGE; with none,
         a neutral line, no figure and no arrow.
       */}
@@ -72,7 +72,7 @@ export async function WhatChanged({ insights }: { readonly insights: readonly In
         </p>
       </section>
       {/*
-        Standing facts, each in its own window — every sentence names its
+        Standing facts, each in its own window - every sentence names its
         period ("in the last 30 days"), which is why they may sit on a page
         about the last seven.
       */}
@@ -80,7 +80,7 @@ export async function WhatChanged({ insights }: { readonly insights: readonly In
         <h2 className={styles.cardTitle}>{t('changed.also')}</h2>
         {insights === null ? (
           <p className={styles.alsoNone} data-testid="insights-unavailable">
-            —
+            -
           </p>
         ) : standing.length > 0 ? (
           <ul className={styles.alsoList}>
@@ -99,7 +99,7 @@ export async function WhatChanged({ insights }: { readonly insights: readonly In
 }
 
 /**
- * 06's strip of five — the week's figures, with the change against the week
+ * 06's strip of five - the week's figures, with the change against the week
  * before ONLY where the platform computes one.
  *
  * ⚠ `overview` returns a delta for the conversation count and nothing else.
@@ -142,7 +142,7 @@ export async function KpiStrip({
     },
     /*
      * ⚠ A SHARE OF NOTHING IS NOT 0%. With no conversations in the week there
-     *   is no denominator; "—", as the reply time already says.
+     *   is no denominator; "-", as the reply time already says.
      */
     { key: 'handledByGotcha', value: share(overview.aiHandledPct), delta: null },
     { key: 'resolved', value: share(overview.resolutionRate), delta: null },

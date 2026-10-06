@@ -13,8 +13,8 @@ export interface InputProps extends Omit<
   /**
    * Hides the label visually while keeping it in the accessibility tree.
    *
-   * For the case where something ELSE on screen already names the field — a
-   * row label, a column heading — and printing the name twice reads as a
+   * For the case where something ELSE on screen already names the field - a
+   * row label, a column heading - and printing the name twice reads as a
    * stutter. The label is never dropped, only moved out of sight: a field with
    * no accessible name is the failure this prop exists to avoid, not the one
    * it creates.

@@ -6,7 +6,7 @@ import { STREAM_SCROLLER } from './stream-scroller';
 
 /*
  * jsdom has no layout, so the scroller's geometry is set by hand: 2757 of
- * content in a 615 window — the deployed conversation that opened at 10:03.
+ * content in a 615 window - the deployed conversation that opened at 10:03.
  */
 const scroller = (scrollHeight = 2757, clientHeight = 615) => {
   const el = document.createElement('ol');
@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe('⚠⚠ a conversation opens at its LATEST message', () => {
-  it('★★ scrolls to the end on open — it sat at 0 of 2142', () => {
+  it('★★ scrolls to the end on open - it sat at 0 of 2142', () => {
     const { el } = scroller();
     render(<StreamPin conversationId="c1" />);
     expect(el.scrollTop).toBe(2757);

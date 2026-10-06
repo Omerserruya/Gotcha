@@ -30,8 +30,8 @@ const overview = (over: Record<string, number> = {}) =>
 
 const cell = (label: string) => screen.getByText(label).parentElement!;
 
-describe('★ 01’s strip — no share of nothing', () => {
-  it('no conversations today: the count is 0, the shares of it are "—"', async () => {
+describe('★ 01’s strip - no share of nothing', () => {
+  it('no conversations today: the count is 0, the shares of it are "-"', async () => {
     render(
       await MetricStrip({
         overview: overview(),
@@ -41,8 +41,8 @@ describe('★ 01’s strip — no share of nothing', () => {
       }),
     );
     expect(cell('Conversations today')).toHaveTextContent(/0$/);
-    expect(cell('Handled by GOTCHA')).toHaveTextContent(/—$/);
-    expect(cell('By your team')).toHaveTextContent(/—$/);
+    expect(cell('Handled by GOTCHA')).toHaveTextContent(/-$/);
+    expect(cell('By your team')).toHaveTextContent(/-$/);
     // Approvals waiting is a count of its own: a true zero.
     expect(cell('Waiting on approval')).toHaveTextContent(/0$/);
   });

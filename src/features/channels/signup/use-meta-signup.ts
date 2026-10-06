@@ -23,11 +23,11 @@ export type SignupProblem = 'cancelled' | 'noCode' | 'inspectFailed' | 'unavaila
  * Meta's Embedded Signup, as one hook: launched with the server's parameters
  * (`/api/channels/config`), never assembled here.
  *
- *   start() → Meta's window (FB.login)              — nothing is connected
- *   code    → inspect the numbers on that account   — nothing is connected
+ *   start() → Meta's window (FB.login)              - nothing is connected
+ *   code    → inspect the numbers on that account   - nothing is connected
  *
  * The window tells us the business and its WABA ids by `postMessage`; only a
- * Meta origin is believed (`isMetaOrigin` — copied with its tests, because
+ * Meta origin is believed (`isMetaOrigin` - copied with its tests, because
  * `endsWith('facebook.com')` alone accepts `evilfacebook.com`). They are kept
  * in a ref: the message lands after the click, and a state value captured by
  * the login callback would be empty.

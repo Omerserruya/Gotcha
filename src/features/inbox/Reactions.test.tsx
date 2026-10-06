@@ -16,8 +16,8 @@ import { MessageStream } from './MessageStream';
  * ════════════════════════════════════════════════════════════════════════════
  * There is no reaction table, no column and no handler. A WhatsApp reaction
  * hits the adapter's default branch, so it is stored as a **text message whose
- * body is the literal string `"[reaction message]"`** — which is what an agent
- * reads today — and everything real about it survives only because
+ * body is the literal string `"[reaction message]"`** - which is what an agent
+ * reads today - and everything real about it survives only because
  * `webhook.ts:344` persists `metadata.unsupported`.
  *
  * Inbound only is not restraint: `whatsAppOutboundAdapter` has no reaction
@@ -124,7 +124,7 @@ describe('★★ a reaction is not a message, and it arrives as one', () => {
 describe('★★ everything else the provider could not give us properly', () => {
   it('★★ names the provider’s type instead of printing a bracketed token', async () => {
     /*
-     * `[revoke message]`, `[edit message]` — the adapter's placeholder for
+     * `[revoke message]`, `[edit message]` - the adapter's placeholder for
      * every type it does not model. Naming the type is all we can honestly
      * do: unlike a reaction, we have not read these payloads and do not know
      * what happened.

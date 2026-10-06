@@ -41,7 +41,7 @@ describe('★ 01 sits inside the frame, in three columns', () => {
   });
 });
 
-describe('★ 01d — a lone "Mark read" aligns with the text', () => {
+describe('★ 01d - a lone "Mark read" aligns with the text', () => {
   const panel = readFileSync('src/features/notifications/Notifications.module.css', 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     '',
@@ -53,7 +53,7 @@ describe('★ 01d — a lone "Mark read" aligns with the text', () => {
   });
 });
 
-describe('★ 01b — a quiet day is two columns', () => {
+describe('★ 01b - a quiet day is two columns', () => {
   it('646 · 478, bounded like the busy grid', () => {
     expect(rule('columnsQuiet')).toMatch(
       /grid-template-columns:\s*minmax\(0, 646fr\) minmax\(0, 478fr\)/,
@@ -62,7 +62,7 @@ describe('★ 01b — a quiet day is two columns', () => {
   });
 });
 
-describe('★ 01b — the work rows: one line, buttons not links, edges by type', () => {
+describe('★ 01b - the work rows: one line, buttons not links, edges by type', () => {
   it('the actions are links drawn as buttons', () => {
     expect(rule('actionPrimary,\\s*\\.actionSecondary')).toMatch(/text-decoration:\s*none/);
   });
@@ -79,7 +79,7 @@ describe('★ 01b — the work rows: one line, buttons not links, edges by type'
   });
 });
 
-describe('★ 01c — First steps is one card that fits the frame', () => {
+describe('★ 01c - First steps is one card that fits the frame', () => {
   const steps = readFileSync('src/features/home/FirstSteps.module.css', 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     '',
@@ -92,7 +92,7 @@ describe('★ 01c — First steps is one card that fits the frame', () => {
     expect(r('block')).toMatch(/inline-size:\s*880px/);
     expect(r('block')).toMatch(/min-block-size:\s*0/);
   });
-  it('the steps and Go live scroll together — Go live last, never pinned over a step', () => {
+  it('the steps and Go live scroll together - Go live last, never pinned over a step', () => {
     expect(r('scroller')).toMatch(/overflow-y:\s*auto/);
     expect(r('list')).not.toMatch(/overflow-y/);
     expect(r('goLive')).toMatch(/flex:\s*none/);
@@ -107,7 +107,7 @@ describe('★ 01c — First steps is one card that fits the frame', () => {
   });
 });
 
-describe('★ 01 — composition against 02: no line-height leaking into the head and strip', () => {
+describe('★ 01 - composition against 02: no line-height leaking into the head and strip', () => {
   it.each(['greeting', 'strip', 'statusPill'])('.%s is line-height normal', (selector) => {
     expect(rule(selector)).toMatch(/line-height:\s*normal/);
   });
@@ -124,7 +124,7 @@ describe('★ 01 — composition against 02: no line-height leaking into the hea
   });
 });
 
-describe('★ 12b / 12c — measured proportions', () => {
+describe('★ 12b / 12c - measured proportions', () => {
   const roles = readFileSync('src/features/roles/Roles.module.css', 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     '',
@@ -139,7 +139,7 @@ describe('★ 12b / 12c — measured proportions', () => {
   });
 });
 
-describe('★ 05c — "Worth knowing" hugs its content', () => {
+describe('★ 05c - "Worth knowing" hugs its content', () => {
   const css = readFileSync('src/features/outreach/Outreach.module.css', 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     '',
@@ -150,7 +150,7 @@ describe('★ 05c — "Worth knowing" hugs its content', () => {
   });
 });
 
-describe('★ 06 — "Also worth a look" keeps its 300 beside the dark card', () => {
+describe('★ 06 - "Also worth a look" keeps its 300 beside the dark card', () => {
   const css = readFileSync('src/features/analytics/Analytics.module.css', 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     '',

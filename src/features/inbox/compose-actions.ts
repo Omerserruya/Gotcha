@@ -2,6 +2,8 @@
 
 import { z } from 'zod';
 
+import { plainDashes } from '@/lib/plain-dashes';
+
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { inboxEndpoints } from '@/api/endpoints/registry';
@@ -11,13 +13,13 @@ import { COMPOSE_KINDS, type ComposeKind } from './compose-kinds';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
- * 02's three composer chips — Rewrite · Shorter · Translate.
+ * 02's three composer chips - Rewrite · Shorter · Translate.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ NOTHING HERE SENDS. THE TEXT COMES BACK INTO THE BOX.
  * ════════════════════════════════════════════════════════════════════════════
  * `POST /api/ai-assist/compose` drafts text and returns it. The composer puts
- * it in place of the draft, where the person reads it and presses Send — or
+ * it in place of the draft, where the person reads it and presses Send - or
  * does not. Send stays the one control that reaches the customer.
  *
  * ── THE ROUTE TAKES AN INSTRUCTION, NOT A MODE ──
@@ -44,7 +46,8 @@ const INSTRUCTIONS: Record<ComposeKind, string> = {
     'Translate the current draft into the language the customer is writing in. Change nothing else.',
 };
 
-const composed = z.object({ text: z.string() });
+/* A draft the agent may send: plain hyphens, before it reaches the box (see `plainDashes`). */
+const composed = z.object({ text: z.string().transform((text) => plainDashes(text)) });
 
 export type ComposeResult =
   | { readonly ok: true; readonly text: string }
@@ -56,7 +59,7 @@ export type ComposeResult =
    * ★★ THE WORKSPACE HAS RUN OUT OF AI UNITS. Not "just now" and not "our
    *   side": it lasts until somebody tops up, and that is in the workspace's
    *   hands. The route answers 500 for it, but its body carries the error's
-   *   message, which `AiUnitsExhaustedError` builds as `ai_units:${reason}` —
+   *   message, which `AiUnitsExhaustedError` builds as `ai_units:${reason}` -
    *   a prefix from a class, not prose.
    */
   | { readonly ok: false; readonly reason: 'units_exhausted' }
@@ -97,8 +100,8 @@ export async function composeDraft(
 
 /**
  * The wall's "Ask Copilot anything": the agent's own words as the instruction,
- * with this conversation. The route drafts ONE outbound message —
- * it answers questions by writing the reply — and nothing is sent: the text
+ * with this conversation. The route drafts ONE outbound message -
+ * it answers questions by writing the reply - and nothing is sent: the text
  * goes into the composer for a person to read.
  */
 export async function askCopilot(

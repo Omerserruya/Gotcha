@@ -49,7 +49,7 @@ export interface CallsData {
    * correct everywhere it ran.
    *
    * With voice ON, that same collapse renders *"Nothing here will show calls
-   * until voice is enabled. Ask whoever set up GOTCHA for you"* — sending a
+   * until voice is enabled. Ask whoever set up GOTCHA for you"* - sending a
    * merchant to ask for a feature they already have. The header of this file
    * names that exact danger, one screen up: *"would eventually tell somebody
    * their workspace lacks a feature it has."*
@@ -58,7 +58,7 @@ export interface CallsData {
    */
   readonly voiceEnabled: boolean | null;
   /**
-   * Whether any phone number is actually connected — at least one `VOICE`
+   * Whether any phone number is actually connected - at least one `VOICE`
    * channel `ACTIVE`.
    *
    * ★ VOICE SWITCHED ON IS NOT THE SAME AS A PHONE NUMBER CONNECTED, AND THE
@@ -66,7 +66,7 @@ export interface CallsData {
    *
    * *"Calls appear here as they happen"* is true only for a workspace that
    * can receive one. Said to a workspace with no connected number it is a
-   * promise about something that cannot occur — the same shape as telling
+   * promise about something that cannot occur - the same shape as telling
    * somebody to connect a CRM they already connected, pointed the other way.
    *
    * `null` alongside `voiceEnabled: null`: we did not get to ask.
@@ -74,7 +74,7 @@ export interface CallsData {
   readonly hasNumber: boolean | null;
   readonly calls: readonly Call[] | null;
   readonly summary: CallSummary | null;
-  /** True when voice IS on and the reads still failed — a real fault. */
+  /** True when voice IS on and the reads still failed - a real fault. */
   readonly failed: boolean;
 }
 
@@ -82,14 +82,14 @@ export interface CallsData {
  * The live call, if one is in progress, with whatever transcript exists.
  *
  * Two reads: the active session, then its persisted lines. The lines matter
- * because a reload mid-call would otherwise start blank — every FINAL
+ * because a reload mid-call would otherwise start blank - every FINAL
  * utterance is already a `Message` row, so the history is there to be read.
  */
 export async function loadLiveCall(): Promise<{
   readonly call: Call | null;
   readonly transcript: readonly TranscriptLine[];
   /**
-   * The matched contact's name — "Dana Cohen", not her number. `null` when the
+   * The matched contact's name - "Dana Cohen", not her number. `null` when the
    * call is unmatched, the contact has no name, or the read failed: the
    * screen falls back to the number, which is how the business knows them.
    */
@@ -145,7 +145,7 @@ export async function loadCalls(
   options: {
     /**
      * The summary's window, in days back from now. 05d's strip is "Calls this
-     * week", and the route takes `from` — so the figure is the week's, not
+     * week", and the route takes `from` - so the figure is the week's, not
      * all-time under a week's label. Omitted, the summary is all-time.
      */
     readonly summaryDays?: number;
@@ -165,7 +165,7 @@ export async function loadCalls(
   } catch (cause) {
     /*
      * NOT `false`. We asked the question that resolves the ambiguity and did
-     * not get an answer — which is a third thing, and the only honest one.
+     * not get an answer - which is a third thing, and the only honest one.
      * Claiming "no voice" here is a statement about the workspace made from
      * a failed request.
      */

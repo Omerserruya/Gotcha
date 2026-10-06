@@ -9,9 +9,9 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Security — screen 16.
+ * Settings · Security - screen 16.
  *
- * *"Access control, plus the record of everything that happened — including
+ * *"Access control, plus the record of everything that happened - including
  * everything GOTCHA did."*
  *
  * Four sections, four independent reads, four independent failure states,
@@ -35,7 +35,7 @@ export default async function Page() {
 
   /*
     16, measured: sign-in on the left beside where you are signed in, then
-    "Everything that happened" — the audit — as one card. Sign-ins (the login
+    "Everything that happened" - the audit - as one card. Sign-ins (the login
     history) are not in 02 and stay below it: they are this screen's record of
     who got in, which the audit does not carry.
   */
@@ -43,7 +43,7 @@ export default async function Page() {
     <SettingsSection title={t('title')} description={t('description')} fill>
       <div className={styles.topRow}>
         {/*
-          The switches are absent when the policy could not be read — an
+          The switches are absent when the policy could not be read - an
           unchecked switch would assert that two-factor is NOT required. But
           the card stays, and says so: "we could not find out" is never silent.
         */}
@@ -56,23 +56,23 @@ export default async function Page() {
               {t('mfa.unavailable')}
             </p>
           )}
-          {/* 02's two more rows. Nothing here reads either: "—", and why. */}
+          {/* 02's two more rows. Nothing here reads either: "-", and why. */}
           <div className={styles.policyRow} title={t('policy.googleNone')}>
             <span className={styles.policyText}>
               <span className={styles.policyName}>{t('policy.google')}</span>
             </span>
-            <span className={styles.policyNone}>—</span>
+            <span className={styles.policyNone}>-</span>
           </div>
           <div className={styles.policyRow} title={t('policy.sessionNone')}>
             <span className={styles.policyText}>
               <span className={styles.policyName}>{t('policy.session')}</span>
             </span>
-            <span className={styles.policyNone}>—</span>
+            <span className={styles.policyNone}>-</span>
           </div>
         </section>
 
         <section className={styles.card} data-testid="section-sessions">
-          {/* 02's head: the title, and how many devices — when they could be read. */}
+          {/* 02's head: the title, and how many devices - when they could be read. */}
           <header className={styles.cardHead}>
             <h2 className={styles.cardTitle}>{t('heading.sessions')}</h2>
             {sessionsAvailable ? (

@@ -12,7 +12,7 @@ import styles from './Wall.module.css';
  *
  * Into the composer's own route, with no new one (Omer): the instruction
  * goes to the compose endpoint with this conversation, and what comes back
- * lands in the reply box. **Nothing is sent** — the title says so, because
+ * lands in the reply box. **Nothing is sent** - the title says so, because
  * a box that answers a question could be read as one that writes to the
  * customer.
  */

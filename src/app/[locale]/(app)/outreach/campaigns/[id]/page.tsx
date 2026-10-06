@@ -17,7 +17,7 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Screen 05b — a campaign after it went out: what it did, and the next move.
+ * Screen 05b - a campaign after it went out: what it did, and the next move.
  *
  * Its own route rather than a state of 05, because it is a page you return
  * to ("not a report you read once") and its URL is the campaign's. 05's card

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { destinations, matching } from './command-palette-model';
 
-describe('★ 19 — the screens GO TO offers are the rail’s, under its permission check', () => {
+describe('★ 19 - the screens GO TO offers are the rail’s, under its permission check', () => {
   it('everything, for someone who may see everything', () => {
     const hrefs = destinations(() => true).map((d) => d.href);
     expect(hrefs).toContain('/home');

@@ -16,18 +16,18 @@ import { logger } from '@/observability/logger';
 import { z } from 'zod';
 
 /**
- * What screen 17b shows — plan, price, and what changing it would do.
+ * What screen 17b shows - plan, price, and what changing it would do.
  *
  * Four reads, independent, each degrading on its own. The payment methods are
  * here for a reason that is not obvious: an upgrade charges the prorated
  * difference **before** granting anything, resolving the card as
  * `paymentMethods[0]?.id ?? "nocard"`. With none, the charge cannot succeed.
  * So the count decides whether this screen offers an upgrade or explains why
- * it would be declined — that is a fact about the change flow, not about the
+ * it would be declined - that is a fact about the change flow, not about the
  * billing profile, which is why it is read here rather than assumed.
  */
 
-/** `/billing/pricing` — the catalogue plus the currency and FX attribution. */
+/** `/billing/pricing` - the catalogue plus the currency and FX attribution. */
 const pricingResponseSchema = z.object({
   /** 17b's cards. Read plan by plan in `catalogPlans`. */
   plans: z.unknown().default([]),
@@ -73,7 +73,7 @@ export async function loadPricing(): Promise<PricingData> {
       .get({
         endpoint: billingEndpoints.subscription(),
         payload: subscriptionResponseSchema,
-        // Bare `{ subscription }`. It carries `pendingChange` — the relation
+        // Bare `{ subscription }`. It carries `pendingChange` - the relation
         // is included by `getSubscriptionForTenant`, which is the only place
         // a scheduled change reaches a customer.
         raw: true,

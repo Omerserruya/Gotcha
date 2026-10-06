@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * 04's bulk facts. `get` models `http-client.ts`'s envelope rule — unwrap
- * `data` unless `raw` — and runs the real schema (see load-customer.test.ts
+ * 04's bulk facts. `get` models `http-client.ts`'s envelope rule - unwrap
+ * `data` unless `raw` - and runs the real schema (see load-customer.test.ts
  * for why a mock that returns the parsed answer cannot fail): every commerce
  * answer has `data` BESIDE `source`, and unwrapping it would lose the source.
  */
@@ -40,7 +40,7 @@ beforeEach(() => {
 
 const summary = { lifetimeValue: 2140, currency: 'ILS', orderCount: 6, lastOrderAt: null };
 
-describe('★★ commerce — read, none, or failed; never zeros for "could not look"', () => {
+describe('★★ commerce - read, none, or failed; never zeros for "could not look"', () => {
   it('read: by id, and the cap said', async () => {
     answer = () => ({ source: 'woocommerce', truncated: true, data: { k1: summary } });
     const facts = await loadCommerce(['k1']);
@@ -51,7 +51,7 @@ describe('★★ commerce — read, none, or failed; never zeros for "could not 
     });
   });
 
-  it('★ no store: `none` with the reason — not an empty read', async () => {
+  it('★ no store: `none` with the reason - not an empty read', async () => {
     answer = () => ({ source: null, reason: 'no_store_connected', data: {} });
     expect(await loadCommerce(['k1'])).toEqual({ state: 'none', reason: 'no_store_connected' });
   });

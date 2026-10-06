@@ -68,7 +68,7 @@ beforeEach(() => {
 });
 
 describe('★★ Connect at the wire', () => {
-  it('POST /api/integrations/:slug/connect with { credentials } — the catalogue’s fields only', async () => {
+  it('POST /api/integrations/:slug/connect with { credentials } - the catalogue’s fields only', async () => {
     post.mockResolvedValue({ id: 'ti1' });
     expect(
       await connectIntegration('paypal', {
@@ -127,7 +127,7 @@ describe('★★ OAuth start at the wire (backend 381a5d1b)', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('Salesforce carries its login host — only one of its two', async () => {
+  it('Salesforce carries its login host - only one of its two', async () => {
     get.mockResolvedValue({ url: 'https://test.salesforce.com/services/oauth2/authorize' });
     await startOAuth('salesforce', 'https://test.salesforce.com');
     expect((get.mock.calls[0]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
@@ -179,7 +179,7 @@ describe('★★ OAuth start at the wire (backend 381a5d1b)', () => {
   });
 });
 
-describe('★★ B — the store address, and the start at the wire', () => {
+describe('★★ B - the store address, and the start at the wire', () => {
   it.each([
     ['shop.example.com', 'https://shop.example.com'],
     ['https://shop.example.com/', 'https://shop.example.com'],
@@ -220,7 +220,7 @@ describe('★★ B — the store address, and the start at the wire', () => {
   });
 });
 
-describe('★★ 1aaaefe4 — 422 from a key form', () => {
+describe('★★ 1aaaefe4 - 422 from a key form', () => {
   it('carries the backend’s merchant sentence', async () => {
     get.mockResolvedValue([
       {

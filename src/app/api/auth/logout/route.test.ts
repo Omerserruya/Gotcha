@@ -12,7 +12,7 @@ import { ID_TOKEN_COOKIE } from '@/auth/session';
  * Measured: `end-session` with `client_id` and no hint answers a confirmation
  * screen, and `post_logout_redirect_uri` is NEVER FOLLOWED because the screen
  * is waiting for a click. So sign-out does not pass through the provider's
- * page — it terminates there, offering "Go back to overview · Log out of
+ * page - it terminates there, offering "Go back to overview · Log out of
  * GOTCHA · Log back into GOTCHA".
  *
  * ★ One of those buttons says "Log out of GOTCHA" on a screen reached BY
@@ -81,12 +81,12 @@ describe('⚠⚠ the hint, which is what stops the provider asking', () => {
      * THE DANGEROUS CASE, AND IT MUST STAY SAFE
      * ════════════════════════════════════════════════════════════════════════
      * An older session, a cleared cookie, a rotated secret, a grant with no id
-     * token. Every one must still reach the provider's end-session endpoint —
+     * token. Every one must still reach the provider's end-session endpoint -
      * with the confirmation screen, which is a cost.
      *
      * ★ A sign-out that ASKS is far better than one that does not sign out. If
      *   this ever silently skipped the provider, we would have traded a
-     *   confusing screen for a session that is still alive — the one outcome
+     *   confusing screen for a session that is still alive - the one outcome
      *   worse than what the reviewer photographed.
      */
     unsealIdToken.mockResolvedValue(null);
@@ -114,7 +114,7 @@ describe('⚠⚠ what the response clears', () => {
   it('★★ deletes the hint cookie as well as the session', async () => {
     /*
      * A sealed id token outliving the session it describes is a stale
-     * credential in a browser for nothing — and on the next sign-out it would
+     * credential in a browser for nothing - and on the next sign-out it would
      * be offered as a hint for a session that no longer exists.
      */
     const response = await post(true);
@@ -129,7 +129,7 @@ describe('⚠⚠ what the response clears', () => {
     /*
      * ★ A delete whose path does not match the setter is a SILENT NO-OP. The
      *   cookie survives the sign-out and every test asserting "delete was
-     *   called" still passes — which is exactly the shape of defect this
+     *   called" still passes - which is exactly the shape of defect this
      *   repository keeps finding.
      */
     const response = await post(true);
@@ -144,8 +144,8 @@ describe('⚠⚠ the property that broke: a session must reach the provider', ()
    * THE SHIPPED BUG WAS NOT IN THE HINT LOGIC. IT WAS IN WHAT SURROUNDED IT.
    * ════════════════════════════════════════════════════════════════════════
    * Reading the hint sat INSIDE the try whose catch falls back to a local
-   * redirect. That catch exists for one thing — a provider with no
-   * `end_session_endpoint` — so anything else inside it silently turns a
+   * redirect. That catch exists for one thing - a provider with no
+   * `end_session_endpoint` - so anything else inside it silently turns a
    * sign-out into a redirect that signs nobody out.
    *
    * ★ Measured on the deployed build: `redirectTo` was our own `/v2/sign-in`,
@@ -153,7 +153,7 @@ describe('⚠⚠ the property that broke: a session must reach the provider', ()
    *   fresh authorization then returned a code with no credentials entered.
    *
    * ⚠ The existing tests all passed. They asserted the PARAMETERS of the
-   *   end-session call — which is a fact about the branch that builds it, and
+   *   end-session call - which is a fact about the branch that builds it, and
    *   says nothing about whether that branch is reached. A local URL is a
    *   valid string and a passing shape.
    */
@@ -177,7 +177,7 @@ describe('⚠⚠ the property that broke: a session must reach the provider', ()
   it('⚠⚠ and the answer is a PROVIDER url, not merely a url', async () => {
     /*
      * ★ Asserted on `redirectTo` itself rather than on the call's arguments.
-     *   Every previous test here checked what we would pass IF we called —
+     *   Every previous test here checked what we would pass IF we called -
      *   and the bug was that we did not call.
      */
     for (const token of ['the.id.token', null]) {
@@ -192,7 +192,7 @@ describe('⚠⚠ the property that broke: a session must reach the provider', ()
 
   it('★ only a provider with no end-session endpoint may land locally', async () => {
     /*
-     * The one legitimate reason for a local redirect — and it is now logged,
+     * The one legitimate reason for a local redirect - and it is now logged,
      * because a sign-out that quietly stops calling the provider looks
      * exactly like one that worked: it lands on our sign-in page either way.
      */

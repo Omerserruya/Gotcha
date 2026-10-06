@@ -18,7 +18,7 @@
     border-inline-end: 1px solid var(--border-subtle);
   }
 
-  /* 10's list: 290, `padding:18px 16px 0`, gap 4 — a search, then chips and rows. */
+  /* 10's list: 290, `padding:18px 16px 0`, gap 4 - a search, then chips and rows. */
   .list[data-width='narrow'] {
     inline-size: 290px;
     gap: var(--space-4);

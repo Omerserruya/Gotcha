@@ -32,7 +32,7 @@
      * ⚠⚠ THIS LINE WAS MISSING, AND THE DISPLAY SERIF WAS UPRIGHT EVERYWHERE
      * ════════════════════════════════════════════════════════════════════
      * `--font-serif-style` existed ONLY inside `:root:lang(he)` below, where
-     * `normal` is a deliberate and correct decision — Hebrew has no italic
+     * `normal` is a deliberate and correct decision - Hebrew has no italic
      * tradition and a browser asked for one shears the letterforms.
      *
      * **A token declared only in its exception has no rule to except.** In
@@ -42,13 +42,13 @@
      * there.
      *
      * The design draws the sign-in panel's display line as
-     * `font-family:'Instrument Serif',serif; font-style:italic` — the largest
+     * `font-family:'Instrument Serif',serif; font-style:italic` - the largest
      * text on that screen, in the wrong style since the day it shipped, and
      * `Text.module.css` says "used italic" four lines from the rule that was
      * not applying it.
      *
-     * ★ The italic FACE is loaded — `Instrument_Serif({ style: ['normal',
-     *   'italic'] })` — so this asks for a real cut, not a synthesised
+     * ★ The italic FACE is loaded - `Instrument_Serif({ style: ['normal',
+     *   'italic'] })` - so this asks for a real cut, not a synthesised
      *   oblique. Worth stating because `font-style: italic` against a
      *   normal-only family is a different and worse thing.
      */
@@ -61,12 +61,12 @@
     --font-size-hero: 40px;
     --font-size-display: 36px;
     --font-size-title: 30px;
-    /* 02's screen title — Approvals, Customers, Outreach, Analytics. */
+    /* 02's screen title - Approvals, Customers, Outreach, Analytics. */
     --font-size-screen-title: 26px;
     --font-size-serif-display: 32px;
     --font-size-serif-inline: 16px;
     --font-size-lead: 16px;
-    /* A section heading inside the panel — Settings' own sidebar title. */
+    /* A section heading inside the panel - Settings' own sidebar title. */
     --font-size-heading: 19px;
     --font-size-body-lg: 15.5px;
     --font-size-body: 14.5px;
@@ -78,7 +78,7 @@
      * line-height:1.65` on 00a, 00b and recovery alike.
      *
      * ⚠ A SEPARATE TOKEN RATHER THAN MOVING `--font-size-body-sm`. Half a
-     *   pixel is not a rounding error to fix in place — `body-sm` is read by
+     *   pixel is not a rounding error to fix in place - `body-sm` is read by
      *   screens that have nothing to do with this panel, and changing it to
      *   suit one role would move all of them to match a mock they are not
      *   drawn from.
@@ -101,7 +101,7 @@
     --font-size-tag: 9.5px;
     /*
      * One digit of a six-box code field. 00b's mock: `font-size:26px;
-     * font-weight:600` in a 60px square — more than twice body size, because
+     * font-weight:600` in a 60px square - more than twice body size, because
      * on a screen whose only job is six characters the size IS the affordance.
      */
     --font-size-code-box: 26px;
@@ -127,9 +127,9 @@
     --letter-spacing-heading: -0.02em;
     /*
      * 02's tracking scale, by size, for weight 600 (measured over its source):
-     *   17–25px  heading  -0.02em      27–28px  large   -0.028em
-     *   26px     display  -0.025em     29–40px  hero    -0.03em
-     *   42px     xlarge   -0.035em     44–52px  giant   -0.04em
+     *   17-25px  heading  -0.02em      27-28px  large   -0.028em
+     *   26px     display  -0.025em     29-40px  hero    -0.03em
+     *   42px     xlarge   -0.035em     44-52px  giant   -0.04em
      * `tracking.test.ts` holds every 600 style at 17px and up to it.
      */
     --letter-spacing-large: -0.028em;
@@ -157,7 +157,7 @@
     --radius-round: 50%;
 
     /* ── Spacing ──────────────────────────────────────────────────────────
-       The token number IS the pixel value. Not a formula — the design is
+       The token number IS the pixel value. Not a formula - the design is
        hand-tuned per composition and uses 8, 10 and 22 as readily as 24, so a
        geometric scale would mean rounding every one of them. Naming by value
        makes matching the source mechanical: the design says 24px, the token
@@ -189,7 +189,7 @@
      * 00a gives the editorial column `padding:32px 34px` and its footer row
      * `padding-top:36px`. Both had been taken to the nearest existing step,
      * and the result was a panel two pixels narrow on each side and a footer
-     * four pixels high — individually invisible, and all in one direction.
+     * four pixels high - individually invisible, and all in one direction.
      *
      * ★ On the scale rather than in the screen: 00b's editorial column is the
      *   same shell, and so is recovery's.
@@ -215,8 +215,8 @@
     --size-rail: clamp(210px, 14.6%, 300px);
     /*
      * The inbox queue, which is not the navigation rail. It carries customer
-     * names, channel names and shop domains — values whose length nobody
-     * controls — so it is wider than a column of navigation labels, and its
+     * names, channel names and shop domains - values whose length nobody
+     * controls - so it is wider than a column of navigation labels, and its
      * percentage is of a page that is already allowed to be 1600px.
      */
     /*
@@ -225,14 +225,14 @@
      * ════════════════════════════════════════════════════════════════════
      * It was `clamp(260px, 21%, 360px)`, chosen as "21% of 1440 is about
      * 302, and the design's 352 sits inside the range". **A percentage width
-     * resolves against its CONTAINING BLOCK** — here the content area beside
-     * the rail, `[1218x876]` in 02's computed tree — not the viewport. 21% of
+     * resolves against its CONTAINING BLOCK** - here the content area beside
+     * the rail, `[1218x876]` in 02's computed tree - not the viewport. 21% of
      * 1218 is 256, the floor caught it, and at the exact width the design was
      * drawn at the queue came out 92px narrower than drawn.
      *
      * ★ 352 / 1218 = 28.9%, so the same clamp now computes to the design's
      *   value at the design's width and still flexes either side of it. The
-     *   floor and ceiling — the deliberate responsive part — are unchanged.
+     *   floor and ceiling - the deliberate responsive part - are unchanged.
      *
      * ★ `--size-rail` beside it is right for the opposite reason: its 14.6%
      *   resolves against the FRAME, which is 1440, and 14.6% of 1440 is 210.
@@ -241,7 +241,7 @@
     --size-inbox-queue: clamp(260px, 28.9%, 360px);
     /*
      * ⚠ `--size-code-box: 44px` was here and is gone. The mock gives the code
-     *   boxes `flex:1` — they divide the column rather than having a width —
+     *   boxes `flex:1` - they divide the column rather than having a width -
      *   so a fixed one was the invention that made six boxes stop short of the
      *   button beneath them. Removed rather than left for somebody to reuse.
      */
@@ -265,7 +265,7 @@
     /* The label column in the workspace fact list. */
     --size-fact-label: 190px;
     /*
-     * The narrow label column inside a scan row — not `--size-fact-label`,
+     * The narrow label column inside a scan row - not `--size-fact-label`,
      * which is twice as wide and belongs to the facts tables.
      *
      * It existed only as `var(--size-label-column, 6rem)`, so every screen
@@ -322,7 +322,7 @@
      * ───────────────────────────────────────────────────────────────────── */
     --frame-base: #121212;
     /*
-     * The Copilot's wall. `rgb(23,23,23)` in the computed tree — a step
+     * The Copilot's wall. `rgb(23,23,23)` in the computed tree - a step
      * lighter than the frame, so it reads as a surface ON the dark rather
      * than a hole in the light panel it sits inside.
      */
@@ -339,7 +339,7 @@
     --menu-dark-danger: #e4a88f;
     /* Its input bar: `rgb(20,20,20)`, a step darker again. */
     --copilot-input-surface: #141414;
-    /* 05e's cards on the dark panel — Say this, Careful, Ask: `#1F1F1F`, one step off the shell's `#1E1E1E`. */
+    /* 05e's cards on the dark panel - Say this, Careful, Ask: `#1F1F1F`, one step off the shell's `#1E1E1E`. */
     --copilot-card: #1f1f1f;
     /* 05e's "Say this" card: a violet edge on the dark panel. */
     --copilot-say-edge: #3a3457;
@@ -348,7 +348,7 @@
     /* 02's wall: the order's image well and the person's avatar. */
     --copilot-well: #2a2a2a;
     --copilot-initials: #c4bfb7;
-    /* 02's wall: "Paid" — a lighter green than --signal-done, read on #171717. */
+    /* 02's wall: "Paid" - a lighter green than --signal-done, read on #171717. */
     --copilot-positive: #b9d188;
     /* 02's wall: the mark at the end of "Ask Copilot anything…". */
     --copilot-ask-mark: #2e2a3f;
@@ -362,11 +362,11 @@
     --frame-selected: #262626;
     /*
      * ⚠ #2e2e2e, NOT #333. The design draws every frame hairline at #2E2E2E
-     *   — twice in `Directions.dc.html`, and `#333` appears nowhere in it.
+     *   - twice in `Directions.dc.html`, and `#333` appears nowhere in it.
      *   Ours was a rounding to a web-safe-looking triple.
      *
      * ★ Changed on the TOKEN rather than in the screen, because the other
-     *   reader of it — the shell's frame border — is the same hairline in the
+     *   reader of it - the shell's frame border - is the same hairline in the
      *   same design language. Two call sites, both of which should move.
      */
     --frame-line: #2e2e2e;
@@ -395,9 +395,9 @@
     --panel-inset: #f3f0ea;
     --panel-sunken: #f1efe9;
     --panel-well: #f0ede7;
-    /* The bar that closes a panel — 02's queue footer. */
+    /* The bar that closes a panel - 02's queue footer. */
     --panel-footer: #f5f2ec;
-    /* A quiet row at the foot of a list — 03's "Decided earlier today". */
+    /* A quiet row at the foot of a list - 03's "Decided earlier today". */
     --panel-quiet: #fcfbf8;
     --panel-field: #fff;
 
@@ -439,7 +439,7 @@
     /*
      * Intent tones.
      *
-     * The design gives each detected intent its own pair — a frustrated
+     * The design gives each detected intent its own pair - a frustrated
      * customer and a high-intent buyer are not the same signal, and the
      * neutral/done/waiting trio cannot say so. Read from screen 01's queue
      * rows; these are the design's values, not a palette extension.
@@ -490,8 +490,8 @@
      * ════════════════════════════════════════════════════════════════════
      * ⚠⚠ THE CHANNEL MARK, AND I SAID THIS COULD NOT BE BUILT
      * ════════════════════════════════════════════════════════════════════
-     * I reported that 02 uses `background: url({{ c.chIcon }})` — a brand
-     * image per channel — and that we had no such assets. **That was the
+     * I reported that 02 uses `background: url({{ c.chIcon }})` - a brand
+     * image per channel - and that we had no such assets. **That was the
      * PROTOTYPE, which is a template.** `Directions.dc.html` renders the same
      * badge with `<i data-lucide="message-circle">`, and we have lucide.
      *
@@ -520,7 +520,7 @@
     --channel-messenger-mark: #3e5c99;
 
     /*
-     * A settled conversation's avatar — quieter than a live one. 02 draws a
+     * A settled conversation's avatar - quieter than a live one. 02 draws a
      * resolved row softer in five separate ways; this is one of them.
      */
     --avatar-surface-settled: #f2efe9;
@@ -542,7 +542,7 @@
     /* 02's AI link ("Summarise all of it"): the violet text over this underline. */
     --ai-link-underline: #cfc6f0;
     /*
-     * 02's warning card — "Autumn early access was rejected", "An open
+     * 02's warning card - "Autumn early access was rejected", "An open
      * promise": a pale terracotta field, its edge, a dark title, a warm body,
      * and the outline of a control on it.
      */
@@ -553,7 +553,7 @@
     --alert-control-edge: #e3c3b6;
     /* 03b's confirmation edge: the calm green, drawn as a card's border. */
     --calm-edge: #c9d8b4;
-    /* 13b's scrim: the frame dimmed under a panel — #121212 at 30%. */
+    /* 13b's scrim: the frame dimmed under a panel - #121212 at 30%. */
     --panel-scrim: rgb(18 18 18 / 30%);
     /* 13's warning above the channels: amber, darker words. */
     --warning-banner-surface: #fbf3df;
@@ -577,8 +577,8 @@
     /*
      * Setup, on day one.
      *
-     * The "next" step gets its own treatment — a warm inset, a violet edge and
-     * a violet numeral — because exactly one step is ever next, and it has to
+     * The "next" step gets its own treatment - a warm inset, a violet edge and
+     * a violet numeral - because exactly one step is ever next, and it has to
      * be findable without reading the list.
      */
     --setup-next-surface: #f6f3ec;

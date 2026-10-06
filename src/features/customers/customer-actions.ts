@@ -20,7 +20,7 @@ export type AddCustomerResult =
     };
 
 /**
- * Creates the person — unless they are already here. `POST /api/contacts` is
+ * Creates the person - unless they are already here. `POST /api/contacts` is
  * an UPSERT that would overwrite an existing contact's name and email, so a
  * match on the phone is looked up first and opened instead (Omer: never a
  * duplicate, never an overwrite).

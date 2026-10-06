@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Connecting a WhatsApp number — screens 13c and 13d.
+ * Connecting a WhatsApp number - screens 13c and 13d.
  *
  * `POST /api/channels/whatsapp/inspect` → the numbers on the customer's
  * account, each with the decision that would apply to it.
@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ════════════════════════════════════════════════════════════════════════════
  * THE DESIGN HAS TWO DOORS AND THE PLATFORM HAS NONE
  * ════════════════════════════════════════════════════════════════════════════
- * 13c asks the merchant where their number lives — a new install, or an
+ * 13c asks the merchant where their number lives - a new install, or an
  * existing WhatsApp Business app. `selectFlow` takes
  * `{ inspection, targetPhoneNumberId?, preferredWabaId? }` and no
  * customer-supplied choice. `POST /inspect` does accept a `path` in its body
@@ -25,7 +25,7 @@ import { z } from 'zod';
  * AND THE COPY IS THE PLATFORM'S
  * ════════════════════════════════════════════════════════════════════════════
  * `customerMessage` is documented as *"the text the connect screen shows, so
- * it says what will happen rather than what we detected"* — authored for this
+ * it says what will happen rather than what we detected"* - authored for this
  * screen, in the customer's register, with no Meta vocabulary. Rendered
  * verbatim, like `metaSolution` and `ESTIMATE_DISCLAIMER`. Six sentences of
  * our own would compete with six of theirs and drift the first time a
@@ -98,11 +98,11 @@ export function needsPin(candidate: Candidate): boolean {
 /**
  * The two kinds of impossibility, which need different sentences.
  *
- * `BLOCKED` is *not you, not now* — a blocker the customer can clear.
+ * `BLOCKED` is *not you, not now* - a blocker the customer can clear.
  * `fullMigration` is *not anyone, not ever*: Meta publishes no API for moving
  * a Business app number to Cloud API, so `available` is typed as the literal
  * `false`. A greyed-out control for the second reads as "you did not qualify",
- * and this merchant did not fail a check — the road does not exist.
+ * and this merchant did not fail a check - the road does not exist.
  */
 export type Impossibility = 'blocked_for_now' | 'never_available';
 
@@ -117,7 +117,7 @@ export const businessAppOptionsSchema = z.object({
   fullMigration: z.object({
     /**
      * Always false. Typed as a literal upstream, for every Business app
-     * number that will ever exist — not a per-tenant verdict.
+     * number that will ever exist - not a per-tenant verdict.
      */
     available: z.literal(false),
     title: z.string(),
@@ -166,7 +166,7 @@ export const channelsConfigSchema = z.object({
     .catch(null)
     .default(null),
   /**
-   * Whether each OAuth provider's app credentials exist — a `false` one can
+   * Whether each OAuth provider's app credentials exist - a `false` one can
    * never complete, so its Connect is drawn "not set up" up front.
    */
   providers: z.record(z.string(), z.boolean()).nullish().catch(null).default(null),

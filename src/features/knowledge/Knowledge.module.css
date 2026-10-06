@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * Screen 08 · Studio · What GOTCHA knows — measured. 02 sets no
+   * Screen 08 · Studio · What GOTCHA knows - measured. 02 sets no
    * line-height on any of it.
    */
 
@@ -77,7 +77,7 @@
     background-color: var(--panel-field);
   }
 
-  /* No conflict: the card's shape, neutral — no alert edge. */
+  /* No conflict: the card's shape, neutral - no alert edge. */
   .conflictCard[data-state='empty'] {
     border-color: var(--border-default);
   }

@@ -8,23 +8,24 @@ import type { CommerceSummary, Mood } from '@/api/contracts/customer-facts';
 import { customerOrdersSchema, type CustomerOrders } from '@/api/contracts/customer-orders';
 import { customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { loadCommerce, loadInsights } from '@/features/customers/load-customer-facts';
+import { plainDashes } from '@/lib/plain-dashes';
 import { logger } from '@/observability/logger';
 
 /**
  * The Copilot wall's reads about the PERSON (02 Inbox, Omer 2026-10-06):
  * worth and mood, what GOTCHA remembers, and every conversation they have
- * had. Each read fails on its own — a failed read is "—" in its own block,
+ * had. Each read fails on its own - a failed read is "-" in its own block,
  * never a zero and never the whole wall.
  */
 export interface WallPerson {
   /** `undefined`: no store to read (a reason); `null`: the read failed. */
   readonly commerce: CommerceSummary | 'no_store' | null;
   readonly mood: Mood | null;
-  /** What GOTCHA learned — exactly what the AI is given; `null` when unread. */
+  /** What GOTCHA learned - exactly what the AI is given; `null` when unread. */
   readonly memory: WallMemory | null;
   readonly history: WallHistory | null;
   /**
-   * This person's orders, by contact (Backend e30900fd) — Woo or Shopify.
+   * This person's orders, by contact (Backend e30900fd) - Woo or Shopify.
    * `null`: no contact to read for, or the read failed; the wall then falls
    * back to the conversation's own commerce context.
    */
@@ -35,14 +36,14 @@ export interface WallPerson {
 export type FactSource = 'conversation' | 'person' | 'crm' | 'worked_out';
 
 export interface WallFact {
-  /** The field key, e.g. `business_type` — drawn as a readable label. */
+  /** The field key, e.g. `business_type` - drawn as a readable label. */
   readonly key: string;
   readonly value: string;
   readonly source: FactSource | null;
 }
 
 export interface WallMemory {
-  /** "Known — do NOT re-ask", in the prompt's words. */
+  /** "Known - do NOT re-ask", in the prompt's words. */
   readonly facts: readonly WallFact[];
   /** From a history import: background, not confirmed. */
   readonly historical: {
@@ -86,7 +87,7 @@ export interface WallConversation {
   readonly startedAt: string | null;
   readonly lastAt: string | null;
   readonly messages: number;
-  /** One line, stored. `null` is "No summary yet" — not an empty one. */
+  /** One line, stored. `null` is "No summary yet" - not an empty one. */
   readonly summary: string | null;
   /** The conversation open beside the wall. */
   readonly isCurrent: boolean;
@@ -104,7 +105,7 @@ export const HISTORY_LIMIT = 20;
 
 /*
  * Backend ed8f3e1f. STRICT on the envelope: until it is deployed the path
- * answers 404 or HTML, and that must read as "couldn't read the history" —
+ * answers 404 or HTML, and that must read as "couldn't read the history" -
  * never as a person with no conversations.
  */
 const historySchema = z.object({
@@ -131,8 +132,8 @@ export async function loadWallPerson(
   const api = serverApi();
   /*
    * `contactId` is the conversation row's own (Backend c240bea4). It can be
-   *   null — an older conversation's contact gone, say — and then the
-   *   contact-keyed reads are not made and each block says "—" with why.
+   *   null - an older conversation's contact gone, say - and then the
+   *   contact-keyed reads are not made and each block says "-" with why.
    *   `POST /identity/resolve` is never the fallback: it CREATES on a miss.
    *   Memory is keyed on the conversation and is read either way.
    */
@@ -151,14 +152,14 @@ export async function loadWallPerson(
           .filter((f) => f.key.trim() && f.value.trim())
           .map((f) => ({
             key: f.key,
-            value: f.value.trim(),
+            value: plainDashes(f.value.trim()),
             source: (f.source ? SOURCES[f.source] : undefined) ?? null,
           })),
         historical:
           data.historical && (data.historical.summary?.trim() || data.historical.facts.length > 0)
             ? {
-                summary: data.historical.summary?.trim() || null,
-                facts: data.historical.facts.filter((f) => f.trim()),
+                summary: plainDashes(data.historical.summary?.trim() || null),
+                facts: data.historical.facts.filter((f) => f.trim()).map((f) => plainDashes(f)),
               }
             : null,
       }))
@@ -186,7 +187,7 @@ export async function loadWallPerson(
               startedAt: c.startedAt,
               lastAt: c.lastMessageAt,
               messages: c.messageCount,
-              summary: c.summary?.trim() || null,
+              summary: plainDashes(c.summary?.trim() || null),
               isCurrent: c.isCurrent,
             })),
           }))

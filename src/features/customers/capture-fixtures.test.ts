@@ -18,7 +18,7 @@ vi.mock('@/features/security/capture-fixtures', () => ({ captureFixturesEnabled:
  * The substitution, in both directions.
  *
  * The gate itself (`captureFixturesEnabled`) has its own test in the security
- * feature and is not re-tested here — it is imported unchanged precisely so
+ * feature and is not re-tested here - it is imported unchanged precisely so
  * there is one mechanism rather than two that can drift. What is tested here
  * is that this screen uses it correctly, and that a broken read stays broken.
  */
@@ -55,7 +55,7 @@ describe('withCaptureFixtures', () => {
 
   it('keeps a failed read a failed read', () => {
     // Fixtures make evidence safe. They must never make a broken screen look
-    // like a working one — a capture of a substituted list on top of a failed
+    // like a working one - a capture of a substituted list on top of a failed
     // load would be evidence of nothing.
     enabled.mockReturnValue(true);
     expect(withCaptureFixtures(null, '')).toBeNull();
@@ -72,7 +72,7 @@ describe('withCaptureFixtures', () => {
   it('shares a personId only between rows that carry the same phone', () => {
     /*
      * The join the unifier actually makes. It used to be a WhatsApp row and
-     * an Instagram row sharing a `personId` — the most illustrative case, and
+     * an Instagram row sharing a `personId` - the most illustrative case, and
      * the one case that CANNOT happen: the unifier matches on phone and
      * Instagram contacts have none, so that row could never receive it. The
      * fixture was assigning it by hand, and the evidence showed a collapse
@@ -99,7 +99,7 @@ describe('withCaptureFixtures', () => {
   });
 
   it('keeps an Instagram row that stands alone under the same name', () => {
-    // The duplicate the screen's sentence describes — shown, not asserted.
+    // The duplicate the screen's sentence describes - shown, not asserted.
     enabled.mockReturnValue(true);
     const rows = withCaptureFixtures(real, '')!;
     const instagram = rows.find((r) => r.channel === 'INSTAGRAM')!;
@@ -118,7 +118,7 @@ describe('withCaptureFixtures', () => {
   });
 });
 
-describe('★★ withDetailFixtures — the gate that guards message bodies', () => {
+describe('★★ withDetailFixtures - the gate that guards message bodies', () => {
   const real: CustomerDetail = {
     timeline: {
       identityChannels: [],
@@ -172,7 +172,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
   it('substitutes nothing when the gate is closed', () => {
     /*
      * ★ THE DIRECTION THAT MATTERS ON A SCREEN LIKE THIS ONE is the other
-     * one — a fixture leaking into production would be a screen showing a
+     * one - a fixture leaking into production would be a screen showing a
      * merchant somebody else's customer. But this assertion is what proves
      * the gate is consulted at all, and it is the cheaper of the two to get
      * silently wrong.
@@ -185,7 +185,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
     /*
      * Whole-object substitution, deliberately. A half-substituted page would
      * put a fixture name above a real person's messages, which is worse than
-     * either alone — and it is exactly what per-field substitution drifts
+     * either alone - and it is exactly what per-field substitution drifts
      * into as fields are added.
      */
     enabled.mockReturnValue(true);
@@ -200,7 +200,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
      * Fixtures make evidence safe; they must never make a broken screen look
      * like a working one. A capture that substituted a healthy page over a
      * failed timeline would photograph proof of something that did not
-     * happen — which is the one thing acceptance evidence cannot do.
+     * happen - which is the one thing acceptance evidence cannot do.
      */
     enabled.mockReturnValue(true);
     const failed: CustomerDetail = {
@@ -226,14 +226,14 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
   it('★★ but a FIXTURE id substitutes even over a failed read', () => {
     /*
      * The fixture list serves synthetic ids. Opening one calls the real
-     * timeline endpoint with an id no tenant has, which 404s — so the first
+     * timeline endpoint with an id no tenant has, which 404s - so the first
      * version of this function, which refused to substitute over any failed
      * read, made the whole screen **unphotographable**: every customer page
      * under the gate rendered "we couldn't load this customer".
      *
      * A 404 for an id WE INVENTED is not the screen failing; it is the
      * expected answer about somebody who does not exist. The rule that
-     * matters — a real person's broken page is never photographed healthy —
+     * matters - a real person's broken page is never photographed healthy -
      * is the test above, and it is intact.
      *
      * Found by writing the capture spec, not by running it. The screen was
@@ -264,7 +264,7 @@ describe('★★ withDetailFixtures — the gate that guards message bodies', ()
   });
 
   it('substitutes nothing for a fixture id when the gate is closed', () => {
-    // The id is not an escape hatch — the gate still decides.
+    // The id is not an escape hatch - the gate still decides.
     enabled.mockReturnValue(false);
     expect(withDetailFixtures(real, 'fixture-1')).toBe(real);
   });
@@ -283,8 +283,8 @@ describe('★★ the fixture substitutes CONTENT and must never substitute HEALT
    * ══════════════════════════════════════════════════════════════════════════
    * THE DEFECT THIS GUARDS, WHICH SHIPPED AND PASSED 84 ASSERTIONS
    * ══════════════════════════════════════════════════════════════════════════
-   * The 04e audit read failed on all six capture runs — our contract and the
-   * response envelope disagreeing — and the capture photographed a healthy
+   * The 04e audit read failed on all six capture runs - our contract and the
+   * response envelope disagreeing - and the capture photographed a healthy
    * panel at three viewports in two locales. The spec's own tripwire for
    * that exact state (`customer-actions-failed` must not appear) could not
    * fire: `withDetailFixtures` had already replaced the failed read with a
@@ -307,7 +307,7 @@ describe('★★ the fixture substitutes CONTENT and must never substitute HEALT
       'a-real-contact-id',
     );
 
-    // The failure survives — so the screen renders its failure panel and the
+    // The failure survives - so the screen renders its failure panel and the
     // capture spec's tripwire gets the chance it was written to have.
     expect(out.actions.state).toBe('failed');
     // And the substitution still did its job: no real person's name or
@@ -315,7 +315,7 @@ describe('★★ the fixture substitutes CONTENT and must never substitute HEALT
     expect(out.timeline?.contact?.displayName).toBe('Avery Stone');
   });
 
-  it('★ carries a failed orders read through too — this is a CLASS, not a case', () => {
+  it('★ carries a failed orders read through too - this is a CLASS, not a case', () => {
     /*
      * Fixing only the read that happened to break is the mistake this
      * project has made before. Every sibling read can fail the same way.
@@ -332,7 +332,7 @@ describe('★★ the fixture substitutes CONTENT and must never substitute HEALT
   it('★★ does NOT invent a failure from a read that was never attempted', () => {
     /*
      * `brief`, `memory`, `crm` and `orders` are null both when the read
-     * failed and when there was nothing to ask with — no conversation, no
+     * failed and when there was nothing to ask with - no conversation, no
      * external id. Reading null as failure would report a broken section on
      * every customer who has never written.
      *

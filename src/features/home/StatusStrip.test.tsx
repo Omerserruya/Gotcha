@@ -26,7 +26,7 @@ import { StatusStrip } from './StatusStrip';
 /**
  * The first line on Home, which its own doc says "has to be true".
  *
- * A failed notifications read rendered as "No signals" — the reassuring
+ * A failed notifications read rendered as "No signals" - the reassuring
  * answer, to a count nobody obtained. It is the same shape as the billing
  * screen rounding an unread failure count to zero, and it is the version
  * nobody reports, because the screen looks fine.
@@ -61,7 +61,7 @@ describe('★ an unread count is not a calm one', () => {
 
 describe('quiet is only claimed when something checked', () => {
   it('shows the quiet line when the queue was read and was empty', async () => {
-    // `isQuiet` is `queue !== null && queue.waiting === 0` — already correct.
+    // `isQuiet` is `queue !== null && queue.waiting === 0` - already correct.
     render(await strip({ isQuiet: true }));
     expect(screen.getByText(/nothing needs you/i)).toBeInTheDocument();
   });
@@ -69,7 +69,7 @@ describe('quiet is only claimed when something checked', () => {
   it('says the waiting count is unavailable rather than dropping the clause', async () => {
     /*
      * It used to render nothing. The argument was that a primary count beside
-     * it always renders, so an absence could not read as calm — but that is a
+     * it always renders, so an absence could not read as calm - but that is a
      * layout fact. Reorder the strip and the silence is a reassuring answer
      * given by nobody.
      */
@@ -84,7 +84,7 @@ describe('quiet is only claimed when something checked', () => {
   });
 });
 
-describe('★ 01d — the signals pill opens the notifications panel', () => {
+describe('★ 01d - the signals pill opens the notifications panel', () => {
   it('links to Home with the panel open', async () => {
     render(await strip({ signals: 2 }));
     expect(screen.getByTestId('signals')).toHaveAttribute('href', '/home?notifications=1');
@@ -92,10 +92,10 @@ describe('★ 01d — the signals pill opens the notifications panel', () => {
   });
 });
 
-describe('★ 01b — the quiet strip names the last handover, as "—"', () => {
-  it('quiet: "Last handover —" with why', async () => {
+describe('★ 01b - the quiet strip names the last handover, as "-"', () => {
+  it('quiet: "Last handover -" with why', async () => {
     render(await strip({ isQuiet: true, waiting: 0 }));
-    expect(screen.getByTestId('last-handover')).toHaveTextContent('Last handover —');
+    expect(screen.getByTestId('last-handover')).toHaveTextContent('Last handover -');
     expect(screen.getByTestId('last-handover')).toHaveAttribute(
       'title',
       expect.stringMatching(/Nothing records/),
@@ -108,7 +108,7 @@ describe('★ 01b — the quiet strip names the last handover, as "—"', () => 
   });
 });
 
-describe('★ 01c — the day-one status line', () => {
+describe('★ 01c - the day-one status line', () => {
   it('not live yet, and the trial', async () => {
     render(await strip({ dayOne: { trialDays: 14 } }));
     expect(screen.getByTestId('setup-pill')).toHaveTextContent('Setting up · not live yet');
@@ -123,7 +123,7 @@ describe('★ 01c — the day-one status line', () => {
   });
 });
 
-describe('★ 01c — "Book a setup call", only where it books', () => {
+describe('★ 01c - "Book a setup call", only where it books', () => {
   it('a URL: the link, in a new tab; none: no link', async () => {
     const one = render(
       await strip({ dayOne: { trialDays: 14, setupCallUrl: 'https://cal.example/setup' } }),

@@ -7,7 +7,7 @@ import styles from './Analytics.module.css';
 /**
  * 02's tabs: Overview · GOTCHA · Team · Sales · Topics.
  *
- * Drawn now that each leads somewhere — the only reason they were not.
+ * Drawn now that each leads somewhere - the only reason they were not.
  * `?tab=`, so a tab is a URL; Overview is the bare route.
  */
 export const ANALYTICS_TABS = ['overview', 'gotcha', 'team', 'sales', 'topics'] as const;

@@ -43,7 +43,7 @@ const inFlight = (n: number) => ({
   awaitingApproval: 0,
 });
 
-describe('★★ 02b — the list column: empty, but not blank', () => {
+describe('★★ 02b - the list column: empty, but not blank', () => {
   it('✓, the title, today’s count, and what is still going on', async () => {
     render(await ClearQueueList({ clear: { overview: overview(), inFlight: inFlight(6) } }));
     expect(screen.getByText('The queue is clear')).toBeInTheDocument();
@@ -54,14 +54,14 @@ describe('★★ 02b — the list column: empty, but not blank', () => {
     expect(screen.getByTestId('going-live')).toHaveTextContent('live');
   });
 
-  it('★ held and waiting are kinds of nothing nothing counts: "—", with why', async () => {
+  it('★ held and waiting are kinds of nothing nothing counts: "-", with why', async () => {
     render(await ClearQueueList({ clear: { overview: overview(), inFlight: inFlight(6) } }));
-    expect(screen.getByTestId('going-held')).toHaveTextContent('—');
+    expect(screen.getByTestId('going-held')).toHaveTextContent('-');
     expect(screen.getByTestId('going-held')).toHaveAttribute(
       'title',
       expect.stringMatching(/Nothing records/),
     );
-    expect(screen.getByTestId('going-waiting')).toHaveTextContent('—');
+    expect(screen.getByTestId('going-waiting')).toHaveTextContent('-');
   });
 
   it('no count of nothing: none handled, or no read, is the second sentence alone', async () => {
@@ -71,7 +71,7 @@ describe('★★ 02b — the list column: empty, but not blank', () => {
       }),
     );
     expect(screen.getByTestId('queue-clear-line')).toHaveTextContent(/^Anything it cannot handle/);
-    expect(screen.getByTestId('going-live')).toHaveTextContent('—');
+    expect(screen.getByTestId('going-live')).toHaveTextContent('-');
   });
 
   it('nothing in flight says so', async () => {
@@ -80,7 +80,7 @@ describe('★★ 02b — the list column: empty, but not blank', () => {
   });
 });
 
-describe('★★ 02b — the pane: nothing to read, and the day', () => {
+describe('★★ 02b - the pane: nothing to read, and the day', () => {
   it('"every conversation … without a person" only when that is true', async () => {
     render(
       await ClearQueuePane({
@@ -97,13 +97,13 @@ describe('★★ 02b — the pane: nothing to read, and the day', () => {
     expect(screen.getByTestId('nothing-line')).toHaveTextContent('Nothing is waiting on you.');
   });
 
-  it('the strip: today’s counts, the reply time, and "—" where nothing records why', async () => {
+  it('the strip: today’s counts, the reply time, and "-" where nothing records why', async () => {
     render(await ClearQueuePane({ clear: { overview: overview(), inFlight: null } }));
     const strip = screen.getByTestId('clear-strip');
     expect(strip).toHaveTextContent('Answered today85');
     expect(strip).toHaveTextContent('Average reply time19s');
     expect(strip).toHaveTextContent('Passed to a person1');
-    expect(screen.getByTitle(/Nothing records why/)).toHaveTextContent('—');
+    expect(screen.getByTitle(/Nothing records why/)).toHaveTextContent('-');
   });
 
   it('no conversations today: no counts of nothing', async () => {
@@ -115,7 +115,7 @@ describe('★★ 02b — the pane: nothing to read, and the day', () => {
         },
       }),
     );
-    expect(screen.getByTestId('clear-strip')).toHaveTextContent('Answered today—');
+    expect(screen.getByTestId('clear-strip')).toHaveTextContent('Answered today-');
   });
 
   it('see what GOTCHA answered → the AI view; write to a customer is drawn', async () => {

@@ -3,13 +3,13 @@
  *
  * Transcribed from the backend's canonical set. Kept as named constants rather
  * than inline strings so that a typo is a compile error and a rename is one
- * edit — a mistyped permission string fails silently by hiding a feature,
+ * edit - a mistyped permission string fails silently by hiding a feature,
  * which is the hardest kind of bug to notice.
  *
  * Format is always `domain:resource:action`. Matching is exact: see
  * `PermissionSet`.
  *
- * Not exhaustive of the backend's 47 — the `platform:*` and `settings:*`
+ * Not exhaustive of the backend's 47 - the `platform:*` and `settings:*`
  * families are transcribed as they are needed by the surfaces being built.
  */
 export const PERMISSIONS = {

@@ -11,7 +11,7 @@ import { z } from 'zod';
  * for display and diagnostics only. `priority` IS a real enum and is what the
  * interface groups and sorts by.
  *
- * **`link` is free text.** There are no typed foreign keys — no
+ * **`link` is free text.** There are no typed foreign keys - no
  * `conversationId`, no `approvalId`. Routing is a string somebody wrote, which
  * means it is untrusted input and goes through `safeInternalPath` before it
  * reaches an `href`.
@@ -30,7 +30,7 @@ export const notificationSchema = z.looseObject({
   createdAt: z.string().optional(),
 });
 
-/** Cursor-paginated — the cleanest convention the platform has. */
+/** Cursor-paginated - the cleanest convention the platform has. */
 export const notificationPageSchema = z.looseObject({
   data: z.array(notificationSchema).default([]),
   nextCursor: z.string().nullable().optional(),
@@ -41,20 +41,20 @@ export const unreadCountSchema = z.looseObject({ count: z.number().default(0) })
 
 export type Notification = z.infer<typeof notificationSchema>;
 
-// ── Settings · Notifications — screen 15 ────────────────────────────
+// ── Settings · Notifications - screen 15 ────────────────────────────
 
 /**
- * `GET`/`PATCH /api/notification-preferences/me` — enveloped in `data`.
+ * `GET`/`PATCH /api/notification-preferences/me` - enveloped in `data`.
  *
  * **This is not the design's matrix, and the difference is a product
  * decision rather than a scope adjustment.**
  *
  * The design draws 8 event rows × 3 channels = 24 switches. Per user the
  * platform stores **four booleans and a time window**. `approvals` is the only
- * event-specific field that exists — one of the eight rows.
+ * event-specific field that exists - one of the eight rows.
  *
  * A real matrix does exist and is richer than the design asks (`eventType` ×
- * `channels[]`, with recipients, CEL-lite conditions and priority) — but it is
+ * `channels[]`, with recipients, CEL-lite conditions and priority) - but it is
  * scoped `(tenantId, departmentId)` and phrased as *"when X happens, notify
  * these people"*. The screen says *"tell me when"*. Those are different
  * products: one is my preference, the other is the tenant's routing rule.
@@ -80,7 +80,7 @@ export const notificationPreferencesSchema = z.object({
   approvals: z.boolean().default(true),
   /**
    * One nullable object rather than two fields, because a window needs both
-   * ends to mean anything — the backend clears them together for that reason.
+   * ends to mean anything - the backend clears them together for that reason.
    */
   quietHours: quietHoursSchema.nullable().default(null),
 });

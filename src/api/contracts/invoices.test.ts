@@ -41,7 +41,7 @@ describe('a failed invoice has no receipt, and that is consistency', () => {
      * Measured across every invoice on this machine: PAID 5 / with a PDF 5,
      * DRAFT 6 / 0, FAILED 14 / 0. The correlation is exact.
      *
-     * So a blank where a link would be is the system being consistent — and
+     * So a blank where a link would be is the system being consistent - and
      * a blank cell reads as a document that went astray.
      */
     expect(receiptAbsence(invoice({ status: 'FAILED' }))).toBe('not_paid');
@@ -61,7 +61,7 @@ describe('a failed invoice has no receipt, and that is consistency', () => {
    * ══════════════════════════════════════════════════════════════════════════
    * ⚠⚠ THE THIRD REASON: A RECEIPT ARRIVED AND WE WOULD NOT OPEN IT
    * ══════════════════════════════════════════════════════════════════════════
-   * `providerPdfUrl` is `z.string()` — "a string the payment provider sent",
+   * `providerPdfUrl` is `z.string()` - "a string the payment provider sent",
    * not "a URL". It went into `href` unchecked, with the guard written for
    * exactly that sitting unused in `lib/safe-url.ts`.
    */
@@ -79,7 +79,7 @@ describe('a failed invoice has no receipt, and that is consistency', () => {
   it('★★ and says so as its own reason, not as "the provider was slow"', () => {
     /*
      * `missing` reads as something that will fix itself, blames the provider,
-     * and is FALSE here — a receipt did arrive. Three states, never two: the
+     * and is FALSE here - a receipt did arrive. Three states, never two: the
      * one that needs somebody to look must not render as the one that does
      * not.
      */
@@ -114,7 +114,7 @@ describe('what a merchant most needs to see', () => {
     /*
      * Four subscription charges at 1499.00. Summed through Number these
      * produce the kind of error that shows up as a cent and is never traced
-     * back — on the one screen where a cent is the whole subject.
+     * back - on the one screen where a cent is the whole subject.
      */
     const four = Array.from({ length: 4 }, (_, i) => invoice({ id: `i${i}`, amount: '1499.00' }));
     expect(totalAmount(four)).toBe('5996.00');

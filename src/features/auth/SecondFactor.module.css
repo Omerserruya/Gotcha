@@ -10,7 +10,7 @@
   }
 
   /*
-   * The account, above the heading, with the way out beside it — 00b's mock:
+   * The account, above the heading, with the way out beside it - 00b's mock:
    * `font-size:12.5px; color:#8C887F; display:flex; align-items:center;
    * gap:8px`, and the heading `margin:14px 0 0` below it.
    *
@@ -74,7 +74,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ `flex: 1` IS "THE LENGTH OF THE BUTTON" — 00b's MOCK, VERBATIM
+   * ★★ `flex: 1` IS "THE LENGTH OF THE BUTTON" - 00b's MOCK, VERBATIM
    * ════════════════════════════════════════════════════════════════════════
    *     flex:1; height:60px; border-radius:12px;
    *     font-size:26px; font-weight:600
@@ -82,14 +82,14 @@
    *
    * Ours were a fixed `--size-code-box` (44px) at body size. Six of those plus
    * five 8px gaps is 304px sitting inside a 400px column, so the row stopped
-   * short of a 400px button under it — which is exactly what "make it all the
+   * short of a 400px button under it - which is exactly what "make it all the
    * length of the button" describes.
    *
    * ★ `flex: 1` is not a way of reaching 60px, it is the design's own rule:
    *   the boxes divide whatever the column is. At 400px they come out 60px
    *   each and the row ends level with the button **by construction** rather
    *   than because two numbers were typed to agree. `min-inline-size: 0` is
-   *   what lets them actually shrink — without it a flex item refuses to go
+   *   what lets them actually shrink - without it a flex item refuses to go
    *   below its content width and the row overflows on a narrow viewport.
    *
    * ★ At 26px/600 the digit is more than twice what we were drawing. The size
@@ -100,7 +100,7 @@
    *   not a fact about the mock: 00b's form column there is **430px**, not
    *   400px, so its slots are `(430 − 5×8) / 6 = 65px` wide by 60px tall.
    *   **Not square.** I derived a property from our own layout and attributed
-   *   it to the design — which is the reason this file uses `flex: 1` and not
+   *   it to the design - which is the reason this file uses `flex: 1` and not
    *   a width, and the reason the mistake cost nothing.
    */
   .box {
@@ -124,7 +124,7 @@
    *
    * ★ THE BORDER IS COPIED; THE CARET IS DELIBERATELY NOT. The mock's boxes
    *   are `div`s, so it has to draw its own cursor. Ours are real `<input>`s
-   *   and the browser already puts one there at roughly that size — adding
+   *   and the browser already puts one there at roughly that size - adding
    *   the span would render two carets in the same box, one of which does not
    *   move when you type.
    */
@@ -135,8 +135,8 @@
   }
 
   /*
-   * A recovery code is not six digits — nothing has been observed about its
-   * length or alphabet — so it gets an ordinary field rather than boxes that
+   * A recovery code is not six digits - nothing has been observed about its
+   * length or alphabet - so it gets an ordinary field rather than boxes that
    * would silently truncate one.
    */
   .input {
@@ -168,7 +168,7 @@
 
   /*
    * Quiet on purpose. One device means no chooser, and the way out is phrased as
-   * the situation somebody is in rather than as a menu label — so it costs
+   * the situation somebody is in rather than as a menu label - so it costs
    * nothing to the person whose phone is in their hand.
    */
   .noAccess,

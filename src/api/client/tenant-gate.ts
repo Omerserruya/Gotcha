@@ -4,7 +4,7 @@ import { isApiError } from './api-error';
  * Why the platform locked an entire tenant out.
  *
  * Lives in the API layer because it is read off the error the transport
- * produced, and because both the shell and any feature may need it — neither
+ * produced, and because both the shell and any feature may need it - neither
  * can import the other.
  *
  * Every field is an enum or a path, never prose and never customer data.
@@ -33,7 +33,7 @@ const FEATURE_CODES = new Set([
 ]);
 
 /**
- * One feature this tenant may not use — not the tenant being locked out.
+ * One feature this tenant may not use - not the tenant being locked out.
  *
  * `null` when the failure was anything else.
  */
@@ -72,7 +72,7 @@ export function featureRefusalFrom(cause: unknown): FeatureRefusal | null {
  * is not on their plan. Both arrive as `kind: 'tenant_inactive'` because 402 maps
  * there by status.
  *
- * So any read that hit a feature-level refusal produced a whole-tenant gate —
+ * So any read that hit a feature-level refusal produced a whole-tenant gate -
  * and `load-home-data` does `gate ??= tenantGateFrom(cause)` across every one of
  * its parallel reads. **One entitlement-gated route would have told a merchant
  * their organisation was locked out while the rest of the product worked.**

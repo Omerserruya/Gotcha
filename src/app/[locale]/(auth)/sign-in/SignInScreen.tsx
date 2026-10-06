@@ -15,14 +15,14 @@ import styles from './SignIn.module.css';
  * The editorial panel and the footnote were server-rendered siblings of
  * `SignInPanel`, which owns the flow stage in client state. Nothing connected
  * them, so the second-factor screen wore the sign-in screen's figures **and**
- * its footnote — *"New here? Ask your workspace admin for an invitation."*,
+ * its footnote - *"New here? Ask your workspace admin for an invitation."*,
  * which is not merely the wrong copy on 00b but an actively wrong statement to
  * somebody already halfway signed in.
  *
  * ── WHY SLOTS AND NOT COPY IN HERE ──
  * Every string still comes from the server page, rendered there and handed
  * across as `ReactNode`. This component decides **which** of them is on screen
- * and nothing else — no `useTranslations`, no catalogue, no copy.
+ * and nothing else - no `useTranslations`, no catalogue, no copy.
  *
  * ★ That is what keeps the panel bundle from growing: the two editorials are
  *   already-rendered markup, not two catalogues plus a switch.
@@ -52,7 +52,7 @@ export function SignInScreen({
   readonly notice?: ReactNode;
   readonly brand: ReactNode;
   readonly ticks: ReactNode;
-  /** One per screen — the rotating figures and the line under the ticks. */
+  /** One per screen - the rotating figures and the line under the ticks. */
   readonly figures: Record<SignInScreenName, ReactNode>;
   readonly status: Record<SignInScreenName, ReactNode>;
   /**
@@ -87,7 +87,7 @@ export function SignInScreen({
         {/*
           ★★ THE COLUMN IS NOT THE SAME WIDTH ON BOTH SCREENS.
           00a's mock gives the form `width:400px`; 00b's gives it `430px`.
-          Thirty pixels, and it is the column the six code slots divide — so
+          Thirty pixels, and it is the column the six code slots divide - so
           it is not only the column that changes width.
         */}
         <div className={styles.form} data-screen={screen}>

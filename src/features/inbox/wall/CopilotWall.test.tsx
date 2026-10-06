@@ -78,7 +78,7 @@ beforeEach(() => {
 });
 
 describe('★ the header outside a provider', () => {
-  it('Copilot, and "—": nothing running, so no stop', async () => {
+  it('Copilot, and "-": nothing running, so no stop', async () => {
     await show(WallHeader({ conversationId: 'c1', aiDriving: true }));
     expect(screen.getByText('Copilot')).toBeInTheDocument();
     expect(screen.getByTestId('wall-working')).toHaveAttribute('data-working', 'no');
@@ -86,11 +86,11 @@ describe('★ the header outside a provider', () => {
   });
 });
 
-describe('★★ an unidentified visitor (c240bea4) — one line, not three blocks of "—"', () => {
+describe('★★ an unidentified visitor (c240bea4) - one line, not three blocks of "-"', () => {
   it('Shopify live chat with no contact: the line; no person, orders, history or reads', async () => {
     await show(wall(null, {}, 'SHOPIFY_LIVE_CHAT'));
     expect(screen.getByTestId('wall-visitor')).toHaveTextContent(
-      'An unidentified visitor — history, memory and orders appear once they’re identified.',
+      'An unidentified visitor - history, memory and orders appear once they’re identified.',
     );
     expect(screen.queryByTestId('wall-person')).toBeNull();
     expect(screen.queryByTestId('wall-orders')).toBeNull();
@@ -106,20 +106,20 @@ describe('★★ an unidentified visitor (c240bea4) — one line, not three bloc
     expect(screen.getByTestId('wall-person')).toBeInTheDocument();
   });
 
-  it('⚠ any other channel without a contact is "—", not "a visitor"', async () => {
+  it('⚠ any other channel without a contact is "-", not "a visitor"', async () => {
     await show(wall(null));
     expect(screen.queryByTestId('wall-visitor')).toBeNull();
   });
 });
 
 describe('★★ the person, from what exists today', () => {
-  it('★★ no contact yet: every contact-keyed value is "—" with why, never a zero', async () => {
+  it('★★ no contact yet: every contact-keyed value is "-" with why, never a zero', async () => {
     await show(wall());
     expect(person).toHaveBeenCalledWith(null, 'c1');
     expect(screen.getByText('Dana Cohen')).toBeInTheDocument();
     for (const stat of ['lifetime', 'orders', 'mood']) {
       const value = screen.getByTestId(`wall-stat-${stat}`);
-      expect(value).toHaveTextContent('—');
+      expect(value).toHaveTextContent('-');
       expect(value).toHaveAttribute('title', expect.stringContaining('does not name its customer'));
     }
     expect(screen.queryByTestId('wall-profile')).toBeNull();
@@ -150,7 +150,7 @@ describe('★★ the person, from what exists today', () => {
     expect(screen.getByTestId('wall-stat-orders')).toHaveTextContent('6');
     expect(screen.getByTestId('wall-person-since')).toHaveTextContent('Since March 2024');
     // Six orders, none read: refunds cannot be counted.
-    expect(screen.getByTestId('wall-stat-refunds')).toHaveTextContent('—');
+    expect(screen.getByTestId('wall-stat-refunds')).toHaveTextContent('-');
   });
 
   it('with a contact: Profile, and Mood in its words', async () => {
@@ -162,7 +162,7 @@ describe('★★ the person, from what exists today', () => {
   });
 });
 
-describe('★★ What GOTCHA learned — what the AI is given', () => {
+describe('★★ What GOTCHA learned - what the AI is given', () => {
   it('facts with a readable label and a quiet source; "From before" apart', async () => {
     person.mockResolvedValue({
       ...blank,
@@ -190,7 +190,7 @@ describe('★★ What GOTCHA learned — what the AI is given', () => {
 
   it('★ unread is not empty', async () => {
     await show(wall());
-    expect(screen.getByTestId('wall-memory-unread')).toHaveTextContent('—');
+    expect(screen.getByTestId('wall-memory-unread')).toHaveTextContent('-');
     expect(screen.queryByTestId('wall-memory-none')).toBeNull();
   });
 });

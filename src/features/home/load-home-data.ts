@@ -57,7 +57,7 @@ import { logger } from '@/observability/logger';
  * one dead analytics query is not a reason to show them nothing. The sections
  * that resolved render; the ones that did not say so.
  *
- * The two calls run in parallel — they are unrelated, and sequencing them
+ * The two calls run in parallel - they are unrelated, and sequencing them
  * would double the wait for no benefit.
  */
 /** 01b's card shows four rows; a read that returns this many may have more. */
@@ -83,14 +83,14 @@ export interface HomeData {
    * not be shown with the confidence of a measured one.
    */
   readonly timeSaved: TimeSaved | null;
-  /** What GOTCHA is doing right now — present tense, unlike `activity`. */
+  /** What GOTCHA is doing right now - present tense, unlike `activity`. */
   readonly inFlight: InFlight | null;
   /** Conversation headroom. `limit` null means the plan is uncapped. */
   readonly allowance: UsageAllowance | null;
   /**
    * "Worth knowing". `kind` + `values`; the wording is ours.
    *
-   * Null when the call failed, empty when nothing stands out — a distinction
+   * Null when the call failed, empty when nothing stands out - a distinction
    * the screen keeps, because "nothing to report" is a real and good state.
    */
   readonly insights: readonly Insight[] | null;
@@ -100,7 +100,7 @@ export interface HomeData {
    */
   readonly quietDay: QuietDay | null;
   /**
-   * Setup progress. Null when the call failed — which is NOT the same as a
+   * Setup progress. Null when the call failed - which is NOT the same as a
    * workspace being live, so the day-one block is withheld rather than the
    * screen claiming the workspace is ready.
    */
@@ -126,12 +126,12 @@ export interface HomeData {
    * Whether nothing is waiting on a person.
    *
    * Derived, because the backend has no such signal. `waiting` counts
-   * unassigned OPEN/WAITING conversations tenant-wide — the nearest thing to
+   * unassigned OPEN/WAITING conversations tenant-wide - the nearest thing to
    * "needs somebody", though not the same as it, since no classification of
    * "needing a person" exists.
    */
   readonly isQuiet: boolean;
-  /** Unread notifications — the "2 signals" pill. Null when unavailable. */
+  /** Unread notifications - the "2 signals" pill. Null when unavailable. */
   readonly signals: number | null;
   /**
    * Set when the platform refused because the tenant itself is gated.
@@ -286,7 +286,7 @@ export async function loadHomeData(): Promise<HomeData> {
       .get({
         endpoint: intelligenceReviewEndpoints.list(),
         payload: intelligenceReviewsSchema,
-        // `{ ok, pending, reviews }` — `data` is not the payload here.
+        // `{ ok, pending, reviews }` - `data` is not the payload here.
         raw: true,
       })
       .then((result) => result.reviews.filter((review) => review.reason === 'conflict'))
@@ -330,7 +330,7 @@ export async function loadHomeData(): Promise<HomeData> {
 
 /**
  * 01c's "Your workspace is ready, Maya": the viewer's first name, from
- * `/api/auth/me`. `null` when unread or unnamed — then the heading has none.
+ * `/api/auth/me`. `null` when unread or unnamed - then the heading has none.
  */
 export async function loadViewerFirstName(): Promise<string | null> {
   return serverApi()

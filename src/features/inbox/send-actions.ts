@@ -15,8 +15,8 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THIS IS THE ONE CONTROL IN THIS PROJECT WHOSE PURPOSE IS TO BE PRESSED
  * ════════════════════════════════════════════════════════════════════════════
- * Every other write here is something somebody *might* press — sign out
- * everywhere, resolve a conflict, connect a system — and the rule has been that
+ * Every other write here is something somebody *might* press - sign out
+ * everywhere, resolve a conflict, connect a system - and the rule has been that
  * no test and no capture presses it. That rule holds and is not enough on its
  * own, because a composer is a thing somebody **will** press, by design, and on
  * the dev tenant the first person to press it is one of us during a walk.
@@ -25,7 +25,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * not a test artefact; it is a message a person receives from GOTCHA, and this
  * platform has no undo anywhere.
  *
- * So: no automated run calls this — `Composer.test.tsx` mocks it to throw — and
+ * So: no automated run calls this - `Composer.test.tsx` mocks it to throw - and
  * **no human presses the control on dev until Omer has said so in his own
  * words.** Built and unpressed is a real state and this is it.
  *
@@ -35,8 +35,8 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * The route validates, writes a `Message` row, and enqueues onto
  * `outgoingMessageQueue`. Delivery happens later and asynchronously through a
  * path the response cannot see, so **nothing here may say "sent".** `queued` is
- * the strongest true word, and the row's own `status` — `PENDING` → `SENT` →
- * `DELIVERED`, or `FAILED` — is what reports the rest, on the stream.
+ * the strongest true word, and the row's own `status` - `PENDING` → `SENT` →
+ * `DELIVERED`, or `FAILED` - is what reports the rest, on the stream.
  *
  * That is also why `Message.status` had to reach the contract first: a composer
  * over a stream that cannot report `FAILED` is a screen that lies in exactly the
@@ -47,11 +47,11 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
 const unchecked = z.unknown();
 
 export type SendResult =
-  /** Queued. NOT delivered — see the note above. */
+  /** Queued. NOT delivered - see the note above. */
   | { readonly ok: true }
   /** `body` was empty. The route answers 400 and the control also prevents it. */
   | { readonly ok: false; readonly reason: 'empty' }
-  /** 404 — the conversation is not there, or not visible to this tenant. */
+  /** 404 - the conversation is not there, or not visible to this tenant. */
   | { readonly ok: false; readonly reason: 'not_found' }
   /**
    * 400 `Channel not configured for this tenant`.
@@ -61,7 +61,7 @@ export type SendResult =
    * "try again" is the wrong advice and nothing about the message is at fault.
    */
   | { readonly ok: false; readonly reason: 'channel_not_configured' }
-  /** 400 — the quoted message is not in this conversation. */
+  /** 400 - the quoted message is not in this conversation. */
   | { readonly ok: false; readonly reason: 'quote_not_here' }
   | { readonly ok: false; readonly reason: 'failed' };
 
@@ -78,7 +78,7 @@ export async function sendReply(
   conversationId: string,
   body: string,
   /**
-   * The message this answers — 02's Reply. The route checks it belongs to
+   * The message this answers - 02's Reply. The route checks it belongs to
    * this conversation and quotes it on the customer's channel.
    */
   replyToMessageId?: string,
@@ -87,7 +87,7 @@ export async function sendReply(
   /*
    * Checked here as well as on the route. The route answers 400 for an empty
    * body, and a round trip to be told what we already knew is a worse
-   * experience than a disabled button — but the guard is here rather than only
+   * experience than a disabled button - but the guard is here rather than only
    * in the component because a server action is a public endpoint.
    */
   if (text === '') return { ok: false, reason: 'empty' };
@@ -117,8 +117,8 @@ export async function sendReply(
      *
      * The route answers `{ error: "Channel not configured for this tenant" }`
      * and `{ error: "The message you are replying to is not in this
-     * conversation" }`. Neither sends a `code`, so the house idiom — matching
-     * `cause.code` — compiles here and can never fire. The reason lands in
+     * conversation" }`. Neither sends a `code`, so the house idiom - matching
+     * `cause.code` - compiles here and can never fire. The reason lands in
      * `developerMessage`, and that is what has to be read.
      *
      * Matched on a narrow, stable substring rather than the whole sentence: the

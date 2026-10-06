@@ -36,7 +36,7 @@ import {
  * between page 1 and page 2, so an agent scrolling sees a duplicate and
  * **silently skips a row.**
  *
- * A skipped conversation in an inbox is not cosmetic — it is somebody
+ * A skipped conversation in an inbox is not cosmetic - it is somebody
  * waiting who never appears, with no symptom the agent could notice. The
  * queue is the one list in this product where completeness IS the feature.
  *
@@ -84,13 +84,13 @@ export async function ConversationList({
   /**
    * The viewer, so a row can say "You".
    *
-   * ★ `loadInbox` already fetches it — it is one of the four calls in round
-   *   one — and the conversation header already uses it. The queue was the
+   * ★ `loadInbox` already fetches it - it is one of the four calls in round
+   *   one - and the conversation header already uses it. The queue was the
    *   one place that had the fact and did not show it.
    */
   readonly meId?: string | null;
   /**
-   * The viewer's role, colleagues and greeting — what the right-click menu
+   * The viewer's role, colleagues and greeting - what the right-click menu
    * needs to offer only what the routes will do. See `menuPlan`.
    */
   readonly role?: string | null;
@@ -99,7 +99,7 @@ export async function ConversationList({
   /**
    * Which view this list is, so the header names it.
    *
-   * ⚠ The header said "Waiting in queue" on every view — including Resolved,
+   * ⚠ The header said "Waiting in queue" on every view - including Resolved,
    *   whose rows are by definition not waiting. A heading that contradicts
    *   the list under it is the same defect as a list that ignores the view.
    */
@@ -122,7 +122,7 @@ export async function ConversationList({
    *
    * ★ `undefined` MEANS NOBODY LOOKED. The running service may predate the
    * count, or the read may have failed. Either way the screen must not say
-   * zero — that is the instrument reporting all-clear because it is absent.
+   * zero - that is the instrument reporting all-clear because it is absent.
    */
   readonly undatedCount?: number;
 }) {
@@ -130,7 +130,7 @@ export async function ConversationList({
   /* The configured zone is `Asia/Jerusalem`; the server's is not. */
   const format = await getFormatter();
   /*
-   * The view's name, from the RAIL's own keys — so the header and the
+   * The view's name, from the RAIL's own keys - so the header and the
    * highlighted rail item cannot disagree about what this list is.
    */
   const nav = await getTranslations('navigation');
@@ -173,13 +173,13 @@ export async function ConversationList({
           Measured on the deployed build: a `DIV`, no role, no tabindex, zero
           links or buttons inside, `cursor: auto`, no hover, and nothing on
           right-click. **The only way into a conversation was to type
-          `?c=<id>` in the address bar** — on the screen whose entire job is
+          `?c=<id>` in the address bar** - on the screen whose entire job is
           choosing which conversation to open.
 
           ★ A LINK, NOT THE DESIGN'S `<button onClick>`. The prototype uses a
             button because a static mock has no routing; we have a real URL.
             An anchor gives middle-click, open-in-new-tab, the browser's own
-            context menu, keyboard focus and a status-bar preview — all of
+            context menu, keyboard focus and a status-bar preview - all of
             which a button reimplements badly or not at all. That is the same
             reading as the code field's caret: when the mock draws something
             the platform provides, it is describing an outcome.
@@ -195,7 +195,7 @@ export async function ConversationList({
           /*
             ★★ MARKED ON CLICK, NOT ON THE SERVER'S ANSWER. `open` is what the
             server rendered; the link follows a pending click until the new
-            page lands — see `QueueRowLink`. What the pane shows meanwhile
+            page lands - see `QueueRowLink`. What the pane shows meanwhile
             comes from this row, which is already loaded.
           */
           open={conversation.id === openId}
@@ -205,7 +205,7 @@ export async function ConversationList({
             channelLabel: channelName(conversation.channel, channelNames),
           }}
           /*
-            ★★ 02 DRAWS A SETTLED ROW QUIETER IN FIVE SEPARATE WAYS — name
+            ★★ 02 DRAWS A SETTLED ROW QUIETER IN FIVE SEPARATE WAYS - name
             weight, name colour, preview colour, avatar tint and time colour.
             We drew every row identically, which is why the column read flat.
 
@@ -224,7 +224,7 @@ export async function ConversationList({
             `flex-direction:column; gap:4px` carrying name+time, preview+
             unread, and a tag row.
 
-            We drew name · channel · waiting-age on one baseline — three
+            We drew name · channel · waiting-age on one baseline - three
             facts, none of them the message.
           */}
           {/*
@@ -237,7 +237,7 @@ export async function ConversationList({
             className={styles.avatarStack}
             /*
               ⚠ NOT `aria-hidden` ANY MORE. The initials are decorative, but
-                the badge is now the only thing saying which channel this is —
+                the badge is now the only thing saying which channel this is -
                 it was a visible word a moment ago. Hiding the stack would
                 remove that fact from anybody using a screen reader.
             */
@@ -273,7 +273,7 @@ export async function ConversationList({
 
               {/*
                 ★ THE TIME OF THE LAST MESSAGE, which is what the design puts
-                  here — and waiting-age has moved to the tag row, which is
+                  here - and waiting-age has moved to the tag row, which is
                   where the design puts THAT. Both facts kept, each in its
                   own slot, rather than one standing in for the other.
 
@@ -290,7 +290,7 @@ export async function ConversationList({
                     /*
                      * ⚠⚠ 24-HOUR, STATED RATHER THAN INHERITED. `hour12`
                      *   follows the LOCALE by default, so `en` rendered
-                     *   "07:48 PM" and `he` would render "19:48" — the two
+                     *   "07:48 PM" and `he` would render "19:48" - the two
                      *   locales disagreeing about a thing 02 states once, on
                      *   every row, as `09:29`.
                      *
@@ -306,11 +306,11 @@ export async function ConversationList({
 
             {/*
               ════════════════════════════════════════════════════════════════
-              ⚠⚠ THE MESSAGE PREVIEW — IN THE CONTRACT ALL ALONG, NEVER DRAWN
+              ⚠⚠ THE MESSAGE PREVIEW - IN THE CONTRACT ALL ALONG, NEVER DRAWN
               ════════════════════════════════════════════════════════════════
               `lastMessageBody` is parsed by `conversationRowSchema` and
-              appeared NOWHERE outside it. The row's whole purpose — what the
-              person actually said — was being fetched on every page load and
+              appeared NOWHERE outside it. The row's whole purpose - what the
+              person actually said - was being fetched on every page load and
               discarded.
 
               ★ The fourth value today that existed and had no reader.
@@ -318,7 +318,7 @@ export async function ConversationList({
             {/*
               ⚠ AN EMPTY PREVIEW KEEPS ITS LINE. A media message has no body
                 and the list does not send its type, so there is nothing true
-                to write — but dropping the line made those rows 69 tall in a
+                to write - but dropping the line made those rows 69 tall in a
                 column of 82s. The line stays, empty; no text is invented.
             */}
             <span
@@ -342,7 +342,7 @@ export async function ConversationList({
                 <span className={styles.waiting} data-testid={`waiting-${conversation.id}`}>
                   {/*
                     ★★ AT A SCALE SOMEBODY CAN READ. This printed raw minutes,
-                    so the capture showed `47061m` — thirty-two days, on the
+                    so the capture showed `47061m` - thirty-two days, on the
                     column an agent triages on.
                   */}
                   {(() => {
@@ -358,7 +358,7 @@ export async function ConversationList({
                 live chat" in both languages all along.
 
                 ⚠ THE DESIGN DRAWS A LOGO BADGE HERE AND WE DRAW THE NAME.
-                  Its template is `background: url({{ c.chIcon }})` — a brand
+                  Its template is `background: url({{ c.chIcon }})` - a brand
                   image per channel, and this product has no such assets. A
                   lucide glyph would be a different mark, not that one, so the
                   name stays until the logos exist.
@@ -366,7 +366,7 @@ export async function ConversationList({
               {/*
                 ⚠⚠ THE CHANNEL TAG IS GONE, AND THE BADGE IS WHY. The avatar
                    now carries a tinted channel mark, so printing the name
-                   here spent the row's ONE coloured slot on a duplicate —
+                   here spent the row's ONE coloured slot on a duplicate -
                    and 02 puts status in that slot, not provenance.
 
                 ★ `channelName` is still read for the badge's accessible
@@ -381,12 +381,12 @@ export async function ConversationList({
                 They split three ways:
 
                   buildable   "You" (assignedAgentId === me), "Flow"
-                              (handledBy === 'flow' — an EXACT match for
+                              (handledBy === 'flow' - an EXACT match for
                               HANDLED_BY's literal word)
-                  needs a     "Support AI" / "Sales AI" — the row carries
+                  needs a     "Support AI" / "Sales AI" - the row carries
                   name        `assignedAiAgentId`, an id with no name
                   no field    "Shipping issue", "High intent", "Waiting on
-                              returns", "Approval needed" — a classification
+                              returns", "Approval needed" - a classification
                               nobody stores
 
                 ⚠ The last four are NOT approximations of `status`. "Waiting
@@ -421,7 +421,7 @@ export async function ConversationList({
         ════════════════════════════════════════════════════════════════════
         ⚠ THE COUNT IS WHAT THIS PAGE HOLDS, NOT THE QUEUE'S TOTAL. The design
           shows 14 beside the heading; we do not know the total when
-          `hasMore` is true — the route pages by keyset and reports no grand
+          `hasMore` is true - the route pages by keyset and reports no grand
           count. Printing a page size as a queue size would be the cap
           defect the footer sentence exists to prevent, moved into a number.
 
@@ -439,7 +439,7 @@ export async function ConversationList({
 
         {/*
           ════════════════════════════════════════════════════════════════════
-          ★★ 02's FILTER ROW — AND EVERY CHIP IN IT FILTERS
+          ★★ 02's FILTER ROW - AND EVERY CHIP IN IT FILTERS
           ════════════════════════════════════════════════════════════════════
           "All" as a dark pill, then one tinted square per channel. Links, not
           buttons, for the same reason the rows are: the filter is a URL, so
@@ -492,11 +492,11 @@ export async function ConversationList({
            frame's height and the LIST moves inside it.
 
         ★ Without the wrapper the list is a direct child of the panel and
-          pushes it taller — which is the bottom edge running off the screen.
+          pushes it taller - which is the bottom edge running off the screen.
       */}
       <div className={styles.queueScroll}>
         {/*
-          ★★ 02's RIGHT-CLICK MENU, AND SHIFT-CLICK TO PICK SEVERAL — over the
+          ★★ 02's RIGHT-CLICK MENU, AND SHIFT-CLICK TO PICK SEVERAL - over the
           rows, inside the scroll region. A client component around the rows:
           the rows stay server-rendered, and the menu learns which one was
           right-clicked from the row's own `data-conversation-id`.
@@ -535,13 +535,13 @@ export async function ConversationList({
           ★★ THE ROWS THE ORDERING CANNOT PLACE, SHOWN RATHER THAN SUNK
           ════════════════════════════════════════════════════════════════════
           `lastMessageAt` is maintained by convention and some writers skip it.
-          A null sinks to the floor of a recency list and is never seen — the
+          A null sinks to the floor of a recency list and is never seen - the
           same defect as the pagination skip, and the reason this list is
           capped in the first place.
 
           Its own group says the true thing: open, and we cannot tell where
           they belong. The count makes a growing problem visible instead of
-          gradual — if writers that forget are common, that number rising is
+          gradual - if writers that forget are common, that number rising is
           how anybody would ever find out, and it rises in front of the person
           using the screen rather than only in an audit.
 
@@ -550,8 +550,8 @@ export async function ConversationList({
           ════════════════════════════════════════════════════════════════════
           **We can refuse to bury the rows that ADMIT they do not know. We
           cannot find the ones that are quietly wrong.** A stale
-          `lastMessageAt` — a plausible timestamp from before the newest
-          message, written by a forgetful path — is indistinguishable from a
+          `lastMessageAt` - a plausible timestamp from before the newest
+          message, written by a forgetful path - is indistinguishable from a
           correct one at every layer we control. Nothing on the row disagrees
           with it and the list looks entirely normal.
 
@@ -569,7 +569,7 @@ export async function ConversationList({
           The server orders `{ lastMessageAt: desc, nulls: last }`, so every
           undated row sits at the **very end of the whole queue**. On a tenant
           with more conversations than one page holds, this group is empty on
-          every page but the last — and an empty group reads as "none".
+          every page but the last - and an empty group reads as "none".
 
           Found when the keyset endpoint landed and made the paging real. It
           was already true of the capped list and I had not seen it: the group
@@ -587,8 +587,8 @@ export async function ConversationList({
 
               `undatedCount` is scoped to this view's filters and is
               cursor-blind, so it answers the question the per-page group could
-              only gesture at. When it is absent — an older service, or a
-              failed read — the caption falls back to what this page can see
+              only gesture at. When it is absent - an older service, or a
+              failed read - the caption falls back to what this page can see
               and says that is what it is.
             */}
               <p className={styles.note}>
@@ -608,8 +608,8 @@ export async function ConversationList({
         ════════════════════════════════════════════════════════════════════
         ★★ THE DESIGN'S FOOTER BAR, CARRYING OUR SENTENCE RATHER THAN ITS OWN
         ════════════════════════════════════════════════════════════════════
-        02 ends the queue card with a bar — `#F5F2EC`, radius `0 0 18px 18px`,
-        `border-top 1px #EDE9E1` — reading *"Shift-click to pick several ·
+        02 ends the queue card with a bar - `#F5F2EC`, radius `0 0 18px 18px`,
+        `border-top 1px #EDE9E1` - reading *"Shift-click to pick several ·
         right-click for actions"*.
 
         ⚠ WE DO NOT SHIP THAT SENTENCE. It is the only thing that tells anyone

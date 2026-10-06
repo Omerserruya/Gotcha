@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 /**
  * ★ WE DO NOT KNOW A CUSTOMER'S GENDER, SO THE COPY NEVER ASSUMES ONE.
  *
- * Two English strings said "her" about whoever is in the conversation —
- * "Her channels", "We can't show her other channels" — carried over from 02's
+ * Two English strings said "her" about whoever is in the conversation -
+ * "Her channels", "We can't show her other channels" - carried over from 02's
  * persona, Dana. The first sweep for them was lowercase and missed "Her".
  * Hebrew genders by grammar, so it is not swept by word: "האדם הזה" with "שלו"
  * agrees with the noun and assumes nothing; a feminine form about a customer

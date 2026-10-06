@@ -15,7 +15,7 @@ vi.mock('@/i18n/navigation', () => ({
 import { BuyCredits } from './BuyCredits';
 
 /**
- * Screen 17d — buying credits.
+ * Screen 17d - buying credits.
  *
  * ── NOTHING HERE CALLS THE REAL ACTION ──
  * `POST /billing/credits/buy` charges a live card on a real tenant. The
@@ -23,8 +23,8 @@ import { BuyCredits } from './BuyCredits';
  * against the button is disabled anyway: `buyCredits()` checks
  * `no_billable_entity` first and this workspace has no billing profile.
  *
- * Which means the interesting half of this screen — the totals, the three
- * outcomes, the cap — is unreachable by any capture and lives only here.
+ * Which means the interesting half of this screen - the totals, the three
+ * outcomes, the cap - is unreachable by any capture and lives only here.
  */
 
 const buyCreditPack = vi.hoisted(() => vi.fn());
@@ -44,7 +44,7 @@ const PACKS = packagesResponseSchema.parse({
       name: 'Starter',
       credits: 1000,
       /*
-       * ★★ FLAT, BECAUSE THE WIRE IS FLAT — AND THIS FIXTURE IS WHY THE DEFECT
+       * ★★ FLAT, BECAUSE THE WIRE IS FLAT - AND THIS FIXTURE IS WHY THE DEFECT
        * SHIPPED. It claimed `price: { amount, currency }`, a nested object the
        * route does not send (`price: String(p.price)` with `currency` as its
        * sibling), so the component read it happily here and got nothing in
@@ -79,7 +79,7 @@ function show(over: { billable?: boolean; hasPaymentMethod?: boolean; packages?:
 }
 
 describe('★ the price on the tile is not the price that is charged', () => {
-  it('shows net, VAT and a total — and the total is the gross', () => {
+  it('shows net, VAT and a total - and the total is the gross', () => {
     /*
      * Catalogue prices are NET. `taxed` has been on the wire all along and
      * our `z.object` contract was stripping it, so this screen could only
@@ -163,7 +163,7 @@ describe('★ per-pack expiry, from the packages response and never the summary'
      * The first version of this test asserted `/\S/` and passed while the
      * key was wrong, because next-intl's dev fallback renders the key path.
      * The capture build returns '' for a missing key, so the line would have
-     * been blank in every shot with the suite green — 11d again.
+     * been blank in every shot with the suite green - 11d again.
      */
     expect(screen.getByTestId('buy-pack-expiry-pack_1k')).toHaveTextContent(
       /these credits do not expire/i,
@@ -203,7 +203,7 @@ describe('★ the button does not pretend it can work', () => {
     await user.type(qty, '9');
 
     /*
-     * The TOTAL is clamped immediately — it is derived from the capped
+     * The TOTAL is clamped immediately - it is derived from the capped
      * quantity, so neither the amount shown nor the amount sent can exceed
      * the cap even if a click lands before the field is blurred.
      */
@@ -226,8 +226,8 @@ describe('★★ an unsettled charge is not a failure', () => {
      * payment-required response invites the customer to try again, and they
      * may already have been charged."
      *
-     * Flattening three outcomes into "Something went wrong, try again" —
-     * which is exactly what a redesign does to error states — takes money
+     * Flattening three outcomes into "Something went wrong, try again" -
+     * which is exactly what a redesign does to error states - takes money
      * from somebody twice. So this must say a charge MAY have been made,
      * must not say failed, and must tell them not to retry.
      */
@@ -270,7 +270,7 @@ describe('★★ an unsettled charge is not a failure', () => {
      * nothing was charged. You can try again."*
      *
      * `failed` is a network drop, a 500, or a response that failed its
-     * contract — **and a contract failure can follow a 200 in which the card
+     * contract - **and a contract failure can follow a 200 in which the card
      * was charged and the credits granted.** Telling that customer nothing
      * was charged, and inviting a retry, is the same harm the `unsettled`
      * branch two tests above exists to prevent, arriving through the parse
@@ -315,7 +315,7 @@ describe('★★ an unsettled charge is not a failure', () => {
   });
 });
 
-describe('★★ one purchase, one intent key — and when it is released', () => {
+describe('★★ one purchase, one intent key - and when it is released', () => {
   /*
    * ════════════════════════════════════════════════════════════════════════
    * THE TWO FAILURES ARE NOT SYMMETRIC, AND THAT DECIDES EVERY CASE HERE.
@@ -406,7 +406,7 @@ describe('★★ one purchase, one intent key — and when it is released', () =
     /*
      * The key used to carry `Math.floor(Date.now() / 60_000)`. Two deliberate
      * presses either side of a minute boundary were two purchases and two
-     * presses within one minute were one — and neither edge is where the
+     * presses within one minute were one - and neither edge is where the
      * customer's intent changed. Nothing about time appears in it now.
      */
     buyCreditPack.mockResolvedValue({ ok: false, kind: 'unsettled', invoiceId: null });
@@ -419,7 +419,7 @@ describe('★★ one purchase, one intent key — and when it is released', () =
     /*
      * ★★ THE SPECIFIC VALUE THE OLD CODE EMBEDDED, NOT A SHAPE.
      *
-     * This asserted `not.toMatch(/\d{8,}/)` — "no long number" — and a v4
+     * This asserted `not.toMatch(/\d{8,}/)` - "no long number" - and a v4
      * UUID contains a run of eight digits **8% of the time**, measured over
      * 20,000 samples. So the test failed about one run in twelve with nothing
      * wrong, which is almost certainly the single unexplained failure reported
@@ -428,7 +428,7 @@ describe('★★ one purchase, one intent key — and when it is released', () =
      * A flaky assertion is worse than no assertion: it teaches everybody that
      * a red run might be noise. What it MEANT was that the key carries no
      * clock, so it now looks for the exact minute bucket the previous
-     * implementation embedded — a value that cannot appear by chance.
+     * implementation embedded - a value that cannot appear by chance.
      */
     expect(key).not.toContain(String(Math.floor(Date.now() / 60_000)));
   });
@@ -440,7 +440,7 @@ describe('★★ the tax label is in the reader’s language, not the tenant’s
      * ════════════════════════════════════════════════════════════════════════
      * A BROWSER WALK FOUND `מע"מ` IN THE MONEY SUMMARY OF THE ENGLISH SCREEN
      * ════════════════════════════════════════════════════════════════════════
-     * `taxed.label` is the platform's, localised to the ACCOUNT — correct for
+     * `taxed.label` is the platform's, localised to the ACCOUNT - correct for
      * an Israeli tenant and wrong for a reader who chose English. It was
      * preferred over our own translation, so the label came through in Hebrew.
      *
@@ -450,7 +450,7 @@ describe('★★ the tax label is in the reader’s language, not the tenant’s
     /*
      * Built through `packagesResponseSchema`, like `PACKS`. A first version
      * hand-rolled the object and the component threw on a missing
-     * `expiryPolicy` — a fixture is a claim that the platform can produce it,
+     * `expiryPolicy` - a fixture is a claim that the platform can produce it,
      * and that one could not have come from anywhere.
      */
     const hebrewLabel = packagesResponseSchema.parse({
@@ -462,7 +462,7 @@ describe('★★ the tax label is in the reader’s language, not the tenant’s
           name: 'Starter',
           credits: 1000,
           /*
-           * ★★ FLAT, BECAUSE THE WIRE IS FLAT — AND THIS FIXTURE IS WHY THE DEFECT
+           * ★★ FLAT, BECAUSE THE WIRE IS FLAT - AND THIS FIXTURE IS WHY THE DEFECT
            * SHIPPED. It claimed `price: { amount, currency }`, a nested object the
            * route does not send (`price: String(p.price)` with `currency` as its
            * sibling), so the component read it happily here and got nothing in
@@ -484,7 +484,7 @@ describe('★★ the tax label is in the reader’s language, not the tenant’s
     const label = await screen.findByTestId('buy-tax-label');
     expect(label).toHaveTextContent(/VAT/i);
     expect(label).toHaveTextContent(/18/);
-    // The Hebrew block — nothing in it should reach an English screen here.
+    // The Hebrew block - nothing in it should reach an English screen here.
     expect(label.textContent ?? '').not.toMatch(/[֐-׿]/);
   });
 });
@@ -492,7 +492,7 @@ describe('★★ the tax label is in the reader’s language, not the tenant’s
 describe('★★ the four defects a browser walk found in one panel', () => {
   it('★★ a pack shows its price, which no pack had', async () => {
     /*
-     * The contract read `price: { amount, currency }` — a nested object the
+     * The contract read `price: { amount, currency }` - a nested object the
      * route does not send. `price` is a string and `currency` is its sibling,
      * so the object schema failed, the default fired, and every tile was
      * priceless while every total lost its symbol. One cause, two reports.
@@ -551,7 +551,7 @@ describe('★★ the four defects a browser walk found in one panel', () => {
   it('★★ the buy control is a button, not centred plain text', async () => {
     /*
      * It was a raw `<button className={styles.buyButton}>` and the stylesheet
-     * had ONLY a `.buyButton:disabled` rule — no base style. On the screen that
+     * had ONLY a `.buyButton:disabled` rule - no base style. On the screen that
      * charges a card, the thing you press did not look like one.
      */
     show();
@@ -598,7 +598,7 @@ const showWire = (extra: Record<string, unknown> = {}) =>
     </NextIntlClientProvider>,
   );
 
-describe('★ 17d — 02’s dialog (measurement of 208d849)', () => {
+describe('★ 17d - 02’s dialog (measurement of 208d849)', () => {
   it('no second "Buy credits" heading inside the dialog', () => {
     showWire();
     expect(screen.queryByRole('heading', { name: /buy credits/i })).toBeNull();
@@ -632,7 +632,7 @@ describe('★ 17d — 02’s dialog (measurement of 208d849)', () => {
   });
 });
 
-describe('★ 17d — 02 draws no quantity: a pack is the amount', () => {
+describe('★ 17d - 02 draws no quantity: a pack is the amount', () => {
   it('no field unless the server says a pack may be bought several at once', () => {
     const one = show({
       packages: {

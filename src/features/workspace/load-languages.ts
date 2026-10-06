@@ -7,7 +7,7 @@ import { logger } from '@/observability/logger';
 import { z } from 'zod';
 
 /**
- * What screen 11d needs — and it is three different settings, not one.
+ * What screen 11d needs - and it is three different settings, not one.
  *
  * The design separates them and is right to: the language customers are
  * answered in, the language GOTCHA itself writes in, and the language this
@@ -15,7 +15,7 @@ import { z } from 'zod';
  * stored in different places.
  */
 
-/** `GET /api/account` — bare, not enveloped. */
+/** `GET /api/account` - bare, not enveloped. */
 const accountSchema = z.object({
   user: z
     .object({ locale: z.string().nullable().default(null) })

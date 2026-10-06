@@ -14,9 +14,9 @@ import { CREDENTIAL_SURFACE_NAMESPACES, NAMESPACES, SHELL_NAMESPACES } from './n
  * ════════════════════════════════════════════════════════════════════════════
  * `NextIntlClientProvider` with no `messages` serialises every namespace in
  * the request config into the client payload. Measured on the deployed page:
- * 143,757 bytes, 1,097 message-shaped strings — "Approvals", "Studio",
+ * 143,757 bytes, 1,097 message-shaped strings - "Approvals", "Studio",
  * "conversation" x121, "refund" x20, and a warning naming the Approvals queue
- * — on a page nobody has authenticated to reach.
+ * - on a page nobody has authenticated to reach.
  *
  * ── WHY THIS READS THE CALL SITES ──
  * A hand-kept list of "what sign-in needs" fails silently in the direction
@@ -71,7 +71,7 @@ describe('⚠⚠ the credential surface carries its own vocabulary and no more',
     const requested = [...namespacesRequested()].sort();
     // Read, not assumed: if somebody adds `useTranslations('billing')` to a
     // design-system primitive, this reddens rather than blanking a string.
-    expect(requested.length, 'no call sites found — the scan is broken').toBeGreaterThan(0);
+    expect(requested.length, 'no call sites found - the scan is broken').toBeGreaterThan(0);
     for (const namespace of requested) {
       expect(CREDENTIAL_SURFACE_NAMESPACES as readonly string[], namespace).toContain(namespace);
     }
@@ -80,7 +80,7 @@ describe('⚠⚠ the credential surface carries its own vocabulary and no more',
   it('⚠⚠ carries nothing the surface does not ask for', () => {
     /*
      * The direction that matters. "Covers what is needed" is satisfied by
-     * shipping everything — which is exactly the defect. This is the assertion
+     * shipping everything - which is exactly the defect. This is the assertion
      * that fails if somebody widens the set for comfort.
      */
     const requested = namespacesRequested();
@@ -98,7 +98,7 @@ describe('⚠⚠ the credential surface carries its own vocabulary and no more',
      */
     const allowed = new Set<string>([...CREDENTIAL_SURFACE_NAMESPACES, ...SHELL_NAMESPACES]);
     const product = NAMESPACES.filter((namespace) => !allowed.has(namespace));
-    expect(product, 'every namespace is allowed — the test proves nothing').not.toHaveLength(0);
+    expect(product, 'every namespace is allowed - the test proves nothing').not.toHaveLength(0);
     for (const namespace of product) {
       expect(CREDENTIAL_SURFACE_NAMESPACES as readonly string[], namespace).not.toContain(
         namespace,
@@ -130,7 +130,7 @@ describe('⚠⚠ the credential surface carries its own vocabulary and no more',
      * `error.tsx` is a client component by Next's requirement and lives at the
      * locale root, outside `(app)` and `(auth)` alike. If its namespace is not
      * provided above them, an error on the sign-in route renders empty strings
-     * — a failure that looks like a quiet page rather than a broken one.
+     * - a failure that looks like a quiet page rather than a broken one.
      */
     expect(SHELL_NAMESPACES as readonly string[]).toContain('errors');
     const source = readFileSync('src/app/[locale]/error.tsx', 'utf8');

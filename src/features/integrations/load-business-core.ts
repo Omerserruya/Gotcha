@@ -9,7 +9,7 @@ import { logger } from '@/observability/logger';
  * What screens 14b and 14c read.
  *
  * One call. The route composes the use case, the parts, who can serve each
- * and who currently does — and deliberately connects nothing:
+ * and who currently does - and deliberately connects nothing:
  *
  *   "The election mechanism this builds on is already capability-honest and
  *    already SEPARATE FROM CONNECTING… Connecting stays in the marketplace,
@@ -23,7 +23,7 @@ import { logger } from '@/observability/logger';
  * That looks like an inconsistency to whoever refactors it next: four parts
  * read from `config.roles` and one reads from somewhere else, and the obvious
  * tidy-up is to make CRM like the rest. Doing so would create two sources for
- * one decision — this screen could then show one system while the AI called
+ * one decision - this screen could then show one system while the AI called
  * another, which is the shape that cost this project a day on two Shopifys.
  */
 export async function loadBusinessCore(): Promise<BusinessCore | null> {

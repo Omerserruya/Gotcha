@@ -13,14 +13,14 @@ import {
 import styles from './Billing.module.css';
 
 /**
- * Credits left — 17's first card.
+ * Credits left - 17's first card.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * THE USAGE BAR IS NOT DRAWN, AND THAT IS THE POINT OF THIS COMPONENT
  * (02's bar is drawn as holdings instead, and only when it can be believed)
  * ════════════════════════════════════════════════════════════════════════════
  * `consumedCredits` is `includedAllowance - includedRemaining`, so anything
- * that removes credits without spending them lands in it — and expiry removes
+ * that removes credits without spending them lands in it - and expiry removes
  * credits without spending them.
  *
  * Measured on this tenant: granted 7,000, **spent 340.01**, and 6,659.99
@@ -32,7 +32,7 @@ import styles from './Billing.module.css';
  * caveat is a sentence, and people read pictures.** The belief is formed
  * before the caveat is reached.
  *
- * So `consumptionIsTrustworthy` withholds the figure — on a contradiction the
+ * So `consumptionIsTrustworthy` withholds the figure - on a contradiction the
  * payload carries on its own face, not on a policy of distrust, and it lifts
  * the moment the route starts reporting real spend.
  * ════════════════════════════════════════════════════════════════════════════
@@ -51,8 +51,8 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
 
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
   /*
-    02 writes "12 Sep – 12 Oct". A cycle that crosses a year carries it, or a
-    year-long period reads "8 Sep – 8 Sep".
+    02 writes "12 Sep - 12 Oct". A cycle that crosses a year carries it, or a
+    year-long period reads "8 Sep - 8 Sep".
   */
   const crossesYear =
     credits.period.startsAt != null &&
@@ -77,14 +77,14 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
     02's bar, as HOLDINGS rather than spend: the plan's credits still held
     (dark) and those bought separately (violet), against what the cycle
     started with. It is drawn only when the payload's consumption can be
-    believed and the period's credits have been granted — otherwise an empty
+    believed and the period's credits have been granted - otherwise an empty
     bar is the same picture as the 100% this component refuses to draw.
   */
   const whole = credits.plan.includedCredits + purchased;
   const bar = trustworthy && !waiting && whole > 0;
 
   /*
-    16's ruling — states, not explanations. Every sentence this card used to
+    16's ruling - states, not explanations. Every sentence this card used to
     print under its tiles still exists, on the title of the thing it explains:
     the grant on "Not granted yet", metering and attribution on the estimate,
     the withheld usage on "Until renewal". The card keeps 02's height.
@@ -92,12 +92,12 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
   const grant = waiting
     ? `${t('awaitingGrant.lead')} ${t('awaitingGrant.body', {
         included: number.format(credits.plan.includedCredits),
-        date: credits.period.startsAt ? longDay.format(new Date(credits.period.startsAt)) : '—',
+        date: credits.period.startsAt ? longDay.format(new Date(credits.period.startsAt)) : '-',
       })}`
     : null;
   /*
     `no_consumption_recorded` arrives with conversations in the sample: a
-    statement about METERING, not activity — "no activity" would be false
+    statement about METERING, not activity - "no activity" would be false
     beside the number that disproves it.
   */
   const metering = ranWithoutMetering(credits)
@@ -154,14 +154,14 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
           {number.format(credits.totalAvailableCredits)}
         </span>
         {/*
-          What the total is made of — 02's "12,640 of 20,000 plan credits +
+          What the total is made of - 02's "12,640 of 20,000 plan credits +
           2,000 top-up". No "Used 7,360": that is `consumedCredits`, which
           counts expiry as spend. And the purchased half is "bought
           separately", never a "top-up kept until used": the summary route
           strips `expiresAt`, so permanence is a promise nothing here checks.
         */}
         {/*
-          A contracted allowance with nothing granted is not a spent one —
+          A contracted allowance with nothing granted is not a spent one -
           "7,000 included" beside "0" reads as a loss. So "0" says it is not
           granted yet, and the contract and its date ride on the title.
         */}
@@ -234,7 +234,7 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
         02's two translations of the number. TWO ESTIMATES, NEVER SUBSTITUTED:
         `observedRemaining` is this tenant's measured burn, `estimatedRemaining`
         the plan's published ratio, and the tile names which it is. Neither is
-        shown while the period's credits have not been granted — both divide a
+        shown while the period's credits have not been granted - both divide a
         balance the screen has just disowned, and "about 0 conversations" would
         be read as a measurement.
       */}
@@ -246,7 +246,7 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
             title={estimateNote}
             data-testid="credits-estimate-withheld"
           >
-            <p className={styles.creditsTileValue}>—</p>
+            <p className={styles.creditsTileValue}>-</p>
             <p className={styles.creditsTileSub}>{t('estimate.awaitingGrant')}</p>
           </div>
         ) : observed.chats != null && observed.basis === 'TENANT_ACTUAL' ? (
@@ -294,15 +294,15 @@ export async function CreditsSection({ credits }: { readonly credits: CreditSumm
             title={estimateNote}
             data-testid="credits-estimate-none"
           >
-            <p className={styles.creditsTileValue}>—</p>
+            <p className={styles.creditsTileValue}>-</p>
           </div>
         )}
         {/*
           "Lasts until renewal" needs a projected run-out against the renewal
-          date, and nothing computes one for credits: "—", and why on its title.
+          date, and nothing computes one for credits: "-", and why on its title.
         */}
         <div className={styles.creditsTile} data-testid="credits-runout" title={runoutNote}>
-          <p className={styles.creditsTileValue}>—</p>
+          <p className={styles.creditsTileValue}>-</p>
           <p className={styles.creditsTileSub}>{t('runout.label')}</p>
         </div>
       </div>

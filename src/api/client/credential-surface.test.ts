@@ -12,13 +12,13 @@ import { refuseOnCredentialSurface } from './credential-surface';
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ `proxy.ts`'s MATCHER EXCLUDES `/api`
  * ════════════════════════════════════════════════════════════════════════════
- * Every page route on the sign-in origin is refused twice — by the gateway
+ * Every page route on the sign-in origin is refused twice - by the gateway
  * allowlist and by the app. `/api/bff/…`, which forwards the caller's platform
  * session upstream, had the allowlist and nothing else, because middleware
  * never runs for a route handler.
  *
  * ★ The guard read as covering the app. It covered the part of the app its
- *   matcher could see — the same defect as a sweep organised by file: correct
+ *   matcher could see - the same defect as a sweep organised by file: correct
  *   about everything it examines, silent about what it does not.
  */
 
@@ -38,7 +38,7 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
   it('★★ and does nothing on the product, or every API call 404s', () => {
     /*
      * Both directions. The whole failure mode this design trades away is a
-     * value on the wrong image — and here it would take out every API call in
+     * value on the wrong image - and here it would take out every API call in
      * the product rather than only its pages.
      */
     expect(refuseOnCredentialSurface(request())).toBeNull();
@@ -58,7 +58,7 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
    * ★★ THE PROPERTY IS "EVERY HANDLER", WHICH NO UNIT TEST CAN SEE
    * ══════════════════════════════════════════════════════════════════════════
    * A test that drove one route would pass while a sixth was added without the
-   * guard, and that is exactly how this rots — not a guard written wrongly, a
+   * guard, and that is exactly how this rots - not a guard written wrongly, a
    * route added later. So the set is read from the DIRECTORY rather than from
    * a list somebody maintains, which is the same reason `messages.test.ts`
    * enumerates its folder.
@@ -69,7 +69,7 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
      * THIS ASSERTION USED TO PIN THE HOLE. IT NOW PINS THE FIX.
      * ═══════════════════════════════════════════════════════════════════════════
      * `.*\..*` meant "a dot anywhere", so `/en/customers/a.b@c.com` skipped the
-     * credential-surface refusal, the auth gate AND the narrowed CSP —
+     * credential-surface refusal, the auth gate AND the narrowed CSP -
      * reproduced against the deployed image as a `307` where every other
      * product path answered `404`.
      *
@@ -89,7 +89,7 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
     /*
      * ⚠ The source is a STRING literal, so `\\.` there is `\.` in the regex it
      *   builds. Reading it back without undoing that escape produced a pattern
-     *   matching a literal backslash — and the first run of this test claimed
+     *   matching a literal backslash - and the first run of this test claimed
      *   the dotted path was covered. The extraction was wrong in the
      *   reassuring direction, which is the only direction that matters.
      */
@@ -101,7 +101,7 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
      * ⚠⚠ THE SECOND HALF OF THIS DEFECT, AND THE FIRST FIX DID NOT CLOSE IT.
      * A lookahead need not reach the end of the string, so an UNANCHORED
      * `.*\.(?:…|js|…)` means "a dot followed by something that BEGINS WITH a
-     * listed extension" — the trailing `.*` eats the rest. The extension list
+     * listed extension" - the trailing `.*` eats the rest. The extension list
      * shrank the hole rather than closing it.
      *
      * ★★ `a.jsmith@company.com` is what "J. Smith" looks like. These are not
@@ -131,7 +131,7 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
 
     /*
      * ★ And the symptom the bug was hiding: `/anything.json` was SKIPPED, not
-     *   because `json` is listed — it is not — but because `.js` matched and
+     *   because `json` is listed - it is not - but because `.js` matched and
      *   `on` was eaten. It looked like correct behaviour from an extension
      *   that does not exist in the list.
      */
@@ -151,7 +151,7 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
   it('★ and the cookie that made the gap survivable is still host-only', () => {
     /*
      * The gap is closed in the matcher now, so this is no longer what stands
-     * between a signed-in visitor and a product page on the sign-in origin —
+     * between a signed-in visitor and a product page on the sign-in origin -
      * but it was, and nothing said so. Kept because the reasoning at
      * `sessionCookieOptions` refers to it, and a note whose assertion has been
      * deleted is a claim again.
@@ -178,7 +178,7 @@ describe('⚠⚠ refusing on the sign-in origin', () => {
     };
     walk('src/app/api');
 
-    expect(handlers.length, 'no route handlers found — the scan is broken').toBeGreaterThan(0);
+    expect(handlers.length, 'no route handlers found - the scan is broken').toBeGreaterThan(0);
     for (const handler of handlers) {
       expect(readFileSync(handler, 'utf8'), handler).toContain(
         'refuseOnCredentialSurface(request)',

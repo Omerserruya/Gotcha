@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-/** 07b–07f's overlay values, read from the stylesheets. */
+/** 07b-07f's overlay values, read from the stylesheets. */
 const read = (path: string) => readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const rule = (css: string, selector: string) =>
   new RegExp(`(?:^|\\n)\\s*\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
@@ -35,7 +35,7 @@ describe('★ links drawn as buttons are not underlined', () => {
   });
 });
 
-describe('★ 07f — what it may do stays one line a row, and scrolls inside its card', () => {
+describe('★ 07f - what it may do stays one line a row, and scrolls inside its card', () => {
   const css = read('src/features/employees/edit/Edit.module.css');
   it('the name is one line, cut with an ellipsis', () => {
     expect(rule(css, 'mayName')).toMatch(/white-space:\s*nowrap/);

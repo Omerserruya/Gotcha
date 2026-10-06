@@ -14,7 +14,7 @@ import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import { PendingPane } from '@/features/inbox/PendingPane';
 
 /**
- * Screen 02, assembled — tested on the tree rather than on the pixels.
+ * Screen 02, assembled - tested on the tree rather than on the pixels.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHY THIS IS A STRUCTURAL TEST AND NOT A RENDER
@@ -24,12 +24,12 @@ import { PendingPane } from '@/features/inbox/PendingPane';
  * an async component inside another is an unresolved node it cannot see into.
  *
  * ⚠ CORRECTED: this note used to say a nested async component "renders
- *   nothing". React Server Components render them — the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).
+ *   nothing". React Server Components render them - the deployed inbox renders nested async components inside `<Suspense>` (8bb92d6, measured in a browser).
  *   What is streamed is tested by calling those components directly
  *   (`ConversationDetail.test.tsx`).
  *
  * jsdom cannot render an async component at all, so a render-based test would
- * have to resolve them by hand — and resolving them is exactly what the
+ * have to resolve them by hand - and resolving them is exactly what the
  * browser will not do for a nested one. **The instrument would repair the
  * defect it was built to find.**
  *
@@ -55,7 +55,7 @@ vi.mock('@/features/inbox/load-clear-queue', () => ({ loadClearQueue }));
 
 /*
  * ⚠ `ConversationList` now imports the locale-aware `Link`, which pulls in
- *   `next/navigation` — unresolvable in this environment. This page test
+ *   `next/navigation` - unresolvable in this environment. This page test
  *   inspects the TREE rather than rendering it, so the real Link is never
  *   needed; the mock exists so the module graph loads at all.
  */
@@ -172,7 +172,7 @@ describe('★★ four panels, and none of them inside another', () => {
     expect(panels).toContain(CopilotWall);
   });
 
-  it('★★ NONE is a descendant of another — the trap that has cost five screens', async () => {
+  it('★★ NONE is a descendant of another - the trap that has cost five screens', async () => {
     /*
      * The failure mode is not an error. The inner component simply does not
      * render, the page looks finished, and the missing panel is discovered in
@@ -242,7 +242,7 @@ describe('★★ what the page decides before the verbs are drawn', () => {
     /*
      * THE COMPARISON THAT MUST NOT BE MADE. `meId === null` is a failed
      * `/api/auth/me`. Comparing null to a null `assignedAgentId` would make
-     * every UNASSIGNED conversation "mine" — hiding the claim button on
+     * every UNASSIGNED conversation "mine" - hiding the claim button on
      * exactly the conversations that need claiming, and offering a transfer
      * that the route refuses.
      */
@@ -298,7 +298,7 @@ describe('⚠⚠ the queue is told which conversation is open', () => {
     expect(props?.openId).toBe('c7');
   });
 
-  it('⚠⚠ and with no `?c=` it is the one the loader opened — not nothing', async () => {
+  it('⚠⚠ and with no `?c=` it is the one the loader opened - not nothing', async () => {
     /*
      * Measured on the deployed build: the first conversation open in the
      * pane and no row marked, because the list was told `c`, which was
@@ -328,7 +328,7 @@ describe('⚠⚠ the verbs are told whether this conversation is resolved', () =
    * ════════════════════════════════════════════════════════════════════════
    * `onScreen` this morning, `openId` this afternoon, now `resolved`. Each
    * time the component was thoroughly tested for what it DOES with the value
-   * and nothing checked that the page SUPPLIES it — and each time a mutation
+   * and nothing checked that the page SUPPLIES it - and each time a mutation
    * found it rather than a reviewer.
    *
    * ★ The pattern is mine to break: the wiring test belongs in the same
@@ -339,7 +339,7 @@ describe('⚠⚠ the verbs are told whether this conversation is resolved', () =
       ['CLOSED', true],
       ['OPEN', false],
       /*
-       * ⚠ WAITING IS THE MOST LIVE STATE IN THE QUEUE — somebody is waiting
+       * ⚠ WAITING IS THE MOST LIVE STATE IN THE QUEUE - somebody is waiting
        *   for a reply. Treating it as resolved would hide the Resolve button
        *   on exactly the conversations that need resolving.
        */
@@ -362,7 +362,7 @@ describe('⚠⚠ the inbox draws its own panels, so the shell’s surface steps 
    * ════════════════════════════════════════════════════════════════════════
    * 02's frame computes to `rgb(18,18,18)` and the three columns are
    * `#FAF8F4` cards floating on it. **Light on near-black is the
-   * separation** — and we had light panels on the shell's light work
+   * separation** - and we had light panels on the shell's light work
    * surface, which is why a reviewer asked "what separated????".
    *
    * ★ The shell already paints that frame. What was missing is the screen
@@ -397,7 +397,7 @@ describe('⚠⚠ the inbox draws its own panels, so the shell’s surface steps 
      *
      * ★ `bleed` removes the 40px gutters and the 1120px cap. Without it the
      *   three panels sit inside a document's margins and the dark frame reads
-     *   as a border around a page rather than as the ground they float on —
+     *   as a border around a page rather than as the ground they float on -
      *   which is the whole point of the dark.
      */
     let container: ReactElement | null = null;
@@ -414,7 +414,7 @@ describe('⚠⚠ the inbox draws its own panels, so the shell’s surface steps 
     /*
      * ★ The attribute makes an ANCESTOR transparent through `:has()`. A
      *   second element carrying it would be harmless today and confusing the
-     *   moment somebody moves one of them — it reads as a local style and
+     *   moment somebody moves one of them - it reads as a local style and
      *   acts at a distance.
      */
     expect(owners(await page())).toHaveLength(1);
@@ -428,7 +428,7 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
    * ════════════════════════════════════════════════════════════════════════
    * The chat panel is `[856x876]`, and INSIDE it a flex row holds the
    * conversation beside `[372x809]` of Copilot at `rgb(23,23,23)` with
-   * `r:0 0 18px 18px` — the panel's own bottom-right corner, which only a
+   * `r:0 0 18px 18px` - the panel's own bottom-right corner, which only a
    * CHILD can inherit. It is not a third card; it is a wall of the second.
    */
   const ancestorsOf = (tree: ReactNode, target: unknown): string[] => {
@@ -477,7 +477,7 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
     /*
      * ★ THE BUG MY FIRST ATTEMPT INTRODUCED. The branch was two sections, and
      *   moving the Copilot into the open one silently dropped it from the
-     *   empty one — the panel vanished exactly when somebody had nothing
+     *   empty one - the panel vanished exactly when somebody had nothing
      *   selected. It is now one section with two bodies, and this is the
      *   assertion that keeps it that way.
      */
@@ -486,14 +486,14 @@ describe('⚠⚠ two panels, and the Copilot is the chat panel’s wall', () => 
   });
 });
 
-describe('⚠⚠ the page READS `view` — the whole of the bug', () => {
+describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
   /*
    * ════════════════════════════════════════════════════════════════════════
    * THE RAIL WROTE `?view=` AND THE PAGE DID NOT READ IT
    * ════════════════════════════════════════════════════════════════════════
    * `searchParams` declared only `c` and `cursor`. Every view rendered the
    * same ten rows under the same heading. This is the hop that was broken, so
-   * it is the hop asserted — not the mapping, which has its own tests.
+   * it is the hop asserted - not the mapping, which has its own tests.
    */
   const withView = async (view: string | undefined) => {
     loadInbox.mockResolvedValue(data());
@@ -566,7 +566,7 @@ describe('★★ the second round streams in, and the page does not wait for it'
     expect(keys).toEqual(['c7', 'c7']);
   });
 
-  it('★ and the composer is NOT inside one — it is there to type into at once', async () => {
+  it('★ and the composer is NOT inside one - it is there to type into at once', async () => {
     const tree = await page();
     let insideSuspense = false;
     const visit = (node: ReactNode, under: boolean): void => {
@@ -588,7 +588,7 @@ describe('★★ the second round streams in, and the page does not wait for it'
   });
 });
 
-describe('⚠⚠ the queue menu is told who is looking — or Delete is offered to nobody', () => {
+describe('⚠⚠ the queue menu is told who is looking - or Delete is offered to nobody', () => {
   it('★★ the page hands the role, colleagues and greeting to the list', async () => {
     const props = propsOf<{ role?: string | null; colleagues?: unknown; greeting?: unknown }>(
       await page({ role: 'ADMIN', greeting: true }),
@@ -600,7 +600,7 @@ describe('⚠⚠ the queue menu is told who is looking — or Delete is offered 
   });
 });
 
-describe('★★ 02b — the queue is clear, and only then', () => {
+describe('★★ 02b - the queue is clear, and only then', () => {
   const props = (tree: unknown, type: unknown) =>
     propsOf<Record<string, unknown>>(tree as never, type);
 
@@ -614,7 +614,7 @@ describe('★★ 02b — the queue is clear, and only then', () => {
     expect(JSON.stringify(Object.keys(props(tree, ClearQueuePane) ?? {}))).toContain('clear');
   });
 
-  it('★★ ?c= opened by link on an empty queue is open — not "all clear"', async () => {
+  it('★★ ?c= opened by link on an empty queue is open - not "all clear"', async () => {
     loadClearQueue.mockClear();
     const tree = await page({ rows: [], messages: null });
     expect(loadClearQueue).not.toHaveBeenCalled();
@@ -640,7 +640,7 @@ describe('★★ 02b — the queue is clear, and only then', () => {
     ['a busy queue', { rows: [row()], open: null, messages: null }, {}],
     ['another view', { rows: [], open: null, messages: null }, { view: 'resolved' }],
     ['a channel filter', { rows: [], open: null, messages: null }, { channel: 'WHATSAPP' }],
-  ])('not on %s — and no extra read', async (_, data, query) => {
+  ])('not on %s - and no extra read', async (_, data, query) => {
     loadClearQueue.mockClear();
     const tree = await page(data as never, query as never);
     expect(loadClearQueue).not.toHaveBeenCalled();

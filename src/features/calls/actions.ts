@@ -10,7 +10,7 @@ import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
- * 05d / 05e — placing, ending and transferring a call (Omer, 2026-10-04).
+ * 05d / 05e - placing, ending and transferring a call (Omer, 2026-10-04).
  *
  * The same writes the old frontend makes. Each is a real phone call on a
  * real line: nothing here runs except from a click, and the tests assert so.
@@ -56,7 +56,7 @@ export type StartCallResult =
   | { readonly ok: true; readonly mode: 'AGENT_FIRST'; readonly sessionId: string | null }
   /**
    * The line dials from a browser phone, which this app does not have. The
-   * route creates nothing in this mode — nothing was dialled.
+   * route creates nothing in this mode - nothing was dialled.
    */
   | { readonly ok: true; readonly mode: 'IN_PLATFORM' }
   | Extract<CallWriteResult, { ok: false }>;

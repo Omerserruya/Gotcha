@@ -12,7 +12,7 @@ import { buildRoster, type RosterRow } from './roster';
  * *"Humans and AI employees in one list."*
  *
  * A SERVER component, and not incidentally. `GET /api/ai-agents` answers the
- * whole `AIAgent` row — system prompts included — and although the contract
+ * whole `AIAgent` row - system prompts included - and although the contract
  * strips those fields, rendering here means nothing about an AI employee is
  * serialised into the browser payload at all. The table is also entirely
  * read-only: there is no state to own, so making it a client component would
@@ -20,7 +20,7 @@ import { buildRoster, type RosterRow } from './roster';
  *
  * Two kinds share four columns because operationally they are the same
  * resource. They are told apart by the SHAPE of the avatar as well as its
- * colour — a circle for a person, a rounded square for an employee — so the
+ * colour - a circle for a person, a rounded square for an employee - so the
  * distinction survives greyscale and a viewer who cannot separate the hues.
  */
 export async function PeopleTable({
@@ -50,7 +50,7 @@ export async function PeopleTable({
    * What this row may do.
    *
    * A built-in role is translated, so a Hebrew reader sees בעלים rather than
-   * the English word. A role the tenant invented is shown in THEIR words —
+   * the English word. A role the tenant invented is shown in THEIR words -
    * translating it is not ours to do, and a custom role has no key to look up.
    */
   const canDo = (row: RosterRow): string => {

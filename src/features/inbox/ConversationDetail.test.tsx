@@ -18,7 +18,7 @@ vi.mock('server-only', () => ({}));
 /*
  * These are the components that read the second round inside `<Suspense>`.
  * The page test checks they are mounted and keyed; this checks what each one
- * hands on — the half of the join the page test cannot see, because it does
+ * hands on - the half of the join the page test cannot see, because it does
  * not run them.
  */
 const detail = (over: Partial<ConversationDetail> = {}): Promise<ConversationDetail> =>
@@ -42,7 +42,7 @@ const propsIn = <T,>(tree: ReactNode, type: unknown): T | null => {
   return found;
 };
 
-describe('★★ ConversationStream — the stream and the pin', () => {
+describe('★★ ConversationStream - the stream and the pin', () => {
   it('★★ hands the messages and the channel to the stream', async () => {
     const messages = [{ id: 'm1' }] as never;
     const tree = await ConversationStream({
@@ -55,7 +55,7 @@ describe('★★ ConversationStream — the stream and the pin', () => {
     expect(stream?.channel).toBe('WHATSAPP');
   });
 
-  it('⚠⚠ pins the stream to its latest message — it opened at the oldest', async () => {
+  it('⚠⚠ pins the stream to its latest message - it opened at the oldest', async () => {
     const tree = await ConversationStream({
       detail: detail(),
       conversationId: 'c7',
@@ -78,7 +78,7 @@ describe('★ OrdersChip draws only a count it can stand behind', () => {
   });
 });
 
-describe('★★ placeholders are the size of what they stand in for — nothing jumps', () => {
+describe('★★ placeholders are the size of what they stand in for - nothing jumps', () => {
   const css = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     '',
@@ -95,7 +95,7 @@ describe('★★ placeholders are the size of what they stand in for — nothing
     expect(rule(".skeletonLine[data-size='tag']")).toMatch(/block-size:\s*17px/);
   });
 
-  it('★ the queue title line is 16 — the row it sits in is 16', () => {
+  it('★ the queue title line is 16 - the row it sits in is 16', () => {
     expect(rule(".skeletonLine[data-size='title']")).toMatch(/block-size:\s*16px/);
   });
 

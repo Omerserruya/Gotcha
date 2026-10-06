@@ -22,8 +22,8 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * cookie doing their jobs without the form knowing either exists.
  *
  * They return a result rather than throwing, because the interesting failures
- * are answers the form has to render — an address already in the tenant, a
- * plan out of seats — not exceptions to catch.
+ * are answers the form has to render - an address already in the tenant, a
+ * plan out of seats - not exceptions to catch.
  */
 
 export type PeopleWriteResult<T> =
@@ -36,7 +36,7 @@ export type PeopleWriteResult<T> =
    * The plan is out of seats, or out of teams.
    *
    * Its own outcome, because it is the one failure here that is neither the
-   * admin's mistake nor a fault — it is a limit, and "you have used them all"
+   * admin's mistake nor a fault - it is a limit, and "you have used them all"
    * is a different sentence from "that didn't work", with a different next
    * step.
    *
@@ -58,7 +58,7 @@ function fieldErrorsOf(cause: unknown): Record<string, string> {
  * One classifier for both writes, because they fail the same ways.
  *
  * The 402 needs care: the transport maps that status to `tenant_inactive`,
- * which is right almost everywhere — but `requireCapacity` also answers 402,
+ * which is right almost everywhere - but `requireCapacity` also answers 402,
  * for a plan limit. The two are told apart by `code`, never by status, so a
  * tenant that has simply run out of seats is not reported as suspended.
  */
@@ -78,7 +78,7 @@ function classify(cause: unknown): Extract<PeopleWriteResult<never>, { ok: false
  * Invites someone, with their teams, in one call.
  *
  * `departmentIds` is part of the same write rather than a follow-up, and the
- * backend validates every id against the ACTIVE tenant — a foreign or unknown
+ * backend validates every id against the ACTIVE tenant - a foreign or unknown
  * id fails the whole invite instead of creating a member with partial
  * memberships. That property is worth preserving: ids arriving from client
  * state are never trusted as-is, so this action passes them straight through

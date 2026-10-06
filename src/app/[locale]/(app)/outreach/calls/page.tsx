@@ -17,11 +17,11 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Screen 05d — phone calls.
+ * Screen 05d - phone calls.
  *
  * One frame in every state: the dialer, the week's figures, and the recent
- * calls card, whose body says why it is empty when it is — voice off, no
- * number, a failed read — rather than the whole screen collapsing to a
+ * calls card, whose body says why it is empty when it is - voice off, no
+ * number, a failed read - rather than the whole screen collapsing to a
  * sentence. `?q=` searches, `?calls=` filters.
  *
  * 05e lives on the same route: a call in progress heads the column, because
@@ -65,8 +65,8 @@ export default async function Page({
             : 'ok';
 
   /*
-    05e: a call in progress IS the page — the transcript and Copilot, the
-    call's own header across the top — rather than a strip above the log.
+    05e: a call in progress IS the page - the transcript and Copilot, the
+    call's own header across the top - rather than a strip above the log.
   */
   if (liveCall) {
     return (
@@ -93,7 +93,7 @@ export default async function Page({
       description={t('description')}
       actions={
         <OutreachTabs current="calls">
-          {/* 02's "Start a call": the dialer is on this page — it takes you to its field. */}
+          {/* 02's "Start a call": the dialer is on this page - it takes you to its field. */}
           <a href="#dialer-q" className={outreach.createButton} data-testid="start-call">
             {t('startCall')}
           </a>

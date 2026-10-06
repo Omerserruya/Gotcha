@@ -19,8 +19,8 @@ export type TagResult =
 
 /**
  * 04's selection bar: one tag on every picked person (backend 01bb7b6e).
- * All or nothing on the server — a tag half-applied would leave a selection
- * nobody chose — so more than one call's worth is refused here rather than
+ * All or nothing on the server - a tag half-applied would leave a selection
+ * nobody chose - so more than one call's worth is refused here rather than
  * split into calls that could half-succeed. Exact match: "VIP" and "vip" are
  * two tags, as decided.
  *

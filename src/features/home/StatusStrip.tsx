@@ -9,12 +9,12 @@ import styles from './Home.module.css';
  *
  * Both faces of Home carry one, and they say different things: on a busy
  * morning it counts what is unresolved, on a quiet one it confirms that
- * nothing is. It is the first thing read, so it has to be true — which is why
+ * nothing is. It is the first thing read, so it has to be true - which is why
  * "everything is running" is only shown when something actually checked.
  *
  * The design also puts "last handover 3 hours ago" on the right. There is no
- * handover timestamp anywhere in the platform — `Conversation.handledBy` is a
- * string with no transition history — so it is absent rather than invented.
+ * handover timestamp anywhere in the platform - `Conversation.handledBy` is a
+ * string with no transition history - so it is absent rather than invented.
  */
 export async function StatusStrip({
   waiting,
@@ -28,13 +28,13 @@ export async function StatusStrip({
   signals: number | null;
   isQuiet: boolean;
   /**
-   * 01c: not live yet. The pill says so — and only so: nothing restricts who
+   * 01c: not live yet. The pill says so - and only so: nothing restricts who
    * GOTCHA answers before going live, so 02's "replies only to your team" is
    * not said. The right side is the trial, when there is one.
    */
   dayOne?: {
     readonly trialDays: number | null;
-    /** `SETUP_CALL_URL`; null when unset — then there is no link. */
+    /** `SETUP_CALL_URL`; null when unset - then there is no link. */
     readonly setupCallUrl?: string | null;
   } | null;
 }) {
@@ -84,10 +84,10 @@ export async function StatusStrip({
         <span className={styles.statusDot} aria-hidden="true" />
         {/*
           `signals === null` is "we could not find out", and it used to render
-          as `noSignals` — the reassuring answer, to a count nobody obtained.
+          as `noSignals` - the reassuring answer, to a count nobody obtained.
 
           This file's own opening paragraph forbids that: "it is the first
-          thing read, so it has to be true — which is why 'everything is
+          thing read, so it has to be true - which is why 'everything is
           running' is only shown when something actually checked." The
           component said the right thing and then did the other one.
 
@@ -107,7 +107,7 @@ export async function StatusStrip({
       {/*
         This clause used to vanish when the count failed, and the argument for
         leaving it was that its absence could not be mistaken for a calm
-        answer — there is a primary count beside it that always renders.
+        answer - there is a primary count beside it that always renders.
 
         That is a LAYOUT fact, not a code fact. Reorder the strip, or lose the
         primary on the same request, and a silently missing clause is a
@@ -123,7 +123,7 @@ export async function StatusStrip({
             title={t('lastHandoverNone')}
             data-testid="last-handover"
           >
-            {t('lastHandover')} —
+            {t('lastHandover')} -
           </span>
         ) : null}
       </span>

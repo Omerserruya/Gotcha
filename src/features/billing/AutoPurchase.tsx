@@ -11,7 +11,7 @@ import {
 import styles from './Billing.module.css';
 
 /**
- * Screen 17c — when credits run low, and what happens when you stop.
+ * Screen 17c - when credits run low, and what happens when you stop.
  *
  * ── THE FIVE BEHAVIOURS ARE NOT FIVE SETTINGS OF ONE THING ──
  * `STOP_AI` and `PAYG` are **opposite answers to the same question**: one
@@ -22,7 +22,7 @@ import styles from './Billing.module.css';
  *
  * ── AND A CAP PLUS PAYG IS NOT A CAP ──
  * The design offers *"set a spending cap"*. With `PAYG` selected, usage past
- * zero is accrued and billed at the end of the cycle — **so the cap stops
+ * zero is accrued and billed at the end of the cycle - **so the cap stops
  * auto-purchasing and does not stop the bill.** A merchant who sets a limit
  * and picks that behaviour has not done what they think they have done, and
  * this is the one combination the screen has to call out.
@@ -45,7 +45,7 @@ export function optionOf(policy: Policy): Option {
 /**
  * 17c's body, measured: three answers as cards (the stored one marked),
  * "If the limit is reached", and "Alerts". Read state: every control is the
- * stored value, and nothing here writes — the auto-purchase write spends
+ * stored value, and nothing here writes - the auto-purchase write spends
  * money and is not wired from this screen.
  */
 export async function AutoPurchase({
@@ -62,8 +62,8 @@ export async function AutoPurchase({
 
   /*
     02 draws the three answers in every state. Nothing set is "Stop at my
-    plan" marked — the platform's default when no policy row exists — with
-    one line saying so; every figure a policy would carry is "—" rather than
+    plan" marked - the platform's default when no policy row exists - with
+    one line saying so; every figure a policy would carry is "-" rather than
     a schema default dressed up as a setting.
   */
   const used = policy ? capUsed(policy) : null;
@@ -105,7 +105,7 @@ export async function AutoPurchase({
                 : t('autoPurchase.off')}
             </p>
           ) : null}
-          {/* The cap, with what has gone against it — "—" when nothing is set. */}
+          {/* The cap, with what has gone against it - "-" when nothing is set. */}
           {policy ? (
             <p className={styles.lowOptionText} data-testid="auto-cap">
               {policy.maxMonthlySpend === null
@@ -119,7 +119,7 @@ export async function AutoPurchase({
             </p>
           ) : (
             <p className={styles.lowOptionText} data-testid="auto-cap">
-              {t('autoPurchase.mostYouCould')} —
+              {t('autoPurchase.mostYouCould')} -
             </p>
           )}
         </>,
@@ -133,7 +133,7 @@ export async function AutoPurchase({
             </p>
           ) : null}
           {/*
-            A behaviour the platform honours and the settings API refuses —
+            A behaviour the platform honours and the settings API refuses -
             shown, not hidden: the warning below is ABOUT pay-as-you-go.
           */}
           {policy && !isSettable(policy.limitBehavior) ? (
@@ -180,16 +180,16 @@ export async function AutoPurchase({
           </li>
         ) : (
           <li className={styles.lowAlert} title={t('autoPurchase.alertNone')}>
-            <span className={styles.lowNone}>—</span>
+            <span className={styles.lowNone}>-</span>
             <span>{t('autoPurchase.alertWarning')}</span>
           </li>
         )}
         <li className={styles.lowAlert} title={t('autoPurchase.alertNone')}>
-          <span className={styles.lowNone}>—</span>
+          <span className={styles.lowNone}>-</span>
           <span>{t('autoPurchase.alertPurchase')}</span>
         </li>
         <li className={styles.lowAlert} title={t('autoPurchase.alertNone')}>
-          <span className={styles.lowNone}>—</span>
+          <span className={styles.lowNone}>-</span>
           <span>{t('autoPurchase.alertLimit')}</span>
         </li>
       </ul>

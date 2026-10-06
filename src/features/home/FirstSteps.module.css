@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * "First steps" — screen 01c.
+   * "First steps" - screen 01c.
    *
    * Not a separate onboarding page. It is Home in its first state: same shell,
    * same command box, one extra block beneath it. Exactly one step is ever
@@ -76,7 +76,7 @@
     border: none;
     padding: 0;
     cursor: pointer;
-    /* Quiet text, as 02's — not a link's underline. */
+    /* Quiet text, as 02's - not a link's underline. */
     text-decoration: none;
   }
 
@@ -196,7 +196,7 @@
     white-space: nowrap;
   }
 
-  /* 02's waiting row: one line — the name, then what it is, cut if it must be. */
+  /* 02's waiting row: one line - the name, then what it is, cut if it must be. */
   .rowLine {
     display: flex;
     align-items: baseline;
@@ -348,7 +348,7 @@
     cursor: not-allowed;
   }
 
-  /* Eligible: the button is live — light on the dark card, ready to press. */
+  /* Eligible: the button is live - light on the dark card, ready to press. */
   button.goLiveButton {
     border-color: transparent;
     background-color: var(--frame-text);
@@ -409,7 +409,7 @@
     color: var(--frame-text-muted);
   }
 
-  /* 02: the store and handover rows — the title, then its explanation beneath. */
+  /* 02: the store and handover rows - the title, then its explanation beneath. */
   .rowTwoLine {
     display: flex;
     flex-direction: column;

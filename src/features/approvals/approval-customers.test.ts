@@ -63,11 +63,11 @@ describe('★★ 03’s customer, from what can be read', () => {
       refunds: null,
       mood: 'frustrated',
     });
-    // The brief is read without `refresh` — never a model call on a page load.
+    // The brief is read without `refresh` - never a model call on a page load.
     expect(post.mock.calls[0]![0].body).toStrictEqual({ contactId: 'k1' });
   });
 
-  it('no contact: the conversation’s name; a failed read is "—", never a thrown page', async () => {
+  it('no contact: the conversation’s name; a failed read is "-", never a thrown page', async () => {
     get.mockImplementation(
       async ({
         endpoint,

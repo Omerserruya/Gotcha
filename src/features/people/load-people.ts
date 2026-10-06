@@ -27,7 +27,7 @@ import { logger } from '@/observability/logger';
  * can still read the member list is better served than one shown a single
  * error for the whole page.
  *
- * `null` means the call failed. It is never conflated with empty — a tenant
+ * `null` means the call failed. It is never conflated with empty - a tenant
  * with no teams and a tenant whose teams would not load look identical on
  * screen otherwise, and only one of them is safe to leave alone. Presence is
  * the exception and defaults to `[]`: no presence row genuinely means offline,

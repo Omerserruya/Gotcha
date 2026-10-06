@@ -12,8 +12,8 @@ import { ApiError } from '@/api/client/api-error';
  *
  * ★★ AND THIS IS WHERE THE HOUSE IDIOM WOULD HAVE FAILED SILENTLY.
  * The two 400s from `messages.ts` answer `{ error: "..." }` and send **no
- * `code`**. Matching `cause.code` — which every other action in this codebase
- * does — compiles here and can never fire. The reason lands in
+ * `code`**. Matching `cause.code` - which every other action in this codebase
+ * does - compiles here and can never fire. The reason lands in
  * `developerMessage`, so that is what is read, and these tests are the only
  * thing that would catch somebody "tidying" it back to `code`.
  */
@@ -44,7 +44,7 @@ describe('★★ a 201 is queued, and the action says exactly that', () => {
     /*
      * The route defaults to `reply`, which continues the customer's existing mail
      * thread, and its own comment says that is what an agent answering an email
-     * expects. Passing nothing is how we get it — and passing `"new"` by accident
+     * expects. Passing nothing is how we get it - and passing `"new"` by accident
      * would start a fresh thread the customer has to connect by hand.
      */
     await send('Hello');
@@ -58,7 +58,7 @@ describe('★★ an empty body never reaches the route', () => {
   it('refuses whitespace without a request', async () => {
     /*
      * The route answers 400 for an empty body. A round trip to be told what we
-     * already knew is worse than refusing here — and the guard is in the action,
+     * already knew is worse than refusing here - and the guard is in the action,
      * not only in the component, because a server action is a public endpoint.
      */
     await expect(send('   ')).resolves.toEqual({ ok: false, reason: 'empty' });
@@ -88,7 +88,7 @@ describe('★★ the two 400s mean different things and neither carries a code',
      * The wording is prose in a route nobody promised to keep. A match on the
      * whole sentence breaks the day somebody adds punctuation, and then a
      * disconnected channel reports as a generic failure and the advice becomes
-     * "try again" — which cannot work.
+     * "try again" - which cannot work.
      */
     refuse(400, 'Channel not configured for this tenant.');
     await expect(send('Hello')).resolves.toEqual({
@@ -115,14 +115,14 @@ describe('the other outcomes', () => {
   });
 });
 
-describe('★ 02’s Reply — the target travels as `replyToMessageId`', () => {
+describe('★ 02’s Reply - the target travels as `replyToMessageId`', () => {
   it('sends it when there is one', async () => {
     const { sendReply } = await import('./send-actions');
     await sendReply('c1', 'Yes, it is', 'm9');
     expect(post.mock.calls[0]![0].body).toEqual({ body: 'Yes, it is', replyToMessageId: 'm9' });
   });
 
-  it('⚠ and sends no key at all when there is none — not an empty one', async () => {
+  it('⚠ and sends no key at all when there is none - not an empty one', async () => {
     const { sendReply } = await import('./send-actions');
     await sendReply('c1', 'Hello', undefined);
     expect(post.mock.calls[0]![0].body).toEqual({ body: 'Hello' });

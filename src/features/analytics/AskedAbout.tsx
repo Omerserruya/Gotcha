@@ -9,7 +9,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * 06's "What people ask about".
  *
  * This is what became of screen 06e. Topics are a `groupBy` over
- * `detectedIntent` recomputed per request — there is no `Topic` model — so
+ * `detectedIntent` recomputed per request - there is no `Topic` model - so
  * rename and merge have nowhere to persist to, and a screen built around
  * controls that cannot save would have been one real column beside six empty
  * ones.
@@ -19,7 +19,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * AI-alone rate, no how-it-ends, no sentiment, no "automatable".
  *
  * The change column and the new-topic flag are the two worth naming, because
- * they are *derivable* — two queries would produce them — and they are still
+ * they are *derivable* - two queries would produce them - and they are still
  * out. The label is an unconstrained model-written string, so
  * **an unmerged variant would read as a brand-new topic**: a spelling
  * difference rendered as the most attention-grabbing thing on the panel.
@@ -54,7 +54,7 @@ export async function AskedAbout({
         `detectedIntent` is model-written and unconstrained, so "where is my
         order" and "order status" arrive as two rows. Saying GOTCHA did the
         grouping means a reader who sees two rows that look like one question
-        knows we know — rather than concluding the counts are broken, which is
+        knows we know - rather than concluding the counts are broken, which is
         what an uncaptioned list would teach them.
       */}
       <p className={styles.note} data-testid="asked-caption" title={t('asked.grouped')}>

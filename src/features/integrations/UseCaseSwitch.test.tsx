@@ -25,7 +25,7 @@ beforeEach(() => {
   refresh.mockReset();
 });
 
-describe('★★ 14b — "Your business runs on", live', () => {
+describe('★★ 14b - "Your business runs on", live', () => {
   it('the chosen one is marked (02: dark); unset marks none and says so', () => {
     const one = show('both');
     expect(screen.getByTestId('core-use-case-both')).toHaveAttribute('aria-checked', 'true');

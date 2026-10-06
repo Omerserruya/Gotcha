@@ -1,13 +1,15 @@
 import { z } from 'zod';
 
+import { plainDashes } from '@/lib/plain-dashes';
+
 /**
- * The AI's suggested replies — `GET /api/ai-assist/:conversationId/suggestions`.
+ * The AI's suggested replies - `GET /api/ai-assist/:conversationId/suggestions`.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ TWO ENTITLEMENTS, TWO INDEPENDENT ABSENCES
  * ════════════════════════════════════════════════════════════════════════════
  * The route is gated on `ai.copilot`. Its neighbour, `/summary`, is gated on
- * **`communication.crm_summaries`** — deliberately a different key, with the
+ * **`communication.crm_summaries`** - deliberately a different key, with the
  * platform's own comment saying *"Foundation denies Copilot and grants
  * summaries; gating this route on ai.copilot would break exactly the plan
  * combination the product sells."*
@@ -19,7 +21,7 @@ import { z } from 'zod';
  * `READY_MESSAGE` is a list of drafts an agent may send. `CHAT` is a
  * conversation between the agent and the AI, which is a different control with a
  * different write behind it. The route defaults to `READY_MESSAGE` when the
- * tenant has no explicit config, so that is the one built — and an unbuilt mode
+ * tenant has no explicit config, so that is the one built - and an unbuilt mode
  * says so rather than showing ready messages for a mode that did not ask for
  * them.
  *
@@ -37,9 +39,13 @@ export type SuggestionType = (typeof SUGGESTION_TYPES)[number];
 
 export const suggestionSchema = z.object({
   id: z.string().min(1),
-  text: z.string().default(''),
+  /* Model text: plain hyphens (see `plainDashes`). The same three below. */
+  text: z
+    .string()
+    .default('')
+    .transform((text) => plainDashes(text)),
   /**
-   * `0`–`1` from the model. Rendered as a band, never as a percentage: two
+   * `0`-`1` from the model. Rendered as a band, never as a percentage: two
    * decimal places on a model's self-report is a precision claim nothing
    * supports.
    */
@@ -51,9 +57,17 @@ export const suggestionSchema = z.object({
    */
   type: z.string().default('info'),
   /** One line naming the tactic. Model-authored, so it is rendered, not parsed. */
-  approach: z.string().nullable().optional(),
+  approach: z
+    .string()
+    .nullable()
+    .transform((text) => plainDashes(text))
+    .optional(),
   /** Why this fits, in the model's words. */
-  rationale: z.string().nullable().optional(),
+  rationale: z
+    .string()
+    .nullable()
+    .transform((text) => plainDashes(text))
+    .optional(),
 });
 export type Suggestion = z.infer<typeof suggestionSchema>;
 
@@ -88,7 +102,7 @@ export type SuggestionsResponse = z.infer<typeof suggestionsResponseSchema>;
  *     Failed to get AI suggestions. Check API key and model configuration.
  *
  * A support agent deciding whether to trust the AI's draft was being told to go
- * and check an API key. It is not an error envelope, not a status, and not a 402 —
+ * and check an API key. It is not an error envelope, not a status, and not a 402 -
  * it is a one-item list with a sentinel id, so the panel's four honest empty
  * states could not see it. The response was a 200 with content.
  *
@@ -101,18 +115,18 @@ export type SuggestionsResponse = z.infer<typeof suggestionsResponseSchema>;
  *     stub-1      no provider is configured at all
  *     disabled    Copilot is switched off for this tenant
  *     no-config   no AI employee exists to draft with
- *     no-match    nothing relevant to suggest — the genuine empty case
+ *     no-match    nothing relevant to suggest - the genuine empty case
  *
  * ★ AND THE SIXTH IS A REAL DRAFT AND MUST NOT BE SUPPRESSED. `openai-text`
  *   carries the model's own content with `confidence: 0.5`; the provider emits it
  *   when its structured parse failed, not when the model did. Discarding it would
- *   throw away a usable reply, and treating it as an `info` note — which its
- *   `type` says — labels a draft as "an action it would take", which is the
+ *   throw away a usable reply, and treating it as an `info` note - which its
+ *   `type` says - labels a draft as "an action it would take", which is the
  *   opposite of true.
  *
  * ⚠ ITS BLIND SPOT, STATED: a sentinel id added later renders its text verbatim,
- * exactly as `error` did. A closed set is the only honest option from this side —
- * the real fix is for these not to travel inside the payload — so the set is here,
+ * exactly as `error` did. A closed set is the only honest option from this side -
+ * the real fix is for these not to travel inside the payload - so the set is here,
  * in one place, for the next one to be added to.
  */
 const SENTINELS = new Map<string, CopilotSentinel>([
@@ -134,8 +148,8 @@ const UNSTRUCTURED_DRAFT = 'openai-text';
  *
  * Only for a list of exactly one: the provider returns a sentinel *instead of*
  * suggestions, never beside them. Requiring that means a genuine suggestion which
- * happened to carry one of these ids — vanishingly unlikely, but the kind of
- * coincidence that eats a real draft — cannot hide four others.
+ * happened to carry one of these ids - vanishingly unlikely, but the kind of
+ * coincidence that eats a real draft - cannot hide four others.
  */
 export function copilotSentinel(suggestions: readonly Suggestion[]): CopilotSentinel | null {
   if (suggestions.length !== 1) return null;
@@ -164,7 +178,7 @@ export type ConfidenceBand = 'high' | 'medium' | 'low' | 'unstated';
  *   unsure" are different facts, and filing the first as the second tells an
  *   agent to distrust a draft nothing has reported anything about.
  *
- * A number outside `0`–`1` is also `unstated`: a value we cannot place on the
+ * A number outside `0`-`1` is also `unstated`: a value we cannot place on the
  * scale is not a low one.
  */
 export function confidenceBand(suggestion: Suggestion): ConfidenceBand {

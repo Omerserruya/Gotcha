@@ -9,9 +9,9 @@ import { Link, useRouter } from '@/i18n/navigation';
 import styles from './Customers.module.css';
 
 /**
- * 04e's pending action, decided where it is read — 02's "Approve · Decline ·
+ * 04e's pending action, decided where it is read - 02's "Approve · Decline ·
  * Change amount". The same writes as 03, and they ask first: an approval
- * moves money. Approve says what HAPPENED, not only that it was recorded —
+ * moves money. Approve says what HAPPENED, not only that it was recorded -
  * a decision can land and the action still not run. Decline takes 03's own
  * reasons, sent as their label as 03 sends them. Changing the amount is 03's
  * editor: it opens there.

@@ -21,7 +21,7 @@ import { OrderActions } from './OrderActions';
 import styles from './Customers.module.css';
 
 /**
- * Screen 04d — their orders, as the customer card's tab draws them.
+ * Screen 04d - their orders, as the customer card's tab draws them.
  *
  * ★ A SIBLING OF `CustomerOrders`, NOT ITS REPLACEMENT. The inbox's Copilot
  * side mounts `CustomerOrders` and the inbox is a closed screen; 04d's frame
@@ -35,7 +35,7 @@ import styles from './Customers.module.css';
  * ★★ EIGHT STATES, RENDERED AS EIGHT. THE PLATFORM ASKED FOR THIS.
  * ════════════════════════════════════════════════════════════════════════════
  * `CommerceContextResponse`'s own comment says the frontend *"renders an
- * explicit UI for each state — it never guesses from a bare error"*, and the
+ * explicit UI for each state - it never guesses from a bare error"*, and the
  * union is built so it can. Collapsing them into "we couldn't load orders"
  * would throw away five different repairs:
  *
@@ -47,14 +47,14 @@ import styles from './Customers.module.css';
  *   missing_scopes        grant them, IN SHOPIFY   (the connection is fine)
  *   unavailable           try again                (retryable, and says so)
  *
- * The first two are the distinction this project has made on 13, 14 and 17 —
+ * The first two are the distinction this project has made on 13, 14 and 17 -
  * made here by Backend before we arrived.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ AND THIS SCREEN TAKES NO ORDER ACTIONS, THOUGH THEY WOULD WORK
  * ════════════════════════════════════════════════════════════════════════════
  * `POST /api/commerce-context/:conversationId/actions` is the best-guarded
- * write in the platform — permission, ownership re-validation, business
+ * write in the platform - permission, ownership re-validation, business
  * policy, optional approval, idempotent adapter call, provider-result
  * validation, post-action verify, audit. *"There is NO second
  * frontend-to-Shopify execution path."*
@@ -62,11 +62,11 @@ import styles from './Customers.module.css';
  * And it is conversation-keyed. `commerce-actions.service.ts:190` writes the
  * audit with `metadata: { conversationId }`, so an action taken from the
  * customer page would be recorded against whichever conversation this page
- * entered through — **a wrong audit trail, on the actions whose whole
+ * entered through - **a wrong audit trail, on the actions whose whole
  * purpose is leaving a right one.**
  *
  * So eligibility is SHOWN and nothing is offered. A merchant learns what
- * could be done to this order, by them, with their permissions — and does it
+ * could be done to this order, by them, with their permissions - and does it
  * in the conversation, where the record will be true.
  */
 export const ORDER_FILTERS = ['all', 'open', 'returns'] as const;
@@ -107,7 +107,7 @@ export async function OrdersTab({
   readonly orders: CommerceContextResponse | null;
   /**
    * Where the actions post. `null` when this person has no conversation to
-   * act through — and then the controls are absent rather than broken,
+   * act through - and then the controls are absent rather than broken,
    * because the endpoint has nowhere to route.
    */
   readonly conversationId: string | null;
@@ -148,7 +148,7 @@ export async function OrdersTab({
 
   /*
     02's lead: "6 orders · ₪2,140 · 1 open". The spend is Shopify's own
-    total when it has one, else the per-currency totals — never summed
+    total when it has one, else the per-currency totals - never summed
     across currencies, which is their rule.
   */
   const spend = summary?.shopCurrencyTotal
@@ -216,7 +216,7 @@ export async function OrdersTab({
             /*
               ★ THE CHIPS ARE THEIRS. Rendered verbatim, already localised,
               with their tone. Payment joins the status only when it is not
-              simply paid — "Payment pending" is news; "Paid" is the tracker's.
+              simply paid - "Payment pending" is news; "Paid" is the tracker's.
             */
             const chips = [
               status,
@@ -248,8 +248,8 @@ export async function OrdersTab({
                   data-troubled={isTroubled(order) ? 'yes' : 'no'}
                 >
                   <span className={styles.orderRowNumber}>{order.orderNumber}</span>
-                  <span className={styles.orderRowDate}>{day(order.createdAt) ?? '—'}</span>
-                  <span className={styles.orderRowItems}>{itemsLine || '—'}</span>
+                  <span className={styles.orderRowDate}>{day(order.createdAt) ?? '-'}</span>
+                  <span className={styles.orderRowItems}>{itemsLine || '-'}</span>
                   {order.extraItemCount > 0 ? (
                     <span
                       className={styles.orderRowNote}
@@ -259,7 +259,7 @@ export async function OrdersTab({
                     </span>
                   ) : null}
                   {chipEls}
-                  <span className={styles.orderRowTotal}>{money(order.total) ?? '—'}</span>
+                  <span className={styles.orderRowTotal}>{money(order.total) ?? '-'}</span>
                 </li>
               );
             }
@@ -298,7 +298,7 @@ export async function OrdersTab({
               >
                 <div className={styles.orderHead}>
                   <span className={styles.orderNumber}>{order.orderNumber}</span>
-                  <span className={styles.orderDate}>{day(order.createdAt) ?? '—'}</span>
+                  <span className={styles.orderDate}>{day(order.createdAt) ?? '-'}</span>
                   {chipEls}
                   <span className={styles.orderTotal}>
                     {money(order.total) ?? t('orders.amountUnknown')}
@@ -321,7 +321,7 @@ export async function OrdersTab({
                             {t('orders.qty', { count: line.quantity })}
                           </span>
                         </span>
-                        <span className={styles.orderItemPrice}>{line.price ?? '—'}</span>
+                        <span className={styles.orderItemPrice}>{line.price ?? '-'}</span>
                       </li>
                     ))}
                   </ul>
@@ -356,7 +356,7 @@ export async function OrdersTab({
                             </span>
                             <span className={styles.trackerLabel}>{step.label}</span>
                             <span className={styles.trackerDate}>
-                              {day(step.at ?? null) ?? '—'}
+                              {day(step.at ?? null) ?? '-'}
                             </span>
                           </li>
                         );
@@ -367,16 +367,16 @@ export async function OrdersTab({
                   <dl className={styles.orderFacts}>
                     <div>
                       <dt>{t('orders.fact.tracking')}</dt>
-                      <dd>{trackingText ?? '—'}</dd>
+                      <dd>{trackingText ?? '-'}</dd>
                     </div>
                     <div>
                       <dt>{t('orders.fact.shipTo')}</dt>
-                      <dd>{order.detail?.shippingAddress ?? '—'}</dd>
+                      <dd>{order.detail?.shippingAddress ?? '-'}</dd>
                     </div>
                     {/* No carrier case is recorded anywhere; the row keeps its place. */}
                     <div>
                       <dt>{t('orders.fact.carrierCase')}</dt>
-                      <dd>—</dd>
+                      <dd>-</dd>
                     </div>
                     {/*
                       Money already returned, and the ceiling on returning more:
@@ -396,7 +396,7 @@ export async function OrdersTab({
                           })}
                         </dd>
                       ) : (
-                        <dd>—</dd>
+                        <dd>-</dd>
                       )}
                     </div>
                   </dl>
@@ -417,8 +417,8 @@ export async function OrdersTab({
                   ) : anythingPossible(order) ? (
                     /*
                      * No conversation to act through, so the actions have nowhere
-                     * to route. What COULD be done is still said — it is a fact
-                     * about the order — and nothing is drawn that would fail.
+                     * to route. What COULD be done is still said - it is a fact
+                     * about the order - and nothing is drawn that would fail.
                      */
                     <p className={styles.orderCan} data-testid={`order-possible-${order.orderId}`}>
                       {t('orders.possible', {
@@ -462,7 +462,7 @@ export async function OrdersTab({
       {/*
         ★ THE ACTIONS ARE HERE, and the reason is a sharpened rule rather than
         a reversal: this write carries `targetType: "customer" | "order"` and
-        the conversation only as context — acceptable on a record already
+        the conversation only as context - acceptable on a record already
         keyed to the person, where `createNote`'s attribution was not.
       */}
       {list.length > 0 && !conversationId ? (
@@ -507,10 +507,10 @@ export async function OrderFilters({
  * 04d's side: "Across their orders", "What they buy", "On file", and the
  * promise card at the foot.
  *
- * Every figure is the summary's own — Shopify's average order and counts —
+ * Every figure is the summary's own - Shopify's average order and counts -
  * never computed from the recent page, which is a few orders, not all of
  * them. What nothing records ("arrived on time", payment method, what they
- * buy) keeps its place as "—" or "Nothing yet.".
+ * buy) keeps its place as "-" or "Nothing yet.".
  */
 export async function OrdersSide({ orders }: { readonly orders: CommerceContextResponse | null }) {
   const t = await getTranslations('customers');
@@ -526,9 +526,9 @@ export async function OrdersSide({ orders }: { readonly orders: CommerceContextR
             maximumFractionDigits: 0,
           })
         : format.number(m.amount)
-      : '—';
+      : '-';
   const figure = (n: number | null | undefined) =>
-    n === null || n === undefined ? '—' : format.number(n);
+    n === null || n === undefined ? '-' : format.number(n);
 
   return (
     <>
@@ -542,7 +542,7 @@ export async function OrdersSide({ orders }: { readonly orders: CommerceContextR
           {/* Nothing records a promised delivery date to compare against. */}
           <div>
             <dt>{t('orders.side.onTime')}</dt>
-            <dd className={styles.worthValue}>—</dd>
+            <dd className={styles.worthValue}>-</dd>
           </div>
           <div>
             <dt>{t('orders.side.open')}</dt>
@@ -559,19 +559,19 @@ export async function OrdersSide({ orders }: { readonly orders: CommerceContextR
         <dl className={styles.onFile}>
           <div>
             <dt>{t('orders.side.address')}</dt>
-            <dd>{summary?.defaultAddress ?? '—'}</dd>
+            <dd>{summary?.defaultAddress ?? '-'}</dd>
           </div>
           {/* The order card carries no payment method. */}
           <div>
             <dt>{t('orders.side.payment')}</dt>
-            <dd>—</dd>
+            <dd>-</dd>
           </div>
           <div>
             <dt>{t('orders.side.returns')}</dt>
             <dd>
               {summary?.refundedOrCancelledCount === null ||
               summary?.refundedOrCancelledCount === undefined
-                ? '—'
+                ? '-'
                 : t('orders.side.returnsValue', { count: summary.refundedOrCancelledCount })}
             </dd>
           </div>

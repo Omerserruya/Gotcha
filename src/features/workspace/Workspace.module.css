@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * Settings · Workspace — screen 11.
+   * Settings · Workspace - screen 11.
    *
    * `padding: 15px 18px; gap: 20px; label width 190px` in the source, and the
    * rows share one card with a hairline between them rather than each being a
@@ -45,7 +45,7 @@
     color: var(--text-faint);
   }
 
-  /* 02: plain grey "Edit", 11px — a link or a button, never underlined. */
+  /* 02: plain grey "Edit", 11px - a link or a button, never underlined. */
   .edit {
     font-size: var(--font-size-micro);
     color: var(--text-subtle);
@@ -372,10 +372,10 @@
 
   /* The inline "From website" badge, where the design puts it. */
   /*
-   * 02's "From website" chip — on the rows and as the banner's legend, one
+   * 02's "From website" chip - on the rows and as the banner's legend, one
    * look for both: violet, radius 6, `padding:3px 8px`, 10.5px, a dot.
    */
-  /* 11b: the site, then Scan again beside it — 02's row. */
+  /* 11b: the site, then Scan again beside it - 02's row. */
   .websiteRow {
     display: flex;
     align-items: center;
@@ -398,7 +398,7 @@
     text-decoration: none;
   }
 
-  /* "Also found" — what else the scan saw, as quiet chips. */
+  /* "Also found" - what else the scan saw, as quiet chips. */
   .alsoFound {
     display: flex;
     flex-wrap: wrap;
@@ -442,7 +442,7 @@
     background-color: currentcolor;
   }
 
-  /* A caveat under a value — never a second value. */
+  /* A caveat under a value - never a second value. */
   .rowCaveat {
     grid-column: 2;
     margin: var(--space-2) 0 0;
@@ -647,7 +647,7 @@
     color: var(--text-primary);
   }
 
-  /* The voice, read: its words at 13px — where 02 has tone chips. */
+  /* The voice, read: its words at 13px - where 02 has tone chips. */
   .voiceText {
     margin: 0;
     font-size: var(--font-size-body-sm);
@@ -768,7 +768,7 @@
     opacity: 0.6;
   }
 
-  /* ── 11c · the week: day 92 · switch · opens – closes · + Split ──────── */
+  /* ── 11c · the week: day 92 · switch · opens - closes · + Split ──────── */
   .weekRows {
     display: flex;
     flex-direction: column;
@@ -831,7 +831,7 @@
     cursor: pointer;
   }
 
-  /* Switched off, the week stays visible — quieter, not closed. */
+  /* Switched off, the week stays visible - quieter, not closed. */
   .weekRows[data-in-use='no'] {
     opacity: 0.55;
   }

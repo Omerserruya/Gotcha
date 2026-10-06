@@ -27,7 +27,7 @@ const SERIES = dailySeriesSchema.parse({
   ],
 });
 
-describe('★★ 06 — "Conversations a day": GOTCHA dark beneath your team, against the busiest day', () => {
+describe('★★ 06 - "Conversations a day": GOTCHA dark beneath your team, against the busiest day', () => {
   it('each day stacked, its height a share of the busiest (50 here)', async () => {
     render(await ConversationsADay({ daily: SERIES, fallbackDays: FALLBACK }));
     const day = (i: number) => screen.getByTestId(`conversations-a-day-day-${i}`);
@@ -39,13 +39,13 @@ describe('★★ 06 — "Conversations a day": GOTCHA dark beneath your team, ag
     expect(day(2).querySelectorAll('[style]')).toHaveLength(0);
   });
 
-  it('★ the series’ days are UTC dates, named as such — never shifted a day by the viewer’s zone', async () => {
+  it('★ the series’ days are UTC dates, named as such - never shifted a day by the viewer’s zone', async () => {
     render(await ConversationsADay({ daily: SERIES, fallbackDays: FALLBACK }));
     // 2026-08-01 is a Saturday in UTC.
     expect(screen.getByTestId('conversations-a-day-day-0')).toHaveTextContent('Sat');
   });
 
-  it('unread: seven empty columns on the axis, and the sentence — no zeros', async () => {
+  it('unread: seven empty columns on the axis, and the sentence - no zeros', async () => {
     render(await ConversationsADay({ daily: null, fallbackDays: FALLBACK }));
     const chart = screen.getByTestId('conversations-a-day');
     expect(chart.querySelectorAll('li')).toHaveLength(7);
@@ -54,7 +54,7 @@ describe('★★ 06 — "Conversations a day": GOTCHA dark beneath your team, ag
   });
 });
 
-describe('★★ 06b — "Alone, or with a person", from the same series', () => {
+describe('★★ 06b - "Alone, or with a person", from the same series', () => {
   it('alone dark, passed over light', async () => {
     render(await AloneChart({ daily: SERIES, fallbackDays: FALLBACK }));
     const [light, dark] = [
@@ -66,7 +66,7 @@ describe('★★ 06b — "Alone, or with a person", from the same series', () =>
 });
 
 describe('★ the contract refuses the other /daily', () => {
-  it('the Redis volumes route answers an array — not a series', () => {
+  it('the Redis volumes route answers an array - not a series', () => {
     expect(
       dailySeriesSchema.safeParse([{ date: '2026-08-01', total: 3, inbound: 1, outbound: 2 }])
         .success,

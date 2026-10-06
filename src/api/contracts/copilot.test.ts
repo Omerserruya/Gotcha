@@ -7,7 +7,7 @@ import { confidenceBand, isDraft, suggestionsResponseSchema, suggestionSchema } 
 const s = (over: Record<string, unknown> = {}) =>
   suggestionSchema.parse({ id: 's1', text: 'Hi', ...over });
 
-describe('★★ confidenceBand — "not reported" is not "unsure"', () => {
+describe('★★ confidenceBand - "not reported" is not "unsure"', () => {
   it('bands a reported confidence', () => {
     expect(confidenceBand(s({ confidence: 0.95 }))).toBe('high');
     expect(confidenceBand(s({ confidence: 0.6 }))).toBe('medium');
@@ -18,7 +18,7 @@ describe('★★ confidenceBand — "not reported" is not "unsure"', () => {
     /*
      * "The model did not say" and "the model is unsure" are different facts.
      * Filing the first as the second tells an agent to distrust a draft nothing
-     * has reported anything about — the third state, on a fourth screen.
+     * has reported anything about - the third state, on a fourth screen.
      */
     expect(confidenceBand(s({ confidence: null }))).toBe('unstated');
   });
@@ -26,7 +26,7 @@ describe('★★ confidenceBand — "not reported" is not "unsure"', () => {
   it('★★ a value off the scale is unstated, not low', () => {
     /*
      * A number we cannot place is not a small one. `-1` and `7` are both a
-     * service sending something other than a 0–1 fraction, and clamping them
+     * service sending something other than a 0-1 fraction, and clamping them
      * into "low" would publish a judgement about a draft on no basis.
      */
     expect(confidenceBand(s({ confidence: -1 }))).toBe('unstated');
@@ -38,7 +38,7 @@ describe('★★ confidenceBand — "not reported" is not "unsure"', () => {
      * Worth asserting rather than assuming: `z.number()` rejects `NaN`, so the
      * boundary stops it and `confidenceBand`'s `Number.isFinite` guard is defence
      * for a value built without parsing. Two layers, and this records which one
-     * actually fires — the alternative is a guard nobody can tell is dead.
+     * actually fires - the alternative is a guard nobody can tell is dead.
      */
     expect(() => s({ confidence: Number.NaN })).toThrow();
     expect(confidenceBand({ ...s(), confidence: Number.NaN })).toBe('unstated');
@@ -77,7 +77,7 @@ describe('★★ only a reply is a draft', () => {
 describe('★★ the response keeps `copilotMode`, which sits BESIDE `data`', () => {
   it('★★ parses both halves', () => {
     /*
-     * `{ data, copilotMode }` — `data` has a sibling, so the read passes
+     * `{ data, copilotMode }` - `data` has a sibling, so the read passes
      * `raw: true`. Without it the client unwraps `data` and the mode is silently
      * discarded, and the mode is what decides which panel this is.
      */

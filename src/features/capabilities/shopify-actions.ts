@@ -19,7 +19,7 @@ export type ShopifyStart =
 /**
  * "Connect Shopify": the backend mints an install intent and answers with
  * Shopify's page and the intent in a cookie. That cookie is set HERE on the
- * browser — same name, `/`, HttpOnly, Lax — or the way back from Shopify
+ * browser - same name, `/`, HttpOnly, Lax - or the way back from Shopify
  * would not know which workspace started it.
  */
 export async function startShopifyInstall(): Promise<ShopifyStart> {
@@ -70,7 +70,7 @@ export type ShopifyClaim =
     };
 
 /**
- * Binds the store approved in Shopify to this workspace — and, with
+ * Binds the store approved in Shopify to this workspace - and, with
  * `replace`, disconnects the one connected now. The pending install is the
  * browser's cookie, sent on; nothing in the URL or the page holds it.
  */
@@ -144,7 +144,7 @@ export type ShopifyBillingCheck =
       readonly grantsAccess: boolean;
       readonly state: string;
       readonly declined: boolean;
-      /** Set only when the SERVER says a plan is owed — never built here. */
+      /** Set only when the SERVER says a plan is owed - never built here. */
       readonly planSelectionUrl: string | null;
     }
   | {
@@ -154,7 +154,7 @@ export type ShopifyBillingCheck =
 
 /**
  * Back from Shopify's plan page: ask the server what the subscription IS.
- * Arriving proves nothing — the URL is replayable — so the only outcome shown
+ * Arriving proves nothing - the URL is replayable - so the only outcome shown
  * is the one the server read from Shopify.
  */
 export async function verifyShopifyBilling(shop: string | null): Promise<ShopifyBillingCheck> {

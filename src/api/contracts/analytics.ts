@@ -47,7 +47,7 @@ export const analyticsOverviewSchema = z.looseObject({
   /**
    * Approvals still waiting on a person.
    *
-   * Deliberately not filtered by the query's date range — an approval raised
+   * Deliberately not filtered by the query's date range - an approval raised
    * last week that nobody has answered is still waiting today, and scoping it
    * to "today" would report zero on the morning it matters most.
    */
@@ -89,7 +89,7 @@ export type ChannelPerformance = z.infer<typeof channelPerformanceSchema>;
  *
  * Two scalars, not a list. The design's "Needs you now" wants a risk-ranked
  * set of rows with intent and wait time per conversation; this endpoint cannot
- * supply it. See docs/api-gaps.md — that section of Home is blocked on a
+ * supply it. See docs/api-gaps.md - that section of Home is blocked on a
  * backend contract, not on frontend work.
  */
 export const analyticsQueueSchema = z.looseObject({
@@ -100,7 +100,7 @@ export const analyticsQueueSchema = z.looseObject({
 export type AnalyticsQueue = z.infer<typeof analyticsQueueSchema>;
 
 /**
- * `GET /api/analytics/queue/items?limit&cursor` — Home's ranked "needs you now".
+ * `GET /api/analytics/queue/items?limit&cursor` - Home's ranked "needs you now".
  *
  * `data` sits beside `nextCursor` and `totalWaiting`, so requests use `raw`.
  *
@@ -164,10 +164,10 @@ export const queueItemsSchema = z.looseObject({
 export type QueueItems = z.infer<typeof queueItemsSchema>;
 
 /**
- * `GET /api/analytics/activity?limit&cursor` — what GOTCHA has been doing.
+ * `GET /api/analytics/activity?limit&cursor` - what GOTCHA has been doing.
  *
  * Merges completed tool executions with approvals still waiting on a person,
- * so the pending refund appears beside the completed ones — that is the only
+ * so the pending refund appears beside the completed ones - that is the only
  * entry an operator can still change the outcome of.
  *
  * The server emits `kind` + `values` and never a rendered sentence: this
@@ -176,7 +176,7 @@ export type QueueItems = z.infer<typeof queueItemsSchema>;
  * are the client's.
  *
  * `data` sits beside `nextCursor`, so requests use `raw`. The cursor is a
- * timestamp — the merged stream has no single id sequence to seek on.
+ * timestamp - the merged stream has no single id sequence to seek on.
  */
 export const ACTIVITY_OUTCOMES = ['completed', 'failed', 'awaiting_approval'] as const;
 export type ActivityOutcome = (typeof ACTIVITY_OUTCOMES)[number];
@@ -198,13 +198,13 @@ export const activityEventSchema = z.looseObject({
   /**
    * `<noun>.<outcome>`, e.g. `refund.completed`. An unmapped tool falls back to
    * its own slug as the noun, which reads plainly and is honest about not
-   * having been mapped — so this cannot be a closed enum.
+   * having been mapped - so this cannot be a closed enum.
    */
   kind: z.string(),
   values: z.record(z.string(), z.unknown()).default({}),
   subject: z.looseObject({
     type: z.enum(ACTIVITY_SUBJECT_TYPES).catch('none'),
-    /** The identifier a human recognises — an order NUMBER, not an id. */
+    /** The identifier a human recognises - an order NUMBER, not an id. */
     id: z.string().nullable().optional(),
   }),
   conversationId: z.string().nullable().optional(),
@@ -226,7 +226,7 @@ export type ActivityFeed = z.infer<typeof activityFeedSchema>;
  * This figure sits on the product's first screen and is the easiest number in
  * the product to inflate, so it ships with everything needed to reconstruct
  * it. `source` says whether it came from this tenant's own history or the
- * platform default — the screen must not imply the precision of the first when
+ * platform default - the screen must not imply the precision of the first when
  * it is showing the second.
  */
 export const timeSavedSchema = z.looseObject({
@@ -246,7 +246,7 @@ export const timeSavedSchema = z.looseObject({
 export type TimeSaved = z.infer<typeof timeSavedSchema>;
 
 /**
- * `GET /api/analytics/in-flight` — the dark card's opening line.
+ * `GET /api/analytics/in-flight` - the dark card's opening line.
  *
  * Present tense, unlike `activity`, which is what happened in order. Tools are
  * grouped by SUBJECT rather than by tool name: the sentence says "checking 4
@@ -265,7 +265,7 @@ export const inFlightSchema = z.looseObject({
 export type InFlight = z.infer<typeof inFlightSchema>;
 
 /**
- * `GET /api/usage/allowance` — conversation headroom this period.
+ * `GET /api/usage/allowance` - conversation headroom this period.
  *
  * `limit` is null on an uncapped plan and on a tenant with no plan at all: the
  * honest answer there is that there is no limit to report, not a limit of zero.
@@ -286,7 +286,7 @@ export const usageAllowanceSchema = z.looseObject({
 export type UsageAllowance = z.infer<typeof usageAllowanceSchema>;
 
 /**
- * `GET /api/analytics/insights` — "Worth knowing".
+ * `GET /api/analytics/insights` - "Worth knowing".
  *
  * Now `kind` + `values`, not prose. The earlier shape returned composed English
  * sentences with the numbers already interpolated, which could not be rendered
@@ -311,12 +311,12 @@ export type Insight = z.infer<typeof insightSchema>;
 export const insightsSchema = z.array(insightSchema);
 
 /**
- * `GET /api/analytics/quiet-day?limit` — "Worth an hour, while it is quiet".
+ * `GET /api/analytics/quiet-day?limit` - "Worth an hour, while it is quiet".
  *
  * Merged and ranked server-side, for the same reason the queue is: two
  * surfaces ordering the same list disagree the moment either changes.
  *
- * `effect` is the important field. Three sources REMOVE future work — answer
+ * `effect` is the important field. Three sources REMOVE future work - answer
  * the question, resolve the conflict, stock the product, and those
  * conversations stop arriving. Dormant customers are the opposite: acting on
  * them creates conversations, which is the entire point of them. Ranking an
@@ -366,8 +366,8 @@ export type QuietDay = z.infer<typeof quietDaySchema>;
  * ════════════════════════════════════════════════════════════════════════════
  * The design draws five: conversations +12%, handled-without-you +4, first
  * reply −18s, resolved flat, time saved +6h. `deltas` carries exactly three
- * percentages — `totalConversationsPct`, `resolvedConversationsPct`,
- * `totalMessagesPct` — and nothing else.
+ * percentages - `totalConversationsPct`, `resolvedConversationsPct`,
+ * `totalMessagesPct` - and nothing else.
  *
  * ── THE TRAP ──
  * `resolvedConversationsPct` is the change in the **count** of resolved
@@ -376,14 +376,14 @@ export type QuietDay = z.infer<typeof quietDaySchema>;
  * they can move in opposite directions: a week with twice the volume and the
  * same rate shows +100% beside a number that did not change.
  *
- * So a delta is bound to the metric it was computed for, here, once —
+ * So a delta is bound to the metric it was computed for, here, once -
  * rather than at each render site where the pairing could drift.
  *
  * ── AND THE UNIT IS A PERCENTAGE ──
  * The design says the comparison is *"stated in the same unit as the
  * metric"*. It is not: what exists is a percentage, for all three. Rendering
  * "up 140 conversations" would mean reconstructing the prior period as
- * `current / (1 + pct/100)` — **a derived number a reader cannot tell from a
+ * `current / (1 + pct/100)` - **a derived number a reader cannot tell from a
  * recorded one**, with rounding error, in a headline. The screen says the
  * comparison in the unit it exists in.
  */
@@ -393,13 +393,13 @@ export interface HeadlineMetric {
   /**
    * Percent change against the preceding period of equal length.
    *
-   * `null` means no comparison could be made — the prior period had a zero
+   * `null` means no comparison could be made - the prior period had a zero
    * denominator, which is the normal state for a tenant in its first period.
    * **Not the same as 0%**, and the screen must not render it as "no change":
    * there is no baseline to have changed from.
    *
    * `undefined` means this metric has no comparison at all. Also not zero,
-   * and a different sentence again — one is "we could not compare", the
+   * and a different sentence again - one is "we could not compare", the
    * other is "nobody computes this".
    */
   readonly deltaPct?: number | null;
@@ -422,7 +422,7 @@ export function headlineMetrics(overview: AnalyticsOverview): readonly HeadlineM
     },
     {
       /*
-       * ★ THE COUNT, NOT THE RATE — because the count is what the delta
+       * ★ THE COUNT, NOT THE RATE - because the count is what the delta
        * belongs to. `resolutionRate` is on the same response and has no
        * comparison, so pairing them would be the trap above.
        */
@@ -445,7 +445,7 @@ export function hasComparison(metric: HeadlineMetric): boolean {
 /* ── Screen 06c · the team's workload ────────────────────────────────────── */
 
 /**
- * `GET /api/analytics/agents` — `analytics:workspace:read`.
+ * `GET /api/analytics/agents` - `analytics:workspace:read`.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ EVERY FIELD HERE COVERS A DIFFERENT PERIOD, AND TWO OF THEM ARE TODAY
@@ -463,7 +463,7 @@ export function hasComparison(metric: HeadlineMetric): boolean {
  *
  * ── AND IT IS HUMANS ONLY ──
  * `where: { role: "AGENT" }` selects human users. AI employees are not in
- * this list, which the design puts *"in the same table — colleagues in the
+ * this list, which the design puts *"in the same table - colleagues in the
  * workload, not a separate report"*. A real absence a reader notices, so the
  * screen states it rather than letting the table imply the team is smaller
  * than it is.
@@ -484,8 +484,8 @@ export const agentLoadSchema = z.object({
   /** Open right now. A queue depth, not a throughput. */
   activeConversations: z.number().default(0),
   /**
-   * Today only, from a Redis day-key. `null` on an AI row — an AI employee
-   * is assigned, it does not claim — and `nullReasons` says why.
+   * Today only, from a Redis day-key. `null` on an AI row - an AI employee
+   * is assigned, it does not claim - and `nullReasons` says why.
    */
   claimedToday: z.number().nullable().default(null),
   /** Why a figure is null (`ai_does_not_claim`, …). Read for titles only. */
@@ -505,7 +505,7 @@ export const agentLoadSchema = z.object({
    *   claim_time      set ONCE when a conversation is claimed, `EX` 7 days
    *   agent_response  pushes `now − claim_time` on EVERY agent message
    *
-   * `claim_time` is **never deleted** — one `set`, one `get`, no `del`
+   * `claim_time` is **never deleted** - one `set`, one `get`, no `del`
    * anywhere. So the second reply measures from the original claim, the
    * tenth reports hours, and the average **grows with how long a
    * conversation runs rather than with how slow anybody is.**
@@ -517,7 +517,7 @@ export const agentLoadSchema = z.object({
    *     customer's real wait is invisible
    *   · it counts every agent response, not the first
    *   · it needs a `claim_time` key, so AI-answered conversations contribute
-   *     nothing — on this product, most of them
+   *     nothing - on this product, most of them
    *
    * ── AND BESIDE A PERSON'S NAME IT IS UNFAIR, NOT MERELY WRONG ──
    * A number rising with conversation length makes whoever handles the long
@@ -538,11 +538,11 @@ export const agentLoadListSchema = z.array(agentLoadSchema);
  * Ordered for reading, not for ranking.
  *
  * ★ BY NAME. Sorting by volume would build the leaderboard out of the row
- * order even with no outcome column present — the top of a sorted list reads
+ * order even with no outcome column present - the top of a sorted list reads
  * as the best or the worst of something, and this data cannot support either
  * claim. Alphabetical says only "here is the team".
  */
-/** The people in the workload — what a queue comparison is between. */
+/** The people in the workload - what a queue comparison is between. */
 export function humans(agents: readonly AgentLoad[]): readonly AgentLoad[] {
   return agents.filter((agent) => agent.kind === 'human');
 }
@@ -550,7 +550,7 @@ export function humans(agents: readonly AgentLoad[]): readonly AgentLoad[] {
 /**
  * ★ REMOVED WITH THE COLUMN IT SUPPORTED.
  *
- * `avgResponseTimeMs` is not a reply time — see the field's own note — so
+ * `avgResponseTimeMs` is not a reply time - see the field's own note - so
  * there is no "nobody has replied yet" to report. Kept as a named export
  * would have left a helper pointing at a metric the screen must not show.
  */
@@ -558,7 +558,7 @@ export function humans(agents: readonly AgentLoad[]): readonly AgentLoad[] {
 /* ── 06's "What people ask about" panel ──────────────────────────────────── */
 
 /**
- * `GET /api/analytics/top-questions` — `analytics:dashboard:read`.
+ * `GET /api/analytics/top-questions` - `analytics:dashboard:read`.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ A "TOPIC" IS A `groupBy`, NOT A THING THE PRODUCT HOLDS
@@ -574,14 +574,14 @@ export function humans(agents: readonly AgentLoad[]): readonly AgentLoad[] {
  * raw column and show the old name back.
  *
  * ── AND THE LABELS ARE MODEL-WRITTEN, SO NEAR-DUPLICATES ARE EXPECTED ──
- * `detectedIntent` is `String?` — nullable, no enum. "where is my order",
+ * `detectedIntent` is `String?` - nullable, no enum. "where is my order",
  * "order status" and "where's my package" are three rows with three counts.
  * The panel's caption says GOTCHA did the grouping, so a reader seeing two
  * rows that look like one question knows we know, rather than concluding the
  * counts are broken.
  *
  * ── `automatable` IS DELIBERATELY NOT NAMED ──
- * The route sends it, and it is `count > 5` — a threshold relabelled as a
+ * The route sends it, and it is `count > 5` - a threshold relabelled as a
  * property of the topic. Rendered as *"GOTCHA could handle this"* it asserts
  * a capability from a frequency; rendered as *"asked more than 5 times"* it
  * is a worse way of printing the count in the next column. Third field this
@@ -593,14 +593,14 @@ export const askedAboutSchema = z.object({
   question: z.string().nullable().default(null),
   count: z.number().default(0),
   /**
-   * The grouped intent — or `null` when the route fell back to the most
+   * The grouped intent - or `null` when the route fell back to the most
    * repeated raw message bodies (`getTopQuestions`, no intents in range).
    * Those rows are customers' own words, not topics; 06e tells them apart.
    */
   intent: z.string().nullable().default(null),
   /**
    * Backend 8d9d09ec: for the classifier's `unknown` / `general`, what people
-   * actually wrote — up to five first messages, most common first.
+   * actually wrote - up to five first messages, most common first.
    */
   examples: z
     .array(z.object({ question: z.string(), count: z.number().catch(1).default(1) }))
@@ -616,7 +616,7 @@ export const askedAboutListSchema = z.array(askedAboutSchema);
  *
  * A null `detectedIntent` is excluded by the route's own `where`, but the
  * fallback path can produce an unlabelled row. An unnamed topic is not a
- * topic — it is a count with nothing to attach to — and inventing a name
+ * topic - it is a count with nothing to attach to - and inventing a name
  * for it would be the one thing this panel must not do.
  */
 export function namedTopics(rows: readonly AskedAbout[]): readonly AskedAbout[] {
@@ -630,7 +630,7 @@ export function namedTopics(rows: readonly AskedAbout[]): readonly AskedAbout[] 
  * starts at `"general"` and writes it back when classification fails, the
  * incoming worker's heuristic falls back to `"general"`, and the stored rows
  * also carry `"unknown"`. The backend's own normalizer maps both to OTHER.
- * Measured on dev: the tenant's ONLY intent was `unknown` — so 06e listed
+ * Measured on dev: the tenant's ONLY intent was `unknown` - so 06e listed
  * "Unknown" as a topic, marked it "new", and titled the by-day card with it.
  */
 export const UNPLACED_INTENTS: ReadonlySet<string> = new Set(['unknown', 'general']);
@@ -639,7 +639,7 @@ export function isUnplaced(row: AskedAbout): boolean {
   return row.intent !== null && UNPLACED_INTENTS.has(row.intent.trim().toLowerCase());
 }
 
-/** `GET /api/analytics/ai-performance?from&to` — the fields 06b reads. */
+/** `GET /api/analytics/ai-performance?from&to` - the fields 06b reads. */
 export const aiPerformanceSchema = z.looseObject({
   totalAIMessages: z.number().default(0),
   totalHumanMessages: z.number().default(0),
@@ -679,7 +679,7 @@ export type UnansweredQuestions = z.infer<typeof unansweredQuestionsSchema>;
  * searched the catalogue for this ISO week and did not find.
  *
  * ⚠ `askedBy` IS NOT PEOPLE. The writer (`recordProductDemand`) increments it
- * on every ask that carries an asker key, with no de-duplication — so it is a
+ * on every ask that carries an asker key, with no de-duplication - so it is a
  * count of keyed asks, and a screen must never say "N people". `askCount` is
  * the asks; that is the figure shown. Terms are stored lowercased.
  */
@@ -702,7 +702,7 @@ export type ProductDemand = z.infer<typeof productDemandSchema>;
 const count = z.number().int().nonnegative().catch(0);
 
 /**
- * `GET /api/analytics/daily?days=` — one row per UTC day, oldest first.
+ * `GET /api/analytics/daily?days=` - one row per UTC day, oldest first.
  *   gotcha / team        conversations ANSWERED that day, by who answered
  *   alone / passedOver   conversations STARTED that day, by whether a person
  *                        took them over
@@ -726,7 +726,7 @@ export type DailySeries = z.infer<typeof dailySeriesSchema>;
 export type DayRow = DailySeries['series'][number];
 
 /**
- * `GET /api/analytics/team?days=` (backend af4f0072) — 06c. People and AI
+ * `GET /api/analytics/team?days=` (backend af4f0072) - 06c. People and AI
  * employees, attributed by ownership; the cards are over every conversation
  * a PERSON replied in. `resolvedRate` is a fraction (0.94), `null` with
  * nothing handled; `firstReplyMedianMs` has no target for AI (decided).

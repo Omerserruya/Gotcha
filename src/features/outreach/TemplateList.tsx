@@ -18,7 +18,7 @@ import styles from './Outreach.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
- * Screen 05c — message templates, measured.
+ * Screen 05c - message templates, measured.
  *
  * A table card (684 wide; head `#F5F2EC` at `padding:11px 18px`; rows at
  * `14px 18px`; the open one `#FCFBF8` with 02's 3px dark edge; the window
@@ -26,13 +26,13 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * is one, and "Worth knowing".
  *
  * ── WHAT EACH PART IS MADE OF ──
- *   USED · REPLIES   "—": nothing counts a template's sends or replies. 02's
+ *   USED · REPLIES   "-": nothing counts a template's sends or replies. 02's
  *                    own spec lists both under "needs from the backend".
  *   STATE            the platform's review status, said as what you can do
  *   preview          the body as a message, its {{n}} filled with each
- *                    variable's sample — highlighted — and its real buttons
+ *                    variable's sample - highlighted - and its real buttons
  *   Filled in from   the variables' descriptions
- *   Who may send it  "—": nothing records which employees may
+ *   Who may send it  "-": nothing records which employees may
  *   Approved         that it is, and whether it changed since (`version`);
  *                    no approval DATE exists
  *
@@ -55,7 +55,7 @@ export function selectedGroup(
 }
 
 /**
- * "a, b and c". English lists here drop the comma before "and" — `en`'s own
+ * "a, b and c". English lists here drop the comma before "and" - `en`'s own
  * list format keeps it, `en-GB`'s does not; other languages use their own.
  */
 function joinWithAnd(items: readonly string[], locale: string): string {
@@ -63,7 +63,7 @@ function joinWithAnd(items: readonly string[], locale: string): string {
   return new Intl.ListFormat(tag, { style: 'long', type: 'conjunction' }).format(items);
 }
 
-/** The body as one line, its variables in braces: "Hi {John} — the {lamp} is back". */
+/** The body as one line, its variables in braces: "Hi {John} - the {lamp} is back". */
 function bodyLine(template: Template): string {
   return bodyParts(template)
     .map((part) => ('text' in part ? part.text : `{${part.variable}}`))
@@ -134,8 +134,8 @@ export async function TemplateTable({
                       <span className={styles.tplLine}>{bodyLine(group.primary)}</span>
                     </span>
                     {/* Nothing counts a template's sends or replies: 02 lists both as backend needs. */}
-                    <span className={styles.tplFigure}>—</span>
-                    <span className={styles.tplFigure}>—</span>
+                    <span className={styles.tplFigure}>-</span>
+                    <span className={styles.tplFigure}>-</span>
                     <span className={styles.tplState}>
                       <span
                         className={styles.tplChip}
@@ -179,7 +179,7 @@ export async function TemplatePreview({
     return (
       <section className={styles.tplCard} data-testid="template-preview">
         <div className={styles.tplCardHead}>
-          <span className={styles.tplCardName}>—</span>
+          <span className={styles.tplCardName}>-</span>
         </div>
         <div className={styles.tplStage} />
       </section>
@@ -200,7 +200,7 @@ export async function TemplatePreview({
   );
   /*
     One sentence, not a list of labels: "The customer, the product and when
-    they asked" — lowercase after the first, and no comma before "and", as
+    they asked" - lowercase after the first, and no comma before "and", as
     the rest of the app writes a list.
   */
   const filledFrom = template.variables
@@ -256,13 +256,13 @@ export async function TemplatePreview({
         <div>
           <dt>{t('preview.filledFrom')}</dt>
           <dd data-testid="template-filled-from">
-            {filledFrom.length > 0 ? joinWithAnd(filledFrom, locale) : '—'}
+            {filledFrom.length > 0 ? joinWithAnd(filledFrom, locale) : '-'}
           </dd>
         </div>
         {/* Nothing records which employees or automations may send it. */}
         <div>
           <dt>{t('preview.whoMay')}</dt>
-          <dd>—</dd>
+          <dd>-</dd>
         </div>
         <div>
           <dt>{t('preview.approved')}</dt>
@@ -275,7 +275,7 @@ export async function TemplatePreview({
                 ? t('preview.approvedOff')
                 : stance === 'exempt' || stance === 'off'
                   ? t('preview.noReview')
-                  : '—'}
+                  : '-'}
           </dd>
         </div>
       </dl>
@@ -283,7 +283,7 @@ export async function TemplatePreview({
       {/*
         Live (Omer, 2026-10-04): an approved template opens the draft-campaign
         drawer with it chosen; Duplicate makes a local DRAFT copy. Submitting
-        a draft to Meta is a separate write — drawn, with why.
+        a draft to Meta is a separate write - drawn, with why.
       */}
       <div className={styles.tplActions}>
         {template.status === 'APPROVED' ? (
@@ -332,7 +332,7 @@ export async function TemplatePreview({
 }
 
 /**
- * 02's rejection card — for the first rejected template, with WhatsApp's own
+ * 02's rejection card - for the first rejected template, with WhatsApp's own
  * words. Drawn only when one exists: a pink card announcing nothing would
  * alarm. No rewrite exists to see, and no email fallback to send by, so both
  * controls are drawn and not live.

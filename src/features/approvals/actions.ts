@@ -32,7 +32,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * forbade editing, and building the UI would have made that routine rather
  * than theoretical.
  *
- * What is true now — `approvals.ts:1061-1085`, D49, verified here rather
+ * What is true now - `approvals.ts:1061-1085`, D49, verified here rather
  * than taken on report:
  *
  *     const wantsModification = req.body?.modifiedParams != null && …
@@ -42,16 +42,16 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  *         → 403 MODIFICATION_NOT_ALLOWED
  *     }
  *
- * It refuses LOUDLY and fails CLOSED — an absent `approvalConfig` is not
- * permission — and the route's own comment gives the reason: falling back to
+ * It refuses LOUDLY and fails CLOSED - an absent `approvalConfig` is not
+ * permission - and the route's own comment gives the reason: falling back to
  * the original params would execute something the approver did not agree to
  * while showing them the version they typed, so the approval record would
  * disagree with what ran.
  *
  * ── SO AN EDIT CONTROL IS NOW BUILDABLE, AND IS NOT BUILT HERE ──
  * It is buildable gated on the tool's policy, with the 403 rendered as its
- * own sentence — "this tool's policy does not allow editing before
- * approval" — rather than a generic failure. That is a separate piece of
+ * own sentence - "this tool's policy does not allow editing before
+ * approval" - rather than a generic failure. That is a separate piece of
  * work with its own ruling; this file does not have it, and this comment no
  * longer claims it never will.
  *
@@ -68,7 +68,7 @@ export type ApprovalWriteResult =
        * Present on approve only, and the reason 03b exists.
        *
        * The route answers `{ approval, dispatch }`, so whether the action
-       * actually ran comes back **in the response to the decision** — no poll,
+       * actually ran comes back **in the response to the decision** - no poll,
        * no subscription. `false` here is an approval that was granted and then
        * failed to execute, which is the case the whole screen is for, reported
        * at the one moment the person who decided is still looking at it.
@@ -78,7 +78,7 @@ export type ApprovalWriteResult =
       /**
        * The row as the server now holds it, on approve.
        *
-       * 03b's third fact — **was the customer told** — is
+       * 03b's third fact - **was the customer told** - is
        * `customerNotifiedAt` on this row, and the backend uses its presence as
        * the once-only guard for the continuation message. So it is a fact
        * rather than an inference, and reading it from the response means the
@@ -87,7 +87,7 @@ export type ApprovalWriteResult =
       readonly approval?: Approval;
     }
   /**
-   * The row moved under us — already decided, or past its deadline.
+   * The row moved under us - already decided, or past its deadline.
    *
    * The route answers 409 for both. Its own outcome because the remedy is the
    * same in each case and it is not a fault: the screen reloads and shows what
@@ -119,7 +119,7 @@ function classify(cause: unknown, event: string): ApprovalWriteResult {
  * Approve.
  *
  * With `edits` only for an edited amount (backend 05979604, Omer 2026-10-04):
- * `{ edits: { amount } }` — the server checks the tool is allowed, the amount is
+ * `{ edits: { amount } }` - the server checks the tool is allowed, the amount is
  * no more than the original, and refuses 400 otherwise with nothing decided.
  */
 export async function approveRequest(
@@ -145,7 +145,7 @@ export async function approveRequest(
     });
     revalidatePath('/[locale]/(app)/approvals', 'page');
     // A 200 means the DECISION was recorded. It says nothing on its own about
-    // whether the action ran — that is what `dispatch` is for, and conflating
+    // whether the action ran - that is what `dispatch` is for, and conflating
     // the two is the exact mistake the model was reshaped to prevent.
     return {
       ok: true,
@@ -196,13 +196,13 @@ export async function rejectRequest(
  *
  * This is the affordance the design drew an Undo in place of, and it is the
  * opposite one: it runs the action again, forward. It is offered only where
- * `isRetryable` allows — never on `LEGACY_UNVERIFIED`, whose own comment is
+ * `isRetryable` allows - never on `LEGACY_UNVERIFIED`, whose own comment is
  * that many of those rows provably never ran, so re-running an old refund is
  * worse than not knowing.
  */
 export async function retryExecution(id: string): Promise<ApprovalWriteResult> {
   try {
-    // `{ data }` here, unlike its two siblings — so no `raw`, and `serverApi`
+    // `{ data }` here, unlike its two siblings - so no `raw`, and `serverApi`
     // unwraps it. Three routes in one file, three envelope shapes.
     const result = await serverApi().post({
       endpoint: approvalEndpoints.retryExecution(id),

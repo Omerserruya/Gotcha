@@ -130,7 +130,7 @@ describe('FirstSteps', () => {
    * The count must come from the total, the names from the sample - reading
    * the count off the sample would under-report what is waiting.
    */
-  it('counts pending answers from the total, not from the sample — on the knowledge step', async () => {
+  it('counts pending answers from the total, not from the sample - on the knowledge step', async () => {
     await renderBlock();
     const line = screen.getByText(/need your word/);
     expect(line.textContent).toContain('214 pages read');
@@ -157,7 +157,7 @@ describe('FirstSteps', () => {
     );
   });
 
-  it('★ eligible, Go live is live (Omer, decision 01) — its own control, which asks first', async () => {
+  it('★ eligible, Go live is live (Omer, decision 01) - its own control, which asks first', async () => {
     await renderBlock({ ...status, goLive: { eligible: true, blockedBy: [] }, trial: null });
     expect(screen.getByTestId('go-live-live')).toBeInTheDocument();
     expect(screen.queryByTestId('go-live-button')).toBeNull();
@@ -171,7 +171,7 @@ describe('FirstSteps', () => {
     expect(screen.getByTestId(`step-action-${id}`)).toHaveAttribute('href', href);
   });
 
-  it('★ a step no screen sets is drawn, with why — never a link to the wrong page', async () => {
+  it('★ a step no screen sets is drawn, with why - never a link to the wrong page', async () => {
     await renderBlock();
     const action = screen.getByTestId('step-action-handover_rules');
     expect(action).not.toHaveAttribute('href');
@@ -194,9 +194,9 @@ describe('FirstSteps', () => {
   });
 });
 
-describe('★ 01c — measured against 02', () => {
+describe('★ 01c - measured against 02', () => {
   it('a done step’s time is 24-hour, as everywhere else', async () => {
-    // 18:20 UTC is 21:20 in Jerusalem — which `timeStyle: short` wrote as "9:20 PM".
+    // 18:20 UTC is 21:20 in Jerusalem - which `timeStyle: short` wrote as "9:20 PM".
     await renderBlock({
       ...status,
       steps: [
@@ -224,12 +224,12 @@ describe('★ 01c — measured against 02', () => {
 });
 
 describe('★ 01c as measured', () => {
-  it('locked, Go live says what it waits for — inline, not only in a title', async () => {
+  it('locked, Go live says what it waits for - inline, not only in a title', async () => {
     await renderBlock();
     expect(screen.getByTestId('go-live-body')).toHaveTextContent(/Opens once .+ are set\./);
   });
 
-  it('★ Go live is the last thing in the steps’ own scroller — never pinned over them', async () => {
+  it('★ Go live is the last thing in the steps’ own scroller - never pinned over them', async () => {
     await renderBlock();
     const goLive = screen.getByTestId('go-live');
     expect(goLive.parentElement?.lastElementChild).toBe(goLive);
@@ -263,7 +263,7 @@ describe('★ 01c corrections (second measurement)', () => {
 });
 
 describe('★ approval limits are completed on 10 (backend b3411ed4)', () => {
-  it('"Set limits" opens /studio/capabilities — Ask me on an action tool closes the step', async () => {
+  it('"Set limits" opens /studio/capabilities - Ask me on an action tool closes the step', async () => {
     await renderBlock({
       ...status,
       steps: [step({ id: 'approval_limits', state: 'next', estimateMinutes: 3 })],

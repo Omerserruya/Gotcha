@@ -63,7 +63,7 @@ describe('★★ suggested, never silent', () => {
     expect(screen.getByTestId('merge-problem')).toHaveTextContent("These two can't be merged");
   });
 
-  it('"Not the same" is drawn — nothing remembers it yet; no pair: said', () => {
+  it('"Not the same" is drawn - nothing remembers it yet; no pair: said', () => {
     const one = show([yael, yaelB]);
     expect(screen.getByTestId('not-same')).toHaveAttribute('aria-disabled', 'true');
     one.unmount();

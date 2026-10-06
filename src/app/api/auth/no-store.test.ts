@@ -8,14 +8,14 @@ import { describe, expect, it } from 'vitest';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THIS IS A PROPERTY OF THE SET, WHICH NO UNIT TEST CAN SEE
  * ════════════════════════════════════════════════════════════════════════════
- * The callback answers six ways — five refusals and one success — and each
+ * The callback answers six ways - five refusals and one success - and each
  * carries either a single-use reason or a `Set-Cookie` with a sealed session.
  * A test that drove one of them and checked its header would pass while a
  * seventh was added without the wrapper, which is the way this actually goes
  * wrong: not a header written incorrectly, a return statement added later.
  *
- * So it asserts the shape of the source — every `NextResponse.redirect` in
- * these handlers is inside `uncached(…)` — rather than the behaviour of one
+ * So it asserts the shape of the source - every `NextResponse.redirect` in
+ * these handlers is inside `uncached(…)` - rather than the behaviour of one
  * path. The same reason `messages.test.ts` reads the directory instead of
  * trusting a list.
  *
@@ -34,7 +34,7 @@ const ROUTES = ['src/app/api/auth/callback/route.ts', 'src/app/api/auth/login/ro
  *
  * ★ The login route is deliberately absent: it assigns its redirect to a name
  *   so it can attach the sealed PKCE cookie, so the scan finds nothing there.
- *   Its tripwire fired on the first run of this file and it was right to —
+ *   Its tripwire fired on the first run of this file and it was right to -
  *   "no redirects found" is what a broken scan and a differently-shaped file
  *   look like alike, and the answer is to say which this is rather than to
  *   loosen the regex until it matches something.
@@ -46,7 +46,7 @@ describe('⚠⚠ every auth redirect says no-store', () => {
     for (const route of RETURNING_ROUTES) {
       const source = readFileSync(route, 'utf8');
       const returned = [...source.matchAll(/return\s+([A-Za-z]+\()?NextResponse\.redirect/g)];
-      expect(returned.length, `${route}: no redirects found — the scan is broken`).toBeGreaterThan(
+      expect(returned.length, `${route}: no redirects found - the scan is broken`).toBeGreaterThan(
         0,
       );
       for (const match of returned) {

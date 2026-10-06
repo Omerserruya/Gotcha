@@ -24,13 +24,13 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Studio · Capabilities — screen 10.
+ * Studio · Capabilities - screen 10.
  *
  * ── NOT GROUPED BY RISK, AND THAT IS THE POINT ──
  * `riskGroup` arrives on every row and is **a regex over the tool's name**,
  * computed at response time, with `create_update` as its no-match fallback.
  * On this tenant `update_contact` lands in `sensitive_data` and `update_crm`
- * in `create_update` — **the same operation on the same data, separated
+ * in `create_update` - **the same operation on the same data, separated
  * because one name contains the word "contact"**.
  *
  * Rendering that as a risk assessment would present a regex miss as a
@@ -75,7 +75,7 @@ export default async function Page({
   );
   const onShopify = integration?.slug === 'shopify';
   const [shopifyAvailability, shopifyPending] = await Promise.all([
-    // Unconnected — or back with an approval, whose banner may need the listing link.
+    // Unconnected - or back with an approval, whose banner may need the listing link.
     onShopify && (!isConnected(integration) || params.pending === '1')
       ? loadShopifyAvailability()
       : null,
@@ -83,12 +83,12 @@ export default async function Page({
   ]);
 
   /*
-    10, measured: 02's header — the title over a line that wraps at 720, no
-    action — then the systems (290) beside the permissions (`26px 36px`).
+    10, measured: 02's header - the title over a line that wraps at 720, no
+    action - then the systems (290) beside the permissions (`26px 36px`).
 
     ★★ The rail and the permissions are SIBLINGS, never nested: both are
     async server components, and the structural test does not run a nested
-    one. `StudioSplit` takes them as two props — still siblings.
+    one. `StudioSplit` takes them as two props - still siblings.
   */
   return (
     <PageContainer

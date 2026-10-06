@@ -9,9 +9,9 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ 02's STREAM — A BUBBLE, AND ITS TIME LINE UNDER IT
+   * ★★ 02's STREAM - A BUBBLE, AND ITS TIME LINE UNDER IT
    * ════════════════════════════════════════════════════════════════════════
-   * Measured: each message is a column at `gap:5px` — the bubble, then
+   * Measured: each message is a column at `gap:5px` - the bubble, then
    * `09:12 · Support AI · read` at 10.5px `#A8A39A`. Inbound: white,
    * `1px #E6E2DA`, radius `14 14 14 4`. Outbound: `#121212` on `#F0EDE7`,
    * radius `14 14 4 14`. Text 13.5px at 1.5. The corner that is 4px is the
@@ -61,7 +61,7 @@
   }
 
   .message[data-direction='OUTBOUND'] .bubble {
-    /* 02: no border at all — a transparent 1px still made the box 2px larger. */
+    /* 02: no border at all - a transparent 1px still made the box 2px larger. */
     border: 0;
     border-radius: 14px;
     border-end-end-radius: var(--space-4);
@@ -76,7 +76,7 @@
 
   /*
    * 02's quote: `padding:2px 0 2px 9px`, a 2px `#D8D3C9` rule, 8px above the
-   * reply — who said it at 10.5px, then one line of it at 12px.
+   * reply - who said it at 10.5px, then one line of it at 12px.
    */
   .quote {
     display: flex;
@@ -139,17 +139,17 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ "SEE THAT THEY'RE IN A SEPARATE PART" — THE QUEUE IS A CARD
+   * ★★ "SEE THAT THEY'RE IN A SEPARATE PART" - THE QUEUE IS A CARD
    * ════════════════════════════════════════════════════════════════════════
    * 02 gives the column its own surface with `border-radius:18px` and closes
    * it with a footer bar. We drew rows straight onto the page background,
    * which is why the column read as a list on a page rather than a panel
    * beside two others.
    *
-   * Ordering is worth only as much as `lastMessageAt` is — see below.
+   * Ordering is worth only as much as `lastMessageAt` is - see below.
    */
   /*
-   * ★ The CARD is `.queueColumn` now — the panel the design draws. This is
+   * ★ The CARD is `.queueColumn` now - the panel the design draws. This is
    *   the list inside it, so it carries no surface or radius of its own:
    *   two rounded boxes with the same radius, one inside the other, is a
    *   seam rather than a card.
@@ -190,7 +190,7 @@
    * read-only list because it WAS one.
    *
    * ★ The prototype draws `padding:13px 16px` with a `border-left:3px` edge
-   *   and a per-row background; this is the interactive half of that — the
+   *   and a per-row background; this is the interactive half of that - the
    *   avatar, preview, badges and tags are the other half and are not here
    *   yet. Naming that rather than letting it look finished.
    */
@@ -200,7 +200,7 @@
    */
   /*
    * 02's queue header, measured: `[352x87]`, a COLUMN at `gap:12px` and
-   * `padding:18px 18px 12px` — the title row, then the filter row — over a
+   * `padding:18px 18px 12px` - the title row, then the filter row - over a
    * `#EDE9E1` hairline. It was one row at `14px 18px` over `#F0EDE7`, which
    * is the panel's well colour and not its divider.
    */
@@ -213,7 +213,7 @@
     border-block-end: 1px solid var(--border-subtle);
   }
 
-  /* 02: `justify-content:space-between` — the count sits hard right. */
+  /* 02: `justify-content:space-between` - the count sits hard right. */
   .queueTitleRow {
     display: flex;
     align-items: center;
@@ -313,7 +313,7 @@
     white-space: nowrap;
     /*
      * ⚠ "You" IS NEUTRAL IN 02, NOT GREEN. Measured: `#F0EDE7` on `#55524C`,
-     *   the same as "Flow". The green there is "High intent" — a
+     *   the same as "Flow". The green there is "High intent" - a
      *   classification, which is what the row's colour is spent on.
      */
     background-color: var(--panel-well);
@@ -351,16 +351,16 @@
 
   /*
    * ⚠ THE OPEN CONVERSATION LOOKED LIKE EVERY OTHER ROW. In the capture, the
-   *   one on screen to the right was visually identical to the other nine —
+   *   one on screen to the right was visually identical to the other nine -
    *   a queue that cannot show you where you are is a list you re-read after
    *   every reply.
    */
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ "SEE HOW THEY'RE MARKED" — WHITE ROW, BLACK EDGE
+   * ★★ "SEE HOW THEY'RE MARKED" - WHITE ROW, BLACK EDGE
    * ════════════════════════════════════════════════════════════════════════
    * 02's selected row: `background:#FFFFFF` against the panel's `#FAF8F4`,
-   * and the 3px left slot filled `#121212`. **Two signals, not one** — and
+   * and the 3px left slot filled `#121212`. **Two signals, not one** - and
    * the slot is on every row at `transparent`, so nothing shifts by three
    * pixels when selection moves.
    *
@@ -373,7 +373,7 @@
   .queueRow[data-open] {
     background-color: var(--panel-field);
     border-inline-start-color: var(--action-base);
-    /* 02: `border-top: 0` — the width, not a transparent line still 1px tall. */
+    /* 02: `border-top: 0` - the width, not a transparent line still 1px tall. */
     border-block-start-width: 0;
   }
 
@@ -423,7 +423,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* `--panel-base` IS #faf8f4 — the design’s own badge border. The card
+    /* `--panel-base` IS #faf8f4 - the design’s own badge border. The card
        colour, not white: the badge cuts the disc’s edge rather than
        floating on it. */
     border: 2px solid var(--panel-base);
@@ -467,10 +467,10 @@
   /*
    * ⚠⚠ A SETTLED ROW IS QUIETER IN FIVE WAYS, AND WE DREW EVERY ROW THE SAME.
    * 02: name weight 400 and `#55524C`, preview `#8C887F`, time `#A8A39A`,
-   * avatar tinted down. That is why the column read flat — not spacing.
+   * avatar tinted down. That is why the column read flat - not spacing.
    *
    * ★ `CLOSED` is the only status that means settled. `OPEN` and `WAITING`
-   *   are both live, and the design's third state — unread — needs a field
+   *   are both live, and the design's third state - unread - needs a field
    *   the contract does not have.
    */
   .queueRow[data-settled] .who {
@@ -500,7 +500,7 @@
     gap: var(--space-8);
   }
 
-  /* `margin-inline-start: auto` in the design — the time sits hard right. */
+  /* `margin-inline-start: auto` in the design - the time sits hard right. */
   .rowTime {
     margin-inline-start: auto;
     flex: none;
@@ -540,13 +540,13 @@
   /*
    * ★★ ONE LINE, TRUNCATED, AND THE REASON IT IS SAFE IS THE NEW HEADER.
    * A Shopify live-chat `customerName` is "Shopper on
-   * urban-supply-gotcha-demo.myshopify.com" — a forty-character unbroken token
+   * urban-supply-gotcha-demo.myshopify.com" - a forty-character unbroken token
    * that wrapped to three lines in a queue row, three times over on one screen.
    *
    * Truncating an identifier normally hides the thing that tells two customers
    * apart, which is why the queue previously let it wrap. **The conversation
    * header now carries the full name, the channel and the handle**, so the queue
-   * only has to be enough to recognise and click — and the value it truncates is
+   * only has to be enough to recognise and click - and the value it truncates is
    * one click from being read in full.
    *
    * `min-inline-size: 0` because a flex item will not shrink below its content
@@ -575,8 +575,8 @@
    * at a glance.
    */
   /*
-   * ⚠ WAITING-AGE IS OURS, NOT 02's. The design's tag row carries STATUS —
-   *   `Flow`, `You`, `Support AI` — and puts nothing about age there.
+   * ⚠ WAITING-AGE IS OURS, NOT 02's. The design's tag row carries STATUS -
+   *   `Flow`, `You`, `Support AI` - and puts nothing about age there.
    *
    * ★ It stays because it is what this queue is sorted by and what an agent
    *   triages on, but as muted running text rather than a pill: the row has
@@ -585,7 +585,7 @@
   /*
    * ⚠ AND NOW A PILL, IN 02's NEUTRAL: `#8C887F` on `#F0EDE7`, as its
    *   "Support AI" tag. As running text the line was 11h where 02's pill row
-   *   is 17h, which was the whole of the row's 76 against 82 — and 02 has no
+   *   is 17h, which was the whole of the row's 76 against 82 - and 02 has no
    *   plain-text line in that slot anywhere.
    */
   .waiting {
@@ -660,7 +660,7 @@
     background-color: var(--panel-well);
   }
 
-  /* No border, as 02 draws it — which is why it measures 24 tall to 26. */
+  /* No border, as 02 draws it - which is why it measures 24 tall to 26. */
   .verbButtonPrimary {
     background-color: var(--action-base);
     color: var(--action-text);
@@ -733,7 +733,7 @@
   /* ── Screen 02's three columns ────────────────────────────────────────── */
   /*
    * ★★ THE CONVERSATION COLUMN GOT THE EXTRA WIDTH AND THE QUEUE GOT NONE.
-   * `--size-rail` is `clamp(210px, 14.6%, 300px)` — a percentage of the
+   * `--size-rail` is `clamp(210px, 14.6%, 300px)` - a percentage of the
    * container, so raising the page cap to 1600px moved it by about twelve
    * pixels while the middle column gained four hundred. A walk found every
    * Shopify row breaking its shop domain across three lines and "60 days
@@ -747,7 +747,7 @@
     display: grid;
     /*
      * ⚠⚠ TWO PANELS. The computed tree shows `[352x876]` queue and
-     *    `[856x876]` chat side by side — and the Copilot INSIDE the chat.
+     *    `[856x876]` chat side by side - and the Copilot INSIDE the chat.
      */
     grid-template-columns: var(--size-inbox-queue) minmax(0, 1fr);
     /* 02: the three panels sit 10px apart, not 16. */
@@ -755,7 +755,7 @@
     align-items: stretch;
     /*
      * ⚠⚠ THE SCREEN IS THE FRAME'S HEIGHT, AND NOT ONE PIXEL MORE.
-     *    02's panels are `876px` — the 900px frame less its 12px padding —
+     *    02's panels are `876px` - the 900px frame less its 12px padding -
      *    and `min-block-size: 0` is what lets this grid shrink to it. Without
      *    that, a grid refuses to go below its content, the panels grow past
      *    the viewport, and the PAGE scrolls instead of the panels.
@@ -765,7 +765,7 @@
     /*
      * ⚠⚠ NO BACKGROUND HERE, AND IT USED TO BE `--panel-sunken`. That colour
      *    came from a different frame in the design file. Rendered, 02's page
-     *    is `rgb(18,18,18)` — the DARK FRAME — and the three panels are light
+     *    is `rgb(18,18,18)` - the DARK FRAME - and the three panels are light
      *    cards on it.
      *
      * ★ The shell already paints that frame. What this screen needs is for
@@ -791,7 +791,7 @@
    * ════════════════════════════════════════════════════════════════════════
    * 02 draws three panels on a `#F1EFE9` page: each `#FAF8F4`, each
    * `border-radius:18px`, each `overflow:hidden`, 10px apart. We drew all
-   * three on one flat surface — which is why no amount of work inside a
+   * three on one flat surface - which is why no amount of work inside a
    * column made it look like a column.
    *
    * ⚠ `overflow: hidden` IS NOT DECORATION. It is what makes the rows' square
@@ -800,7 +800,7 @@
    *   rather than a card containing one.
    *
    * ★ Every colour here was ALREADY A TOKEN. `--panel-base` IS #faf8f4 and
-   *   `--panel-sunken` IS #f1efe9 — a grep for the design's uppercase hex
+   *   `--panel-sunken` IS #f1efe9 - a grep for the design's uppercase hex
    *   found nothing because ours are lowercase, which nearly produced six
    *   duplicate tokens for colours we already had.
    */
@@ -809,11 +809,11 @@
    * ★★ THE CONVERSATION PANEL IS THE SAME SHAPE: FIXED, SCROLLING, FIXED
    * ════════════════════════════════════════════════════════════════════════
    * 02: a header at the top, the message stream scrolling, and the composer
-   * PINNED at the bottom — not at the end of a long page. Every direct child
+   * PINNED at the bottom - not at the end of a long page. Every direct child
    * holds its height; only the stream gives.
    *
    * ★ `.stream` is `MessageStream`'s own root and a direct child here, so
-   *   this needs no wrapper in the JSX — the structure was already right and
+   *   this needs no wrapper in the JSX - the structure was already right and
    *   nothing was telling it which part moves.
    *
    * ⚠ `min-block-size: 0` again. A flex child will not shrink below its
@@ -825,7 +825,7 @@
   }
 
   /*
-   * 02: `[856x809] flex` — a ROW holding the conversation and the Copilot,
+   * 02: `[856x809] flex` - a ROW holding the conversation and the Copilot,
    * below the panel's own 67px header.
    */
   .chatBody {
@@ -850,7 +850,7 @@
   /*
    * ⚠ NO INNER PADDING, AND EVERYTHING SAT FLUSH AGAINST THE PANEL EDGE.
    *   02: the stream is `p:14px 24px 12px` with `gap:11px`, and the reply bar
-   *   and composer are 436 wide inside a 484 column — 24px either side — with
+   *   and composer are 436 wide inside a 484 column - 24px either side - with
    *   the composer 30px from the frame's bottom.
    */
   .conversationPane .stream {
@@ -876,7 +876,7 @@
    * ★★ THE COPILOT IS DARK AND IT IS THE CHAT PANEL'S RIGHT-HAND WALL
    * ════════════════════════════════════════════════════════════════════════
    * `[372x809] bg:rgb(23,23,23) r:0 0 18px 18px ovf:hidden`, inside the
-   * `[856x876]` panel. **That radius is the giveaway** — it inherits the
+   * `[856x876]` panel. **That radius is the giveaway** - it inherits the
    * panel's bottom-right corner, which only a child can do.
    *
    * ⚠ It was a third sibling card on the light page. Two errors at once: the
@@ -907,7 +907,7 @@
     min-block-size: 0;
     overflow-y: auto;
     /*
-     * 02 pads every Copilot section 18px either side — and each section
+     * 02 pads every Copilot section 18px either side - and each section
      * draws its own #262626 rule edge to edge, so the padding is the
      * sections' (`wall/Wall.module.css`), not this container's.
      */
@@ -944,7 +944,7 @@
    * ════════════════════════════════════════════════════════════════════════
    * 02 sets no line-height anywhere in the queue, so each line is the
    * browser's `normal` for Archivo. We inherited the body's 1.6, and every
-   * line came out taller with padding, gaps and sizes all correct — measured:
+   * line came out taller with padding, gaps and sizes all correct - measured:
    * name 15h → 22h, row 86h → 94h, header 87h → 97h, footer 35h → 43h.
    *
    * ★ Here, on the panel, because the shell is closed and the body's 1.6 is
@@ -966,18 +966,18 @@
   /*
    * ★★ THE BAR IS THE CONTAINER, NOT THE HEADER.
    * The border used to sit on `.openHeader`, so the verbs rendered outside the
-   * card and "Take control" still read as detached — which is what a walk
+   * card and "Take control" still read as detached - which is what a walk
    * reported, and my commit message had already claimed was fixed. The card is
    * now the thing that holds both.
    */
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ 02: ONE ROW ACROSS THE WHOLE PANEL — `[856x67]`
+   * ★★ 02: ONE ROW ACROSS THE WHOLE PANEL - `[856x67]`
    * ════════════════════════════════════════════════════════════════════════
    * `display:flex; align-items:center; gap:14px; padding:16px 22px` over a
    * `#EDE9E1` hairline: avatar, the name over its subline, and the verbs
    * pushed to the right end. It was a bordered white card stacking the
-   * identity above the verbs — two rows, inset from the panel.
+   * identity above the verbs - two rows, inset from the panel.
    *
    * ⚠ `line-height: normal` for the reason the queue has it: 02 sets none,
    *   and the body's 1.6 makes every line taller than the design's.
@@ -1030,7 +1030,7 @@
     gap: 9px;
     /*
      * ⚠ RESERVED AT THE CHIP'S HEIGHT. The orders chip streams in after the
-     *   header paints, and it is 18 tall where the name alone is ~16 — so the
+     *   header paints, and it is 18 tall where the name alone is ~16 - so the
      *   row grew as it arrived and moved everything under it. 02's row is 18.
      */
     min-block-size: 18px;
@@ -1073,7 +1073,7 @@
 @layer features {
   /*
    * A message the customer never received. The only delivery state on this
-   * screen that is a problem, so the only one that is coloured — if every state
+   * screen that is a problem, so the only one that is coloured - if every state
    * were marked, the one that matters would be as quiet as the rest.
    */
   .streamFailed {
@@ -1110,7 +1110,7 @@
 
   /*
    * 02: `padding:12px 15px 10px`, 13.5px. One line when empty, growing with
-   * what is typed up to a cap — 02 draws the idle state, a single line.
+   * what is typed up to a cap - 02 draws the idle state, a single line.
    */
   .composerInput {
     inline-size: 100%;
@@ -1219,11 +1219,11 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 02's HOVER BAR — `#171717`, radius 9px, `padding:4px`, under the message
+   * 02's HOVER BAR - `#171717`, radius 9px, `padding:4px`, under the message
    * ════════════════════════════════════════════════════════════════════════
    * Over the next message rather than between them, so hovering a message
    * does not shift every message below it. Shown on hover and on keyboard
-   * focus — `opacity`, not `display`, so the button stays reachable by Tab.
+   * focus - `opacity`, not `display`, so the button stays reachable by Tab.
    */
   .messageActions {
     position: absolute;
@@ -1360,12 +1360,12 @@
 @layer features {
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ OMER'S CONTENT PLACEHOLDERS — the box of the real thing, quietly
+   * ★★ OMER'S CONTENT PLACEHOLDERS - the box of the real thing, quietly
    * ════════════════════════════════════════════════════════════════════════
    * Every size below is the measured size of what it stands in for (see
    * `Skeletons.tsx`), so the content lands without moving anything. The
-   * colour is the panel's own well, and the motion a slow pulse — nothing
-   * that draws the eye — which stops for anyone who asked for less motion.
+   * colour is the panel's own well, and the motion a slow pulse - nothing
+   * that draws the eye - which stops for anyone who asked for less motion.
    */
   @keyframes skeleton-pulse {
     0%,
@@ -1417,7 +1417,7 @@
     inline-size: 16px;
   }
 
-  /* A row's three lines: 15 + 15 + 17 at gap 4 — 55, as the real text. */
+  /* A row's three lines: 15 + 15 + 17 at gap 4 - 55, as the real text. */
   .skeletonLine[data-size='name'] {
     inline-size: 45%;
     block-size: 15px;
@@ -1572,7 +1572,7 @@
 @layer features {
   /*
    * A row picked with shift-click: the well's colour and a quiet edge, so it
-   * reads as "picked" and never as "open" — open is white with a black edge.
+   * reads as "picked" and never as "open" - open is white with a black edge.
    */
   .queueRow[data-selected] {
     background-color: var(--panel-well);
@@ -1770,7 +1770,7 @@
     margin: 0;
     font-family: var(--font-serif);
     font-size: 26px;
-    /* Italic in Latin, upright in Hebrew — the token decides. */
+    /* Italic in Latin, upright in Hebrew - the token decides. */
     font-style: var(--font-serif-style);
     color: var(--text-subtle);
   }
@@ -1996,7 +1996,7 @@
   }
 
   /* Up to five held files, a picture as itself. */
-  /* The held files as a row of chips that wraps — the composer stays low. */
+  /* The held files as a row of chips that wraps - the composer stays low. */
   .composerFiles {
     display: flex;
     flex-wrap: wrap;

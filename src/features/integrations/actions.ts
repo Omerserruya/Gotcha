@@ -39,8 +39,8 @@ export type ElectResult =
    */
   | { readonly ok: false; readonly reason: 'not_connected' }
   /**
-   * Elected on its own screen. TWO of these now — the CRM has
-   * `config.useAsCrm` and returns has `config.returnProvider` — and they
+   * Elected on its own screen. TWO of these now - the CRM has
+   * `config.useAsCrm` and returns has `config.returnProvider` - and they
    * point at different places, so they are different answers rather than one
    * "not here". Sending somebody to the CRM screen to change returns is a
    * wrong instruction that looks like a right one.
@@ -70,7 +70,7 @@ function classify(cause: unknown): ElectResult {
  *
  * ★ AND THIS NOW CHANGES WHAT THE AI DOES.
  * It did not, for most of a day: `config.roles` was read in exactly one
- * place — the displacement logic inside this very write. Backend landed the
+ * place - the displacement logic inside this very write. Backend landed the
  * read at 2d1abf88 and the live bot path consumes it
  * (`ai-bot.service.ts:1705` → `prompt-builder.service.ts:463`), so the
  * caveat this screen carried has been deleted rather than left to rot.
@@ -98,7 +98,7 @@ export type UseCaseResult =
   { readonly ok: true } | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
 
 /**
- * 14b's switch — what the business runs on. It decides which parts are asked
+ * 14b's switch - what the business runs on. It decides which parts are asked
  * about at all, so the page is re-read after it lands.
  */
 export async function setUseCase(useCase: UseCase): Promise<UseCaseResult> {

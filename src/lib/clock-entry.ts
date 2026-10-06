@@ -1,11 +1,11 @@
 /**
- * Day-first, 24-hour entry — the product's rule, which a native
+ * Day-first, 24-hour entry - the product's rule, which a native
  * `type="date"`, `type="time"` or `datetime-local` cannot keep: they follow the
  * BROWSER's locale, so an en-US browser shows "mm/dd/yyyy, --:-- --" with
  * AM/PM on a screen that writes 09:12 everywhere else.
  *
- * Values are stored in the forms the platform takes — `HH:mm` and an ISO day
- * (`yyyy-mm-dd`) — and only the display is ours.
+ * Values are stored in the forms the platform takes - `HH:mm` and an ISO day
+ * (`yyyy-mm-dd`) - and only the display is ours.
  */
 
 const pad = (n: number) => String(n).padStart(2, '0');

@@ -15,7 +15,7 @@ import { logger } from '@/observability/logger';
  * How far back the volume figure looks.
  *
  * The design says "this week". A literal trailing week is empty on any tenant
- * that has been quiet for eight days — including this one, where nothing is
+ * that has been quiet for eight days - including this one, where nothing is
  * newer than 2026-09-08, and where a trailing week is measurably 0 on every
  * channel. A health check whose every number is zero proves nothing.
  *
@@ -48,7 +48,7 @@ export const VOLUME_WINDOW_DAYS = 30;
  * tenant whose channels would not load must not be told it has none.
  *
  * Voice is the second read, and its absence has THREE meanings that must not
- * collapse into one — see `voiceOffered`.
+ * collapse into one - see `voiceOffered`.
  */
 export interface ChannelsData {
   readonly channels: readonly Channel[] | null;
@@ -62,7 +62,7 @@ export interface ChannelsData {
    * you", not "you may not look". So the Phone calls row appears when the
    * PRODUCT says voice exists here, rather than when we assume it does.
    *
-   * A 500, a timeout or a 403 leaves this `true` with an empty list — we
+   * A 500, a timeout or a 403 leaves this `true` with an empty list - we
    * could not ask, which is not the same as being told no, and the row should
    * not disappear because a service was briefly down.
    */

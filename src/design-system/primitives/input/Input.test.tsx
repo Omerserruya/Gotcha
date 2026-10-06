@@ -31,7 +31,7 @@ describe('Input', () => {
 });
 
 describe('★ a trailing control sits inside the field, at its end', () => {
-  it('beside the input in one box — not floating under the hint', () => {
+  it('beside the input in one box - not floating under the hint', () => {
     render(
       <Input
         label="Token"

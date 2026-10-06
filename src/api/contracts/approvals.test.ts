@@ -83,14 +83,14 @@ describe('the contract strips what no screen needs', () => {
   });
 });
 
-describe('hasLapsed — computed from expiresAt, never read from status', () => {
+describe('hasLapsed - computed from expiresAt, never read from status', () => {
   it('is true for a PENDING row past its deadline', () => {
     expect(hasLapsed(approval({ expiresAt: AN_HOUR_AGO }), NOW)).toBe(true);
   });
 
   it('is true at the exact moment the deadline passes', () => {
     // The countdown reaches 0m while `status` is still PENDING every single
-    // time, by construction — the sweeper runs on a five-minute cron.
+    // time, by construction - the sweeper runs on a five-minute cron.
     expect(hasLapsed(approval({ expiresAt: NOW.toISOString() }), NOW)).toBe(true);
   });
 
@@ -108,7 +108,7 @@ describe('hasLapsed — computed from expiresAt, never read from status', () => 
   });
 });
 
-describe('isDecidable — no button for a decision the route will refuse', () => {
+describe('isDecidable - no button for a decision the route will refuse', () => {
   it('offers a decision only while one can be taken', () => {
     expect(isDecidable(approval(), NOW)).toBe(true);
   });
@@ -176,7 +176,7 @@ describe('IRREVERSIBLE is a label, not a window', () => {
   });
 
   it('exposes nothing that could be rendered as a reversal window', () => {
-    // There is no undo in this platform — no route, no gateway path, no
+    // There is no undo in this platform - no route, no gateway path, no
     // `undoneAt` or `reversalOf` field, enumerated across the repository. A
     // function returning a duration here is how "Reversible · within 24h"
     // gets back onto the screen.
@@ -185,7 +185,7 @@ describe('IRREVERSIBLE is a label, not a window', () => {
   });
 });
 
-describe('aiEmployeeIdOf — a machine identifier must not reach a person', () => {
+describe('aiEmployeeIdOf - a machine identifier must not reach a person', () => {
   it('extracts the employee id the list route refuses to resolve', () => {
     expect(aiEmployeeIdOf(approval({ requestedBy: 'ai-agent:clx123' }))).toBe('clx123');
   });
@@ -200,7 +200,7 @@ describe('aiEmployeeIdOf — a machine identifier must not reach a person', () =
   });
 });
 
-describe('★★ approvalSummary — a sentence from the record, for rows that stored a breadcrumb', () => {
+describe('★★ approvalSummary - a sentence from the record, for rows that stored a breadcrumb', () => {
   // The platform's own cases (packages/shared/src/lib/__tests__/approval-summary.test.ts).
   it('names the act, for the tools that actually reach approval', () => {
     expect(
@@ -233,7 +233,7 @@ describe('★★ approvalSummary — a sentence from the record, for rows that s
     expect(s).not.toMatch(/[₪$€£]/);
   });
 
-  it('★★ replaces the breadcrumb, the signature and the bare tool name — and nothing else', () => {
+  it('★★ replaces the breadcrumb, the signature and the bare tool name - and nothing else', () => {
     const row = (summary: string) => ({
       summary,
       tool: 'shopify.cancel_order',
@@ -257,7 +257,7 @@ describe('⚠⚠ every risk tag reaches the screen as words', () => {
   });
 });
 
-describe('★★ classifyDispatchError — the operator’s classes, the platform’s rules', () => {
+describe('★★ classifyDispatchError - the operator’s classes, the platform’s rules', () => {
   it.each([
     [
       'Token refresh failed for shopify: shopify_token_refresh_failed_401: <!DOCTYPE html>…',
@@ -278,12 +278,12 @@ describe('★★ classifyDispatchError — the operator’s classes, the platfor
     expect(classifyDispatchError(error)).toBe(expected);
   });
 
-  it('a 401 is the connection, not a permission — its repair is reconnecting', () => {
+  it('a 401 is the connection, not a permission - its repair is reconnecting', () => {
     expect(classifyDispatchError('request failed with 401')).toBe('connection');
   });
 });
 
-describe('★ plainErrorText — a tooltip, never a page', () => {
+describe('★ plainErrorText - a tooltip, never a page', () => {
   it('drops an HTML document and its tags, collapses, cuts', () => {
     expect(plainErrorText('Failed: x_401: <!DOCTYPE html><html><body>big</body></html>')).toBe(
       'Failed: x_401',

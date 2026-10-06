@@ -34,7 +34,7 @@ export type VoiceCreateResult =
     };
 
 /**
- * Bring your own Twilio — the old app's three steps, inside 13's Connect
+ * Bring your own Twilio - the old app's three steps, inside 13's Connect
  * panel (no design of its own). Stores the account's credentials and reads
  * its numbers; nothing answers calls until a number is activated.
  */
@@ -77,7 +77,7 @@ export type ActivationResult = {
   readonly failed: readonly string[];
 };
 
-/** Activates the chosen numbers one by one — each a write at Twilio; one failing stops none. */
+/** Activates the chosen numbers one by one - each a write at Twilio; one failing stops none. */
 export async function activateVoiceNumbers(
   channelId: string,
   numberIds: readonly string[],

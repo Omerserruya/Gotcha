@@ -18,7 +18,7 @@ import { featureRefusalFrom, tenantGateFrom } from './tenant-gate';
  * their organisation was locked out while the rest of the product worked.**
  *
  * Found by reading both sides. It needs a tenant whose plan denies something Home
- * reads, and the demo tenant is not one — so no walk could have found it.
+ * reads, and the demo tenant is not one - so no walk could have found it.
  */
 
 const refused = (code: string, extra: Record<string, unknown> = {}) =>
@@ -88,7 +88,7 @@ describe('★★ tenantGateFrom no longer claims the tenant is locked out', () =
   it('★★ still returns the gate for a real tenant gate', () => {
     /*
      * Both directions. A fix that made `tenantGateFrom` return null more often
-     * would also "pass" a test that only checked the feature codes — and then a
+     * would also "pass" a test that only checked the feature codes - and then a
      * suspended tenant would get no notice at all, which is the worse failure.
      */
     const gate = tenantGateFrom(

@@ -24,8 +24,8 @@ import {
 } from './CampaignResults';
 
 /**
- * Screen 05b. Only the send is recorded — `sent`, `failed`, `skipped` — so
- * these assert the parts made of it, and that every other part is "—" in
+ * Screen 05b. Only the send is recorded - `sent`, `failed`, `skipped` - so
+ * these assert the parts made of it, and that every other part is "-" in
  * its shape rather than a confident zero.
  */
 const campaign = (over: Record<string, unknown> = {}): Campaign =>
@@ -60,7 +60,7 @@ describe('★ the figures the send gives', () => {
     expect(sendHours(campaign({ completedAt: '2026-10-03T15:00:00.000Z' }))).toHaveLength(12);
   });
 
-  it('⚠ an end before the start, inside one hour, is no axis — not one bar', () => {
+  it('⚠ an end before the start, inside one hour, is no axis - not one bar', () => {
     // Floored to 15:00, the start would sit before an end of 15:10.
     expect(
       sendHours(
@@ -72,7 +72,7 @@ describe('★ the figures the send gives', () => {
     ).toEqual([]);
   });
 
-  it('⚠ without both ends there is no axis — never an invented one', () => {
+  it('⚠ without both ends there is no axis - never an invented one', () => {
     expect(sendHours(campaign({ completedAt: null }))).toEqual([]);
     expect(sendHours(campaign({ startedAt: null }))).toEqual([]);
     expect(
@@ -86,13 +86,13 @@ describe('★ the figures the send gives', () => {
   });
 });
 
-describe('★★ every part drawn; what nothing records is "—"', () => {
-  it('★ the strip: Sent with what did not arrive; the rest "—", never 0', async () => {
+describe('★★ every part drawn; what nothing records is "-"', () => {
+  it('★ the strip: Sent with what did not arrive; the rest "-", never 0', async () => {
     render(await ResultStrip({ campaign: campaign() }));
     expect(screen.getByTestId('results-sent')).toHaveTextContent('1,228');
     expect(screen.getByTestId('results-sent')).toHaveTextContent("12 didn't arrive");
     for (const key of ['delivered', 'opened', 'replied', 'bought', 'optedOut']) {
-      expect(screen.getByTestId(`results-${key}`)).toHaveTextContent('—');
+      expect(screen.getByTestId(`results-${key}`)).toHaveTextContent('-');
       expect(screen.getByTestId(`results-${key}`)).not.toHaveTextContent('0');
     }
   });
@@ -102,10 +102,10 @@ describe('★★ every part drawn; what nothing records is "—"', () => {
     expect(screen.getByTestId('results-sent')).not.toHaveTextContent("didn't arrive");
   });
 
-  it('★ what it brought in: "—", from the messages sent; the actions not live', async () => {
+  it('★ what it brought in: "-", from the messages sent; the actions not live', async () => {
     render(await BroughtIn({ campaign: campaign() }));
     const card = screen.getByTestId('results-brought');
-    expect(card).toHaveTextContent('—');
+    expect(card).toHaveTextContent('-');
     expect(card).toHaveTextContent('from 1,228 messages');
     expect(screen.getByText('Send this again in a month')).toHaveAttribute('aria-disabled', 'true');
     expect(card.querySelectorAll('button')).toHaveLength(0);

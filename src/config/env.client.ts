@@ -30,7 +30,7 @@ export type ClientEnv = z.infer<typeof clientEnvSchema>;
  * `.default()` and `.optional()` fire on `undefined` only, and a Dockerfile
  * `ARG X=""` or a compose `${X:-}` supplies an empty string. Without this,
  * `APP_ENV: ''` throws the enum and takes the entire browser bundle down at
- * module load — a healthy container serving a blank app.
+ * module load - a healthy container serving a blank app.
  */
 const parsed = clientEnvSchema.safeParse(
   emptyIsUnset({

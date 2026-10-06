@@ -12,7 +12,7 @@ import {
  * Screen 08's "out of date" counter.
  *
  * ★ THE THRESHOLD IS OURS AND THE DATE IS THEIRS. No staleness policy exists
- * anywhere in the platform — no field, no job, no threshold. Ninety days is
+ * anywhere in the platform - no field, no job, no threshold. Ninety days is
  * a judgement, chosen between the design's own "rescanned yesterday · Fresh"
  * and "last change 5 months ago · Ageing", and the screen prints the date so
  * a reader can disagree with the verdict without disagreeing with the fact.
@@ -49,15 +49,15 @@ describe('★★ out of date, and the two things it is not', () => {
   it('★★ an EMPTY source is not out of date', () => {
     /*
      * `lastRefreshed` is null for a source holding nothing. Empty and old
-     * are different states with different repairs — one needs content, the
-     * other needs a refresh — and counting the first as the second sends
+     * are different states with different repairs - one needs content, the
+     * other needs a refresh - and counting the first as the second sends
      * somebody to re-read a folder with nothing in it.
      */
     expect(staleSources([source({ documents: [] })], NOW)).toHaveLength(0);
     expect(undatedSources([source({ documents: [] })])).toHaveLength(0);
   });
 
-  it('★★ an UNDATED source is not out of date either — it is unknown', () => {
+  it('★★ an UNDATED source is not out of date either - it is unknown', () => {
     /*
      * `lastRefreshed` is also null when documents exist but carry no
      * `updatedAt`. "We cannot tell when this was last read" is a different

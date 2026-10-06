@@ -1,7 +1,7 @@
 /* Pure: the dialer (server) and the transfer panel (client) both use these. */
 
 /**
- * A number typed or pasted as itself: a leading + and 8–15 digits once
+ * A number typed or pasted as itself: a leading + and 8-15 digits once
  * spaces, dashes and brackets are dropped. The server validates E.164 again.
  */
 export function pastedNumber(query: string): string | null {

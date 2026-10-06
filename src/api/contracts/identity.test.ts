@@ -10,8 +10,8 @@ import { currentUserSchema, membershipSchema } from './identity';
  * ════════════════════════════════════════════════════════════════════════════
  * Copied from `listMemberships` in `services/auth/src/routes/auth.ts:24` and
  * from the `res.json` beneath it. The contract this replaces required
- * `tenantId` at the top of a membership, which that route has never sent —
- * the tenant is nested — so it rejected every response the endpoint has ever
+ * `tenantId` at the top of a membership, which that route has never sent -
+ * the tenant is nested - so it rejected every response the endpoint has ever
  * produced, and took two screens with it.
  */
 
@@ -51,7 +51,7 @@ describe('★★ the shape the route actually sends', () => {
     /*
      * THE DEFECT. `tenantId` was required at the top of a membership and is
      * nested at `tenant.id`. One required key that does not exist fails the
-     * element, the array, and the whole response — `looseObject` and the
+     * element, the array, and the whole response - `looseObject` and the
      * optional siblings cannot rescue it.
      */
     const parsed = currentUserSchema.parse(ME);
@@ -64,7 +64,7 @@ describe('★★ the shape the route actually sends', () => {
     /*
      * Neither caller reads `memberships`. 04f wants `user.id` and screen 18
      * wants `user.phoneNumber`, and both got nothing for as long as this was
-     * wrong — the edit control hidden from every author, and the WhatsApp
+     * wrong - the edit control hidden from every author, and the WhatsApp
      * destination reading as absent for everybody.
      *
      * Asserted as the property that matters: the field the callers DO use
@@ -76,7 +76,7 @@ describe('★★ the shape the route actually sends', () => {
 
   it('★ tolerates a null tenant name, which the route can send', () => {
     // `tenantName: tenant?.name ?? null`. `z.string().optional()` rejects
-    // null — a second route into the same blank screen, from a tenant row
+    // null - a second route into the same blank screen, from a tenant row
     // that could not be read.
     expect(currentUserSchema.parse({ ...ME, tenantName: null }).tenantName).toBeNull();
     expect(
@@ -90,7 +90,7 @@ describe('★★ the shape the route actually sends', () => {
   it('★ keeps `userId`, which is the User.id an author is compared against', () => {
     /*
      * `listMemberships` maps `userId: m.id` over `prisma.user`, so this is
-     * `User.id` — the same id `CustomerNote.authorUserId` holds, and NOT the
+     * `User.id` - the same id `CustomerNote.authorUserId` holds, and NOT the
      * session's Authentik `sub`. Verified at the mapping rather than
      * inferred from the shape of the string, because the whole point of this
      * read is that two identifiers for one person were being confused.

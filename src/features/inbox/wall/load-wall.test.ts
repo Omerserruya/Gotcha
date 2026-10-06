@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 
 /*
- * `serverApi` answers by path, through the CALLER'S schema — so a strict
+ * `serverApi` answers by path, through the CALLER'S schema - so a strict
  * envelope is tested as strict, the way the real client parses it.
  */
 const answers = vi.hoisted(() => new Map<string, unknown>());
@@ -42,7 +42,7 @@ beforeEach(() => {
   asked.length = 0;
 });
 
-describe('★★ memory — exactly what the AI is given (cd504002)', () => {
+describe('★★ memory - exactly what the AI is given (cd504002)', () => {
   it('★ facts with a quiet source; blanks dropped; an unknown source named nothing', async () => {
     answers.set(MEMORY, {
       data: {
@@ -72,13 +72,13 @@ describe('★★ memory — exactly what the AI is given (cd504002)', () => {
     expect((await loadWallPerson(null, 'c1')).memory).toEqual({ facts: [], historical: null });
   });
 
-  it('★★ an older service (no envelope) is unread — never "knows nothing"', async () => {
+  it('★★ an older service (no envelope) is unread - never "knows nothing"', async () => {
     answers.set(MEMORY, '<html>404</html>');
     expect((await loadWallPerson(null, 'c1')).memory).toBeNull();
   });
 });
 
-describe('★★ history (ed8f3e1f) — keyed on the contact, strict on the envelope', () => {
+describe('★★ history (ed8f3e1f) - keyed on the contact, strict on the envelope', () => {
   it('★★ no contact: no read made, and nothing claimed', async () => {
     answers.set(MEMORY, { data: { conversationId: 'c1', facts: [], historical: null } });
     const person = await loadWallPerson(null, 'c1');
@@ -138,7 +138,7 @@ describe('★★ history (ed8f3e1f) — keyed on the contact, strict on the enve
   });
 });
 
-describe('★★ orders by contact (e30900fd) — strict, and only with a contact', () => {
+describe('★★ orders by contact (e30900fd) - strict, and only with a contact', () => {
   const ORDERS = '/api/commerce-context/customers/k1/orders';
 
   it('asks for 10 in the reader’s language; reads Woo with matchedBy', async () => {

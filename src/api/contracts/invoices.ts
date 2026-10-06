@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { safeLinkUrl } from '@/lib/safe-url';
 
 /**
- * Invoices — screen 17.
+ * Invoices - screen 17.
  *
  * `GET /api/billing/invoices` → **`{ invoices }`**, a fifth envelope shape on
  * this platform after `{ data }`, `{ data, nextCursor }`, a bare array and a
@@ -16,7 +16,7 @@ import { safeLinkUrl } from '@/lib/safe-url';
  * invoices sit on the demo tenant, unreachable."*
  *
  * **All of that was written in good faith and was wrong.** `invoices.ts` is
- * mounted — at bare `/api`, like every billing router, which is why searching
+ * mounted - at bare `/api`, like every billing router, which is why searching
  * for an `/api/billing` mount finds nothing.
  *
  * And what it was hiding is not cosmetic: **four invoices, every one FAILED,
@@ -43,7 +43,7 @@ export const invoiceSchema = z.object({
   id: z.string().min(1),
   type: z.string().default(''),
   status: z.enum(INVOICE_STATUSES).catch('DRAFT'),
-  /** A decimal string from the route — never parsed to a float. */
+  /** A decimal string from the route - never parsed to a float. */
   amount: z.string().default('0'),
   currency: z.string().default('ILS'),
   issuedAt: z.string().nullable().default(null),
@@ -56,7 +56,7 @@ export const invoiceSchema = z.object({
 
 export type Invoice = z.infer<typeof invoiceSchema>;
 
-/** `{ invoices }` — the fifth envelope. */
+/** `{ invoices }` - the fifth envelope. */
 export const invoiceListSchema = z
   .object({ invoices: z.array(invoiceSchema).default([]) })
   .transform(({ invoices }) => invoices);
@@ -69,7 +69,7 @@ export const invoiceListSchema = z
  * ════════════════════════════════════════════════════════════════════════════
  * The contract says "a URL"; the type says "a string the payment provider
  * sent". Nothing between the two ever checked which, and the screen rendered
- * it as `href={invoice.providerPdfUrl ?? '#'}` — the precise sink
+ * it as `href={invoice.providerPdfUrl ?? '#'}` - the precise sink
  * `safeLinkUrl` was written for and, until now, **the module had no callers at
  * all.** A guard nobody calls is worse than no guard, because its existence is
  * the reassurance.
@@ -97,11 +97,11 @@ export function receiptAbsence(invoice: Invoice): 'not_paid' | 'missing' | 'unus
   // A failed or draft invoice was never paid, so no receipt was ever issued.
   if (invoice.status !== 'PAID') return 'not_paid';
   /*
-   * ★★ THREE REASONS, NOT TWO — AND THE THIRD IS THE ONE SOMEBODY MUST SEE.
+   * ★★ THREE REASONS, NOT TWO - AND THE THIRD IS THE ONE SOMEBODY MUST SEE.
    * "Paid, but the receipt hasn't arrived from the payment provider" is a
    * sentence about the provider being slow. If a receipt DID arrive and we
    * refused it, that sentence is false, it blames the wrong party, and it
-   * reads as something that will fix itself — so nobody ever looks.
+   * reads as something that will fix itself - so nobody ever looks.
    *
    * A refused URL means the provider sent something we could not safely open,
    * which is a thing to investigate rather than to wait out.

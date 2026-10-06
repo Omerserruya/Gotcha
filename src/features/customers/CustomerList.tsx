@@ -15,7 +15,7 @@ import { chipOf, insightOf, money, reasonKey, situationLine, valueCell } from '.
 import styles from './Customers.module.css';
 
 /**
- * Screen 04 — the customer list.
+ * Screen 04 - the customer list.
  *
  * ── WHAT THE COLLAPSE ACTUALLY JOINS ──
  * **Not two channels.** The unifier that populates `personId` matches on
@@ -23,7 +23,7 @@ import styles from './Customers.module.css';
  * an opaque page-scoped id. So a person who writes from WhatsApp and from
  * Instagram is two rows and will stay two rows.
  *
- * The phone-only rule is a safety argument rather than an oversight — nothing
+ * The phone-only rule is a safety argument rather than an oversight - nothing
  * customer-typed can reach `Contact.phone`, so phone matching structurally
  * cannot merge two strangers, where email matching could. What it does join
  * is a WhatsApp contact and a staff-entered contact carrying the same number,
@@ -42,18 +42,18 @@ import styles from './Customers.module.css';
  *
  * Both fields now come back and the route filters tombstones itself, so rows
  * collapse by `personId` and the design's first line is finally true. A row
- * with no `personId` is its own person — the unifier assigns one only when a
+ * with no `personId` is its own person - the unifier assigns one only when a
  * shared identifier is found, so its absence means *"not known to be the same
  * human"*, never *"the same as the others"*.
  *
  * ── THE COUNT COUNTS PEOPLE, WHICH IS NOT THE SAME AS ROWS ──
  * This screen's whole claim is *"People, not rows"*, so the header is the one
- * place that must not confuse the two — and it is the place that did: the
+ * place that must not confuse the two - and it is the place that did: the
  * count was the number of contact ROWS under a label reading "people", while
  * the list below it showed the collapsed set. Two people on screen, three in
  * the header.
  *
- * So the number is now `collapseToPeople(rows).length` — it counts exactly
+ * So the number is now `collapseToPeople(rows).length` - it counts exactly
  * what is rendered, and it is exact because it is derived from the same array.
  *
  * **The server's `total` never appears beside the word "people".** It counts
@@ -118,7 +118,7 @@ export async function CustomerList({
   return (
     /*
       04's list card: rows at 66, `13px 18px`, gap 14. Each leads with what
-      is true today — their last word, waiting on you or not — then, on the
+      is true today - their last word, waiting on you or not - then, on the
       right, what they are worth and when they last wrote. The handle moved
       to the row's title: it is how to reach them, not what is true.
     */
@@ -221,12 +221,12 @@ export async function CustomerList({
                         </bdi>
                       ) : (
                         <span title={t('today.noWord')} aria-label={t('today.noWord')}>
-                          —
+                          -
                         </span>
                       )}
                     </span>
                   </span>
-                  {/* 02: the amount over how many orders — or "—" with why. */}
+                  {/* 02: the amount over how many orders - or "-" with why. */}
                   <span
                     className={styles.rowValue}
                     title={
@@ -239,7 +239,7 @@ export async function CustomerList({
                     data-testid={`value-${row.id}`}
                   >
                     <span className={styles.rowAmount}>
-                      {value.kind === 'amount' ? money(value.amount, value.currency, locale) : '—'}
+                      {value.kind === 'amount' ? money(value.amount, value.currency, locale) : '-'}
                     </span>
                     {value.kind === 'amount' || value.kind === 'mixed' ? (
                       <span className={styles.rowOrders}>
@@ -250,7 +250,7 @@ export async function CustomerList({
                     ) : null}
                   </span>
                   <span className={styles.rowWhen} data-testid={`since-${row.id}`}>
-                    {since ? t(`since.${since.key}` as 'since.days', { n: since.n ?? 0 }) : '—'}
+                    {since ? t(`since.${since.key}` as 'since.days', { n: since.n ?? 0 }) : '-'}
                   </span>
                 </Link>
               </li>
@@ -270,7 +270,7 @@ export async function CustomerList({
   );
 }
 
-/** 02's three chips — everyone, talking now, gone quiet — each a live count, or none when unread. */
+/** 02's three chips - everyone, talking now, gone quiet - each a live count, or none when unread. */
 export async function Segments({
   segment,
   everyone,
@@ -373,7 +373,7 @@ const WHO = [
 
 /**
  * 02's "Who your customers are" (backend 63985641): four counts, each bar a
- * share of everyone. No store, or a failed read: "—" with why, never zeros.
+ * share of everyone. No store, or a failed read: "-" with why, never zeros.
  */
 export async function WhoTheyAre({
   segments = null,
@@ -404,7 +404,7 @@ export async function WhoTheyAre({
             <li key={key} className={styles.whoRow} data-testid={`who-${key}`}>
               <span className={styles.whoTop}>
                 <span>{t(key)}</span>
-                <span className={styles.whoCount}>{value === null ? '—' : n.format(value)}</span>
+                <span className={styles.whoCount}>{value === null ? '-' : n.format(value)}</span>
               </span>
               <span className={styles.whoTrack} aria-hidden="true">
                 {value === null ? null : (
@@ -434,7 +434,7 @@ function initialsOf(label: string | null): string {
 }
 
 /**
- * 04's right-hand "Who your customers are", by the channel they write on —
+ * 04's right-hand "Who your customers are", by the channel they write on -
  * counted from the people on this list. Only when the list is whole: from a
  * truncated one it would describe the first 500, not the business.
  */

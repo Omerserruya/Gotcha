@@ -30,7 +30,7 @@ export interface DecidedTrace {
 }
 
 /**
- * How many of this kind were approved, this one included — and rejected.
+ * How many of this kind were approved, this one included - and rejected.
  * The history is the server's snapshot, which after a refresh contains this
  * decision too, so it is excluded by id and counted once.
  */
@@ -46,14 +46,14 @@ export function runOf(
 }
 
 /**
- * Screen 03b — the moment after, measured.
+ * Screen 03b - the moment after, measured.
  *
  * The right pane becomes the moment until you open the next request:
  *
  *   the confirmation   green-edged (`#C9D8B4`), a check, what was done, how
- *                      long ago; then the chain — recorded, carried out (or
+ *                      long ago; then the chain - recorded, carried out (or
  *                      not, in the provider's words), the customer told
- *   what was sent      the message's state; its text is "—" (not recorded
+ *   what was sent      the message's state; its text is "-" (not recorded
  *                      on the approval, and the detail route returns inbound
  *                      messages only)
  *   the pattern        after a run of the same kind: how many, from the
@@ -61,8 +61,8 @@ export function runOf(
  *   up next            the next request and "Open it"
  *
  * ⚠ Undo is drawn and not live: there is no undo in this platform, and its
- * tooltip says so. Before a decision nothing mentions reversal at all — see
- * the screen's own test — because a promise read before an irreversible act
+ * tooltip says so. Before a decision nothing mentions reversal at all - see
+ * the screen's own test - because a promise read before an irreversible act
  * changes the act. "Add something", the discount, and "Let GOTCHA handle
  * them" (a policy write) are drawn and not live too.
  */
@@ -97,7 +97,7 @@ export function MomentAfter({
   /*
     ★ RETRY ON THE DISPATCH, NOT ONLY ON THE ROW. The approve route answers
     with the row as it was BEFORE dispatch, so `executionState` there is never
-    FAILED — measured on dev, a failed refund offered no retry. The response's
+    FAILED - measured on dev, a failed refund offered no retry. The response's
     own `dispatch.ok` is the fact.
   */
   const retryable =
@@ -164,7 +164,7 @@ export function MomentAfter({
           <li className={styles.momentStep} data-testid="moment-fact-decision" data-state="ok">
             {t('moment.factDecision')}
           </li>
-          {/* 2 · The execution, from the approve response — the step that actually fails. */}
+          {/* 2 · The execution, from the approve response - the step that actually fails. */}
           <li
             className={styles.momentStep}
             data-testid="moment-fact-execution"
@@ -172,7 +172,7 @@ export function MomentAfter({
           >
             {failed ? t('moment.factExecutionFailed') : t('moment.factExecutionRan')}
             {/*
-              ★ Why, as a sentence by class — never the provider's text, which
+              ★ Why, as a sentence by class - never the provider's text, which
               arrived once as Shopify's whole HTML error page. The text, plain
               and cut short, is the tooltip for whoever is debugging.
             */}
@@ -201,7 +201,7 @@ export function MomentAfter({
           </li>
           {/*
             3 · The customer: `customerNotifiedAt`, the backend's own once-only
-            guard. "Not yet" is not "failed" — delivery may still be retried.
+            guard. "Not yet" is not "failed" - delivery may still be retried.
           */}
           <li
             className={styles.momentStep}
@@ -221,7 +221,7 @@ export function MomentAfter({
             {customerTold ? t('moment.sent.delivered') : t('moment.sent.notYet')}
           </span>
         </header>
-        <p className={styles.momentMessage}>—</p>
+        <p className={styles.momentMessage}>-</p>
         <div className={styles.momentCardActions}>
           <span className={styles.momentButton} aria-disabled="true">
             {t('moment.sent.add')}

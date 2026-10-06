@@ -2,8 +2,8 @@
  * 12e's "Ends": the last second of a day, in the workspace's time zone, as
  * an instant (backend 53a5079a takes ISO with an offset; `Z` is one).
  *
- * "7 days" is the end of the day seven days from today THERE — not now + 168
- * hours, which would end mid-afternoon — and the zone's offset is that DAY's,
+ * "7 days" is the end of the day seven days from today THERE - not now + 168
+ * hours, which would end mid-afternoon - and the zone's offset is that DAY's,
  * so a date across a daylight-saving change ends at its own 23:59:59.
  */
 
@@ -24,7 +24,7 @@ function offsetMinutes(at: number, timeZone: string): number {
   return Math.round((local - at) / 60_000);
 }
 
-/** "2026-10-13" — the calendar date there, `days` from `now`. */
+/** "2026-10-13" - the calendar date there, `days` from `now`. */
 export function dateIn(timeZone: string, now: Date, days = 0): string {
   const ymd = new Intl.DateTimeFormat('en-CA', {
     timeZone,

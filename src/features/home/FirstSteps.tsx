@@ -9,13 +9,13 @@ import { GoLiveButton } from './GoLiveButton';
 import { nextStep, setupProgress, stepCopyKey, stepDestination } from './first-steps';
 
 /**
- * "First steps" — screen 01c.
+ * "First steps" - screen 01c.
  *
  * Home in its first state, not a separate onboarding page: same shell, same
  * command box, one block beneath it. A snapshot of zero and an empty queue say
  * nothing, so this takes their place until the workspace goes live.
  *
- * Steps are ordered by what unblocks GOTCHA, and exactly one is ever "next" —
+ * Steps are ordered by what unblocks GOTCHA, and exactly one is ever "next" -
  * both decided by the server. Recomputing either here would let this block and
  * Settings disagree about what to do now.
  */
@@ -69,7 +69,7 @@ export async function FirstSteps({
           ))}
         </div>
 
-        {/* One scroller: the steps, then Go live as the last item (02) — never pinned over them. */}
+        {/* One scroller: the steps, then Go live as the last item (02) - never pinned over them. */}
         <div className={styles.scroller}>
           <ol className={styles.list}>
             {setup.steps.map((step, index) => (
@@ -87,7 +87,7 @@ export async function FirstSteps({
 
           {/*
         01c's Go live: locked, with what holds it, until the server says it is
-        eligible — then live (Omer, decision 01), asking once before the write
+        eligible - then live (Omer, decision 01), asking once before the write
         that puts GOTCHA in front of real customers.
       */}
           <div className={styles.goLive} data-testid="go-live">
@@ -118,7 +118,7 @@ export async function FirstSteps({
                 data-testid="go-live-button"
                 title={t('goLive.lockedBy', {
                   steps:
-                    (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') || '—',
+                    (setup.goLive?.blockedBy ?? []).map((id) => stepTitle(id, t)).join(', ') || '-',
                 })}
               >
                 {t('goLive.locked')}
@@ -130,7 +130,7 @@ export async function FirstSteps({
       {/* True: once live, Home's face is the ordinary one (`homeFace`). */}
       <p className={styles.foot} data-testid="first-steps-foot">
         <span>{t('foot')}</span>
-        {/* 02's "Send yourself a test message" — no screen sends one yet: drawn, with why. */}
+        {/* 02's "Send yourself a test message" - no screen sends one yet: drawn, with why. */}
         <span
           className={styles.footLink}
           aria-disabled="true"
@@ -240,8 +240,8 @@ function Row({
 }
 
 /**
- * 02 gives the two steps that decide whether GOTCHA can act — the store, the
- * handover rules — their explanation on a second line; the rest stay one line.
+ * 02 gives the two steps that decide whether GOTCHA can act - the store, the
+ * handover rules - their explanation on a second line; the rest stay one line.
  */
 const TWO_LINES = new Set(['connect_store', 'handover_rules']);
 
@@ -281,7 +281,7 @@ function StepAction({
   );
 }
 
-/** "After you hire your first AI employee." — a sentence per blocker. */
+/** "After you hire your first AI employee." - a sentence per blocker. */
 function afterStep(id: string, t: Translate): string {
   const key = stepCopyKey(id);
   return key ? t(`step.${key}.after`) : t('blockedBy', { step: id });
@@ -295,24 +295,24 @@ function stepTitle(id: string, t: Translate): string {
 /**
  * The scan result, folded into the knowledge step once it is done.
  *
- * "avivco.il read, 214 pages, 38 answers drafted" — the number is the
+ * "avivco.il read, 214 pages, 38 answers drafted" - the number is the
  * reassurance. "We read your site" says nothing without how much of it.
  */
 function ingestSuffix(step: SetupStep, ingest: KnowledgeIngest, t: Translate): string {
   if (step.id !== 'add_knowledge' || !ingest) return '';
   const read = t('ingest', { pages: ingest.pagesRead, drafted: ingest.answersDrafted });
   /*
-    The answers waiting on a person, counted from the TRUE total —
+    The answers waiting on a person, counted from the TRUE total -
     `pendingTopics` is a sample. This lived on `hire_employee`, which the
     server completes when an employee exists, not when answers are confirmed.
   */
-  if (ingest.answersNeedingConfirmation === 0) return ` — ${read}`;
+  if (ingest.answersNeedingConfirmation === 0) return ` - ${read}`;
   // The count from the total; the names (three) from the sample.
   const topics = ingest.pendingTopics.slice(0, 3).map((entry) => entry.topic);
   const waiting = t('ingestWaiting', { count: ingest.answersNeedingConfirmation });
   return topics.length > 0
-    ? ` — ${read} · ${waiting}: ${topics.join(', ')}`
-    : ` — ${read} · ${waiting}`;
+    ? ` - ${read} · ${waiting}: ${topics.join(', ')}`
+    : ` - ${read} · ${waiting}`;
 }
 
 function clockTime(at: string, format: Format): string {

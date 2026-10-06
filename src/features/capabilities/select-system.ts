@@ -5,9 +5,9 @@ import { isConnected, type Integration } from '@/api/contracts/integrations';
  * Which system 10's detail shows, and its actions.
  *
  * `?system=` names a connected slug, `builtin` (the actions that belong to
- * no provider), or a system that is NOT connected — which is its own screen,
+ * no provider), or a system that is NOT connected - which is its own screen,
  * with Connect (Omer, 2026-10-04), and has no actions to set yet. Anything
- * else — absent or unknown — falls back to the first connected system that
+ * else - absent or unknown - falls back to the first connected system that
  * brings actions, else the built-in ones: the detail is never empty while
  * there is something to show.
  */

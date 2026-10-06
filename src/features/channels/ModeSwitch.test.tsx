@@ -25,7 +25,7 @@ beforeEach(() => {
   refresh.mockReset();
 });
 
-describe('★★ 13b — AI mode, 02’s two segments, live', () => {
+describe('★★ 13b - AI mode, 02’s two segments, live', () => {
   it('the current one is marked; pressing it writes nothing', async () => {
     show();
     expect(screen.getByTestId('mode-HUMAN_WITH_COPILOT-ca1')).toHaveAttribute(
@@ -36,7 +36,7 @@ describe('★★ 13b — AI mode, 02’s two segments, live', () => {
     expect(setResponseMode).not.toHaveBeenCalled();
   });
 
-  it('the other asks first — what changes for customers — then switches and re-reads', async () => {
+  it('the other asks first - what changes for customers - then switches and re-reads', async () => {
     setResponseMode.mockResolvedValue({ ok: true, data: {} });
     show();
     await userEvent.click(screen.getByTestId('mode-AI_AUTO_REPLY-ca1'));

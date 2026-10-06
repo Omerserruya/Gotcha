@@ -36,7 +36,7 @@ describe('null provenance means unknown, never “from the website”', () => {
 
 describe('nothing is attributed anywhere yet', () => {
   it('★ reports the estate’s actual state: no field is marked', () => {
-    // `tenant_settings WHERE key='profileFieldProvenance'` — zero rows, whole
+    // `tenant_settings WHERE key='profileFieldProvenance'` - zero rows, whole
     // database. So a rescan applies nothing and offers everything, today.
     const measured = workspace({
       organizationName: null,
@@ -89,7 +89,7 @@ describe('the voice basis is a placeholder, and the contract must accept it', ()
      * the whole voice editor vanished behind "could not be loaded".
      *
      * The stub used to send 0. Backend changed it to null, which is MORE
-     * truthful — zero analysed is a claim, null is "we do not know" — and the
+     * truthful - zero analysed is a claim, null is "we do not know" - and the
      * guard refused the improvement.
      */
     const v = workspaceVoiceSchema.parse({

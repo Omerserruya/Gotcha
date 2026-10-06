@@ -26,7 +26,7 @@ import styles from './Wall.module.css';
  *   ask         Ask Copilot anything…                        → AskCopilot
  *
  * ★ Where a value has no source yet the element keeps its shape and says
- *   "—", with a title naming what it waits for. Never a zero, never a guess.
+ *   "-", with a title naming what it waits for. Never a zero, never a guess.
  */
 
 /**
@@ -70,8 +70,8 @@ export async function CopilotWall({
 
   /*
    * ★ AN UNIDENTIFIED VISITOR (Backend c240bea4): Shopify live chat has no
-   *   contact until the visitor is identified — by design, not a failed
-   *   read. One line says so, in place of three blocks of "—"; nothing is
+   *   contact until the visitor is identified - by design, not a failed
+   *   read. One line says so, in place of three blocks of "-"; nothing is
    *   read for a person who is not one yet.
    */
   if (contactId === null && conversation.channel === 'SHOPIFY_LIVE_CHAT') {
@@ -178,7 +178,7 @@ async function PersonBlock({
                 date: format.dateTime(new Date(since), { month: 'long', year: 'numeric' }),
               })
             ) : (
-              <span title={why}>—</span>
+              <span title={why}>-</span>
             )}
             {shop?.defaultAddress ? (
               <>
@@ -232,7 +232,7 @@ async function PersonBlock({
 }
 
 /**
- * What GOTCHA learned — exactly what the AI is given (Backend cd504002, the
+ * What GOTCHA learned - exactly what the AI is given (Backend cd504002, the
  * prompt's own loaders): the facts it is told not to ask again, each with a
  * quiet word on where it came from; then "From before", an imported
  * history's summary, marked as background rather than confirmed.
@@ -242,7 +242,7 @@ async function Memory({ memory }: { readonly memory: WallMemory | null }) {
   if (memory === null) {
     return (
       <p className={styles.note} data-testid="wall-memory-unread" title={t('unread')}>
-        {t('learned')} · —
+        {t('learned')} · -
       </p>
     );
   }
@@ -324,7 +324,7 @@ function Stat({
         data-tone={tone}
         title={value === null ? why : undefined}
       >
-        {value ?? '—'}
+        {value ?? '-'}
       </dd>
     </div>
   );

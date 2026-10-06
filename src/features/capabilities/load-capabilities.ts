@@ -33,7 +33,7 @@ export interface CapabilityData {
   /**
    * How often each tool has actually run.
    *
-   * `null` when the read failed — which is NOT "never used". The screen says
+   * `null` when the read failed - which is NOT "never used". The screen says
    * nothing about a tool's history rather than printing a zero, because
    * "used 0 times" is a claim and a failed read is not evidence for it.
    *
@@ -42,7 +42,7 @@ export interface CapabilityData {
    */
   readonly usage: readonly ToolUsage[] | null;
   /**
-   * The catalogue behind screen 10's rail — connected and available in one
+   * The catalogue behind screen 10's rail - connected and available in one
    * list, split on `tenantConnection`.
    *
    * `null` is a failed read. An empty array would mean the catalogue itself
@@ -66,7 +66,7 @@ export async function loadCapabilities(): Promise<CapabilityData> {
      *
      * The permissions list needs none; this needs
      * `analytics:dashboard:read`. So somebody can legitimately see what
-     * GOTCHA may do and not see how often it has done it — which is a 403,
+     * GOTCHA may do and not see how often it has done it - which is a 403,
      * caught here like any other failure, and renders as the counts simply
      * not being there rather than as an error on a working screen.
      */
@@ -79,7 +79,7 @@ export async function loadCapabilities(): Promise<CapabilityData> {
     /*
      * The published catalogue with this tenant's connection on each row, so
      * connected-versus-available is one read rather than two. Gated on
-     * `integrations:connections:read`, a third permission again — each of
+     * `integrations:connections:read`, a third permission again - each of
      * these three panels can fail on its own and the screen degrades to the
      * ones that answered.
      */
@@ -118,7 +118,7 @@ export async function loadShopifyAvailability(): Promise<ShopifyAvailability | n
 /**
  * The store waiting to be claimed (the browser's pending cookie, sent on):
  * its domain; `'gone'` when there is no approval to claim (no cookie, or the
- * route has none — expired or used); `null` when the read itself failed.
+ * route has none - expired or used); `null` when the read itself failed.
  */
 export async function loadShopifyPending(): Promise<string | 'gone' | null> {
   const pending = (await cookies()).get(PENDING_COOKIE)?.value;

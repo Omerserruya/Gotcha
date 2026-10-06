@@ -1,10 +1,10 @@
 import type { AdminChoice } from '@/api/contracts/capabilities';
 
 /**
- * 07b–07d's choices, held locally while the flow is read-only.
+ * 07b-07d's choices, held locally while the flow is read-only.
  *
  * ★ THE SHAPE THE BUILDER WILL TAKE, SO GOING LIVE IS PLUMBING.
- * Each field maps to one call on `/api/ai-agents/builder` — none is made yet
+ * Each field maps to one call on `/api/ai-agents/builder` - none is made yet
  * (Omer's call; a DRAFT row per walk-through, an LLM readiness test, and an
  * employee answering live customers):
  *
@@ -42,7 +42,7 @@ export interface HireTool {
   readonly current: AdminChoice;
 }
 
-/** Step 1 is complete when there is a job — and, for "Something else", words. */
+/** Step 1 is complete when there is a job - and, for "Something else", words. */
 export function stepOneDone(plan: HirePlan): boolean {
   if (plan.job === null) return false;
   return plan.job !== 'custom' || plan.goal.trim().length > 0;

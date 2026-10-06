@@ -12,7 +12,7 @@ import { CampaignCard } from './CampaignCard';
  * Screen 05's campaign card.
  *
  * This file exists because the card shipped through a capture rendering three
- * counters that are always zero — and it passed, because this tenant has no
+ * counters that are always zero - and it passed, because this tenant has no
  * broadcasts, so the card has never been photographed with a campaign behind
  * it. **The screen was accepted on its empty state.**
  */
@@ -55,7 +55,7 @@ describe('★★ a measurement nobody took is never shown as zero', () => {
      * increments them, so a merchant whose campaign WAS delivered and read
      * saw "0 delivered · 0 opened · 0 replied".
      *
-     * Three measurements presented as findings, none of them taken — the
+     * Three measurements presented as findings, none of them taken - the
      * calm wrong value at its purest: not a crash, not a blank, three
      * plausible numbers.
      */
@@ -69,12 +69,12 @@ describe('★★ a measurement nobody took is never shown as zero', () => {
   it('★ says delivered and opened are COMING, because the data exists', async () => {
     /*
      * `Message.broadcastId` is indexed and `Message.status` is updated from
-     * delivery receipts — this tenant has READ 139 · DELIVERED 8. So these
+     * delivery receipts - this tenant has READ 139 · DELIVERED 8. So these
      * are a groupBy away, and "not shown yet" is true where "none" would be
      * false.
      */
     await show();
-    // One line on the screen, the reason as its tooltip — 02 shows states.
+    // One line on the screen, the reason as its tooltip - 02 shows states.
     const pending = screen.getByTestId('pending-c1');
     expect(pending).toHaveTextContent(/aren’t counted yet/i);
     expect(pending.getAttribute('title')).toMatch(/aren't shown yet/i);
@@ -84,7 +84,7 @@ describe('★★ a measurement nobody took is never shown as zero', () => {
   it('★★ and says replied is ABSENT, which is a different fact', async () => {
     /*
      * No inbound path carries a broadcast id and `repliedAt` is never
-     * written. So this one is not pending — there is nothing to count, and
+     * written. So this one is not pending - there is nothing to count, and
      * one sentence for both would promise a number that is not coming.
      */
     await show();
@@ -134,7 +134,7 @@ describe('★ "When" says it once', () => {
   });
 });
 
-describe('★ 05b — a campaign that has gone out links to what it did', () => {
+describe('★ 05b - a campaign that has gone out links to what it did', () => {
   it.each([
     ['COMPLETED', true],
     ['CANCELLED', true],
@@ -195,7 +195,7 @@ describe('★★ 02\'s "Who": who they are, then how many', () => {
     expect(await who(null)).toHaveTextContent('People added to it directly');
   });
 
-  it('★★ a rule is never put into words — "a saved audience"', async () => {
+  it('★★ a rule is never put into words - "a saved audience"', async () => {
     // `tags` is Json and the resolver filters it as a scalar: "tagged VIP"
     // would describe a selection the platform does not make.
     const tagged = {
@@ -220,11 +220,11 @@ describe('★★ 02\'s "Who": who they are, then how many', () => {
     );
   });
 
-  it('★★ an unknown form — dev\'s own `{"note":"ui test"}` — is "a saved audience", never a rejected campaign', async () => {
+  it('★★ an unknown form - dev\'s own `{"note":"ui test"}` - is "a saved audience", never a rejected campaign', async () => {
     expect(await who({ note: 'ui test' })).toHaveTextContent(/^A saved audience400 people$/);
   });
 
-  it('★ an unknown form is never read as "everyone" — only a composite can say that', async () => {
+  it('★ an unknown form is never read as "everyone" - only a composite can say that', async () => {
     expect(await who({ everyone: true })).toHaveTextContent(/^A saved audience/);
   });
 

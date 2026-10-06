@@ -28,7 +28,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * cookie doing their jobs without the form knowing either exists.
  *
  * They return a result rather than throwing, because the interesting failures
- * here are not exceptions — a stale write and a failed validation are both
+ * here are not exceptions - a stale write and a failed validation are both
  * answers the form has to render, not errors to catch.
  */
 
@@ -66,7 +66,7 @@ function classify(cause: unknown): WriteResult<never> {
  * editor cannot silently overwrite the first. The server only enforces it when
  * sent, which is why it is always sent from here.
  *
- * `hours` is replaced wholesale, never merged — it describes a whole week, and
+ * `hours` is replaced wholesale, never merged - it describes a whole week, and
  * merging a partial one produces a schedule nobody wrote.
  */
 export async function saveWorkspaceFacts(
@@ -120,8 +120,8 @@ export async function saveWorkspaceVoice(guidance: string): Promise<WriteResult<
  * this do", asked before anyone commits to it.
  *
  * `unavailable` is its own outcome. The server returns 503 with no canned
- * fallback on purpose — a sample the model never produced would be the one
- * thing worse than no preview — and the screen must not dress that as an
+ * fallback on purpose - a sample the model never produced would be the one
+ * thing worse than no preview - and the screen must not dress that as an
  * ordinary error, because it is expected whenever the AI service is down.
  */
 export async function previewVoiceSample(
@@ -170,13 +170,13 @@ export async function saveProhibitedClaims(
 }
 
 /**
- * Scan the website again — screen 11b.
+ * Scan the website again - screen 11b.
  *
  * ★ THIS RE-CRAWLS A LIVE SITE. It is not free and it is not instant, but it
  * is safe in the one way that matters: `planRescan` writes only fields the
  * scan already owns, and everything else comes back as a proposal. On a
- * tenant whose provenance map is empty — which is every tenant on this
- * database — it therefore writes nothing at all.
+ * tenant whose provenance map is empty - which is every tenant on this
+ * database - it therefore writes nothing at all.
  *
  * Refusals arrive as `{ ok: false, reason }` with a 200, because "you have not
  * told us your website yet" and "the site did not answer" are sentences the
@@ -204,8 +204,8 @@ export async function runWorkspaceScan(): Promise<ScanResult | null> {
 /**
  * Take the website's value for offered fields.
  *
- * ★ STAMPS THEM `scan`-OWNED, NOT `human`. Provenance answers one question —
- * may a future scan refresh this silently? — so it records what the value
+ * ★ STAMPS THEM `scan`-OWNED, NOT `human`. Provenance answers one question -
+ * may a future scan refresh this silently? - so it records what the value
  * TRACKS rather than who clicked. Accepting the site's wording IS the consent
  * a silent refresh needs.
  *
@@ -214,7 +214,7 @@ export async function runWorkspaceScan(): Promise<ScanResult | null> {
  * direction. Before this endpoint existed, `scan` ownership was unreachable
  * and every scan offered everything forever.
  *
- * The body carries FIELD NAMES ONLY — values come from the stored proposal,
+ * The body carries FIELD NAMES ONLY - values come from the stored proposal,
  * so a client cannot mark arbitrary text as website-owned.
  */
 export async function acceptScanFields(fields: readonly string[]): Promise<AcceptResult | null> {

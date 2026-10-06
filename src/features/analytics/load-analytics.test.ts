@@ -17,7 +17,7 @@ beforeEach(() => {
   get.mockReset().mockResolvedValue([]);
 });
 
-describe('★★ the screen says "last 7 days" — and that is what it asks for', () => {
+describe('★★ the screen says "last 7 days" - and that is what it asks for', () => {
   it('overview and time saved are read for the last seven days', async () => {
     await loadAnalytics();
     const asked = (path: string) =>
@@ -71,7 +71,7 @@ describe('★ 06b’s reads', () => {
       expect(Date.parse(to) - Date.parse(from), path).toBe(7 * 24 * 60 * 60 * 1000);
     }
     const unanswered = asked('/api/analytics/unanswered-questions');
-    // `{ period, data }` — unwrapping would hand the array to an object schema.
+    // `{ period, data }` - unwrapping would hand the array to an object schema.
     expect(unanswered.raw).toBe(true);
     expect(unanswered.query?.limit).toBe(50);
   });
@@ -107,7 +107,7 @@ describe('★ 06c’s reads', () => {
     expect(data.agents).toEqual([]);
   });
 
-  it('⚠ a failed report is null — the table says it, not "no one on the team"', async () => {
+  it('⚠ a failed report is null - the table says it, not "no one on the team"', async () => {
     get.mockImplementation(async (r: { endpoint: { path: string } }) => {
       if (r.endpoint.path === '/api/analytics/team') throw new Error('down');
       return [];
@@ -117,7 +117,7 @@ describe('★ 06c’s reads', () => {
 });
 
 describe('★ 06d’s read', () => {
-  it('product demand is read raw — `{ weekKey, data }` — and a failure is null', async () => {
+  it('product demand is read raw - `{ weekKey, data }` - and a failure is null', async () => {
     get.mockResolvedValue({ weekKey: '2026-W40', data: [] });
     await loadSales();
     const req = get.mock.calls[0]![0] as { endpoint: { path: string }; raw?: boolean };
@@ -129,7 +129,7 @@ describe('★ 06d’s read', () => {
 });
 
 describe('★ 06e’s reads', () => {
-  it('topics for this week AND the week before — that is what makes "Change" real', async () => {
+  it('topics for this week AND the week before - that is what makes "Change" real', async () => {
     get.mockImplementation(async (r: { endpoint: { path: string } }) =>
       r.endpoint.path.endsWith('unanswered-questions') ? { data: [] } : [],
     );

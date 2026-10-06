@@ -12,8 +12,8 @@ import { CreditPackagesSection, CurrentPlanSection } from './Pricing';
  * Screen 17b, tested where a capture cannot reach.
  *
  * This tenant has **no scheduled change**, an **eligible** plan and **four**
- * packages, so three of the branches that matter most — a scheduled CANCEL, a
- * plan that cannot buy credits, a fallback exchange rate — are unreachable by
+ * packages, so three of the branches that matter most - a scheduled CANCEL, a
+ * plan that cannot buy credits, a fallback exchange rate - are unreachable by
  * evidence. They are asserted here instead of being left to a screenshot that
  * would have proved the one state the tenant happens to be in.
  */
@@ -74,13 +74,13 @@ describe('a scheduled change says which kind it is', () => {
   it('says the subscription ENDS for a cancellation', async () => {
     /*
      * A CANCEL carries no targetPlanKey. Rendered as a plan change it would
-     * read "Changes to — on 8 September 2027" for a customer who is leaving.
+     * read "Changes to - on 8 September 2027" for a customer who is leaving.
      */
     await renderPlan({ pendingChange: pending({ changeType: 'CANCEL', targetPlanKey: null }) });
     const line = screen.getByTestId('pricing-pending-line');
     expect(line).toHaveTextContent(/ends/i);
     expect(line).not.toHaveTextContent(/changes to/i);
-    expect(line).not.toHaveTextContent('—');
+    expect(line).not.toHaveTextContent('-');
   });
 
   it('promises that nothing moves until then', async () => {
@@ -153,7 +153,7 @@ describe('the price shown is not always the price charged', () => {
      * ════════════════════════════════════════════════════════════════════════
      * It passes `label: 'VAT'`. **The platform does not send that.** For this
      * tenant `/billing/pricing` sends `מע"מ`, and the sentence was
-     * `t('netOfTaxRate', { label: tax.label })` — so a browser at `/v2` read
+     * `t('netOfTaxRate', { label: tax.label })` - so a browser at `/v2` read
      * *"Prices are before מע"מ."* on the English screen, and this assertion
      * matched anyway, because its fixture was the one value where the two
      * behaviours agree.
@@ -174,7 +174,7 @@ describe('the price shown is not always the price charged', () => {
 
   it('★★ keeps the sentence when the platform sends a rate and no label', async () => {
     /*
-     * The guard used to be `tax?.label` — the platform's STRING doubled as the
+     * The guard used to be `tax?.label` - the platform's STRING doubled as the
      * signal that tax applies. Dropping the string from the sentence without
      * moving the guard would have dropped the whole sentence for a tenant whose
      * rate we know, which is a worse defect than the one being fixed: a net

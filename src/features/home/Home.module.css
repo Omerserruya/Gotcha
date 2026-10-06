@@ -9,7 +9,7 @@
    * entirely.
    */
   /*
-   * 01, measured: everything sits inside the frame — head, the command box,
+   * 01, measured: everything sits inside the frame - head, the command box,
    * the strip, and three columns whose cards scroll inside themselves. So
    * the page is the frame's height, not at least it.
    */
@@ -39,7 +39,7 @@
     gap: var(--space-8);
     background-color: var(--intent-neutral-surface);
     border-radius: var(--radius-item);
-    /* 02: `padding: 7px 12px`, line-height normal — 28 tall. */
+    /* 02: `padding: 7px 12px`, line-height normal - 28 tall. */
     padding-block: 7px;
     padding-inline: var(--space-12);
     font-size: var(--font-size-label);
@@ -67,7 +67,7 @@
     flex: none;
   }
 
-  /* Quiet turns the pill green — the one place the screen says "all clear". */
+  /* Quiet turns the pill green - the one place the screen says "all clear". */
   .statusCalm {
     background-color: var(--intent-calm-surface);
     color: var(--intent-calm-text);
@@ -234,7 +234,7 @@
     padding-inline: var(--space-40);
   }
 
-  /* 01b, measured: two columns on a quiet day — 646 · 478. */
+  /* 01b, measured: two columns on a quiet day - 646 · 478. */
   .columnsQuiet {
     flex: 1;
     min-block-size: 0;
@@ -680,7 +680,7 @@
     flex: 1;
   }
 
-  /* Availability. Grey by default — unknown and offline read the same. */
+  /* Availability. Grey by default - unknown and offline read the same. */
   .presenceDot {
     inline-size: var(--size-dot);
     block-size: var(--size-dot);
@@ -817,7 +817,7 @@
     cursor: not-allowed;
   }
 
-  /* `padding: 11px 16px` in the source — the card's closing line. */
+  /* `padding: 11px 16px` in the source - the card's closing line. */
   .workFooter {
     padding-block: var(--space-11);
     padding-inline: var(--space-16);

@@ -24,13 +24,13 @@ import { PermissionChoice } from './PermissionChoice';
 import styles from './Capabilities.module.css';
 
 /**
- * Screen 10 — what GOTCHA is allowed to do.
+ * Screen 10 - what GOTCHA is allowed to do.
  *
  * ── SAID ONCE, NOT SEVENTEEN TIMES ──
  * `isDefault`, `allowModification`, `expiresAfterMin` and `approverRole` are
  * **uniform across every row on this tenant**. A column of identical values
  * reads as seventeen decisions somebody made; one sentence reads as what it
- * is — a platform default nobody has changed.
+ * is - a platform default nobody has changed.
  *
  * ── AND NOT GROUPED BY RISK ──
  * `riskGroup` is a regex over the tool's name with `create_update` as its
@@ -44,7 +44,7 @@ export async function CapabilityScreen({
   integration = null,
 }: {
   readonly capabilities: readonly Capability[];
-  /** The system these belong to — its catalogue names them. `null` for the built-in ones. */
+  /** The system these belong to - its catalogue names them. `null` for the built-in ones. */
   readonly integration?: Integration | null;
   /** `null` when the usage read failed or was not permitted. Never zeroes. */
   readonly usage: readonly ToolUsage[] | null;
@@ -97,7 +97,7 @@ export async function CapabilityScreen({
           <ul className={styles.capabilities}>
             {group.capabilities.map((capability) => {
               /*
-               * Still used, for `data-stance` — a styling and test hook that
+               * Still used, for `data-stance` - a styling and test hook that
                * says which of the three the tool is on. Not dead: I removed
                * it as unused a moment ago and the attribute below is the
                * reader I had missed.
@@ -112,9 +112,9 @@ export async function CapabilityScreen({
                 >
                   {/*
                     Our words, not the platform's. Its `description` is
-                    written for whoever CALLS the tool — backticks,
+                    written for whoever CALLS the tool - backticks,
                     "(autonomous bot only)", instructions to use
-                    `schedule_followup` — and seventeen rows of that is an API
+                    `schedule_followup` - and seventeen rows of that is an API
                     reference on a merchant's screen. An unmapped tool falls
                     back to its own name rather than to that prose.
                   */}
@@ -140,7 +140,7 @@ export async function CapabilityScreen({
                     ════════════════════════════════════════════════════════
                     ★★ FOUR STATES, BECAUSE THE PLATFORM MODELS FOUR
                     ════════════════════════════════════════════════════════
-                    The design asks for three — do it, ask me, never. The
+                    The design asks for three - do it, ask me, never. The
                     platform adds `unavailable`: the switch is not the
                     admin's to press right now, with a reason saying why.
 
@@ -164,7 +164,7 @@ export async function CapabilityScreen({
                     whether they were refusals or breakages.
 
                     So the claim has three answers and the middle one is
-                    silence — see `neverFailed`. A refusal is never reported
+                    silence - see `neverFailed`. A refusal is never reported
                     as a failure either: a tool a policy keeps stopping and a
                     tool that keeps breaking need opposite repairs.
                   */}
@@ -172,7 +172,7 @@ export async function CapabilityScreen({
                     const ran = usageFor(capability.toolName, usage);
                     /*
                       02's line under every action. Without a run to count,
-                      the state says what happens instead — never a number
+                      the state says what happens instead - never a number
                       nobody measured, never a zero over a failed read.
                     */
                     if (!ran || ran.executionCount === 0) {
@@ -199,7 +199,7 @@ export async function CapabilityScreen({
                   {(() => {
                     const availability = resolveAvailability(capability);
                     /*
-                      ★ The control, always — disabled with its reason when
+                      ★ The control, always - disabled with its reason when
                       the platform decides, its stored state still marked
                       (06's ruling: states, not explanations). The connection
                       itself is said once, above the list.
@@ -231,7 +231,7 @@ export async function CapabilityScreen({
         to ₪200"). Nothing proposes one yet: drawn in its shape.
       */}
       {/*
-        Why "Do it" is greyed on some rows — said ONCE, here, and on the
+        Why "Do it" is greyed on some rows - said ONCE, here, and on the
         segment itself; never beside each of seventeen rows.
       */}
       {capabilities.some((capability) => automationCeiling(capability) !== null) ? (

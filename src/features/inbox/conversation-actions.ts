@@ -16,7 +16,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * the same object.
  *
  * `z.unknown()` rather than a real schema is a deliberate, greppable
- * admission of that — **and it is only safe because no value is taken from
+ * admission of that - **and it is only safe because no value is taken from
  * it.** The moment something reads a field, it needs a contract.
  */
 const unchecked = z.unknown();
@@ -27,8 +27,8 @@ const unchecked = z.unknown();
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠ CLAIM AND TRANSFER CAN SEND A MESSAGE TO THE CUSTOMER
  * ════════════════════════════════════════════════════════════════════════════
- * `claim()` and `reassign()` both end in `sendAutoGreeting(...)`, which — if
- * the tenant has an `autoGreeting` setting — enqueues a real outbound message
+ * `claim()` and `reassign()` both end in `sendAutoGreeting(...)`, which - if
+ * the tenant has an `autoGreeting` setting - enqueues a real outbound message
  * on the customer's channel. On claim **and on reclaim**: its own comment
  * says *"send on both claim and reclaim"*, so pressing twice greets twice.
  *
@@ -38,20 +38,20 @@ const unchecked = z.unknown();
  * ── AND THERE IS NO "PUT BACK IN THE QUEUE" ──
  * `POST /:id/release` exists. Omer ruled it out: a human who has taken a
  * conversation hands it to the AI or to a named colleague, never drops it.
- * The platform agrees by accident — `release()` clears the assignment and
+ * The platform agrees by accident - `release()` clears the assignment and
  * leaves `isHandedOver` set, so the conversation has no human and the AI is
  * still latched off it. Nobody drives it and no screen says so.
  */
 
 export type VerbResult =
   | { readonly ok: true }
-  /** 409 on claim — a colleague holds it. */
+  /** 409 on claim - a colleague holds it. */
   | { readonly ok: false; readonly reason: 'already_claimed' }
-  /** 409 on return-to-ai — no AI employee is bound to this conversation. */
+  /** 409 on return-to-ai - no AI employee is bound to this conversation. */
   | { readonly ok: false; readonly reason: 'no_ai_employee' }
-  /** 403 on transfer — not yours, and you are not an admin. */
+  /** 403 on transfer - not yours, and you are not an admin. */
   | { readonly ok: false; readonly reason: 'not_yours' }
-  /** 404 — the conversation, or the colleague, is not there. */
+  /** 404 - the conversation, or the colleague, is not there. */
   | { readonly ok: false; readonly reason: 'not_found' }
   /** 403 from delete: the viewer is not an admin. The menu hides it for them. */
   | { readonly ok: false; readonly reason: 'not_allowed' }
@@ -81,7 +81,7 @@ export async function claimConversation(conversationId: string): Promise<VerbRes
     await signInIfSignedOut(cause);
     if (isApiError(cause)) {
       /*
-       * "Conversation already assigned" — somebody else got there. Not a
+       * "Conversation already assigned" - somebody else got there. Not a
        * fault and not a retry: the repair is to ask them, and the screen says
        * so rather than offering the button again.
        */
@@ -152,7 +152,7 @@ export async function returnToAi(conversationId: string): Promise<VerbResult> {
  *
  * `agentId` only. The route also takes `departmentId`, and this product does
  * not send it: Omer ruled transfers go to a person. Sending both is not
- * possible here by construction rather than by care — the route branches on
+ * possible here by construction rather than by care - the route branches on
  * `departmentId` FIRST, so a body carrying both would silently transfer to
  * the department and ignore the person named on screen.
  */
@@ -187,7 +187,7 @@ export async function transferConversation(
 }
 
 /**
- * Put a conversation back in the queue — the design's *"requeue"*.
+ * Put a conversation back in the queue - the design's *"requeue"*.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ ONE OF FIVE THE PLATFORM CAN DO, OUT OF THE SEVEN THE DESIGN NAMES
@@ -206,7 +206,7 @@ export async function transferConversation(
  *
  * ⚠ The last three are not "not wired yet". There is no route for them in the
  *   platform's API at all, so a menu item for them would be a control that
- *   cannot work — the thirty-days label and the resend button again, three at
+ *   cannot work - the thirty-days label and the resend button again, three at
  *   once and on a destructive action.
  */
 export async function releaseConversation(conversationId: string): Promise<VerbResult> {
@@ -224,7 +224,7 @@ export async function releaseConversation(conversationId: string): Promise<VerbR
     if (isApiError(cause)) {
       /*
        * ⚠ 409 IS NOT GIVEN THE SAME MEANING AS claim's OR returnToAi's.
-       *   Those two have documented conflicts — already claimed, no AI
+       *   Those two have documented conflicts - already claimed, no AI
        *   employee. This route's conflict condition is not described in the
        *   schema, so it reports the generic failure rather than inventing a
        *   sentence about a state nobody has observed.
@@ -236,7 +236,7 @@ export async function releaseConversation(conversationId: string): Promise<VerbR
   }
 }
 
-/** Mark a conversation resolved — the design's *"resolve"*. */
+/** Mark a conversation resolved - the design's *"resolve"*. */
 export async function closeConversation(conversationId: string): Promise<VerbResult> {
   try {
     await serverApi().post({
@@ -258,7 +258,7 @@ export async function closeConversation(conversationId: string): Promise<VerbRes
 }
 
 /**
- * Delete a conversation and its messages — the queue menu's last item.
+ * Delete a conversation and its messages - the queue menu's last item.
  *
  * ⚠⚠ IRREVERSIBLE. The menu asks first, every time, and names how many.
  *

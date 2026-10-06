@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Settings · Business systems — screen 14.
+ * Settings · Business systems - screen 14.
  *
  * *"Platform config, no AI behaviour."*
  *
@@ -10,7 +10,7 @@ import { z } from 'zod';
  * Two things the design draws that nothing behind them can produce:
  *
  *   - **"11 exchange requests are waiting."** Nothing queues or holds work
- *     when an integration fails — there is no held-work table and no retry
+ *     when an integration fails - there is no held-work table and no retry
  *     queue anywhere. `ApprovalRequest` is a different concept: work paused
  *     awaiting a HUMAN decision, not work held because a platform is
  *     unreachable. The nearest real number is failed `ToolExecution` rows,
@@ -30,7 +30,7 @@ import { z } from 'zod';
 export const AUTH_TYPES = ['API_KEY', 'OAUTH2', 'BASIC_AUTH', 'WEBHOOK', 'CUSTOM'] as const;
 export type AuthType = (typeof AUTH_TYPES)[number];
 
-/** `ConnectionStatus`. `TESTING` is transient — a test in flight. */
+/** `ConnectionStatus`. `TESTING` is transient - a test in flight. */
 export const INTEGRATION_STATES = [
   'PENDING',
   'TESTING',
@@ -44,7 +44,7 @@ export type IntegrationState = (typeof INTEGRATION_STATES)[number];
  * Is this one of the five states we have a name for?
  *
  * The column is `z.enum(...).catch('PENDING')`, so a parsed value is always in
- * range — but the rail also renders connections from a second read whose shape
+ * range - but the rail also renders connections from a second read whose shape
  * is looser, and an unrecognised value must say "status unknown" rather than
  * print itself. A reader cannot act on a code.
  */
@@ -55,13 +55,13 @@ export function isIntegrationState(value: string): value is IntegrationState {
 /**
  * What a capability is allowed to do, as the design's tri-state.
  *
- * Not an approximation of a boolean — the model really does store three
+ * Not an approximation of a boolean - the model really does store three
  * outcomes, across two rows:
  *
- *   `never`  — `TenantTool.isEnabled = false`
- *   `ask`    — enabled, and `requiresApproval`, so running it creates an
+ *   `never`  - `TenantTool.isEnabled = false`
+ *   `ask`    - enabled, and `requiresApproval`, so running it creates an
  *              `ApprovalRequest` and the conversation is held for a human
- *   `allow`  — enabled, no approval required
+ *   `allow`  - enabled, no approval required
  *
  * `CatalogTool.hitlPolicy` seeds it and the tenant row is authoritative over
  * the seed: it can tighten or loosen.
@@ -95,7 +95,7 @@ export const capabilitySchema = z
     name: raw.name,
     riskLevel: raw.riskLevel ?? null,
     /**
-     * A tool the tenant has never activated is `never` — it cannot run.
+     * A tool the tenant has never activated is `never` - it cannot run.
      *
      * The `ask` half needs `TenantToolPermission`, which this route does not
      * join, so it is resolved separately where the panel needs it rather than
@@ -110,8 +110,8 @@ export type Capability = z.infer<typeof capabilitySchema>;
  * The tenant's connection to one system.
  *
  * **`credentials` is deliberately absent.** `GET /integrations/:slug` selects
- * and returns it — the stored integration secret, encrypted but still a
- * secret — while the sibling list route excludes it with a comment saying no
+ * and returns it - the stored integration secret, encrypted but still a
+ * secret - while the sibling list route excludes it with a comment saying no
  * list view needs it. Naming fields explicitly is what keeps it out of this
  * app regardless of which route we call.
  *
@@ -133,8 +133,8 @@ export const connectionSchema = z
     /** The platform's own words, truncated to 200 chars by the backend. */
     lastError: z.string().nullable().optional(),
     /**
-     * The connection's config. ONE field is read from it — Shopify's
-     * `shopDomain`, 14d's "avivco.myshopify.com" — and the transform drops the
+     * The connection's config. ONE field is read from it - Shopify's
+     * `shopDomain`, 14d's "avivco.myshopify.com" - and the transform drops the
      * rest: config can hold more than a page needs, and nothing else of it
      * leaves this contract.
      */
@@ -149,11 +149,11 @@ export const connectionSchema = z
   });
 
 /**
- * `GET /api/integrations` — enveloped in `data`.
+ * `GET /api/integrations` - enveloped in `data`.
  *
  * **`object`, not `looseObject`.** The route spreads the whole catalog entry,
- * which carries `authSchema` and `configSchema` — shape descriptions the
- * screen never renders — and the detail route spreads `credentials` too.
+ * which carries `authSchema` and `configSchema` - shape descriptions the
+ * screen never renders - and the detail route spreads `credentials` too.
  * Naming what we use is the standing rule on this project, and this is the
  * fourth route it has caught handing out more than a page needs.
  */
@@ -171,7 +171,7 @@ export const credentialFieldSchema = z.object({
 export type CredentialField = z.infer<typeof credentialFieldSchema>;
 
 /**
- * How a system is connected, from `authSchema` — and ONLY that.
+ * How a system is connected, from `authSchema` - and ONLY that.
  *
  * ★ `authSchema` also carries `scopes` (raw OAuth scopes) and `helpText`
  * (Airtable's names the scopes it needs). Neither may reach a screen, so the
@@ -203,7 +203,7 @@ export const integrationSchema = z.object({
   logoUrl: z.string().nullable().optional(),
   docsUrl: z.string().nullable().optional(),
   /**
-   * How this system authenticates — and therefore whether a broken one can be
+   * How this system authenticates - and therefore whether a broken one can be
    * repaired from here.
    *
    * `OAUTH2` means repair is a re-authorisation at the provider, which is
@@ -213,7 +213,7 @@ export const integrationSchema = z.object({
    * which touches no tool activation and destroys no per-agent narrowing.
    *
    * `authSchema` sits beside this on the wire and carries the raw OAuth
-   * `scopes`, which this screen may never show — so it is read through
+   * `scopes`, which this screen may never show - so it is read through
    * `connectSchema`, which keeps `oauth` and `fields` and drops the rest.
    */
   authType: z.enum(AUTH_TYPES).catch('CUSTOM'),
@@ -249,17 +249,17 @@ export function isFailing(
 // ── Tool policy, which is a second read and the authoritative one ────
 
 /**
- * `GET /api/tool-permissions` — enveloped in `data`.
+ * `GET /api/tool-permissions` - enveloped in `data`.
  *
  * **`object`, not `looseObject`, and here it is a product rule as well as a
  * security one.** The route also returns `grantedScopes` and `missingScopes`
- * — raw OAuth scopes — and this screen may never show those: *"What it can
+ * - raw OAuth scopes - and this screen may never show those: *"What it can
  * do"* speaks in what an employee gains. Not naming them strips them in the
  * API layer, so no component can render them by accident.
  *
  * `toolName` is `integration.<slug>` for a catalog tool, or
  * `<provider>.<slug>` where an adapter exists (`shopify.cancel_order`). Both
- * key on the slug — the backend says so itself. A name with no dot is an
+ * key on the slug - the backend says so itself. A name with no dot is an
  * internal tool and not an integration capability at all.
  */
 export const toolPermissionSchema = z.object({
@@ -292,21 +292,21 @@ export function toolSlugOf(toolName: string): string | null {
  * So activation plus a live connection is what decides whether a capability
  * can run at all. Approval, when required, comes from
  * `TenantTool.configOverrides.hitlPolicy` falling back to the
- * `CatalogTool.hitlPolicy` seed — which is what `GET /api/tool-permissions`
+ * `CatalogTool.hitlPolicy` seed - which is what `GET /api/tool-permissions`
  * reports as `requiresApproval`.
  *
  * ── THE TRAP, AND IT IS THE OPPOSITE OF WHAT IT LOOKS LIKE ──
  * `TenantToolPermission` has a row `integration.process_refund` with
  * `enabled = false`, and it is tempting to treat that as an owner switching a
  * refund tool off. **Nothing enforces it for integration tools.** No execution
- * path reads that table at all — only routes do — and
+ * path reads that table at all - only routes do - and
  * `GET /api/tool-permissions` hardcodes `enabled: true` for every integration
  * tool it returns, because the surface is already filtered by `isEnabled`.
  *
  * So rendering that row as *Never* would report a restriction the runtime does
  * not apply: wrong in the CAUTIOUS direction, which is better than the
  * reassuring one and still a false statement about what the AI may do. It is
- * the same shape as the hand-set `tenant_features` rows on screen 13 — a table
+ * the same shape as the hand-set `tenant_features` rows on screen 13 - a table
  * that looks authoritative and is consulted by nothing.
  *
  * `enabled` on a `ToolPermission` is therefore deliberately unused here.
@@ -325,7 +325,7 @@ export function resolveStance(
  * Connected means there is a tenant connection row, whatever state it is in.
  *
  * ★ A BROKEN CONNECTION IS STILL CONNECTED. `status: "ERROR"` belongs in the
- * connected list with its error showing — moving it to "available" would
+ * connected list with its error showing - moving it to "available" would
  * offer a Connect button for something already connected, which is the
  * distinction 14c, 04d and 05d each had to make separately.
  */
@@ -342,8 +342,8 @@ export function isConnected(entry: Integration): boolean {
  * `IntegrationCatalog` has **17 published rows on dev**. The design draws
  * "Available · 58" and names ten providers, most of which have no row.
  *
- * This returns what is there. Padding the list to match the design — or
- * printing 58 above a list of 17 — would imply coverage the product does not
+ * This returns what is there. Padding the list to match the design - or
+ * printing 58 above a list of 17 - would imply coverage the product does not
  * have, which is the same defect as a knowledge counter made of candidates
  * nobody accepted. Each missing provider is a catalogue row plus an adapter,
  * and that is a decision for Omer rather than a gap to paper over.
@@ -363,7 +363,7 @@ export function splitCatalogue(entries: readonly Integration[]): {
  *
  * `category` is a stored column the route sorts by `sortOrder`, so the groups
  * arrive in the order somebody chose rather than alphabetically. An entry
- * with no category goes in its own bucket rather than being assigned one —
+ * with no category goes in its own bucket rather than being assigned one -
  * inventing a category is how a filter starts lying about what it contains.
  */
 export function byCategory(
@@ -399,7 +399,7 @@ export function sentenceCase(name: string, keep: string | null): string {
 }
 
 /**
- * An integration action's name as its catalogue writes it, sentence-cased —
+ * An integration action's name as its catalogue writes it, sentence-cased -
  * "Add VIP tag", not the humanised `shopify.add_vip_tag` ("Shopify add vip
  * tag"). Matched on the slug after the provider; `null` when the catalogue
  * has no such action or was not read.

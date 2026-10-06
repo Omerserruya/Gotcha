@@ -8,15 +8,15 @@ import styles from './Outreach.module.css';
 import { campaignWhen } from './when';
 
 /**
- * 05's "In flight" — one card, one row per campaign.
+ * 05's "In flight" - one card, one row per campaign.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ MEASURED, AND WHAT EACH PART IS MADE OF
  * ════════════════════════════════════════════════════════════════════════════
  * Rows at `padding:15px 18px`, `gap:16px`, `#F0EDE7` between them, a 3px
  * edge in the status's colour (sending green, scheduled stone, finished none).
- * Each: the name at 13.5/500 over a 12px line — the channel and how many
- * people — then a 170px progress bar with its caption, and a status pill.
+ * Each: the name at 13.5/500 over a 12px line - the channel and how many
+ * people - then a 170px progress bar with its caption, and a status pill.
  *
  * ⚠ THE BAR IS SENT OF RECIPIENTS, AND THE CAPTION SAYS ONLY THAT. 02 writes
  *   "794 sent · 312 opened · 41 bought". `sentCount` and `failedCount` are
@@ -50,7 +50,7 @@ export async function InFlightList({
               ? Math.min(1, campaign.sentCount / campaign.totalRecipients)
               : null;
           /*
-            02: "Email · 3,180 customers · Thursday 10:00" — a scheduled
+            02: "Email · 3,180 customers · Thursday 10:00" - a scheduled
             campaign's date belongs to its subline, and the middle column says
             only "Scheduled".
           */
@@ -117,11 +117,11 @@ export async function InFlightList({
 }
 
 /**
- * 05's "This month" strip — only the figures the platform writes.
+ * 05's "This month" strip - only the figures the platform writes.
  *
  * 02 draws Reached · Replied · Revenue · Opted out. Reached is `sentCount`,
  * summed over this month's campaigns. Replied is never recorded, revenue is
- * not attributed to campaigns, and opt-outs are not counted per period — so
+ * not attributed to campaigns, and opt-outs are not counted per period - so
  * the strip carries what is true: reached, how many campaigns, and how many
  * messages did not arrive.
  */

@@ -24,7 +24,7 @@ beforeEach(() => {
   push.mockReset();
 });
 
-describe('★★ 04 — Add a customer', () => {
+describe('★★ 04 - Add a customer', () => {
   it('a phone that does not parse is said, and Add stays off', async () => {
     show();
     await userEvent.click(screen.getByTestId('add-customer'));

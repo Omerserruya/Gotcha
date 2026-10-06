@@ -65,8 +65,8 @@ function classify(cause: unknown): Extract<ChannelWriteResult<never>, { ok: fals
  *
  * The one connect path with no third party in it: nothing is authorised
  * anywhere, so nothing has to be revoked to undo it. The backend creates it
- * `PENDING` rather than `CONNECTED` — a freshly made widget is a draft until
- * it is actually on a page — which is the design's two-step arriving from the
+ * `PENDING` rather than `CONNECTED` - a freshly made widget is a draft until
+ * it is actually on a page - which is the design's two-step arriving from the
  * backend rather than being imposed by the form.
  *
  * It is also idempotent: an existing widget is returned rather than a second
@@ -105,13 +105,13 @@ export interface EmailConnectInput {
 /**
  * Connects a mailbox over SMTP/IMAP.
  *
- * Credentials, not OAuth — the backend stores them and uses them to send and
+ * Credentials, not OAuth - the backend stores them and uses them to send and
  * receive as this address. So this is a real secret leaving a person's hands,
  * and it is never exercised by a test: a capture that submits this form has
  * given a mailbox password to a system on someone's behalf.
  *
  * The passwords are passed straight through and never touched otherwise. They
- * are not trimmed — leading or trailing whitespace can be part of a password,
+ * are not trimmed - leading or trailing whitespace can be part of a password,
  * and silently "cleaning" one turns a correct credential into a failed login
  * nobody can explain.
  */
@@ -147,8 +147,8 @@ export async function connectEmail(input: EmailConnectInput): Promise<ChannelWri
 /**
  * Step 2: who answers this channel.
  *
- * The only routing a `ChannelAccount` can store. Reversible by construction —
- * it is one field with two values — which is what makes it the one part of the
+ * The only routing a `ChannelAccount` can store. Reversible by construction -
+ * it is one field with two values - which is what makes it the one part of the
  * connect flow a capture may safely exercise and put back.
  */
 export async function setResponseMode(

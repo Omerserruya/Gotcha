@@ -1,17 +1,17 @@
 'use server';
 
 /**
- * Connecting a WhatsApp number — the three server actions behind 13c/13d.
+ * Connecting a WhatsApp number - the three server actions behind 13c/13d.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★ TWO OF THESE MUTATE A REAL MESSAGING ACCOUNT. NOTHING AUTOMATED MAY FIRE
- *   THEM — NOT A TEST, NOT A CAPTURE, NOT ONCE TO SEE.
+ *   THEM - NOT A TEST, NOT A CAPTURE, NOT ONCE TO SEE.
  * ════════════════════════════════════════════════════════════════════════════
  *   inspect   reads Meta · SPENDS a single-use authorization code ·
  *             REPLACES the tenant's signup session
- *   connect   subscribeApp(wabaId) + client.register(...) — writes at Meta,
+ *   connect   subscribeApp(wabaId) + client.register(...) - writes at Meta,
  *             creates a WhatsAppNumber and a ChannelAccount
- *   resume    the register step with the customer's PIN — writes at Meta
+ *   resume    the register step with the customer's PIN - writes at Meta
  *
  * Dev points at a real Meta business account and sends real traffic. Component
  * tests mock this module; the live path is exercised by a person, on purpose,
@@ -34,7 +34,7 @@ import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
- * Neither verb returns anything the screen renders — the list is re-read
+ * Neither verb returns anything the screen renders - the list is re-read
  * afterwards. Parsed anyway rather than left untyped, so a response shape
  * that changes is a parse failure here and not a silent success.
  */
@@ -59,7 +59,7 @@ const connectedSchema = z
 /** Read the numbers on the account the customer just authorised. */
 export async function inspectNumbers(
   code: string,
-  /** What the popup told us (business portfolio, WABA ids) — the server uses them. */
+  /** What the popup told us (business portfolio, WABA ids) - the server uses them. */
   assets: { readonly businessPortfolioId?: string; readonly wabaIds?: readonly string[] } = {},
   /** The route's `path` (default `new`): `business-app` for a number on the Business app. */
   path: 'business-app' | 'new' = 'new',
@@ -107,7 +107,7 @@ export async function connectNumber(
   }
 }
 
-/** Supply what the customer was asked for — the PIN. Writes at Meta. */
+/** Supply what the customer was asked for - the PIN. Writes at Meta. */
 export async function resumeNumber(id: string, pin: string): Promise<ConnectResult> {
   try {
     await serverApi().post({

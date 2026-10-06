@@ -13,7 +13,7 @@ import {
  * Screen 10's ceiling on automation.
  *
  * These are the tests for a control that changes what the AI may do to
- * customers without anyone watching. Nothing here presses the write — the
+ * customers without anyone watching. Nothing here presses the write - the
  * subject is which choices are OFFERED, and that is decided before any
  * request is made.
  */
@@ -29,7 +29,7 @@ describe('★★ "Do it" needs a positive read_only, not the absence of a warnin
      * `riskGroupFor` tests four name patterns and falls through to
      * `create_update`. Neither "cancel" nor "return" is in any of them, so
      * `shopify.cancel_order` and `shopify.create_return` both land here and
-     * the platform's own `mayBeAlwaysAllowed` returns TRUE for them — while
+     * the platform's own `mayBeAlwaysAllowed` returns TRUE for them - while
      * the design puts both under "Changing orders and money · Comes to
      * Approvals".
      *
@@ -77,7 +77,7 @@ describe('★★ the write body always states BOTH fields', () => {
     /*
      * The route applies `requiresApproval` only when present. So enabling a
      * tool currently set to Never with `{ enabled: true }` alone would
-     * restore whatever approval setting it last carried — on a financial
+     * restore whatever approval setting it last carried - on a financial
      * tool, possibly none. Every transition states both.
      */
     for (const choice of ['do_it', 'ask_me', 'never'] as const) {
@@ -107,7 +107,7 @@ describe('★ where the tool is now', () => {
 
   it('★★ can report `do_it` on a tool that may no longer be SET to it', () => {
     /*
-     * A financial tool stored as auto-approve — set before this ceiling
+     * A financial tool stored as auto-approve - set before this ceiling
      * existed, or by curl, since the write does not enforce the guard.
      * `currentChoice` reports the truth and `choicesFor` withholds the
      * option, so the screen shows what IS without offering to put it back.

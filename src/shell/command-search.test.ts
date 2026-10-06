@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-/* Reads only — and mocked: nothing here reaches the platform. */
+/* Reads only - and mocked: nothing here reaches the platform. */
 const get = vi.hoisted(() => vi.fn());
 const post = vi.hoisted(() => vi.fn());
 vi.mock('server-only', () => ({}));
@@ -57,7 +57,7 @@ beforeEach(() => {
 
 const pathOf = (call: unknown[]) => (call[0] as { endpoint: { path: string } }).endpoint.path;
 
-describe('★★ 19 — customers, and only the actions that exist', () => {
+describe('★★ 19 - customers, and only the actions that exist', () => {
   it('a pending approval is offered only for a customer the search found', async () => {
     const found = await searchPeople('dana');
     expect(found).toMatchObject({

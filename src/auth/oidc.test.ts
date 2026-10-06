@@ -9,7 +9,7 @@ import { productCallbackUrl } from './oidc';
  * `redirectUri()` reads `APP_ORIGIN`. On the product container that is the
  * product; on the sign-in container it is the sign-in host. The finishing hop
  * ran on the second and compared the provider's completion against the wrong
- * one, so a correct `to` was refused — silently, because refusing is what that
+ * one, so a correct `to` was refused - silently, because refusing is what that
  * guard is for.
  */
 describe('⚠⚠ the product’s callback, from the only thing this container knows', () => {
@@ -21,8 +21,8 @@ describe('⚠⚠ the product’s callback, from the only thing this container kn
 
   it('⚠⚠ keeps the mount point, which is the whole reason it is derived', () => {
     /*
-     * `/v2` is the base path. Composing this from an origin would drop it —
-     * the absolute-path defect this repository has had four times — and the
+     * `/v2` is the base path. Composing this from an origin would drop it -
+     * the absolute-path defect this repository has had four times - and the
      * result would be refused by exactly the guard we are trying to satisfy.
      */
     expect(productCallbackUrl('https://dev.gotcha.co.il/api/auth/login')).toBe(

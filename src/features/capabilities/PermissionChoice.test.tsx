@@ -56,7 +56,7 @@ describe('★★ "Do it" is disabled where it may not be chosen, and says why on
     expect(screen.getByTestId('choice-shopify.process_refund-never')).toBeEnabled();
   });
 
-  it('★★ and on `create_update`, the no-match fallback — the OTHER sentence', async () => {
+  it('★★ and on `create_update`, the no-match fallback - the OTHER sentence', async () => {
     // "We could not tell", not "this moves money": a reader can act on the
     // first and would be misled by the second.
     show(tool({ toolName: 'shopify.cancel_order', riskGroup: 'create_update' }));
@@ -89,7 +89,7 @@ describe('★★ "Do it" is disabled where it may not be chosen, and says why on
     }
   });
 
-  it('★ and no explanation beside the row — states, not explanations', async () => {
+  it('★ and no explanation beside the row - states, not explanations', async () => {
     const { container } = show(tool({ riskGroup: 'financial' }));
     expect(container.querySelectorAll('p')).toHaveLength(0);
   });
@@ -98,7 +98,7 @@ describe('★★ "Do it" is disabled where it may not be chosen, and says why on
 describe('★★ a stored state the ceiling would now forbid', () => {
   it('★★ is SHOWN as the current one, and its segment says it cannot be set back', async () => {
     /*
-     * A financial tool stored as auto-approve — set before this ceiling
+     * A financial tool stored as auto-approve - set before this ceiling
      * existed, or by curl. Hiding it would be worse than showing it: an
      * admin cannot turn off a setting the screen will not show them.
      */
@@ -124,7 +124,7 @@ describe('★★ a stored state the ceiling would now forbid', () => {
   });
 });
 
-describe('★★ blocked — the platform decides, so nothing can be chosen', () => {
+describe('★★ blocked - the platform decides, so nothing can be chosen', () => {
   it('all three disabled with the reason, the stored one marked, and no click writes', async () => {
     render(
       <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>

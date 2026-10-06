@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
+import { plainDashes } from '@/lib/plain-dashes';
+
 /**
- * Screen 04b — one customer.
+ * Screen 04b - one customer.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * THREE READS, THREE DIFFERENT DOORS, AND NONE OF THEM IS KEYED ON A CUSTOMER
@@ -18,7 +20,7 @@ import { z } from 'zod';
 /* ── The timeline ────────────────────────────────────────────────────────── */
 
 /**
- * ★★ THE OLD SHAPE WAS NOT TRUNCATED — IT WAS THINNED, AND THAT IS WORSE.
+ * ★★ THE OLD SHAPE WAS NOT TRUNCATED - IT WAS THINNED, AND THAT IS WORSE.
  *
  * Until 2026-09-24 this route took 50 conversations and the newest **5
  * messages of each**, then merged and sorted them. So a 300-message thread
@@ -26,7 +28,7 @@ import { z } from 'zod';
  * **with holes in the middle of every conversation**.
  *
  * A truncated history is visibly short. A thinned one looks complete and is
- * undetectable from the response — and the honest-limit sentence this screen
+ * undetectable from the response - and the honest-limit sentence this screen
  * was built with would have named the WRONG limit, describing recent activity
  * over a stream that was missing the middle.
  *
@@ -34,7 +36,7 @@ import { z } from 'zod';
  * (`packages/shared/src/lib/prisma.ts:243`) injects `origin: "LIVE"` into any
  * bulk read that does not mention origin, and this route never did. For any
  * customer whose WhatsApp history was imported, the timeline showed none of
- * it — a long-standing customer rendered as brand new, confidently, with no
+ * it - a long-standing customer rendered as brand new, confidently, with no
  * marker.
  *
  * ── THE STANDING RULE FOR THIS AREA ──
@@ -53,8 +55,8 @@ export type TimelineEventType = (typeof TIMELINE_EVENT_TYPES)[number];
 
 export const timelineEventSchema = z.object({
   /**
-   * Three kinds now, where there was one. The design asks for five —
-   * conversations, orders, returns, AI actions and notes — and `coverage`
+   * Three kinds now, where there was one. The design asks for five -
+   * conversations, orders, returns, AI actions and notes - and `coverage`
    * below says what became of the other two rather than leaving the stream
    * to imply they never happened.
    */
@@ -111,7 +113,7 @@ export const timelineEventSchema = z.object({
 export type TimelineEvent = z.infer<typeof timelineEventSchema>;
 
 /**
- * ★★ WHAT THE STREAM COVERS — INCLUDING WHERE IT IS AVAILABLE AND STILL
+ * ★★ WHAT THE STREAM COVERS - INCLUDING WHERE IT IS AVAILABLE AND STILL
  * INCOMPLETE.
  *
  * `available: true` is not the same as complete. `ai_action` carries a
@@ -120,7 +122,7 @@ export type TimelineEvent = z.infer<typeof timelineEventSchema>;
  * here."*
  *
  * So a merchant reading the AI-actions stream sees a plausible, complete
- * list that omits a whole class of action — Backend's own comment says the
+ * list that omits a whole class of action - Backend's own comment says the
  * gap is invisible from the data. A screen that renders the events and drops
  * the detail is the calm wrong value with the explanation deleted.
  */
@@ -153,7 +155,7 @@ export function coverageCaveats(
 export const timelineSchema = z.object({
   /**
    * The EFFECTIVE contact. The route follows `mergedIntoId`, so a person
-   * opened by a merged-away id resolves to the survivor — and the name shown
+   * opened by a merged-away id resolves to the survivor - and the name shown
    * must be this one, not the one the list held.
    */
   contact: z
@@ -162,14 +164,14 @@ export const timelineSchema = z.object({
       displayName: z.string().nullable().default(null),
       externalId: z.string().default(''),
       channel: z.string().default(''),
-      /** When the contact was made — 04b's "with you since". */
+      /** When the contact was made - 04b's "with you since". */
       createdAt: z.string().nullable().catch(null).default(null),
     })
     .nullable()
     .default(null),
   /**
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ EVERY CHANNEL THIS PERSON USES — A PROJECTION, NOT A ROW DUMP
+   * ★★ EVERY CHANNEL THIS PERSON USES - A PROJECTION, NOT A ROW DUMP
    * ════════════════════════════════════════════════════════════════════════
    * Five named fields per handle, with a `source` discriminator:
    *
@@ -181,8 +183,8 @@ export const timelineSchema = z.object({
    *
    * ── THIS REPLACED A `metadata.aliases` PARSE, AND THE REASON MATTERS ──
    * We read the handles out of the contact's raw `metadata` because the
-   * route sent the whole row. The obvious fix — "return the siblings you
-   * already compute" — would have been **worse than what it replaced**:
+   * route sent the whole row. The obvious fix - "return the siblings you
+   * already compute" - would have been **worse than what it replaced**:
    * `findSiblingContacts` selects no columns, so each sibling arrives
    * carrying its own `metadata` blob, and returning them raw would ship the
    * customer's phone number **once per linked channel instead of once.**
@@ -298,7 +300,7 @@ export function newestConversationId(events: readonly TimelineEvent[]): string |
 /* ── The brief ───────────────────────────────────────────────────────────── */
 
 /**
- * The written character summary — 04b's opening, and the one place the
+ * The written character summary - 04b's opening, and the one place the
  * design uses serif italic.
  *
  * Persisted in `customer_briefs` and rewritten by the post-chat subscriber
@@ -308,7 +310,11 @@ export function newestConversationId(events: readonly TimelineEvent[]): string |
  */
 export const briefSchema = z.object({
   ok: z.boolean().default(false),
-  summary: z.string().nullable().default(null),
+  summary: z
+    .string()
+    .nullable()
+    .default(null)
+    .transform((text) => plainDashes(text)),
   signals: z.array(z.string()).default([]),
   generated_at: z.string().nullable().default(null),
   cached: z.boolean().default(false),
@@ -322,8 +328,8 @@ export const briefSchema = z.object({
       /**
        * ★ `no_conversations` COMES BACK AS A SUCCESS WITH A CANNED SUMMARY.
        *
-       * The route answers `ok: true` and a literal string — "New customer
-       * with no recorded prior interactions." — rather than an error or a
+       * The route answers `ok: true` and a literal string - "New customer
+       * with no recorded prior interactions." - rather than an error or a
        * null. That is the right call on their side: a contact with no
        * history is an ordinary state, not a failure.
        *
@@ -348,8 +354,8 @@ export type CustomerBrief = z.infer<typeof briefSchema>;
 /**
  * Is there a brief worth rendering?
  *
- * `ok: true` with a null summary is a real answer — the row exists and the
- * prose has not been written — and it must not render as an empty italic
+ * `ok: true` with a null summary is a real answer - the row exists and the
+ * prose has not been written - and it must not render as an empty italic
  * paragraph, which reads as a summary that says nothing about them.
  */
 export function hasBrief(brief: CustomerBrief | null): boolean {
@@ -361,8 +367,8 @@ export function hasBrief(brief: CustomerBrief | null): boolean {
 /**
  * Has this person never written to us at all?
  *
- * A real, ordinary state — somebody imported from a CRM who has never sent a
- * message — and NOT an edge case. Four of this page's sections are then
+ * A real, ordinary state - somebody imported from a CRM who has never sent a
+ * message - and NOT an edge case. Four of this page's sections are then
  * unreachable rather than empty, and the page has to say which.
  *
  * Read from the brief's own `reason` rather than inferred from an empty
@@ -380,7 +386,7 @@ export function hasNeverWritten(brief: CustomerBrief | null): boolean {
  *
  * `CustomerHistoricalMemory.facts` is stored as
  * `[{ text, category, confidence, evidenceConversationIds[], firstSeenAt,
- * lastSeenAt }]` — and `evidenceConversationIds` is the exact thing 04b asks
+ * lastSeenAt }]` - and `evidenceConversationIds` is the exact thing 04b asks
  * for: *"each traceable to where it was learned"*.
  *
  * It reached no route when this screen was built, and Backend has since
@@ -389,7 +395,7 @@ export function hasNeverWritten(brief: CustomerBrief | null): boolean {
  * ★★ AND THE SCREEN STILL DRAWS NO LINK, ON PURPOSE.
  *
  * Those conversations carry `origin: "HISTORICAL_IMPORT"`, and
- * `applyLiveByDefault` injects `origin: "LIVE"` into bulk reads — **so a read
+ * `applyLiveByDefault` injects `origin: "LIVE"` into bulk reads - **so a read
  * that does not name an origin returns ZERO ROWS.** A link that looks
  * followable would open an empty conversation.
  *
@@ -401,23 +407,23 @@ export function hasNeverWritten(brief: CustomerBrief | null): boolean {
  * worse than an honest statement that the trace exists and is not yet
  * followable.
  *
- * The model's own comment is worth keeping in view — it stores durable
+ * The model's own comment is worth keeping in view - it stores durable
  * observations only, because *"'is waiting for a package' was true for a
  * week in March and would be a lie the moment it is read back"*.
  */
 export const memoryFactSchema = z.object({
-  text: z.string(),
+  text: z.string().transform((text) => plainDashes(text)),
   category: z.string().nullable().default(null),
   confidence: z.string().nullable().default(null),
   /**
-   * ★ NOW RETURNED — AND DECLARED HERE OR IT IS STRIPPED.
+   * ★ NOW RETURNED - AND DECLARED HERE OR IT IS STRIPPED.
    *
    * Backend added it after this screen reported it missing. Third field
    * today that had to be NAMED to arrive, after `source` and `taxed`: a
    * strict `z.object` discards what the consumer never asked for, so a new
    * field is invisible until somebody writes it down.
    *
-   * Real `Conversation.id` values — `identity.stage.ts:208-213` queries the
+   * Real `Conversation.id` values - `identity.stage.ts:208-213` queries the
    * `Message` table by them, which is proof rather than inference. `[]` when
    * there are none; never absent.
    */
@@ -428,18 +434,22 @@ export type MemoryFact = z.infer<typeof memoryFactSchema>;
 export const memorySchema = z.object({
   context: z
     .object({
-      summary: z.string().nullable().default(null),
+      summary: z
+        .string()
+        .nullable()
+        .default(null)
+        .transform((text) => plainDashes(text)),
       facts: z.array(memoryFactSchema).default([]),
       messageCount: z.number().nullable().default(null),
       /** e.g. `historical_whatsapp_import`. The block's provenance. */
       source: z.string().nullable().default(null),
       learnedAt: z.string().nullable().default(null),
       /**
-       * ★ WHEN THE EVIDENCE WAS OBSERVED — AT BLOCK LEVEL, DELIBERATELY.
+       * ★ WHEN THE EVIDENCE WAS OBSERVED - AT BLOCK LEVEL, DELIBERATELY.
        *
        * `firstSeenAt` / `lastSeenAt` exist per fact and Backend refused to
        * return them there, because both come from `transcript[0]` and
-       * `transcript[last]` of the whole conversation — so **every fact in a
+       * `transcript[last]` of the whole conversation - so **every fact in a
        * row carries identical values.** Per fact they would read as "this
        * preference was first observed on 2 March", which the data cannot
        * support and which nothing in the shape would reveal.
@@ -471,19 +481,19 @@ export function hasMemory(memory: CustomerMemory | null): boolean {
  *
  * This screen shipped saying notes were not recorded, on the strength of
  * `POST /conversations/:id/notes` being a demo stub that echoes and persists
- * nothing. The stub is real and so is the capability — it is somewhere else:
+ * nothing. The stub is real and so is the capability - it is somewhere else:
  * `crm-panel.ts:690` calls `adapter.createNote`, a real audited write, and
  * `recent_crm_notes` is already rendered in the legacy UI.
  *
  * So a note lives in the merchant's CRM, and the repair for not having notes
  * is one a merchant can actually perform: connect a CRM, and link this
- * contact to a record in it. Two different repairs, hence two sentences —
+ * contact to a record in it. Two different repairs, hence two sentences -
  * the 14d shape, which DOES apply here after all.
  *
  * ⚠ AND THERE IS NO AUTHOR. `CrmActivity` is
  * `{ id, kind, body, occurred_at, source_interaction_id }`. So 04f's *"notes
  * are attributed and dated"* is dated and anonymous on this path, and no
- * amount of screen work changes that — it is one of four things the CRM
+ * amount of screen work changes that - it is one of four things the CRM
  * shape cannot hold, alongside a visibility flag, an edit history and pending
  * AI suggestions.
  */
@@ -508,7 +518,7 @@ export type CrmContext = z.infer<typeof crmContextSchema>;
  * Why notes cannot be written, or `null` when they can.
  *
  * The two 409s the write answers with, read back as the two states BEFORE
- * anybody presses anything — because a control that fails on click teaches a
+ * anybody presses anything - because a control that fails on click teaches a
  * merchant the page is broken rather than that their CRM is not connected.
  *
  *   no_crm        the adapter is a stub: nothing is connected
@@ -525,7 +535,7 @@ export function notesBlockedBy(context: CrmContext | null): NotesBlocker | null 
   const outcome = context.link_meta?.outcome ?? null;
   if (outcome === 'no_crm_link' || outcome === 'not_found') return 'no_link';
   /*
-   * `search_only` means the adapter cannot write — a read-only or stub
+   * `search_only` means the adapter cannot write - a read-only or stub
    * connector. Treated as "no CRM" because the repair is the same: connect
    * one that can take a note.
    */
@@ -544,8 +554,8 @@ export interface ChannelHandle {
  * Every channel this person uses.
  *
  * ★ THE CAPTION CHANGED WITH THE DATA. This used to be "channels we've
- * joined up" — the contact's own handle plus whatever a prior merge left
- * behind — because live siblings were computed by the route and never
+ * joined up" - the contact's own handle plus whatever a prior merge left
+ * behind - because live siblings were computed by the route and never
  * returned. `identityChannels` carries both kinds with a `source` saying
  * which, so the list is now complete and the screen can say so.
  *

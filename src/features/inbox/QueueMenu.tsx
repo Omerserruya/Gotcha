@@ -31,7 +31,7 @@ import { clearSelected, currentSelection, useSelection } from './queue-selection
 import styles from './Inbox.module.css';
 
 /**
- * 02's right-click menu on the queue — and shift-click to pick several.
+ * 02's right-click menu on the queue - and shift-click to pick several.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHAT IT ACTS ON
@@ -81,7 +81,7 @@ export function QueueMenu({
     const picked = currentSelection();
     /*
      * Nothing under the pointer and nothing picked: there is nothing to act
-     * on, so no menu at all — not an empty one.
+     * on, so no menu at all - not an empty one.
      */
     if (id === null && picked.length === 0) {
       event.preventDefault();

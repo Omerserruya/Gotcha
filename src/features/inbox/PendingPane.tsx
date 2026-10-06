@@ -14,9 +14,9 @@ import styles from './Inbox.module.css';
  * Over the panel, not in it: the header and the stream of the conversation
  * being LEFT stay mounted underneath, so nothing is torn down for a click
  * that might still be followed by another. The overlay draws the clicked
- * row's name and channel — already on the row — and the stream's skeleton.
+ * row's name and channel - already on the row - and the stream's skeleton.
  *
- * ★ CLEARED BY THE ANSWER — the URL landing, not only the open conversation
+ * ★ CLEARED BY THE ANSWER - the URL landing, not only the open conversation
  *   changing. If the server answers with the SAME open conversation (the one
  *   clicked has gone, and the first row is open again), `openId` does not
  *   change, and keyed on it alone the overlay would stay up for good. The

@@ -23,7 +23,7 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Screen 05c — message templates.
+ * Screen 05c - message templates.
  *
  * Measured: the table card and a 440 column inside `padding:22px 40px 30px`,
  * `gap:14px`, each card filling the panel's height and scrolling inside

@@ -4,9 +4,9 @@ import he from '@/i18n/messages/he/approvals.json';
 /**
  * A rejection's reason, said in the reader's language when it was one of
  * ours. The reject buttons send their LABEL as `decisionReason`, in whatever
- * language the decider had — so a Hebrew reader saw "Outside policy · נדחה"
+ * language the decider had - so a Hebrew reader saw "Outside policy · נדחה"
  * (measured on dev). A label from any catalogue maps back to its key; free
- * text — typed under "Other", or written by the platform — is the writer's
+ * text - typed under "Other", or written by the platform - is the writer's
  * own words and stays as it is.
  */
 const REASONS = {

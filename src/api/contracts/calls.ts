@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Phone calls — screens 05d and 05e.
+ * Phone calls - screens 05d and 05e.
  *
  * Shapes read from `services/conversation/src/routes/voice-sessions.ts` and
  * the `VoiceCallSession` model.
@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ── THE WHOLE ROUTER 404s WHEN VOICE IS OFF ──
  * `voiceCopilotGate` reads `tenant.voiceCopilotEnabled` and answers **404** for
  * the entire router when it is false. So **a 404 from the gate and a 404 from
- * a route that does not exist are identical on the wire** — one means *"this
+ * a route that does not exist are identical on the wire** - one means *"this
  * workspace has not switched voice on"* and the other means *"we shipped a
  * broken build"*, and a screen guessing between them will eventually tell
  * somebody the wrong one.
@@ -23,7 +23,7 @@ import { z } from 'zod';
  * ── WHAT IS NOT MODELLED ──
  * **No mute.** Searched the whole platform, not one service: nothing
  * implements it. It is one of three buttons the design puts in the call
- * header, beside two that work — a dead control in a live call, which is the
+ * header, beside two that work - a dead control in a live call, which is the
  * "Pause the rest" class with someone speaking.
  *
  * **No translation.** *"Hebrew · translating as she speaks"* has nothing
@@ -33,10 +33,10 @@ import { z } from 'zod';
  * are absent, and **nothing on the voice path creates an `ApprovalRequest`**,
  * so in-call approval routing is absent too.
  *
- * **No AI calling campaign** — no model, no list-driven object, no per-call
+ * **No AI calling campaign** - no model, no list-driven object, no per-call
  * outcome capture tied to one.
  *
- * **`converted`** — *"Ended in a sale"* — is its **fourth appearance across
+ * **`converted`** - *"Ended in a sale"* - is its **fourth appearance across
  * four screens**, and is a concept nowhere in this platform.
  */
 
@@ -62,12 +62,12 @@ export const callSchema = z.object({
   durationMs: z.number().nullable().default(null),
   /** Present once the provider has one. `recordingStatus` says which. */
   recordingUrl: z.string().nullable().default(null),
-  /** `pending` | `available` | `failed` — a recording can fail on its own. */
+  /** `pending` | `available` | `failed` - a recording can fail on its own. */
   recordingStatus: z.string().nullable().default(null),
   endReason: z.string().nullable().default(null),
   customerNumber: z.string().default(''),
   /**
-   * The contact, when the call was matched to one — on the wire and stripped
+   * The contact, when the call was matched to one - on the wire and stripped
    * until 05d needed to name the person and link to them.
    */
   customerId: z.string().nullish().default(null),
@@ -75,7 +75,7 @@ export const callSchema = z.object({
 
 export type Call = z.infer<typeof callSchema>;
 
-/** `{ data, nextCursor }` — cursor-paginated, filterable on direction/status. */
+/** `{ data, nextCursor }` - cursor-paginated, filterable on direction/status. */
 export const callListSchema = z.object({
   data: z.array(callSchema).default([]),
   nextCursor: z.string().nullable().default(null),
@@ -85,7 +85,7 @@ export const callListSchema = z.object({
  * `GET /summary`.
  *
  * `averageDurationMs` is `null` when nothing has a duration, and
- * `durationSampleSize` sits beside it — the route's own comment says why:
+ * `durationSampleSize` sits beside it - the route's own comment says why:
  * *"'nobody connected' and 'calls averaged zero' are different statements."*
  * The same distinction as a send rate before anything is sent.
  */
@@ -102,7 +102,7 @@ export type CallSummary = z.infer<typeof callSummarySchema>;
 /**
  * One line of a transcript.
  *
- * Not a column anywhere — a call is a conversation and its transcript is
+ * Not a column anywhere - a call is a conversation and its transcript is
  * `Message` rows on the VOICE channel, written one per **final** utterance by
  * `stream-router.ts`. `senderName` is the speaker separation the design asks
  * for, and `metadata.confidence` is per utterance.
@@ -135,21 +135,21 @@ export type TranscriptLine = z.infer<typeof transcriptLineSchema>;
  * ════════════════════════════════════════════════════════════════════════════
  * `voiceCopilotEnabled` used to be `.default(false)`. A response that stopped
  * carrying it would have parsed cleanly and read as **"this workspace has no
- * voice"** — a statement about somebody's workspace manufactured out of a
+ * voice"** - a statement about somebody's workspace manufactured out of a
  * missing key. That is the same collapse the loader was just repaired for,
  * one level further down, and a default is the quieter version of it: the
  * loader at least logged.
  *
  * Required, so absence fails the parse, the loader catches it, and the screen
  * says *we could not find out*. **A required field proves itself; a defaulted
- * one cannot.** `/api/tenant-settings` sends all three unconditionally —
- * `!!tenant?.x` — so nothing is being asked of the platform that it does not
+ * one cannot.** `/api/tenant-settings` sends all three unconditionally -
+ * `!!tenant?.x` - so nothing is being asked of the platform that it does not
  * already do.
  *
  * `hasActiveVoiceChannel` is the platform's own precondition, and its comment
  * says what it is for: *"skip /api/voice-copilot/token entirely when the
  * tenant has no active voice channel yet."* Voice switched on and no number
- * connected is a real and separate state — see `CallsData.hasNumber`.
+ * connected is a real and separate state - see `CallsData.hasNumber`.
  */
 export const voiceAvailabilitySchema = z.object({
   voiceCopilotEnabled: z.boolean(),
@@ -167,7 +167,7 @@ export function hasPlayableRecording(call: Call): boolean {
  * Whether a call connected at all.
  *
  * `answeredAt` rather than status, because a call can be `completed` having
- * never been answered — the provider completes it either way, and "it ended"
+ * never been answered - the provider completes it either way, and "it ended"
  * is not "somebody spoke".
  */
 export function wasAnswered(call: Call): boolean {

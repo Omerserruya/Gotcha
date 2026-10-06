@@ -32,7 +32,7 @@ describe('★★ one read: both launches, and which providers are set up', () =>
     );
   });
 
-  it('unread: no launches, no providers — never "not set up"', async () => {
+  it('unread: no launches, no providers - never "not set up"', async () => {
     get.mockRejectedValue(new Error('down'));
     expect(await loadChannelsConfig()).toEqual({
       launches: { coexistence: null, newNumber: null },

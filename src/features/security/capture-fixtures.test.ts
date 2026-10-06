@@ -7,7 +7,7 @@ import { isLoopbackOrigin } from './capture-fixtures';
  * fixtures engaging on a host that serves real people.
  *
  * The first version of the guard used `NODE_ENV !== 'production'` and was
- * broken in the safe direction — `next start` IS production mode, so the
+ * broken in the safe direction - `next start` IS production mode, so the
  * fixtures could never engage at all. These tests pin the replacement in both
  * directions, because a guard that is wrong the other way would be silent.
  */

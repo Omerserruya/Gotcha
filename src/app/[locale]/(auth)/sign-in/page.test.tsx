@@ -14,13 +14,13 @@ import messages from '@/i18n/messages/en/auth.json';
  * the failure is the confusing kind: the password is accepted, the identity
  * provider session is created, and the browser then asks the AUTH host for a
  * route only the PRODUCT host serves. Behind a gateway allowlist that is a
- * **404 at the end of a successful sign-in** — which reads as the panel being
+ * **404 at the end of a successful sign-in** - which reads as the panel being
  * broken when the panel has just done its job.
  *
  * ★ This page had no test at all, which is how a URL built three different
  *   ways in one file stayed unexamined: `appPath` for the anchor, a raw path
  *   for the fetch, and `appUrl` for the callback. The anchor was already wrong
- *   once before, for the opposite reason — unprefixed, so it started the
+ *   once before, for the opposite reason - unprefixed, so it started the
  *   LEGACY product's OIDC flow.
  */
 
@@ -30,7 +30,7 @@ vi.mock('@/config/env.server', () => ({ serverEnv }));
 
 /*
  * Discovery, stubbed to the endpoint this deployment really reports. The page
- * compares the `?authorize=` parameter against it — so the value here IS the
+ * compares the `?authorize=` parameter against it - so the value here IS the
  * thing under test, and hardcoding the check instead would assert nothing.
  */
 vi.mock('@/auth/oidc', async (importOriginal) => {
@@ -40,7 +40,7 @@ vi.mock('@/auth/oidc', async (importOriginal) => {
      * ★ `productCallbackUrl` is the REAL one. It is the thing that decides
      *   which callback the hop compares against, and a stub here would assert
      *   that the page calls something rather than that it gets the right
-     *   answer — which is exactly how the wrong callback got shipped.
+     *   answer - which is exactly how the wrong callback got shipped.
      */
     ...actual,
     oidcConfiguration: async () => ({
@@ -99,7 +99,7 @@ const { default: SignInPage } = await import('./page');
  * Queried WITHIN this render rather than from the document. Testing Library
  * cleans up between tests, not between renders, so a second `render` in one
  * test leaves two panels on the page and `getByTestId` throws "found multiple"
- * — which reads as a duplicated element rather than as a test that rendered
+ * - which reads as a duplicated element rather than as a test that rendered
  * twice on purpose.
  */
 const show = async (search: { error?: string; returnTo?: string } = {}) => {
@@ -130,8 +130,8 @@ describe('⚠⚠ the hand-over target', () => {
 
   it('⚠⚠ carries `returnTo` either way, or the deep link is lost at the hop', async () => {
     /*
-     * The round trip the design requires — signing in returns you to the exact
-     * conversation you were reading — now crosses an origin. `returnTo` is
+     * The round trip the design requires - signing in returns you to the exact
+     * conversation you were reading - now crosses an origin. `returnTo` is
      * appended to whichever base is in use, and a test for only the relative
      * case would have passed while the absolute one dropped it.
      */
@@ -164,7 +164,7 @@ it('⚠⚠ always carries the hand-over marker, or this panel loops on itself', 
   /*
    * ═══════════════════════════════════════════════════════════════════════════
    * `/api/auth/login` now sends anyone WITHOUT the marker to the sign-in
-   * surface — reaching the OIDC start cold renders the identity provider's
+   * surface - reaching the OIDC start cold renders the identity provider's
    * own login page, which is the screen the separation exists to prevent.
    * This panel is the one legitimate direct caller.
    *
@@ -187,12 +187,12 @@ it('⚠⚠ always carries the hand-over marker, or this panel loops on itself', 
 describe('★★ the rotating panel and its three ticks', () => {
   /*
    * ═══════════════════════════════════════════════════════════════════════════
-   * 00a: "The dark panel rotates through three live figures — one every five
+   * 00a: "The dark panel rotates through three live figures - one every five
    * seconds … with the position marked by three ticks."
    * ═══════════════════════════════════════════════════════════════════════════
    * ⚠ WHAT THIS CAN AND CANNOT SEE, SAID FIRST. The rotation is a CSS opacity
    *   animation and all three statements are in the DOM at every instant, so
-   *   **no text assertion can observe the rotation** — a probe sampling text at
+   *   **no text assertion can observe the rotation** - a probe sampling text at
    *   t+0 and t+20 reads the same string both times and concludes there is one
    *   figure. That is what happened on the live panel, and the rotation was
    *   working. These tests assert the STRUCTURE the animation needs; whether
@@ -207,7 +207,7 @@ describe('★★ the rotating panel and its three ticks', () => {
 
   it('★★ one tick per statement, or the position marker lies about the count', async () => {
     /*
-     * The number is not three because three is a nice number — it is one per
+     * The number is not three because three is a nice number - it is one per
      * figure. Counting the slides rather than hard-coding 3 means adding a
      * fourth statement reddens this instead of leaving a marker that silently
      * undercounts.
@@ -223,12 +223,12 @@ describe('★★ the rotating panel and its three ticks', () => {
   it('⚠⚠ the ticks sit inside the status row, not in a block above it', async () => {
     /*
      * The mock is ONE footer row: ticks, a 1×12px rule, the status dot, the
-     * status text — `margin-top:auto; padding-top:36px; gap:14px`. My first
+     * status text - `margin-top:auto; padding-top:36px; gap:14px`. My first
      * version made the ticks a separate block with a margin, which renders
      * close enough to look right and is a different structure.
      *
      * ★ Asserted as containment rather than by class name, because what the
-     *   design specifies is that they share a row — not what the row is called.
+     *   design specifies is that they share a row - not what the row is called.
      */
     serverEnv.mockReturnValue({});
     const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
@@ -376,7 +376,7 @@ describe('⚠⚠ which callback the hop is told to expect', () => {
      * ════════════════════════════════════════════════════════════════════════
      * This page passed `appUrl('/api/auth/callback', APP_ORIGIN)`. On the
      * sign-in deployment `APP_ORIGIN` is the SIGN-IN host, so the provider's
-     * completion — which points at the product — was compared against a URL
+     * completion - which points at the product - was compared against a URL
      * on the wrong origin and correctly refused.
      *
      * ★ The guard did exactly its job. The expectation it was handed was

@@ -41,7 +41,7 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
     /*
      * The old route took 50 conversations × the newest 5 messages of each,
      * so a 300-message thread contributed five and the output was a
-     * well-ordered stream WITH HOLES IN THE MIDDLE. Not truncated — thinned.
+     * well-ordered stream WITH HOLES IN THE MIDDLE. Not truncated - thinned.
      * A truncated history is visibly short; a thinned one looks complete and
      * is undetectable from the response.
      *
@@ -89,7 +89,7 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
   it('★★ separates imported messages from observed ones', () => {
     /*
      * `applyLiveByDefault` injects `origin: "LIVE"` into any bulk read that
-     * does not mention origin, and this route never did — so for any customer
+     * does not mention origin, and this route never did - so for any customer
      * with imported WhatsApp history the timeline showed NONE of it, and a
      * long-standing customer rendered as brand new with no marker.
      *
@@ -112,7 +112,7 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
     /*
      * `type` is `z.literal('message')` because the producer's union has
      * exactly one member. If an `order` event ever arrives, this must break
-     * loudly here — a wider schema would let the screen draw an order as a
+     * loudly here - a wider schema would let the screen draw an order as a
      * message body and nobody would see it.
      *
      * The opposite direction from `roles.2.source`: there the enum was too
@@ -123,7 +123,7 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
 
   it('finds the newest conversation, which is the only key to the brief', () => {
     // `POST /customer-summary` requires a conversationId. No conversations,
-    // no brief — a fact about the person, not a failure.
+    // no brief - a fact about the person, not a failure.
     const events = [
       event({ conversationId: 'old', createdAt: '2026-01-01T00:00:00.000Z' }),
       event({ conversationId: 'new', createdAt: '2026-09-09T00:00:00.000Z' }),
@@ -146,7 +146,7 @@ describe('★ the timeline is a sample and the helpers have to say so', () => {
 
 describe('an empty answer is not a failed one', () => {
   it('★ distinguishes “no brief written” from “brief with no prose”', () => {
-    // `ok: true` with a null summary is a real answer — the row exists and
+    // `ok: true` with a null summary is a real answer - the row exists and
     // the prose has not been written. Rendering it would be an empty italic
     // paragraph, which reads as a summary that says nothing about them.
     expect(hasBrief(null)).toBe(false);

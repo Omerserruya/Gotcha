@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Settings · People & teams — screen 12.
+ * Settings · People & teams - screen 12.
  *
  * *"Humans and AI employees in one list, because operationally they are the
  * same resource."* They are one list and three resources, which is the whole
@@ -9,9 +9,9 @@ import { z } from 'zod';
  * server. Asking the backend to return them as one collection would put a
  * settings screen's layout into the API.
  *
- * Shapes read from route source — `services/auth/src/routes/permissions.ts`,
+ * Shapes read from route source - `services/auth/src/routes/permissions.ts`,
  * `services/ai/src/routes/ai-agents.ts`, `services/auth/src/routes/
- * departments.ts` — not from the OpenAPI document, whose generator cannot
+ * departments.ts` - not from the OpenAPI document, whose generator cannot
  * extract response schemas.
  *
  * Three things the design draws that the backend cannot express, all ruled
@@ -27,7 +27,7 @@ import { z } from 'zod';
  *   - **Escalation target.** `Department.escalationPolicy` has exactly one
  *     writer, fed by an onboarding payload no client populates, and the
  *     departments CRUD route cannot touch it. Unreachable rather than
- *     unpopulated — so no field, and deliberately no "Not set" either, which
+ *     unpopulated - so no field, and deliberately no "Not set" either, which
  *     would promise a control that exists on no screen.
  */
 
@@ -41,16 +41,16 @@ export const membershipSchema = z.looseObject({
 });
 
 /**
- * `GET /api/permissions/users` — enveloped in `data`, ADMIN only.
+ * `GET /api/permissions/users` - enveloped in `data`, ADMIN only.
  *
  * The UNIFIED list. There is a second one, `GET /api/agents`, which filters
- * `role: "AGENT"` — on a tenant whose members are all admins it returns `[]`,
+ * `role: "AGENT"` - on a tenant whose members are all admins it returns `[]`,
  * which looks exactly like a tenant with nobody in it. This screen must use
  * the unified route; the agent-only one is not an alternative source.
  *
  * `roleName` is the assigned built-in role and is what the "Can do" column
  * renders. `legacyRole` is the old enum, kept by the backend for consumers
- * that predate the role model — it is a fallback, never the primary label.
+ * that predate the role model - it is a fallback, never the primary label.
  */
 export const memberSchema = z.looseObject({
   id: z.string().min(1),
@@ -66,7 +66,7 @@ export const memberSchema = z.looseObject({
   /**
    * Conversations assigned to this person and not CLOSED.
    *
-   * Optional because the unified route does not serve it yet — the count is
+   * Optional because the unified route does not serve it yet - the count is
    * already computed on `GET /api/agents` and the contract to add it here is
    * accepted but unbuilt. Absent means "not served", which the column renders
    * as nothing at all; it must never collapse to 0, because "no open
@@ -86,12 +86,12 @@ export const AI_STATUSES = ['ACTIVE', 'DRAFT', 'PAUSED'] as const;
 export type AiStatus = (typeof AI_STATUSES)[number];
 
 /**
- * `GET /api/ai-agents` — enveloped in `data`.
+ * `GET /api/ai-agents` - enveloped in `data`.
  *
  * **Deliberately `object`, not `looseObject`.** Every other contract in this
  * codebase is loose, because the backend adds fields without versioning and an
- * unknown key must not fail a parse. Here the route answers `{ ...agent }` —
- * the entire `AIAgent` row — which carries `systemPrompt`, `sharedPrompt`,
+ * unknown key must not fail a parse. Here the route answers `{ ...agent }` -
+ * the entire `AIAgent` row - which carries `systemPrompt`, `sharedPrompt`,
  * `autonomousPrompt` and `salesContext`: the tenant's proprietary AI
  * instructions. A loose schema would pass all of it through, and this list is
  * read by a client component, so it would be serialised into the browser
@@ -109,7 +109,7 @@ export const aiEmployeeSchema = z.object({
   status: z.enum(AI_STATUSES).catch('DRAFT'),
   /**
    * Set while the creation wizard is mid-flight and cleared when the employee
-   * is saved. `DRAFT` + a step is an ABANDONED draft, not an employee — see
+   * is saved. `DRAFT` + a step is an ABANDONED draft, not an employee - see
    * `isBuilderDraft`.
    */
   builderStep: z.string().nullable().optional(),
@@ -140,10 +140,10 @@ export function isBuilderDraft(ai: AiEmployee): boolean {
 // ── Teams ───────────────────────────────────────────────────────────
 
 /**
- * `GET /api/departments` — enveloped in `data`.
+ * `GET /api/departments` - enveloped in `data`.
  *
  * "Team" in the design; `Department` in the backend. Named for the resource
- * here, because a contract describes what the API serves — the user-facing
+ * here, because a contract describes what the API serves - the user-facing
  * word is the translator's job, and `team.ts` already means something else in
  * this codebase (Home's "your team right now" panel, which is analytics).
  *
@@ -182,7 +182,7 @@ export type Department = z.infer<typeof departmentSchema>;
 // ── Writes ──────────────────────────────────────────────────────────
 
 /**
- * `POST /api/agents` — the invite. Answers **bare**, with no `data` envelope.
+ * `POST /api/agents` - the invite. Answers **bare**, with no `data` envelope.
  *
  * The route hardcodes the role to `AGENT`; `inviteUser` accepts a role but the
  * caller passes a literal. So an invite cannot choose one, and the form does
@@ -190,7 +190,7 @@ export type Department = z.infer<typeof departmentSchema>;
  * `POST /api/permissions/users/:userId/roles/:roleId`.
  *
  * `setupLink` is null when the invitee's identity has signed in somewhere
- * before — the backend withholds it deliberately, because mailing an existing
+ * before - the backend withholds it deliberately, because mailing an existing
  * user a "set your password" link reads like a phish and can lock them out.
  * Null therefore means "they already have an account", not "something failed".
  */

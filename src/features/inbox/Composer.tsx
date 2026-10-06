@@ -25,7 +25,7 @@ import styles from './Inbox.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
- * The reply box — screen 02's last missing part.
+ * The reply box - screen 02's last missing part.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THE ONLY CONTROL HERE WHOSE PURPOSE IS TO BE PRESSED
@@ -46,7 +46,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * `PENDING → SENT → DELIVERED` or lands on `FAILED`.
  *
  * The button says what pressing it does, in the present tense of an outward
- * action — not "Save", not "OK". A control that sends a stranger a message
+ * action - not "Save", not "OK". A control that sends a stranger a message
  * should read like one.
  *
  * ── NO ENTER-TO-SEND, AND THE REASON IS THE SAME AS ON APPROVALS ──
@@ -76,7 +76,7 @@ export function Composer({
    */
   const [files, setFiles] = useState<readonly File[]>([]);
   const file = files[0] ?? null;
-  /* Image previews, as object URLs — made once per file, released when it goes. */
+  /* Image previews, as object URLs - made once per file, released when it goes. */
   const previews = useMemo(
     () =>
       files.map((f) =>
@@ -100,12 +100,12 @@ export function Composer({
    */
   const [before, setBefore] = useState<string | null>(null);
   const [composed, setComposed] = useState<ComposeResult | null>(null);
-  /* The same plain flag as `isComposing`, for the same reason — see there. */
+  /* The same plain flag as `isComposing`, for the same reason - see there. */
   const [isPending, setPending] = useState(false);
   /*
    * ⚠ A PLAIN FLAG, NOT A SECOND TRANSITION. As `useTransition`, the pending
-   *   state never cleared after the reworked text arrived — the field and
-   *   Undo stayed disabled — because updates after an `await` are not part of
+   *   state never cleared after the reworked text arrived - the field and
+   *   Undo stayed disabled - because updates after an `await` are not part of
    *   the transition. Set before the call, cleared in `finally`.
    */
   const [isComposing, setComposing] = useState(false);
@@ -113,7 +113,7 @@ export function Composer({
   const fileInput = useRef<HTMLInputElement>(null);
   const body = useRef<HTMLTextAreaElement>(null);
   /*
-   * ★ THE MESSAGE BEING ANSWERED — 02's Reply. Set by a message's button in
+   * ★ THE MESSAGE BEING ANSWERED - 02's Reply. Set by a message's button in
    *   the stream, shown above the field, sent as `replyToMessageId`.
    */
   const [replying, setReplying] = useState<ReplyTarget | null>(null);
@@ -130,7 +130,7 @@ export function Composer({
 
   /*
    * The Copilot wall's "Use this", "Edit" and "Ask": the text into the box,
-   * focused — never sent. Edit selects it, to be typed over; the others leave
+   * focused - never sent. Edit selects it, to be typed over; the others leave
    * the caret at the end, ready to send. After the frame, so the box holds it.
    */
   useEffect(() => {
@@ -159,7 +159,7 @@ export function Composer({
    */
   const conflict = file !== null && replying !== null;
 
-  /** Adds what was chosen or dropped — up to five, as the old app allowed. */
+  /** Adds what was chosen or dropped - up to five, as the old app allowed. */
   const add = (chosen: FileList | readonly File[] | null | undefined) => {
     setResult(null);
     if (!chosen) return;
@@ -216,7 +216,7 @@ export function Composer({
             } else {
               /*
                * One upload per file (the route takes one). The words go with
-               * the FIRST only — five copies of a caption is not what was
+               * the FIRST only - five copies of a caption is not what was
                * written. A failure stops the rest; what did not go stays held.
                */
               outcome = { ok: true };
@@ -234,7 +234,7 @@ export function Composer({
             setResult(outcome);
             /*
              * Cleared only on success. A failed send that empties the box loses
-             * somebody's words and gives them nothing to retry with — and the
+             * somebody's words and gives them nothing to retry with - and the
              * commonest failure here is recoverable.
              */
             if (outcome.ok) {
@@ -258,7 +258,7 @@ export function Composer({
       }}
     >
       {/*
-        ★ 02's CARD HAS NO VISIBLE LABEL — the placeholder and the channel in
+        ★ 02's CARD HAS NO VISIBLE LABEL - the placeholder and the channel in
           the bar say what this is. The label stays, for whoever cannot see
           either: a placeholder is not a name.
       */}
@@ -300,7 +300,7 @@ export function Composer({
         onChange={(event) => setText(event.target.value)}
       />
 
-      {/* The held files — a picture as itself — each with the way to take it back out. */}
+      {/* The held files - a picture as itself - each with the way to take it back out. */}
       {files.length === 0 ? null : (
         <ul className={styles.composerFiles} data-testid="composer-files">
           {files.map((f, i) => (
@@ -336,7 +336,7 @@ export function Composer({
 
       {/*
         ════════════════════════════════════════════════════════════════════
-        ★★ 02's BAR — EVERY CONTROL IN IT DOES SOMETHING
+        ★★ 02's BAR - EVERY CONTROL IN IT DOES SOMETHING
         ════════════════════════════════════════════════════════════════════
         02 draws image · paperclip · mic · bookmark, a divider, Rewrite ·
         Shorter · Translate, the channel and send. The mic and the bookmark
@@ -393,7 +393,7 @@ export function Composer({
         <span className={styles.composerDivider} aria-hidden="true" />
 
         {/*
-          ★ They act on the draft, so with no draft they are not ready —
+          ★ They act on the draft, so with no draft they are not ready -
             the same reasoning as Send.
         */}
         <span role="group" aria-label={t('compose.label')} className={styles.composerChips}>
@@ -438,7 +438,7 @@ export function Composer({
           screen already knew is worse than a control that says it is not ready.
           A held file is something to send, with or without words.
 
-          ⚠ An arrow, as 02 draws it — and the words stay, for a screen
+          ⚠ An arrow, as 02 draws it - and the words stay, for a screen
             reader: "Send to the customer" is what pressing it does.
         */}
         <button
@@ -512,7 +512,7 @@ export function Composer({
                 ? /*
                    * Not "try again". The conversation arrived on a channel whose
                    * credentials have since been removed, and nothing about the
-                   * message is at fault — so the sentence points at the channel.
+                   * message is at fault - so the sentence points at the channel.
                    */
                   t('error.channelGone')
                 : result.reason === 'not_found'

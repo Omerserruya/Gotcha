@@ -18,8 +18,8 @@ export type ConnectResult =
   | {
       readonly ok: false;
       /**
-       * `missing` — a required field is empty or a choice is not one offered;
-       * `not_here` — this system connects at its provider (OAuth) or not by a
+       * `missing` - a required field is empty or a choice is not one offered;
+       * `not_here` - this system connects at its provider (OAuth) or not by a
        * form at all; `entitlement` · `forbidden` · `failed`.
        */
       readonly reason: 'missing' | 'not_here' | 'entitlement' | 'forbidden' | 'failed';
@@ -28,7 +28,7 @@ export type ConnectResult =
   | { readonly ok: false; readonly reason: 'validation'; readonly message: string | null };
 
 /**
- * 10's Connect — live (Omer, 2026-10-04): `POST /api/integrations/:slug/connect`.
+ * 10's Connect - live (Omer, 2026-10-04): `POST /api/integrations/:slug/connect`.
  *
  * The form's fields are read again HERE, from the catalogue, rather than
  * taken from the browser: what is sent is what the catalogue asks for and
@@ -80,9 +80,9 @@ export type OAuthStart =
   | {
       readonly ok: false;
       /**
-       * `not_here` — this system does not come back here; `not_configured`
-       * — the provider's app is not set up (500 *_not_configured);
-       * `needs_store` — Shopify with no store connected yet (409);
+       * `not_here` - this system does not come back here; `not_configured`
+       * - the provider's app is not set up (500 *_not_configured);
+       * `needs_store` - Shopify with no store connected yet (409);
        * `forbidden` · `failed`.
        */
       readonly reason: 'not_here' | 'not_configured' | 'needs_store' | 'forbidden' | 'failed';
@@ -90,8 +90,8 @@ export type OAuthStart =
 
 /**
  * 10's Connect for an OAuth system (Omer, 2026-10-04; backend 381a5d1b):
- * `GET /api/connectors/:slug/oauth/init?flow=redesign_studio` — server-side,
- * with the session — then the browser goes to the provider's page. Nothing
+ * `GET /api/connectors/:slug/oauth/init?flow=redesign_studio` - server-side,
+ * with the session - then the browser goes to the provider's page. Nothing
  * is connected until the person approves there; the way back lands on this
  * system's screen with `connected=1` or `error=<code>`.
  */

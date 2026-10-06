@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetServerEnvCache } from '@/config/env.server';
 
 /**
- * The session is renewed in the proxy, before the render — the one place a
+ * The session is renewed in the proxy, before the render - the one place a
  * cookie can be written AND the render can be handed the new token.
  */
 const refreshSession = vi.hoisted(() => vi.fn());

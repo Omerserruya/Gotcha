@@ -25,7 +25,7 @@ const entry = (id: string, over: Record<string, unknown>) =>
 const show = async (entries: ReturnType<typeof entry>[]) =>
   render(await AuditSection({ entries, available: true, facets: [], facetsTruncated: false }));
 
-describe('★ 16 — an audit row is time · what happened · its kind', () => {
+describe('★ 16 - an audit row is time · what happened · its kind', () => {
   it('a failure says "Failure"; otherwise who did it', async () => {
     await show([
       entry('a', {}),
@@ -37,7 +37,7 @@ describe('★ 16 — an audit row is time · what happened · its kind', () => {
     expect(screen.getByTestId('audit-kind-c')).toHaveTextContent(/^Failure$/);
   });
 
-  it('an actor nobody named gets no word — never a missing-message key', async () => {
+  it('an actor nobody named gets no word - never a missing-message key', async () => {
     await show([entry('x', { actorType: 'webhook' })]);
     expect(screen.getByTestId('audit-kind-x')).toBeEmptyDOMElement();
   });
@@ -49,7 +49,7 @@ describe('★ 16 — an audit row is time · what happened · its kind', () => {
   });
 });
 
-describe('★ 16 — the audit card’s head is 02’s', () => {
+describe('★ 16 - the audit card’s head is 02’s', () => {
   const facet = (action: string, count: number) => ({ action, count });
 
   it('"All" first and dark, four facets in the rows’ words, the rest under More', async () => {
@@ -78,7 +78,7 @@ describe('★ 16 — the audit card’s head is 02’s', () => {
     expect(screen.getByTestId('audit-facets-more')).toBeInTheDocument();
   });
 
-  it('Export is drawn and is not live — whether or not the log could be read', async () => {
+  it('Export is drawn and is not live - whether or not the log could be read', async () => {
     render(
       await AuditSection({ entries: [], available: false, facets: [], facetsTruncated: false }),
     );
@@ -133,7 +133,7 @@ describe('★ 16 corrections (measurement of 9aeb1a7)', () => {
   });
 });
 
-describe('★ 16 — chips in the rows’ words, short (measurement of f6f4564)', () => {
+describe('★ 16 - chips in the rows’ words, short (measurement of f6f4564)', () => {
   it.each([
     ['adapter.ok.shopify.get_customer_by_phone', 'Looked up by phone'],
     ['adapter.ok.shopify.search_products', 'Searched products'],

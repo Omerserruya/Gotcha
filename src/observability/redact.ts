@@ -41,13 +41,13 @@ export function redact(value: unknown, depth = 0): unknown {
      *
      * An upstream failure is exactly where a whole response body ends up, and
      * `cause` is logged at 900+ call sites. It goes through the same handling
-     * now — one rule for strings, not two.
+     * now - one rule for strings, not two.
      *
      * ★★ THE CONTENT IS NOT REDACTED, AND THAT IS NOW A RULING RATHER THAN AN
      *    OPEN QUESTION. Decided 2026-09-30: **cap it, keep the beginning.**
      *
      *   `message` is in `SENSITIVE_KEY_PATTERN`, so `{ message }` as a FIELD
-     *   becomes `[redacted]` while an `Error`'s message survives — two rules
+     *   becomes `[redacted]` while an `Error`'s message survives - two rules
      *   for one word, both tested. That asymmetry stands on purpose. The
      *   argument for keeping it was that an error reading `[redacted]` is
      *   useless; the argument against was this module's own principle, that it
@@ -55,8 +55,8 @@ export function redact(value: unknown, depth = 0): unknown {
      *   that in this product an error message **can quote customer data**.
      *
      * ★ The cap is what satisfies both: a whole response body cannot reach a
-     *   log sink, and the first 512 characters — which is where the cause is
-     *   — survive for whoever has to read it.
+     *   log sink, and the first 512 characters - which is where the cause is
+     *   - survive for whoever has to read it.
      *
      * ⚠ BOTH DIRECTIONS ARE ASSERTED, and the second is the one that matters.
      *   A cap that deleted everything would pass "nothing leaked" perfectly

@@ -1,13 +1,13 @@
 import { z } from 'zod';
 
 /**
- * AI employees — screen 07.
+ * AI employees - screen 07.
  *
  * Shapes read from `services/ai/src/routes/ai-agents.ts`.
  *
  * ── THREE VERBS OF FOUR ──
  * The design says *"Hire, edit, pause, fire"*. `AIAgentStatus` is
- * `ACTIVE | DRAFT | PAUSED` — **there is no `RETIRED`.** Firing is not a state
+ * `ACTIVE | DRAFT | PAUSED` - **there is no `RETIRED`.** Firing is not a state
  * this platform has, and the screen says which verb is missing rather than
  * quietly listing three: a missing verb in a stated list of four reads as an
  * oversight, and this one is a fact about the product.
@@ -20,7 +20,7 @@ import { z } from 'zod';
  * No handover, no reassignment, no notification. **A customer mid-conversation
  * simply stops getting replies**, and nothing tells them or anyone else. The
  * screen says so at the moment of pausing, because the person clicking it is
- * not the person who bears the consequence — the same shape as the
+ * not the person who bears the consequence - the same shape as the
  * unenforced quiet hours.
  *
  * ── THE THREE COUNTS, AND THE ONE THAT IS ABSENT ──
@@ -32,7 +32,7 @@ import { z } from 'zod';
  * **There is no escalation count**, and the route explains why: `isHandedOver`
  * has six-plus writers sharing only *"a person ended up driving"*, and the
  * cause would need `ConversationHandover.reason`, which **holds zero rows
- * while five conversations carry the flag** — so a cause column would be *"a
+ * while five conversations carry the flag** - so a cause column would be *"a
  * confident zero for every employee"*. Neither source is honest, so neither is
  * drawn.
  */
@@ -46,7 +46,7 @@ export const employeeSchema = z.object({
   /** `customer_support`, `sales`, `booking`, `billing`, `custom`. */
   role: z.string().default(''),
   status: z.enum(EMPLOYEE_STATUSES).catch('DRAFT'),
-  /** `["whatsapp", "instagram", …]` — where this employee answers. */
+  /** `["whatsapp", "instagram", …]` - where this employee answers. */
   channels: z.array(z.string()).default([]),
   departmentName: z.string().nullable().default(null),
   knowledgeSources: z
@@ -62,7 +62,7 @@ export const employeeSchema = z.object({
   lastTestedAt: z.string().nullable().default(null),
 
   /**
-   * OPEN + WAITING. **Not "being handled right now"** — the route's own note
+   * OPEN + WAITING. **Not "being handled right now"** - the route's own note
    * says WAITING is usually waiting on the CUSTOMER, so this must not be
    * captioned as live activity.
    */
@@ -75,14 +75,14 @@ export const employeeSchema = z.object({
   /*
    * ── 07's DETAIL: what the list route already sends (it spreads the row) ──
    * Each is `.catch`-ed: a field only the detail draws must never reject the
-   * whole list. `systemPrompt` and the model settings are NOT named — no
+   * whole list. `systemPrompt` and the model settings are NOT named - no
    * card shows them, and a prompt has no business in a browser payload.
    */
   /** `professional`, `friendly`, `casual`, `formal`. */
   tone: z.string().catch('').default(''),
   /** `{ english: true, hebrew: false, arabic: false }`. */
   languages: z.record(z.string(), z.boolean()).catch({}).default({}),
-  /** `[{ label, type, value, enabled }]` — the label is written by a person. */
+  /** `[{ label, type, value, enabled }]` - the label is written by a person. */
   escalationRules: z
     .array(
       /*
@@ -98,7 +98,7 @@ export const employeeSchema = z.object({
     )
     .catch([])
     .default([]),
-  /** `{ role, responsibility, … }` — the responsibility is 07's subline. */
+  /** `{ role, responsibility, … }` - the responsibility is 07's subline. */
   identity: z
     .object({ responsibility: z.string().nullable().catch(null).default(null) })
     // PATCH replaces the whole object: `role` and the guidelines ride along.
@@ -164,7 +164,7 @@ export const employeeListSchema = z.array(employeeSchema);
 /**
  * The share this employee finished without a person stepping in.
  *
- * `null` rather than zero when nothing has been routed here yet — "has never
+ * `null` rather than zero when nothing has been routed here yet - "has never
  * handled a conversation" and "handled some and needed help every time" are
  * opposite facts, and 0% would state the second about an employee in the
  * first position.
@@ -177,7 +177,7 @@ const NAMED_ROLES = new Set(['customer_support', 'sales', 'booking', 'billing', 
  *
  * Three states, and the third is the one the screen was missing entirely:
  * a named role, a role the platform has added since this list was written, and
- * **no role at all** — which is a real state, because `role` defaults to `''`.
+ * **no role at all** - which is a real state, because `role` defaults to `''`.
  *
  * An employee nobody has said anything about is the interesting row on that
  * screen; it is usually a draft somebody abandoned. Rendering the row and
@@ -240,7 +240,7 @@ export function finishedConversations(employee: Employee): number {
  * every non-closed conversation assigned to the employee, with no such
  * exclusions.
  *
- * So the server can legitimately release **more** than the dialog predicted —
+ * So the server can legitimately release **more** than the dialog predicted -
  * the extra being test rows that were never anyone's customer. The dialog is
  * the honest forecast of real people affected; the result is what the
  * database did. Neither is wrong, and the screen shows the result afterwards
@@ -260,7 +260,7 @@ export function canResume(employee: Employee): boolean {
  * Would pausing this employee leave somebody mid-conversation?
  *
  * The warning is always true, but it is **concrete** when there are open
- * conversations — and a number is what makes a consequence land. Zero open
+ * conversations - and a number is what makes a consequence land. Zero open
  * conversations still warns, because one can arrive between reading and
  * clicking.
  */

@@ -15,7 +15,7 @@ import { shortWhen } from './when';
  *
  * Three, as 02's card holds, so the card keeps its height beside the policy
  * card. Few, because the list's job is "do I recognise these?" and a person answers
- * that about a handful. It is not a page size — there is no second page and no
+ * that about a handful. It is not a page size - there is no second page and no
  * server-side paging; the whole list is already in props, and pretending
  * otherwise would put a control on screen that cannot be honoured.
  */
@@ -25,8 +25,8 @@ const VISIBLE = 3;
  * Where this account is signed in.
  *
  * *"An unfamiliar session is flagged in the list rather than in an email."*
- * So the row has to carry enough for a person to recognise their own devices —
- * browser, city and when it was last used — and revoking has to be one click
+ * So the row has to carry enough for a person to recognise their own devices -
+ * browser, city and when it was last used - and revoking has to be one click
  * away from noticing.
  *
  * The details are the reader's own and are rendered for exactly that reason.
@@ -70,7 +70,7 @@ export function SessionList({
    * ════════════════════════════════════════════════════════════════════════════
    * A browser walk reported "no sign out everywhere" on this screen. The control
    * was here the whole time, mounted, wired to `DELETE /api/account/sessions`.
-   * The dev tenant has 38 sessions — one per capture mint — and the button comes
+   * The dev tenant has 38 sessions - one per capture mint - and the button comes
    * after all of them.
    *
    * ★ So the finding was right and its cause was not the one it named. **A
@@ -100,12 +100,12 @@ export function SessionList({
       for, read from the props rather than from the DOM, so they are right
       whether the list is collapsed or expanded. **The reader who needs them is
       an instrument, and an instrument that has to count nodes is one that can
-      count the wrong nodes** — which is exactly what happened: a probe used
+      count the wrong nodes** - which is exactly what happened: a probe used
       `[data-testid^="session-"]`, which also matches `session-detail-*` and,
       because the plural starts with the singular, `sessions-show-all`.
 
       I am not renaming the testids over that. 752 of them have 392 prefix
-      relationships, because the scheme is hierarchical on purpose —
+      relationships, because the scheme is hierarchical on purpose -
       `session-<id>` and `session-detail-<id>` describe a row and its detail. Any
       hierarchy has prefixes; a prefix selector over one is the wrong query, not
       the wrong name. Stating the numbers removes the reason to write that query.
@@ -131,11 +131,11 @@ export function SessionList({
               {/*
                 Place and time, which is what makes a session recognisable or
                 not. The city comes from the identity provider's own GeoIP and
-                is simply absent when it has none — never guessed from the IP,
+                is simply absent when it has none - never guessed from the IP,
                 and never replaced by a placeholder.
               */}
               {/*
-                02: one line — "This device · …", the city, and when, in the
+                02: one line - "This device · …", the city, and when, in the
                 audit's own clock. The address rides on the title.
               */}
               <span
@@ -157,7 +157,7 @@ export function SessionList({
 
             {/*
               The one destructive control on this project that is meant to be
-              pressed — it is why the list is here. Absent on the current
+              pressed - it is why the list is here. Absent on the current
               device: a button that signs you out of the browser you are using
               cannot report whether it worked.
             */}
@@ -224,8 +224,8 @@ export function SessionList({
               whether they are about to lock themselves out will not press it,
               and **a control nobody dares press is the same as no control.**
 
-              Two presses, not a dialog. The action is recoverable — signing in
-              again is what it costs — so the guard only has to stop a stray
+              Two presses, not a dialog. The action is recoverable - signing in
+              again is what it costs - so the guard only has to stop a stray
               click, and an inline confirm cannot be dismissed by a stray click
               elsewhere the way an overlay can.
             */
@@ -282,7 +282,7 @@ export function SessionList({
                  ★ "WE COULDN'T CONFIRM" IS NOT "THAT DIDN'T SIGN OUT".
                  The second is a claim about a session that may well be gone.
                  The advice is identical either way because signing out twice
-                 is idempotent — so saying the true one costs nothing.
+                 is idempotent - so saying the true one costs nothing.
                 */
                 result.reason === 'unconfirmed'
                 ? t('sessions.revokeUnconfirmed')

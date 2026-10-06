@@ -9,7 +9,7 @@ import { channelName } from '@/api/contracts/inbox';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
- * "Needs you now" — the ranked queue on Home.
+ * "Needs you now" - the ranked queue on Home.
  *
  * Ordered by risk, not by time, and the order is the server's. Recomputing it
  * here would mean Home and Inbox disagreeing about the first row the moment
@@ -24,7 +24,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * The design marks a row only when it is angry, valuable or blocked;
  * everything else is neutral. `COMPLAINT` joins `FRUSTRATED` because the
  * ranker weighs them identically, and an unrecognised intent is neutral rather
- * than guessed at — a wrongly coloured row is worse than an uncoloured one.
+ * than guessed at - a wrongly coloured row is worse than an uncoloured one.
  */
 const TONE_BY_INTENT: Record<string, 'urgent' | 'opportunity' | 'blocked'> = {
   FRUSTRATED: 'urgent',
@@ -107,7 +107,7 @@ export async function QueueList({
                   ★★ THE CHANNEL'S NAME, ON EVERY ROW OF THE FIRST SCREEN.
                   This printed `SHOPIFY_LIVE_CHAT` verbatim. Same fix as the
                   inbox queue and the metric strip, and this site was missed by
-                  `raw-value-sweep` because the line also assigns a className —
+                  `raw-value-sweep` because the line also assigns a className -
                   the blind spot that script now documents. A browser walk
                   found it.
                 */}

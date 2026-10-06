@@ -17,7 +17,7 @@ import { UserText } from './UserText';
  * and every element inherits it, so the bidirectional algorithm resolved a
  * right-to-left string against a left-to-right paragraph.
  *
- * A DOM test cannot see visual order — no test in this repo can, which is why
+ * A DOM test cannot see visual order - no test in this repo can, which is why
  * this one went to production. What it CAN pin is that the isolation is present
  * and that it is `auto` rather than inherited, which is the whole mechanism.
  */
@@ -55,7 +55,7 @@ describe('★★ user content is isolated from the page direction', () => {
     expect(node.tagName).toBe('BDI');
   });
 
-  it('★ leaves Latin text alone — isolation is not transformation', () => {
+  it('★ leaves Latin text alone - isolation is not transformation', () => {
     render(<UserText>Natural cosmetics (organic)</UserText>);
     expect(screen.getByText('Natural cosmetics (organic)')).toBeInTheDocument();
   });

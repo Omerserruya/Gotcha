@@ -17,7 +17,7 @@ import {
 import styles from './Channels.module.css';
 
 /**
- * Phone calls with the merchant's own Twilio, inside 13's Connect panel —
+ * Phone calls with the merchant's own Twilio, inside 13's Connect panel -
  * the old app's three steps (details → numbers → activate), drawn the way
  * Email is: fields, then a list. No screen of its own.
  */

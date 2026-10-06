@@ -13,7 +13,7 @@
  * ── WHAT NEXT DOES FOR YOU, AND WHAT IT DOES NOT ──
  * `next/link`, the router, `redirect()` and the `source` of `headers()` and
  * `redirects()` are all prefixed automatically. **`fetch` is not, and neither
- * is `new URL()`** — those are plain web APIs with no knowledge of the app's
+ * is `new URL()`** - those are plain web APIs with no knowledge of the app's
  * mount point, and they are where this leaks.
  *
  * `basePath` is applied at BUILD time and inlined into the client bundle, so
@@ -33,7 +33,7 @@ export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
  * An in-app absolute path, prefixed for wherever this app is mounted.
  *
  * For `fetch` and anything else that takes a URL string directly. **Not for
- * `next/link` or `redirect()`** — they prefix it themselves, and passing an
+ * `next/link` or `redirect()`** - they prefix it themselves, and passing an
  * already-prefixed path to them produces `/v2/v2/…`.
  */
 export function appPath(path: `/${string}`): string {
@@ -47,7 +47,7 @@ export function appPath(path: `/${string}`): string {
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ `new URL('/a', 'https://host/v2')` IS `https://host/a`
  * ════════════════════════════════════════════════════════════════════════════
- * An absolute path DISCARDS the base's path — with or without a trailing
+ * An absolute path DISCARDS the base's path - with or without a trailing
  * slash. So composing the OIDC `redirect_uri` as
  * `new URL('/api/auth/callback', APP_ORIGIN)` silently drops the mount point
  * and produces a URL that belongs to whatever else is served at that origin.

@@ -12,7 +12,7 @@ import { captureFixturesEnabled } from '@/features/security/capture-fixtures';
  *
  * ── WHY THIS SCREEN NEEDS IT MORE THAN SCREEN 16 DID ──
  * Screen 16 renders an IP address and a city. **This one renders a name, a
- * phone number and an email address on the same row** — directly identifying
+ * phone number and an email address on the same row** - directly identifying
  * and directly contactable, which the other was not. A full-page capture at
  * three viewports produces eighteen copies.
  *
@@ -20,7 +20,7 @@ import { captureFixturesEnabled } from '@/features/security/capture-fixtures';
  * `captureFixturesEnabled()` is imported unchanged from the security feature:
  * `E2E_SECURITY_FIXTURES=1` **and** an `APP_ORIGIN` on a loopback address,
  * failing closed on anything it cannot parse. One mechanism on two screens
- * beats two mechanisms that can drift — and that predicate has already been
+ * beats two mechanisms that can drift - and that predicate has already been
  * wrong once, in the safe direction, silently. It is tested in both
  * directions and this file inherits that test rather than repeating it.
  *
@@ -46,7 +46,7 @@ import { captureFixturesEnabled } from '@/features/security/capture-fixtures';
  * ── EVERY ROW MUST BE A ROW THE PRODUCT COULD HAVE CREATED ──
  * ★ THIS RULE IS NOT SPECIFIC TO CAPTURES AND IT WAS WRONGLY SCOPED HERE.
  * It now lives in `api/contracts/README.md` because a UNIT fixture makes the
- * identical claim — `outreach.test.ts` carried `readCount: 904` on a counter
+ * identical claim - `outreach.test.ts` carried `readCount: 904` on a counter
  * nothing increments, one directory over, for as long as anybody kept it.
  * The version below is the capture-specific half.
  *
@@ -59,7 +59,7 @@ import { captureFixturesEnabled } from '@/features/security/capture-fixtures';
  * first two rows used to be a WhatsApp contact and an Instagram contact
  * sharing a `personId`, with a comment explaining that this was *"what makes
  * the collapse visible in evidence"*. It was chosen because it was the most
- * illustrative case — and it is the one case that **cannot happen**: the
+ * illustrative case - and it is the one case that **cannot happen**: the
  * unifier matches on phone, Instagram contacts have `phone: null`, so that
  * row can never receive that `personId`. The fixture was assigning it by
  * hand.
@@ -73,7 +73,7 @@ import { captureFixturesEnabled } from '@/features/security/capture-fixtures';
  * WhatsApp and one a person typed in. That is what the unifier produces, and
  * it is worth showing.
  *
- * The Instagram row then stands alone, under the same name — which is the
+ * The Instagram row then stands alone, under the same name - which is the
  * duplicate the screen's sentence describes. A reader sees both halves at
  * once: the join that works, and the one that does not.
  */
@@ -90,7 +90,7 @@ const FIXTURE_CONTACTS: readonly CustomerRow[] = [
     source: null,
     /*
      * Shares a `personId` with the entry below because they carry the SAME
-     * PHONE NUMBER. That is the join the unifier actually makes — and the
+     * PHONE NUMBER. That is the join the unifier actually makes - and the
      * reason it is safe is that nothing customer-typed can reach
      * `Contact.phone`, so phone matching cannot merge two strangers.
      */
@@ -101,7 +101,7 @@ const FIXTURE_CONTACTS: readonly CustomerRow[] = [
     id: 'fixture-2',
     externalId: 'avery@example.com',
     displayName: 'Avery Stone',
-    // Entered by a person rather than arriving over a channel — the second
+    // Entered by a person rather than arriving over a channel - the second
     // half of the only join this product performs.
     channel: 'EMAIL',
     phone: '+447700900123',
@@ -171,7 +171,7 @@ export function withCaptureFixtures(
 
   /*
    * Search is applied to the fixtures too, so the capture of a no-match query
-   * exercises the real empty state rather than a contrived one — and so a
+   * exercises the real empty state rather than a contrived one - and so a
    * fixture run cannot accidentally show rows for a query that matches none.
    */
   return FIXTURE_CONTACTS.filter((row) =>
@@ -197,7 +197,7 @@ export function withCaptureFixtures(
  * A full-page capture at three viewports banks eighteen copies of somebody's
  * actual conversation into a repository. That is a different order of
  * exposure from a phone number, and nothing about the fixture mechanism
- * covered it until now — `loadCustomer` had no gate at all.
+ * covered it until now - `loadCustomer` had no gate at all.
  *
  * ── THE SAME GATE, NOT A SECOND ONE ──
  * `captureFixturesEnabled()` again, unchanged: `E2E_SECURITY_FIXTURES=1` AND
@@ -214,7 +214,7 @@ export function withCaptureFixtures(
  * assert what the capture spec asserts. The capture is run by somebody else
  * on a machine this session cannot reach; without that test, a fixture that
  * disagrees with the spec is discovered during their run rather than before
- * it — and the fixture's whole job is to be the thing photographed.
+ * it - and the fixture's whole job is to be the thing photographed.
  */
 export const FIXTURE_DETAIL: CustomerDetail = {
   timeline: {
@@ -229,7 +229,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
      * ★ THE JOIN THAT EXISTS, FROM THE ROUTE'S OWN PROJECTION.
      *
      * The EMAIL entry shares this person's phone, which is what the unifier
-     * matches on — `linked` rather than `merged` because it is a live
+     * matches on - `linked` rather than `merged` because it is a live
      * sibling contact rather than an alias left by a merge.
      *
      * No Instagram row: that contact has `phone: null`, so the unifier
@@ -258,7 +258,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
         channel: 'WHATSAPP',
         conversationId: 'fixture-conv-1',
         direction: 'INBOUND',
-        body: 'Hi — is the wholesale order still arriving Thursday?',
+        body: 'Hi - is the wholesale order still arriving Thursday?',
         createdAt: '2026-09-18T09:14:00.000Z',
         origin: 'LIVE',
         id: 'fx-1',
@@ -282,7 +282,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
         channel: 'EMAIL',
         conversationId: 'fixture-conv-2',
         direction: 'INBOUND',
-        body: 'Following up on the March delivery — has anything changed?',
+        body: 'Following up on the March delivery - has anything changed?',
         createdAt: '2026-08-02T15:40:00.000Z',
         // Imported, so the capture photographs the label. Until today these
         // were excluded from the timeline entirely.
@@ -293,7 +293,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
       },
       /*
        * One of each remaining kind, so the capture photographs them rendering
-       * from `handover` and `action` rather than from `body` — which is null
+       * from `handover` and `action` rather than from `body` - which is null
        * on both, and which the legacy screen shows as "(no body)".
        */
       {
@@ -343,7 +343,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
      * capture has to photograph the caveats a merchant actually sees.
      *
      * ★ `ai_action` is AVAILABLE and carries a detail. That is the entry a
-     * screen is most likely to skip — `available: true` reads as "fine" —
+     * screen is most likely to skip - `available: true` reads as "fine" -
      * and it is the one saying a Shopify refund the AI performed is not in
      * this list. An empty coverage map here would have produced a shot with
      * no caveats at all and a passing spec.
@@ -426,7 +426,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
     },
   },
   /*
-   * A CRM that is connected and linked, with two notes — so the capture
+   * A CRM that is connected and linked, with two notes - so the capture
    * photographs the state a merchant with a working CRM sees, rather than
    * one of the two blocked sentences. Those are unit-tested instead.
    */
@@ -435,7 +435,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
       {
         id: 'fixture-note-1',
         kind: 'note',
-        body: 'Prefers the Thursday delivery slot — confirmed twice.',
+        body: 'Prefers the Thursday delivery slot - confirmed twice.',
         occurred_at: '2026-09-10T08:00:00.000Z',
       },
       {
@@ -448,7 +448,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
     link_meta: { outcome: 'linked' },
   },
   /*
-   * Screen 04d. The `ok` state with two orders — one troubled, so the
+   * Screen 04d. The `ok` state with two orders - one troubled, so the
    * capture photographs the expansion rule choosing the RIGHT one rather
    * than simply the first.
    *
@@ -605,7 +605,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
   noConversations: false,
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ SCREEN 04f — THE FIRST CUSTOMER SCREEN WHOSE POPULATED STATE IS REAL
+   * ★★ SCREEN 04f - THE FIRST CUSTOMER SCREEN WHOSE POPULATED STATE IS REAL
    * ════════════════════════════════════════════════════════════════════════
    * Every other section here stands in for data this tenant cannot produce.
    * Notes are different: the table is live and empty, so **the real empty
@@ -627,7 +627,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
   notes: [
     {
       id: 'fx-note-1',
-      body: 'Prefers delivery after 4pm — asked twice. Worth remembering before we promise a morning slot.',
+      body: 'Prefers delivery after 4pm - asked twice. Worth remembering before we promise a morning slot.',
       visibility: 'TEAM',
       aiUsable: true,
       status: 'PUBLISHED',
@@ -646,7 +646,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
     {
       /*
        * ★ NOT MARKED FOR THE AI, SO IT NEVER LEFT. The push is the only
-       * chokepoint — once a note is in the CRM it returns through
+       * chokepoint - once a note is in the CRM it returns through
        * `recent_crm_notes` into the brief and into the model, and no filter
        * on our own table can stop it. The screen says where it lives.
        */
@@ -721,7 +721,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
   viewerUserId: 'fixture-viewer-1',
   approvals: [],
   /*
-   * Wire-shaped — `{ actionKinds, policies }`, the latest version per kind —
+   * Wire-shaped - `{ actionKinds, policies }`, the latest version per kind -
    * and parsed by the real contract. A refund rule with both limits, a
    * cancel rule switched off; the other four kinds fall to the engine's
    * defaults, which is what most tenants will show.
@@ -746,16 +746,16 @@ export const FIXTURE_DETAIL: CustomerDetail = {
     ],
   }),
   // The fixture stands for a page where every read succeeded. A real page
-  // that did not gets its failures carried through — see `keepFailures`.
+  // that did not gets its failures carried through - see `keepFailures`.
   readsFailed: [],
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * ★★ SCREEN 04e — AND EVERY ROW IS ONE THE PLATFORM ACTUALLY WRITES
+   * ★★ SCREEN 04e - AND EVERY ROW IS ONE THE PLATFORM ACTUALLY WRITES
    * ════════════════════════════════════════════════════════════════════════
    * Checked at the write sites, not taken from the route's header. The
    * header advertises `crm.link.linked` as part of the "rich set"; **no code
    * in the platform writes it**, so it is not here. The same mistake as the
-   * WhatsApp-plus-Instagram row above, and caught the same way — by looking
+   * WhatsApp-plus-Instagram row above, and caught the same way - by looking
    * for the code path rather than for a sentence describing one.
    *
    * ── WHAT IS DELIBERATELY ABSENT ──
@@ -763,7 +763,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
    * an action carrying an `ok.`/`err.` segment whose recorded verdict
    * disagrees with it. The only writer of such an action is
    * `auditAdapterCall`, which sets the name and `metadata.ok` from the SAME
-   * boolean — they cannot disagree. Manufacturing one would put a row in the
+   * boolean - they cannot disagree. Manufacturing one would put a row in the
    * evidence that this platform cannot produce, which is the exact rule this
    * file exists to keep. Those branches are unit-tested and named unreached.
    *
@@ -781,7 +781,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
       data: [
         {
           // `logAudit` from `ai.service.ts`, metadata `{model, type, tokens}`
-          // — no `ok`, so the outcome genuinely was never recorded.
+          // - no `ok`, so the outcome genuinely was never recorded.
           id: 'fx-audit-1',
           actorType: 'ai',
           actorId: null,
@@ -794,7 +794,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
           outcomeDisagrees: false,
         },
         {
-          // `auditAdapterCall` — the one writer that records a verdict, and
+          // `auditAdapterCall` - the one writer that records a verdict, and
           // it records it in agreement with its own name, always.
           id: 'fx-audit-2',
           actorType: 'ai',
@@ -824,7 +824,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
            * ★ THE ROW THE SCREEN IS HARDEST ON. Its name says it was done;
            * `commerce-actions.service.ts` writes no `metadata.ok` beside it,
            * so nothing recorded whether it was. The screen shows the name
-           * and says the outcome is unrecorded — it does not let the name
+           * and says the outcome is unrecorded - it does not let the name
            * decide, which is the defect Backend caught in `outcomeOf`.
            */
           id: 'fx-audit-4',
@@ -847,7 +847,7 @@ export const FIXTURE_DETAIL: CustomerDetail = {
        * sentence they already wrote would drift from it.
        *
        * `customer` still declares `requires: "shopifyCustomerId"` even
-       * though this fixture SUPPLIED it — the constant is what the endpoint
+       * though this fixture SUPPLIED it - the constant is what the endpoint
        * returns either way. `supplied` above is what stops the screen
        * printing "pass it" underneath the rows it fetched.
        */
@@ -894,12 +894,12 @@ const FIXTURE_CONTACT_IDS: ReadonlySet<string> = new Set(FIXTURE_CONTACTS.map((c
  * ★★ WHY THIS TAKES THE ID, AND WHY IT SUBSTITUTES OVER A FAILED READ
  * ════════════════════════════════════════════════════════════════════════════
  * The first version refused to substitute whenever `timeline === null`, on
- * the rule that a failed read must stay a failed read — fixtures make
+ * the rule that a failed read must stay a failed read - fixtures make
  * evidence safe, they must never make a broken screen look like a working
  * one. That rule is right and it made this screen **unphotographable.**
  *
  * The fixture LIST serves synthetic ids. Opening one calls the real timeline
- * endpoint with an id no tenant has, which 404s — so under the gate every
+ * endpoint with an id no tenant has, which 404s - so under the gate every
  * customer page rendered "we couldn't load this customer", and the capture
  * would have banked a shot of an error state as evidence for 04b.
  *
@@ -908,7 +908,7 @@ const FIXTURE_CONTACT_IDS: ReadonlySet<string> = new Set(FIXTURE_CONTACTS.map((c
  *
  * So the two cases are separated by the id:
  *
- *   fixture id + gate open   substitute, even over a failed read — the read
+ *   fixture id + gate open   substitute, even over a failed read - the read
  *                            was always going to fail and its failure says
  *                            nothing about the screen
  *   real id    + gate open   a failure stays a failure. THIS is the case the
@@ -917,7 +917,7 @@ const FIXTURE_CONTACT_IDS: ReadonlySet<string> = new Set(FIXTURE_CONTACTS.map((c
  *                            be photographed as healthy
  *   gate closed              nothing is ever substituted
  *
- * Found by writing the capture spec rather than by running it — the screen
+ * Found by writing the capture spec rather than by running it - the screen
  * was built, unit-tested and committed in a state where no shot of it could
  * ever have been taken.
  */
@@ -936,8 +936,8 @@ export function withDetailFixtures(detail: CustomerDetail, contactId: string): C
  * ★★ THE GUARD ABOVE WAS WRITTEN WHEN THE TIMELINE WAS THE ONLY READ THAT
  *    COULD FAIL, AND IT SILENTLY STOPPED BEING ENOUGH
  * ════════════════════════════════════════════════════════════════════════════
- * On 2026-09-25 the 04e audit read failed on every capture run — our
- * contract and the response envelope disagreeing — and `customer-actions`
+ * On 2026-09-25 the 04e audit read failed on every capture run - our
+ * contract and the response envelope disagreeing - and `customer-actions`
  * photographed a healthy panel at three viewports in two locales. The
  * spec's tripwire for precisely that state never fired, because by the time
  * the page rendered, this function had already replaced the failed read
@@ -949,7 +949,7 @@ export function withDetailFixtures(detail: CustomerDetail, contactId: string): C
  *
  * The rule was right and the implementation checked a single read by name.
  * A guard written against the failures that existed when it was written
- * does not cover the failure added afterwards — and nothing reports the
+ * does not cover the failure added afterwards - and nothing reports the
  * gap, because the guard still passes.
  *
  * ── WHY THIS IS SAFE FOR THE THING FIXTURES EXIST FOR ──

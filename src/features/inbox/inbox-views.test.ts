@@ -11,11 +11,11 @@ import {
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * ⚠⚠ THE VIEWS DID NOT FILTER — THE PAGE NEVER READ `view`
+ * ⚠⚠ THE VIEWS DID NOT FILTER - THE PAGE NEVER READ `view`
  * ════════════════════════════════════════════════════════════════════════════
  * "Resolved" showed open conversations; "Assigned to me" showed nine that were
- * not. The route could filter all along — `conversations.ts:71` destructures
- * `status, assignedAgentId, … includeAutomated, automatedOnly` — and the
+ * not. The route could filter all along - `conversations.ts:71` destructures
+ * `status, assignedAgentId, … includeAutomated, automatedOnly` - and the
  * OpenAPI simply never listed them.
  */
 describe('★★ each view asks the route for what its name says', () => {
@@ -31,7 +31,7 @@ describe('★★ each view asks the route for what its name says', () => {
     /*
      * An unfiltered list under the heading "Assigned to me" is the defect
      * being fixed. There is no honest query for "me" without knowing who that
-     * is, so the answer is null — the list reports it could not read.
+     * is, so the answer is null - the list reports it could not read.
      */
     expect(viewQuery('mine', null)).toBeNull();
   });
@@ -49,7 +49,7 @@ describe('★★ each view asks the route for what its name says', () => {
      * ════════════════════════════════════════════════════════════════════════
      * THE ROUTE CANNOT SEPARATE THEM, AND THIS IS STATED RATHER THAN HIDDEN
      * ════════════════════════════════════════════════════════════════════════
-     * `automatedOnly` returns both — `AUTOMATED_HANDLERS = ["ai_agent",
+     * `automatedOnly` returns both - `AUTOMATED_HANDLERS = ["ai_agent",
      * "flow"]`. The route ignores an unknown query key today, so sending
      * `handledBy` is harmless now and exact the moment the route accepts it.
      *
@@ -88,7 +88,7 @@ describe('★ the channel filter is one of the five the header draws', () => {
     for (const id of QUEUE_CHANNEL_FILTERS) expect(parseChannelFilter(id)).toBe(id);
   });
 
-  it('⚠ and anything else is "All" — including real channels with no chip', () => {
+  it('⚠ and anything else is "All" - including real channels with no chip', () => {
     // A narrowed list with no chip lit would say nothing about what narrowed it.
     for (const raw of [undefined, '', 'GMAIL', 'whatsapp', 'SHOPIFY_LIVE_CHAT']) {
       expect(parseChannelFilter(raw), String(raw)).toBeNull();

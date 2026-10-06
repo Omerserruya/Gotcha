@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client/api-error';
 
 /**
- * The verbs that change a real conversation — and they had no direct tests.
+ * The verbs that change a real conversation - and they had no direct tests.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ NO REQUEST IS MADE HERE. `serverApi` is mocked for the whole file, so
@@ -13,7 +13,7 @@ import { ApiError } from '@/api/client/api-error';
  * ★★ THIS MODULE WAS COVERED ONLY THROUGH `Verbs.test.tsx`, WHICH MOCKS IT.
  * Every assertion about claiming and returning to the AI was about a stub.
  * The module that performs the writes was the least-tested thing in the
- * feature — the same shape as the OIDC callback, which minted sessions and
+ * feature - the same shape as the OIDC callback, which minted sessions and
  * had no test file beside it.
  */
 const post = vi.hoisted(() => vi.fn());
@@ -37,7 +37,7 @@ describe('⚠⚠ the two the right-click menu needed, and the platform can do', 
   it('★★ requeue posts to `release`, with the body `claim` is proven with', async () => {
     /*
      * ★ The schema says "no Zod schema is declared; shape is not verifiable
-     *   from source" — identically for claim, release and close. `claim` is
+     *   from source" - identically for claim, release and close. `claim` is
      *   called with `{}` in production, so the other two follow it rather
      *   than inventing a body.
      */
@@ -64,7 +64,7 @@ describe('⚠⚠ the two the right-click menu needed, and the platform can do', 
   it('⚠⚠ a 404 is "not found", and anything else is the generic failure', async () => {
     /*
      * ⚠ NEITHER IS GIVEN A 409 MEANING. `claim` and `returnToAi` each have a
-     *   documented conflict — already claimed, no AI employee — and a
+     *   documented conflict - already claimed, no AI employee - and a
      *   sentence for it. These two have no described conflict condition, so
      *   they report the generic failure rather than inventing a sentence
      *   about a state nobody has observed.

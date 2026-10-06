@@ -1,6 +1,6 @@
 {
   "title": "Security",
-  "description": "Who can get in, and a record of everything that happened — by a person or by GOTCHA.",
+  "description": "Who can get in, and a record of everything that happened - by a person or by GOTCHA.",
   "forbidden": "You don't have permission to do that.",
   "heading": {
     "sessions": "Where you're signed in",
@@ -17,7 +17,7 @@
     "revokeOthers": "{count, plural, one {Sign out the other device} other {Sign out all # other devices}}",
     "idpDown": "The identity provider didn't answer, so nothing was signed out. Try again shortly.",
     "revokeFailed": "That didn't sign out. Try again.",
-    "revokeUnconfirmed": "We couldn't confirm that signed out. It may have worked — signing out again is safe either way.",
+    "revokeUnconfirmed": "We couldn't confirm that signed out. It may have worked - signing out again is safe either way.",
     "showAll": "Show all {count} devices",
     "showFewer": "Show fewer",
     "hiddenNote": "{count, plural, one {# more device} other {# more devices}} not shown",
@@ -48,7 +48,7 @@
     }
   },
   "audit": {
-    "unavailable": "We can't read the activity log yet, so this list is not available. It isn't empty — we just can't show it.",
+    "unavailable": "We can't read the activity log yet, so this list is not available. It isn't empty - we just can't show it.",
     "empty": "Nothing recorded yet.",
     "actor": {
       "ai": "By GOTCHA",
@@ -99,6 +99,6 @@
     "google": "Sign in with Google",
     "googleNone": "Nothing here reads whether Google sign-in is on.",
     "session": "Sign out after inactivity",
-    "sessionNone": "Session length is set for the whole platform, not for this workspace — and it is not an inactivity timeout."
+    "sessionNone": "Session length is set for the whole platform, not for this workspace - and it is not an inactivity timeout."
   }
 }

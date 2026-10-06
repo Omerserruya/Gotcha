@@ -80,7 +80,7 @@ describe('four things blank billing fields can mean', () => {
   it('★ no billable entity is not “you have not filled this in”', () => {
     /*
      * The sharpest of the four: with no account, "add your billing details"
-     * is not even the right instruction — there is nothing to add them to.
+     * is not even the right instruction - there is nothing to add them to.
      */
     expect(profileReading(profile({ state: 'no_billable_entity' }))).toBe('no_account');
   });
@@ -106,7 +106,7 @@ describe('four things blank billing fields can mean', () => {
   });
 });
 
-describe('★ 17e — the card’s expiry, as the route sends it', () => {
+describe('★ 17e - the card’s expiry, as the route sends it', () => {
   it('keeps expMonth / expYear and writes them as 02 does', () => {
     const [card] = paymentMethodListSchema.parse({
       paymentMethods: [

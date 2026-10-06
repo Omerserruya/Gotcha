@@ -10,7 +10,7 @@ import styles from './Knowledge.module.css';
 import { resolveConflict, type ResolveResult } from './resolve-actions';
 
 /**
- * "This one is right" — screen 08's resolve, one button per observed answer.
+ * "This one is right" - screen 08's resolve, one button per observed answer.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠ PRESSING THIS WRITES THE KNOWLEDGE EVERY AI EMPLOYEE ANSWERS FROM
@@ -25,7 +25,7 @@ import { resolveConflict, type ResolveResult } from './resolve-actions';
  * number, and 06e's merge panel exists because model-written labels arrive in
  * *"near-identical variants"*. Two adjacent buttons under two answers that
  * differ by three characters is a misclick that silently sets the wrong
- * refund window — and nobody re-reads an answer that has been approved.
+ * refund window - and nobody re-reads an answer that has been approved.
  *
  * So the second press echoes **the answer itself**, not the word "confirm".
  * The reader has to look at the text they chose, which is the only check that
@@ -59,7 +59,7 @@ export function ResolveConflict({
   /*
    * ★ A RESOLVED ROW DOES NOT KEEP OFFERING TO BE RESOLVED.
    * `revalidatePath` will replace this card on the next render, but until it
-   * does the buttons would still be live — and a second press on the *other*
+   * does the buttons would still be live - and a second press on the *other*
    * variant would write a second, contradicting document. `already_covered`
    * counts as settled for the same reason: the candidate has been marked.
    */
@@ -84,7 +84,7 @@ export function ResolveConflict({
                 /*
                  * Secondary until it is armed. The armed one becomes the
                  * primary action on the card, which is the only moment this
-                 * panel has a primary action at all — before that, choosing
+                 * panel has a primary action at all - before that, choosing
                  * between two answers is the reader's job and the screen
                  * takes no side.
                  */
@@ -98,7 +98,7 @@ export function ResolveConflict({
                 {isArmed
                   ? /*
                      * The answer, quoted back. Long answers are clipped for
-                     * the button label only — never for what is sent, which
+                     * the button label only - never for what is sent, which
                      * is `variant.answer` whole.
                      */
                     t('confirm', { answer: clip(variant.answer) })

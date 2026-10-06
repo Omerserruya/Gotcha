@@ -27,7 +27,7 @@ import {
  * never heard of **mid-sign-in, with somebody's password already accepted.**
  *
  * The identity provider's own page can still finish any flow. So an unknown
- * stage is not an error, it is a handover — and most of what is asserted here is
+ * stage is not an error, it is a handover - and most of what is asserted here is
  * that we hand over rather than improvise.
  *
  * The two known stages were measured against the real tenant on 2026-09-28.
@@ -50,7 +50,7 @@ describe('★★ the two stages this tenant actually has', () => {
     /*
      * `recovery_url` is a flow slug an administrator can change. Hardcoding
      * `/if/flow/gotcha-recovery-self/` sends somebody who has forgotten their
-     * password to a 404 the day it is renamed — and that is the one person on
+     * password to a 404 the day it is renamed - and that is the one person on
      * this screen who cannot get in by trying harder.
      */
     const step = readChallenge(identification());
@@ -111,7 +111,7 @@ describe('★★ anything else is a handover, not an improvisation', () => {
   it('★★ hands over on a stage we have never heard of', () => {
     /*
      * ★ THIS USED `ak-stage-authenticator-validate` AS ITS EXAMPLE, and that
-     * stage has since been observed and is parsed — so the example had to change
+     * stage has since been observed and is parsed - so the example had to change
      * or the test would be asserting that a known stage is unknown. A consent
      * stage is genuinely unseen here.
      *
@@ -131,7 +131,7 @@ describe('★★ anything else is a handover, not an improvisation', () => {
      * a single submit, and drawing a password box the stage will reject fails
      * after the typing rather than before.
      *
-     * ⚠ But the RECOVERY flow's first stage is this exact shape — the same
+     * ⚠ But the RECOVERY flow's first stage is this exact shape - the same
      *   `ak-stage-identification` with `password_fields: false`, because asking
      *   for an address and no password is what recovery IS. A rule about one
      *   screen was being enforced on every screen, so the contract refused a
@@ -179,7 +179,7 @@ describe('★★ anything else is a handover, not an improvisation', () => {
     /*
      * Every other contract in the repo is strict, and this one is loose on
      * purpose. A strict object would drop `flow_designation` silently, and from
-     * inside this codebase that reads as Authentik not sending it — the exact
+     * inside this codebase that reads as Authentik not sending it - the exact
      * mistake that hid three fields on contracts we DO own this week.
      */
     const step = readChallenge(identification({ flow_designation: 'authentication' }));
@@ -199,7 +199,7 @@ describe('★★ what a failed sign-in is allowed to say', () => {
     /*
      * ★ THE FIELD ERROR IS LISTED FIRST ON PURPOSE. The first version of this put
      * `non_field_errors` first, and deleting the preference entirely still
-     * passed — `Object.values` iterates in insertion order, so the loop found
+     * passed - `Object.values` iterates in insertion order, so the loop found
      * the same string by accident. A fixture where both rules give the same
      * answer cannot tell them apart, which is the third time this week.
      */
@@ -230,7 +230,7 @@ describe('★★ what a failed sign-in is allowed to say', () => {
   });
 });
 
-describe('★★ the second factor — observed, parsed, and deliberately not rendered', () => {
+describe('★★ the second factor - observed, parsed, and deliberately not rendered', () => {
   /** The real payload, 2026-09-28, from an enrolled account. */
   const validate = (over: Record<string, unknown> = {}) => ({
     flow_info: { title: 'Welcome back', cancel_url: '/flows/-/cancel/' },
@@ -260,7 +260,7 @@ describe('★★ the second factor — observed, parsed, and deliberately not re
   it('★★ keeps `static`, because that is recovery codes and it arrives as a PEER', () => {
     /*
      * The finding that makes this stage a design question rather than a text
-     * box. `static` is not a link under a code field — it is an entry in the same
+     * box. `static` is not a link under a code field - it is an entry in the same
      * list as the authenticator app, so the stage is **a choice between
      * devices**. A parser that filtered to "the code one" would delete somebody's
      * only way in when their phone is lost, which is the entire point of recovery
@@ -275,7 +275,7 @@ describe('★★ the second factor — observed, parsed, and deliberately not re
     /*
      * Authentik also ships `webauthn`, `duo`, `sms` and `email`. Dropping an
      * unrecognised class would silently remove somebody's only second factor from
-     * the list — and they would be told they have none.
+     * the list - and they would be told they have none.
      */
     const step = readChallenge(
       validate({
@@ -297,7 +297,7 @@ describe('★★ the second factor — observed, parsed, and deliberately not re
   });
 });
 
-describe('★★ devicesByRecency — the familiar one first', () => {
+describe('★★ devicesByRecency - the familiar one first', () => {
   const device = (deviceClass: string, lastUsed: string | null) =>
     deviceChallengeSchema.parse({
       device_class: deviceClass,
@@ -309,7 +309,7 @@ describe('★★ devicesByRecency — the familiar one first', () => {
     /*
      * "Never make somebody choose a method they cannot remember picking", applied
      * to a list whose order they did not choose. `last_used` is null on a device
-     * nobody has touched — recovery codes, usually — and that is exactly the one
+     * nobody has touched - recovery codes, usually - and that is exactly the one
      * that should not be at the top.
      */
     const ordered = devicesByRecency([
@@ -322,7 +322,7 @@ describe('★★ devicesByRecency — the familiar one first', () => {
 
   it('★★ is stable, so the list does not reshuffle between renders', () => {
     /*
-     * Two devices with the same `last_used` — or two with none — keep the order
+     * Two devices with the same `last_used` - or two with none - keep the order
      * the server sent. A picker that reorders itself on re-render is one where
      * somebody clicks the wrong device, and on this screen the wrong device is a
      * recovery code they only have ten of.
@@ -348,15 +348,15 @@ describe('★★ devicesByRecency — the familiar one first', () => {
     expect(ordered.map((d) => d.device_class)).toEqual(['good', 'bad']);
   });
 
-  it('★ does not mutate what it was given — a guard on a refactor, not on a line', () => {
+  it('★ does not mutate what it was given - a guard on a refactor, not on a line', () => {
     /*
      * ★ STATED BECAUSE A MUTATION SURVIVED IT. No single-line edit to the current
      * implementation can make this fail: `.map()` already returns a new array, so
      * the `[...devices]` spread is belt-and-braces and the `.sort()` never touches
      * the caller's array.
      *
-     * It is kept because the natural "simplification" — dropping the intermediate
-     * map and sorting in place — DOES make it fail, and that refactor is the
+     * It is kept because the natural "simplification" - dropping the intermediate
+     * map and sorting in place - DOES make it fail, and that refactor is the
      * likely one. A test that only a refactor can break is worth having as long
      * as nobody mistakes its green for evidence about the line beside it.
      */
@@ -366,7 +366,7 @@ describe('★★ devicesByRecency — the familiar one first', () => {
   });
 });
 
-describe('★★ the validate submit — from the schema, and the trap inside it', () => {
+describe('★★ the validate submit - from the schema, and the trap inside it', () => {
   const device = deviceChallengeSchema.parse({
     device_class: 'totp',
     device_uid: '1',
@@ -377,7 +377,7 @@ describe('★★ the validate submit — from the schema, and the trap inside it
   it('★★ echoes the whole device back, because that is what the field takes', () => {
     /*
      * `selected_challenge` is a `DeviceChallengeRequest` with all four fields
-     * required — not an id. So the picker hands back exactly the object it was
+     * required - not an id. So the picker hands back exactly the object it was
      * given, which is also why nothing here needs to understand `challenge`.
      */
     expect(validateBody(device, '123456')).toEqual({
@@ -421,7 +421,7 @@ describe('★★ the validate submit — from the schema, and the trap inside it
   });
 });
 
-describe('★★ factorEntry — a code box is wrong for three of the five', () => {
+describe('★★ factorEntry - a code box is wrong for three of the five', () => {
   it('★★ names the two that are digits somebody types', () => {
     expect(factorEntry('totp')).toBe('code');
     expect(factorEntry('static')).toBe('code');
@@ -430,8 +430,8 @@ describe('★★ factorEntry — a code box is wrong for three of the five', () 
   it('★★ names the three that are not, which the schema proves by having three fields', () => {
     /*
      * `code`, `webauthn` and `duo` are **separate fields** on the submit. That is
-     * the contract saying these are different journeys — a browser credential
-     * prompt, a push, and an out-of-band message — rather than one value with
+     * the contract saying these are different journeys - a browser credential
+     * prompt, a push, and an out-of-band message - rather than one value with
      * three flavours.
      */
     expect(factorEntry('webauthn')).toBe('other');
@@ -469,7 +469,7 @@ describe('⚠⚠ the recovery flow names itself', () => {
   it('⚠⚠ refuses anything that is not that exact shape', () => {
     /*
      * The result is used to COMPOSE A REQUEST, so it is checked rather than
-     * trusted. Not an authorisation check — the executor is the provider's own
+     * trusted. Not an authorisation check - the executor is the provider's own
      * and a person can reach any flow by typing its URL. What this prevents is
      * our code building a request out of an arbitrary string.
      */
@@ -498,7 +498,7 @@ describe('⚠⚠ the recovery flow names itself', () => {
   });
 });
 
-describe('⚠⚠ a completed flow’s `to` — one field, two meanings', () => {
+describe('⚠⚠ a completed flow’s `to` - one field, two meanings', () => {
   const CALLBACK = 'https://dev.gotcha.co.il/v2/api/auth/callback';
 
   it('★★ follows the authorization flow’s completion, which is our callback', () => {
@@ -517,7 +517,7 @@ describe('⚠⚠ a completed flow’s `to` — one field, two meanings', () => {
      * in successfully on a stranger's home page.
      *
      * ★ This is the whole reason the function exists. A generic "is this URL
-     *   safe" check would pass `/` — it is same-origin and relative and
+     *   safe" check would pass `/` - it is same-origin and relative and
      *   harmless-looking, and it is the exact value that must not be followed.
      */
     expect(followableCompletion('/', CALLBACK)).toBeNull();
@@ -576,7 +576,7 @@ describe('⚠⚠ a completed flow’s `to` — one field, two meanings', () => {
      * ★ `'callback?code=…'` resolved against `/v2/api/auth/callback` lands
      *   exactly on the callback and would be followed. A relative `to` from
      *   the provider belongs to the PROVIDER's origin, so resolving it against
-     *   ours is the absolute-path defect inverted — and this repository has
+     *   ours is the absolute-path defect inverted - and this repository has
      *   had that one three times.
      */
     for (const to of ['callback?code=abc&state=xyz', './callback?code=abc&state=xyz']) {

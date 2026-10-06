@@ -26,7 +26,7 @@ import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
  * want the local sign-out to have happened.
  */
 /**
- * The sealed id token, or null — and it NEVER throws.
+ * The sealed id token, or null - and it NEVER throws.
  *
  * ★ Separate from the end-session call so that a hint we cannot read costs a
  *   confirmation screen rather than the whole sign-out. Every failure here is
@@ -44,7 +44,7 @@ async function readHint(request: NextRequest): Promise<string | null> {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   /*
    * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
-   * see this file — its matcher excludes `/api` — so this route was covered
+   * see this file - its matcher excludes `/api` - so this route was covered
    * there by the gateway allowlist and by nothing else, while every page route
    * had two independent refusals.
    */
@@ -64,8 +64,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
    * ⚠⚠ READ THE HINT FIRST, AND OUTSIDE THE TRY. THIS IS WHY.
    * ════════════════════════════════════════════════════════════════════════════
    * The first version read it INSIDE the try whose catch falls back to a
-   * local redirect. That catch exists for one thing — a provider with no
-   * `end_session_endpoint` — and putting anything else inside it means any
+   * local redirect. That catch exists for one thing - a provider with no
+   * `end_session_endpoint` - and putting anything else inside it means any
    * failure there silently turns a sign-out into a redirect that signs
    * nobody out of anything.
    *
@@ -81,8 +81,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (session) {
     try {
       /*
-       * Without a hint, RP-initiated logout can only offer `client_id` —
-       * which says which application is asking but not WHO — so the provider
+       * Without a hint, RP-initiated logout can only offer `client_id` -
+       * which says which application is asking but not WHO - so the provider
        * asks the person to confirm, on its own page, in its own vocabulary.
        * That screen is the entire cost of the fallback, and it is what a
        * reviewer photographed.
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       /*
        * ⚠ NO LONGER SILENT. This swallowed its reason, and a sign-out that
        *   quietly stops calling the provider is the one failure that looks
-       *   like success from the outside — it lands on our sign-in page, which
+       *   like success from the outside - it lands on our sign-in page, which
        *   is exactly where a working sign-out lands.
        */
       logger.error('auth.logout.no_end_session', { cause });
@@ -121,10 +121,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
    *
    * Scoping it to the mount point would look tidier and would break the one
    * thing that matters: `/api/auth/callback` and the BFF both sit under the
-   * prefix, but a cookie written at `/v2` is not sent to `/` — and nothing
+   * prefix, but a cookie written at `/v2` is not sent to `/` - and nothing
    * here needs it to be. What decides it is the other direction: the two
    * applications use DIFFERENT cookie names, so a root-scoped cookie cannot
-   * collide with the legacy session — and the whole safety argument rests on
+   * collide with the legacy session - and the whole safety argument rests on
    * those names, so they are worth getting right:
    *
    *     this app      gotcha_session            (both environments)
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   /*
    * ⚠⚠ AND THE HINT GOES WITH IT. A sealed id token that outlives the session
-   *   it describes is a stale credential sitting in a browser for nothing —
+   *   it describes is a stale credential sitting in a browser for nothing -
    *   and on the next sign-out it would be sent as a hint for a session that
    *   no longer exists.
    *

@@ -19,7 +19,7 @@ beforeEach(() => {
   post.mockReset();
 });
 
-describe('★★ 05d — placing a call', () => {
+describe('★★ 05d - placing a call', () => {
   it('posts to start-outbound with the number, and the conversation when there is one', async () => {
     post.mockResolvedValue({ mode: 'AGENT_FIRST', sessionId: 's9' });
     expect(await startCall('+972501234567', 'c1')).toEqual({
@@ -56,7 +56,7 @@ describe('★★ 05d — placing a call', () => {
   });
 });
 
-describe('★★ 05e — ending and transferring', () => {
+describe('★★ 05e - ending and transferring', () => {
   it.each([
     ['hangup', () => endCall('s1'), '/api/voice-sessions/s1/hangup', {}],
     [

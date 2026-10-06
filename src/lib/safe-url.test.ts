@@ -21,7 +21,7 @@ describe('safeLinkUrl', () => {
   it('★★ an in-app path stays a path instead of becoming a dead sentinel URL', () => {
     /*
      * It used to resolve onto `https://invalid.example` and RETURN that, so
-     * `recovery_url` — which the identity provider sends as a path — came back
+     * `recovery_url` - which the identity provider sends as a path - came back
      * as a link to a domain that cannot resolve. An inert link that looks real
      * is the one thing this module promises callers they will never be handed.
      */
@@ -30,7 +30,7 @@ describe('safeLinkUrl', () => {
 
   it('⚠⚠ and a path gets the same whitespace treatment as everything else', () => {
     // It routes to `safeInternalPath`, so the tab/LF/CR handling is not
-    // duplicated here — duplicating it is what produced the hole in the first
+    // duplicated here - duplicating it is what produced the hole in the first
     // place.
     expect(safeLinkUrl('/\t/evil.example')).toBeNull();
     expect(safeLinkUrl('/.//evil.example')).toBeNull();
@@ -104,7 +104,7 @@ describe('safeInternalPath', () => {
 
     /*
      * ★★ AND THESE TWO DEFEATED THE FIX RATHER THAN THE ORIGINAL.
-     * They resolve to our own origin — the host is not in the URL when it is
+     * They resolve to our own origin - the host is not in the URL when it is
      * parsed. `.` and `..` collapse to nothing and the pathname comes back as
      * `//evil.example`: an authority MANUFACTURED by normalisation, after the
      * origin comparison has already said yes.
@@ -133,7 +133,7 @@ describe('safeInternalPath', () => {
   it('⚠⚠ nothing that survives can navigate off this origin', () => {
     /*
      * The list above can only hold the spellings somebody wrote down. This asks
-     * the question the value exists to answer — where does the BROWSER end up —
+     * the question the value exists to answer - where does the BROWSER end up -
      * by resolving the approved output the way an `href` is resolved.
      *
      * ★ At the root, deliberately. Under `/v2` the prefix absorbs a smuggled
@@ -153,7 +153,7 @@ describe('safeInternalPath', () => {
 
   it('★★ what it returns is already canonical, so a second parse cannot move it', () => {
     /*
-     * The original defect was not only the missing spellings — it was checking
+     * The original defect was not only the missing spellings - it was checking
      * one string and navigating to a different one. Re-approving the output
      * must be a no-op, or whatever renders it can still reinterpret a value
      * this function approved.

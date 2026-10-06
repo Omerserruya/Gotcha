@@ -52,7 +52,7 @@ const MEASURED = {
  *
  * Worth naming: the first run after mounting ElectPart failed with "the
  * context from NextIntlClientProvider was not found", pointing at the
- * component. It was the harness, not the subject — the fifth time this
+ * component. It was the harness, not the subject - the fifth time this
  * session that a test-environment gap has arrived wearing the screen's
  * clothes. The tell is the same every time: the failure describes the
  * RENDERER's situation, not the product's.
@@ -220,7 +220,7 @@ describe('★ an inferred system is not a chosen one', () => {
      *
      * `returns` resolves to Shopify because the capability resolver found it
      * could serve returns. The prompt the model receives says so in
-     * parentheses — "shopify (inferred, not chosen by the business)".
+     * parentheses - "shopify (inferred, not chosen by the business)".
      *
      * Rendered through `state.chosen` it would read "Shopify does this", and
      * the next person to open this screen would believe a colleague had
@@ -277,7 +277,7 @@ describe('★ an inferred system is not a chosen one', () => {
   });
 });
 
-describe('★ 14e — absent is not unset', () => {
+describe('★ 14e - absent is not unset', () => {
   /*
    * The design draws a panel of write-back settings. There are none, and the
    * failure this block exists to prevent is a merchant reading that absence
@@ -298,8 +298,8 @@ describe('★ 14e — absent is not unset', () => {
      * ★ THE ASSERTION THIS WHOLE BLOCK IS FOR.
      *
      * Every one of these is a decision the product has already made. The
-     * vocabulary of an unfinished setup — "not configured", "coming soon",
-     * "set this up" — would turn each of them into a promise.
+     * vocabulary of an unfinished setup - "not configured", "coming soon",
+     * "set this up" - would turn each of them into a promise.
      *
      * Asserted over the RENDERED block rather than the catalogue, because a
      * key can be edited and a sentence can arrive from somewhere else.
@@ -314,7 +314,7 @@ describe('★ 14e — absent is not unset', () => {
   it('names what cannot be configured, with Monday as an EXAMPLE and not the subject', async () => {
     /*
      * ★ Omer has no Monday connected. A page written as a Monday page with a
-     * caveat asks somebody to reason about a system they have never seen —
+     * caveat asks somebody to reason about a system they have never seen -
      * which is exactly why the design's two-board question could not be
      * answered when it was put to him.
      *
@@ -328,10 +328,10 @@ describe('★ 14e — absent is not unset', () => {
     expect(board).toHaveTextContent(/isn't connected here/i);
   });
 
-  it('★ says the CRM default nobody chose — with the condition that makes it true', async () => {
+  it('★ says the CRM default nobody chose - with the condition that makes it true', async () => {
     /*
      * `crm-adapter-resolver.ts:146-191`. `useAsCrm` absent means a connected
-     * Shopify is the DEFAULT CRM — but only when no dedicated CRM-category
+     * Shopify is the DEFAULT CRM - but only when no dedicated CRM-category
      * integration is connected, because step 2 finds that one first.
      *
      * Stated unconditionally it is FALSE for a tenant with HubSpot connected,
@@ -365,7 +365,7 @@ describe('★ 14e — absent is not unset', () => {
     const still = screen.getByTestId('core-writeback-still-source');
     expect(still).toHaveTextContent(/stays the source of truth/i);
     expect(still).toHaveTextContent(/doesn't quietly move your customer records/i);
-    // Deliberate, not an oversight — and the reason, so it reads as a design.
+    // Deliberate, not an oversight - and the reason, so it reads as a design.
     expect(still).toHaveTextContent(/deliberate/i);
     // ★ The cost, said out loud.
     expect(still).toHaveTextContent(/the one that's currently down/i);
@@ -375,7 +375,7 @@ describe('★ 14e — absent is not unset', () => {
     /*
      * `crm-identity.service.ts` owns a 0/1/2+ flow. "First match wins, new
      * contact if none match" loses the half that matters: on exactly one
-     * match GOTCHA ENRICHES the record with missing strong identifiers —
+     * match GOTCHA ENRICHES the record with missing strong identifiers -
      * phone, email, PSID, IGSID, username.
      *
      * That is a write to a customer's record nobody asked for, and it is the
@@ -399,7 +399,7 @@ describe('★ 14e — absent is not unset', () => {
     /*
      * `post-chat-pipeline.service.ts` calls `resolveEffectiveLocale({ tenantId })`
      * with no userId, so the AI-written summary takes `Tenant.defaultLocale`.
-     * `crm-adapter-resolver.ts` has no locale reference at all — field values
+     * `crm-adapter-resolver.ts` has no locale reference at all - field values
      * are the customer's data and nothing translates them.
      *
      * "Everything written back is in the workspace language" was the sentence
@@ -416,7 +416,7 @@ describe('★ 14e — absent is not unset', () => {
   });
 });
 
-describe('★ 14 — a part is 02’s row: what it is, who plays it, its state', () => {
+describe('★ 14 - a part is 02’s row: what it is, who plays it, its state', () => {
   it('★ the state sentence rides on the chip, and the row shows the purpose, not prose', async () => {
     await render14();
     const chip = screen.getByTestId('core-chip-ecommerce');
@@ -424,7 +424,7 @@ describe('★ 14 — a part is 02’s row: what it is, who plays it, its state',
     expect(screen.getByTestId('core-part-ecommerce')).toHaveTextContent('the catalogue and orders');
   });
 
-  it('★ the footer says where connecting lives — Studio · Integrations', async () => {
+  it('★ the footer says where connecting lives - Studio · Integrations', async () => {
     await render14();
     expect(screen.getByRole('link', { name: 'Studio · Integrations' })).toHaveAttribute(
       'href',
@@ -434,11 +434,11 @@ describe('★ 14 — a part is 02’s row: what it is, who plays it, its state',
 });
 
 describe('★ 14 corrections (measurement of 204d715)', () => {
-  it('a broken system is named in its tile; "—" only where there is no system', async () => {
+  it('a broken system is named in its tile; "-" only where there is no system', async () => {
     await render14();
     expect(screen.getByTestId('core-system-ecommerce')).toHaveTextContent(/^Shopify$/);
     expect(screen.getByTestId('core-chip-ecommerce')).toHaveTextContent('Needs fixing');
-    expect(within(screen.getByTestId('core-part-payments')).getByText('—')).toBeInTheDocument();
+    expect(within(screen.getByTestId('core-part-payments')).getByText('-')).toBeInTheDocument();
   });
 });
 

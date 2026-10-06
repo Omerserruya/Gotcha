@@ -18,14 +18,14 @@ import styles from './SignIn.module.css';
  * ★★ WHAT THIS REPLACES: THE ONE SCREEN THE PROVIDER STILL DREW
  * ════════════════════════════════════════════════════════════════════════════
  * Navigating to `authorize` makes the browser render `/if/flow/` for the final
- * hop. Fetching it instead returns the same 302 chain, the same HTML — and we
+ * hop. Fetching it instead returns the same 302 chain, the same HTML - and we
  * never render it. `completeAuthorization` then asks the executor for that
  * plan's outcome, which is `xak-flow-redirect` carrying our callback.
  *
  * ⚠ EVERY FAILURE GOES TO THE AUTHORIZE URL, NOT BACK TO `/api/auth/login`.
  *   That route is what sent us here; returning to it is an infinite redirect.
  *   Going to `authorize` is exactly what the browser would have done without
- *   this component — so the worst outcome is the provider's page, which is
+ *   this component - so the worst outcome is the provider's page, which is
  *   where we started, and never a dead screen.
  *
  * ★ The authorize URL is verified by the SERVER before it reaches this file.
@@ -37,7 +37,7 @@ import styles from './SignIn.module.css';
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ AND IT WRITES ITS PROGRESS INTO THE DOM, BECAUSE A LOG DID NOT ARRIVE
  * ════════════════════════════════════════════════════════════════════════════
- * The first walk with this active produced **no line of ours anywhere** — not
+ * The first walk with this active produced **no line of ours anywhere** - not
  * in the browser console, not in either container. So "it ran and gave up" and
  * "it never ran" were indistinguishable, which is the same collapse the
  * four-reason outcome had just fixed one level down.
@@ -62,7 +62,7 @@ export function FinishSignIn({
    *
    * ⚠ Opt-in through a query parameter the person typed themselves. It cannot
    *   be reached by accident, it exposes nothing, and its only effect is that
-   *   sign-in does not continue — which is recoverable by reloading without
+   *   sign-in does not continue - which is recoverable by reloading without
    *   it. It exists because the alternative is guessing.
    */
   readonly hold?: boolean;
@@ -72,7 +72,7 @@ export function FinishSignIn({
   const [outcome, setOutcome] = useState<AuthorizationOutcome | null>(null);
   /*
    * Separate from `outcome.reason`, because the fifth give-up is decided HERE
-   * rather than inside `completeAuthorization` — it is about our callback, a
+   * rather than inside `completeAuthorization` - it is about our callback, a
    * fact that function is deliberately not given.
    */
   const [giveUp, setGiveUp] = useState<string | undefined>(undefined);
@@ -83,7 +83,7 @@ export function FinishSignIn({
    * ═════════════════════════════════════════════════════════════════════════
    * Walked: pressing BACK onto `/en/sign-in?authorize=…` re-runs this hop
    * against a one-time URL that has already been redeemed. The executor
-   * cannot complete it, we fall back to the authorize URL as designed — and
+   * cannot complete it, we fall back to the authorize URL as designed - and
    * the provider draws a page. Sixteen documents and one Authentik render,
    * for a back button.
    *
@@ -158,7 +158,7 @@ export function FinishSignIn({
    *
    * Measured from the submit click: the panel until 2.2s, then eight elements
    * on `#121212` until 5.2s. The comment that used to sit here said a spinner
-   * appearing and vanishing reads as a fault rather than as progress — true
+   * appearing and vanishing reads as a fault rather than as progress - true
    * of one that ANIMATES IN, and the wrong conclusion to draw from it.
    *
    * ★ So: the brand, and the same sentence the panel shows while its own

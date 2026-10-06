@@ -142,7 +142,7 @@ export function isAccessTokenExpired(session: Session): boolean {
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHY IT IS NOT IN THE SESSION, AND WHY THAT WAS THE WRONG CONCLUSION
  * ════════════════════════════════════════════════════════════════════════════
- * `sessionSchema` records that the id token is "deliberately NOT kept here —
+ * `sessionSchema` records that the id token is "deliberately NOT kept here -
  * see MAX_COOKIE_BYTES", and that was correct: adding it pushed the session
  * cookie past the browser's limit. The conclusion drawn from it was that we
  * therefore could not keep an id token at all, and **that does not follow.**
@@ -158,12 +158,12 @@ export function isAccessTokenExpired(session: Session): boolean {
  *
  * ── WHAT IT BUYS ──
  * RP-initiated logout without an `id_token_hint` can only offer `client_id`,
- * which does not tell the provider WHO is signing out — so it asks the person
+ * which does not tell the provider WHO is signing out - so it asks the person
  * to confirm, on its own page, in its own vocabulary. That confirmation screen
  * is the whole cost, and it is the one a reviewer photographed.
  *
  * ⚠ IT IS SENT ON NOTHING ELSE. Scoped to the logout path, it adds zero bytes
- *   to every other request — which is the reason it can exist at all on a
+ *   to every other request - which is the reason it can exist at all on a
  *   product that already carries 2.6 KB of session.
  */
 export const ID_TOKEN_COOKIE = 'gotcha_id_token';
@@ -197,7 +197,7 @@ export function idTokenCookieOptions(): {
  * ⚠ THROWS RATHER THAN TRUNCATES. A truncated `id_token_hint` is worse than an
  *   absent one: the provider cannot verify it, and what it does with a
  *   malformed hint is unspecified. The caller omits the cookie and the logout
- *   falls back to `client_id` — a confirmation screen, which is a cost, where
+ *   falls back to `client_id` - a confirmation screen, which is a cost, where
  *   a broken hint risks a sign-out that does not sign out.
  */
 export async function sealIdToken(idToken: string): Promise<string> {
@@ -223,7 +223,7 @@ export async function unsealIdToken(sealed: string | undefined): Promise<string 
   } catch {
     /*
      * Tampered, or encrypted under a rotated secret. Treated as absent, which
-     * costs a confirmation screen — never as a reason to fail the sign-out.
+     * costs a confirmation screen - never as a reason to fail the sign-out.
      */
     return null;
   }
@@ -250,7 +250,7 @@ export function sessionCookieOptions(): {
      * Without one the cookie is HOST-ONLY: set on the product's host, never
      * sent to the sign-in origin. That is what keeps a signed-in visitor from
      * rendering a product page there through the one gap in the middleware's
-     * matcher — it skips any path containing a dot, so
+     * matcher - it skips any path containing a dot, so
      * `/en/customers/a.b@c.com` reaches the app with no refusal in front of
      * it, and only the absent session turns it away.
      *

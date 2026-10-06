@@ -7,7 +7,7 @@ import styles from '@/features/studio/StudioSplit.module.css';
 /**
  * 09's list column: the automation's name, what it does, and how often it
  * ran. ⚠ 02's line is "Ran 46 times this week"; `runCount` has no clock, so
- * the line is the all-time count — never captioned as a week — or that it is
+ * the line is the all-time count - never captioned as a week - or that it is
  * switched off.
  */
 export async function AutomationRail({

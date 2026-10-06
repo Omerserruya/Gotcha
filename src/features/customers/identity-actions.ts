@@ -14,7 +14,7 @@ export type MergeResult =
   | { readonly ok: false; readonly reason: 'gone' | 'conflict' | 'forbidden' | 'failed' };
 
 /**
- * 04's "Merge them" — suggested, never silent: a person confirmed it on the
+ * 04's "Merge them" - suggested, never silent: a person confirmed it on the
  * screen first. `POST /api/identity/merge { targetId, sourceId }` keeps every
  * message and order under the target.
  */

@@ -31,7 +31,7 @@ beforeEach(() => {
 
 const drive = { id: 'int1', provider: 'google_drive', displayName: 'Maya’s Drive', isActive: true };
 
-describe('★★ 08b after connecting — a list in the sheet’s shape, nothing learned before a press', () => {
+describe('★★ 08b after connecting - a list in the sheet’s shape, nothing learned before a press', () => {
   it('what is kept in sync is said; choosing reads the root, folders open', async () => {
     s.readIntegrations.mockResolvedValue([drive]);
     s.readDriveSources.mockResolvedValue([{ key: 'folder:f1', kind: 'folder', name: 'Policies' }]);

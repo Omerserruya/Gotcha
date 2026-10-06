@@ -14,7 +14,7 @@ const capture = () => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('★ a body is JSON — unless it is a file', () => {
+describe('★ a body is JSON - unless it is a file', () => {
   it('JSON: stringified, with a JSON content type', async () => {
     const call = capture();
     await client.post({ endpoint, payload: z.unknown(), body: { a: 1 } });

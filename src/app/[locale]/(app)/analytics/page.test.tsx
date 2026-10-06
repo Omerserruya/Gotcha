@@ -7,14 +7,14 @@ import { KpiStrip, WhatChanged } from '@/features/analytics/OperationSummary';
 import { ConversationsADay } from '@/features/analytics/ConversationsADay';
 
 /**
- * Screen 06, assembled — and the test that would have said it was not.
+ * Screen 06, assembled - and the test that would have said it was not.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE PANELS WERE FINISHED, TESTED, AND ON NO PAGE
  * ════════════════════════════════════════════════════════════════════════════
  * `TeamLoad` and `AskedAbout` each had a passing test file and **no importer**.
  * This route was the placeholder stub. Every artefact was correct and the
- * screen did not exist — the same shape as three i18n catalogues that no loader
+ * screen did not exist - the same shape as three i18n catalogues that no loader
  * enumerated, and Analytics was reported as finished on the strength of it.
  *
  * So the first assertion here is the dullest one available: the page mounts
@@ -24,7 +24,7 @@ import { ConversationsADay } from '@/features/analytics/ConversationsADay';
  * Structural rather than rendered, for the reason `inbox/page.test.tsx` gives:
  * both panels are async server components, jsdom cannot render one, and
  * resolving them by hand is exactly what a browser will not do for a nested
- * one — the instrument would repair the defect it exists to find.
+ * one - the instrument would repair the defect it exists to find.
  */
 
 const loadAnalytics = vi.hoisted(() => vi.fn());
@@ -100,8 +100,8 @@ describe('★★ the screen exists, which is what was missing', () => {
   });
 
   it('★★ neither panel is inside the other', async () => {
-    // This test cannot see inside a nested async component — it does not run
-    // one — so a panel inside another would be invisible to it.
+    // This test cannot see inside a nested async component - it does not run
+    // one - so a panel inside another would be invisible to it.
     expect(inspect(await page()).nested).toEqual([]);
   });
 
@@ -109,7 +109,7 @@ describe('★★ the screen exists, which is what was missing', () => {
     /*
      * `null` is "we could not read it" and each panel renders its own
      * unavailable state. Withholding a panel on a failed read would make a
-     * permission look like a screen that is still being built — which is
+     * permission look like a screen that is still being built - which is
      * exactly what this screen looked like an hour ago.
      */
     const { mounted } = inspect(await page({ topics: null }));
@@ -118,7 +118,7 @@ describe('★★ the screen exists, which is what was missing', () => {
 });
 
 describe('★★ the section that is not here says so', () => {
-  it('★★ shows states, not explanations — the "no GOTCHA section" paragraph is gone', async () => {
+  it('★★ shows states, not explanations - the "no GOTCHA section" paragraph is gone', async () => {
     /*
      * It explained an absence (the handover cause is not recorded). 02 shows
      * states and does not explain them; GOTCHA's share is now a FIGURE in the
@@ -128,7 +128,7 @@ describe('★★ the section that is not here says so', () => {
     expect(testids).not.toContain('analytics-no-gotcha-section');
   });
 
-  it('★ the tab row is drawn — 06b–06e exist, so each tab leads somewhere', async () => {
+  it('★ the tab row is drawn - 06b-06e exist, so each tab leads somewhere', async () => {
     // Superseded 2026-10-02: the row was withheld only while four tabs had
     // nowhere to lead. Drawn in the header, the same on every tab.
     const { AnalyticsTabs } = await import('@/features/analytics/AnalyticsTabs');
@@ -165,8 +165,8 @@ describe('★★ 06’s summary gets the week the loader read', () => {
   });
 });
 
-describe('★★ 06b — ?tab=gotcha has its own reads and its own parts', () => {
-  it('mounts the dark card, where it stopped, the strip, the chart and what it did — and not 06', async () => {
+describe('★★ 06b - ?tab=gotcha has its own reads and its own parts', () => {
+  it('mounts the dark card, where it stopped, the strip, the chart and what it did - and not 06', async () => {
     const { GotchaHero, GotchaStrip, WhatItDid, WhereStopped } =
       await import('@/features/analytics/GotchaTab');
     const { AloneChart } = await import('@/features/analytics/ConversationsADay');
@@ -189,8 +189,8 @@ describe('★★ 06b — ?tab=gotcha has its own reads and its own parts', () =>
   });
 });
 
-describe('★★ 06c — ?tab=team', () => {
-  it('mounts the dark card, the handover, the strip and the one table — with its own reads', async () => {
+describe('★★ 06c - ?tab=team', () => {
+  it('mounts the dark card, the handover, the strip and the one table - with its own reads', async () => {
     const { HandoverCard, TeamHero, TeamStrip, TeamTable } =
       await import('@/features/analytics/TeamTab');
     loadTeam.mockResolvedValue({ agents: null, aiEmployees: null, overview: null, hourly: null });
@@ -206,7 +206,7 @@ describe('★★ 06c — ?tab=team', () => {
   });
 });
 
-describe('★★ 06d — ?tab=sales', () => {
+describe('★★ 06d - ?tab=sales', () => {
   it('mounts its five parts with the demand read only', async () => {
     const { AskedNotGot, MoneySources, SalesHero, SalesStrip, WhatYouLost } =
       await import('@/features/analytics/SalesTab');
@@ -223,7 +223,7 @@ describe('★★ 06d — ?tab=sales', () => {
   });
 });
 
-describe('★★ 06e — ?tab=topics', () => {
+describe('★★ 06e - ?tab=topics', () => {
   it('mounts its parts, with the same tab row marking Topics', async () => {
     const { HowTheySound, TopicByDay, TopicsHero, TopicTable, UnansweredCard } =
       await import('@/features/analytics/TopicsTab');
@@ -247,7 +247,7 @@ describe('★★ 06e — ?tab=topics', () => {
   });
 });
 
-describe('★★ every tab is a window — the last row runs to the frame’s bottom', () => {
+describe('★★ every tab is a window - the last row runs to the frame’s bottom', () => {
   it('each tab’s page is `fill`, enumerated from the tab registry', async () => {
     /*
      * Measured on all five: without `fill` the body stopped at its content,
@@ -272,7 +272,7 @@ describe('★★ every tab is a window — the last row runs to the frame’s bo
   });
 });
 
-describe('★ 06: "Conversations a day" in its place — the series read, handed to the chart', () => {
+describe('★ 06: "Conversations a day" in its place - the series read, handed to the chart', () => {
   it('the daily series goes to the chart; who holds what is not on Overview', async () => {
     const daily = { timezone: 'UTC', series: [] };
     loadDaily.mockResolvedValue(daily);

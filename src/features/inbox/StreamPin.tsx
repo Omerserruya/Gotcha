@@ -12,10 +12,10 @@ import { STREAM_SCROLLER } from './stream-scroller';
  * ════════════════════════════════════════════════════════════════════════════
  * Measured on the deployed build: the stream's scroller at `scrollTop 0` of a
  * possible 2142. The reader saw 10:03 and the message they had come to answer
- * was 2142px below — in a column whose reply box sits at the bottom.
+ * was 2142px below - in a column whose reply box sits at the bottom.
  *
  * ── PINNED ONLY WHILE THE READER IS AT THE BOTTOM ──
- * A new message, or the composer growing, keeps the latest message in view —
+ * A new message, or the composer growing, keeps the latest message in view -
  * unless the reader has scrolled up to read something, in which case moving
  * them would take away what they were reading. "At the bottom" has a little
  * slack, because a sub-pixel `scrollTop` never reaches the exact end.
@@ -50,7 +50,7 @@ export function StreamPin({ conversationId }: { readonly conversationId: string 
     });
     added.observe(scroller, { childList: true, subtree: true });
 
-    // The window shrinking — the composer grows as somebody types.
+    // The window shrinking - the composer grows as somebody types.
     const resized =
       typeof ResizeObserver === 'undefined'
         ? null

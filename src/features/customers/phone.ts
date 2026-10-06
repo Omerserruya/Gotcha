@@ -1,7 +1,7 @@
 /**
  * A phone-keyed handle as a person reads it: `972545680665` → `+972 54 568 0665`.
  *
- * Grouped only where the plan is known — Israel (972, nine national digits)
+ * Grouped only where the plan is known - Israel (972, nine national digits)
  * and NANP (1, ten). Any other country code gets its `+` and stays one run:
  * without the numbering plan, a grouping would be a guess about where the
  * country code ends.

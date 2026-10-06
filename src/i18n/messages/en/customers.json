@@ -31,26 +31,26 @@
     "SMS": "SMS",
     "TELEGRAM": "Telegram"
   },
-  "identityLimit": "If the same person writes from WhatsApp and from Instagram, they appear here twice. GOTCHA joins two entries only when it has the same phone number for both — and Instagram never provides one.",
+  "identityLimit": "If the same person writes from WhatsApp and from Instagram, they appear here twice. GOTCHA joins two entries only when it has the same phone number for both - and Instagram never provides one.",
   "detail": {
     "unavailable": "We couldn't load this customer.",
     "brief": {
       "generated": "Written from their history on {when}.",
       "none": "There's no written summary for this person yet. GOTCHA writes one when a conversation ends.",
-      "noConversations": "No written summary — there are no conversations with this person to write one from."
+      "noConversations": "No written summary - there are no conversations with this person to write one from."
     },
     "memory": {
       "heading": "What GOTCHA remembers",
       "source": "Learned from {source}, across {count} messages.",
       "unknownSource": "an earlier import",
-      "noPerFactTrace": "GOTCHA records which conversation each of these came from, but those conversations can't be opened from here yet — so there's nothing to follow. They also can't be corrected or removed from here.",
+      "noPerFactTrace": "GOTCHA records which conversation each of these came from, but those conversations can't be opened from here yet - so there's nothing to follow. They also can't be corrected or removed from here.",
       "none": "GOTCHA hasn't learned anything durable about this person yet.",
       "unavailable": "We couldn't read what GOTCHA remembers about this person.",
       "window": "Observed between {from} and {to}."
     },
     "timeline": {
       "heading": "Recent activity",
-      "everyChannel": "Every channel this person reaches you on, in one stream — including numbers and handles that were merged into them.",
+      "everyChannel": "Every channel this person reaches you on, in one stream - including numbers and handles that were merged into them.",
       "empty": "Nothing recorded with this person yet.",
       "INBOUND": "from them",
       "OUTBOUND": "to them",
@@ -60,7 +60,7 @@
       "whole": "{total, plural, one {# message} other {All {total, number} messages}} with this person.",
       "scanTruncated": "This person has more conversations than we scan in one go, so the oldest may not be represented here.",
       "handover": "Handed to {to}.",
-      "handoverWithReason": "Handed to {to} — {reason}.",
+      "handoverWithReason": "Handed to {to} - {reason}.",
       "actionDone": "GOTCHA ran {tool}.",
       "actionFailed": "GOTCHA tried {tool} and it failed.",
       "kind": {
@@ -70,13 +70,13 @@
       }
     },
     "absent": {
-      "money": "Spend, order count and refunds aren't shown here. Reading them means calling your store live for each customer, so they appear where one person is being decided about — on an approval — rather than on every page."
+      "money": "Spend, order count and refunds aren't shown here. Reading them means calling your store live for each customer, so they appear where one person is being decided about - on an approval - rather than on every page."
     },
-    "neverWritten": "This person has never written to you. There's nothing to summarise, no conversation history, no orders and no notes — not because anything failed, but because nothing has happened yet.",
+    "neverWritten": "This person has never written to you. There's nothing to summarise, no conversation history, no orders and no notes - not because anything failed, but because nothing has happened yet.",
     "notes": {
       "heading": "Notes",
       "noCrm": "Notes are kept in your CRM, and there isn't one connected. Connect one in Business core and notes about your customers will appear here.",
-      "noLink": "You have a CRM connected, but this person isn't linked to a record in it — so there's nowhere for their notes to live yet.",
+      "noLink": "You have a CRM connected, but this person isn't linked to a record in it - so there's nowhere for their notes to live yet.",
       "empty": "No notes on this person in your CRM.",
       "unavailable": "We couldn't read notes from your CRM.",
       "anonymous": "Your CRM doesn't record who wrote a note, so these show a date and no author.",
@@ -92,7 +92,7 @@
       "customer_not_linked": "Your store has no customer record matching this person, so there are no orders to show against them.",
       "verification_required": "This person hasn't been verified as the owner of this account, so their orders aren't shown.",
       "no_orders": "No orders from this person yet.",
-      "unavailable": "Orders couldn't be loaded just now. This usually passes — try again in a moment.",
+      "unavailable": "Orders couldn't be loaded just now. This usually passes - try again in a moment.",
       "ok": ""
     },
     "missingScopes": "Your store connection is working, but GOTCHA was never granted permission to read orders. Grant these in Shopify: {scopes}.",
@@ -109,12 +109,12 @@
       "refund": "Refund"
     },
     "running": "Working…",
-    "pendingApproval": "This is waiting for someone to approve it. It hasn't happened yet, and it hasn't failed — it's in your Approvals queue until a person decides.",
+    "pendingApproval": "This is waiting for someone to approve it. It hasn't happened yet, and it hasn't failed - it's in your Approvals queue until a person decides.",
     "denied": "This wasn't allowed: {reason}. Nothing was changed.",
     "actionUnavailable": "This couldn't be done just now: {reason}. Nothing was changed.",
     "noReason": "no reason given",
-    "outcomeUnknown": "We don't know whether that went through. Please do NOT try it again — check the order in your store first, and contact us if it looks wrong.",
-    "noConversationToActThrough": "These orders can't be acted on from here — there's no conversation with this person to carry the action.",
+    "outcomeUnknown": "We don't know whether that went through. Please do NOT try it again - check the order in your store first, and contact us if it looks wrong.",
+    "noConversationToActThrough": "These orders can't be acted on from here - there's no conversation with this person to carry the action.",
     "count": "{count, plural, one {# order} other {# orders}}",
     "openCount": "{count} open",
     "synced": "From Shopify · synced {when}",
@@ -153,7 +153,7 @@
     "forbidden": "You don't have permission to read this workspace's record of actions. Whoever administers GOTCHA can grant it.",
     "failed": "We couldn't read the record of what was done for this person just now.",
     "none": "Nothing has been recorded against this person yet.",
-    "truncated": "This covers the {count, plural, =1 {one conversation} other {# conversations}} we could scan — the oldest may not be included.",
+    "truncated": "This covers the {count, plural, =1 {one conversation} other {# conversations}} we could scan - the oldest may not be included.",
     "more": "Older entries exist than the ones shown here.",
     "actor": {
       "ai": "GOTCHA",
@@ -232,8 +232,8 @@
         "DISCOUNT": "Discounts",
         "CUSTOMER_WRITE": "Changes to their record"
       },
-      "never": "{name}: never — switched off.",
-      "neverByDefault": "{name}: never — no rule set.",
+      "never": "{name}: never - switched off.",
+      "neverByDefault": "{name}: never - no rule set.",
       "unset": "{name}: no rule set.",
       "noLimit": "{name}: allowed, no limit set.",
       "limits": "{name}: {rules}.",
@@ -249,13 +249,13 @@
       "approveYes": "Yes, approve",
       "declineAsk": "Why not?",
       "notNow": "Not now",
-      "approvedRan": "Approved — it ran.",
-      "approvedNotRun": "Approved, and it didn’t run — see Approvals.",
+      "approvedRan": "Approved - it ran.",
+      "approvedNotRun": "Approved, and it didn’t run - see Approvals.",
       "declined": "Declined.",
       "refused": {
         "stale": "Someone already decided this one.",
         "forbidden": "You can’t decide this one.",
-        "failed": "That didn’t go through — nothing changed."
+        "failed": "That didn’t go through - nothing changed."
       }
     }
   },
@@ -282,13 +282,13 @@
     "aiUsableOff": "Team only. It stays in GOTCHA and never reaches your CRM.",
     "where": {
       "synced": "Also written to {system}.",
-      "pending": "We're still sending this to your CRM — we don't know yet whether it arrived.",
+      "pending": "We're still sending this to your CRM - we don't know yet whether it arrived.",
       "failed": "This did NOT reach your CRM. Your CRM said: {reason}.",
-      "private": "Kept in GOTCHA only — a private note doesn't go to a shared CRM.",
+      "private": "Kept in GOTCHA only - a private note doesn't go to a shared CRM.",
       "not_ai_usable": "Kept in GOTCHA only, because it isn't marked for GOTCHA to use.",
-      "no_crm": "Kept in GOTCHA only — no CRM is connected.",
-      "not_linked": "Kept in GOTCHA only — your CRM is connected, but this person isn't matched to a record in it.",
-      "nothing_to_push": "Kept in GOTCHA only — there was nothing to send it through."
+      "no_crm": "Kept in GOTCHA only - no CRM is connected.",
+      "not_linked": "Kept in GOTCHA only - your CRM is connected, but this person isn't matched to a record in it.",
+      "nothing_to_push": "Kept in GOTCHA only - there was nothing to send it through."
     },
     "teamOnly": "Team only",
     "mayUse": "GOTCHA may use",
@@ -319,7 +319,7 @@
   "card": {
     "since": "with you since {when}",
     "reaches": "reaches you on {channels}",
-    "noSummary": "No summary yet — GOTCHA writes one once there's enough to go on.",
+    "noSummary": "No summary yet - GOTCHA writes one once there's enough to go on.",
     "addNote": "Add note",
     "message": "Message",
     "tabs": {
@@ -402,10 +402,10 @@
     "cancel": "Cancel",
     "problem": {
       "name": "Give them a name.",
-      "phone": "That doesn't look like a phone number — try 054-123 4567 or +972 54 123 4567.",
+      "phone": "That doesn't look like a phone number - try 054-123 4567 or +972 54 123 4567.",
       "email": "That email doesn't look right.",
       "forbidden": "You don't have permission to add customers.",
-      "failed": "They weren't added — try again."
+      "failed": "They weren't added - try again."
     }
   },
   "today": {
@@ -461,9 +461,9 @@
     "done": "Merged.",
     "failed": {
       "gone": "One of them no longer exists.",
-      "conflict": "These two can't be merged — one was already merged elsewhere.",
+      "conflict": "These two can't be merged - one was already merged elsewhere.",
       "forbidden": "You don't have permission to merge customers.",
-      "failed": "They weren't merged — try again."
+      "failed": "They weren't merged - try again."
     }
   },
   "who": {
@@ -494,12 +494,12 @@
     "tagCancel": "Cancel",
     "tagTooMany": "Tag at most {max} people at a time.",
     "tagRefused": {
-      "invalid": "A tag is 1–40 characters.",
+      "invalid": "A tag is 1-40 characters.",
       "too_many_people": "Tag at most {max} people at a time.",
       "too_many_tags": "Someone here already has too many tags.",
-      "not_found": "Someone here is no longer a customer — refresh and pick again.",
+      "not_found": "Someone here is no longer a customer - refresh and pick again.",
       "forbidden": "You don’t have permission to tag customers.",
-      "failed": "Nobody was tagged — try again."
+      "failed": "Nobody was tagged - try again."
     }
   }
 }

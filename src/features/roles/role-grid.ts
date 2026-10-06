@@ -1,12 +1,12 @@
 import type { PermissionDef } from '@/api/contracts/permission-catalog';
 
 /**
- * 12c's table, from the catalogue — the mapping Omer's supervisor approved.
+ * 12c's table, from the catalogue - the mapping Omer's supervisor approved.
  *
  * One row per `feature:sub-feature`. Where the actions really are a ladder,
  * the row is a LEVEL (None · View · Edit · Manage, each level holding the
- * ones below it). Where they are separate jobs — reply is not a lower
- * "assign", refund does not come bundled with return — the row is its
+ * ones below it). Where they are separate jobs - reply is not a lower
+ * "assign", refund does not come bundled with return - the row is its
  * ACTIONS, toggled one by one. A feature the catalogue adds later and this
  * table does not know is a row of actions, never a guessed ladder.
  */
@@ -96,7 +96,7 @@ export function levelsOf(row: GridRow): readonly Level[] {
 }
 
 /**
- * The row's level for a selection — or `null` when the selection holds a mix
+ * The row's level for a selection - or `null` when the selection holds a mix
  * no level describes (an edit without its read, say). A null is drawn as no
  * segment chosen, never rounded to a level.
  */

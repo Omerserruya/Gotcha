@@ -15,7 +15,7 @@ import { gridRows, levelOf, levelsOf, rowChanged, withLevel, type GridRow } from
 import styles from './Roles.module.css';
 
 /**
- * 12c, measured: "New role" — name and "Start from" on one row, what it is
+ * 12c, measured: "New role" - name and "Start from" on one row, what it is
  * for, then the permissions as 02's table (AREA · PERMISSION · LEVEL ·
  * SCOPE / LIMIT), "Compared with {source}" and "Give this role to" beside
  * it, and Create role.
@@ -23,7 +23,7 @@ import styles from './Roles.module.css';
  * The table is the catalogue on the approved mapping (`role-grid.ts`): a
  * LEVEL where the actions are a ladder, the ACTIONS where they are separate
  * jobs. Scope is the role ASSIGNMENT's, not a permission's, so the column
- * says so on rows that take one; a money limit has no field anywhere — "—".
+ * says so on rows that take one; a money limit has no field anywhere - "-".
  *
  * ★ A role that grants by PATTERN (Owner's `*`, Department Manager's
  * `conversation:messages:*`) is a standing instruction a grid cannot hold:
@@ -44,7 +44,7 @@ export function RoleForm({
   const t = useTranslations('roles');
   /*
    * 02 starts from Agent: "you start from an existing role and only touch
-   * what's different" — so the Compared card is there from the first look.
+   * what's different" - so the Compared card is there from the first look.
    * 12b's Duplicate (`?from=`) wins; no Agent role, nothing.
    */
   // The platform's key is lowercase (`invite-role.service`: builtinKey "agent").
@@ -53,7 +53,7 @@ export function RoleForm({
   const [sourceId, setSourceId] = useState(startId);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  // Seeded as `startFrom` would seed it — including its refusal of a pattern role.
+  // Seeded as `startFrom` would seed it - including its refusal of a pattern role.
   const [selected, setSelected] = useState<readonly string[]>(() => {
     const role = roles.find((r) => r.id === startId);
     return role && gridCanRepresent(role.features) ? [...role.features] : [];
@@ -229,7 +229,7 @@ export function RoleForm({
                     <span className={styles.gridPattern}>
                       {row.permissions.some((p) => holds(source.features, p.key))
                         ? t('form.byPattern')
-                        : '—'}
+                        : '-'}
                     </span>
                   ) : row.ladder ? (
                     <span className={styles.segmented} role="radiogroup" aria-label={rowName(row)}>
@@ -272,7 +272,7 @@ export function RoleForm({
                   role="cell"
                   title={row.scoped ? t('form.scopeHint') : t('form.noLimits')}
                 >
-                  {row.scoped ? t('form.scopeAssigned') : '—'}
+                  {row.scoped ? t('form.scopeAssigned') : '-'}
                 </span>
               </div>
             );
@@ -289,7 +289,7 @@ export function RoleForm({
           {t('form.selected', { count: selected.length })}
         </p>
 
-        {/* 02's bar at the form's end — it stays in view while the grid scrolls. */}
+        {/* 02's bar at the form's end - it stays in view while the grid scrolls. */}
         <div className={styles.formBar} data-testid="role-bar">
           <button
             type="button"

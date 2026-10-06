@@ -1,5 +1,5 @@
 /**
- * 16's one way of saying when: the clock today, "Yesterday", else the date —
+ * 16's one way of saying when: the clock today, "Yesterday", else the date -
  * 02's "09:41" / "Yesterday" / "Yesterday 22:14". Shared by the audit rows
  * and the devices, so one screen never says the same moment two ways.
  */

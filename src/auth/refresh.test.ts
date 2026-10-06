@@ -52,7 +52,7 @@ beforeEach(() => {
   idp.grant.mockClear();
 });
 
-describe('★★ rotation — the session lives past the first refresh', () => {
+describe('★★ rotation - the session lives past the first refresh', () => {
   it('two refreshes in a row: each spends the token the last one issued, and both succeed', async () => {
     const first = await refreshSession(session('rt-1'));
     expect(first?.rt).toBe('rt-2');

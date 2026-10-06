@@ -25,15 +25,15 @@ import styles from './BusinessCore.module.css';
 import { ElectPart } from './ElectPart';
 
 /**
- * 14c / 14d, measured: one part's drawer — which connection plays it, what
+ * 14c / 14d, measured: one part's drawer - which connection plays it, what
  * GOTCHA reads there, and what it may do there.
  *
- * Connection: the system playing the part, then — where the server would
- * accept a choice — 14c's choice of the CONNECTED candidates (ElectPart,
+ * Connection: the system playing the part, then - where the server would
+ * accept a choice - 14c's choice of the CONNECTED candidates (ElectPart,
  * live), then the ones not connected, each going to Integrations.
  * What it may do: the system's actions with 10's own control
  * (PermissionChoice, live), or why an action is not the admin's choice.
- * What it reads: nothing serves what a part reads, or how much of it — "—".
+ * What it reads: nothing serves what a part reads, or how much of it - "-".
  */
 export async function PartDrawer({
   part,
@@ -61,7 +61,7 @@ export async function PartDrawer({
     ? (capabilities ?? []).filter((c) => c.integration === playingSlug)
     : [];
   /*
-    The system's actions are `GET /tool-permissions`' rows for it — every
+    The system's actions are `GET /tool-permissions`' rows for it - every
     catalogue action of the connection, provisioned or not, each with its
     state and risk (backend 3cee674f). They used to list only provisioned
     and enabled tools, so this drawer drew them from `catalogTools` instead;
@@ -77,7 +77,7 @@ export async function PartDrawer({
         <span className={drawer.fieldLabel}>{t('drawer.connection')}</span>
         <div className={styles.drawerSystem} data-testid="part-playing">
           <span className={styles.drawerSystemText}>
-            <span className={styles.drawerSystemName}>{playing ?? '—'}</span>
+            <span className={styles.drawerSystemName}>{playing ?? '-'}</span>
             {storeHost || checked ? (
               <span className={styles.drawerSystemSub} data-testid="part-playing-sub">
                 {[
@@ -138,7 +138,7 @@ export async function PartDrawer({
 
       <h3 className={drawer.sectionTitle}>{t('drawer.reads')}</h3>
       <p className={styles.drawerNone} title={t('drawer.readsNone')} data-testid="part-reads">
-        —
+        -
       </p>
 
       <h3 className={drawer.sectionTitle}>{t('drawer.mayDo')}</h3>
@@ -149,7 +149,7 @@ export async function PartDrawer({
       ) : null}
       {playing === null ? (
         <p className={styles.drawerNone} data-testid="part-actions-none">
-          —
+          -
         </p>
       ) : capabilities === null ? (
         <p
@@ -157,7 +157,7 @@ export async function PartDrawer({
           title={t('drawer.actionsUnread')}
           data-testid="part-actions-unread"
         >
-          —
+          -
         </p>
       ) : actions.length === 0 ? (
         <p
@@ -165,7 +165,7 @@ export async function PartDrawer({
           title={t('drawer.noActions')}
           data-testid="part-actions-none"
         >
-          —
+          -
         </p>
       ) : (
         <div data-testid="part-actions">

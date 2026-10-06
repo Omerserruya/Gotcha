@@ -5,7 +5,7 @@ import { humaniseCode } from '@/api/contracts/capabilities';
  * Choosing the message and the blanks for one activity event.
  *
  * Pure and separate from the card, because this is where a line can quietly go
- * wrong — an unmapped tool filed under a familiar heading, or a missing value
+ * wrong - an unmapped tool filed under a familiar heading, or a missing value
  * leaving a dangling preposition.
  */
 
@@ -62,7 +62,7 @@ export function eventMessage(event: ActivityEvent): EventMessage {
    *
    * ★ But `get_customer_orders` is the slug, not the showing of it. This used
    * to swap underscores for spaces by hand, which is `humaniseCode` minus the
-   * brand and acronym maps — so `historical_whatsapp_import` read as
+   * brand and acronym maps - so `historical_whatsapp_import` read as
    * "historical whatsapp import" on a screen that says WhatsApp everywhere
    * else. The shared helper is not a refinement here; the hand-rolled version
    * was a second, worse copy of it.
@@ -78,7 +78,7 @@ export function eventMessage(event: ActivityEvent): EventMessage {
  *
  * Split on the LAST dot: an unmapped tool slug can itself contain one, and
  * splitting on the first would file `foo.bar.completed` under the noun `foo`
- * with the outcome `bar` — a key that does not exist.
+ * with the outcome `bar` - a key that does not exist.
  */
 export function splitKind(kind: string): [string, string] {
   const at = kind.lastIndexOf('.');

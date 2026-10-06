@@ -12,7 +12,7 @@ import { useAgentRun, type AgentStep } from './use-agent-run';
 /**
  * Home's ask box.
  *
- * "⌘K covers both finding and doing" — this is the doing half, in place on
+ * "⌘K covers both finding and doing" - this is the doing half, in place on
  * Home rather than behind a shortcut. It runs `POST /api/agent/run`, which
  * streams, so the answer appears a token at a time and the tools the agent
  * uses appear as they run.
@@ -20,14 +20,14 @@ import { useAgentRun, type AgentStep } from './use-agent-run';
  * The trace is deliberately shallow: tool names and outcomes, never reasoning.
  * The brief is explicit that hidden chain-of-thought is not to be exposed, and
  * what an operator actually needs is "did it look at the order, did the refund
- * go through" — not how it decided.
+ * go through" - not how it decided.
  */
 export function CommandSurface({
   tone = 'busy',
   openQuestions = null,
   initial = '',
 }: {
-  /** 19's ASK: the question, put in the box — never sent on its own. */
+  /** 19's ASK: the question, put in the box - never sent on its own. */
   initial?: string;
   tone?: 'busy' | 'quiet' | 'dayOne';
   /** 01b: questions GOTCHA could not answer, for "Answer the 4 open questions". */
@@ -58,7 +58,7 @@ export function CommandSurface({
 
   /*
     01b: on a quiet day the chips shift from triage to improvement. They
-    existed in the catalogue and were never drawn — the busy three showed
+    existed in the catalogue and were never drawn - the busy three showed
     on every day.
   */
   const suggestions =

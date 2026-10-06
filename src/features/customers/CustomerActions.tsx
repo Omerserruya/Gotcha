@@ -26,7 +26,7 @@ import styles from './Customers.module.css';
 import { DecideHere } from './DecideHere';
 
 /**
- * Screen 04e — what was done in this customer's context.
+ * Screen 04e - what was done in this customer's context.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHAT THE PLATFORM ACTUALLY WRITES, CHECKED ROW BY ROW
@@ -34,7 +34,7 @@ import { DecideHere } from './DecideHere';
  * The endpoint returns rows whose `targetType` is `conversation` (this
  * person's conversations) or `customer` (their provider id). Everything
  * else is unreachable here by construction, so the vocabulary this screen
- * can meet is small and finite — and it is NOT the vocabulary the route's
+ * can meet is small and finite - and it is NOT the vocabulary the route's
  * own comment advertises.
  *
  * Reachable, verified at the write sites:
@@ -58,23 +58,23 @@ import { DecideHere } from './DecideHere';
  * `metadata.ok`. So `succeeded` is null on every customer-keyed row, and
  * `outcomeOf` says `not_recorded` beside an event whose NAME says it failed.
  *
- * That is not a bug to route around. The name is not the verdict — that is
+ * That is not a bug to route around. The name is not the verdict - that is
  * the exact resolution-by-naming-convention Backend caught in `outcomeOf`'s
- * first version — so the name is SHOWN, through the lookup below, and the
+ * first version - so the name is SHOWN, through the lookup below, and the
  * outcome stays unrecorded. Showing and deciding are different acts, and
  * only one of them is ours to perform.
  *
  * ── TWO BRANCHES HERE ARE UNREACHABLE TODAY, AND ARE KEPT ANYWAY ──
  * `contradicts` needs `succeeded` and the name to disagree. The only writer
  * of a `.ok.`/`.err.` action is `auditAdapterCall`, which sets BOTH from the
- * same `opts.ok` — so they cannot disagree, and no other writer produces an
+ * same `opts.ok` - so they cannot disagree, and no other writer produces an
  * action with an `ok.`/`err.` segment. `unrecordedHint` is dead for the
  * same reason: the only rows with a name-implication always record a
  * verdict.
  *
  * They stay because the contract is the server's, not ours, and a future
  * emitter can produce both. They are named here and in the tests as
- * **unreached** rather than left to look like coverage — and deliberately
+ * **unreached** rather than left to look like coverage - and deliberately
  * NOT fabricated into the capture fixture, which would photograph a row the
  * platform cannot currently create.
  */
@@ -84,7 +84,7 @@ import { DecideHere } from './DecideHere';
  *
  * ★ A LOOKUP, NOT A REWRITE. Every key here is a string this platform
  * actually writes against a conversation or a customer. An action with no
- * entry is kept, in words (`humanizeTag`), with its key as the tooltip — an
+ * entry is kept, in words (`humanizeTag`), with its key as the tooltip - an
  * unknown event is still evidence, and a screen that hid what it could not
  * label would quietly shorten the record. (It was rendered verbatim until
  * 2026-10-02: no code reaches the screen raw.)
@@ -104,7 +104,7 @@ const ACTION_KEYS: Readonly<Record<string, string>> = {
    * GOTCHA's own guards, from `ai-bot.service.ts` and
    * `output-validator.service.ts`, each said as what it DOES. The two claim
    * checks strip the claim only when they can clean the reply, and otherwise
-   * let it go out — so "was stopped" would be false; "claimed" is always true.
+   * let it go out - so "was stopped" would be false; "claimed" is always true.
    */
   'ai.unsupported_outcome_claim': 'unsupportedOutcomeClaim',
   'ai.unsupported_action_claim': 'unsupportedActionClaim',
@@ -122,8 +122,8 @@ const PREFIX_KEYS: readonly (readonly [string, string])[] = [
  * ★★ THE CONVERSATION IS NOT AN ACTION ON THE ACCOUNT.
  *
  * A reply, a bot turn, a message sent: these are the conversation itself,
- * which has its own tab. Drawn one per row they drowned 04e — "GOTCHA
- * replied · Outcome not recorded", dozens deep — and inflated "by GOTCHA" to
+ * which has its own tab. Drawn one per row they drowned 04e - "GOTCHA
+ * replied · Outcome not recorded", dozens deep - and inflated "by GOTCHA" to
  * 54. So they collapse to one row per day ("GOTCHA replied 12 times") with no
  * outcome chip, and stay out of the counts. Collapsed, not dropped: the record
  * keeps its length.
@@ -140,7 +140,7 @@ export function isConversationActivity(event: AuditEvent): boolean {
 
 /**
  * Does this row have an outcome to report? A tool GOTCHA used, an adapter
- * call, a change to the customer's record in the store — yes. A pause, a
+ * call, a change to the customer's record in the store - yes. A pause, a
  * refusal, a budget stop is itself the outcome; a chip there says nothing.
  */
 export function expectsOutcome(event: AuditEvent): boolean {
@@ -152,7 +152,7 @@ export function expectsOutcome(event: AuditEvent): boolean {
 }
 
 /**
- * The approval's `reason` is the bot's stated reasoning — or, from the
+ * The approval's `reason` is the bot's stated reasoning - or, from the
  * policy engine, a log line: "policy requires approval (catalog=always)".
  * A `key=value` in it is the log, and the line is left empty rather than
  * shown.
@@ -181,7 +181,7 @@ type Who = 'ai' | 'user' | 'flow' | 'system' | 'unknown';
  */
 const MONEY = /refund|cancel|discount|commerce\./i;
 
-/** `requestedBy` is `"bot"`, `"flow:<id>"` or `"ai-agent:<id>"` — never a person. */
+/** `requestedBy` is `"bot"`, `"flow:<id>"` or `"ai-agent:<id>"` - never a person. */
 function whoAsked(approval: Approval): Who {
   return approval.requestedBy.startsWith('flow:') ? 'flow' : 'ai';
 }
@@ -220,16 +220,16 @@ interface Row {
   readonly testid: string;
   readonly pending: boolean;
   readonly money: boolean;
-  /** A pending approval's id — decided on the row. */
+  /** A pending approval's id - decided on the row. */
   readonly approvalId?: string;
 }
 
 /**
- * 04e — everything done on their account, one spine, newest first.
+ * 04e - everything done on their account, one spine, newest first.
  *
  * Two records feed it, each the platform's own: the audit log (what was
  * done, with the four reads above) and the approvals GOTCHA asked for in
- * their conversations — 02's "Asked to refund ₪179 on #1842 · Waiting on
+ * their conversations - 02's "Asked to refund ₪179 on #1842 · Waiting on
  * you". An approval is drawn with the backend's sentence, its status, and
  * the bot's stated reasoning as the line.
  *
@@ -303,7 +303,7 @@ export async function CustomerActions({
       }
     }
     /*
-      ★ AN UNKNOWN KEY IN WORDS, NEVER RAW — the rule that no code reaches
+      ★ AN UNKNOWN KEY IN WORDS, NEVER RAW - the rule that no code reaches
       the screen outranks the older "verbatim". Still never dropped: an event
       we have no words for is something that happened. The key itself is the
       row's tooltip, for whoever is debugging.
@@ -386,8 +386,8 @@ export async function CustomerActions({
           rawKey: rawKeyOf(event),
           /*
           ★ FOUR OUTCOMES AND THE UNRECORDED ONE IS NOT STYLED AS A
-          FAILURE. It is the most common state on this screen — no
-          customer-keyed row records a verdict at all — so dressing it as
+          FAILURE. It is the most common state on this screen - no
+          customer-keyed row records a verdict at all - so dressing it as
           bad would paint the whole log red.
         */
           chip:
@@ -419,7 +419,7 @@ export async function CustomerActions({
             : t(`card.approval.${approval.status}`),
         tone: APPROVAL_TONE[approval.status],
       },
-      // The bot's stated reasoning — shown as reasoning, never as fact.
+      // The bot's stated reasoning - shown as reasoning, never as fact.
       line: humanReason(approval.reason),
       testid: `action-approval-${approval.id}`,
       pending: approval.status === 'PENDING',
@@ -522,7 +522,7 @@ export async function CustomerActions({
                   </span>
                 ) : null}
                 {row.pending && row.approvalId ? (
-                  // 02: decided here — Approve · Decline · Change amount (in 03).
+                  // 02: decided here - Approve · Decline · Change amount (in 03).
                   <span className={styles.spineFoot}>
                     <DecideHere approvalId={row.approvalId} />
                   </span>
@@ -583,7 +583,7 @@ export async function ActionFilters({
 }
 
 /**
- * 04e's side: who did what, money moved, what GOTCHA may do — and the
+ * 04e's side: who did what, money moved, what GOTCHA may do - and the
  * promise card.
  *
  * The counts are of what this page read: the audit page and the approvals
@@ -601,7 +601,7 @@ export async function ActionsSide({
   readonly approvals: readonly Approval[] | null;
   /** The tenant's business rules; `null` when unread or not readable by this viewer. */
   readonly policies?: BusinessPolicies | null;
-  /** The shop's currency, for the rules' amounts — which carry none of their own. */
+  /** The shop's currency, for the rules' amounts - which carry none of their own. */
   readonly currency?: string | null;
 }) {
   const t = await getTranslations('customers');
@@ -615,7 +615,7 @@ export async function ActionsSide({
       ? t(`actions.policy.kind.${kind}` as 'actions.policy.kind.REFUND')
       : humanizeTag(kind);
   /*
-    Each rule as the engine applies it — see `describePolicy`. The percent is
+    Each rule as the engine applies it - see `describePolicy`. The percent is
     a fraction of the order in the engine (`cap = maxPercentOfOrder × order`),
     so it is shown as one.
   */
@@ -640,13 +640,13 @@ export async function ActionsSide({
       ? t('actions.policy.limits', { name, rules: parts.join('; ') })
       : t('actions.policy.noLimit', { name });
   };
-  // Actions on the account, not the conversation — see `CONVERSATION_ACTIONS`.
+  // Actions on the account, not the conversation - see `CONVERSATION_ACTIONS`.
   const events =
     actions.state === 'ok'
       ? actions.audit.data.filter((event) => !isConversationActivity(event))
       : null;
   const asked = approvals ?? [];
-  const count = (n: number | null) => (n === null ? '—' : format.number(n));
+  const count = (n: number | null) => (n === null ? '-' : format.number(n));
   const read = events !== null && approvals !== null;
   const byGotcha = read
     ? events.filter((e) => e.actorType === 'ai').length +
@@ -686,15 +686,15 @@ export async function ActionsSide({
         <dl className={styles.moneyMoved}>
           <div>
             <dt>{t('actions.side.refunded')}</dt>
-            <dd>—</dd>
+            <dd>-</dd>
           </div>
           <div>
             <dt>{t('actions.side.discounts')}</dt>
-            <dd>—</dd>
+            <dd>-</dd>
           </div>
           <div data-attention={waiting ? '' : undefined}>
             <dt>{t('actions.side.waiting')}</dt>
-            <dd>{waiting === null ? '—' : t('actions.side.waitingValue', { count: waiting })}</dd>
+            <dd>{waiting === null ? '-' : t('actions.side.waitingValue', { count: waiting })}</dd>
           </div>
         </dl>
       </section>
@@ -710,7 +710,7 @@ export async function ActionsSide({
             ))}
           </ul>
         ) : (
-          <p className={styles.sideNone}>—</p>
+          <p className={styles.sideNone}>-</p>
         )}
         <Link href="/studio/capabilities" className={styles.tabLeadLink}>
           {t('actions.side.change')}

@@ -6,7 +6,7 @@
     "sources": "{count, plural, =0 {No sources yet} =1 {One source} other {# sources}}",
     "undated": "{count, plural, =1 {1 source has no last-read date} other {# sources have no last-read date}}",
     "conflictsUnknown": "We couldn't check for contradictions",
-    "noConfidence": "GOTCHA doesn't record how sure it is of what it already knows — that score exists only on suggestions, before you accept them."
+    "noConfidence": "GOTCHA doesn't record how sure it is of what it already knows - that score exists only on suggestions, before you accept them."
   },
   "conflicts": {
     "heading": "Answered more than one way",
@@ -15,7 +15,7 @@
     "byCustomers": "{count, plural, =1 {to one customer} other {to # customers}}",
     "lastHeard": "last on {when}",
     "meanwhile": "Nobody has decided which of these is right, so GOTCHA has both.",
-    "coverage": "These come from reading past conversations — each answer is one your team actually gave, not something written on your website or in a document. Nothing has compared your website against your files; that check doesn't exist yet.",
+    "coverage": "These come from reading past conversations - each answer is one your team actually gave, not something written on your website or in a document. Nothing has compared your website against your files; that check doesn't exist yet.",
     "resolve": {
       "choose": "This one is right",
       "confirm": "Save “{answer}” as the answer?",
@@ -23,13 +23,13 @@
       "alreadyApproved": "This was already approved, so nothing was written twice.",
       "use": {
         "in_use": "Saved. GOTCHA answers with this from now on.",
-        "not_retrievable": "Saved to your knowledge base, but GOTCHA cannot use it yet — preparing it for search failed. Nothing will answer with it until that is retried.",
+        "not_retrievable": "Saved to your knowledge base, but GOTCHA cannot use it yet - preparing it for search failed. Nothing will answer with it until that is retried.",
         "unknown": "Saved to your knowledge base. We could not confirm it is ready for GOTCHA to use yet."
       },
       "problem": {
         "already_covered": "Your knowledge base already answers this, so nothing was added. This suggestion is marked as covered and will not come back as a conflict.",
         "no_knowledge_base": "There is no knowledge base to save this into yet. Create one first, and then this will have somewhere to go.",
-        "not_found": "This suggestion is no longer there. Someone may have decided it already — reload to see where it stands.",
+        "not_found": "This suggestion is no longer there. Someone may have decided it already - reload to see where it stands.",
         "forbidden": "You do not have permission to change the knowledge base. Whoever administers GOTCHA for you can do this or grant it.",
         "too_long": "One of these answers is too long to save as it stands. Shorten it in the knowledge base after approving a shorter one, or edit it there directly.",
         "failed": "We could not save that just now, and nothing was written. Try again in a moment."
@@ -38,7 +38,7 @@
     "emptyUnavailable": "We couldn't read these just now",
     "emptyUnavailableLine": "That isn't the same as none.",
     "emptyNever": "Nothing has been checked for contradictions yet",
-    "emptyNeverLine": "It runs when past conversations are imported — nobody has checked.",
+    "emptyNeverLine": "It runs when past conversations are imported - nobody has checked.",
     "emptyNone": "Nothing contradicted itself",
     "emptyNoneLine": "Checked in the conversations that were imported.",
     "emptyNoneLineWhen": "Checked in the conversations imported on {when}."
@@ -65,7 +65,7 @@
   "add": "Add knowledge",
   "strip": {
     "confident": "Answers confidently",
-    "thin": "Thin — guesses sometimes",
+    "thin": "Thin - guesses sometimes",
     "conflicts": "Contradicts itself",
     "stale": "Not refreshed in {days} days"
   },
@@ -147,7 +147,7 @@
     "reading": "Reading…",
     "teaching": "Teaching…",
     "state": {
-      "reading": "Being read — it answers once it is",
+      "reading": "Being read - it answers once it is",
       "ready": "Learned"
     },
     "error": {
@@ -157,20 +157,20 @@
       "unreadable": "There was no text to read in it. Nothing was added.",
       "entitlement": "Knowledge isn't part of this plan.",
       "forbidden": "You don't have permission to add knowledge.",
-      "failed": "It wasn't added — try again."
+      "failed": "It wasn't added - try again."
     },
     "connectProblem": {
       "not_configured": "{name} isn't set up on GOTCHA's side yet.",
       "forbidden": "Only an admin can connect a knowledge source.",
-      "failed": "{name} couldn't be opened — try again."
+      "failed": "{name} couldn't be opened - try again."
     },
     "opening": "Opening…",
     "landing": {
       "connected": "{name} is connected.",
-      "denied": "You cancelled at {provider} — nothing was connected.",
-      "token_exchange_failed": "{provider} didn't confirm the connection. Nothing was connected — try again.",
-      "no_accessible_site": "No Confluence site you can reach was found — nothing was connected.",
-      "callback_error": "Something went wrong on the way back from {provider}. Nothing was connected — try again.",
+      "denied": "You cancelled at {provider} - nothing was connected.",
+      "token_exchange_failed": "{provider} didn't confirm the connection. Nothing was connected - try again.",
+      "no_accessible_site": "No Confluence site you can reach was found - nothing was connected.",
+      "callback_error": "Something went wrong on the way back from {provider}. Nothing was connected - try again.",
       "other": "{name} didn't connect. Try again.",
       "close": "Close"
     },
@@ -190,19 +190,19 @@
       "open": "Open",
       "loading": "Reading…",
       "empty": "Nothing here.",
-      "filesUnread": "We couldn't read this Drive — try again.",
-      "spacesUnread": "We couldn't read the Confluence spaces — try again.",
-      "unread": "We couldn't read what's connected — try again.",
+      "filesUnread": "We couldn't read this Drive - try again.",
+      "spacesUnread": "We couldn't read the Confluence spaces - try again.",
+      "unread": "We couldn't read what's connected - try again.",
       "oneKind": "Learn folders and files in separate rounds.",
       "learn": "{count, plural, =0 {Learn these} one {Learn 1 item} other {Learn # items}}",
-      "learning": "{count, plural, one {Learning 1 item — it answers once it’s read.} other {Learning # items — they answer once they’re read.}}",
+      "learning": "{count, plural, one {Learning 1 item - it answers once it’s read.} other {Learning # items - they answer once they’re read.}}",
       "learnSpaces": "{count, plural, =0 {Learn these spaces} one {Learn 1 space} other {Learn # spaces}}",
-      "learnedSpaces": "{count, plural, one {The space is being read — it answers once it is.} other {# spaces are being read — they answer once they are.}}",
+      "learnedSpaces": "{count, plural, one {The space is being read - it answers once it is.} other {# spaces are being read - they answer once they are.}}",
       "cancel": "Cancel",
       "refused": {
-        "busy": "A sync is already running for this source — try again when it finishes.",
+        "busy": "A sync is already running for this source - try again when it finishes.",
         "mixed": "Learn folders and files in separate rounds.",
-        "failed": "That wasn't learned — try again."
+        "failed": "That wasn't learned - try again."
       }
     },
     "connectedAlready": "Connected",

@@ -14,9 +14,9 @@ const HREF: Record<Exclude<OutreachTab, 'finished'>, string> = {
 };
 
 /**
- * 05b–05d's header pills: In flight · Templates · Calls · Finished, the open
- * one dark, then the screen's own button. "Finished" has no list of its own —
- * 05's list ends on what already went — so it is the open pill on a
+ * 05b-05d's header pills: In flight · Templates · Calls · Finished, the open
+ * one dark, then the screen's own button. "Finished" has no list of its own -
+ * 05's list ends on what already went - so it is the open pill on a
  * campaign's results (05b) and, elsewhere, leads to that list.
  */
 export async function OutreachTabs({

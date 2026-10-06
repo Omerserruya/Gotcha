@@ -19,7 +19,7 @@ import styles from './Recover.module.css';
  * ════════════════════════════════════════════════════════════════════════════
  * `Directions.dc.html` holds 69 rendered frames and not one heading mentions
  * reset, recovery, forgot or password. The design's recovery story is a
- * WhatsApp code — ruled out of scope — so this screen is ours to design inside
+ * WhatsApp code - ruled out of scope - so this screen is ours to design inside
  * 00a and 00b's system rather than to copy.
  *
  * ★ Which is why every value here is a token already carrying a mock's number,
@@ -29,7 +29,7 @@ import styles from './Recover.module.css';
  *
  * ── WHAT IT DRIVES ──
  * The same executor as sign-in, pointed at a different flow. Its first stage
- * is `ak-stage-identification` with `password_fields: false` — which the
+ * is `ak-stage-identification` with `password_fields: false` - which the
  * contract used to refuse, and which is the whole reason "Forgot it?" landed
  * on the provider's own UI.
  *
@@ -91,7 +91,7 @@ export function RecoverPanel({
     /*
      * ★★ ANYTHING THAT IS NOT THE SAME STAGE AGAIN MEANS IT WAS ACCEPTED.
      *
-     * We cannot assert what the next challenge looks like — reaching it sends
+     * We cannot assert what the next challenge looks like - reaching it sends
      * real mail, so it has never been observed. What we CAN say is that the
      * executor stopped asking for an address, and that is exactly the fact
      * this screen needs.
@@ -143,7 +143,7 @@ export function RecoverPanel({
 
       {/*
         ★ 00a's own field markup, not a new one. There is no `Field` primitive
-          in this design system — the sign-in panel writes the label, the
+          in this design system - the sign-in panel writes the label, the
           control wrapper and the input itself, so this screen does the same
           rather than inventing a component the rest of the auth area does not
           use.

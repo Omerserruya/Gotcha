@@ -12,13 +12,13 @@ import { decisionStats } from './load-approvals';
 import { DecisionStats, NothingWaiting } from './NothingWaiting';
 
 /**
- * What you decided — screen 03's other list, and the state this tenant is in.
+ * What you decided - screen 03's other list, and the state this tenant is in.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THIS FILE DID NOT EXIST, AND IT IS THE ONLY LIST DEV CAN SHOW
  * ════════════════════════════════════════════════════════════════════════════
  * The pending queue is empty on the demo tenant, so every walk of Approvals has
- * been photographing THIS list — twenty-nine rows of decided history — while the
+ * been photographing THIS list - twenty-nine rows of decided history - while the
  * grouping and paging arguments were all about the queue nobody can see.
  *
  * A walk read the rows as *"Approved by someone at 12:43 AM"*, cycling through
@@ -58,7 +58,7 @@ const show = async (decided: readonly Approval[] | null, mayBeIncomplete = false
   render(await NothingWaiting({ decided, mayBeIncomplete, requesterNames: {}, now: NOW }));
 
 describe('★★ a decision carries the day it was made, not just the time', () => {
-  it('★★ an earlier day shows its DATE — a time alone was the same on every day', async () => {
+  it('★★ an earlier day shows its DATE - a time alone was the same on every day', async () => {
     /*
      * A list spanning several days with times only cannot be read at all: "12:43
      * AM" was the same string on every one of those days. 02's column is a time
@@ -73,7 +73,7 @@ describe('★★ a decision carries the day it was made, not just the time', () 
     expect(screen.getByTestId('when-a1')).toHaveTextContent('07:41');
   });
 
-  it('★★ claims no time it does not have — no year, no clock, not the epoch', async () => {
+  it('★★ claims no time it does not have - no year, no clock, not the epoch', async () => {
     /*
      * `decidedAt` is nullable on the contract, so this is a real row. Mutations
      * have produced both "at " with a hole and "Jan 1, 1970" from `new
@@ -87,20 +87,20 @@ describe('★★ a decision carries the day it was made, not just the time', () 
   });
 });
 
-describe('★★ how it ended, in one word — and never "someone"', () => {
+describe('★★ how it ended, in one word - and never "someone"', () => {
   it('★ approved, with who decided as its tooltip', async () => {
     await show([approval()]);
     const status = screen.getByText('Approved');
     expect(status).toHaveAttribute('title', 'Decided by Dana');
   });
 
-  it('★ "someone" where the platform holds no name — true for dev’s fixture-labelled rows', async () => {
+  it('★ "someone" where the platform holds no name - true for dev’s fixture-labelled rows', async () => {
     // 26 of dev's 29 decided rows carry `dev-e2e` / `qa-manager`, not user ids.
     await show([approval({ decidedByName: null })]);
     expect(screen.getByText('Approved')).toHaveAttribute('title', 'Decided by someone');
   });
 
-  it('★ and where it was decided — a manager’s WhatsApp reply says so', async () => {
+  it('★ and where it was decided - a manager’s WhatsApp reply says so', async () => {
     await show([approval({ decisionChannel: 'whatsapp' })]);
     expect(screen.getByText('Approved')).toHaveAttribute('title', 'Decided by Dana via WhatsApp');
   });
@@ -133,7 +133,7 @@ describe('★★ how it ended, in one word — and never "someone"', () => {
     );
   });
 
-  it('★★ approved and then it did not run — the ending 02’s tidy column cannot show', async () => {
+  it('★★ approved and then it did not run - the ending 02’s tidy column cannot show', async () => {
     await show([approval({ executionState: 'FAILED' })]);
     const failed = screen.getByTestId('failed-a1');
     expect(failed).toHaveTextContent(/didn’t run/);
@@ -165,7 +165,7 @@ describe('★★ the three states of the decided list', () => {
     expect(screen.getByTestId('decided-foot')).toHaveTextContent(/most recent decisions/i);
   });
 
-  it('★ the head counts today’s decisions — 02’s "7 today", with no 24h (Undo is gone)', async () => {
+  it('★ the head counts today’s decisions - 02’s "7 today", with no 24h (Undo is gone)', async () => {
     await show([approval()], true);
     // None today: what is shown, not "0 today" over a list from August.
     expect(screen.getByTestId('decided-today')).toHaveTextContent('1 decision');
@@ -173,7 +173,7 @@ describe('★★ the three states of the decided list', () => {
   });
 });
 
-describe('★★ 02’s header figures — only when they can be stood behind', () => {
+describe('★★ 02’s header figures - only when they can be stood behind', () => {
   it('★ approved this week, and the mean time from asking to deciding', async () => {
     const stats = decisionStats(
       [
@@ -204,7 +204,7 @@ describe('★★ 02’s header figures — only when they can be stood behind', 
     expect(screen.getByTestId('decision-stats')).toHaveTextContent('Avg decision 16s');
   });
 
-  it('⚠⚠ none at all when the list may be cut — a short count is worse than none', async () => {
+  it('⚠⚠ none at all when the list may be cut - a short count is worse than none', async () => {
     expect(decisionStats([approval()], true, NOW)).toBeNull();
     const { container } = render(await DecisionStats({ stats: null }));
     expect(container).toBeEmptyDOMElement();

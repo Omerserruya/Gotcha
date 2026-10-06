@@ -18,10 +18,10 @@ import { TeamPanel } from './TeamPanel';
 import { WorthKnowing } from './WorthKnowing';
 
 /**
- * Home — screens 01 and 01b.
+ * Home - screens 01 and 01b.
  *
  * One screen with two faces. When something is waiting it leads with the
- * queue; when nothing is, it becomes a different screen — "nothing urgent is a
+ * queue; when nothing is, it becomes a different screen - "nothing urgent is a
  * state worth designing". The greeting changes, the suggestions change, and
  * the queue is replaced by work worth doing while it is quiet.
  *
@@ -82,7 +82,7 @@ export async function HomeScreen({
   }
 
   const now = new Date();
-  // 02: "Good morning, Maya" — the name on every face, not only day one's.
+  // 02: "Good morning, Maya" - the name on every face, not only day one's.
   const firstName = await loadViewerFirstName();
   // From the viewer's clock: "good morning" at 9pm is worse than no greeting.
   const partOfDay = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
@@ -152,7 +152,7 @@ export async function HomeScreen({
           /*
             Counted only from a COMPLETE list: the read is capped at
             QUIET_DAY_LIMIT, and a full page may hold more questions than it
-            shows — "Answer the 4 open questions" would then be false.
+            shows - "Answer the 4 open questions" would then be false.
           */
           quietDay && quietDay.data.length < QUIET_DAY_LIMIT
             ? openQuestionCount(quietDay.data)
@@ -166,7 +166,7 @@ export async function HomeScreen({
         zero and an empty queue say nothing, so first steps take their place
         until the workspace goes live.
 
-        A failed call is NOT a live workspace — `setup` null falls through to
+        A failed call is NOT a live workspace - `setup` null falls through to
         the ordinary screen rather than claiming either state.
       */}
       {isDayOne && setup ? <FirstSteps setup={setup} ingest={ingest} /> : null}
@@ -216,7 +216,7 @@ export async function HomeScreen({
           </section>
 
           {isQuiet ? (
-            /* 01b, measured: two columns — the work, then the dark card over the team. */
+            /* 01b, measured: two columns - the work, then the dark card over the team. */
             <aside className={styles.asideColumn}>
               <ActivityCard
                 events={activity}
@@ -229,7 +229,7 @@ export async function HomeScreen({
             </aside>
           ) : (
             <>
-              {/* 01, measured: three columns — 447 · 331 (dark) · 331. */}
+              {/* 01, measured: three columns - 447 · 331 (dark) · 331. */}
               <div className={styles.activityColumn}>
                 <ActivityCard
                   events={activity}
@@ -255,7 +255,7 @@ export async function HomeScreen({
 }
 
 /**
- * 01c's line: what the scan did, and what is left — "GOTCHA read 214 pages
+ * 01c's line: what the scan did, and what is left - "GOTCHA read 214 pages
  * and drafted 38 answers. Six steps left." Without a scan, the steps alone.
  */
 function dayOneLine(

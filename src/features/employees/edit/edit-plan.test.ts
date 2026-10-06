@@ -22,7 +22,7 @@ const employee = () =>
     ],
   });
 
-describe('★ 07f — the draft starts as stored; nothing is a change until it differs', () => {
+describe('★ 07f - the draft starts as stored; nothing is a change until it differs', () => {
   it('an untouched draft has no changes and an empty patch', () => {
     const e = employee();
     expect(changesIn(e, draftOf(e))).toEqual([]);
@@ -48,7 +48,7 @@ describe('★ 07f — the draft starts as stored; nothing is a change until it d
   });
 });
 
-describe('★★ the patch never drops what 07 does not draw — PATCH replaces whole objects', () => {
+describe('★★ the patch never drops what 07 does not draw - PATCH replaces whole objects', () => {
   it('identity keeps its role and guidelines', () => {
     const e = employee();
     expect(editPatch(e, { ...draftOf(e), responsibility: ' Everything ' })).toEqual({

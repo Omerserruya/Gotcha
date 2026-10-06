@@ -13,14 +13,14 @@ import { dateIn, expiresAtOf, type Ends } from './grant-end';
 import styles from './Roles.module.css';
 
 /**
- * 12e, measured: a floating dialog over 12d — "Add a permission for {name}" — a search over the
+ * 12e, measured: a floating dialog over 12d - "Add a permission for {name}" - a search over the
  * catalogue by area, what is already covered shown and not pickable (given
  * to them already, or in their role), an end, a reason, and Add.
  *
  * ⚠ Add is a WRITE that gives a real person a permission. No test presses
  * it against the platform; the action is mocked to throw in every test.
  *
- * Ends (backend 53a5079a): no end date, 7 or 30 days, or a date — each the
+ * Ends (backend 53a5079a): no end date, 7 or 30 days, or a date - each the
  * END of that day in the workspace's time zone. A date is in the future
  * only; the server refuses a past one anyway, and says so.
  */
@@ -63,7 +63,7 @@ export function GrantPicker({
     given.has(p.key)
       ? t('already')
       : holds(person.permissions, p.key)
-        ? t('inRole', { role: roleName || '—' })
+        ? t('inRole', { role: roleName || '-' })
         : null;
   const pickable = named.filter((p) => status(p) === null);
 
@@ -106,7 +106,7 @@ export function GrantPicker({
         {/* An all-disabled list explains itself. */}
         {named.length > 0 && pickable.length === 0 ? (
           <p className={styles.grantAllCovered} data-testid="grant-all-covered">
-            {t('allCovered', { role: roleName || '—' })}
+            {t('allCovered', { role: roleName || '-' })}
           </p>
         ) : null}
       </div>

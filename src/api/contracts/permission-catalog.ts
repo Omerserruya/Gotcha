@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * The permission catalogue — screen 12c.
+ * The permission catalogue - screen 12c.
  *
  * `GET /api/permissions/catalog` → `{ data: { permissions, byDomain,
  * builtinRoles, scopes } }`. Sixty-three permissions, twenty-nine of which
@@ -14,13 +14,13 @@ import { z } from 'zod';
  * conversation:messages:read · reply · takeover · assign · close
  * ```
  * **The action IS the level, and each action is an independent key.** There is
- * no single "conversations" permission with four settings — there are five
+ * no single "conversations" permission with four settings - there are five
  * separate booleans, and *"Edit"* maps to none of them.
  *
  * **A four-level radio over independent keys is not a lossy display. It is a
  * lossy WRITE.** Someone opens a role to change one thing, the grid renders
  * the nearest approximation of five booleans as one of four levels, they
- * save, and **a permission they never looked at is gone** — no error, no
+ * save, and **a permission they never looked at is gone** - no error, no
  * warning, and the role now differs from what its owner believes.
  *
  * > **A control that cannot represent a state the system can be in will
@@ -32,8 +32,8 @@ import { z } from 'zod';
  *
  * ── SCOPE IS PER ROLE, NOT PER ROW ──
  * `SCOPE_ORDER` is `own · team · department · workspace` and the value lives
- * on the role. `PermissionDef.scoped` is a **boolean — whether the dimension
- * applies at all** — so a permission with `scoped: false` must not be shown
+ * on the role. `PermissionDef.scoped` is a **boolean - whether the dimension
+ * applies at all** - so a permission with `scoped: false` must not be shown
  * taking a scope. A greyed scope control on a row that has none is the same
  * lie in miniature.
  */
@@ -42,7 +42,7 @@ export const SCOPES = ['own', 'team', 'department', 'workspace'] as const;
 export type Scope = (typeof SCOPES)[number];
 
 export const permissionDefSchema = z.object({
-  /** `domain:feature:action` — the action is the level. */
+  /** `domain:feature:action` - the action is the level. */
   key: z.string().min(1),
   domain: z.string().default(''),
   feature: z.string().default(''),

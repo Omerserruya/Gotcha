@@ -157,7 +157,7 @@ describe('★ classic notes, and what the cut left out', () => {
     /*
      * `pinned`, `editHistory` and `status: AI_SUGGESTED` all exist on the
      * table. Omer's cut was "classic notes only", so they are left unused
-     * rather than given surfaces — and a ruling survives only if something
+     * rather than given surfaces - and a ruling survives only if something
      * fails when it is undone.
      */
     const { container } = await show([note()]);
@@ -197,7 +197,7 @@ const showWith = async (
     </NextIntlClientProvider>,
   );
 
-describe('★★ 04f — the notes as 02 draws them', () => {
+describe('★★ 04f - the notes as 02 draws them', () => {
   it('★ each card says who may hear it: "Team only" or "GOTCHA may use"', async () => {
     await showWith([note({ id: 'a', aiUsable: true }), note({ id: 'b', aiUsable: false })]);
     expect(screen.getByTestId('note-chip-a')).toHaveTextContent('GOTCHA may use');
@@ -249,8 +249,8 @@ describe('★★ 04f — the notes as 02 draws them', () => {
   });
 });
 
-describe('★★ 04f’s side — what GOTCHA reads is what the platform gives it', () => {
-  it('counts, and the notes marked for GOTCHA — the same rule as `promptSafeNotes`', async () => {
+describe('★★ 04f’s side - what GOTCHA reads is what the platform gives it', () => {
+  it('counts, and the notes marked for GOTCHA - the same rule as `promptSafeNotes`', async () => {
     render(
       await NotesSide({
         notes: [
@@ -276,9 +276,9 @@ describe('★★ 04f’s side — what GOTCHA reads is what the platform gives i
     expect(reads).toHaveTextContent('Team-only notes are never shown to the AI');
   });
 
-  it('⚠ unread notes are "—", not zero and not "Nothing yet."', async () => {
+  it('⚠ unread notes are "-", not zero and not "Nothing yet."', async () => {
     render(await NotesSide({ notes: null }));
-    expect(screen.getByTestId('notes-counts').textContent?.match(/—/g)).toHaveLength(3);
+    expect(screen.getByTestId('notes-counts').textContent?.match(/-/g)).toHaveLength(3);
     expect(screen.getByTestId('notes-reads')).not.toHaveTextContent('Nothing yet.');
   });
 });

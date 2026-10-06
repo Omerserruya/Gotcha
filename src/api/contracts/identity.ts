@@ -7,7 +7,7 @@ import { z } from 'zod';
  * facts drove how they are written:
  *
  *   1. **The `{ data }` envelope is not universal.** 410 handlers use it and
- *      743 answer bare — `/api/auth/me` is bare, `/api/permissions/me` is
+ *      743 answer bare - `/api/auth/me` is bare, `/api/permissions/me` is
  *      enveloped. The transport unwraps `data` when present and passes the
  *      body through when it is not, so schemas here describe the payload
  *      either way.
@@ -35,13 +35,13 @@ import { z } from 'zod';
  * ── AND THE COMMENT THAT HID IT ASSERTED A HISTORY ──
  * The transform read `raw.tenantName ?? raw.name` under *"the backend has
  * used both spellings; prefer the explicit one."* Neither spelling is on a
- * membership — the name is at `tenant.name`. A sentence about what the
+ * membership - the name is at `tenant.name`. A sentence about what the
  * backend used to do, standing in for a look at what it does. Sixth time
  * today a comment did the reading and got it wrong.
  *
  * ── WHAT IT COST, ON TWO SCREENS ──
  * Nothing reads `memberships` at all. Both callers of `currentUserSchema`
- * want one field each — and both have been getting neither:
+ * want one field each - and both have been getting neither:
  *
  *   04f   `user.id`, so the edit control was hidden from every author
  *   18    `user.phoneNumber`, so the WhatsApp destination read as absent for
@@ -54,7 +54,7 @@ import { z } from 'zod';
 export const membershipSchema = z
   .looseObject({
     /**
-     * ★ `User.id` — the route maps `userId: m.id` over `prisma.user`. So this
+     * ★ `User.id` - the route maps `userId: m.id` over `prisma.user`. So this
      * IS the id `CustomerNote.authorUserId` holds, verified at the mapping
      * rather than inferred from the shape of the string.
      */
@@ -80,7 +80,7 @@ export const membershipSchema = z
 export type Membership = z.infer<typeof membershipSchema>;
 
 /**
- * `GET /api/auth/me`. Answers bare — no `data` envelope.
+ * `GET /api/auth/me`. Answers bare - no `data` envelope.
  *
  * There is no avatar field anywhere on the user, which is why the shell
  * renders initials rather than an image with a fallback.
@@ -97,7 +97,7 @@ export const currentUserSchema = z.looseObject({
   tenantStatus: z.string().optional(),
   /**
    * ★ NULLISH, NOT OPTIONAL. The route sends `tenant?.name ?? null`, and
-   * `z.string().optional()` accepts `undefined` and rejects `null` — so a
+   * `z.string().optional()` accepts `undefined` and rejects `null` - so a
    * tenant row that could not be read would have failed this parse too, by
    * a second route into the same blank screen.
    */

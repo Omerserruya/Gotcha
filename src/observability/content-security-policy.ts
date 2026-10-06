@@ -16,7 +16,7 @@
  * ★ BUT THE GATEWAY DEFINES IT NINE TIMES, NOT ONCE. `nginx/security-headers.conf`
  *   and eight `add_header` lines across `nginx.conf.template` and
  *   `gateway/nginx.prod.conf.template`, with different values per server and
- *   location block — the one on `dev.gotcha.co.il` is not the one in
+ *   location block - the one on `dev.gotcha.co.il` is not the one in
  *   `security-headers.conf`. Which applies depends on which block matches, and
  *   **nginx's `add_header` inheritance is all-or-nothing**: a block that defines
  *   any `add_header` drops every inherited one. So the second policy can change,
@@ -28,7 +28,7 @@
  *    two sources.
  * 2. **The coupling is one-way.** A future narrowing in nginx can break a route
  *    without touching this file; a future widening there cannot help it.
- * 3. Therefore this policy is written to be **self-sufficient** — every
+ * 3. Therefore this policy is written to be **self-sufficient** - every
  *    directive we rely on is named here rather than left to fall back to the
  *    other policy or to `default-src`. If the gateway's header vanished
  *    tomorrow, the page would be exactly as protected. There is a test for that.
@@ -58,7 +58,7 @@ export function buildContentSecurityPolicy(options: {
    * Screen 00a renders a password field in our own bundle, which is a real
    * change: until now the credential was typed on the identity provider's
    * origin and an XSS here could not reach it. The architecture's claim is that
-   * **our server** never sees the password — our JavaScript does, and this is
+   * **our server** never sees the password - our JavaScript does, and this is
    * the control that narrows what an injected script could do with it.
    *
    * ★ `img-src https:` IS THE ONE THAT MATTERS, and it is easy to miss because
@@ -66,7 +66,7 @@ export function buildContentSecurityPolicy(options: {
    *   exfiltrates over a channel `connect-src` does not govern. The general
    *   policy allows `https:` because the product renders customer avatars and
    *   product photos from wherever a merchant's shop hosts them. **The sign-in
-   *   screen renders none of that** — its only image is an inline SVG logo — so
+   *   screen renders none of that** - its only image is an inline SVG logo - so
    *   the wildcard buys nothing there and costs the whole exfiltration path.
    *
    * `media-src` is the same channel in a different tag. `connect-src` loses the
@@ -82,7 +82,7 @@ export function buildContentSecurityPolicy(options: {
   /**
    * 13c's Meta launcher (Embedded Signup) lives here: Meta's SDK frames
    * `www.facebook.com` / `web.facebook.com`, exactly what the old app's
-   * policy allows — and only on this surface, never app-wide.
+   * policy allows - and only on this surface, never app-wide.
    */
   readonly metaSignupSurface?: boolean;
 }): string {

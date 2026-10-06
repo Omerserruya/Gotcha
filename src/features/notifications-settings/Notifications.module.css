@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * Settings · Notifications — screen 15.
+   * Settings · Notifications - screen 15.
    *
    * On a tenant with no rules the empty state IS the screen, so it is styled
    * as a first-class surface rather than as a message in a gap.
@@ -177,7 +177,7 @@
     border-block-start: var(--border-width-thin) solid var(--row-divider);
   }
 
-  /* "We could not find out" — never the same as "there are none". */
+  /* "We could not find out" - never the same as "there are none". */
   .unavailable {
     margin: 0;
     font-size: var(--font-size-meta);
@@ -261,7 +261,7 @@
   }
 
   /*
-   * 02's toggle: a plain pill, 34 × 18, no knob — on is ink, off is the
+   * 02's toggle: a plain pill, 34 × 18, no knob - on is ink, off is the
    * hairline colour. It shows a state; nothing slides.
    */
   .switch {

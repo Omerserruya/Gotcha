@@ -25,7 +25,7 @@ const CATALOG = [
 const rows = gridRows(CATALOG);
 const row = (id: string) => rows.find((r) => r.id === id)!;
 
-describe('★ 12c — ladders where the actions are a ladder, actions where they are jobs', () => {
+describe('★ 12c - ladders where the actions are a ladder, actions where they are jobs', () => {
   it('conversation:messages is actions; crm:contacts and ai:employees are levels', () => {
     expect(row('conversation:messages').ladder).toBeNull();
     expect(levelsOf(row('crm:contacts'))).toEqual(['none', 'view', 'edit']);

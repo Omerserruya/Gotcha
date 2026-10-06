@@ -7,7 +7,7 @@ import { PageContainer } from './PageContainer';
 
 /*
  * ★★ `layout="screen"` is 02's page header and body, measured on four
- *    screens (Approvals, Customers, Outreach, Analytics) — one variant that
+ *    screens (Approvals, Customers, Outreach, Analytics) - one variant that
  *    closes most of the visual gap on all of them.
  */
 describe('★★ the screen layout: a header ROW, and a body the panel’s width', () => {
@@ -29,7 +29,7 @@ describe('★★ the screen layout: a header ROW, and a body the panel’s width
     expect(header).not.toContainElement(screen.getByText('body'));
   });
 
-  it('★ the document layout is unchanged — every other page', () => {
+  it('★ the document layout is unchanged - every other page', () => {
     render(<PageContainer title="Settings">x</PageContainer>);
     expect(screen.queryByRole('banner')).toBeNull();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
@@ -49,7 +49,7 @@ describe('★ 02’s measurements, read from the stylesheet', () => {
     expect(rule('screenHeader')).toMatch(/padding:\s*30px var\(--space-40\) var\(--space-20\)/);
     expect(rule('screenHeader')).toMatch(/align-items:\s*flex-end/);
     expect(rule('screen')).not.toMatch(/max-inline-size/);
-    // The divider the first trees could not see — they recorded only border-top.
+    // The divider the first trees could not see - they recorded only border-top.
     expect(rule('screenHeader')).toMatch(/border-block-end:\s*1px solid var\(--border-subtle\)/);
   });
 
@@ -70,12 +70,12 @@ describe('⚠⚠ the four screens 02 draws this way use it', () => {
     const source = readFileSync(`src/app/[locale]/(app)/${page}/page.tsx`, 'utf8');
     const uses = source.match(/<PageContainer\b[^>]*>/g) ?? [];
     expect(uses.length).toBeGreaterThan(0);
-    // Every return — the unavailable and empty states too, not only the main one.
+    // Every return - the unavailable and empty states too, not only the main one.
     for (const use of uses) expect(use).toContain('layout="screen"');
   });
 });
 
-describe('★★ `fill` — a window you scroll inside, not a document that runs off the screen', () => {
+describe('★★ `fill` - a window you scroll inside, not a document that runs off the screen', () => {
   const css = readFileSync('src/shell/PageContainer.module.css', 'utf8').replace(
     /\/\*[\s\S]*?\*\//g,
     '',
@@ -95,7 +95,7 @@ describe('★★ `fill` — a window you scroll inside, not a document that runs
 
   it('⚠⚠ the card can SHRINK, and its list is what scrolls', () => {
     // Without `min-block-size: 0` a flex child refuses to shrink below its
-    // content, and pushes the page instead — the 1175px card on a 900 screen.
+    // content, and pushes the page instead - the 1175px card on a 900 screen.
     expect(rule(pattern, 'fillCard')).toMatch(/min-block-size:\s*0/);
     expect(rule(pattern, 'fillScroll')).toMatch(/overflow-y:\s*auto/);
     expect(rule(pattern, 'fillScroll')).toMatch(/min-block-size:\s*0/);
@@ -111,7 +111,7 @@ describe('★★ `fill` — a window you scroll inside, not a document that runs
   });
 });
 
-describe('★ Studio’s header is 22 at the bottom; 02–06 keep their 20', () => {
+describe('★ Studio’s header is 22 at the bottom; 02-06 keep their 20', () => {
   it('the option reaches the header, and its absence leaves the default', async () => {
     const { container, unmount } = render(
       <PageContainer layout="screen" title="Automations" headerPadEnd={22} />,

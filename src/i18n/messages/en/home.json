@@ -235,12 +235,12 @@
     "item": {
       "gaps": {
         "title": "{count, plural, one {A question it could not answer} other {# questions it could not answer}}",
-        "body": "{questions} — asked {asked, plural, one {once} other {# times}}",
+        "body": "{questions} - asked {asked, plural, one {once} other {# times}}",
         "action": "{count, plural, one {Answer it} other {Answer them}}"
       },
       "conflicts": {
         "title": "{count, plural, one {Two sources still disagree about {fields}} other {Sources disagree about # things}}",
-        "body": "{count, plural, one {Until you pick one, GOTCHA passes every question touching it to a person.} other {{fields} — until you pick, GOTCHA passes those questions to a person.}}",
+        "body": "{count, plural, one {Until you pick one, GOTCHA passes every question touching it to a person.} other {{fields} - until you pick, GOTCHA passes those questions to a person.}}",
         "action": "Resolve it"
       },
       "demandOne": {
@@ -250,7 +250,7 @@
       },
       "demandMany": {
         "title": "{count} things people asked for that you do not stock",
-        "body": "{terms} — asked {asked, plural, one {once} other {# times}}",
+        "body": "{terms} - asked {asked, plural, one {once} other {# times}}",
         "action": "See who"
       },
       "dormant": {
@@ -272,7 +272,7 @@
     "online": "{count, plural, =0 {Nobody online} one {# online} other {# online}}",
     "load": "{open} open · replies in {reply}",
     "awayUntil": "Away until {time}",
-    "imbalance": "{name} is carrying most of the queue —",
+    "imbalance": "{name} is carrying most of the queue -",
     "rebalance": "open Inbox",
     "none": "No one on the team yet.",
     "unavailable": "We couldn't read your team just now.",
@@ -303,10 +303,10 @@
         "multiple_automatable": "<b>{count}</b> recurring topics came up at least {minOccurrences} times each in the last {days} days. Each one is a flow waiting to be written."
       },
       "escalation": {
-        "rate_high": "<b>{percent}%</b> of analysed conversations were escalated to a person in the last {days} days — {escalated} of {analyzed}."
+        "rate_high": "<b>{percent}%</b> of analysed conversations were escalated to a person in the last {days} days - {escalated} of {analyzed}."
       },
       "confidence": {
-        "below_threshold": "GOTCHA was unsure on <b>{percent}%</b> of analysed conversations in the last {days} days — {count} of {analyzed}, below {threshold}% confidence."
+        "below_threshold": "GOTCHA was unsure on <b>{percent}%</b> of analysed conversations in the last {days} days - {count} of {analyzed}, below {threshold}% confidence."
       },
       "channel": {
         "highest_volume": "<b>{count}</b> conversations came through {channel} in the last {days} days, more than any other channel."
@@ -321,7 +321,7 @@
     "title": "First steps",
     "progress": "{done, plural, one {One done} other {# done}} · about {minutes, plural, one {# minute} other {# minutes}} left",
     "allDone": "All done",
-    "hide": "Hide — finish later in Settings",
+    "hide": "Hide - finish later in Settings",
     "next": "DO THIS NEXT",
     "estimate": "{minutes} min",
     "unavailable": "Setup progress could not be loaded just now.",
@@ -329,7 +329,7 @@
     "step": {
       "connect_channel": {
         "title": "Connect a channel",
-        "body": "WhatsApp, Instagram or email — wherever your customers already write to you.",
+        "body": "WhatsApp, Instagram or email - wherever your customers already write to you.",
         "action": "Connect",
         "after": "After you connect a channel."
       },
@@ -353,7 +353,7 @@
       },
       "handover_rules": {
         "title": "Set the handover rules",
-        "body": "When a person takes over — anger, money, wholesale — and what happens outside working hours.",
+        "body": "When a person takes over - anger, money, wholesale - and what happens outside working hours.",
         "action": "Set rules",
         "after": "After you set the handover rules."
       },
@@ -390,11 +390,11 @@
       "cancel": "Not yet",
       "connectStore": "Connect your store",
       "failed": {
-        "store": "Connect your store first — GOTCHA needs it to act on orders.",
+        "store": "Connect your store first - GOTCHA needs it to act on orders.",
         "profile": "Your business profile needs filling in first.",
         "admin": "The workspace needs an active admin first.",
         "forbidden": "Only an admin can take the workspace live.",
-        "failed": "That didn't go live — try again."
+        "failed": "That didn't go live - try again."
       },
       "opensOnce": "Opens once {steps} are set."
     },
@@ -402,7 +402,7 @@
     "blockedBy": "Waiting on: {step}",
     "and": "and",
     "testMessage": "Send yourself a test message",
-    "testMessageNotYet": "Sending a test message from here comes next — message your WhatsApp number from your own phone meanwhile."
+    "testMessageNotYet": "Sending a test message from here comes next - message your WhatsApp number from your own phone meanwhile."
   },
   "dayOne": {
     "eyebrow": "Day one",

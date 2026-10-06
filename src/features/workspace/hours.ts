@@ -3,8 +3,8 @@ import { DAY_KEYS, type DayKey, type Workspace } from '@/api/contracts/workspace
 /**
  * Reading a week back to somebody.
  *
- * The design writes it as "Sun–Thu 09:00–18:00 · Fri 09:00–13:00 · closed
- * Saturday" — runs of identical days collapsed, the exceptions spelled out.
+ * The design writes it as "Sun-Thu 09:00-18:00 · Fri 09:00-13:00 · closed
+ * Saturday" - runs of identical days collapsed, the exceptions spelled out.
  * Seven lines would be accurate and unreadable; this is the same information
  * at a glance, which is what a fact row is for.
  *
@@ -54,7 +54,7 @@ export function weekOf(workspace: Workspace | null): Record<DayKey, DayHours> {
  *
  * Runs are consecutive in the week's own order, which starts on Sunday here
  * because the business does. Two separate stretches with the same hours stay
- * separate: "Sun–Mon and Thu–Fri" is true and "Sun–Fri" is not.
+ * separate: "Sun-Mon and Thu-Fri" is true and "Sun-Fri" is not.
  */
 export function summariseWeek(week: Record<DayKey, DayHours>): WeekSummary {
   const runs: HoursRun[] = [];

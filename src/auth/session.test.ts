@@ -56,20 +56,20 @@ describe('sealSession', () => {
     /*
      * ★★ THE TAMPER IS PROVEN TO TAMPER, BECAUSE TWICE IT DID NOT.
      *
-     * First version: `${sealed.slice(0, -2)}xy` — a no-op whenever the seal
+     * First version: `${sealed.slice(0, -2)}xy` - a no-op whenever the seal
      * already ended in "xy". About one in four thousand. It failed once in a
      * full-suite run and passed alone, the signature of a flake.
      *
      * Second version, my fix: flip the final character A↔B. Also a no-op,
-     * and more often. This is JWE compact —
-     * `header.key.iv.ciphertext.tag` — and a 16-byte GCM tag is 22 base64url
+     * and more often. This is JWE compact -
+     * `header.key.iv.ciphertext.tag` - and a 16-byte GCM tag is 22 base64url
      * characters carrying 128 bits. 21 × 6 = 126, so the FINAL character
      * contributes two significant bits and four of padding. 'A' and 'B'
      * differ only in the lowest bit, which is padding, so the two strings
      * decode to an identical tag.
      *
      * ★ Both versions assumed the mutation mutated. The lesson is not "pick
-     * a better character" — it is that a test which tampers must PROVE the
+     * a better character" - it is that a test which tampers must PROVE the
      * tamper, the same way a mutation run proves a guard can fail.
      *
      * So: change the first character of the CIPHERTEXT segment, where every

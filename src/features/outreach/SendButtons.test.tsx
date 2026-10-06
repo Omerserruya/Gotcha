@@ -24,7 +24,7 @@ const intl = (node: React.ReactNode) =>
     </NextIntlClientProvider>,
   );
 
-describe('★★ Send and Submit ask first — they reach outside', () => {
+describe('★★ Send and Submit ask first - they reach outside', () => {
   it('Send: the first press names how many; only the second sends', async () => {
     sendCampaign.mockResolvedValue({ ok: true });
     intl(<SendCampaign id="b1" count={1240} />);

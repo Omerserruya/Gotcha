@@ -78,8 +78,8 @@ describe('★ 13b → 13e / 13f: one row while there is an import', () => {
   });
 });
 
-describe('★ 13e — the platform’s two stages, drawn as 02’s timeline', () => {
-  it('analyzing: the three kinds of learning share ONE state — they happen together', async () => {
+describe('★ 13e - the platform’s two stages, drawn as 02’s timeline', () => {
+  it('analyzing: the three kinds of learning share ONE state - they happen together', async () => {
     render(await ImportPanel({ status: status({ analysisPercent: 40 }), receiving: true }));
     for (const key of ['learning', 'answers', 'customers']) {
       expect(screen.getByTestId(`learn-step-${key}`)).toHaveAttribute('data-state', 'active');
@@ -133,9 +133,9 @@ describe('★ 13e — the platform’s two stages, drawn as 02’s timeline', ()
 
   it('running: closing is safe, and the email promise rides on it, with its condition', async () => {
     render(await ImportPanel({ status: status(), receiving: true }));
-    // 02's foot sentence, said — with no "minutes left": no estimate is reported.
+    // 02's foot sentence, said - with no "minutes left": no estimate is reported.
     expect(screen.getByTestId('import-foot')).toHaveTextContent(
-      "You can close this — we'll email the workspace owners when the report is ready.",
+      "You can close this - we'll email the workspace owners when the report is ready.",
     );
     expect(screen.getByTestId('import-foot')).not.toHaveTextContent(/minutes/);
     expect(screen.getByTestId('import-close')).toHaveAttribute(
@@ -179,7 +179,7 @@ describe('★ 13e — the platform’s two stages, drawn as 02’s timeline', ()
   });
 });
 
-describe('★ 13f — the report, no paragraphs', () => {
+describe('★ 13f - the report, no paragraphs', () => {
   const ALL = [
     candidate({ id: 'c1', confidence: 0.92 }),
     candidate({
@@ -204,9 +204,9 @@ describe('★ 13f — the report, no paragraphs', () => {
       tab,
     });
 
-  it('02’s tabs: needs a look · ready to add · rejected — already covered only when there is any', async () => {
+  it('02’s tabs: needs a look · ready to add · rejected - already covered only when there is any', async () => {
     render(await report());
-    // c2 conflicts, c3 is under the floor; c1 is high and clean — ready to add.
+    // c2 conflicts, c3 is under the floor; c1 is high and clean - ready to add.
     expect(screen.getByTestId('report-tab-needs_a_look')).toHaveTextContent('Needs a look2');
     expect(screen.getByTestId('report-tab-ready_to_add')).toHaveTextContent('Ready to add1');
     expect(screen.getByTestId('report-tab-rejected')).toHaveTextContent('Rejected1');
@@ -240,7 +240,7 @@ describe('★ 13f — the report, no paragraphs', () => {
     );
   });
 
-  it('a chip only for a reason; the figure on the right — never both', async () => {
+  it('a chip only for a reason; the figure on the right - never both', async () => {
     const one = render(await report());
     const low = screen.getByTestId('candidate-c3');
     expect(low).toHaveTextContent('Low confidence');
@@ -262,7 +262,7 @@ describe('★ 13f — the report, no paragraphs', () => {
     expect(screen.getByTestId('report-preview')).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('★ the button counts what the tab shows — what the route takes, a live lookup included (measured on dev: 3 against 2)', async () => {
+  it('★ the button counts what the tab shows - what the route takes, a live lookup included (measured on dev: 3 against 2)', async () => {
     render(
       await ReportPanel({
         status: status({ stage: 'ready' }),

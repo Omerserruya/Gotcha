@@ -10,7 +10,7 @@ const BARS = [7, 13, 19, 11, 22, 15, 9, 17, 21, 12, 6, 14, 18, 10, 16, 8, 13, 20
 
 /**
  * 02's voice note: a black disc to play, a waveform that fills as it plays,
- * and the time — over an `<audio>` nobody sees. One control, not the
+ * and the time - over an `<audio>` nobody sees. One control, not the
  * browser's beside the design's.
  */
 export function VoicePlayer({

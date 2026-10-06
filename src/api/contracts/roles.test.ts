@@ -34,7 +34,7 @@ describe('a role is a set of feature keys and nothing else', () => {
   it('carries no amount, because no column holds one', () => {
     /*
      * The design describes roles as allowing "refunds up to ₪1,000" and "up
-     * to ₪500". `TenantRoleFeature` is (roleId, feature) — a composite key
+     * to ₪500". `TenantRoleFeature` is (roleId, feature) - a composite key
      * with no other columns. A role grants `billing.refund` or it does not.
      *
      * A limit on this shape would be a number a reader acts on that no code
@@ -70,7 +70,7 @@ describe('a per-person grant can also take something away', () => {
 
   it('reads granted:false as a removal, which the design never mentions', () => {
     /*
-     * `UserFeatureGrant.granted` false is an explicit REVOKE — it overrides a
+     * `UserFeatureGrant.granted` false is an explicit REVOKE - it overrides a
      * permission the person's role grants. The design's 12e is "add a
      * permission to one person" and describes only additions.
      *
@@ -83,7 +83,7 @@ describe('a per-person grant can also take something away', () => {
     expect(revoke.granted).toBe(false);
   });
 
-  it('carries its end (53a5079a) — and still no limit, because that column does not exist', () => {
+  it('carries its end (53a5079a) - and still no limit, because that column does not exist', () => {
     // The design gives a grant an end date and a limit. The end landed with
     // `expiresAt` + `active`; a limit is still nowhere, and a field for one
     // would save nothing.
@@ -96,7 +96,7 @@ describe('a per-person grant can also take something away', () => {
 describe('a wildcard role says what it means, never how many rows it has', () => {
   it('reports a role holding * as allowing everything', () => {
     /*
-     * Owner holds exactly ONE feature row — `*` — and
+     * Owner holds exactly ONE feature row - `*` - and
      * `permissions.ts:37` is `if (key === "*") return true`. Counting it
      * rendered "Allows one thing" directly beneath "Full access to
      * everything", and a reader comparing Owner's 1 to Admin's 58 concludes

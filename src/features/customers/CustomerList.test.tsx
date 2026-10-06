@@ -71,7 +71,7 @@ const show = async (
     }),
   );
 
-describe('★★ 04’s rows — what is true about them today', () => {
+describe('★★ 04’s rows - what is true about them today', () => {
   it('a link to the person: initials, name, their last word, and how long ago', async () => {
     await show([row()]);
     const link = screen.getByRole('link');
@@ -83,7 +83,7 @@ describe('★★ 04’s rows — what is true about them today', () => {
     expect(link).toHaveAttribute('title', 'Reach: +972500000001');
   });
 
-  it('★ open and their word last: "Waiting on you"; answered: no chip — a tag shows instead', async () => {
+  it('★ open and their word last: "Waiting on you"; answered: no chip - a tag shows instead', async () => {
     const one = await show([row()]);
     expect(screen.getByTestId('waiting-k1')).toHaveTextContent('Waiting on you');
     one.unmount();
@@ -92,15 +92,15 @@ describe('★★ 04’s rows — what is true about them today', () => {
     expect(screen.getByTestId('customer-k1')).toHaveTextContent('Wholesale');
   });
 
-  it('no conversation read for them: "—" with why — never "never wrote"', async () => {
+  it('no conversation read for them: "-" with why - never "never wrote"', async () => {
     await show([row()], []);
-    expect(screen.getByTestId('situation-k1')).toHaveTextContent('—');
-    expect(screen.getByTestId('since-k1')).toHaveTextContent('—');
+    expect(screen.getByTestId('situation-k1')).toHaveTextContent('-');
+    expect(screen.getByTestId('since-k1')).toHaveTextContent('-');
   });
 
-  it('worth unread: "—" with why — no figure nobody read, and no second line', async () => {
+  it('worth unread: "-" with why - no figure nobody read, and no second line', async () => {
     await show([row()]);
-    expect(screen.getByTestId('value-k1').textContent).toBe('—');
+    expect(screen.getByTestId('value-k1').textContent).toBe('-');
     expect(screen.getByTestId('value-k1').getAttribute('title')).toBe(
       'The store’s orders couldn’t be read.',
     );
@@ -126,7 +126,7 @@ describe('★★ 04’s rows — what is true about them today', () => {
   });
 });
 
-describe('★★ the three chips — live counts, or none when unread', () => {
+describe('★★ the three chips - live counts, or none when unread', () => {
   it('counts; the current one marked; links keep the segment in the URL', async () => {
     render(
       await Segments({
@@ -146,7 +146,7 @@ describe('★★ the three chips — live counts, or none when unread', () => {
     );
   });
 
-  it('unread: the label alone — never "· 0"; capped: "100+"', async () => {
+  it('unread: the label alone - never "· 0"; capped: "100+"', async () => {
     render(
       await Segments({
         segment: 'everyone',
@@ -182,13 +182,13 @@ describe('★★ the side column', () => {
     );
   });
 
-  it('who they are, unread: label and "—" on a line, an empty bar under each, why on the card', async () => {
+  it('who they are, unread: label and "-" on a line, an empty bar under each, why on the card', async () => {
     render(await WhoTheyAre());
     const card = screen.getByTestId('who-they-are');
     expect(card.textContent).not.toMatch(/\d/);
     const rows = card.querySelectorAll('li');
     expect(rows).toHaveLength(4);
-    expect(rows[0]!.children[0]).toHaveTextContent('Bought once—');
+    expect(rows[0]!.children[0]).toHaveTextContent('Bought once-');
     expect(rows[0]!.children[1]?.getAttribute('aria-hidden')).toBe('true');
     expect(rows[0]!.children[1]?.children).toHaveLength(0);
     expect(card.getAttribute('title')).toBe('The store’s orders couldn’t be read.');
@@ -215,7 +215,7 @@ describe('★★ the side column', () => {
     expect(screen.getByTestId('who-they-are')).not.toHaveAttribute('title');
   });
 
-  it('★ who they are, no store: "—" with the reason — never four zeros', async () => {
+  it('★ who they are, no store: "-" with the reason - never four zeros', async () => {
     render(
       await WhoTheyAre({
         segments: {
@@ -367,7 +367,7 @@ const insight = (over: Partial<Insight> = {}): Insight => ({
   ...over,
 });
 
-describe('★★ 04’s value column — the amount over its orders, or "—" with why', () => {
+describe('★★ 04’s value column - the amount over its orders, or "-" with why', () => {
   const value = () => screen.getByTestId('value-k1');
 
   it('read: "₪2,140" over "6 orders"', async () => {
@@ -378,37 +378,37 @@ describe('★★ 04’s value column — the amount over its orders, or "—" wi
     expect(value()).not.toHaveAttribute('title');
   });
 
-  it('read, none: "—" over "no orders yet"', async () => {
+  it('read, none: "-" over "no orders yet"', async () => {
     await show([row()], undefined, { commerce: read({ k1: {} }) });
-    expect(value().textContent).toBe('—no orders yet');
+    expect(value().textContent).toBe('-no orders yet');
   });
 
-  it('★ capped and none: "—" with why — an older order may be past the cap', async () => {
+  it('★ capped and none: "-" with why - an older order may be past the cap', async () => {
     await show([row()], undefined, { commerce: read({ k1: {} }, true) });
-    expect(value().textContent).toBe('—');
+    expect(value().textContent).toBe('-');
     expect(value().getAttribute('title')).toMatch(/newest orders/);
   });
 
-  it('★ no store: "—" with the reason — never "no orders yet"', async () => {
+  it('★ no store: "-" with the reason - never "no orders yet"', async () => {
     await show([row()], undefined, {
       commerce: { state: 'none', reason: 'no_store_connected' },
     });
-    expect(value().textContent).toBe('—');
+    expect(value().textContent).toBe('-');
     expect(value()).not.toHaveTextContent('no orders yet');
     expect(value().getAttribute('title')).toBe(
       'No store is connected, so there are no orders to read.',
     );
   });
 
-  it('★ mixed currencies: the route withholds the sum (0) — "—" over the orders, not "0"', async () => {
+  it('★ mixed currencies: the route withholds the sum (0) - "-" over the orders, not "0"', async () => {
     await show([row()], undefined, {
       commerce: read({ k1: { lifetimeValue: 0, currency: null, orderCount: 3 } }),
     });
-    expect(value().textContent).toBe('—3 orders');
+    expect(value().textContent).toBe('-3 orders');
     expect(value().getAttribute('title')).toMatch(/more than one currency/);
   });
 
-  it('★ two identities: the one with most orders speaks — the same phone’s orders are never summed', async () => {
+  it('★ two identities: the one with most orders speaks - the same phone’s orders are never summed', async () => {
     await show(
       [row({ personId: 'p1' }), row({ id: 'k2', personId: 'p1', externalId: 'other' })],
       undefined,
@@ -452,7 +452,7 @@ describe('★★ 04’s second line and chip, from their open conversation', () 
         ['k1', insight({ situation: 'Asking about the sand king', mood: 'about_to_buy' })],
       ]),
     });
-    // The line is the situation alone — no "wrote" for a first message.
+    // The line is the situation alone - no "wrote" for a first message.
     expect(screen.getByTestId('situation-k1').querySelector('bdi')!.textContent).toBe(
       'Asking about the sand king',
     );
@@ -469,7 +469,7 @@ describe('★★ 04’s second line and chip, from their open conversation', () 
     expect(screen.getByTestId('situation-k1').querySelector('bdi')).toHaveTextContent('בקשה להחזר');
   });
 
-  it('★ measured on dev: only the situation is in its own direction — "wrote N times" stays after it', async () => {
+  it('★ measured on dev: only the situation is in its own direction - "wrote N times" stays after it', async () => {
     await show([row()], undefined, {
       insights: new Map([
         ['k1', insight({ situation: 'היי, מחפש מידע על מוצר', inboundCount: 2 })],

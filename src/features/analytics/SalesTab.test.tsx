@@ -43,7 +43,7 @@ const demand = productDemandSchema.parse({
   ],
 });
 
-describe('★★ 06d — nothing ties a sale to a conversation, and it says so', () => {
+describe('★★ 06d - nothing ties a sale to a conversation, and it says so', () => {
   it('★ the dark card: no revenue figure, the reason', async () => {
     render(await SalesHero());
     const hero = screen.getByTestId('sales-hero');
@@ -51,10 +51,10 @@ describe('★★ 06d — nothing ties a sale to a conversation, and it says so',
     expect(hero).not.toHaveTextContent(/₪|\$|\d/);
   });
 
-  it('the strip: all five drawn, every one "—", never 0', async () => {
+  it('the strip: all five drawn, every one "-", never 0', async () => {
     render(await SalesStrip());
     for (const key of ['revenue', 'wanted', 'bought', 'average', 'carts']) {
-      expect(screen.getByTestId(`sales-${key}`)).toHaveTextContent('—');
+      expect(screen.getByTestId(`sales-${key}`)).toHaveTextContent('-');
     }
     expect(screen.getByTestId('sales-strip')).not.toHaveTextContent(/\b0\b/);
   });
@@ -65,7 +65,7 @@ describe('★★ 06d — nothing ties a sale to a conversation, and it says so',
   });
 });
 
-describe('★★ what IS recorded: this week’s catalogue misses — as asks, never people', () => {
+describe('★★ what IS recorded: this week’s catalogue misses - as asks, never people', () => {
   it('★ what you lost: asks and how many things, from the misses only', async () => {
     render(await WhatYouLost({ demand }));
     expect(screen.getByTestId('sales-lost')).toHaveTextContent(
@@ -74,9 +74,9 @@ describe('★★ what IS recorded: this week’s catalogue misses — as asks, n
     expect(screen.getByTestId('sales-lost')).not.toHaveTextContent(/people/i);
   });
 
-  it('⚠ a failed read is "—"; no misses says so', async () => {
+  it('⚠ a failed read is "-"; no misses says so', async () => {
     const { unmount } = render(await WhatYouLost({ demand: null }));
-    expect(screen.getByTestId('sales-lost')).toHaveTextContent('—');
+    expect(screen.getByTestId('sales-lost')).toHaveTextContent('-');
     unmount();
     render(await WhatYouLost({ demand: productDemandSchema.parse({ data: [] }) }));
     expect(screen.getByTestId('sales-lost')).toHaveTextContent(
@@ -92,7 +92,7 @@ describe('★★ what IS recorded: this week’s catalogue misses — as asks, n
     expect(screen.getByTestId('asked-d1')).toHaveTextContent('asked 3 weeks running');
     expect(screen.getByTestId('asked-d1')).toHaveTextContent('11 asks');
     expect(screen.getByTestId('asked-d2')).toHaveTextContent('not stocked');
-    expect(screen.getByTestId('asked-d1')).toHaveTextContent('—');
+    expect(screen.getByTestId('asked-d1')).toHaveTextContent('-');
     expect(screen.getByTestId('sales-asked-foot')).toHaveTextContent(
       "Navy towels was searched for 11 times this week and isn't in your catalogue.",
     );

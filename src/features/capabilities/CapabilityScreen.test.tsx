@@ -51,7 +51,7 @@ const renderScreen = async (
     /*
      * Wrapped, because `PermissionChoice` is a CLIENT component inside this
      * server tree and `useTranslations` needs a context the server mock does
-     * not supply. Sixth time this session — the tell is always the same
+     * not supply. Sixth time this session - the tell is always the same
      * sentence about `NextIntlClientProvider`, and it names the component
      * rather than the harness.
      */
@@ -76,7 +76,7 @@ describe('our words, not the platform’s', () => {
   });
 
   it('carries no developer prose in any of its own words', async () => {
-    // The whole catalogue, not just the rows rendered above — a sentence
+    // The whole catalogue, not just the rows rendered above - a sentence
     // added later must pass the same bar.
     for (const [name, words] of Object.entries(messages.tool as Record<string, string>)) {
       expect(words, name).not.toMatch(/`|autonomous bot|Returns |adapter|CRM adapter/i);
@@ -121,7 +121,7 @@ describe('the uniform facts are stated only when they are uniform', () => {
 });
 
 describe('★★ the fourth state, on screen', () => {
-  it('★★ a blocked row keeps its control — disabled, its state marked, the repair in a title', async () => {
+  it('★★ a blocked row keeps its control - disabled, its state marked, the repair in a title', async () => {
     /*
      * 06's ruling (states, not explanations): the earlier red sentence on
      * every row is gone. The three segments stay, the stored one marked, and
@@ -149,7 +149,7 @@ describe('★★ the fourth state, on screen', () => {
     expect(screen.getByTestId('capability-screen')).not.toHaveTextContent(/reconnect it/i);
   });
 
-  it('★★ names the missing scopes — in the title, not beside the row', async () => {
+  it('★★ names the missing scopes - in the title, not beside the row', async () => {
     await renderScreen([
       capability({
         toolName: 'shopify.refund',
@@ -197,7 +197,7 @@ describe('★★ the fourth state, on screen', () => {
     // Shopify re-authorises from here (backend 381a5d1b): the repair beside the line.
     expect(screen.getByTestId('oauth-start')).toHaveTextContent('Reconnect Shopify');
     expect(screen.getByTestId('system-down')).toHaveTextContent(
-      'Hidden from GOTCHA while Shopify needs fixing — reconnect it in Integrations.',
+      'Hidden from GOTCHA while Shopify needs fixing - reconnect it in Integrations.',
     );
     expect(screen.getByTestId('capability-shopify.add_vip_tag')).toHaveTextContent(/^Add VIP tag/);
     expect(screen.getByTestId('capability-shopify.check_delivery_eta')).toHaveTextContent(
@@ -221,20 +221,20 @@ describe('★★ the fourth state, on screen', () => {
      */
     await renderScreen([capability({ toolName: 'send_message', integrationConnected: undefined })]);
     // The control is offered. (It is `choice-…` since the three-state
-    // control replaced the read-only stance label — the claim is the same.)
+    // control replaced the read-only stance label - the claim is the same.)
     expect(screen.getByTestId('choice-send_message')).toBeInTheDocument();
     expect(screen.queryByTestId('blocked-send_message')).toBeNull();
   });
 
   it('★ a row the admin turned off still reads as their choice', async () => {
-    // `disabled` with `reason: 'ok'` — the switch is theirs and it is off.
+    // `disabled` with `reason: 'ok'` - the switch is theirs and it is off.
     // That must not render as the platform blocking them.
     await renderScreen([capability({ toolName: 'delete_contact', enabled: false })]);
     expect(screen.getByTestId('choice-delete_contact')).toBeInTheDocument();
     expect(screen.queryByTestId('blocked-delete_contact')).toBeNull();
     /*
      * ★ AND "Never" READS AS THEIRS. `disabled` with `reason: 'ok'` means the
-     * admin turned it off — the control shows that as the current choice
+     * admin turned it off - the control shows that as the current choice
      * rather than as the platform blocking them.
      */
     expect(screen.getByTestId('choice-delete_contact-never')).toHaveAttribute(
@@ -267,7 +267,7 @@ describe('★★ how often it has run, and what that does not prove', () => {
      * THE DESIGN'S CAPTION, AND WHY IT NEEDS A THIRD ANSWER.
      *
      * Attempts written before the platform recorded a failure reason land in
-     * `unclassifiedFailureCount` and are deliberately NOT counted as errors —
+     * `unclassifiedFailureCount` and are deliberately NOT counted as errors -
      * the service refuses to guess whether they were refusals or breakages.
      * So `erroredCount === 0` does not support "never failed"; it supports
      * "nothing we can read failed", which is a different sentence and the
@@ -290,7 +290,7 @@ describe('★★ how often it has run, and what that does not prove', () => {
      * *"A refusal is the product working correctly, and guessing would make a
      * functioning approval policy read as a broken integration."* A tool a
      * rule keeps stopping and a tool that keeps breaking need opposite
-     * repairs — one is a policy review, the other is an outage.
+     * repairs - one is a policy review, the other is an outage.
      */
     await renderScreen([capability()], [ran({ refusedCount: 41, successCount: 571 })]);
     const used = screen.getByTestId('used-close_conversation');
@@ -301,7 +301,7 @@ describe('★★ how often it has run, and what that does not prove', () => {
      * The first version excluded only "failed 41", and a mutation folding
      * refusals into failures rendered "failed 0 times" and passed it. The
      * second excluded /failed/ outright and failed on correct code, because
-     * "never failed" contains it — which is the right answer here: 41
+     * "never failed" contains it - which is the right answer here: 41
      * refusals with no errors genuinely never failed.
      *
      * So the claim to exclude is a failure COUNT. Both wrong assertions were
@@ -326,7 +326,7 @@ describe('★★ how often it has run, and what that does not prove', () => {
   });
 });
 
-describe('★★ 02’s row: what it is, how it ran, one control — and nothing beside it', () => {
+describe('★★ 02’s row: what it is, how it ran, one control - and nothing beside it', () => {
   it('★ without a run to count, the state says what happens instead', async () => {
     await renderScreen([
       capability({ toolName: 'asks', requiresApproval: true }),

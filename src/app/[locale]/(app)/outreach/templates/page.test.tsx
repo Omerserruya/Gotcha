@@ -39,7 +39,7 @@ beforeEach(() => {
   loadTemplates.mockReset();
 });
 
-describe('★★ 05c — the table, the preview, the rejection, worth knowing', () => {
+describe('★★ 05c - the table, the preview, the rejection, worth knowing', () => {
   it('★ ?template= picks the preview, and the table marks the same row', async () => {
     loadTemplates.mockResolvedValue({ templates: [row('a', 'One'), row('b', 'Two')], total: 2 });
     const tree = await page('b');

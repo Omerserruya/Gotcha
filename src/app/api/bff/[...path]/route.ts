@@ -63,7 +63,7 @@ function upstreamPath(segments: string[]): string | null {
 async function proxy(request: NextRequest, segments: string[]): Promise<NextResponse> {
   /*
    * ★★ NOT REACHABLE ON THE SIGN-IN ORIGIN. The middleware's refusal cannot
-   * see this file — its matcher excludes `/api` — so this route was covered
+   * see this file - its matcher excludes `/api` - so this route was covered
    * there by the gateway allowlist and by nothing else, while every page route
    * had two independent refusals.
    */
@@ -111,7 +111,7 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
     if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value);
   });
   if (platformCookie) {
-    // Only the platform's own session cookie is relayed — never this app's,
+    // Only the platform's own session cookie is relayed - never this app's,
     // and never anything else the browser happens to be carrying.
     headers.set('cookie', `${platformCookie.name}=${platformCookie.value}`);
   } else if (session) {

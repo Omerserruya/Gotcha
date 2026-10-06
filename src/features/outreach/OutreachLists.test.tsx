@@ -44,7 +44,7 @@ const campaign = (over: Record<string, unknown> = {}): Campaign =>
     ...over,
   });
 
-describe('★★ 05’s "In flight" — the parts the platform writes', () => {
+describe('★★ 05’s "In flight" - the parts the platform writes', () => {
   it('★ a row: the name, the channel and how many people', async () => {
     render(await InFlightList({ campaigns: [campaign()], selectedId: 'c1' }));
     const row = screen.getByTestId('row-c1');
@@ -54,10 +54,10 @@ describe('★★ 05’s "In flight" — the parts the platform writes', () => {
     expect(row).toHaveAttribute('aria-current', 'true');
   });
 
-  it('⚠⚠ progress is SENT of recipients — never opened, read or replied, which nothing counts', async () => {
+  it('⚠⚠ progress is SENT of recipients - never opened, read or replied, which nothing counts', async () => {
     render(await InFlightList({ campaigns: [campaign()], selectedId: null }));
     const progress = screen.getByTestId('progress-c1');
-    // One line in 170px — 02's caption never wraps its row.
+    // One line in 170px - 02's caption never wraps its row.
     expect(progress).toHaveTextContent('794 / 1,240 sent');
     expect(progress.textContent).not.toMatch(/open|read|repl|bought/i);
   });
@@ -76,7 +76,7 @@ describe('★★ 05’s "In flight" — the parts the platform writes', () => {
         selectedId: null,
       }),
     );
-    // 02: the date in the subline — 24-hour, no current year — and only
+    // 02: the date in the subline - 24-hour, no current year - and only
     // "Scheduled" in the middle column.
     const row = screen.getByTestId('row-c1');
     expect(row).toHaveTextContent(
@@ -87,7 +87,7 @@ describe('★★ 05’s "In flight" — the parts the platform writes', () => {
   });
 });
 
-describe('★ "This month" — reached, campaigns, didn’t arrive', () => {
+describe('★ "This month" - reached, campaigns, didn’t arrive', () => {
   it('sums this month’s campaigns only', async () => {
     render(
       await MonthStrip({
@@ -104,7 +104,7 @@ describe('★ "This month" — reached, campaigns, didn’t arrive', () => {
     expect(screen.getByTestId('month-didntArrive')).toHaveTextContent('2');
   });
 
-  it('⚠ and never a "replied" or "revenue" figure — neither is recorded', async () => {
+  it('⚠ and never a "replied" or "revenue" figure - neither is recorded', async () => {
     const { container } = render(
       await MonthStrip({ campaigns: [campaign()], now: new Date('2026-10-02') }),
     );

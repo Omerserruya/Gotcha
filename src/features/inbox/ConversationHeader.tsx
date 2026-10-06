@@ -27,7 +27,7 @@ export function orderCountOf(orders: CommerceContextResponse | null): number | n
 }
 
 /**
- * Who this conversation is with — screen 02's header.
+ * Who this conversation is with - screen 02's header.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ 02's HEADER IS ONE ROW: AVATAR · NAME AND CHIP OVER A SUBLINE · VERBS
@@ -47,10 +47,10 @@ export async function ConversationHeader({
   chip = null,
 }: {
   readonly conversation: ConversationRow;
-  /** One `now` for the whole render — the capture runs at three viewports. */
+  /** One `now` for the whole render - the capture runs at three viewports. */
   readonly now: Date;
   /**
-   * 02's "Returning · 6 orders" chip — `OrdersChip`, inside a `<Suspense>`.
+   * 02's "Returning · 6 orders" chip - `OrdersChip`, inside a `<Suspense>`.
    *
    * ⚠ A slot rather than the order read: the read is the second round, and
    *   the header must paint before it returns. The chip arrives beside the
@@ -92,7 +92,7 @@ export async function ConversationHeader({
           </h2>
 
           {/*
-            ★★ 02's CHIP, FROM THE COUNT WE ALREADY HAD — see `OrdersChip`.
+            ★★ 02's CHIP, FROM THE COUNT WE ALREADY HAD - see `OrdersChip`.
             "Returning" means more than one order (our definition); no chip
             for a count that is absent, zero or unreadable.
           */}
@@ -117,7 +117,7 @@ export async function ConversationHeader({
             .join(' · ')}
           {/*
             ★★ HOW LONG THEY HAVE BEEN WAITING, AND "UNKNOWN" WHEN WE CANNOT
-            SAY. `waitingMinutes` is `null` when `lastMessageAt` is absent — a
+            SAY. `waitingMinutes` is `null` when `lastMessageAt` is absent - a
             denormalised cache maintained by convention. "0m" would sort it as
             the freshest thing on the screen and read as just-arrived.
 

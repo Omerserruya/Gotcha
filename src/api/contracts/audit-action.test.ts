@@ -75,7 +75,7 @@ describe('★★ the verdict reads both sources, and keeps three states', () => 
      * ════════════════════════════════════════════════════════════════════════
      * `AuditEntry.succeeded` is `null` on every `adapter.*` row while the action
      * name says `err` in so many words. Reading only the column throws away a
-     * verdict we were given — it is just encoded in a string.
+     * verdict we were given - it is just encoded in a string.
      */
     expect(auditVerdict(null, 'adapter.err.shopify.get_shop')).toBe(false);
     expect(auditVerdict(undefined, 'adapter.err.shopify.get_shop')).toBe(false);

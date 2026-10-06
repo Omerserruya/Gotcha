@@ -10,13 +10,13 @@ import styles from './Home.module.css';
 import { quietRows, type QuietRow } from './quiet-day-item';
 
 /**
- * "Worth an hour, while it is quiet" — the quiet day's replacement for the queue.
+ * "Worth an hour, while it is quiet" - the quiet day's replacement for the queue.
  *
  * The list is merged and ranked by the server across four sources, so this
  * renders an order rather than deciding one.
  *
  * Two lists, not one. Three sources remove future work; dormant customers
- * create conversations, which is the point of them — ranking an opportunity by
+ * create conversations, which is the point of them - ranking an opportunity by
  * how much work it removes would put the most valuable item last for being
  * valuable. The server keeps them apart and so does this.
  *

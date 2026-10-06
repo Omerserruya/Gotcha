@@ -26,8 +26,8 @@ const show = (guidance: string | null) =>
     </NextIntlClientProvider>,
   );
 
-describe('★ 11 — "How GOTCHA should sound" is read first, edited in place', () => {
-  it('reads: the words it writes by, the sample, its caption, and "Edit" — no field', () => {
+describe('★ 11 - "How GOTCHA should sound" is read first, edited in place', () => {
+  it('reads: the words it writes by, the sample, its caption, and "Edit" - no field', () => {
     show('Open with hi and their first name. Two sentences at most.');
     expect(screen.getByTestId('voice-text')).toHaveTextContent('Open with hi');
     expect(screen.queryByTestId('voice-field')).toBeNull();
@@ -40,7 +40,7 @@ describe('★ 11 — "How GOTCHA should sound" is read first, edited in place', 
   it('nothing set says so, in the place the words would be', () => {
     show(null);
     expect(screen.getByTestId('voice-text')).toHaveTextContent('Nothing learned yet');
-    // Said once — not again as the source line under it.
+    // Said once - not again as the source line under it.
     expect(screen.getAllByText('Nothing learned yet')).toHaveLength(1);
   });
 

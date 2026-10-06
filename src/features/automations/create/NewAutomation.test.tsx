@@ -33,12 +33,12 @@ const sheet = () =>
     </NextIntlClientProvider>,
   );
 
-describe('★★ 21 — a rule assembled locally from the runner’s own steps; nothing sent', () => {
+describe('★★ 21 - a rule assembled locally from the runner’s own steps; nothing sent', () => {
   it('THEN: a dashed row opening a menu of exactly the node types the runner executes', async () => {
     sheet();
     const add = screen.getByTestId('new-add');
     expect(add.tagName).toBe('BUTTON');
-    expect(add).toHaveTextContent(/^Add a step — /);
+    expect(add).toHaveTextContent(/^Add a step - /);
     expect(screen.queryByRole('menu')).toBeNull();
     await userEvent.click(add);
     expect(add).toHaveAttribute('aria-expanded', 'true');
@@ -88,7 +88,7 @@ describe('★★ 21 — a rule assembled locally from the runner’s own steps; 
     expect(screen.getByTestId(id)).toHaveAttribute('title', expect.stringMatching(reason));
   });
 
-  it('★ "last month" is drawn in its shape — no invented count, no named customer', () => {
+  it('★ "last month" is drawn in its shape - no invented count, no named customer', () => {
     sheet();
     const card = screen.getByTestId('new-caught');
     expect(card).toHaveTextContent('If this had been running last month');

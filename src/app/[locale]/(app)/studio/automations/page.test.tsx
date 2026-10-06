@@ -33,7 +33,7 @@ const page = async (query: Record<string, string> = {}) => {
   return Page({ searchParams: Promise.resolve(query) });
 };
 
-describe('★ 21 — New automation opens by query', () => {
+describe('★ 21 - New automation opens by query', () => {
   it('only with ?create=1', async () => {
     expect(find(await page(), NewAutomation)).toBeNull();
     expect(find(await page({ create: '1' }), NewAutomation)).not.toBeNull();

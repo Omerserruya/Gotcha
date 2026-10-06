@@ -85,7 +85,7 @@ describe('★★ a real WhatsApp Business account', () => {
     expect(await wabaConnected()).toBe(false);
   });
 
-  it('unread: null — nothing is offered, and it says why', async () => {
+  it('unread: null - nothing is offered, and it says why', async () => {
     get.mockRejectedValue(new Error('down'));
     expect(await wabaConnected()).toBeNull();
   });

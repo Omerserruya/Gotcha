@@ -28,7 +28,7 @@ export interface UsableTemplate {
 }
 
 /**
- * 05's "Create outreach · Campaign" — a DRAFT (Omer, 2026-10-04).
+ * 05's "Create outreach · Campaign" - a DRAFT (Omer, 2026-10-04).
  *
  * The campaign as 02 reads it: who it goes from, what they get, when. WhatsApp
  * sends only an approved template, so for a WhatsApp account the message is a
@@ -44,11 +44,11 @@ export function CampaignForm({
   contactIds = [],
 }: {
   readonly accounts: readonly SendingAccount[];
-  /** APPROVED templates only — nothing else can be sent on WhatsApp. */
+  /** APPROVED templates only - nothing else can be sent on WhatsApp. */
   readonly templates: readonly UsableTemplate[];
   readonly initialTemplateId?: string;
   readonly initialChannel?: string;
-  /** People picked on 04 — the draft goes to exactly them. */
+  /** People picked on 04 - the draft goes to exactly them. */
   readonly contactIds?: readonly string[];
 }) {
   const t = useTranslations('outreach.create');
@@ -61,7 +61,7 @@ export function CampaignForm({
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState(initialTemplateId ?? '');
   const [body, setBody] = useState('');
-  /* "When": a day and a clock, day-first and 24-hour — both, or neither. */
+  /* "When": a day and a clock, day-first and 24-hour - both, or neither. */
   const [day, setDay] = useState('');
   const [clock, setClock] = useState('');
   const [problem, setProblem] = useState<string | null>(null);

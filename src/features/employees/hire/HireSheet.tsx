@@ -21,8 +21,8 @@ import styles from './Hire.module.css';
 type Step = 1 | 2 | 3;
 
 /**
- * 07b–07d, measured: "Hire an AI employee" as a 1000 sheet over Studio —
- * Responsibility, Limits, Try it — the form on the left, what it means on
+ * 07b-07d, measured: "Hire an AI employee" as a 1000 sheet over Studio -
+ * Responsibility, Limits, Try it - the form on the left, what it means on
  * the right.
  *
  * ★ READ-ONLY, ON PURPOSE (the supervisor's ruling, pending Omer). Every
@@ -34,7 +34,7 @@ type Step = 1 | 2 | 3;
  * Step 2's rows are the business's own actions as 10 reads them, with 10's
  * three answers and its ceiling ("Do it" is not offered where orders or
  * money change). Step 1's "It already knows" is the business's knowledge
- * sources — 08's read — because the builder's `GET /:id/options` needs a
+ * sources - 08's read - because the builder's `GET /:id/options` needs a
  * draft id, and a draft is a write.
  */
 export function HireSheet({
@@ -164,7 +164,7 @@ export function HireSheet({
                   <p className={styles.chips}>
                     {channels.length === 0 ? (
                       <span className={styles.none} title={t('one.noChannels')}>
-                        —
+                        -
                       </span>
                     ) : (
                       channels.map((channel) => (
@@ -202,7 +202,7 @@ export function HireSheet({
                 </div>
                 {tools.length === 0 ? (
                   <p className={styles.none} title={t('two.noTools')} data-testid="hire-no-tools">
-                    —
+                    -
                   </p>
                 ) : (
                   groups.map(([key, list]) =>
@@ -210,7 +210,7 @@ export function HireSheet({
                       <section key={key} className={styles.group} data-testid={`hire-group-${key}`}>
                         <h4 className={styles.eyebrow}>{t(`two.group.${key}`)}</h4>
                         <p className={styles.groupNone} title={t(`two.groupNone.${key}`)}>
-                          —
+                          -
                         </p>
                       </section>
                     ) : (
@@ -289,7 +289,7 @@ export function HireSheet({
                   {(['reviewed', 'better', 'same', 'worse'] as const).map((k) => (
                     <div key={k} className={styles.stat}>
                       <dt className={styles.statLabel}>{t(`three.stat.${k}`)}</dt>
-                      <dd className={styles.statFigure}>—</dd>
+                      <dd className={styles.statFigure}>-</dd>
                     </div>
                   ))}
                 </dl>
@@ -297,7 +297,7 @@ export function HireSheet({
                   {Array.from({ length: 8 }, (_, i) => (
                     <li key={i} className={styles.case} title={t('three.notRun')}>
                       <span className={styles.caseNo}>{t('three.case', { n: i + 1 })}</span>
-                      <span className={styles.none}>—</span>
+                      <span className={styles.none}>-</span>
                     </li>
                   ))}
                 </ol>
@@ -366,7 +366,7 @@ export function HireSheet({
               <>
                 <h4 className={styles.eyebrow}>{t('side.dayOne')}</h4>
                 <p className={styles.sideLead} data-testid="hire-day-one">
-                  {plan.job ? t(`job.${plan.job}.dayOne`) : '—'}
+                  {plan.job ? t(`job.${plan.job}.dayOne`) : '-'}
                 </p>
                 <h4 className={styles.sideLabel}>{t('side.knows')}</h4>
                 {knowledge && knowledge.length > 0 ? (
@@ -377,7 +377,7 @@ export function HireSheet({
                   </ul>
                 ) : (
                   <p className={styles.none} title={t('side.knowsNone')}>
-                    —
+                    -
                   </p>
                 )}
               </>
@@ -385,7 +385,7 @@ export function HireSheet({
               <>
                 <h4 className={styles.eyebrow}>{t('side.cost')}</h4>
                 <p className={styles.sideFigure} title={t('side.costNone')}>
-                  —
+                  -
                 </p>
                 <p className={styles.sideLabel}>{t('side.costLabel')}</p>
               </>
@@ -393,7 +393,7 @@ export function HireSheet({
               <>
                 <h4 className={styles.eyebrow}>{t('side.soFar')}</h4>
                 <p className={styles.sideFigure} title={t('three.notRun')}>
-                  —
+                  -
                 </p>
               </>
             )}

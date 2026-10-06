@@ -1,5 +1,5 @@
 /**
- * The statuses of one AI step — Backend ed0f1c9c's `ActivityStatus`
+ * The statuses of one AI step - Backend ed0f1c9c's `ActivityStatus`
  * (`statusForEvent` plus the table's own). Here, in `lib`, because both the
  * contract (`api`) and the realtime translator read it, and neither layer may
  * import the other.

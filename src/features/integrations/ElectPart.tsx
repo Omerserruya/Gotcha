@@ -12,9 +12,9 @@ import { electRole, type ElectResult } from './actions';
 import styles from './BusinessCore.module.css';
 
 /**
- * 14 and 14c — which system plays a part, as 02 draws it: "the dropdown,
+ * 14 and 14c - which system plays a part, as 02 draws it: "the dropdown,
  * never a connect form". A 240px pill (the system's mark, its name, a
- * chevron) the height of its row; open, "Connected in Integrations" — only
+ * chevron) the height of its row; open, "Connected in Integrations" - only
  * CONNECTED candidates, because the write refuses anything else and a broken
  * shop in the list would be a choice the server rejects on save. Choosing
  * saves; there is no Save.
@@ -22,14 +22,14 @@ import styles from './BusinessCore.module.css';
  * What the save DISPLACED ("it was WooCommerce") and any refusal are said on
  * the pill (title) and to a screen reader, never as a paragraph that grows
  * the row. Connecting a new system is named at the foot of the menu, not
- * linked — this app has no route to the marketplace.
+ * linked - this app has no route to the marketplace.
  */
 export function ElectPart({ part }: { readonly part: RolePart }) {
   const t = useTranslations('business-core');
   const router = useRouter();
   const connected = part.candidates.filter((c) => c.connected);
-  // Connected once and not working now: listed, not choosable — the write
-  // would refuse it — with why (measured on dev: Shopify in ERROR).
+  // Connected once and not working now: listed, not choosable - the write
+  // would refuse it - with why (measured on dev: Shopify in ERROR).
   const broken = part.candidates.filter((c) => connectedButFailing(c));
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ElectResult | null>(null);
@@ -160,7 +160,7 @@ export function ElectPart({ part }: { readonly part: RolePart }) {
   );
 }
 
-/** A part nobody can choose for here: the same pill, still — the system's mark and name, or "—". */
+/** A part nobody can choose for here: the same pill, still - the system's mark and name, or "-". */
 export function SystemPill({
   slug,
   name,
@@ -173,7 +173,7 @@ export function SystemPill({
   return (
     <span className={styles.pill} data-static="" data-testid={testId}>
       {name ? <IntegrationLogo slug={slug} size="pill" /> : null}
-      <span className={name ? styles.pillName : styles.systemNone}>{name ?? '—'}</span>
+      <span className={name ? styles.pillName : styles.systemNone}>{name ?? '-'}</span>
     </span>
   );
 }

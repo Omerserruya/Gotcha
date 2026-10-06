@@ -32,7 +32,7 @@ const employee = (over: Record<string, unknown>) =>
   employeeSchema.parse({ id: 'a', name: 'Customer Support', ...over });
 
 describe('★ 07’s list: a row per employee', () => {
-  it('★★ an active one counts its conversations as OPEN — never "live"', async () => {
+  it('★★ an active one counts its conversations as OPEN - never "live"', async () => {
     render(
       await EmployeeRail({
         employees: [employee({ status: 'ACTIVE', openConversations: 88 })],
@@ -59,7 +59,7 @@ describe('★ 07’s list: a row per employee', () => {
 });
 
 describe('★ the list’s foot is 02’s sentence, as far as it is true', () => {
-  it('says knowledge reaches every employee that READS it — not "everyone"', async () => {
+  it('says knowledge reaches every employee that READS it - not "everyone"', async () => {
     render(await EmployeeRail({ employees: [employee({})], selectedId: 'a' }));
     const foot = screen.getByTestId('list-foot');
     expect(foot).toHaveTextContent('every employee that reads it learns it');

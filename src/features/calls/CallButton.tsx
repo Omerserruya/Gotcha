@@ -8,7 +8,7 @@ import { startCall, type StartCallResult } from './actions';
 import styles from './Calls.module.css';
 
 /**
- * 05d's "Call {name}" — live (Omer, 2026-10-04): `POST /api/voice-sessions/
+ * 05d's "Call {name}" - live (Omer, 2026-10-04): `POST /api/voice-sessions/
  * start-outbound`, from a click and nothing else.
  *
  * The line decides how the call is made:
@@ -16,7 +16,7 @@ import styles from './Calls.module.css';
  *                customer is bridged in. The screen says so.
  *   IN_PLATFORM  the line dials from a browser phone, which this app does
  *                not have. The route creates nothing in this mode, so the
- *                screen says nothing was dialled — never "calling…".
+ *                screen says nothing was dialled - never "calling…".
  */
 export function CallButton({
   to,
@@ -28,7 +28,7 @@ export function CallButton({
   readonly to: string | null;
   readonly label: string;
   readonly conversationId?: string;
-  /** Why no call can go out from this workspace at all — said on the button, before the click. */
+  /** Why no call can go out from this workspace at all - said on the button, before the click. */
   readonly blocked?: string;
 }) {
   const t = useTranslations('calls.dialer');

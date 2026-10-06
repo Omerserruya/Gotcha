@@ -25,12 +25,12 @@ type Messages =
  * The wall's scrolling body, and the history that covers it.
  *
  * 02 draws "History across all channels ›" as the body's last row; Omer's
- * description says what the › opens — three levels over the column, each
+ * description says what the › opens - three levels over the column, each
  * with "‹ Back":
  *
  *   1  the person's conversations: channel, date, its one-line summary
  *   2  one conversation's summary, and "Open the whole conversation"
- *   3  the whole conversation, to read — nothing here answers it
+ *   3  the whole conversation, to read - nothing here answers it
  *
  * Levels 1 and 2 are one read (Backend ed8f3e1f): each conversation comes
  * with its stored summary, so opening one asks nothing. Level 3 reads the
@@ -44,9 +44,9 @@ export function WallBody({
 }: {
   /** `null`: we could not read it, or had no person to read it for. */
   readonly history: WallHistory | null;
-  /** The title on a "—" row: which of those two it was. */
+  /** The title on a "-" row: which of those two it was. */
   readonly why: string;
-  /** No row at all — an unidentified visitor has no history to open yet. */
+  /** No row at all - an unidentified visitor has no history to open yet. */
   readonly showHistory?: boolean;
   readonly children: ReactNode;
 }) {
@@ -82,7 +82,7 @@ export function WallBody({
           <span className={styles.historyText}>
             <span>{t('title')}</span>
             <span className={styles.meta} data-testid="wall-history-line">
-              {history === null ? '—' : <HistoryLine history={history} />}
+              {history === null ? '-' : <HistoryLine history={history} />}
             </span>
           </span>
           <span className={styles.chevron} aria-hidden="true">
@@ -169,7 +169,7 @@ function HistoryLine({ history }: { readonly history: WallHistory }) {
   );
 }
 
-/** Channel mark, channel · date (· This one), then the summary — one line, or whole. */
+/** Channel mark, channel · date (· This one), then the summary - one line, or whole. */
 function ConversationFacts({
   conversation,
   oneLine,
@@ -193,7 +193,7 @@ function ConversationFacts({
           {' · '}
           {at
             ? format.dateTime(new Date(at), { day: 'numeric', month: 'short', year: 'numeric' })
-            : '—'}
+            : '-'}
           {conversation.isCurrent ? ` · ${t('thisOne')}` : null}
         </span>
         <span
@@ -221,7 +221,7 @@ function Whole({
 }) {
   const t = useTranslations('inbox.wall.history');
   const format = useFormatter();
-  if (!read) return <p className={styles.note}>{pending ? t('reading') : '—'}</p>;
+  if (!read) return <p className={styles.note}>{pending ? t('reading') : '-'}</p>;
   if (!read.ok) {
     return (
       <p className={styles.note} data-testid="wall-whole-failed">

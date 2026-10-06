@@ -76,7 +76,7 @@ const airtable = integrationSchema.parse({
     ],
   },
 });
-/** Salesforce: OAuth, AND a field (which login host) — still connects at the provider. */
+/** Salesforce: OAuth, AND a field (which login host) - still connects at the provider. */
 const salesforce = integrationSchema.parse({
   id: 'i-sf',
   slug: 'salesforce',
@@ -122,14 +122,14 @@ beforeEach(() => {
   });
 });
 
-describe('★★ authSchema, reduced to a form — scopes never leave the contract', () => {
+describe('★★ authSchema, reduced to a form - scopes never leave the contract', () => {
   it('oauth is the schema’s flag, not authType: Airtable connects with a token', () => {
     expect(hubspot.authSchema).toEqual({ oauth: true, fields: [] });
     expect(airtable.authSchema.oauth).toBe(false);
     expect(airtable.authSchema.fields.map((f) => f.key)).toEqual(['apiKey']);
   });
 
-  it('★ no scopes, no helpText — not even inside a field', () => {
+  it('★ no scopes, no helpText - not even inside a field', () => {
     const text = JSON.stringify([hubspot, airtable, woo]);
     expect(text).not.toMatch(/scopes|crm\.objects|helpText|data\.records/);
   });
@@ -164,7 +164,7 @@ describe('★★ the tool-permissions row carries state and risk (backend 3cee67
   });
 });
 
-describe('★ credentialsFor — exactly what the catalogue asks for', () => {
+describe('★ credentialsFor - exactly what the catalogue asks for', () => {
   const fields = [
     { key: 'clientId', type: 'password' as const, label: 'Client ID', required: true },
     {
@@ -190,7 +190,7 @@ describe('★ credentialsFor — exactly what the catalogue asks for', () => {
   });
 });
 
-describe('★★ 10 for a system that is not connected — its own screen', () => {
+describe('★★ 10 for a system that is not connected - its own screen', () => {
   it('mark, name, what it is, what it brings with its risk', async () => {
     inIntl(await AvailableSystem({ integration: woo }));
     expect(screen.getByTestId('system-head')).toHaveTextContent('WooCommerce');
@@ -281,7 +281,7 @@ describe('★★ 10 for a system that is not connected — its own screen', () =
       /Wix connects at its own site/,
     );
     one.unmount();
-    // A new Shopify store is installed from Shopify — not from here.
+    // A new Shopify store is installed from Shopify - not from here.
     const shop = integrationSchema.parse({
       id: 'i-sh',
       slug: 'shopify',
@@ -300,16 +300,16 @@ describe('★★ 10 for a system that is not connected — its own screen', () =
     );
     expect(screen.queryByTestId('oauth-start')).toBeNull();
     expect(screen.queryByTestId('connect-form')).toBeNull();
-    // 98676242: Shopify's own block — the listing isn't public, so a sentence.
+    // 98676242: Shopify's own block - the listing isn't public, so a sentence.
     expect(screen.getByTestId('shopify-not-published')).toBeInTheDocument();
     two.unmount();
     inIntl(await AvailableSystem({ integration: custom }));
     expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(/set up with GOTCHA/);
-    expect(screen.getByTestId('available-brings')).toHaveTextContent('—');
+    expect(screen.getByTestId('available-brings')).toHaveTextContent('-');
   });
 });
 
-describe('★★ B — WooCommerce by the store’s approval (no keys typed here)', () => {
+describe('★★ B - WooCommerce by the store’s approval (no keys typed here)', () => {
   it('only the store address; the store’s page opens on the click', async () => {
     startWooOAuth.mockResolvedValue({
       ok: true,
@@ -331,24 +331,24 @@ describe('★★ B — WooCommerce by the store’s approval (no keys typed here
     await userEvent.type(screen.getByTestId('woo-address'), 'nope');
     await userEvent.click(screen.getByTestId('woo-start'));
     expect(screen.getByTestId('woo-problem')).toHaveTextContent(
-      "That doesn't look like a store address we can reach — try https://yourstore.com",
+      "That doesn't look like a store address we can reach - try https://yourstore.com",
     );
     expect(assign).not.toHaveBeenCalled();
   });
 });
 
-describe('★★ 1aaaefe4 — keys that do not work: the backend’s sentence, verbatim', () => {
+describe('★★ 1aaaefe4 - keys that do not work: the backend’s sentence, verbatim', () => {
   it('422 with a message shows it; without one, ours', async () => {
     connectIntegration.mockResolvedValue({
       ok: false,
       reason: 'validation',
-      message: 'Airtable rejected that token — it needs data.records:read.',
+      message: 'Airtable rejected that token - it needs data.records:read.',
     });
     const one = inIntl(await AvailableSystem({ integration: airtable }));
     await userEvent.type(screen.getByTestId('connect-apiKey'), 'pat');
     await userEvent.click(screen.getByTestId('connect-submit'));
     expect(screen.getByTestId('connect-problem')).toHaveTextContent(
-      'Airtable rejected that token — it needs data.records:read.',
+      'Airtable rejected that token - it needs data.records:read.',
     );
     one.unmount();
     connectIntegration.mockResolvedValue({ ok: false, reason: 'validation', message: null });

@@ -81,7 +81,7 @@ const call = (over: Record<string, unknown> = {}): Call =>
   });
 
 describe('★ the rules', () => {
-  it('missed is an inbound call nobody answered — by answeredAt, never status', () => {
+  it('missed is an inbound call nobody answered - by answeredAt, never status', () => {
     expect(isMissed(call({ answeredAt: null }))).toBe(true);
     expect(isMissed(call({ answeredAt: null, direction: 'outbound' }))).toBe(false);
     expect(isMissed(call())).toBe(false);
@@ -104,15 +104,15 @@ describe('★ the rules', () => {
     expect(parseCallFilter('nope')).toBe('all');
   });
 
-  it('02’s durations — and no length is "—", never "0s"', () => {
+  it('02’s durations - and no length is "-", never "0s"', () => {
     expect(callDuration(192000)).toBe('3m 12s');
     expect(callDuration(52000)).toBe('52s');
     expect(callDuration(66000)).toBe('1m 06s');
-    expect(callDuration(null)).toBe('—');
+    expect(callDuration(null)).toBe('-');
   });
 });
 
-describe('★★ the dialer — a live search, and no call placed from here', () => {
+describe('★★ the dialer - a live search, and no call placed from here', () => {
   const dana = customerRowSchema.parse({
     id: 'k1',
     displayName: 'Dana Cohen',
@@ -130,7 +130,7 @@ describe('★★ the dialer — a live search, and no call placed from here', ()
     expect(row).toHaveAttribute('href', '/customers/k1');
   });
 
-  it('★★ "Call Dana" is live — and nothing is dialled without the click', async () => {
+  it('★★ "Call Dana" is live - and nothing is dialled without the click', async () => {
     await renderDialer({ query: 'dana', results: [dana] });
     const call = screen.getByTestId('dialer-call');
     expect(call).toHaveTextContent('Call Dana');
@@ -228,12 +228,12 @@ describe('★★ the dialer — a live search, and no call placed from here', ()
     expect(screen.getByTestId('dialer-q')).toHaveValue('dana');
   });
 
-  it('"Or have GOTCHA call a list": nobody quiet (or unread) — nothing yet', async () => {
+  it('"Or have GOTCHA call a list": nobody quiet (or unread) - nothing yet', async () => {
     await renderDialer({ query: '', results: [] });
     expect(screen.getByTestId('dialer-lists')).toHaveTextContent('Nothing yet.');
   });
 
-  it('★ who went quiet is a list: named, counted, opening on Customers — no promise of a call', async () => {
+  it('★ who went quiet is a list: named, counted, opening on Customers - no promise of a call', async () => {
     await renderDialer({ query: '', results: [], quiet: { count: 46, capped: false } });
     const row = screen.getByTestId('dialer-list-quiet');
     expect(row).toHaveTextContent('46 people who went quiet');
@@ -244,7 +244,7 @@ describe('★★ the dialer — a live search, and no call placed from here', ()
 });
 
 describe('★ the week', () => {
-  it('total and average from the week’s summary; "—" for what nothing records', async () => {
+  it('total and average from the week’s summary; "-" for what nothing records', async () => {
     render(
       await CallStats({
         week: callSummarySchema.parse({ total: 124, averageDurationMs: 160000 }),
@@ -252,18 +252,18 @@ describe('★ the week', () => {
     );
     expect(screen.getByTestId('stat-week')).toHaveTextContent('124');
     expect(screen.getByTestId('stat-average')).toHaveTextContent('2m 40s');
-    expect(screen.getByTestId('stat-gotchaAnswered')).toHaveTextContent('—');
-    expect(screen.getByTestId('stat-sale')).toHaveTextContent('—');
+    expect(screen.getByTestId('stat-gotchaAnswered')).toHaveTextContent('-');
+    expect(screen.getByTestId('stat-sale')).toHaveTextContent('-');
   });
 
-  it('⚠ no summary, or no durations: "—", never 0', async () => {
+  it('⚠ no summary, or no durations: "-", never 0', async () => {
     const { unmount } = render(await CallStats({ week: null }));
-    expect(screen.getByTestId('call-stats').textContent?.match(/—/g)).toHaveLength(4);
+    expect(screen.getByTestId('call-stats').textContent?.match(/-/g)).toHaveLength(4);
     unmount();
     render(
       await CallStats({ week: callSummarySchema.parse({ total: 3, averageDurationMs: null }) }),
     );
-    expect(screen.getByTestId('stat-average')).toHaveTextContent('—');
+    expect(screen.getByTestId('stat-average')).toHaveTextContent('-');
   });
 });
 
@@ -288,7 +288,7 @@ describe('★★ recent calls', () => {
       }),
     );
     expect(screen.getByTestId('call-m')).toHaveTextContent('Nobody picked up');
-    expect(screen.getByTestId('call-m')).toHaveTextContent('—');
+    expect(screen.getByTestId('call-m')).toHaveTextContent('-');
     expect(screen.getByTestId('call-o')).toHaveTextContent("They didn't answer");
   });
 
@@ -311,7 +311,7 @@ describe('★★ recent calls', () => {
     );
   });
 
-  it('⚠ the foot claims no retention period — nothing states one', async () => {
+  it('⚠ the foot claims no retention period - nothing states one', async () => {
     render(await RecentCalls({ calls: [], state: 'none', filter: 'all' }));
     expect(screen.getByTestId('recent-calls')).not.toHaveTextContent(/90 days|kept for/);
   });

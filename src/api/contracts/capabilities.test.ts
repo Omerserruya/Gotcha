@@ -97,7 +97,7 @@ describe('grouping is by category, never by risk', () => {
      *
      * The same operation on the same data, in two groups, because one name
      * contains a word. Grouping by that would render a regex miss as a risk
-     * finding — so both land together, by category.
+     * finding - so both land together, by category.
      */
     const groups = groupByCategory([
       capability({ toolName: 'update_contact', category: 'crm', riskGroup: 'sensitive_data' }),
@@ -108,7 +108,7 @@ describe('grouping is by category, never by risk', () => {
   });
 });
 
-describe('isUniform — said once, not seventeen times', () => {
+describe('isUniform - said once, not seventeen times', () => {
   it('is true when every row shares a value', () => {
     const rows = [capability({ toolName: 'a' }), capability({ toolName: 'b' })];
     expect(isUniform(rows, (c) => c.allowModification)).toBe(true);
@@ -154,7 +154,7 @@ describe('a capability carries nothing that could become a false claim', () => {
 
 describe("the platform's own descriptions never reach the screen", () => {
   it('has words of its own for every action this tenant has', () => {
-    // Sixteen mapped. If the route grows one, the fallback covers it — but
+    // Sixteen mapped. If the route grows one, the fallback covers it - but
     // the map is the answer and this test says how much of it is covered.
     expect(DESCRIBED_TOOLS.length).toBeGreaterThanOrEqual(16);
     expect(hasOwnWords('close_conversation')).toBe(true);
@@ -168,7 +168,7 @@ describe("the platform's own descriptions never reach the screen", () => {
      *   "Returns a draft body; use `schedule_followup` … to actually dispatch it."
      *
      * Seventeen rows of that is an API reference on a merchant's screen. An
-     * unmapped tool gets its own name made readable instead — short, true,
+     * unmapped tool gets its own name made readable instead - short, true,
      * and a missing translation that looks like one.
      */
     expect(humaniseToolName('shopify.cancel_order')).toBe('Shopify cancel order');
@@ -184,12 +184,12 @@ describe("the platform's own descriptions never reach the screen", () => {
 describe('★★ looksLikeCode separates a machine value from something a person wrote', () => {
   /*
    * ════════════════════════════════════════════════════════════════════════════
-   * THE PROPERTY IS "ONE TOKEN, NO SPACES" — NOT "HAS AN UNDERSCORE"
+   * THE PROPERTY IS "ONE TOKEN, NO SPACES" - NOT "HAS AN UNDERSCORE"
    * ════════════════════════════════════════════════════════════════════════════
    * Two instruments missed `WHATSAPP` on the same day. One swept where text
    * appears rather than what it does. The other REQUIRED an underscore, for the
    * sound reason that a bare run of capitals is how `CRM` and `VAT` legitimately
-   * render — and that is exactly how a screaming identifier which happens to be
+   * render - and that is exactly how a screaming identifier which happens to be
    * one word walked past it, reporting green.
    *
    * Both matched the shape in front of them (`SHOPIFY_LIVE_CHAT`) instead of the
@@ -212,7 +212,7 @@ describe('★★ looksLikeCode separates a machine value from something a person
     expect(looksLikeCode('ai-bot')).toBe(true);
   });
 
-  it('★★ leaves anything with a space alone — prose and names are not ours', () => {
+  it('★★ leaves anything with a space alone - prose and names are not ours', () => {
     expect(looksLikeCode('Urban Supply - GOTCHA Demo')).toBe(false);
     expect(looksLikeCode('A Shopify storefront')).toBe(false);
     expect(looksLikeCode('חנות מקוונת')).toBe(false);
@@ -236,7 +236,7 @@ describe('★★ readableValues closes the spread, not the placeholder', () => {
     /*
      * The defect was `71 conversations came through WHATSAPP`. Repairing
      * `{channel}` would have fixed that sentence and left every future key with
-     * the same free pass — which is the difference between a site and a hole.
+     * the same free pass - which is the difference between a site and a hole.
      * `department` has no resolver and no catalogue and must still be readable.
      */
     expect(readableValues({ channel: 'WHATSAPP', department: 'customer_success' })).toEqual({
@@ -279,7 +279,7 @@ describe('★★ readableValues closes the spread, not the placeholder', () => {
 
   it('★★ prefers a resolver, because the humaniser answers in English only', () => {
     /*
-     * `humaniseCode('SHOPIFY_LIVE_CHAT')` is "Shopify live chat" — right in
+     * `humaniseCode('SHOPIFY_LIVE_CHAT')` is "Shopify live chat" - right in
      * English and English on a Hebrew screen. Where a translated catalogue
      * exists the caller supplies it; the fallback is what cannot go stale.
      */

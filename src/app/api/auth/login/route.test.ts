@@ -9,13 +9,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THIS ROUTE HAD NOTHING IN FRONT OF IT
  * ════════════════════════════════════════════════════════════════════════════
- * It IS the OIDC start, so it goes straight to `authorize` — and with no
+ * It IS the OIDC start, so it goes straight to `authorize` - and with no
  * identity-provider session the provider renders **its own login page**, the
  * screen the whole origin separation exists to stop anyone seeing. The
  * middleware cannot help: its matcher excludes `/api`.
  *
  * Reached twice from a bookmark carrying `?next=/application/o/authorize/`,
- * and not only from bookmarks — `SessionExpiryWatcher` came here too.
+ * and not only from bookmarks - `SessionExpiryWatcher` came here too.
  *
  * ★ The gate and this route gave two different answers to one question:
  *   `proxy.ts` sends an unauthenticated visitor to `SIGN_IN_URL`, this sent
@@ -32,18 +32,18 @@ vi.mock('@/config/env.server', () => ({ serverEnv }));
 
 /*
  * The OIDC client is mocked so the marker path can be exercised at all. It is
- * NOT the subject here — what is asserted is which of the two destinations this
+ * NOT the subject here - what is asserted is which of the two destinations this
  * route chooses, and a test that could only reach one of them would be half a
  * test.
  */
 /*
  * A spy rather than an arrow, so the authorize PARAMETERS can be asserted.
- * What goes into this call is the security-relevant part — `state`, the PKCE
- * challenge, and now the nonce — and a stub that discards them can only prove
+ * What goes into this call is the security-relevant part - `state`, the PKCE
+ * challenge, and now the nonce - and a stub that discards them can only prove
  * that a redirect happened.
  */
 const buildAuthorizationUrl = vi.hoisted(() =>
-  /* The parameters are declared so `mock.calls[n][1]` is typed at all — an
+  /* The parameters are declared so `mock.calls[n][1]` is typed at all - an
      untyped spy infers a zero-length tuple and the assertion cannot compile. */
   vi.fn(
     (_config: unknown, _parameters: Record<string, unknown>) =>
@@ -70,12 +70,12 @@ vi.mock('@/auth/oidc', () => ({
  * ★ No type argument and no `typeof import(…)`:
  *   `@typescript-eslint/consistent-type-imports` forbids the annotation form,
  *   and this is the second time I have written it inside a `vi.mock` factory.
- *   `safeReturnPath` has to be the REAL one — one of the assertions below is
+ *   `safeReturnPath` has to be the REAL one - one of the assertions below is
  *   that a hostile `returnTo` is still refused on this path.
  */
 /*
  * A spy, so what goes INTO the seal can be asserted. The real one encrypts,
- * and this file stubs it to a literal — so a round-trip proves nothing here,
+ * and this file stubs it to a literal - so a round-trip proves nothing here,
  * and the question is whether the nonce reaches the cookie at all.
  */
 const sealLoginState = vi.hoisted(() => vi.fn(async () => 'sealed'));

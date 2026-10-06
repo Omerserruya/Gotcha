@@ -1,10 +1,10 @@
 @layer features {
   /*
-   * Settings · People & teams — screen 12.
+   * Settings · People & teams - screen 12.
    *
    * `padding: 13px 18px` on a row, `11px 18px` on the headings, columns of
    * 150/150/120 beside a flexible name, and one card with a hairline between
-   * rows rather than a card each — so the roster reads as one list.
+   * rows rather than a card each - so the roster reads as one list.
    *
    * Every inline direction is logical. In Hebrew the avatar sits on the right
    * and "Right now" ends the row on the left, with no component branching on
@@ -122,7 +122,7 @@
     /*
      * An AI employee: a rounded square.
      *
-     * The shape is the discriminator, not the colour — so the two kinds stay
+     * The shape is the discriminator, not the colour - so the two kinds stay
      * tellable apart in greyscale, and for a reader who cannot separate the
      * hues.
      */
@@ -427,7 +427,7 @@
      * The fixed columns stop being columns.
      *
      * At this width 150 + 150 + 120 leaves nothing for a name, and the
-     * headings stop describing what is under them — so they go, and each row
+     * headings stop describing what is under them - so they go, and each row
      * becomes the person with their facts beneath. Truncating four columns
      * into a phone would keep the shape and lose the content.
      */

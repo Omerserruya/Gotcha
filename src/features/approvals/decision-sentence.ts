@@ -1,8 +1,8 @@
 import type { Approval } from '@/api/contracts/approvals';
 
 /**
- * 03c's row as 02 writes it — "Refunded ₪179 to Dana Cohen", "Cancelled order
- * #4812 for Rotem Shani" — from the approval's own facts and the customer of
+ * 03c's row as 02 writes it - "Refunded ₪179 to Dana Cohen", "Cancelled order
+ * #4812 for Rotem Shani" - from the approval's own facts and the customer of
  * its conversation. Only what is known is said: no name, no "to"; no amount,
  * the order; neither, the platform's own summary.
  *

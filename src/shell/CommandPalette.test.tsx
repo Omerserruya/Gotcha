@@ -37,7 +37,7 @@ beforeEach(() => {
   searchPeople.mockResolvedValue({ ok: true, people: [], actions: [] });
 });
 
-describe('★★ 19 — ⌘K from anywhere', () => {
+describe('★★ 19 - ⌘K from anywhere', () => {
   it('closed until ⌘K, Ctrl K, or the rail’s button; Esc closes', async () => {
     mount();
     expect(screen.queryByTestId('command-palette')).toBeNull();
@@ -79,7 +79,7 @@ describe('★★ 19 — ⌘K from anywhere', () => {
     expect(screen.getByTestId('command-item-ask')).toHaveTextContent('Ask GOTCHA: “knowledge”');
   });
 
-  it('★ DO THIS only for what can be acted on — nothing pending, no section at all', async () => {
+  it('★ DO THIS only for what can be acted on - nothing pending, no section at all', async () => {
     mount();
     openWithKeys();
     await userEvent.type(screen.getByTestId('command-input'), 'refund dana');
@@ -103,7 +103,7 @@ describe('★★ 19 — ⌘K from anywhere', () => {
     expect(push).toHaveBeenCalledWith('/approvals');
   });
 
-  it('★ GO TO a customer — by name, or by an order number', async () => {
+  it('★ GO TO a customer - by name, or by an order number', async () => {
     searchPeople.mockResolvedValue({
       ok: true,
       people: [
@@ -123,7 +123,7 @@ describe('★★ 19 — ⌘K from anywhere', () => {
     expect(push).toHaveBeenCalledWith('/customers/k1');
   });
 
-  it('★ ASK goes to Home with the question — Home only fills its box', async () => {
+  it('★ ASK goes to Home with the question - Home only fills its box', async () => {
     mount();
     openWithKeys();
     await userEvent.type(screen.getByTestId('command-input'), 'how many refunds?');
@@ -193,7 +193,7 @@ describe('★★ 19 — ⌘K from anywhere', () => {
     ).toHaveTextContent('היי');
   });
 
-  it('★ an order number that found nobody: a quiet line — the search ran', async () => {
+  it('★ an order number that found nobody: a quiet line - the search ran', async () => {
     searchPeople.mockResolvedValue({
       ok: true,
       people: [],

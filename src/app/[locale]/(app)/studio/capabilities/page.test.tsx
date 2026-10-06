@@ -60,8 +60,8 @@ beforeEach(() => {
   });
 });
 
-describe('★★ 10 — every integration has its own screen', () => {
-  it('?system=<not connected> is that system’s screen, with Connect — not the permissions', async () => {
+describe('★★ 10 - every integration has its own screen', () => {
+  it('?system=<not connected> is that system’s screen, with Connect - not the permissions', async () => {
     const tree = await page({ system: 'woocommerce' });
     expect(find<{ integration: { slug: string } }>(tree, AvailableSystem)?.integration.slug).toBe(
       'woocommerce',

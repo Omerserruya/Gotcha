@@ -52,7 +52,7 @@ const inIntl = (node: ReactNode) =>
     </NextIntlClientProvider>,
   );
 
-describe('★ 11b — the business form', () => {
+describe('★ 11b - the business form', () => {
   it('what PATCH cannot take is drawn, not live, and says why', () => {
     inIntl(<BusinessDrawer workspace={ws()} />);
     const site = screen.getByTestId('business-website');
@@ -62,7 +62,7 @@ describe('★ 11b — the business form', () => {
     expect(screen.getByText('Home textiles')).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('★ no stored value as stored: a crawler code by name, "unknown" as "—"', () => {
+  it('★ no stored value as stored: a crawler code by name, "unknown" as "-"', () => {
     inIntl(<BusinessDrawer workspace={ws({ industry: 'ecommerce', country: 'unknown' })} />);
     expect(screen.getByText('E-commerce')).toBeInTheDocument();
     expect(screen.getByTestId('business-drawer')).not.toHaveTextContent(/ecommerce|unknown/);
@@ -90,7 +90,7 @@ describe('★ 11b — the business form', () => {
   });
 });
 
-describe('★ 11c — the week, and what it cannot hold', () => {
+describe('★ 11c - the week, and what it cannot hold', () => {
   it('+ Split and the holidays are drawn, not live, with why on their titles', () => {
     inIntl(<HoursDrawer workspace={ws()} />);
     expect(screen.getByTestId('hours-one-range')).toHaveAttribute('aria-disabled', 'true');
@@ -125,7 +125,7 @@ describe('★ 11c — the week, and what it cannot hold', () => {
     inIntl(<HoursDrawer workspace={ws({ hours: { enabled: false } })} />);
     expect(screen.getByTestId('hours-use')).not.toBeChecked();
     expect(screen.getByTestId('hours-day-monday')).not.toHaveTextContent(/closed/i);
-    expect(screen.getByTestId('hours-unset-monday')).toHaveTextContent('— – —');
+    expect(screen.getByTestId('hours-unset-monday')).toHaveTextContent('- - -');
   });
 
   it('a day stored as closed IS "Closed"', () => {
@@ -154,7 +154,7 @@ describe('★ 11c — the week, and what it cannot hold', () => {
 
   it('★ the clock is typed 24-hour: "1730" is 17:30, a miss puts the last good time back', async () => {
     inIntl(<HoursDrawer workspace={ws()} />);
-    const [opens, closes] = screen.getAllByRole('textbox', { name: /^Sunday — / });
+    const [opens, closes] = screen.getAllByRole('textbox', { name: /^Sunday - / });
     const before = (opens as HTMLInputElement).value;
     await userEvent.clear(closes!);
     await userEvent.type(closes!, '1730');
@@ -180,8 +180,8 @@ describe('★ 11c — the week, and what it cannot hold', () => {
   });
 });
 
-describe('★ 11d — two cards, no paragraphs', () => {
-  /** Dev's real mix: English 7, Hebrew 5 — too few for percentages. */
+describe('★ 11d - two cards, no paragraphs', () => {
+  /** Dev's real mix: English 7, Hebrew 5 - too few for percentages. */
   const share = languageShareSchema.parse({
     windowDays: 30,
     total: 12,
@@ -230,7 +230,7 @@ describe('★ 11d — two cards, no paragraphs', () => {
   });
 });
 
-describe('★ 11b — the website: what the scan read, what else it found, and Scan again', () => {
+describe('★ 11b - the website: what the scan read, what else it found, and Scan again', () => {
   it('"42 pages read" with when and its topics; "Also found" as chips; Scan again leads to the scan', () => {
     inIntl(
       <BusinessDrawer
@@ -255,7 +255,7 @@ describe('★ 11b — the website: what the scan read, what else it found, and S
     expect(screen.getByTestId('business-scan-again').getAttribute('href')).toContain('scan');
   });
 
-  it('nothing read: no line and no chips — never "0 pages read"', () => {
+  it('nothing read: no line and no chips - never "0 pages read"', () => {
     inIntl(<BusinessDrawer workspace={ws()} scan={null} />);
     expect(screen.queryByTestId('business-scan-line')).toBeNull();
     expect(screen.queryByTestId('business-also-found')).toBeNull();

@@ -14,9 +14,9 @@ import { Invoices } from './BillingSections';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE GUARD EXISTED. NOTHING CALLED IT.
  * ════════════════════════════════════════════════════════════════════════════
- * `lib/safe-url.ts` was written for exactly this sink — "placing an unvalidated
+ * `lib/safe-url.ts` was written for exactly this sink - "placing an unvalidated
  * URL in `href` or `src` is how `javascript:` payloads become script
- * execution" — and a sweep for guard-shaped exports with no non-test caller
+ * execution" - and a sweep for guard-shaped exports with no non-test caller
  * found `safeLinkUrl` and `safeMediaUrl` with **zero**. Meanwhile this row
  * rendered `href={invoice.providerPdfUrl ?? '#'}`: a string the payment
  * provider wrote, straight into an anchor.
@@ -26,7 +26,7 @@ import { Invoices } from './BillingSections';
  *
  * ── AND THE CONTRACT TESTS ARE NOT ENOUGH ON THEIR OWN ──
  * `receiptHref` is tested in `invoices.test.ts` and was already right in
- * principle. **The defect was never in a predicate — it was that the screen did
+ * principle. **The defect was never in a predicate - it was that the screen did
  * not use one.** Only a test that renders the screen can see that, which is why
  * this file exists rather than three more assertions next to the others.
  */
@@ -67,7 +67,7 @@ describe('⚠⚠ the receipt link is the validated one, not the provider’s str
 
   it('★★ and says which of the three reasons it is', async () => {
     /*
-     * Not "the receipt hasn't arrived from the payment provider" — one DID
+     * Not "the receipt hasn't arrived from the payment provider" - one DID
      * arrive, that sentence blames the wrong party, and it reads as something
      * that will resolve itself, so nobody ever looks. Three states, never two.
      */
@@ -86,7 +86,7 @@ describe('⚠⚠ the receipt link is the validated one, not the provider’s str
     /*
      * The PAID rule and the safety rule are separate, and the render tests
      * BOTH. Testing only the URL would put a receipt link on a FAILED invoice
-     * that happened to carry one — contractually possible, and the last row to
+     * that happened to carry one - contractually possible, and the last row to
      * hand somebody a receipt for.
      */
     await show(invoice({ id: 'x', status: 'FAILED', providerPdfUrl: 'https://pay.example/r.pdf' }));

@@ -3,14 +3,14 @@
    * Screens 05 and 05b · Outreach.
    *
    * Campaigns as cards rather than a table, because the interesting thing
-   * about each is a small set of numbers and one possible action — and
+   * about each is a small set of numbers and one possible action - and
    * because the action on a sending campaign is destructive, which a table row
    * has nowhere sensible to put.
    */
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 05, measured — a main column and a 340px side, to the panel's edges
+   * 05, measured - a main column and a 340px side, to the panel's edges
    * ════════════════════════════════════════════════════════════════════════
    * Main at `padding:26px 40px`, `gap:22px`; the side at `26px 30px` with
    * `#EDE9E1` down its left. Each scrolls inside itself (`PageContainer
@@ -263,7 +263,7 @@
   /*
    * "Who": the audience at 13px, then the count at 11.5px in green. As
    * `.fieldStrong` alone the count lost to `.field dd` (0,1,1 over 0,1,0) and
-   * drew at 13px in black — the colour was written and never applied.
+   * drew at 13px in black - the colour was written and never applied.
    */
   .field dd .fieldLine {
     display: block;
@@ -283,7 +283,7 @@
   }
 
   /*
-   * Absent measurements, as sentences — deliberately NOT styled as counters:
+   * Absent measurements, as sentences - deliberately NOT styled as counters:
    * a greyed-out number in a row of real ones reads as a low value.
    */
   .counterAbsent {
@@ -390,7 +390,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 05c, measured — the table card and a 440 column
+   * 05c, measured - the table card and a 440 column
    * ════════════════════════════════════════════════════════════════════════
    * `padding:22px 40px 30px`, `gap:14px`; each card the panel's height,
    * scrolling inside itself.
@@ -758,7 +758,7 @@
     color: var(--alert-text);
   }
 
-  /* "Worth knowing": the column's last card, its own height — 02's is 211. */
+  /* "Worth knowing": the column's last card, its own height - 02's is 211. */
   .tplWorth {
     flex: none;
     padding: var(--space-16) 18px;
@@ -814,7 +814,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 05b, measured — after it went out
+   * 05b, measured - after it went out
    * ════════════════════════════════════════════════════════════════════════
    * `padding:24px 40px 30px`, `gap:16px`: the two cards (784 + 340), the
    * strip, then the chart (704) and the replies (420), filling the height.
@@ -908,7 +908,7 @@
     margin-block-start: var(--space-14);
   }
 
-  /* `padding:7px 13px`, radius 8, 11.5px — light on the dark card, then outlined. */
+  /* `padding:7px 13px`, radius 8, 11.5px - light on the dark card, then outlined. */
   .resLight,
   .resDarkOutline,
   .resPrimary,
@@ -1217,7 +1217,7 @@
     text-decoration: underline;
   }
 
-  /* 05b–05d: the header pills, the open one dark, then the screen's button. */
+  /* 05b-05d: the header pills, the open one dark, then the screen's button. */
   .tabsRow {
     display: flex;
     align-items: center;

@@ -47,7 +47,7 @@ describe('★★ only one of five outcomes means it happened', () => {
     /*
      * THE OUTCOME A SCREEN GETS WRONG. The action is in the queue screen 03
      * renders, holding until a person decides. Shown as done, somebody stops
-     * watching for it; shown as failed, somebody does it again — and on a
+     * watching for it; shown as failed, somebody does it again - and on a
      * refund that is the same money twice.
      */
     const user = userEvent.setup();
@@ -69,7 +69,7 @@ describe('★★ only one of five outcomes means it happened', () => {
      * here."*
      *
      * So pressing Refund does not make a card say "Refunded". The PROVIDER
-     * saying so makes it say so — and this fixture has the provider
+     * saying so makes it say so - and this fixture has the provider
      * reporting only a partial refund, which an optimistic screen would have
      * drawn as complete.
      */
@@ -101,7 +101,7 @@ describe('★★ only one of five outcomes means it happened', () => {
     /*
      * The 17d distinction, on an endpoint that moves a merchant's money
      * rather than takes it. "It failed, try again" on an outcome nobody has
-     * settled is how a refund gets issued twice — and a second refund is not
+     * settled is how a refund gets issued twice - and a second refund is not
      * recoverable by pressing something else.
      */
     runOrderAction.mockResolvedValue(null);
@@ -122,7 +122,7 @@ describe('★ one press per order', () => {
     /*
      * The outcome may be `pending_approval`. A second press on an action
      * already waiting for a human is a second request for the same money,
-     * and the idempotency key will not save it — that guards a double-click
+     * and the idempotency key will not save it - that guards a double-click
      * on ONE request, not two deliberate ones.
      */
     const user = userEvent.setup();

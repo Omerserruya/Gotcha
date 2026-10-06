@@ -1,6 +1,6 @@
 /**
- * Shopify's install handles travel in cookies the BACKEND sets — on the
- * shared host, at `/`, HttpOnly — so the redirect back from Shopify carries
+ * Shopify's install handles travel in cookies the BACKEND sets - on the
+ * shared host, at `/`, HttpOnly - so the redirect back from Shopify carries
  * them to the backend. Our server calls the backend itself, so it hands the
  * intent on to the browser and sends the pending one back. Pure, so it is
  * tested without a request.

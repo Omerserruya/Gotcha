@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Plan, price and changing it — screen 17b.
+ * Plan, price and changing it - screen 17b.
  *
  * `GET /api/billing/pricing`, `/pricing/current`, `/pricing/packages`,
  * `POST /pricing/quote`, `POST /pricing/change`.
@@ -12,7 +12,7 @@ import { z } from 'zod';
  * `changePlan` returns `applied: "immediate"` or `applied: "scheduled"`.
  *
  * Immediate means charged now, plan flipped, credits topped up. Scheduled
- * means **nothing changes at all** until `effectiveAt` — the service says so
+ * means **nothing changes at all** until `effectiveAt` - the service says so
  * in its own words: *"The current plan, its features, its limits and its
  * credits all stay exactly as they are until then."*
  *
@@ -50,7 +50,7 @@ export const pendingChangeSchema = z.object({
   /**
    * Set when the scheduler has already applied it.
    *
-   * **The row is marked, never deleted** — `subscription.service.ts:524` is an
+   * **The row is marked, never deleted** - `subscription.service.ts:524` is an
    * `update` setting `appliedAt`, and the scheduler's own query is
    * `where: { appliedAt: null, effectiveAt: { lte: now } }`. The relation is
    * loaded unconditionally by `getSubscriptionForTenant`, so a change that
@@ -75,7 +75,7 @@ export function isStillPending(change: PendingChange | null | undefined): boolea
 /**
  * Every catalogue price is NET.
  *
- * The routes are insistent about this — *"the three numbers travel together or
+ * The routes are insistent about this - *"the three numbers travel together or
  * the page shows a total nobody can check against the one on their
  * statement"*. So tax is carried with the price and never dropped, which is
  * the invoices problem avoided in advance rather than discovered later.
@@ -152,8 +152,8 @@ export function packagePrice(pkg: {
 
 /**
  * `price` arrives in two shapes. Bare (`"290.00"` + `currency`) is the older
- * one; `GET /billing/pricing/packages` now sends the shared `DisplayPrice` —
- * `{ base, display, isEstimatedConversion, chargedCurrency, fx }` — and no
+ * one; `GET /billing/pricing/packages` now sends the shared `DisplayPrice` -
+ * `{ base, display, isEstimatedConversion, chargedCurrency, fx }` - and no
  * `currency` beside it. A contract that knew only the first rejected every
  * package, and 17d said "could not load" over four sellable packs.
  *
@@ -176,14 +176,14 @@ export const creditPackageSchema = z.preprocess(
   z.object({
     key: z.string(),
     name: z.string(),
-    /** The platform's own Hebrew. One string, one owner — as with the disclaimer. */
+    /** The platform's own Hebrew. One string, one owner - as with the disclaimer. */
     nameHe: z.string().nullable().default(null),
     credits: z.number().default(0),
     /**
      * ════════════════════════════════════════════════════════════════════════
-     * ★★ FLAT SIBLINGS, NOT A NESTED OBJECT — AND THAT IS WHY NO PACK HAD A PRICE
+     * ★★ FLAT SIBLINGS, NOT A NESTED OBJECT - AND THAT IS WHY NO PACK HAD A PRICE
      * ════════════════════════════════════════════════════════════════════════
-     * This read `price: displayPriceSchema` — an object with `amount` and
+     * This read `price: displayPriceSchema` - an object with `amount` and
      * `currency`. The route sends
      *
      *     { key, name, nameHe, credits: p.units, price: String(p.price),
@@ -192,7 +192,7 @@ export const creditPackageSchema = z.preprocess(
      * so `price` is a **string** and `currency` is its **sibling**. The object
      * schema could not parse a string, the `.default({ amount: null, currency:
      * null })` fired, and a browser walk found **no price on any pack and no
-     * currency symbol on the totals** — one cause, reported as two defects.
+     * currency symbol on the totals** - one cause, reported as two defects.
      *
      * `money()` was behaving correctly throughout: *"no currency means no claim
      * about one"*. It was told there was none.
@@ -200,7 +200,7 @@ export const creditPackageSchema = z.preprocess(
      * ── AND I CHECKED THE WRONG ROUTE FIRST ──
      * `/billing/credits/packages` sends the model raw, where the field is
      * `units`. This app calls `/billing/pricing/packages`, which maps
-     * `credits: p.units` — so `credits` was right all along and "fixing" it
+     * `credits: p.units` - so `credits` was right all along and "fixing" it
      * would have broken a working line.
      */
     price: z.union([z.string(), z.number()]).nullable().default(null),
@@ -211,18 +211,18 @@ export const creditPackageSchema = z.preprocess(
      *
      * Carried because it is the one place per-credit expiry reaches a customer.
      * The credit-summary route strips `expiresAt` from the lots, so after the
-     * purchase nothing can tell them when these credits die — see
+     * purchase nothing can tell them when these credits die - see
      * `credits.ts`. Before the purchase, this is it.
      */
     expiryPolicy: z.enum(['NEVER', 'DAYS_AFTER_PURCHASE', 'PERIOD_END']).default('NEVER'),
     expiryDays: z.number().nullable().default(null),
     /**
-     * ★ WHAT WILL ACTUALLY BE CHARGED — AND IT IS NOT THE PRICE ON THE TILE.
+     * ★ WHAT WILL ACTUALLY BE CHARGED - AND IT IS NOT THE PRICE ON THE TILE.
      *
      * Catalogue prices are NET. The route's own comment says the tax travels
      * with them so "the confirm dialog can state the amount that will actually
      * be charged rather than the one on the tile", and it has been on the wire
-     * all along — our schema is `object`, so it was stripped at the boundary
+     * all along - our schema is `object`, so it was stripped at the boundary
      * and screen 17 could only ever show the net figure.
      *
      * Showing a merchant ₪100 and charging ₪118 is the single worst thing a
@@ -243,7 +243,7 @@ export const creditPackageSchema = z.preprocess(
       .nullable()
       .default(null),
     /**
-     * A per-package cap the SERVER enforces — `quantity_exceeds_maximum` with
+     * A per-package cap the SERVER enforces - `quantity_exceeds_maximum` with
      * the max in `detail`. Also carried all along and also stripped, so the
      * quantity control had no way to know its own limit and would have let
      * somebody pick a number the purchase then refused.
@@ -259,12 +259,12 @@ export const creditPackageSchema = z.preprocess(
  *
  * Computed from `taxed`, never re-derived from `price` and a rate: the server
  * rounds each component to its own scale, and a UI that multiplies and rounds
- * again produces a total that differs from the invoice by a penny — which is
+ * again produces a total that differs from the invoice by a penny - which is
  * the kind of discrepancy nobody can explain afterwards.
  *
  * `null` when the package carries no tax block. That is not zero tax: it
  * means we were not told, and `taxSummaryForTenant` REFUSES rather than
- * defaulting when a profile has declared no country — "defaulting to 0% would
+ * defaulting when a profile has declared no country - "defaulting to 0% would
  * charge an Israeli customer no VAT and leave them" with a bill nobody quoted.
  */
 export function chargeable(
@@ -303,7 +303,7 @@ export const buyResultSchema = z.object({
    * ════════════════════════════════════════════════════════════════════════
    * ★★ DEFAULTS TO `true`, AND THE COMMENT ABOVE THIS FIELD IS WHY
    * ════════════════════════════════════════════════════════════════════════
-   * It used to default to `false` — a schema asserting that the outcome IS
+   * It used to default to `false` - a schema asserting that the outcome IS
    * known, on the one field whose entire purpose is to admit that it is not.
    * A body that arrived without it read as *"we know what happened"*, fell
    * through to `declined`, and the screen offered a retry on a charge that
@@ -312,13 +312,13 @@ export const buyResultSchema = z.object({
    * The paragraph four lines up names that exact danger: *"A payment-required
    * response invites the customer to try again, and they may already have
    * been charged."* **The comment was correct and the line underneath armed
-   * the thing it warned about** — which is worse than a comment that merely
+   * the thing it warned about** - which is worse than a comment that merely
    * describes the code wrongly, because a reader checking this field would
    * read it, agree, and move on. The comment certified the defect.
    *
    * ── AND REQUIRING IT WOULD HAVE BEEN THE WRONG FIX ──
    * A missing required field throws, `buyCreditPack`'s catch sees a contract
-   * error rather than a 409, and it returns `kind: 'failed'` — which renders
+   * error rather than a 409, and it returns `kind: 'failed'` - which renders
    * a retry. That moves the defect from the schema into the error handler,
    * where it is harder to see and identical in effect.
    *
@@ -377,8 +377,8 @@ export function noneOnSale(response: PackagesResponse): boolean {
  * > they may have been charged, and 'failed' invites them to try again."*
  *
  * So for this code the screen must not say *failed* and must not offer a
- * retry. Flattening three outcomes into "Something went wrong, try again" —
- * which is what a redesign does to error states — can charge somebody twice.
+ * retry. Flattening three outcomes into "Something went wrong, try again" -
+ * which is what a redesign does to error states - can charge somebody twice.
  */
 export const OUTCOME_UNKNOWN = 'upgrade_payment_outcome_unknown';
 export const PAYMENT_FAILED_PREFIX = 'upgrade_payment_failed';
@@ -413,7 +413,7 @@ export type ChangeResult = z.infer<typeof changeResultSchema>;
  * difference **before** granting anything. With no payment method the charge
  * cannot succeed, so the upgrade fails having changed nothing.
  *
- * Naming it up front is not a warning for its own sake — the idempotency key
+ * Naming it up front is not a warning for its own sake - the idempotency key
  * is scoped to the payment method *deliberately*, so *"a failed attempt must
  * not permanently block a retry after the customer adds a valid card"*. Add a
  * card, then upgrade, is a path that genuinely works.
@@ -425,7 +425,7 @@ export function upgradeWillBeDeclined(paymentMethodCount: number): boolean {
 /**
  * The credits an upgrade actually grants.
  *
- * `delta = Math.max(0, q.includedCredits - bal.includedAllowance)` — a top-up
+ * `delta = Math.max(0, q.includedCredits - bal.includedAllowance)` - a top-up
  * against the existing allowance, expiring at the **current** period end.
  * So "upgrade and get 7,000 credits" is wrong twice: wrong amount, and they
  * die at the old boundary rather than starting a fresh period.
@@ -435,7 +435,7 @@ export function creditsGrantedOnUpgrade(targetIncluded: number, currentAllowance
 }
 
 /**
- * One plan of `GET /billing/pricing`'s `plans` — the catalog 17b's cards are
+ * One plan of `GET /billing/pricing`'s `plans` - the catalog 17b's cards are
  * drawn from: the public plans plus any custom one negotiated for this
  * tenant, each with its price, its credits, its features and the
  * conversations its credits come to.
@@ -472,8 +472,8 @@ export const catalogPlanSchema = z.object({
         .object({
           monthly: z.number().nullable().default(null),
           /**
-           * `DECLARED_VOLUME` is the chat volume the plan SELLS by default —
-           * 250 a month on every plan here, whatever its credits — and
+           * `DECLARED_VOLUME` is the chat volume the plan SELLS by default -
+           * 250 a month on every plan here, whatever its credits - and
            * `CREDIT_RATIO` is the credits divided by an assumption. Only the
            * second is "what these credits come to".
            */

@@ -16,7 +16,7 @@ import { CustomerOrders } from './CustomerOrders';
  *
  * Almost none of this is reachable by a capture on this tenant: Shopify is in
  * ERROR, so the live response is `connection_unhealthy` and the seven other
- * states — including every order card — are unit-only.
+ * states - including every order card - are unit-only.
  */
 
 vi.mock('next-intl/server', () => ({
@@ -27,7 +27,7 @@ vi.mock('next-intl/server', () => ({
 
 /*
  * `conversationId` defaults to null here, so the order-card tests assert the
- * SAID-not-offered branch. The action controls have their own file — they
+ * SAID-not-offered branch. The action controls have their own file - they
  * are a client component and belong with the outcomes they render.
  */
 const show = async (orders: CommerceContextResponse | null, conversationId: string | null = null) =>
@@ -35,7 +35,7 @@ const show = async (orders: CommerceContextResponse | null, conversationId: stri
     /*
      * Wrapped, because `OrderActions` is a CLIENT component inside this
      * server tree and `useTranslations` needs a context the server mock does
-     * not supply. Fourth time this session — the tell is always the same
+     * not supply. Fourth time this session - the tell is always the same
      * sentence about `NextIntlClientProvider`, and it names the component
      * rather than the harness.
      */
@@ -75,7 +75,7 @@ describe('★★ eight states, rendered as eight', () => {
   it('gives every non-ok state its own sentence', async () => {
     /*
      * `CommerceContextResponse`'s own comment asks for this: the frontend
-     * "renders an explicit UI for each state — it never guesses from a bare
+     * "renders an explicit UI for each state - it never guesses from a bare
      * error". Collapsing them destroys five different repairs.
      *
      * Asserted over ALL of them from the constant, so a state added to the
@@ -217,7 +217,7 @@ describe('★ with no conversation to act through, what could be done is still S
     /*
      * The actions post to `/commerce-context/:conversationId/actions`. A
      * person with no conversation has nowhere for one to route, so the
-     * controls are absent rather than broken — and what could be done is
+     * controls are absent rather than broken - and what could be done is
      * still said, because it is a fact about the order.
      */
     const { container } = await show(

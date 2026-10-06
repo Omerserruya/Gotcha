@@ -4,11 +4,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * ★★ 02 TRACKS EVERY 600 HEADING AND FIGURE FROM 17px UP — HELD HERE.
+ * ★★ 02 TRACKS EVERY 600 HEADING AND FIGURE FROM 17px UP - HELD HERE.
  *
  * Measured over 02's source, the step for each size (the majority at each):
- * 17–25 −0.02em · 26 −0.025em · 27–28 −0.028em · 29–40 −0.03em · 42 −0.035em ·
- * 44–52 −0.04em. Fixed one size at a time it kept coming back: 26px titles,
+ * 17-25 −0.02em · 26 −0.025em · 27-28 −0.028em · 29-40 −0.03em · 42 −0.035em ·
+ * 44-52 −0.04em. Fixed one size at a time it kept coming back: 26px titles,
  * then 25px figures, then five more sizes in one inventory. This is the rule
  * instead of the instances.
  *
@@ -30,7 +30,7 @@ export function stepFor(px: number): number {
   if (px <= 25) return -0.02;
   if (px === 26) return -0.025;
   if (px <= 28) return -0.028;
-  // 02's one 36px heading ("Shell — the product lives inside one dark frame").
+  // 02's one 36px heading ("Shell - the product lives inside one dark frame").
   if (px === 36) return -0.025;
   if (px <= 40) return -0.03;
   if (px <= 42) return -0.035;
@@ -39,7 +39,7 @@ export function stepFor(px: number): number {
 
 /** Deliberate exceptions, each with 02's own reason. */
 const EXCEPTIONS: Record<string, string> = {
-  // 04b's disc: "DC" at 20px/600, untracked in 02 — initials are not a heading.
+  // 04b's disc: "DC" at 20px/600, untracked in 02 - initials are not a heading.
   'features/customers/Customers.module.css .cardDisc': 'initials',
   // A code's digit boxes: 02's 26px digit tiles are its only untracked 26s.
   'features/auth/SecondFactor.module.css .box': 'digit tiles',
@@ -88,7 +88,7 @@ export function offenders(): string[] {
       if (where in EXCEPTIONS) continue;
       const tracking = em(prop('letter-spacing'));
       if (tracking !== stepFor(size)) {
-        found.push(`${where} — ${size}px, tracking ${prop('letter-spacing') ?? 'none'}`);
+        found.push(`${where} - ${size}px, tracking ${prop('letter-spacing') ?? 'none'}`);
       }
     }
   }

@@ -17,15 +17,15 @@ import { CustomerNotes } from './CustomerNotes';
  * ════════════════════════════════════════════════════════════════════════════
  * `e2e/customers.spec.ts` is authored here and run by somebody else on a
  * machine this session cannot reach. So a fixture that disagrees with the
- * spec — an empty `coverage` map, a missing imported event, a `page.types`
- * that does not include the kinds the events use — is discovered during
+ * spec - an empty `coverage` map, a missing imported event, a `page.types`
+ * that does not include the kinds the events use - is discovered during
  * THEIR run, after a restart, a fresh cookie and a smoke test.
  *
  * Every assertion below mirrors one in the spec, against the real component
  * and the real fixture. It cannot prove the capture will pass: it says
  * nothing about the server, the session, the route or the gate. It proves
  * only that the fixture and the spec agree about what is on the page, which
- * is the half that has already been wrong once — `coverage: {}` would have
+ * is the half that has already been wrong once - `coverage: {}` would have
  * rendered no caveats at all and failed the run.
  *
  * ── AND IT IS NOT A SUBSTITUTE FOR THE CAPTURE ──
@@ -46,7 +46,7 @@ const show = async () => render(await CustomerDetail({ detail: FIXTURE_DETAIL })
 
 describe('the capture fixture agrees with the capture spec', () => {
   it('renders the name the gate checks for', async () => {
-    // The spec refuses to photograph unless "Avery Stone" is on the page —
+    // The spec refuses to photograph unless "Avery Stone" is on the page -
     // that string IS the proof the fixtures engaged.
     await show();
     expect(screen.getByTestId('detail-name')).toHaveTextContent(/Avery Stone/);
@@ -66,7 +66,7 @@ describe('the capture fixture agrees with the capture spec', () => {
     expect(count).toHaveTextContent(/of [\d,]+ messages/i);
   });
 
-  it('★ renders coverage caveats — the fixture had an empty map and would have failed the run', async () => {
+  it('★ renders coverage caveats - the fixture had an empty map and would have failed the run', async () => {
     await show();
     expect(screen.getByTestId('timeline-coverage')).toHaveTextContent(/\S/);
     // The available-and-incomplete one specifically: it is the entry a screen
@@ -101,7 +101,7 @@ describe('the capture fixture agrees with the capture spec', () => {
      * ★ THE TEXTAREA CHECK IS SCOPED TO `CustomerDetail`, AND THAT IS WHY IT
      * SURVIVED 04f. The spec's version covered the whole page and had to be
      * re-aimed when the notes composer arrived; this one has always been
-     * about the 04b panel, where the prohibition actually lives — the CRM
+     * about the 04b panel, where the prohibition actually lives - the CRM
      * write is conversation-keyed and would file against the wrong chat.
      *
      * The narrower assertion outlived the broader one, which is the argument
@@ -116,7 +116,7 @@ describe('the capture fixture agrees with the capture spec', () => {
   });
 });
 
-describe('★ and so does 04e — the fixture the audit shots are taken of', () => {
+describe('★ and so does 04e - the fixture the audit shots are taken of', () => {
   /*
    * Mounted on its own, exactly as the page mounts it: a sibling, never a
    * child. An async server component nested inside another yields a tree
@@ -125,7 +125,7 @@ describe('★ and so does 04e — the fixture the audit shots are taken of', () 
   const showActions = async () =>
     render(await CustomerActions({ actions: FIXTURE_DETAIL.actions }));
 
-  it('renders the four rows the spec counts — the reply as its day', async () => {
+  it('renders the four rows the spec counts - the reply as its day', async () => {
     // `fx-audit-1` is a reply: the conversation, collapsed to one row a day
     // ("GOTCHA replied once") rather than an action on the account.
     await showActions();
@@ -150,7 +150,7 @@ describe('★ and so does 04e — the fixture the audit shots are taken of', () 
   it('★★ does NOT ask for the parameter the fixture supplied', async () => {
     // `coverage` still declares `requires: shopifyCustomerId`, because it is
     // a constant. The screen must not print it beneath the rows that
-    // parameter fetched — and must still print the order gap.
+    // parameter fetched - and must still print the order gap.
     await showActions();
     expect(screen.queryByTestId('actions-gap-customer')).toBeNull();
     expect(screen.getByTestId('actions-gap-order')).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe('★ and so does 04e — the fixture the audit shots are taken of', () 
      * trusted. `contradicts` and the name-hints need an emitter that sets a
      * verdict disagreeing with its own action name; the only writer of such
      * a name sets both from one boolean. A fixture row showing either would
-     * be evidence of something that cannot happen — the same mistake as the
+     * be evidence of something that cannot happen - the same mistake as the
      * WhatsApp-plus-Instagram contact this file already records.
      */
     await showActions();
@@ -173,7 +173,7 @@ describe('★ and so does 04e — the fixture the audit shots are taken of', () 
   });
 });
 
-describe('★ and so does 04f — the notes the capture photographs', () => {
+describe('★ and so does 04f - the notes the capture photographs', () => {
   /*
    * Wrapped, because the composer and the per-note controls are CLIENT
    * components inside this server tree. Fifth time this session, and the
@@ -216,7 +216,7 @@ describe('★ and so does 04f — the notes the capture photographs', () => {
     /*
      * The viewer owns two of the four notes. A fixture where they owned all
      * of them would photograph a screen that cannot tell an editable note
-     * from a teammate's — which is the thing the rule is.
+     * from a teammate's - which is the thing the rule is.
      */
     await showNotes();
     expect(screen.getByTestId('note-controls-fx-note-1')).toBeInTheDocument();

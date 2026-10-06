@@ -18,7 +18,7 @@ import { ApiError } from '@/api/client/api-error';
  * produced by the action at all**: the route answers 402 on a refusal, which
  * throws, and `declined`, `no_billable_entity` and `too_many` were being
  * decided from the body of a 200 that cannot be a failure. The sentence about
- * a declined card — the one this screen most needs — was unreachable, and
+ * a declined card - the one this screen most needs - was unreachable, and
  * every refusal fell through to a sentence that told the customer nothing had
  * been charged.
  */
@@ -50,7 +50,7 @@ describe('★★ the outcomes that could not be reached', () => {
      * `invoiceId` is set on a failure ONLY from `chargeFor`'s result, so its
      * presence is the platform's own record that the charge was attempted.
      * Without it this was indistinguishable from a refusal made before the
-     * card was touched — and both said "nothing was charged".
+     * card was touched - and both said "nothing was charged".
      */
     refusal('card_declined', { invoiceId: 'inv_9' });
     expect(await buy()).toEqual({ ok: false, kind: 'declined', code: 'card_declined' });
@@ -112,7 +112,7 @@ describe('★★ the unsettled charge, which must never offer a retry', () => {
      * ORDER MATTERS AND THIS IS THE ASSERTION THAT HOLDS IT. An unsettled
      * charge has an invoice id too. If the decline branch ran first, the
      * worst outcome on the screen would render as "nothing was charged, you
-     * can try again" — and the retry is the harm.
+     * can try again" - and the retry is the harm.
      */
     refuse({ kind: 'conflict', status: 409, invoiceId: 'inv_7', failureCode: 'timeout' });
     expect(await buy()).toMatchObject({ kind: 'unsettled' });

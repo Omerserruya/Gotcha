@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 /**
- * Who the bill is made out to, and what it is charged against — screen 17e.
+ * Who the bill is made out to, and what it is charged against - screen 17e.
  *
  * `GET /api/billing/profile` → `{ data }`.
- * `GET /api/billing/payment-methods` → **`{ paymentMethods }`** — a sixth
+ * `GET /api/billing/payment-methods` → **`{ paymentMethods }`** - a sixth
  * envelope shape on this platform.
  *
  * ── WHAT THE DESIGN ASKS FOR THAT DOES NOT EXIST ──
@@ -13,7 +13,7 @@ import { z } from 'zod';
  * for **invoice recipients (plural)**, a **PO number** and a **profile
  * language**. None has a column.
  *
- * `billingEmail` is one address, not a list — so *"send invoices to
+ * `billingEmail` is one address, not a list - so *"send invoices to
  * finance@ and to the owner"* is not expressible, and a second field that
  * quietly overwrote the first would be worse than none.
  */
@@ -22,7 +22,7 @@ import { z } from 'zod';
  * Which fact the blank fields represent.
  *
  * Backend added this after `billingIdentity()` was found returning
- * `profile ?? empty` — collapsing three states into one blank form, one layer
+ * `profile ?? empty` - collapsing three states into one blank form, one layer
  * below the screen, where nothing here could see it.
  *
  * The vocabulary is `PUT /billing/profile`'s own refusal codes, deliberately:
@@ -45,7 +45,7 @@ export const billingProfileSchema = z.object({
   billingAddress: z.string().nullable().default(null),
   currency: z.string().default('ILS'),
   /**
-   * Defaults to `present` so a response predating the fix still parses — and
+   * Defaults to `present` so a response predating the fix still parses - and
    * `present` is the reading that says least, rather than asserting an absence
    * the old payload never claimed.
    */
@@ -55,7 +55,7 @@ export const billingProfileSchema = z.object({
 export type BillingProfile = z.infer<typeof billingProfileSchema>;
 
 /**
- * `{ data }` — and `data` is now always an object, carrying `state`.
+ * `{ data }` - and `data` is now always an object, carrying `state`.
  *
  * It used to be nullable here because `billingIdentity()` returned
  * `profile ?? empty` and a null was the only signal left. That is fixed
@@ -77,7 +77,7 @@ export const paymentMethodSchema = z.object({
 
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 
-/** `{ paymentMethods }` — the sixth envelope. */
+/** `{ paymentMethods }` - the sixth envelope. */
 export const paymentMethodListSchema = z
   .object({ paymentMethods: z.array(paymentMethodSchema).default([]) })
   .transform(({ paymentMethods }) => paymentMethods);
@@ -86,7 +86,7 @@ export const paymentMethodListSchema = z
  * Is there anything at all to charge?
  *
  * **This is not a completeness check on a form.** With no payment method,
- * a charge cannot be attempted — there is nothing to attempt it against —
+ * a charge cannot be attempted - there is nothing to attempt it against -
  * and on this tenant that sits beside four `FAILED` invoices.
  *
  * Stated as arithmetic rather than as a diagnosis: a card that does not
@@ -117,7 +117,7 @@ export function isBlank(profile: BillingProfile | null): boolean {
  *
  * | reading | what is true | what to say |
  * |---|---|---|
- * | `no_account` | no billable entity exists | *"add your billing details"* is not even the right instruction — there is nothing to add them to |
+ * | `no_account` | no billable entity exists | *"add your billing details"* is not even the right instruction - there is nothing to add them to |
  * | `never_entered` | an account exists, no profile row | they have not filled it in |
  * | `emptied` | a profile exists and was cleared | they HAD details and no longer do |
  * | `filled` | details present | show them |
@@ -135,7 +135,7 @@ export function profileReading(profile: BillingProfile | null): ProfileReading {
   return isBlank(profile) ? 'emptied' : 'filled';
 }
 
-/** "08/28" — or null when either half is missing. */
+/** "08/28" - or null when either half is missing. */
 export function cardExpiry(method: PaymentMethod): string | null {
   if (method.expMonth == null || method.expYear == null) return null;
   return `${String(method.expMonth).padStart(2, '0')}/${String(method.expYear % 100).padStart(2, '0')}`;

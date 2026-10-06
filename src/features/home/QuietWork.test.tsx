@@ -66,12 +66,12 @@ const ITEMS: QuietDayItem[] = [
 const card = async (items = ITEMS) =>
   render(await QuietWork({ quietDay: { sources: {}, data: items }, conflicts: [] }));
 
-describe('★★ 01b — the card, as 02 draws it', () => {
+describe('★★ 01b - the card, as 02 draws it', () => {
   it('one row per source; the questions in one row, with "Answer them"', async () => {
     await card();
     const gaps = screen.getByTestId('quiet-row-unanswered_question');
     expect(gaps).toHaveTextContent('2 questions it could not answer');
-    expect(gaps).toHaveTextContent('“Dispatch cut-off?”, “Gift wrap?” — asked 33 times');
+    expect(gaps).toHaveTextContent('“Dispatch cut-off?”, “Gift wrap?” - asked 33 times');
     expect(gaps).toHaveTextContent('Answer them');
     expect(screen.getByTestId('quiet-row-product_demand')).toHaveTextContent(
       '22 people asked for navy towels',

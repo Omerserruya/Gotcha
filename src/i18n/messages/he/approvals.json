@@ -23,7 +23,7 @@
     "reason": "למה: {reason}",
     "policyRule": "סומן על ידי {rule}",
     "lapsed": "המועד חלף, ולכן אי אפשר להחליט על זה כאן יותר. GOTCHA העבירה את השיחה לאדם.",
-    "outcomeUnknown": "זה אושר לפני ש-GOTCHA תיעדה מה קרה אחר כך, ולכן איננו יכולים לומר לך אם זה רץ. אי אפשר לנסות שוב — הרצה חוזרת עלולה לחזור על משהו שכבר קרה."
+    "outcomeUnknown": "זה אושר לפני ש-GOTCHA תיעדה מה קרה אחר כך, ולכן איננו יכולים לומר לך אם זה רץ. אי אפשר לנסות שוב - הרצה חוזרת עלולה לחזור על משהו שכבר קרה."
   },
   "risk": {
     "HIGH": "סיכון גבוה",
@@ -43,7 +43,7 @@
   },
   "announce": {
     "approvedAndRan": "אושר: {summary}. זה רץ.",
-    "approvedButFailed": "אושר: {summary}. זה לא רץ — אפשר לנסות שוב.",
+    "approvedButFailed": "אושר: {summary}. זה לא רץ - אפשר לנסות שוב.",
     "rejected": "נדחה: {summary}.",
     "retryWorked": "הפעם זה רץ.",
     "retryFailedAgain": "זה נכשל שוב."
@@ -55,10 +55,10 @@
     "failed": "זה לא עבר.",
     "edit_not_allowed": "את הפעולה הזו אי אפשר לאשר בסכום אחר.",
     "amount_above_original": "סכום ערוך חייב להיות נמוך ממה שהתבקש.",
-    "invalid_amount": "את הסכום הזה אי אפשר לשלוח — כדאי לבדוק ולנסות שוב.",
+    "invalid_amount": "את הסכום הזה אי אפשר לשלוח - כדאי לבדוק ולנסות שוב.",
     "edit_requires_original_amount": "זה החזר מלא בלי סכום לערוך. אפשר לאשר כמו שהוא או לדחות.",
     "percentage_above_original": "הנחה ערוכה חייבת להיות נמוכה ממה שהתבקש.",
-    "invalid_percentage": "את ההנחה הזו אי אפשר לשלוח — כדאי לבדוק ולנסות שוב.",
+    "invalid_percentage": "את ההנחה הזו אי אפשר לשלוח - כדאי לבדוק ולנסות שוב.",
     "edit_requires_original_percentage": "בהנחה הזו אין אחוז לערוך. אפשר לאשר כמו שהיא או לדחות."
   },
   "rest": {
@@ -73,17 +73,17 @@
     "unavailable": "לא הצלחנו לקרוא את ההחלטות הקודמות שלך כרגע.",
     "approved": "אושר על ידי {who} ב-{when}",
     "rejected": "נדחה על ידי {who} ב-{when}",
-    "lapsed": "המועד חלף ב-{when} — הועבר לאדם",
+    "lapsed": "המועד חלף ב-{when} - הועבר לאדם",
     "cancelled": "בוטל ב-{when}",
     "someone": "מישהו",
     "askedBy": "התבקש על ידי {who}",
     "because": "הסיבה שניתנה: {reason}",
     "didNotRun": "אישרת את זה, אבל זה לא רץ. פתח כדי לנסות שוב.",
     "outcomeUnknown": "אושר לפני ש-GOTCHA תיעדה מה קרה אחר כך, ולכן איננו יכולים לומר אם זה רץ.",
-    "incomplete": "מוצגות ההחלטות האחרונות שלך, לא כולן — GOTCHA יכולה להחזיר רק את המאה האחרונות מכל סוג.",
+    "incomplete": "מוצגות ההחלטות האחרונות שלך, לא כולן - GOTCHA יכולה להחזיר רק את המאה האחרונות מכל סוג.",
     "approvedNoTime": "אושר על ידי {who}",
     "rejectedNoTime": "נדחה על ידי {who}",
-    "lapsedNoTime": "המועד חלף — הועבר לאדם",
+    "lapsedNoTime": "המועד חלף - הועבר לאדם",
     "cancelledNoTime": "בוטל",
     "count": "{count, plural, one {החלטה אחת} other {# החלטות}}",
     "latest": "{count} האחרונות שלך",
@@ -99,7 +99,7 @@
       "edited": "נערך",
       "editedPercent": "נערך · {was}% ← {now}%"
     },
-    "incompleteShort": "ההחלטות האחרונות שלך — הרשימה מחזיקה את המאה האחרונות מכל סוג.",
+    "incompleteShort": "ההחלטות האחרונות שלך - הרשימה מחזיקה את המאה האחרונות מכל סוג.",
     "byVia": "הוחלט על ידי {who} דרך {channel}",
     "channel": {
       "whatsapp": "WhatsApp",
@@ -178,13 +178,13 @@
     },
     "failure": {
       "theStore": "החנות",
-      "connection": "צריך לחבר מחדש את החנות — {provider} סירב לגישה של GOTCHA.",
+      "connection": "צריך לחבר מחדש את החנות - {provider} סירב לגישה של GOTCHA.",
       "reconnect": "לחבר מחדש את החנות, ואז לנסות שוב.",
       "already_done": "זה כבר בוצע, אז שום דבר לא השתנה.",
       "after_shipping": "אי אפשר לעשות את זה אחרי שההזמנה נשלחה.",
       "not_permitted": "הרשאה או כלל עצרו את זה.",
-      "provider_unavailable": "{provider} לא ענה. בדרך כלל זה עובר — כדאי לנסות שוב.",
-      "exceeds_limit": "זה מעבר למגבלה — הסכום או הכמות גבוהים מדי.",
+      "provider_unavailable": "{provider} לא ענה. בדרך כלל זה עובר - כדאי לנסות שוב.",
+      "exceeds_limit": "זה מעבר למגבלה - הסכום או הכמות גבוהים מדי.",
       "unknown": "{provider} לא אמר למה במילים שאפשר להציג."
     }
   },
@@ -236,8 +236,8 @@
     "lookups": "הזמנות שנבדקו",
     "returns": "החזרות שנפתחו",
     "refundsUnder": "החזרים עד {limit}",
-    "failedOne": "{count, plural, one {ניסיון אחד נכשל} other {# ניסיונות נכשלו}} — {system} צריך תיקון.",
-    "failedMany": "{count, plural, one {ניסיון אחד נכשל} other {# ניסיונות נכשלו}} — חיבור צריך תיקון.",
+    "failedOne": "{count, plural, one {ניסיון אחד נכשל} other {# ניסיונות נכשלו}} - {system} צריך תיקון.",
+    "failedMany": "{count, plural, one {ניסיון אחד נכשל} other {# ניסיונות נכשלו}} - חיבור צריך תיקון.",
     "reconnect": "לחבר מחדש"
   },
   "request": {

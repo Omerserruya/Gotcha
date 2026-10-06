@@ -73,7 +73,7 @@ const SUB = subscriptionSchema.parse({
   currentPeriodEnd: '2027-09-08T14:19:24.353Z',
 });
 
-describe('★ 17b — the plans on offer, side by side', () => {
+describe('★ 17b - the plans on offer, side by side', () => {
   it('reads the catalog plan by plan', () => {
     expect(CATALOG.map((p) => p.key)).toEqual(['foundation', 'ai_workforce', 'ai_voice']);
   });
@@ -105,7 +105,7 @@ describe('★ 17b — the plans on offer, side by side', () => {
   });
 });
 
-describe('★ 17b — what happens if you switch today', () => {
+describe('★ 17b - what happens if you switch today', () => {
   const [foundation, , voice] = CATALOG;
 
   it('moving down costs nothing now and lands at renewal', async () => {
@@ -117,10 +117,10 @@ describe('★ 17b — what happens if you switch today', () => {
     );
   });
 
-  it('moving up: the charge is the server’s to work out, so "—" — never a guess', async () => {
+  it('moving up: the charge is the server’s to work out, so "-" - never a guess', async () => {
     render(await SwitchSummary({ target: voice!, current: foundation!, subscription: SUB }));
     const charged = screen.getByTestId('switch-charged');
-    expect(charged).toHaveTextContent('Charged now—');
+    expect(charged).toHaveTextContent('Charged now-');
     expect(screen.getByTestId('switch-credits')).toHaveTextContent('+ 6,250');
   });
 
@@ -130,7 +130,7 @@ describe('★ 17b — what happens if you switch today', () => {
   });
 });
 
-describe('★ 17b — the switch is drawn, and not live', () => {
+describe('★ 17b - the switch is drawn, and not live', () => {
   it('names the plan, is not a button, and names the card it would charge', async () => {
     const [foundation, , voice] = CATALOG;
     render(
@@ -154,7 +154,7 @@ describe('★ 17b — the switch is drawn, and not live', () => {
   });
 });
 
-describe('★ 17b — conversations beside credits only when they come FROM the credits', () => {
+describe('★ 17b - conversations beside credits only when they come FROM the credits', () => {
   it('the default sold volume (250 on every plan) is not drawn as what the credits buy', async () => {
     render(await PlanCards({ catalog: CATALOG, currentKey: 'ai_voice', selectedKey: null }));
     const card = screen.getByTestId('plan-card-ai_workforce');

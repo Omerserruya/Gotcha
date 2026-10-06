@@ -8,7 +8,7 @@ import { logger } from '@/observability/logger';
 /**
  * The tenant's automations.
  *
- * `raw` because the route answers a **bare array** with no envelope — the
+ * `raw` because the route answers a **bare array** with no envelope - the
  * fourth response shape on this platform, and the only one where unwrapping
  * `data` would throw away the whole response rather than part of it.
  *

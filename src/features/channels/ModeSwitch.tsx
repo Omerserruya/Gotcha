@@ -10,7 +10,7 @@ import { setResponseMode } from './actions';
 import styles from './Channels.module.css';
 
 /**
- * 13b's "AI mode", as 02 draws it: two segments, the current one dark —
+ * 13b's "AI mode", as 02 draws it: two segments, the current one dark -
  * Answers on its own · Drafts, a person sends. Live (`PATCH response-mode`),
  * and it asks first: switching changes what customers on this number get,
  * from the next message on. Nothing moves before the server says so.

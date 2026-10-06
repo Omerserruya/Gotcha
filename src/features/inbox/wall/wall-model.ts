@@ -13,7 +13,7 @@ import type { CopilotRead } from '../load-copilot';
 import type { WallHistory } from './load-wall';
 
 /**
- * The Copilot wall's decisions, apart from its markup — so each one is tested
+ * The Copilot wall's decisions, apart from its markup - so each one is tested
  * as a rule rather than as a count of elements.
  */
 
@@ -100,7 +100,7 @@ export function stepTo(index: number, delta: number, count: number): number {
 
 /**
  * The history row's second line: names for written channels, a count for
- * calls — over the conversations listed (the newest `HISTORY_LIMIT`), which
+ * calls - over the conversations listed (the newest `HISTORY_LIMIT`), which
  * is what the route sends; `total` is the whole count.
  */
 export function historyChannels(history: WallHistory): {
@@ -115,7 +115,7 @@ export function historyChannels(history: WallHistory): {
 }
 
 /**
- * Refunds among this person's orders — or `null`, said as "—", when the orders
+ * Refunds among this person's orders - or `null`, said as "-", when the orders
  * read are not all of them. `recentOrders` is a page, and a count over a page
  * would say "None" about somebody refunded in an order we did not read.
  */
@@ -227,7 +227,7 @@ export interface OrdersView {
 
 /**
  * The person's orders by contact when that was read (Woo or Shopify, one
- * shape); otherwise the conversation's own commerce context — a visitor, or a
+ * shape); otherwise the conversation's own commerce context - a visitor, or a
  * failed contact read. Never both: two answers about money on one screen.
  */
 export function ordersView(

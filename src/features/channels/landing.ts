@@ -4,7 +4,7 @@ import type { ChannelType } from '@/api/contracts/channels';
  * The way back from a channel's provider (backend ecd64c4d), read off the URL:
  *   `?connected=<platform>&count=N[&pending=1]`
  *   `?platform=<platform>&error=<code>`
- * Pure, so the server page can call it — a client module's helper cannot be.
+ * Pure, so the server page can call it - a client module's helper cannot be.
  */
 export const CHANNEL_CONNECT_FAILURES = [
   'denied',

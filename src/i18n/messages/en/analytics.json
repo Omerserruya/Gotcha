@@ -1,7 +1,7 @@
 {
   "title": "Analytics",
   "description": "What people ask about, and how the work is spread across your team.",
-  "noGotchaSection": "There is no “what GOTCHA did” section yet. It needs a breakdown of why the AI handed a conversation to a person, and the platform records the handover without recording the cause — so any chart here would be invented rather than measured.",
+  "noGotchaSection": "There is no “what GOTCHA did” section yet. It needs a breakdown of why the AI handed a conversation to a person, and the platform records the handover without recording the cause - so any chart here would be invented rather than measured.",
   "team": {
     "heading": "Who is holding what",
     "today": "These are today's numbers. They reset at midnight, and they are the only period this panel covers.",
@@ -10,7 +10,7 @@
     "takenToday": "Taken today",
     "unnamed": "Unnamed",
     "unavailable": "We couldn't read the team's workload just now.",
-    "noSpeed": "There's no reply-speed column here. The only timing GOTCHA records measures from when a conversation was claimed to each reply in it, so it grows with how long a conversation runs — beside a name that would read as slowness.",
+    "noSpeed": "There's no reply-speed column here. The only timing GOTCHA records measures from when a conversation was claimed to each reply in it, so it grows with how long a conversation runs - beside a name that would read as slowness.",
     "aiEmployee": "AI employee",
     "nullReason": {
       "ai_does_not_claim": "AI employees don't take conversations; they're assigned.",
@@ -19,7 +19,7 @@
   },
   "asked": {
     "heading": "What people ask about",
-    "grouped": "GOTCHA grouped these questions itself. Two lines can be the same question worded differently — it hasn't learned to merge them yet.",
+    "grouped": "GOTCHA grouped these questions itself. Two lines can be the same question worded differently - it hasn't learned to merge them yet.",
     "asked": "asked {count} times",
     "none": "Nothing has been grouped yet. This fills in as conversations are analysed.",
     "unavailable": "We couldn't read what people are asking about just now."
@@ -43,12 +43,12 @@
     "seconds": "{n}s",
     "minutes": "{n}m",
     "hours": "{n}h",
-    "unknown": "—",
+    "unknown": "-",
     "unavailable": "We couldn't read this week's figures just now.",
-    "estimate": "An estimate: {conversations, number} conversations × the platform’s average of {seconds}s each — not measured in this workspace yet."
+    "estimate": "An estimate: {conversations, number} conversations × the platform’s average of {seconds}s each - not measured in this workspace yet."
   },
   "teamShort": {
-    "today": "Today's numbers — they reset at midnight.",
+    "today": "Today's numbers - they reset at midnight.",
     "noSpeed": "No reply-speed column",
     "none": "No one on the team yet."
   },
@@ -117,7 +117,7 @@
       "eyebrow": "Worth a word",
       "uneven": "{heavy} is carrying <figure>{ratio, plural, =2 {twice} other {# times}}</figure> the queue {light} is.",
       "even": "Open conversations are spread evenly right now.",
-      "measured": "Counted as conversations open now — a queue, not a measure of anyone.",
+      "measured": "Counted as conversations open now - a queue, not a measure of anyone.",
       "rebalance": "Rebalance the queue",
       "week": "Look at their week",
       "tooFew": "There aren't two people counted here to compare a queue between.",

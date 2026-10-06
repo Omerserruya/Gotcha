@@ -54,7 +54,7 @@ beforeEach(() => {
   Object.values(actions).forEach((fn) => fn.mockReset());
 });
 
-describe('★★ 05 — a campaign, as a DRAFT', () => {
+describe('★★ 05 - a campaign, as a DRAFT', () => {
   it('WhatsApp: only approved templates of this number or the tenant’s; nothing saved until the click', async () => {
     wrap(<CampaignForm accounts={ACCOUNTS} templates={TEMPLATES} />);
     // No pick: no audience line, and no contactIds below.
@@ -121,7 +121,7 @@ describe('★★ 05 — a campaign, as a DRAFT', () => {
     expect(screen.getByTestId('campaign-time')).toHaveValue('21:30');
     actions.createCampaignDraft.mockResolvedValue({ ok: true, id: 'b2' });
     await userEvent.click(screen.getByTestId('campaign-save'));
-    // 21:30 in Israel (UTC+3 in October) — in UTC, local and Z would agree.
+    // 21:30 in Israel (UTC+3 in October) - in UTC, local and Z would agree.
     expect(actions.createCampaignDraft.mock.calls[0]![0].scheduledAt).toBe(
       '2026-10-04T18:30:00.000Z',
     );
@@ -156,7 +156,7 @@ describe('★★ 05 — a campaign, as a DRAFT', () => {
   });
 });
 
-describe('★★ 05c — a template, as a local DRAFT', () => {
+describe('★★ 05c - a template, as a local DRAFT', () => {
   it.each([
     ['Order Ready HE', 'order_ready_he'],
     ['back-in-stock!', 'back_in_stock'],
@@ -186,7 +186,7 @@ describe('★★ 05c — a template, as a local DRAFT', () => {
   });
 });
 
-describe('★★ 05c — Duplicate', () => {
+describe('★★ 05c - Duplicate', () => {
   it('copies on the click only, then opens the copy; a refusal is said', async () => {
     wrap(<DuplicateTemplate id="tp1" />);
     expect(actions.duplicateTemplate).not.toHaveBeenCalled();
@@ -203,7 +203,7 @@ describe('★★ 05c — Duplicate', () => {
   });
 });
 
-describe('★★ 05 — the four tasks', () => {
+describe('★★ 05 - the four tasks', () => {
   it('Campaign opens the draft; Email only with an email account; Message is drawn with why', async () => {
     const one = render(await TaskCards({ hasEmail: false }));
     expect(screen.getByTestId('task-campaign')).toHaveAttribute(

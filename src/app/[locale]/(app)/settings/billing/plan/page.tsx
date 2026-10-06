@@ -13,14 +13,14 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Plan & pricing — screen 17b.
+ * Settings · Plan & pricing - screen 17b.
  *
  * Separate from Usage & billing because it answers a different question.
  * That screen says how long you are good for; this one says what you are on
  * and what changing it would do.
  *
  * **Every change available to this tenant is a downgrade**, and downgrades are
- * deferred to the end of the period — 8 September 2027, on an annual
+ * deferred to the end of the period - 8 September 2027, on an annual
  * subscription. So the screen leads with the date rather than with a control,
  * and states the service's own guarantee that nothing moves until then.
  */
@@ -38,7 +38,7 @@ export default async function Page({
     .get({ endpoint: billingEndpoints.plans(), payload: plansResponseSchema, raw: true })
     .then((r) => r.plans)
     .catch((cause: unknown) => {
-      // Costs the plan its NAME, not the screen — the key is ugly and true.
+      // Costs the plan its NAME, not the screen - the key is ugly and true.
       logger.warn('pricing.plans_failed', { cause });
       return [];
     });
@@ -51,9 +51,9 @@ export default async function Page({
 
   /*
     17b, measured: the plans side by side, then what switching would do
-    beside the button that does it. The notes that used to be the screen —
+    beside the button that does it. The notes that used to be the screen -
     the deferred date, "replaceable, never clearable", tax, currency, a
-    scheduled change — are its fine print now, under the button.
+    scheduled change - are its fine print now, under the button.
   */
   return (
     <SettingsSection
@@ -69,9 +69,9 @@ export default async function Page({
           <SwitchActions target={target} current={current} methods={paymentMethods} />
           {/*
             02's fine print is two lines (above, in SwitchActions). Everything
-            else this screen must say — tax, currency, a scheduled change, the
+            else this screen must say - tax, currency, a scheduled change, the
             deferred date, "replaceable, never clearable", the platform's
-            disclaimer — is one "Details" line that opens it.
+            disclaimer - is one "Details" line that opens it.
           */}
           <details className={styles.switchNotes} data-testid="switch-details">
             <summary className={styles.switchNotesSummary}>{t('details')}</summary>
@@ -84,7 +84,7 @@ export default async function Page({
             />
             <ChangePlanGate
               /*
-               * The date a change WOULD take effect is the period end — the
+               * The date a change WOULD take effect is the period end - the
                * same value `changePlan` writes as `effectiveAt`.
                */
               effectiveAt={subscription?.currentPeriodEnd ?? null}

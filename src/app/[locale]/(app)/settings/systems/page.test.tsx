@@ -79,7 +79,7 @@ beforeEach(() => {
   loadCapabilities.mockClear();
 });
 
-describe('★ 14 — 14c/14d and 14e open over it', () => {
+describe('★ 14 - 14c/14d and 14e open over it', () => {
   it('14 alone reads no capabilities: they are only for a part’s drawer', async () => {
     await open({});
     expect(loadCapabilities).not.toHaveBeenCalled();
@@ -102,7 +102,7 @@ describe('★ 14 — 14c/14d and 14e open over it', () => {
   });
 });
 
-describe('★ 14d corrections — the line and the host', () => {
+describe('★ 14d corrections - the line and the host', () => {
   it('the drawer’s line is a sentence: "The catalogue and orders."', async () => {
     await open({ part: 'ecommerce' });
     expect(screen.getByTestId('drawer-part')).toHaveAttribute(

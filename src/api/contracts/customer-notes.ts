@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Screen 04f — what your team wrote about this person.
+ * Screen 04f - what your team wrote about this person.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * CONTACT-KEYED, WHICH IS THE WHOLE REASON THE STUB WAS REPLACED
@@ -12,12 +12,12 @@ import { z } from 'zod';
  *   DELETE /api/identity/:contactId/notes/:noteId
  *
  * The route's own header: the stub these replace *"was keyed on a
- * conversation, which is the wrong subject — a note is about a person, and
+ * conversation, which is the wrong subject - a note is about a person, and
  * the person outlives the thread."* So `readKeyFor` is NOT used here, and the
  * write prohibition recorded in `conversation-key.ts` does not apply: there
  * is no conversation in the key at all.
  *
- * ── THE LIST ANSWERS `{ notes, contactId }` — NO ENVELOPE ──
+ * ── THE LIST ANSWERS `{ notes, contactId }` - NO ENVELOPE ──
  * Checked, not assumed. There is no top-level `data`, so the transport
  * passes the body through and **`raw: true` is neither needed nor correct**.
  * The two sibling-`data` bugs found today were the opposite case.
@@ -38,7 +38,7 @@ import { z } from 'zod';
  * whole team and still be something the bot must never repeat to a customer."*
  *
  * `PRIVATE` is the author's alone, enforced as a WHERE clause rather than a
- * filter — so this screen never receives somebody else's private note.
+ * filter - so this screen never receives somebody else's private note.
  */
 export const NOTE_VISIBILITIES = ['TEAM', 'PRIVATE'] as const;
 export type NoteVisibility = (typeof NOTE_VISIBILITIES)[number];
@@ -48,7 +48,7 @@ export type NoteVisibility = (typeof NOTE_VISIBILITIES)[number];
  *
  * `REJECTED` is a suggestion a person declined, kept so the AI stops
  * re-proposing it. 04f asks for none of the suggestion flow, so this screen
- * requests only `PUBLISHED` — but the domain is named in full, because a
+ * requests only `PUBLISHED` - but the domain is named in full, because a
  * `z.enum` missing one member rejects the whole response.
  */
 export const NOTE_STATUSES = ['PUBLISHED', 'AI_SUGGESTED', 'REJECTED'] as const;
@@ -68,7 +68,7 @@ export const noteSchema = z.object({
    * somebody says otherwise."*
    *
    * It is also the only thing that decides whether the note leaves our
-   * database — see `destinationOf`.
+   * database - see `destinationOf`.
    */
   aiUsable: z.boolean().default(false),
   status: z.enum(NOTE_STATUSES).default('PUBLISHED'),
@@ -81,7 +81,7 @@ export const noteSchema = z.object({
   authorUserId: z.string().nullable().default(null),
   /**
    * Denormalised on purpose: *"a user row can be deleted, and an
-   * unattributable note is worth less than no note."* Required — a note with
+   * unattributable note is worth less than no note."* Required - a note with
    * no author name is not a note this screen can render.
    */
   authorName: z.string(),
@@ -104,7 +104,7 @@ export type Note = z.infer<typeof noteSchema>;
  *
  * Both required. An absent `notes` defaulting to `[]` would render *"nobody
  * has written anything about this person"* from a response that said nothing
- * — the `customerAuditSchema` defect, and this screen makes the same claim.
+ * - the `customerAuditSchema` defect, and this screen makes the same claim.
  */
 export const noteListSchema = z.object({
   notes: z.array(noteSchema),
@@ -112,7 +112,7 @@ export const noteListSchema = z.object({
 });
 export type NoteList = z.infer<typeof noteListSchema>;
 
-/** `POST` and `PATCH` answer `{ note }` — the whole row. */
+/** `POST` and `PATCH` answer `{ note }` - the whole row. */
 export const noteWriteSchema = z.object({ note: noteSchema });
 
 /**
@@ -121,7 +121,7 @@ export const noteWriteSchema = z.object({ note: noteSchema });
  * ★ ITS OWN SCHEMA, because `noteWriteSchema` would reject this body: the
  * full note requires `body`, `authorName` and `createdAt`, and the delete
  * response carries none of them. Reusing it with `.partial()` would not have
- * helped either — that makes `note` optional, not its contents.
+ * helped either - that makes `note` optional, not its contents.
  *
  * `deletedAt` is required and non-null: the route soft-deletes and *"says so
  * rather than 204-ing as if the row were gone"*, so a response without a
@@ -138,14 +138,14 @@ export const noteDeleteSchema = z.object({
  * ★★ SEVEN OUTCOMES, AND THE SCREEN READS THE SERVER'S VERDICT FOR ALL OF THEM
  * ════════════════════════════════════════════════════════════════════════════
  * A note may be mirrored into the merchant's own CRM, and the merchant has to
- * be told which. `NOT_APPLICABLE` alone cannot say — the route reaches it by
+ * be told which. `NOT_APPLICABLE` alone cannot say - the route reaches it by
  * **five different paths**, each a different sentence and two of them a
  * different repair:
  *
  *   private          the note is PRIVATE, and *"a private note in the
  *                    merchant's shared CRM is not private"*
  *   not_ai_usable    not marked for the AI, and the push is the ONLY
- *                    chokepoint — see the note below
+ *                    chokepoint - see the note below
  *   null             no conversation to resolve a CRM contact from, or no
  *                    forwarded authorization. Indistinguishable on the wire,
  *                    and the same fact to a merchant: nothing to push through
@@ -181,7 +181,7 @@ export function destinationOf(note: Note): NoteDestination {
     /*
      * ★ A REAL OBSERVABLE STATE, NOT A TRANSIENT TO IGNORE.
      *
-     * `PENDING` is written before the fetch. A reader can see it mid-push —
+     * `PENDING` is written before the fetch. A reader can see it mid-push -
      * and if the process died between the two writes it stays PENDING for
      * good. Either way we do not know where the note is, and that is the
      * honest sentence rather than guessing at the more likely one.
@@ -210,7 +210,7 @@ export function destinationOf(note: Note): NoteDestination {
 /**
  * Did the push fail in a way somebody must see?
  *
- * ★ *"never render a failed push as saved"* — the lesson of the stub that
+ * ★ *"never render a failed push as saved"* - the lesson of the stub that
  * answered 200 and persisted nothing. `FAILED` means there WAS a target and
  * it refused, which is different from every `NOT_APPLICABLE` reason and is
  * the one the merchant may need to act on.
@@ -226,7 +226,7 @@ export function pushFailed(note: Note): boolean {
  * deleted. *"Letting anyone else rewrite it would make `authorName` a claim
  * about somebody who did not write what it now says."*
  *
- * `viewerUserId` is `User.id` from `/api/auth/me` — the same id the route
+ * `viewerUserId` is `User.id` from `/api/auth/me` - the same id the route
  * compares against. **Not the session's `sub`**, which is the Authentik
  * subject and would never match.
  */

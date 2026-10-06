@@ -36,7 +36,7 @@ const serverEnvSchema = z.object({
    * intended architecture: the platform issues the session, the frontend never
    * holds a token, and revoking the session takes effect everywhere at once.
    *
-   * Unset means the app runs on its own session instead — see `src/auth`.
+   * Unset means the app runs on its own session instead - see `src/auth`.
    */
   PLATFORM_SESSION_COOKIE: z.string().min(1).optional(),
 
@@ -50,7 +50,7 @@ const serverEnvSchema = z.object({
 
   /**
    * 01c's "Book a setup call" (Omer, decision 01): where it books. Unset, the
-   * link is not drawn — never a call booked nowhere.
+   * link is not drawn - never a call booked nowhere.
    */
   SETUP_CALL_URL: z.url().optional(),
 
@@ -64,14 +64,14 @@ const serverEnvSchema = z.object({
    * ═════════════════════════════════════════════════════════════════════════════
    * The panel finishes the flow and then navigates to `/api/auth/login` so the
    * OIDC exchange can run against the session it just created. Unset, that is
-   * built with `appPath` and is a path on this same host — correct, and what
+   * built with `appPath` and is a path on this same host - correct, and what
    * ships today.
    *
    * ★ Served from an auth origin it is NOT correct, and it fails in the
    *   confusing direction: the credentials are accepted, the identity provider
    *   session is created, and the browser then asks the AUTH host for a route
    *   only the product host has. Under a gateway allowlist that is a 404 at
-   *   the end of a successful sign-in — a failure that looks like the panel
+   *   the end of a successful sign-in - a failure that looks like the panel
    *   is broken when the panel has just done its job.
    *
    * ★ And `appUrl(…, APP_ORIGIN)` cannot substitute. It rebuilds the path from
@@ -125,8 +125,8 @@ export function serverEnv(): ServerEnv {
   if (cached) return cached;
 
   /*
-   * ★★ EMPTY IS UNSET. A compose file's `${V2_OIDC_CLIENT_SECRET:-}` — the
-   * documented way to make a variable optional — supplies an empty string,
+   * ★★ EMPTY IS UNSET. A compose file's `${V2_OIDC_CLIENT_SECRET:-}` - the
+   * documented way to make a variable optional - supplies an empty string,
    * and `z.string().min(1).optional()` rejects it. Every request reading the
    * server config then fails validation while pages that do not read it still
    * return 200: a container that looks healthy and whose login route 500s.

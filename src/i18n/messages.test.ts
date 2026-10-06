@@ -68,7 +68,7 @@ describe('message catalogues', () => {
    * ════════════════════════════════════════════════════════════════════════
    * `loadMessages` maps over `NAMESPACES`, not over the directory. So a
    * namespace file can exist, be complete, match its counterpart key for key,
-   * pass every other test in this file — and be **absent at runtime**.
+   * pass every other test in this file - and be **absent at runtime**.
    *
    * That is what happened to `inbox.json`. Screen 02 shipped with its whole
    * catalogue unloaded, and the failure did not look like missing text: a
@@ -83,7 +83,7 @@ describe('message catalogues', () => {
    * absent NAMESPACE raises. The loud one is the kinder one.
    *
    * Both directions are checked. A name in `NAMESPACES` with no file is not
-   * harmless either — `loadNamespace` catches the failed import and returns
+   * harmless either - `loadNamespace` catches the failed import and returns
    * `{}`, so it fails exactly as quietly as the case above.
    *
    * Every other test here reads the namespace list from the DIRECTORY, which
@@ -114,7 +114,7 @@ describe('message catalogues', () => {
    * ★★ AND THE CONSUMER SIDE: EVERY NAMESPACE THE CODE ASKS FOR MUST EXIST.
    *
    * The test above catches a catalogue that is never loaded. This catches the
-   * mirror: a component asking for a namespace that is not registered — which
+   * mirror: a component asking for a namespace that is not registered - which
    * is what `useTranslations('inbox.verbs')` was doing, and what took screen
    * 02's page down rather than blanking one label.
    *

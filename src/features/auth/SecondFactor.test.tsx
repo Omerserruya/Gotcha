@@ -24,7 +24,7 @@ import { SecondFactor } from './SecondFactor';
  * on the way out, or a device somebody needs being unreachable.
  *
  * The challenge fixture is the real payload captured from an enrolled account on
- * 2026-09-28 — two devices, `static` and `totp`, `last_used` populated on one.
+ * 2026-09-28 - two devices, `static` and `totp`, `last_used` populated on one.
  * The body asserted in the first test is the one a live server accepted.
  */
 
@@ -74,13 +74,13 @@ describe('★★ the digit count is the constant’s to own, not the copy’s', 
      * THE HINT SAID “THE SIXTH DIGIT” IN TWO CATALOGUES
      * ═════════════════════════════════════════════════════════════════════════
      * `CODE_LENGTH` is measured from this deployment’s own `otpauth://` URL,
-     * and a number the code owns was also written out in prose — in English and
+     * and a number the code owns was also written out in prose - in English and
      * in Hebrew. Change the constant and both sentences stay confidently wrong,
      * the boxes and the sentence disagree, and nothing anywhere reddens.
      *
      * ★ It asserts the RENDERED text rather than the catalogue string, so it
      *   also covers a future sentence that names the number somewhere else. The
-     *   count is allowed to reach the screen twice — as the boxes themselves,
+     *   count is allowed to reach the screen twice - as the boxes themselves,
      *   which are visible and countable, and through `code.digit`’s `{of}`
      *   parameter, which is derived. Both track the constant; prose does not.
      */
@@ -105,7 +105,7 @@ describe('★★ the digit count is the constant’s to own, not the copy’s', 
     /*
      * \u2605 THE DEFECT WAS IN BOTH CATALOGUES, SO ONE LOCALE IS HALF A TEST.
      * A guard that reads only English passes a Hebrew sentence that still says
-     * \u201cthe sixth digit\u201d \u2014 and the Hebrew reader is the one it would be wrong
+     * \u201cthe sixth digit\u201d - and the Hebrew reader is the one it would be wrong
      * for.
      *
      * The numeral check is language-independent and carries no false-positive
@@ -143,7 +143,7 @@ describe('the code, and the shape a real server accepted', () => {
      * A real TOTP code was submitted against the real `ak-stage-authenticator-
      * validate` on an enrolled account, and the flow advanced to
      * `ak-stage-user-login` with no `response_errors`. So the shape below is
-     * confirmed rather than read off a schema — and the first person to use this
+     * confirmed rather than read off a schema - and the first person to use this
      * screen is not the first to test the contract.
      *
      * `selected_challenge` carries the device back **verbatim**: the confirmation
@@ -175,7 +175,7 @@ describe('the code, and the shape a real server accepted', () => {
     /*
      * The trap two lines apart in Authentik's schema: `code` is a string when
      * validating and an integer when enrolling. Through an integer, `012345` is
-     * `12345` — a failed sign-in nobody can explain, on the screen where failure
+     * `12345` - a failed sign-in nobody can explain, on the screen where failure
      * means lockout. The live confirmation sent a string and it was accepted.
      */
     const user = userEvent.setup();
@@ -188,7 +188,7 @@ describe('the code, and the shape a real server accepted', () => {
   it('a pasted code fills every box, from whichever one has the cursor', async () => {
     /*
      * 00b asks for it, and somebody copying from an authenticator app pastes into
-     * whichever box the cursor is in — not reliably the first.
+     * whichever box the cursor is in - not reliably the first.
      */
     const user = userEvent.setup();
     show();
@@ -228,7 +228,7 @@ describe('a recovery code is not six digits', () => {
 
   it('gets one field, not six boxes that would truncate it', async () => {
     /*
-     * Nothing has been observed about a recovery code's length or alphabet — and
+     * Nothing has been observed about a recovery code's length or alphabet - and
      * it is the one device class nobody has fired, because recovery codes are
      * single-use and burning one to confirm a field name is a bad trade. Six
      * boxes would silently take the first six characters of a longer code and
@@ -309,7 +309,7 @@ describe('one device means no chooser, and the way out is still there', () => {
      * ════════════════════════════════════════════════════════════════════════
      * The admin account has exactly `totp` and `static`, so this is one click
      * from where the walk landed: press "No access to your phone?", choose the
-     * recovery code, and the link underneath asked **the same question again** —
+     * recovery code, and the link underneath asked **the same question again** -
      * of somebody who has already answered it and is now typing a recovery code.
      *
      * The label follows the active device. It stays "No access to your phone?"
@@ -345,7 +345,7 @@ describe('one device means no chooser, and the way out is still there', () => {
 describe('the three classes we have not built hand over rather than guess', () => {
   it('hands over when the only device is one we have never observed', async () => {
     /*
-     * A security key is a browser credential prompt, not a code — and the schema
+     * A security key is a browser credential prompt, not a code - and the schema
      * agrees by giving `webauthn` its own object field rather than sharing
      * `code`. Rendering a code box for it would fail after the typing, on the
      * screen where failure means lockout.
@@ -392,7 +392,7 @@ describe('the three classes we have not built hand over rather than guess', () =
 describe('who it says you are', () => {
   it('shows the address they typed, never the server username', async () => {
     /*
-     * `pending_user` is `akadmin` — a username that reads as an internal system
+     * `pending_user` is `akadmin` - a username that reads as an internal system
      * account to somebody halfway through signing in. What they typed a moment
      * ago is always recognisable to them and cannot leak an account name.
      */
@@ -415,7 +415,7 @@ describe('⚠⚠ what the reviewer saw first: a label with nothing after it', ()
      * THE STAGE OUTLIVES THE ADDRESS
      * ════════════════════════════════════════════════════════════════════════
      * `startFlow()` resumes whatever stage the flow cookie holds, so a reload
-     * lands on this screen with the panel's `email` state empty — nobody typed
+     * lands on this screen with the panel's `email` state empty - nobody typed
      * it in that page load. The stage is server-side; the typed value was only
      * in React.
      *
@@ -450,7 +450,7 @@ describe('⚠⚠ what the reviewer saw first: a label with nothing after it', ()
     /*
      * The challenge carries `pending_user: 'akadmin'`. Filling the gap with it
      * would put an internal account name in front of somebody halfway through
-     * signing in — ruled out, and a wrong name is worse than no name.
+     * signing in - ruled out, and a wrong name is worse than no name.
      */
     render(
       <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
@@ -468,18 +468,18 @@ describe('⚠⚠ what the reviewer saw first: a label with nothing after it', ()
   });
 });
 
-describe('⚠⚠ "make it all the length of the button" — 00b’s mock', () => {
+describe('⚠⚠ "make it all the length of the button" - 00b’s mock', () => {
   /*
    * ════════════════════════════════════════════════════════════════════════
    * `flex:1` IS THE RULE. 60px IS WHAT IT COMES TO AT 400px.
    * ════════════════════════════════════════════════════════════════════════
    *     mock  flex:1; height:60px; border-radius:12px;
    *           font-size:26px; font-weight:600; row gap:8px
-   *     was   44px fixed, body size — six of those plus five gaps is 304px
+   *     was   44px fixed, body size - six of those plus five gaps is 304px
    *           inside a 400px column, so the row stopped short of the button
    *
    * Asserted from the stylesheet, because a literal there has nothing behind
-   * it — the same reason 00a's quoted values are pinned.
+   * it - the same reason 00a's quoted values are pinned.
    */
   const css = readFileSync('src/features/auth/SecondFactor.module.css', 'utf8');
   const declaration = (selector: string, property: string): string | undefined => {
@@ -503,7 +503,7 @@ describe('⚠⚠ "make it all the length of the button" — 00b’s mock', () =>
   });
 
   it('★ the tokens carry the mock’s own numbers', () => {
-    // 26px and 12px, added to the scale rather than written into this screen —
+    // 26px and 12px, added to the scale rather than written into this screen -
     // 00b is not the last screen that will have a code box.
     const tokens = readFileSync('src/design-system/tokens/tokens.css', 'utf8');
     expect(tokens).toMatch(/--font-size-code-box:\s*26px/);
@@ -512,7 +512,7 @@ describe('⚠⚠ "make it all the length of the button" — 00b’s mock', () =>
      * And the fixed width that caused this is gone, not left to be reused.
      *
      * ⚠ Anchored to a DECLARATION. The first version matched the name
-     *   anywhere and failed on the comment that explains the removal — a
+     *   anywhere and failed on the comment that explains the removal - a
      *   true match against the wrong object, which is the shape that has cost
      *   most today.
      */
@@ -530,8 +530,8 @@ describe('⚠⚠ the account at the top, with a way back', () => {
    *
    * ★ "Back" cannot be a link to the previous page: the stage lives in a
    *   server-side flow, so returning to `/sign-in` resumes THIS stage. The
-   *   provider hands us the way out on the challenge —
-   *   `flow_info.cancel_url` — which our contract has parsed since it was
+   *   provider hands us the way out on the challenge -
+   *   `flow_info.cancel_url` - which our contract has parsed since it was
    *   written and nothing had ever read.
    */
   const withCancel = (over: Record<string, unknown> = {}) =>
@@ -560,7 +560,7 @@ describe('⚠⚠ the account at the top, with a way back', () => {
 
   it('⚠⚠ it comes BEFORE the heading, which is the whole complaint', () => {
     /*
-     * Order, not presence. The address was already on the screen — underneath.
+     * Order, not presence. The address was already on the screen - underneath.
      * `compareDocumentPosition` is the assertion that would have failed on the
      * version he was looking at.
      */
@@ -582,7 +582,7 @@ describe('⚠⚠ the account at the top, with a way back', () => {
 
   it('★ still offers the way out when the address is unknown', () => {
     // A resumed flow has no typed email. The affordance is about leaving, not
-    // about identity, so it survives — with words instead of an address.
+    // about identity, so it survives - with words instead of an address.
     render00b('');
     const back = screen.getByTestId('second-factor-back');
     expect(back).toBeInTheDocument();

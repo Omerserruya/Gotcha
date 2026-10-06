@@ -71,7 +71,7 @@ describe('the cap', () => {
     /*
      * "No limit set" and "nothing spent against the limit" are different
      * facts. A bar at 0% would state the second about a tenant in the first
-     * position — the same distinction as a send rate before anything is sent.
+     * position - the same distinction as a send rate before anything is sent.
      */
     expect(capUsed(policy({ maxMonthlySpend: null }))).toBeNull();
   });
@@ -109,12 +109,12 @@ describe('no policy is not a policy of defaults', () => {
 describe('what the settings API will actually accept', () => {
   it('offers exactly the four the validator allows', () => {
     /*
-     * credits.ts:241 — ["STOP_AI","HUMAN_ONLY","REQUIRE_APPROVAL","PREPAID_ONLY"],
+     * credits.ts:241 - ["STOP_AI","HUMAN_ONLY","REQUIRE_APPROVAL","PREPAID_ONLY"],
      * and :268 rejects anything else.
      *
      * Asserted against the validator's list so that the day PAYG is added
      * there, this test fails and the screen stops lying in the OTHER
-     * direction — refusing an option the platform has started accepting.
+     * direction - refusing an option the platform has started accepting.
      */
     expect([...SETTABLE_BEHAVIORS]).toEqual([
       'STOP_AI',
@@ -126,7 +126,7 @@ describe('what the settings API will actually accept', () => {
 
   it('knows PAYG is honoured and unsettable', () => {
     // payg.service.ts and spend-window.ts both branch on it, so a tenant can
-    // BE in that state — it simply cannot be put there from this screen.
+    // BE in that state - it simply cannot be put there from this screen.
     expect(isSettable('PAYG')).toBe(false);
     expect(LIMIT_BEHAVIORS).toContain('PAYG');
   });

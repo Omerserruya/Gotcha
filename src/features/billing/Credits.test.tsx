@@ -67,7 +67,7 @@ describe('the usage figure is withheld, and the screen says so', () => {
     expect(screen.getByTestId('credits')).toHaveAttribute('data-consumption', 'withheld');
 
     /*
-     * Said, not silently omitted — on the title of "Until renewal", the tile
+     * Said, not silently omitted - on the title of "Until renewal", the tile
      * that would have used the figure (16's ruling: states, not paragraphs).
      */
     expect(screen.getByTestId('credits-runout')).toHaveAttribute(
@@ -100,7 +100,7 @@ describe('the usage figure is withheld, and the screen says so', () => {
 describe('a contracted allowance with nothing granted is not a spent one', () => {
   it('says the credits have not been issued, and names the contract', async () => {
     await render17c();
-    // One line under the 0 — and the contract, the date and the denial on it.
+    // One line under the 0 - and the contract, the date and the denial on it.
     const notice = screen.getByTestId('credits-awaiting-grant');
     expect(notice).toHaveTextContent(/^Not granted yet for this period$/);
     const title = notice.getAttribute('title') ?? '';
@@ -140,7 +140,7 @@ describe('the two buckets do not share a fate', () => {
   it('makes no promise that the purchased half is permanent', async () => {
     /*
      * `CreditExpiryPolicy` has PERIOD_END, and the summary route strips
-     * `expiresAt` from the lots — so the screen cannot know, and must not say.
+     * `expiresAt` from the lots - so the screen cannot know, and must not say.
      */
     const split = await render17c({
       purchasedCredits: { balance: 300 },
@@ -165,7 +165,7 @@ describe('an estimate always says what it rests on', () => {
         sample: { conversations: 88, creditsConsumed: 660, conversationAttributedPct: 76 },
       },
     });
-    // 02's tile: the figure, then the average it rests on — the tenant's own.
+    // 02's tile: the figure, then the average it rests on - the tenant's own.
     expect(measured.getByTestId('credits-estimate-observed')).toHaveTextContent(
       /≈ 120 conversations/,
     );
@@ -204,7 +204,7 @@ describe('an estimate always says what it rests on', () => {
      *
      * Both estimates divide a balance by a rate, so while the balance is not
      * a balance the quotient is not an estimate. The suppression is asserted
-     * together with the sentence that replaces it — withholding silently
+     * together with the sentence that replaces it - withholding silently
      * would leave a gap where a number used to be, and a gap reads as broken.
      */
     const awaiting = await render17c({});
@@ -222,7 +222,7 @@ describe('an estimate always says what it rests on', () => {
 describe('“no consumption recorded” is about metering, not activity', () => {
   it('states the conversations that the reason code omits', async () => {
     await render17c();
-    // On the estimate tile's title: the tile is "—" because of it.
+    // On the estimate tile's title: the tile is "-" because of it.
     const note = document.querySelector('[data-tile="estimate"]')?.getAttribute('title') ?? '';
     expect(note).toMatch(/88 conversations/);
     expect(note).toMatch(/no credits were recorded/i);
@@ -314,7 +314,7 @@ describe("★ 17 · the framing is credits, and two of the design's lines are re
   });
 });
 
-describe('★ 17 — 02’s bar is holdings, drawn only when it can be believed', () => {
+describe('★ 17 - 02’s bar is holdings, drawn only when it can be believed', () => {
   it('no bar on the measured tenant: an empty bar is the 100% this refuses to draw', async () => {
     await render17c();
     expect(screen.queryByTestId('credits-bar')).toBeNull();

@@ -45,13 +45,13 @@ export function oidcConfiguration(): Promise<oidc.Configuration> {
  * ★★ THIS USED TO DROP THE MOUNT POINT SILENTLY
  * ════════════════════════════════════════════════════════════════════════════
  * It was `new URL('/api/auth/callback', APP_ORIGIN)`. An **absolute path
- * discards the base's path** — with or without a trailing slash — so an
+ * discards the base's path** - with or without a trailing slash - so an
  * `APP_ORIGIN` of `https://host/v2` produced `https://host/api/auth/callback`.
  *
  * Beside the legacy product that is not a 404: it is the other application's
  * route, and the provider would be sent a redirect target this app does not
  * own. Either the flow fails on a mismatch, or it succeeds against something
- * else — and the first is much the better outcome.
+ * else - and the first is much the better outcome.
  *
  * `appUrl` rebuilds the path from `BASE_PATH`, so the result no longer depends
  * on whether whoever set `APP_ORIGIN` happened to include the prefix.
@@ -66,7 +66,7 @@ export function oidcConfiguration(): Promise<oidc.Configuration> {
  * It reads `APP_ORIGIN`, which on the product deployment is the product and
  * on the sign-in deployment is **the sign-in host**. The same expression
  * therefore names two different URLs depending on which container evaluates
- * it — and the one that matters is the product's, because that is what the
+ * it - and the one that matters is the product's, because that is what the
  * provider redirects to and what it was registered with.
  *
  * ★ Measured 2026-09-30: the finishing hop compared the provider's completion
@@ -76,12 +76,12 @@ export function oidcConfiguration(): Promise<oidc.Configuration> {
  *   job; the expectation it was given was wrong.
  *
  * ★ `PRODUCT_LOGIN_URL` is configured on the sign-in deployment for precisely
- *   this reason — it is how that container knows where the product is. The
+ *   this reason - it is how that container knows where the product is. The
  *   callback is its sibling, so it is derived rather than composed from an
  *   origin this container cannot know.
  *
  * @returns the product's callback, or `null` when the URL is not the expected
- *          `…/api/auth/login` shape — never a guess.
+ *          `…/api/auth/login` shape - never a guess.
  */
 export function productCallbackUrl(productLoginUrl: string | undefined): string | null {
   if (!productLoginUrl) return null;

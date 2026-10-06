@@ -12,7 +12,7 @@ import {
  * Screen 10's four states.
  *
  * A port of `resolveToolAvailability` from the platform's shared lib, and the
- * tests exist mostly to hold the ORDER — which is a design statement, not an
+ * tests exist mostly to hold the ORDER - which is a design statement, not an
  * implementation detail: *"an unentitled plan cannot be fixed by connecting
  * anything, a disconnected integration cannot be fixed by granting scopes,
  * and a missing scope cannot be fixed by toggling the switch. Reporting the
@@ -53,7 +53,7 @@ describe('★★ the fourth state, and the order of its reasons', () => {
     /*
      * THE ORDER IS THE WHOLE POINT. Both facts are true on this row. Sending
      * somebody to grant a scope on an integration that is not connected is
-     * an instruction to do work that cannot help — they would go to the
+     * an instruction to do work that cannot help - they would go to the
      * provider's settings, find nothing to grant, and come back.
      */
     const both = tool({
@@ -74,7 +74,7 @@ describe('★★ the fourth state, and the order of its reasons', () => {
   it('★★ "we have no record of this provider" is NOT "disconnected"', () => {
     /*
      * The route: *"A tool whose provider we have no record of is not
-     * reported as disconnected — we simply do not know, and guessing
+     * reported as disconnected - we simply do not know, and guessing
      * 'broken' is its own false statement."*
      *
      * `undefined` here with a truthiness check would grey out a working
@@ -104,7 +104,7 @@ describe('★★ the fourth state, and the order of its reasons', () => {
   });
 
   it('★ but an explicit "not blocked" stops the fallback', () => {
-    // When the runtime HAS spoken, its verdict wins over our comparison —
+    // When the runtime HAS spoken, its verdict wins over our comparison -
     // the enforcement source is `missingScopes`, populated from real
     // provider errors, and re-deriving is a second chance to disagree.
     const cleared = tool({
@@ -127,7 +127,7 @@ describe('★ the domain is the platform’s, including what this route cannot s
     /*
      * `plan_not_entitled` and `no_catalog_entry` are resolved from
      * `planEntitled` and `hasCatalogEntry`, and `/api/tool-permissions`
-     * sends neither — it builds its rows by hand rather than calling the
+     * sends neither - it builds its rows by hand rather than calling the
      * shared resolver.
      *
      * They stay in the enum because one missing member rejects the whole

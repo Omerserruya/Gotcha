@@ -23,13 +23,13 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * ════════════════════════════════════════════════════════════════════════════
  * Choosing which of two observed answers is right creates a knowledge document
  * and embeds it, and from then on the AI answers customers out of it. Omer
- * authorized the control knowing that — it was in the question. That is not a
+ * authorized the control knowing that - it was in the question. That is not a
  * reason for anything automated to press it, and **no test and no capture
  * does**: `Resolve.test.tsx` mocks this module to throw.
  *
  * ── ONE TAP IS ENOUGH, BECAUSE THE TAP IS THE ANSWER ──
  * The route refuses a conflicted candidate outright unless the body names an
- * answer — it will not *"silently enshrine whichever variant happened to be
+ * answer - it will not *"silently enshrine whichever variant happened to be
  * most common"*. So the chosen variant's own text IS the payload, sent
  * verbatim, and the screen never has to ask a second question.
  *
@@ -37,7 +37,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * **`force`.** It exists, and it skips the duplicate check. The route's reason
  * for running that check at approval rather than only at clustering is that
  * *"approving into a knowledge base that already answers this question is how
- * it starts contradicting itself"* — and a one-tap button is the last place
+ * it starts contradicting itself"* - and a one-tap button is the last place
  * that should be overridable. `already_covered` is reported as an outcome and
  * the reader decides.
  *
@@ -53,7 +53,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
 
 export type ResolveResult =
   /**
-   * The write landed. `use` says whether the AI can answer with it yet — see
+   * The write landed. `use` says whether the AI can answer with it yet - see
    * `documentUseOf`; `{ ok: true }` alone does not mean the knowledge is live.
    */
   | {
@@ -63,7 +63,7 @@ export type ResolveResult =
       readonly alreadyApproved: boolean;
     }
   /**
-   * 409 — the knowledge base already answers this.
+   * 409 - the knowledge base already answers this.
    *
    * ★ NOT A FAILURE, AND IT CHANGED SOMETHING. The route records
    * `duplicateOfDocumentId` on the candidate before refusing, so the row
@@ -75,11 +75,11 @@ export type ResolveResult =
    * would improve is written and waiting for it.
    */
   | { readonly ok: false; readonly reason: 'already_covered'; readonly title: string | null }
-  /** 400 — there is no knowledge base to write into. A setup step, not a fault. */
+  /** 400 - there is no knowledge base to write into. A setup step, not a fault. */
   | { readonly ok: false; readonly reason: 'no_knowledge_base' }
-  /** 404 — the candidate is gone, or belongs to another tenant. */
+  /** 404 - the candidate is gone, or belongs to another tenant. */
   | { readonly ok: false; readonly reason: 'not_found' }
-  /** 403 — `ai:knowledge:write` or ADMIN. A permission, not a fault. */
+  /** 403 - `ai:knowledge:write` or ADMIN. A permission, not a fault. */
   | { readonly ok: false; readonly reason: 'forbidden' }
   /** Refused here: the route would store this answer cut off at 4000 chars. */
   | { readonly ok: false; readonly reason: 'too_long' }
@@ -93,7 +93,7 @@ export async function resolveConflict(
   if (!answer) {
     /*
      * The route would answer `conflict_requires_answer`, and rightly. Caught
-     * here so an empty variant — which should not exist — cannot produce a
+     * here so an empty variant - which should not exist - cannot produce a
      * refusal whose message the screen would then have to translate back into
      * "nothing was chosen".
      */
@@ -110,7 +110,7 @@ export async function resolveConflict(
   try {
     result = await serverApi().post({
       endpoint: knowledgeEndpoints.approveCandidate(candidateId),
-      // `answer`, not `editedAnswer` — see `APPROVE_BODY_KEY`.
+      // `answer`, not `editedAnswer` - see `APPROVE_BODY_KEY`.
       body: { answer },
       payload: approveResultSchema,
       raw: true,
@@ -122,7 +122,7 @@ export async function resolveConflict(
        * ★★ THE DISCRIMINATOR IS `developerMessage`, AND `cause.code` IS DEAD
        * HERE.
        *
-       * Every other action in this codebase matches `cause.code` — see
+       * Every other action in this codebase matches `cause.code` - see
        * `people/actions.ts:66`, `workspace/actions.ts:52`. Those codes come
        * from the *entitlement* envelope in `packages/shared`, which really
        * does send a `code` field. **This service's own route-level refusals
@@ -135,7 +135,7 @@ export async function resolveConflict(
        * forever, and the one thing that would fix it would never be named.
        *
        * `developerMessage` is documented "never rendered to end users", which
-       * remains true — it is matched on, and the sentence shown is ours.
+       * remains true - it is matched on, and the sentence shown is ours.
        */
       const code = cause.developerMessage;
       if (cause.status === 409 || code === 'already_covered') {
@@ -143,7 +143,7 @@ export async function resolveConflict(
          * The route sends `existing: { documentId, title }`, and we cannot
          * reach it: `errorEnvelopeSchema` names `error`, `details`, `code`,
          * `tenantStatus` and `checkoutPath`, so `z.object` strips `existing`
-         * before `ApiError` is built. Recorded rather than worked around —
+         * before `ApiError` is built. Recorded rather than worked around -
          * naming the document that already answers this would be a better
          * sentence, and it needs a change to the shared error envelope.
          */
@@ -153,8 +153,8 @@ export async function resolveConflict(
       if (cause.status === 404) return { ok: false, reason: 'not_found' };
       if (code === 'no_knowledge_base') return { ok: false, reason: 'no_knowledge_base' };
       /*
-       * `conflict_requires_answer` cannot be reached from here — we always
-       * send an answer — so it gets no state of its own. If it ever arrives
+       * `conflict_requires_answer` cannot be reached from here - we always
+       * send an answer - so it gets no state of its own. If it ever arrives
        * it means the body key changed underneath us, and `failed` with the
        * message in the log is where that gets found.
        */

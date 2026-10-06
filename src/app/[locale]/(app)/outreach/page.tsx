@@ -17,7 +17,7 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Outreach — screens 05 and 05b.
+ * Outreach - screens 05 and 05b.
  *
  * Both states on one route: a campaign that is sending and one that has
  * finished are the same object at different moments, and the design splits
@@ -26,12 +26,12 @@ import { pageMetadata } from '@/shell/page-metadata';
  *
  * ── WHAT IS ABSENT, AND WHY ──
  * **No "Pause the rest".** There is no `PAUSED` status and no resume route.
- * `cancel` is terminal — it drains the queue, marks every pending recipient
+ * `cancel` is terminal - it drains the queue, marks every pending recipient
  * `"skipped"` and sets `completedAt`. The control says **stop**, and its
  * confirmation names the two things that are lost.
  *
  * **No "converted", no "bought", no attributed revenue.** Conversion is not a
- * concept in this platform and revenue has no inputs — its third appearance
+ * concept in this platform and revenue has no inputs - its third appearance
  * across three screens.
  *
  * **No approval state.** `Broadcast` has no approval field, and
@@ -43,7 +43,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  * design states it.
  *
  * **No quiet-hours control.** `outboundQuietHours` is validated and stored in
- * the workspace policy and **read by no send path** — so a tenant could set
+ * the workspace policy and **read by no send path** - so a tenant could set
  * it, see it saved, and have GOTCHA message their customers at 02:00. Drawing
  * the control would make a promise the product breaks on someone else's
  * behalf.
@@ -56,9 +56,9 @@ export default async function Page({
   searchParams,
 }: {
   readonly searchParams: Promise<{
-    /** `?campaign=<id>` — which campaign the right-hand column shows. */
+    /** `?campaign=<id>` - which campaign the right-hand column shows. */
     readonly campaign?: string;
-    /** `?create=campaign[&channel=EMAIL][&template=<id>]` — the draft drawer. */
+    /** `?create=campaign[&channel=EMAIL][&template=<id>]` - the draft drawer. */
     readonly create?: string;
     readonly channel?: string;
     readonly template?: string;
@@ -164,7 +164,7 @@ export default async function Page({
   }
 
   /*
-   * 05's list is one card: what is going out first, then what already went —
+   * 05's list is one card: what is going out first, then what already went -
    * 02's own list ends on "Finished yesterday".
    */
   const campaigns = [...inFlight, ...finished];
@@ -213,7 +213,7 @@ const SENDABLE = new Set(['WHATSAPP', ...EMAIL_CHANNELS]);
 
 export const generateMetadata = pageMetadata('primary.outreach');
 
-/** `?contacts=a,b,c` from 04's selection — ids only, at most 200. */
+/** `?contacts=a,b,c` from 04's selection - ids only, at most 200. */
 function contactsOf(raw: string | undefined): readonly string[] {
   return (raw ?? '')
     .split(',')

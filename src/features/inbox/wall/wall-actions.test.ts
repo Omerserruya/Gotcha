@@ -16,7 +16,7 @@ beforeEach(() => {
   post.mockReset();
 });
 
-describe('★★ refreshSuggestions — "Try again", the one model call here', () => {
+describe('★★ refreshSuggestions - "Try again", the one model call here', () => {
   it('posts to the refresh route with the reader’s language', async () => {
     post.mockResolvedValue({ data: [], copilotMode: 'READY_MESSAGE' });
     expect(await refreshSuggestions('c1')).toMatchObject({ state: 'ok' });
@@ -25,7 +25,7 @@ describe('★★ refreshSuggestions — "Try again", the one model call here', (
     expect(sent.body).toEqual({ locale: 'he' });
   });
 
-  it('★★ 429 REFRESH_RATE_LIMITED is a wait with its seconds — not a failure', async () => {
+  it('★★ 429 REFRESH_RATE_LIMITED is a wait with its seconds - not a failure', async () => {
     post.mockRejectedValue(
       new ApiError({
         kind: 'rate_limited',
@@ -54,7 +54,7 @@ describe('★★ refreshSuggestions — "Try again", the one model call here', (
   });
 });
 
-describe('★ readActivity — strict on the envelope', () => {
+describe('★ readActivity - strict on the envelope', () => {
   const through = (answer: unknown) =>
     get.mockImplementation(async ({ payload }: { payload: { parse: (x: unknown) => unknown } }) =>
       payload.parse(answer),

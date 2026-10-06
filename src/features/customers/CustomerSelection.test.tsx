@@ -52,7 +52,7 @@ const list = () =>
 
 const href = () => JSON.parse(screen.getByTestId('select-message').getAttribute('href')!);
 
-describe('★★ 04 — shift-click picks, a click still opens', () => {
+describe('★★ 04 - shift-click picks, a click still opens', () => {
   it('a plain click picks nobody', async () => {
     list();
     await userEvent.click(screen.getByTestId('open-p1'));
@@ -76,7 +76,7 @@ describe('★★ 04 — shift-click picks, a click still opens', () => {
     });
   });
 
-  it('the bar stands in the foot’s place, inside the card — never over it (measured on dev)', async () => {
+  it('the bar stands in the foot’s place, inside the card - never over it (measured on dev)', async () => {
     const user = userEvent.setup();
     list();
     await user.keyboard('{Shift>}');
@@ -89,7 +89,7 @@ describe('★★ 04 — shift-click picks, a click still opens', () => {
     expect(foot).not.toHaveAttribute('data-picking');
   });
 
-  it('★ Tag: a field and Add — one tag on every identity picked; done, the pick clears', async () => {
+  it('★ Tag: a field and Add - one tag on every identity picked; done, the pick clears', async () => {
     const user = userEvent.setup();
     tagCustomers.mockResolvedValue({ ok: true, tagged: 3 });
     list();

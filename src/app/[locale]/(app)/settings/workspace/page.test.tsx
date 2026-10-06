@@ -46,7 +46,7 @@ import Page from './page';
 const open = async (panel?: string) =>
   render(await Page({ searchParams: Promise.resolve(panel ? { panel } : {}) }));
 
-describe('★ 11 — 11b, 11c and 11d open over it', () => {
+describe('★ 11 - 11b, 11c and 11d open over it', () => {
   it('11 alone: no drawer', async () => {
     await open();
     expect(screen.getByTestId('facts')).toBeInTheDocument();

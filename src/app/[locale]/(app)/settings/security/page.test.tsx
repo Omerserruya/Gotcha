@@ -41,7 +41,7 @@ vi.mock('@/features/security/load-security', () => ({
 
 import Page from './page';
 
-describe('★ 16 — 02’s cards, in 02’s order', () => {
+describe('★ 16 - 02’s cards, in 02’s order', () => {
   it('sign-in policy beside the devices; the audit after; sign-ins last', async () => {
     const { container } = render(await Page());
     const order = [...container.querySelectorAll('section[data-testid]')].map((s) =>
@@ -50,27 +50,27 @@ describe('★ 16 — 02’s cards, in 02’s order', () => {
     expect(order).toEqual(['section-mfa', 'section-sessions', 'section-audit', 'section-logins']);
   });
 
-  it('Google and the session rows are drawn, as "—", with why on their titles', async () => {
+  it('Google and the session rows are drawn, as "-", with why on their titles', async () => {
     render(await Page());
     const mfa = screen.getByTestId('section-mfa');
     const google = within(mfa).getByText('Sign in with Google').closest('[title]');
     const session = within(mfa).getByText('Sign out after inactivity').closest('[title]');
-    expect(google).toHaveTextContent('—');
-    expect(session).toHaveTextContent('—');
+    expect(google).toHaveTextContent('-');
+    expect(session).toHaveTextContent('-');
     // Never "7 days": the platform's session length is not an inactivity timeout.
     expect(session).toHaveAttribute('title', expect.stringMatching(/not an inactivity timeout/));
     expect(mfa).not.toHaveTextContent(/days/);
   });
 });
 
-describe('★ 16 — the devices card’s head counts them', () => {
+describe('★ 16 - the devices card’s head counts them', () => {
   it('"3 devices", from the list it heads', async () => {
     render(await Page());
     expect(screen.getByTestId('sessions-count')).toHaveTextContent(/^3 devices$/);
   });
 });
 
-describe('★ 16 — the audit runs to the frame’s bottom', () => {
+describe('★ 16 - the audit runs to the frame’s bottom', () => {
   it('the section fills, so the audit card can', async () => {
     render(await Page());
     expect(screen.getByTestId('settings-section')).toHaveAttribute('data-fill', 'yes');

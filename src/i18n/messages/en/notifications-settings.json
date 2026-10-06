@@ -1,6 +1,6 @@
 {
   "title": "Notifications",
-  "description": "GOTCHA never pings you for an incoming message — that's what the inbox is for. It tells you when something needs a decision or something broke.",
+  "description": "GOTCHA never pings you for an incoming message - that's what the inbox is for. It tells you when something needs a decision or something broke.",
   "heading": "Who hears about what",
   "family": {
     "work": "Work",
@@ -61,13 +61,13 @@
   },
   "caveat": {
     "integration": {
-      "check_failed": "Fires when someone runs a connection test and the credentials are rejected — not continuous monitoring, and not \"the provider is down\"."
+      "check_failed": "Fires when someone runs a connection test and the credentials are rejected - not continuous monitoring, and not \"the provider is down\"."
     },
     "conversation": {
       "assigned": "Only when a conversation is handed to someone else. Never when they pick one up themselves."
     },
     "broadcast": {
-      "completed": "When every recipient has reached a final state — including the ones that failed."
+      "completed": "When every recipient has reached a final state - including the ones that failed."
     }
   },
   "rule": {
@@ -84,14 +84,14 @@
   "scope": {
     "allTeams": "Every team",
     "team": "{team} only",
-    "unknownTeam": "A team we can't name — it may have been deleted"
+    "unknownTeam": "A team we can't name - it may have been deleted"
   },
   "condition": {
     "only": "Only when {conditions}"
   },
   "flag": {
     "disabled": "Switched off, so nobody is told.",
-    "shadowed": "Not used for a team that has its own rule for this event. GOTCHA uses the team's rule instead of this one — never both.",
+    "shadowed": "Not used for a team that has its own rule for this event. GOTCHA uses the team's rule instead of this one - never both.",
     "unfiring": "GOTCHA never raises this event, so this rule can never fire.",
     "unknownEvent": "GOTCHA doesn't raise an event by this name. It was accepted when it was saved, and it will never match anything.",
     "undeliverable": "{count, plural, =1 {{channels} can be saved but is never delivered.} other {{channels} can be saved but are never delivered.}}",
@@ -121,9 +121,9 @@
     "foot": "Your channels filter what reaches you. Who is told at all is <rules>the workspace's rules</rules>",
     "quiet": {
       "title": "Quiet hours",
-      "window": "{from} – {to}",
+      "window": "{from} - {to}",
       "none": "None set",
-      "note": "One window, every day — no exceptions or days of the week."
+      "note": "One window, every day - no exceptions or days of the week."
     },
     "whatsapp": {
       "title": "Where WhatsApp alerts go",

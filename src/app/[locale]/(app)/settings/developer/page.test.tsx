@@ -22,7 +22,7 @@ vi.mock('@/features/developer/DeveloperScreen', () => ({
 
 import Page from './page';
 
-describe('★ 18 — the bottom row runs to the frame’s bottom', () => {
+describe('★ 18 - the bottom row runs to the frame’s bottom', () => {
   it('the section fills, holding 02’s cards', async () => {
     render(await Page());
     expect(screen.getByTestId('settings-section')).toHaveAttribute('data-fill', 'yes');

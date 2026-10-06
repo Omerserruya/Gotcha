@@ -4,28 +4,28 @@ import type { SetupStatus, SetupStep } from '@/api/contracts/setup';
 /**
  * The derivations behind the day-one block.
  *
- * Pure, so the arithmetic the header states out loud — how many are done, how
- * long the rest takes — can be tested without a translation runtime.
+ * Pure, so the arithmetic the header states out loud - how many are done, how
+ * long the rest takes - can be tested without a translation runtime.
  */
 
 /**
  * Where each step's action goes.
  *
- * "Every step completes inside the sheet it opens — none of them drop the user
+ * "Every step completes inside the sheet it opens - none of them drop the user
  * into Settings and abandon them there." Until those sheets exist, a step
  * points at the page that owns it rather than at a route that does not exist.
  */
 /**
- * Where each step is completed — the screen whose write the server checks
+ * Where each step is completed - the screen whose write the server checks
  * (`services/auth/src/routes/setup-state.ts`). `null`: no screen sets it.
  *
  *   handover_rules   done when the policy has `escalationKeywords` or
  *                    `blockedTopics`. Only Workspace's "Never say" writes
  *                    the second, and that is not a handover rule.
- *   approval_limits  the policy's limits, OR — since backend b3411ed4 — an
+ *   approval_limits  the policy's limits, OR - since backend b3411ed4 - an
  *                    action tool the merchant set to Ask me on 10 (a seed
  *                    does not count). So 10 completes it.
- *   test_conversation  a conversation marked `isTest` — no screen makes one.
+ *   test_conversation  a conversation marked `isTest` - no screen makes one.
  */
 const DESTINATIONS: Record<string, string | null> = {
   connect_channel: '/settings/channels',
@@ -76,7 +76,7 @@ export function setupProgress(status: SetupStatus): SetupProgress {
  * The one step to act on.
  *
  * The server decides it and promises exactly one. If a response ever carries
- * two, the first wins rather than the block raising both — two "do this next"
+ * two, the first wins rather than the block raising both - two "do this next"
  * steps is not a next step at all.
  */
 export function nextStep(status: SetupStatus): SetupStep | null {
@@ -92,7 +92,7 @@ export type HomeFace = 'day-one' | 'gated' | 'ordinary';
  * A workspace still onboarding fails every paid endpoint with a `TENANT_`
  * code, so a gate is reported on exactly the mornings the day-one block exists
  * for. Letting the gate win would replace the block that walks someone through
- * setup with a notice telling them setup is unfinished — true, useless, and a
+ * setup with a notice telling them setup is unfinished - true, useless, and a
  * dead end on the one screen that could fix it.
  *
  * A missing `setup` is the guard rather than a special case: a workspace whose

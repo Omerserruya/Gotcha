@@ -13,7 +13,7 @@ import { logger } from '@/observability/logger';
 const CHANNELS = '/[locale]/(app)/settings/channels';
 
 /**
- * 13f's Approve, "Use this one" and Edit — live (Omer, decision 13): one
+ * 13f's Approve, "Use this one" and Edit - live (Omer, decision 13): one
  * route, the answer always sent (the chosen variant, the edit, or the
  * suggestion as it stands). It goes into the knowledge base that answers
  * customers. The refusals are 08's, already named there.
@@ -57,7 +57,7 @@ export type BulkResult =
   | { readonly ok: true; readonly approved: number; readonly skipped: number }
   | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
 
-/** Adds every ready answer at once — after the owner's second press. */
+/** Adds every ready answer at once - after the owner's second press. */
 export async function addReadyAnswers(importId: string): Promise<BulkResult> {
   try {
     const done = await serverApi().post({
@@ -86,7 +86,7 @@ export type RerunResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: 'not_settled' | 'forbidden' | 'failed' };
 
-/** Runs the analysis again — it clears this report first. After the second press. */
+/** Runs the analysis again - it clears this report first. After the second press. */
 export async function rerunAnalysis(importId: string): Promise<RerunResult> {
   try {
     await serverApi().post({

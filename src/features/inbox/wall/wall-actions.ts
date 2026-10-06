@@ -16,7 +16,7 @@ import { logger } from '@/observability/logger';
 import { loadCopilot, type CopilotRead } from '../load-copilot';
 
 /**
- * The stored suggestions — once when the wall opens on a conversation, and
+ * The stored suggestions - once when the wall opens on a conversation, and
  * again on `copilot.suggestions.updated`. Never on a render, never on a
  * timer. Since Backend 9c5e96cc the GET reads a store and runs no model.
  * `loadCopilot` never throws: it returns which kind of nothing it got.
@@ -26,7 +26,7 @@ export async function readSuggestions(conversationId: string): Promise<CopilotRe
 }
 
 /**
- * The AI's steps here — once when the wall opens; after that each
+ * The AI's steps here - once when the wall opens; after that each
  * `ai.activity.updated` changes its row in place. `null`: unread.
  */
 export async function readActivity(
@@ -55,7 +55,7 @@ export type RefreshRead =
   | { readonly state: 'rate_limited'; readonly retryAfterSeconds: number | null };
 
 /**
- * "Try again" — a model call, metered. Only the button calls this; nothing
+ * "Try again" - a model call, metered. Only the button calls this; nothing
  * calls it on its own, ever.
  */
 export async function refreshSuggestions(conversationId: string): Promise<RefreshRead> {
@@ -86,7 +86,7 @@ export async function refreshSuggestions(conversationId: string): Promise<Refres
 // Strict, as the stream's own: a page that does not parse is a failed read, not an empty one.
 const pageSchema = z.object({ data: z.array(messageSchema) });
 
-/** History, level 3: the whole conversation, to read — never to answer from here. */
+/** History, level 3: the whole conversation, to read - never to answer from here. */
 export async function conversationMessages(
   conversationId: string,
 ): Promise<

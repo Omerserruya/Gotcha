@@ -1,14 +1,14 @@
 import { z } from 'zod';
 
 /**
- * `POST /api/agent/run` — the command surface behind Home's ask box.
+ * `POST /api/agent/run` - the command surface behind Home's ask box.
  *
  * The endpoint answers `text/event-stream`, not JSON. The OpenAPI document
  * types it as the usual `EnvelopeUnknown`, which is wrong rather than merely
  * vague; these shapes come from the handler and from
  * `agent-runtime.service.ts`.
  *
- * Because it is a POST, `EventSource` cannot be used — it only issues GETs.
+ * Because it is a POST, `EventSource` cannot be used - it only issues GETs.
  * See `streamServerSentEvents` for the fetch-based reader.
  */
 
@@ -33,7 +33,7 @@ export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
  * The event union.
  *
  * Every member is `looseObject`: the backend adds fields without versioning,
- * and an unknown key must never fail a parse mid-stream — losing the rest of
+ * and an unknown key must never fail a parse mid-stream - losing the rest of
  * a run because of one new property would be the worst possible trade.
  */
 export const agentEventSchema = z.discriminatedUnion('type', [

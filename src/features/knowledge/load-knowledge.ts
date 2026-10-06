@@ -28,7 +28,7 @@ export interface KnowledgeData {
   readonly sources: readonly KnowledgeSource[] | null;
   readonly unanswered: readonly UnansweredQuestion[] | null;
   /**
-   * Questions the business answered more than one way — the screen's hero.
+   * Questions the business answered more than one way - the screen's hero.
    *
    * `null` when we could not read them, which is distinct from `[]` meaning
    * nothing contradicts itself. The screen says different things for each.
@@ -40,7 +40,7 @@ export interface KnowledgeData {
    * ════════════════════════════════════════════════════════════════════════
    * `false` when there has never been an import.
    *
-   * Conflict detection runs INSIDE the historical-import pipeline —
+   * Conflict detection runs INSIDE the historical-import pipeline -
    * `knowledge-clustering.stage.ts` queries
    * `where: { importId, tenantId, status: "PENDING" }`. It does not watch
    * live conversations and it does not look at a document uploaded
@@ -87,7 +87,7 @@ export async function loadKnowledge(): Promise<KnowledgeData> {
    * There is no tenant-wide read of knowledge candidates: the only list is
    * `/:importId/candidates`, so the import has to land before the conflicts
    * can be asked for. The same shape as 04b's timeline-then-brief, for the
-   * same reason — the key comes out of the previous answer.
+   * same reason - the key comes out of the previous answer.
    *
    * Newest import only. Older ones describe a world the newer one has
    * already re-read, and stacking their conflicts would show a merchant a
@@ -108,7 +108,7 @@ export async function loadKnowledge(): Promise<KnowledgeData> {
         .get({
           endpoint: knowledgeEndpoints.candidates(newest.id),
           payload: candidateListSchema,
-          // `{ candidates, counts }` — `candidates` is a sibling, not the
+          // `{ candidates, counts }` - `candidates` is a sibling, not the
           // payload, so the envelope must not be unwrapped.
           raw: true,
           query: { status: 'PENDING' },
@@ -126,7 +126,7 @@ export async function loadKnowledge(): Promise<KnowledgeData> {
     conflicts: candidates === null ? null : conflictsIn(candidates),
     /*
      * When the scan that produced these actually ran. `completedAt` is the
-     * import's, which is the only timestamp the clustering stage leaves —
+     * import's, which is the only timestamp the clustering stage leaves -
      * and it is the honest answer to "how current is this?", which an empty
      * conflict list cannot answer on its own.
      */

@@ -16,7 +16,7 @@ import { runOrderAction } from './order-actions';
 import styles from './Customers.module.css';
 
 /**
- * Screen 04d's controls — and the state after they run.
+ * Screen 04d's controls - and the state after they run.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ NOTHING HERE IS OPTIMISTIC, AND THE CHIPS PROVE IT
@@ -27,7 +27,7 @@ import styles from './Customers.module.css';
  * returned here."*
  *
  * So after a successful action this renders the chips from
- * `result.order` — the provider's verified state — and never from the action
+ * `result.order` - the provider's verified state - and never from the action
  * that was requested. Pressing Refund does not make a card say "Refunded";
  * the provider saying so makes it say so.
  *
@@ -55,8 +55,8 @@ export function OrderActions({
   readonly conversationId: string;
   /**
    * The Inbox wall's fixed set (02: Refund · Replace). Each is drawn whether
-   * or not this order allows it — disabled, with the platform's reason as
-   * its title, when it does not — so the wall's row has one shape.
+   * or not this order allows it - disabled, with the platform's reason as
+   * its title, when it does not - so the wall's row has one shape.
    */
   readonly only?: readonly OrderAction[];
   readonly label?: (action: OrderAction) => string;
@@ -71,13 +71,13 @@ export function OrderActions({
 
   /*
    * One key per attempt on this order. The service uses it to make a
-   * double-click one operation — the same mechanism as 17d's `intentKey`, and
+   * double-click one operation - the same mechanism as 17d's `intentKey`, and
    * the same trap: minted per click it would be a new operation every time,
    * with identical code and identical appearance.
    *
    * ★★ AND THE CLOCK IS GONE, BECAUSE IT FAILED ON BOTH EDGES.
    * This was `useMemo(() => …Math.floor(Date.now() / 60_000)…)`. A minute
-   * bucket collapses two DELIBERATE presses seconds apart into one refund —
+   * bucket collapses two DELIBERATE presses seconds apart into one refund -
    * and lets the same press a minute later through as a second one. Neither
    * edge is where the customer's intent changes, and React may discard the
    * memo and re-cross either edge on its own.
@@ -85,7 +85,7 @@ export function OrderActions({
    * A ref seeded once per mount is what "one attempt" actually means here:
    * every button is disabled as soon as anything is attempted (see below), so
    * one mount is one decision. Coming back to the order later and pressing
-   * again is a new decision and gets a new key — which is a person deciding,
+   * again is a new decision and gets a new key - which is a person deciding,
    * not a clock.
    */
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -109,7 +109,7 @@ export function OrderActions({
 
   function run(action: OrderAction) {
     // Minted in the handler, so nothing impure runs during a render, and kept
-    // in the ref so a retry — if one ever becomes possible here — carries it.
+    // in the ref so a retry - if one ever becomes possible here - carries it.
     idempotencyKeyRef.current ??= `order:${order.orderId}:${crypto.randomUUID()}`;
     const idempotencyKey = idempotencyKeyRef.current;
 
@@ -122,7 +122,7 @@ export function OrderActions({
 
   /*
    * ★ THE VERIFIED CARD, IF ONE CAME BACK. The chips below are the
-   * provider's, read after the fact — not the ones we would have drawn from
+   * provider's, read after the fact - not the ones we would have drawn from
    * knowing which button was pressed.
    */
   const verified = didExecute(result) ? (result?.order ?? null) : null;
@@ -196,7 +196,7 @@ export function OrderActions({
       ) : null}
 
       {/*
-        ★★ WE DO NOT KNOW. Not "it failed" — the request threw, and on a
+        ★★ WE DO NOT KNOW. Not "it failed" - the request threw, and on a
         refund the honest sentence is the 17d one: do not try again, check,
         and ask. A retry offered here spends somebody's money twice.
       */}

@@ -4,13 +4,13 @@ import { dateIn, endOfDate, expiresAtOf } from './grant-end';
 
 const IL = 'Asia/Jerusalem';
 
-describe('★★ 12e — an end is the last second of a day in the workspace’s zone', () => {
+describe('★★ 12e - an end is the last second of a day in the workspace’s zone', () => {
   it('the day’s own offset: summer +3, winter +2', () => {
     expect(endOfDate('2026-10-05', IL)).toBe('2026-10-05T20:59:59.000Z');
     expect(endOfDate('2026-12-15', IL)).toBe('2026-12-15T21:59:59.000Z');
   });
 
-  it('"7 days" counts calendar days there — late at night UTC is already tomorrow in Israel', () => {
+  it('"7 days" counts calendar days there - late at night UTC is already tomorrow in Israel', () => {
     // 22:30Z on the 5th is 01:30 on the 6th in Israel.
     const now = new Date('2026-10-05T22:30:00Z');
     expect(dateIn(IL, now)).toBe('2026-10-06');

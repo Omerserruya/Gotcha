@@ -1,12 +1,14 @@
 import { z } from 'zod';
 
+import { plainDashes } from '@/lib/plain-dashes';
+
 /**
  * 04's bulk facts (backend 63985641, 01bb7b6e, 0edfd341): what a person is
  * worth, what is going on with them, and who the customers are.
  *
  * ★ "No store" is not "no orders". The commerce routes answer `source: null`
- *   with a reason when they could not look, and that is drawn as "—" with the
- *   reason — never "no orders yet", which would be a claim about the customer.
+ *   with a reason when they could not look, and that is drawn as "-" with the
+ *   reason - never "no orders yet", which would be a claim about the customer.
  */
 
 /** At most this many ids per call, on every one of these routes. */
@@ -62,7 +64,12 @@ export type Mood = (typeof MOODS)[number];
 export const insightSchema = z.object({
   conversationId: z.string().nullable().catch(null).default(null),
   /** One plain sentence from the AI's summary, or `null` (0edfd341). */
-  situation: z.string().nullable().catch(null).default(null),
+  situation: z
+    .string()
+    .nullable()
+    .catch(null)
+    .default(null)
+    .transform((text) => plainDashes(text)),
   inboundCount: z.number().int().nonnegative().catch(0).default(0),
   mood: z.enum(MOODS).nullable().catch(null).default(null),
 });
@@ -76,7 +83,7 @@ export const tagsAnswerSchema = z.object({
   data: z.record(z.string(), z.array(z.string()).catch([])).catch({}),
 });
 
-/** The route's own rule: a tag is 1–40 characters, matched exactly. */
+/** The route's own rule: a tag is 1-40 characters, matched exactly. */
 export const TAG_MAX = 40;
 
 /** What an order number looks like to the route: digits, a `#` allowed. */

@@ -11,7 +11,7 @@ import styles from './Inbox.module.css';
  * what it produces. React has no outbound adapter; the other two belong to
  * the Copilot. A bar of one is still 02's bar.
  *
- * The words come from the server, which renders the stream — this component
+ * The words come from the server, which renders the stream - this component
  * only carries them, so it needs no translations of its own.
  */
 export function ReplyButton({

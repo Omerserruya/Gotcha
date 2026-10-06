@@ -20,7 +20,7 @@ import {
 import styles from './AddKnowledge.module.css';
 
 /**
- * 08b after connecting: each connected Drive or Confluence — what is kept in
+ * 08b after connecting: each connected Drive or Confluence - what is kept in
  * sync, and a plain list to choose more from. 02 draws no picker, so this is
  * the sheet's own shape: rows and checkboxes. Nothing is learned before
  * "Learn these".
@@ -30,7 +30,7 @@ export function ConnectedSources({
   onConnected,
 }: {
   readonly kbId: string;
-  /** Which providers have an active connection — the rows above say "Connected". */
+  /** Which providers have an active connection - the rows above say "Connected". */
   readonly onConnected?: (providers: ReadonlySet<string>) => void;
 }) {
   const t = useTranslations('knowledge.addSheet.sources');

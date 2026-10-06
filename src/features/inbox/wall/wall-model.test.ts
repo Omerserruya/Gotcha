@@ -39,7 +39,7 @@ const ok = (over: Partial<SuggestionsResponse> = {}): CopilotRead =>
     },
   }) satisfies CopilotRead;
 
-describe('★★ suggestionView — every kind of nothing, said apart', () => {
+describe('★★ suggestionView - every kind of nothing, said apart', () => {
   it('cards, and whether the customer wrote since', () => {
     expect(suggestionView(ok())).toMatchObject({ kind: 'cards', stale: false });
     expect(suggestionView(ok({ stale: true }))).toMatchObject({ kind: 'cards', stale: true });
@@ -56,7 +56,7 @@ describe('★★ suggestionView — every kind of nothing, said apart', () => {
       note: 'waiting',
       retry: true,
     });
-    // Not stale and empty: asked, answered, nothing — the ordinary empty case.
+    // Not stale and empty: asked, answered, nothing - the ordinary empty case.
     expect(suggestionView(ok({ data: [] }))).toMatchObject({ note: 'none' });
   });
 
@@ -69,7 +69,7 @@ describe('★★ suggestionView — every kind of nothing, said apart', () => {
     expect(one('no-match')).toMatchObject({ note: 'none' });
   });
 
-  it('★ a refusal by its code — "not built" is never an upgrade', () => {
+  it('★ a refusal by its code - "not built" is never an upgrade', () => {
     const refused = (code: string) =>
       suggestionView({ state: 'refused', refusal: { code } as never });
     expect(refused('FEATURE_NOT_AVAILABLE')).toMatchObject({ note: 'notBuilt', retry: false });
@@ -83,7 +83,7 @@ describe('★★ suggestionView — every kind of nothing, said apart', () => {
   });
 });
 
-describe('canUse — a proposed action is never one click from the composer', () => {
+describe('canUse - a proposed action is never one click from the composer', () => {
   it('a reply with text, yes; an action or a blank, no', () => {
     expect(canUse(s())).toBe(true);
     expect(canUse(s({ type: 'quick_action' }))).toBe(false);
@@ -91,7 +91,7 @@ describe('canUse — a proposed action is never one click from the composer', ()
   });
 });
 
-describe('stepTo — clamped, never wrapped', () => {
+describe('stepTo - clamped, never wrapped', () => {
   it.each([
     [0, -1, 3, 0],
     [0, 1, 3, 1],
@@ -114,7 +114,7 @@ const conv = (channel: string, id = channel): WallConversation => ({
   isCurrent: false,
 });
 
-describe('historyChannels — names for written channels, a count for calls', () => {
+describe('historyChannels - names for written channels, a count for calls', () => {
   it('each written channel once, calls counted', () => {
     const history: WallHistory = {
       total: 24,
@@ -137,7 +137,7 @@ describe('historyChannels — names for written channels, a count for calls', ()
 const order = (over: Partial<OrderCard> = {}) =>
   ({ refund: null, refundedAmount: { amount: null, currency: null }, ...over }) as OrderCard;
 
-describe('★ refundCount — "None" only when every order was read', () => {
+describe('★ refundCount - "None" only when every order was read', () => {
   it('counts refund chips and refunded amounts', () => {
     const orders = [
       order(),
@@ -147,14 +147,14 @@ describe('★ refundCount — "None" only when every order was read', () => {
     expect(refundCount(orders, 3)).toBe(2);
   });
 
-  it('★★ a page of orders is not all of them: null, said as "—"', () => {
+  it('★★ a page of orders is not all of them: null, said as "-"', () => {
     expect(refundCount([order()], 6)).toBeNull();
     expect(refundCount([order()], null)).toBeNull();
     expect(refundCount([order()], 1)).toBe(0);
   });
 });
 
-describe('firstOrder — the troubled one 04d would expand, else the newest', () => {
+describe('firstOrder - the troubled one 04d would expand, else the newest', () => {
   it('its index, or 0', () => {
     const a = order();
     const b = order();
@@ -163,7 +163,7 @@ describe('firstOrder — the troubled one 04d would expand, else the newest', ()
   });
 });
 
-describe('factLabel — a field key as words', () => {
+describe('factLabel - a field key as words', () => {
   it.each([
     ['business_type', 'Business type'],
     ['preferred-size', 'Preferred size'],
@@ -185,7 +185,7 @@ describe('saysRecommended', () => {
   });
 });
 
-describe('★★ ordersView — one source, never two', () => {
+describe('★★ ordersView - one source, never two', () => {
   const ctx = {
     state: 'ok',
     missing: [],
@@ -193,7 +193,7 @@ describe('★★ ordersView — one source, never two', () => {
     data: { recentOrders: [order()] },
   } as never;
 
-  it('by contact when it was read — Woo, Shopify, or a reason', () => {
+  it('by contact when it was read - Woo, Shopify, or a reason', () => {
     expect(
       ordersView({ source: 'woocommerce', state: null, reason: null, orders: [] }, ctx),
     ).toMatchObject({

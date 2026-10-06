@@ -17,8 +17,8 @@ import { KnowledgeScreen } from './KnowledgeScreen';
  *
  * The flag is still correct: **there is no unique index on
  * `(tenant_id, name)`**, so two same-named sources in ONE tenant are
- * possible. It is correct and currently unreachable — the same state screen
- * 04's people-collapse is in — so it is checked here rather than dropped.
+ * possible. It is correct and currently unreachable - the same state screen
+ * 04's people-collapse is in - so it is checked here rather than dropped.
  *
  * A capture test asserting something this tenant cannot produce is a test
  * that fails for being honest.
@@ -26,7 +26,7 @@ import { KnowledgeScreen } from './KnowledgeScreen';
 
 /*
  * `getTranslations` is server-only and throws in this environment, so the
- * server helpers are backed by next-intl's own non-React builders — fed the
+ * server helpers are backed by next-intl's own non-React builders - fed the
  * REAL message catalogue. The assertions below therefore check the copy a
  * reader sees, not translation keys: a test that asserted `sources.sameName`
  * would keep passing after the sentence was rewritten into something wrong.
@@ -117,8 +117,8 @@ describe('a date, never a verdict', () => {
   });
 
   it('renders no freshness judgement of any kind', async () => {
-    // There is no staleness policy in the platform — no threshold, no field,
-    // no job — so "Fresh" would be a verdict needing a rule nobody wrote.
+    // There is no staleness policy in the platform - no threshold, no field,
+    // no job - so "Fresh" would be a verdict needing a rule nobody wrote.
     await renderScreen([source()]);
     expect(document.body.textContent).not.toMatch(/\bfresh\b|out of date|up to date|stale/i);
   });

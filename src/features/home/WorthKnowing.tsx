@@ -7,7 +7,7 @@ import { channelName } from '@/api/contracts/inbox';
 import styles from './Home.module.css';
 
 /**
- * "Worth knowing" — one thing GOTCHA noticed, on Home's right column.
+ * "Worth knowing" - one thing GOTCHA noticed, on Home's right column.
  *
  * The insight arrives as `kind` + `values`; the sentence is written here. It
  * used to arrive as composed English prose with the numbers already inside it,
@@ -75,7 +75,7 @@ export function kindKey(kind: string): string {
  * `readableValues` replaces it and lives in `contracts/capabilities` on
  * purpose: **the hole is the spread, and the spread is a pattern, not a site.**
  * Repairing `{channel}` here would have fixed today's screenshot and left the
- * next `kind` — and the next placeholder added to an existing message — with
+ * next `kind` - and the next placeholder added to an existing message - with
  * the same free pass.
  *
  * The resolver is only for `channel`, because `channels.json` is translated and
@@ -86,7 +86,7 @@ export function kindKey(kind: string): string {
  * ── ONE CORRECTION TO THE REPORT THAT FOUND THIS ──
  * `department.load_imbalance` was expected to carry a department identifier the
  * same way. Its message says "one department" and interpolates no name, so it
- * does not — today. That is a fact about one string in one catalogue, which is
+ * does not - today. That is a fact about one string in one catalogue, which is
  * exactly the kind of thing that changes without anyone thinking about this
  * file, and it is why the fix is at the spread anyway.
  */

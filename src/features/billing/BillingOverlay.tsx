@@ -7,7 +7,7 @@ import { Link } from '@/i18n/navigation';
 import styles from './Billing.module.css';
 
 /**
- * 17c, 17d and 17e open over 17 — a drawer from the end (When credits run
+ * 17c, 17d and 17e open over 17 - a drawer from the end (When credits run
  * low, Billing details) or a dialog in the middle (Buy credits), on 02's
  * scrim. The URL holds the state (`?panel=`), so the scrim and the X are both
  * the way back to 17.

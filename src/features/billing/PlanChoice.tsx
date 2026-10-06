@@ -25,7 +25,7 @@ function amountOf(plan: CatalogPlan): number | null {
 
 /**
  * 17b's cards: every plan on offer, side by side. Yours is the dark one;
- * the one you picked has the heavy border. Picking is a link (`?plan=`) —
+ * the one you picked has the heavy border. Picking is a link (`?plan=`) -
  * nothing is changed by choosing, only by the button under the summary.
  */
 export async function PlanCards({
@@ -44,7 +44,7 @@ export async function PlanCards({
   if (catalog.length === 0) {
     return (
       <p className={styles.choiceNone} data-testid="plan-cards-none" title={t('noCatalog')}>
-        —
+        -
       </p>
     );
   }
@@ -79,7 +79,7 @@ export async function PlanCards({
               </span>
             </span>
             <span className={styles.choicePriceRow}>
-              <span className={styles.choicePrice}>{price ?? '—'}</span>
+              <span className={styles.choicePrice}>{price ?? '-'}</span>
               {price && plan.billingInterval?.toUpperCase() === 'MONTHLY' ? (
                 <span className={styles.choicePer}>{t('perMonth')}</span>
               ) : null}
@@ -135,9 +135,9 @@ export async function PlanCards({
 
 /**
  * "What happens if you switch today", worked out from the catalog and the
- * subscription — not a quote. A move down takes effect at renewal and costs
+ * subscription - not a quote. A move down takes effect at renewal and costs
  * nothing now (`changePlan` writes `effectiveAt` = the period end). A move up
- * is charged now, prorated, and only the server works that out: "—" until
+ * is charged now, prorated, and only the server works that out: "-" until
  * the switch is real.
  */
 export async function SwitchSummary({
@@ -184,7 +184,7 @@ export async function SwitchSummary({
         {
           key: 'from',
           label: renewal ? t('summary.from', { date: renewal }) : t('summary.atRenewal'),
-          value: price ? t('summary.perMonth', { price }) : '—',
+          value: price ? t('summary.perMonth', { price }) : '-',
           note: t('summary.eachCycle', { credits: number.format(target.includedCredits) }),
         },
       ]
@@ -192,7 +192,7 @@ export async function SwitchSummary({
         {
           key: 'charged',
           label: t('summary.chargedNow'),
-          value: '—',
+          value: '-',
           title: t('summary.prorated'),
         },
         {
@@ -200,12 +200,12 @@ export async function SwitchSummary({
           label: t('summary.creditsNow'),
           value: current
             ? `+ ${number.format(creditsGrantedOnUpgrade(target.includedCredits, current.includedCredits))}`
-            : '—',
+            : '-',
         },
         {
           key: 'from',
           label: t('summary.fromToday'),
-          value: price ? t('summary.perMonth', { price }) : '—',
+          value: price ? t('summary.perMonth', { price }) : '-',
           note: t('summary.eachCycle', { credits: number.format(target.includedCredits) }),
         },
       ];
@@ -232,7 +232,7 @@ export async function SwitchSummary({
 
 /**
  * 02's button column. The switch is drawn and not live: nothing on this
- * screen writes a plan change yet, and the one that does moves money — it
+ * screen writes a plan change yet, and the one that does moves money - it
  * waits on Omer. "Keep" is the way back.
  */
 export async function SwitchActions({
@@ -269,7 +269,7 @@ export async function SwitchActions({
         {methods === null
           ? null
           : card
-            ? t('chargedTo', { brand: card.brand ?? t('card'), last4: card.last4 ?? '—' })
+            ? t('chargedTo', { brand: card.brand ?? t('card'), last4: card.last4 ?? '-' })
             : t('noCard')}{' '}
         {t('downAtRenewal')}
       </p>

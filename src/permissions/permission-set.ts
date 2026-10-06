@@ -4,7 +4,7 @@
  * ── The rule is EXACT MATCH ────────────────────────────────────────────────
  * Confirmed against `services/auth/src/routes/permissions.ts`:
  *
- *   - the format is always `domain:resource:action` — three parts, never two,
+ *   - the format is always `domain:resource:action` - three parts, never two,
  *     never four;
  *   - there are **no wildcards** in a granted set;
  *   - there is **no implication**: holding `conversation:messages` grants

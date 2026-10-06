@@ -8,7 +8,7 @@ import { CustomerDetail } from './CustomerDetail';
 import type { CustomerDetail as Detail } from './load-customer';
 
 /**
- * Screen 04b — and every assertion here is about a LIMIT.
+ * Screen 04b - and every assertion here is about a LIMIT.
  *
  * The screen's content is mostly the platform's own prose. What this file
  * guards is the set of things the screen must never imply: that the timeline
@@ -16,7 +16,7 @@ import type { CustomerDetail as Detail } from './load-customer';
  * or that a remembered fact can be traced to its conversation.
  *
  * Each of those is a sentence that is easy to delete and impossible to notice
- * missing — the page still renders, reads well, and is wrong.
+ * missing - the page still renders, reads well, and is wrong.
  */
 
 /*
@@ -76,7 +76,7 @@ const show = async (d: Detail) => render(await CustomerDetail({ detail: d }));
 describe('★★ the timeline must never claim to be a history', () => {
   it('★★ says how many of the total are shown, not just how many are shown', async () => {
     /*
-     * The sentence this replaces named 50 conversations × 5 messages — a
+     * The sentence this replaces named 50 conversations × 5 messages - a
      * shape that no longer exists, and that was the WRONG limit even then.
      * The old route thinned rather than truncated, so the stream had holes in
      * the middle of every conversation and an honest-sounding "showing recent
@@ -118,7 +118,7 @@ describe('★★ the timeline must never claim to be a history', () => {
 
   it('★★ labels an imported message as imported', async () => {
     /*
-     * Until today the timeline excluded imported history entirely —
+     * Until today the timeline excluded imported history entirely -
      * `applyLiveByDefault` injects `origin: "LIVE"` into any read that does
      * not mention origin, and this route never did. A customer with years of
      * imported WhatsApp rendered as brand new, confidently, with no marker.
@@ -179,7 +179,7 @@ describe('★★ the timeline must never claim to be a history', () => {
   it("★★ renders the server's coverage, including AVAILABLE-but-incomplete", async () => {
     /*
      * `available: true` is not the same as complete. `ai_action` carries a
-     * detail saying ToolExecution records catalog HTTP tools only — so a
+     * detail saying ToolExecution records catalog HTTP tools only - so a
      * Shopify refund the AI performed is NOT in this list, and Backend's own
      * note says the gap is invisible from the data.
      *
@@ -219,7 +219,7 @@ describe('★★ the timeline must never claim to be a history', () => {
         },
       }),
     );
-    // The PARTIAL one — the dangerous one.
+    // The PARTIAL one - the dangerous one.
     expect(screen.getByTestId('coverage-ai_action')).toHaveTextContent(/not recorded here/i);
     // And the absent one.
     expect(screen.getByTestId('coverage-order')).toHaveTextContent(/own screen/i);
@@ -311,7 +311,7 @@ describe('★★ the timeline must never claim to be a history', () => {
   it('still says the cross-channel part IS real, because it is', async () => {
     // The route follows `mergedIntoId`, gathers sibling contacts and includes
     // aliases preserved from prior merges. That is the hard part and it is
-    // done — hedging it would undersell the one claim that holds.
+    // done - hedging it would undersell the one claim that holds.
     await show(detail());
     expect(screen.getByTestId('timeline-scope')).toHaveTextContent(/every channel/i);
   });
@@ -321,7 +321,7 @@ describe('★★ nothing here offers a note', () => {
   it('★★ notes are READ-ONLY, and the page says why rather than offering a box', async () => {
     /*
      * This screen first shipped saying notes were not recorded. That was
-     * wrong — `POST /conversations/:id/notes` is a demo stub, but
+     * wrong - `POST /conversations/:id/notes` is a demo stub, but
      * `crm-panel.ts:690` calls `adapter.createNote` for real. GOTCHA does not
      * store notes; the merchant's CRM does.
      *
@@ -341,7 +341,7 @@ describe('★★ nothing here offers a note', () => {
     expect(container.querySelector('button')).toBeNull();
   });
 
-  it('★ two blockers, two repairs — never one sentence for both', async () => {
+  it('★ two blockers, two repairs - never one sentence for both', async () => {
     /*
      * The 14d call, and it applies here because there IS a repair a merchant
      * can perform. Sending somebody to connect a CRM they already have is
@@ -398,7 +398,7 @@ describe('★★ nothing here offers a note', () => {
   it('never renders a tenure line', async () => {
     /*
      * Three fields look like tenure and all three undersell a long-standing
-     * customer — `customer-card.ts` names them itself. A line saying a
+     * customer - `customer-card.ts` names them itself. A line saying a
      * three-year customer joined today is worse than no line.
      */
     await show(detail());
@@ -428,7 +428,7 @@ describe('★ what GOTCHA remembers, and what it cannot tell you about it', () =
               text: 'Had a delayed shipment in March.',
               category: 'service',
               confidence: 'high',
-              // Present now, and still not drawn — the conversations behind
+              // Present now, and still not drawn - the conversations behind
               // these carry origin HISTORICAL_IMPORT and a read that does not
               // name an origin returns nothing.
               evidenceConversationIds: ['conv-abc'],
@@ -442,7 +442,7 @@ describe('★ what GOTCHA remembers, and what it cannot tell you about it', () =
       },
     });
 
-  it('shows block-level provenance — where the whole set came from', async () => {
+  it('shows block-level provenance - where the whole set came from', async () => {
     await show(withMemory());
     const source = screen.getByTestId('memory-source');
     expect(source).toHaveTextContent(/historical_whatsapp_import/);
@@ -452,7 +452,7 @@ describe('★ what GOTCHA remembers, and what it cannot tell you about it', () =
   it('★★ says a single fact cannot be traced, and draws no link', async () => {
     /*
      * `evidenceConversationIds` is written on every fact and returned by NO
-     * route — the reachable endpoint projects each fact to text, category
+     * route - the reachable endpoint projects each fact to text, category
      * and confidence. So 04b's "each traceable to where it was learned"
      * cannot be honoured.
      *
@@ -465,7 +465,7 @@ describe('★ what GOTCHA remembers, and what it cannot tell you about it', () =
      * ★ THE CLAIM CHANGED WHEN BACKEND ADDED THE FIELD.
      *
      * It used to be "we don't record which conversation this came from".
-     * Now we do — and the conversations carry origin HISTORICAL_IMPORT,
+     * Now we do - and the conversations carry origin HISTORICAL_IMPORT,
      * which `applyLiveByDefault` filters out of any read that does not name
      * an origin. So a link would open an empty conversation.
      *
@@ -480,7 +480,7 @@ describe('★ what GOTCHA remembers, and what it cannot tell you about it', () =
     // No anchor anywhere: the ids are present and must not become links.
     expect(container.querySelector('a')).toBeNull();
 
-    // The window belongs to the SET, never to a fact — every fact in a row
+    // The window belongs to the SET, never to a fact - every fact in a row
     // carries identical firstSeen/lastSeen, so per fact it would be a date
     // the data cannot support.
     expect(screen.getByTestId('memory-window')).toHaveTextContent(/observed between/i);
@@ -547,7 +547,7 @@ describe('★★ a person who has never written is a state, not four blank panel
   it('★★ does NOT italicise the canned string as a character study', async () => {
     /*
      * The route returns `ok: true` with "New customer with no recorded prior
-     * interactions." — correct on their side, since a contact with no
+     * interactions." - correct on their side, since a contact with no
      * history is ordinary rather than an error.
      *
      * But rendering it in the serif italic this screen reserves for a written

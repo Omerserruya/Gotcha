@@ -44,7 +44,7 @@ describe('★ which system 10 shows', () => {
     expect(picked.actions).toEqual([]);
   });
 
-  it('★★ an unknown or absent system falls back — never an empty detail', () => {
+  it('★★ an unknown or absent system falls back - never an empty detail', () => {
     for (const wanted of ['nope', undefined]) {
       // The first CONNECTED system that brings actions: not `empty`, not `hubspot`.
       expect(selectSystem(wanted, CAPS, SYSTEMS).selected).toBe('shopify');

@@ -23,7 +23,7 @@
    *     frame     width:1440px height:900px padding:12px radius:26px  #121212
    *     editorial width:508px  flex:none    padding:32px 34px
    *
-   * It was 460px — 48px narrow, which is what "the left column is too narrow"
+   * It was 460px - 48px narrow, which is what "the left column is too narrow"
    * was. Omer read it off the screen; this is the same finding with the
    * design's number attached.
    *
@@ -34,7 +34,7 @@
    *   IT. `34px` appears nowhere else in the product; carrying it would mean a
    *   one-screen token or a raw literal beside a scale that exists to stop
    *   exactly that. 2px of inline padding against 48px of width is a different
-   *   order of thing — but it IS a deviation from "stick to the design", so it
+   *   order of thing - but it IS a deviation from "stick to the design", so it
    *   is written here rather than absorbed silently. Reported alongside.
    */
   /*
@@ -46,7 +46,7 @@
    * our background, nothing drawn.
    *
    * ★ It is the finishing hop's own page. `FinishSignIn` rendered a hidden
-   *   marker and nothing else — and a test of mine asserted exactly that,
+   *   marker and nothing else - and a test of mine asserted exactly that,
    *   because at the time the component had nothing to say. **The design was
    *   the defect**, not a regression against it.
    *
@@ -56,7 +56,7 @@
    *
    * ⚠ NO ENTRANCE ANIMATION, DELIBERATELY. The give-up path navigates away,
    *   sometimes in 200ms, and a loader that fades in over 300ms would flash
-   *   and be torn out — worse than the blank it replaces. It is stable across
+   *   and be torn out - worse than the blank it replaces. It is stable across
    *   both outcomes because it does not move.
    */
   .finishing {
@@ -72,7 +72,7 @@
 
   .finishingWord {
     font-size: var(--font-size-meta);
-    /* On the DARK frame, so not `--text-subtle` — that is the light-card
+    /* On the DARK frame, so not `--text-subtle` - that is the light-card
        role, and reaching for it here is the eyebrow mistake from this
        morning. */
     color: var(--frame-text-muted);
@@ -84,7 +84,7 @@
     display: flex;
     flex-direction: column;
     /*
-     * 00a: `padding:32px 34px 32px 34px`. The inline pair is 34, not 32 —
+     * 00a: `padding:32px 34px 32px 34px`. The inline pair is 34, not 32 -
      * taken to the nearest existing step before `--space-34` existed.
      */
     padding-block: var(--space-32);
@@ -113,7 +113,7 @@
    * The rotating panel.
    *
    * Three statements share one 250px box, each fading up and out on a 15s
-   * cycle offset by 5s — so one is always settled and the change is a roll
+   * cycle offset by 5s - so one is always settled and the change is a roll
    * rather than a flicker. Absolutely positioned so the box does not resize
    * as the lines change length.
    */
@@ -176,7 +176,7 @@
 
   /*
    * ═════════════════════════════════════════════════════════════════════════
-   * ★★ "WITH THE POSITION MARKED BY THREE TICKS" — 00a, VERBATIM
+   * ★★ "WITH THE POSITION MARKED BY THREE TICKS" - 00a, VERBATIM
    * ═════════════════════════════════════════════════════════════════════════
    * The rotation shipped; the ticks did not. Sizes, colour and timing are the
    * design's own values, read out of `Directions.dc.html` rather than chosen:
@@ -189,7 +189,7 @@
    * ★ CSS and not state, because the slides are CSS too. A tick driven from
    *   React would need a timer that agrees with an animation it cannot see,
    *   and the two would drift apart on any frame drop or tab suspension. One
-   *   cycle, one clock, three delays — the ticks cannot disagree with the
+   *   cycle, one clock, three delays - the ticks cannot disagree with the
    *   slides because they are on the same one.
    *
    * ★ `#f7f5f1` is `--frame-text`, which is the same value. The token is used
@@ -197,7 +197,7 @@
    *   changes.
    */
   /*
-   * ⚠ THE TICKS SIT IN THE STATUS ROW, NOT ABOVE IT — CORRECTED.
+   * ⚠ THE TICKS SIT IN THE STATUS ROW, NOT ABOVE IT - CORRECTED.
    * I first built this as its own block with an invented 8px gap. The mock is
    * one footer row holding four things:
    *
@@ -223,7 +223,7 @@
    * The rule between the position marker and the status line: `1×12px`.
    *
    * ⚠ The design's value is `#2E2E2E`; this is `--frame-line` (`#333`). Five
-   *   values apart and role-correct — a rule on the dark frame — where a raw
+   *   values apart and role-correct - a rule on the dark frame - where a raw
    *   `#2e2e2e` would be the one hard-coded colour on a screen whose every
    *   other colour is a token. Named rather than absorbed.
    */
@@ -273,7 +273,7 @@
 
   /*
    * Reduced motion: no travel, no fade, no cycle. Someone who asked their
-   * system to stop animating gets the first statement and nothing moving —
+   * system to stop animating gets the first statement and nothing moving -
    * cycling text they cannot stop is worse than a single line.
    */
   @media (prefers-reduced-motion: reduce) {
@@ -292,7 +292,7 @@
     /*
      * ★ THE TICKS STAY, AND THE FIRST ONE STAYS LIT. The panel holds on
      *   statement one, so one of three marked is the true picture. Hiding them
-     *   would be tidier and would say something false — that there is nothing
+     *   would be tidier and would say something false - that there is nothing
      *   else to see.
      */
     .editorialTick {
@@ -308,12 +308,12 @@
    * ★★ 390px, AND THIS IS PROBABLY WHAT "TOO NARROW" MEANT.
    *
    * The mock: `font-size:13.5px; line-height:1.65; color:#A29D95;
-   * max-width:390px`. Ours was 340px — fifty pixels, 13% narrower, on the
+   * max-width:390px`. Ours was 340px - fifty pixels, 13% narrower, on the
    * paragraph inside the panel.
    *
    * Omer said "the width of the left side with the changing sentences is too
    * narrow". That was read as the panel and the panel was widened 460→508,
-   * which was also right — but **the element he was pointing at is this one**,
+   * which was also right - but **the element he was pointing at is this one**,
    * and it was still short afterwards. Two different widths, one sentence,
    * and the first fix would have looked like it missed.
    */
@@ -322,7 +322,7 @@
      * ════════════════════════════════════════════════════════════════════
      * 00a AND 00b: `font-size:13.5px; line-height:1.65; color:#A29D95`
      * ════════════════════════════════════════════════════════════════════
-     * The `bodySm` role gives 13px and 1.6, so BOTH were a step off — and
+     * The `bodySm` role gives 13px and 1.6, so BOTH were a step off - and
      * the colour was already right, which is what made the other two easy
      * to miss.
      *
@@ -341,7 +341,7 @@
    * `--text-subtle` (#8c887f), correct on a light surface and several steps
    * too light on the dark frame.
    *
-   * ★ `--frame-text-eyebrow` IS #6e6a63 and already exists — the shell and
+   * ★ `--frame-text-eyebrow` IS #6e6a63 and already exists - the shell and
    *   the home screen both read it. This panel was the one dark-framed place
    *   that did not.
    *
@@ -385,7 +385,7 @@
   }
 
   /*
-   * 00a: `width:400px`. 00b: `width:430px` — see the rule below.
+   * 00a: `width:400px`. 00b: `width:430px` - see the rule below.
    */
   .form {
     inline-size: 400px;
@@ -406,7 +406,7 @@
    *
    * Had they been hard-coded to the 60px the mock happens to show, this line
    * would have widened the column and left them stranded in the middle of it
-   * — the same "stops short of the button" defect, reversed.
+   * - the same "stops short of the button" defect, reversed.
    */
   .form[data-screen='secondFactor'] {
     inline-size: 430px;

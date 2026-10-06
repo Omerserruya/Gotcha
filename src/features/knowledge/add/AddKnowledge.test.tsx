@@ -64,8 +64,8 @@ const sheet = (initialWay?: AddWay) =>
     </NextIntlClientProvider>,
   );
 
-describe('★★ 08b — the ways in the platform has, and nothing that sends', () => {
-  it('five ways, document first and chosen — no product catalogue (Omer, 2026-09-26)', () => {
+describe('★★ 08b - the ways in the platform has, and nothing that sends', () => {
+  it('five ways, document first and chosen - no product catalogue (Omer, 2026-09-26)', () => {
     sheet();
     expect(screen.getAllByRole('radio').map((r) => r.getAttribute('data-testid'))).toEqual(
       ADD_WAYS.map((w) => `add-way-${w}`),
@@ -94,9 +94,9 @@ describe('★★ 08b — the ways in the platform has, and nothing that sends', 
     expect(screen.getByTestId('add-url')).toHaveValue('https://example.com/terms');
   });
 
-  it('from a conversation: "—", and where past conversations are learned', () => {
+  it('from a conversation: "-", and where past conversations are learned', () => {
     sheet('conversation');
-    expect(screen.getByTestId('add-pin')).toHaveTextContent('—');
+    expect(screen.getByTestId('add-pin')).toHaveTextContent('-');
     expect(screen.getByTestId('add-pin')).toHaveAttribute(
       'title',
       expect.stringMatching(/history import in Settings · Channels/),
@@ -107,7 +107,7 @@ describe('★★ 08b — the ways in the platform has, and nothing that sends', 
     sheet();
     const card = screen.getByTestId('add-learned');
     expect(card).toHaveTextContent('What it learned');
-    expect(screen.getByTitle(/Nothing previews what a source teaches/)).toHaveTextContent('—');
+    expect(screen.getByTitle(/Nothing previews what a source teaches/)).toHaveTextContent('-');
     expect(card.textContent).not.toMatch(/New|Disagrees|Replaces/);
   });
 
@@ -118,7 +118,7 @@ describe('★★ 08b — the ways in the platform has, and nothing that sends', 
   });
 });
 
-describe('★★ 08b live (Omer, 2026-10-04) — and nothing is sent without the button', () => {
+describe('★★ 08b live (Omer, 2026-10-04) - and nothing is sent without the button', () => {
   const live = (initialWay?: AddWay, base: KnowledgeBaseRef = { id: 'kb1' }) =>
     render(
       <NextIntlClientProvider locale="en" messages={{ knowledge }}>
@@ -144,7 +144,7 @@ describe('★★ 08b live (Omer, 2026-10-04) — and nothing is sent without the
       { way: 'text', title: 'Trade discount', body: '40% from 12 units' },
       'Knowledge',
     );
-    // Being read — never "learned": the platform embeds it in the background.
+    // Being read - never "learned": the platform embeds it in the background.
     expect(screen.getByTestId('add-added')).toHaveTextContent('Trade discount');
     expect(screen.getByTestId('add-added')).toHaveTextContent('Being read');
     expect(refresh).toHaveBeenCalled();
@@ -167,7 +167,7 @@ describe('★★ 08b live (Omer, 2026-10-04) — and nothing is sent without the
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('a document: what the platform reads, up to 10 MB — anything else refused here', async () => {
+  it('a document: what the platform reads, up to 10 MB - anything else refused here', async () => {
     addKnowledge.mockResolvedValue({ ok: true, title: 'Terms', status: 'pending' });
     live('document');
     const picker = screen.getByTestId('add-file');
@@ -190,7 +190,7 @@ describe('★★ 08b live (Omer, 2026-10-04) — and nothing is sent without the
   });
 });
 
-describe('★★ Drive and Confluence — at the provider, and back here (backend df9ee4cd)', () => {
+describe('★★ Drive and Confluence - at the provider, and back here (backend df9ee4cd)', () => {
   const assign = vi.fn();
   beforeEach(() => {
     startKnowledgeConnect.mockReset();
@@ -207,7 +207,7 @@ describe('★★ Drive and Confluence — at the provider, and back here (backen
     </NextIntlClientProvider>
   );
 
-  it('Connect asks for the provider’s page, then goes there — only on the click', async () => {
+  it('Connect asks for the provider’s page, then goes there - only on the click', async () => {
     startKnowledgeConnect.mockResolvedValue({
       ok: true,
       url: 'https://accounts.google.com/o/oauth2/auth?x',
@@ -253,7 +253,7 @@ describe('★★ Drive and Confluence — at the provider, and back here (backen
     );
     rerender(drive(null));
     expect(screen.getByTestId('add-landing')).toHaveTextContent(
-      'You cancelled at Google — nothing was connected.',
+      'You cancelled at Google - nothing was connected.',
     );
   });
 
@@ -270,7 +270,7 @@ describe('★★ Drive and Confluence — at the provider, and back here (backen
   });
 });
 
-describe('★ a connected source says so on its row — not a bare Connect', () => {
+describe('★ a connected source says so on its row - not a bare Connect', () => {
   it('Drive connected: "Connected · Add another account"; Confluence still offers Connect', async () => {
     connected.providers = new Set(['google_drive']);
     render(

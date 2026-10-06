@@ -12,23 +12,23 @@ import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
- * Overrides on one person — screen 12e.
+ * Overrides on one person - screen 12e.
  *
  * ── TWO FUNCTIONS, NOT ONE WITH A FLAG ──
  * `PUT /users/:userId/grants/:feature` takes `{ granted, reason }`, so a
  * single call could do both. It is split here because **adding and removing
- * are not two directions of one action — they are two actions with opposite
+ * are not two directions of one action - they are two actions with opposite
  * visibility.**
  *
  * An addition is self-evidencing: someone has a capability their role does
  * not give, and it shows the moment they use it. **A removal is invisible
  * everywhere except the person panel.** The role says they can refund, they
- * are listed under that role, and they cannot refund — and nothing they or
+ * are listed under that role, and they cannot refund - and nothing they or
  * anyone else looks at will explain why.
  *
  * A shared function with a boolean makes them look symmetrical at every call
  * site, and **a control one click from its opposite will eventually be
- * clicked by someone who meant the other** — silently, for exactly the case
+ * clicked by someone who meant the other** - silently, for exactly the case
  * that is already silent.
  */
 
@@ -98,17 +98,17 @@ async function write(
 }
 
 /**
- * Create a role — screen 12c.
+ * Create a role - screen 12c.
  *
  * The design: *"You start from an existing role and only touch what's
- * different."* That is not a server concept — `POST /permissions/roles` takes
+ * different."* That is not a server concept - `POST /permissions/roles` takes
  * `{ name, description, features }` and knows nothing about a source. Starting
  * from a role means seeding the selection from its features and sending the
  * result, which is one call rather than a copy plus an edit.
  *
  * Two refusals worth distinguishing, because they need different actions:
  * **409** is a name already in use, and **400** names the unknown features it
- * rejected — a feature key the catalogue offered but the server does not
+ * rejected - a feature key the catalogue offered but the server does not
  * grant, which is a drift between the two and not something the person typed.
  */
 export type CreateRoleResult =

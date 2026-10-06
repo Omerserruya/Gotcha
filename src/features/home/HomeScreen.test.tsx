@@ -26,7 +26,7 @@ import { StatusStrip } from './StatusStrip';
 import { TeamPanel } from './TeamPanel';
 import { WorthKnowing } from './WorthKnowing';
 
-/** Every element of a type, shallow — the children are not rendered. */
+/** Every element of a type, shallow - the children are not rendered. */
 function all<P>(
   node: ReactNode,
   test: (e: ReactElement<P>) => boolean,
@@ -104,8 +104,8 @@ const screen = async (over: Record<string, unknown> = {}) => {
 beforeEach(() => vi.useFakeTimers({ now: new Date(2026, 9, 3, 19, 0) }));
 afterEach(() => vi.useRealTimers());
 
-describe('★★ 01b — a quiet day', () => {
-  it('two columns: the work, then the dark card over the team — no Worth knowing', async () => {
+describe('★★ 01b - a quiet day', () => {
+  it('two columns: the work, then the dark card over the team - no Worth knowing', async () => {
     const tree = await screen();
     expect(
       all(tree, (e) => (e.props as { className?: string }).className === styles.columnsQuiet),
@@ -123,7 +123,7 @@ describe('★★ 01b — a quiet day', () => {
     expect(text).not.toContain('greeting.quiet.morning');
   });
 
-  it('★ 02: "Quiet evening, Maya" — the name on every face, from /api/auth/me', async () => {
+  it('★ 02: "Quiet evening, Maya" - the name on every face, from /api/auth/me', async () => {
     firstName.value = 'Maya';
     try {
       const quiet = JSON.stringify(await screen());
@@ -179,7 +179,7 @@ describe('★ a busy day is three columns, with Worth knowing', () => {
   });
 });
 
-describe('★★ 01c — day one: the same Home, its own head', () => {
+describe('★★ 01c - day one: the same Home, its own head', () => {
   const setup = {
     steps: [
       { id: 'connect_channel', state: 'done', blockedBy: [], estimateMinutes: 5 },
@@ -198,7 +198,7 @@ describe('★★ 01c — day one: the same Home, its own head', () => {
     pendingTopics: [],
   };
 
-  it('the status line is "not live" and the trial — never "replies only to your team"', async () => {
+  it('the status line is "not live" and the trial - never "replies only to your team"', async () => {
     const tree = await screen({ setup, ingest, isQuiet: false });
     const [strip] = all<{ dayOne: unknown }>(tree, (e) => e.type === StatusStrip);
     expect(strip?.props.dayOne).toEqual({ trialDays: 14, setupCallUrl: null });

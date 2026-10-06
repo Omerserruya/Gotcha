@@ -6,14 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THIS FILE EXISTS TO STOP THE WATERFALL COMING BACK
  * ════════════════════════════════════════════════════════════════════════════
- * Measured 2026-10-01: the inbox's TTFB was 738 ms against a 317 ms floor —
+ * Measured 2026-10-01: the inbox's TTFB was 738 ms against a 317 ms floor -
  * 420 ms of fetching, with ZERO API calls from the browser. The cause was
  * three sequential rounds where two would do: `queue` was awaited alone, and
  * `me`/`colleagues`/`greeting` waited behind a result none of them reads.
  *
  * ★ EVERY OTHER TEST HERE PASSES WHETHER THE CALLS ARE SERIAL OR PARALLEL.
  *   They assert the data, and the data is identical either way. Only the
- *   ORDER is the fix, so only a test about order can protect it — otherwise
+ *   ORDER is the fix, so only a test about order can protect it - otherwise
  *   the next person to add a read awaits it and nothing goes red.
  */
 const get = vi.hoisted(() => vi.fn());
@@ -47,7 +47,7 @@ describe('⚠⚠ two rounds, and the first one is four calls wide', () => {
      * THE ASSERTION THE FIX NEEDS: ALL FOUR ARE IN FLIGHT BEFORE ANY RESOLVES
      * ════════════════════════════════════════════════════════════════════════
      * If `queue` is awaited alone, the other three are not requested until it
-     * settles — and nothing here settles it. So a serial implementation shows
+     * settles - and nothing here settles it. So a serial implementation shows
      * exactly one request and fails this line.
      */
     const { loadInbox } = await import('./load-inbox');
@@ -97,11 +97,11 @@ describe('⚠⚠ the view reaches the route', () => {
     expect(requested()).toHaveLength(4);
   });
 
-  it('⚠⚠ Assigned to me WAITS for the viewer — the one real dependency', async () => {
+  it('⚠⚠ Assigned to me WAITS for the viewer - the one real dependency', async () => {
     /*
      * ★ `mine` needs `assignedAgentId=<me>`, which only `/auth/me` knows. So
      *   for this view, and no other, the list is not requested until `me`
-     *   answers. Asserted as ABSENT first and PRESENT after — a list fired
+     *   answers. Asserted as ABSENT first and PRESENT after - a list fired
      *   early would carry no assignee and be the original bug.
      */
     const { loadInbox } = await import('./load-inbox');
@@ -132,7 +132,7 @@ describe('⚠⚠ the view reaches the route', () => {
   });
 });
 
-describe('★★ the page does not wait for the conversation — the second round is a promise', () => {
+describe('★★ the page does not wait for the conversation - the second round is a promise', () => {
   it('⚠⚠ loadInbox resolves while the conversation’s own reads are still in flight', async () => {
     /*
      * Omer: "why does it take time to load each conversation". The page awaited
@@ -156,7 +156,7 @@ describe('★★ the page does not wait for the conversation — the second roun
     const shell = await result;
     expect(shell.open?.id).toBe('c1');
     expect(shell.detail).toBeInstanceOf(Promise);
-    // The stream was asked for — and has not answered — yet the shell is here.
+    // The stream was asked for - and has not answered - yet the shell is here.
     expect(requested().some((p) => p.includes('/messages'))).toBe(true);
   });
 });

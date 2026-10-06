@@ -4,7 +4,7 @@ import { planNameFor, type Plan } from '@/api/contracts/billing';
 
 /**
  * `ai_voice` is a plan KEY. It shipped as the most prominent line on the
- * billing screen and was caught in a screenshot — the same class as rendering
+ * billing screen and was caught in a screenshot - the same class as rendering
  * a cuid where an object name belongs, in a more visible place.
  */
 const PLANS: Plan[] = [

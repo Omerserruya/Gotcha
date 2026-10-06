@@ -14,7 +14,7 @@ beforeEach(() => {
   post.mockReset();
 });
 
-describe('★★ tag the picked — the route’s rules, before and after', () => {
+describe('★★ tag the picked - the route’s rules, before and after', () => {
   it('POST /api/contacts/tags with the ids once each and the trimmed tag, as `add`', async () => {
     post.mockResolvedValue({ data: { k1: ['VIP'], k2: ['VIP'] } });
     expect(await tagCustomers(['k1', 'k2', 'k1'], '  VIP ')).toEqual({ ok: true, tagged: 2 });

@@ -7,7 +7,7 @@ import {
 
 /**
  * 19's GO TO, for screens: every destination the rail knows, as one flat
- * list — a primary destination, each of its children (an Inbox view is
+ * list - a primary destination, each of its children (an Inbox view is
  * `/inbox?view=…`), and Settings' sections. Filtered by the same permission
  * check the rail uses, so the palette never offers a screen the rail hides.
  */

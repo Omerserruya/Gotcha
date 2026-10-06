@@ -9,14 +9,14 @@ import { Link } from '@/i18n/navigation';
 import styles from './Roles.module.css';
 
 /**
- * Screen 12b — the roles.
+ * Screen 12b - the roles.
  *
  * ── WHAT A ROLE ALLOWS, WITHOUT THE AMOUNTS ──
  * The design describes each role in prose *"including money limits"*:
  * *"refunds up to ₪1,000"*, *"refunds up to ₪500"*.
  *
  * **`TenantRoleFeature` is `(roleId, feature)` and nothing else.** There is no
- * amount column anywhere — a role either grants `billing.refund` or it does
+ * amount column anywhere - a role either grants `billing.refund` or it does
  * not. Writing "up to ₪1,000" on this screen would be inventing a limit that
  * nothing enforces, which is the same failure as the quiet hours: a number on
  * screen that no code path reads.
@@ -30,7 +30,7 @@ export async function RoleList({
   members = null,
 }: {
   readonly roles: readonly Role[];
-  /** The roster, for 02's faces in PEOPLE; `null` when unread — then the count. */
+  /** The roster, for 02's faces in PEOPLE; `null` when unread - then the count. */
   readonly members?: readonly Member[] | null;
 }) {
   const t = await getTranslations('roles');
@@ -42,7 +42,7 @@ export async function RoleList({
     );
 
   /*
-    12b, measured: one white card — a mono head (ROLE · WHAT IT ALLOWS ·
+    12b, measured: one white card - a mono head (ROLE · WHAT IT ALLOWS ·
     PEOPLE), then a row per role: its name over "Built in" (a lock) or
     "Custom"; what it allows; who holds it; and its action at the end.
   */
@@ -77,7 +77,7 @@ export async function RoleList({
 
             {/*
               The platform's own words for a built-in role; a custom one shows
-              what it allows, counted — never invented from its permissions.
+              what it allows, counted - never invented from its permissions.
               A wildcard role says what it means: Owner holds one row, `*`, and
               counting it read "Allows one thing" under "everything".
             */}
@@ -90,7 +90,7 @@ export async function RoleList({
 
             <span className={styles.colPeople} data-testid={`members-${role.id}`}>
               {members !== null && holders(role).length > 0 ? (
-                // 02: a face per person — initials, 26px; more than four, "+N".
+                // 02: a face per person - initials, 26px; more than four, "+N".
                 <span
                   className={styles.faces}
                   title={holders(role)
@@ -118,7 +118,7 @@ export async function RoleList({
             </span>
 
             {/*
-              A built-in role can be copied but never edited — the route refuses
+              A built-in role can be copied but never edited - the route refuses
               it. A custom one could be edited, but nothing edits a role from
               here yet: drawn, and it says so.
             */}

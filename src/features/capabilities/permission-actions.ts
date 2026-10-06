@@ -25,8 +25,8 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * Omer authorized the control; that is not a reason to make it easy to press
  * by accident, and it is not a reason for anything automated to press it.
  *
- * **No test and no capture calls this.** The behaviour that matters — which
- * choices are offered — is decided by `automationCeiling` before any request
+ * **No test and no capture calls this.** The behaviour that matters - which
+ * choices are offered - is decided by `automationCeiling` before any request
  * exists, and that is what is tested.
  *
  * ── AND THE CEILING IS RE-CHECKED HERE ──
@@ -36,7 +36,7 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
  * does not travel with the request.
  *
  * `PUT /api/tool-permissions/:toolName` does not call `mayBeAlwaysAllowed`
- * itself — Backend has that — so until it does, this is the last check in
+ * itself - Backend has that - so until it does, this is the last check in
  * the chain rather than a convenience on top of one.
  */
 
@@ -44,7 +44,7 @@ export type PermissionWriteResult =
   | { readonly ok: true }
   /** The chosen state is not one this tool may be set to. */
   | { readonly ok: false; readonly reason: 'not_automatable' }
-  /** 409 — the provider is not connected, so there is nothing to enable. */
+  /** 409 - the provider is not connected, so there is nothing to enable. */
   | { readonly ok: false; readonly reason: 'not_connected' }
   | { readonly ok: false; readonly reason: 'forbidden' }
   | { readonly ok: false; readonly reason: 'failed' };
@@ -57,8 +57,8 @@ export async function setToolPermission(
    * ★★ THE CEILING, ENFORCED ON THE WRITE AND NOT ONLY IN THE MARKUP.
    *
    * A disabled radio is a statement to a person, not a constraint on a
-   * request. `create_update` is the no-match fallback of a name regex —
-   * `shopify.cancel_order` lands there — so letting it through would
+   * request. `create_update` is the no-match fallback of a name regex -
+   * `shopify.cancel_order` lands there - so letting it through would
    * auto-approve order cancellation on the strength of a pattern that did
    * not match.
    */
@@ -70,7 +70,7 @@ export async function setToolPermission(
   try {
     await serverApi().put({
       endpoint: capabilityEndpoints.update(capability.toolName),
-      // Both fields, always — see `bodyFor`. The route applies
+      // Both fields, always - see `bodyFor`. The route applies
       // `requiresApproval` only when present.
       body: bodyFor(choice),
       payload: capabilitySchema.partial(),
@@ -84,7 +84,7 @@ export async function setToolPermission(
       /*
        * The route's own refusal: you cannot enable a tool whose integration
        * is disconnected. Rendered as the repair it is rather than as a
-       * failure — the same distinction as screen 10's fourth state, arriving
+       * failure - the same distinction as screen 10's fourth state, arriving
        * on the write.
        */
       if (cause.status === 409) {

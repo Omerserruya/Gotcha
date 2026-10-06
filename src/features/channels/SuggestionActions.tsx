@@ -9,7 +9,7 @@ import { approveSuggestion, rejectSuggestion } from './candidate-actions';
 import styles from './Channels.module.css';
 
 /**
- * A suggestion's decisions on 13f — live (Omer, decision 13). A conflict
+ * A suggestion's decisions on 13f - live (Omer, decision 13). A conflict
  * offers each observed answer to use; any suggestion can be edited before it
  * is approved, or set aside. Nothing is written before a press.
  */
@@ -23,7 +23,7 @@ export function SuggestionActions({
   readonly answer: string;
   /** The observed answers when they disagree; empty otherwise. */
   readonly variants: readonly string[];
-  /** 02's "See the chats" on the right of a conflict — drawn: the evidence has no screen yet. */
+  /** 02's "See the chats" on the right of a conflict - drawn: the evidence has no screen yet. */
   readonly seeChats?: string | null;
 }) {
   const t = useTranslations('channels.whatsapp');
@@ -130,7 +130,7 @@ export function SuggestionActions({
                 {t('review.approve')}
               </button>
             )}
-            {/* 02: a conflict is decided between its answers — Use, Use, Skip; no Edit. */}
+            {/* 02: a conflict is decided between its answers - Use, Use, Skip; no Edit. */}
             {conflict ? null : (
               <button
                 type="button"

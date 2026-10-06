@@ -34,18 +34,18 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 import { isolated } from './isolate';
 
 /**
- * Screen 03 — the queue and the decision.
+ * Screen 03 - the queue and the decision.
  *
  * ── THE KEYBOARD MODEL, AND WHY IT IS NOT THE DESIGN'S ──
  * The design specifies `A` as a single keypress that approves. **It was drawn
- * assuming the Undo exists**, and it does not — there is no undo anywhere in
+ * assuming the Undo exists**, and it does not - there is no undo anywhere in
  * this platform. A one-key, no-confirmation, no-undo refund is the most
  * dangerous control in the product.
  *
  * So `A` moves focus to Approve and **Enter commits**. One extra keystroke
  * against an irreversible payment, and the queue keeps its rhythm.
  *
- * **One rule, for every row** — not a carve-out for rows without
+ * **One rule, for every row** - not a carve-out for rows without
  * `IRREVERSIBLE`. A rule that applies sometimes is one nobody can hold in
  * their head, and a queue's whole value is that you stop thinking about the
  * mechanism.
@@ -54,7 +54,7 @@ import { isolated } from './isolate';
  * safety choice but the contract: the route answers 400 without a reason, so
  * there is nothing for `R` to do except put the cursor where the reason goes.
  *
- * `E` is absent. See `actions.ts` — the permission governing parameter edits
+ * `E` is absent. See `actions.ts` - the permission governing parameter edits
  * is read by nobody, and this is the one control that changes how much money
  * moves.
  *
@@ -96,12 +96,12 @@ export function ApprovalsScreen({
   readonly serverNow: number;
   /**
    * How many decisions were made today, for 02's "Decided earlier today · 7"
-   * row — `null` when the history could not be read, and then no row.
+   * row - `null` when the history could not be read, and then no row.
    */
   readonly decidedToday?: number | null;
   /** The decided history, enough to count a run of one kind (03b's pattern). */
   readonly decidedHistory?: readonly DecidedTrace[];
-  /** 03's "The customer", per request — every fact null where unknown. */
+  /** 03's "The customer", per request - every fact null where unknown. */
   readonly customers?: Readonly<Record<string, ApprovalCustomer>>;
   /** What GOTCHA ran on its own today, for the queue's foot; `null` unknown. */
   readonly handledToday?: number | null;
@@ -111,20 +111,20 @@ export function ApprovalsScreen({
   readonly decidedTotal?: number;
   /** Backend's `edits.amount` is live: Edit amount becomes a field, not a drawing. */
   readonly editAmountLive?: boolean;
-  /** "Refunds under N never reach you" — the REFUND policy's threshold, when set. */
+  /** "Refunds under N never reach you" - the REFUND policy's threshold, when set. */
   readonly refundLimit?: number | null;
 }) {
   const t = useTranslations('approvals');
 
   /*
-   * Deadlines move, so "lapsed" is time-dependent — and computing a different
+   * Deadlines move, so "lapsed" is time-dependent - and computing a different
    * answer on the client than the server rendered is a hydration mismatch. So
    * the clock STARTS at the server's value, which makes the first client
    * render identical by construction, and a ticker takes over from there.
    *
    * The screen's idea of "now" is therefore up to one tick stale. That is
    * deliberate and safe: the sweeper flipping PENDING to EXPIRED runs on a
-   * five-minute cron, so a fifteen-second lag is well inside it — and the
+   * five-minute cron, so a fifteen-second lag is well inside it - and the
    * route's 409 is the real backstop either way. **This computation decides
    * what to OFFER; it never decides what is permitted.**
    */
@@ -171,7 +171,7 @@ export function ApprovalsScreen({
    * Paging a reference list is kind. Paging a WORK QUEUE hides work: the oldest
    * request is the one that most needs deciding, it sorts to the far end, and
    * putting it behind "show more" means the item nobody has looked at is the
-   * item nobody will look at. `expiresAt` is real on these rows — a request that
+   * item nobody will look at. `expiresAt` is real on these rows - a request that
    * lapses because it was on page two is a defect we would have built.
    *
    * So the list stays whole and gains structure instead: a count at the top, so
@@ -220,7 +220,7 @@ export function ApprovalsScreen({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      // Never while typing a reason, and never when a modifier is held —
+      // Never while typing a reason, and never when a modifier is held -
       // Cmd-R must still reload the page.
       if (isTypingTarget(event.target)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -236,14 +236,14 @@ export function ApprovalsScreen({
           break;
         case 'a':
         case 'A':
-          // After a decision, the first key opens the next one — 03b's "one
+          // After a decision, the first key opens the next one - 03b's "one
           // keystroke away". It decides nothing.
           if (moment) {
             event.preventDefault();
             setMoment(null);
             break;
           }
-          // Focuses. Does NOT decide — Enter on the focused button does.
+          // Focuses. Does NOT decide - Enter on the focused button does.
           if (decidable) {
             event.preventDefault();
             approveRef.current?.focus();
@@ -302,7 +302,7 @@ export function ApprovalsScreen({
     /*
      * A 200 means the DECISION was recorded. Whether the action RAN is
      * `dispatched`, and the two are announced separately because they are
-     * separate facts — an approval that was granted and then failed to
+     * separate facts - an approval that was granted and then failed to
      * execute is the case this screen exists for.
      */
     setAnnouncement(
@@ -312,7 +312,7 @@ export function ApprovalsScreen({
     );
     /*
       03b: the pane becomes the moment, and the next request is selected
-      behind it — "already up", one key or "Open it" away. Not `move`, which
+      behind it - "already up", one key or "Open it" away. Not `move`, which
       is leaving the moment.
     */
     const index = pending.findIndex((a) => a.id === selected.id);
@@ -363,11 +363,11 @@ export function ApprovalsScreen({
 
   const showDays = days.length > 1 || days[0]?.key !== dayKey(now.toISOString());
 
-  /** Every tag as words: its label, or — for a value nobody labelled — `humanizeTag`. */
+  /** Every tag as words: its label, or - for a value nobody labelled - `humanizeTag`. */
   const riskLabel = (tag: string) =>
     isKnownRiskTag(tag) ? t(`risk.${tag}` as 'risk.IRREVERSIBLE') : humanizeTag(tag);
 
-  /** "2m", "1h", "3d" — 02's row times and deadlines. */
+  /** "2m", "1h", "3d" - 02's row times and deadlines. */
   const short = (ms: number) => {
     const minutes = Math.max(0, Math.round(ms / 60_000));
     if (minutes < 60) return t('time.minutes', { n: minutes });
@@ -375,12 +375,12 @@ export function ApprovalsScreen({
     if (hours < 48) return t('time.hours', { n: hours });
     return t('time.days', { n: Math.round(hours / 24) });
   };
-  /** A deadline within the hour is said as one, in red — 02's "38m left". */
+  /** A deadline within the hour is said as one, in red - 02's "38m left". */
   const SOON_MS = 60 * 60 * 1000;
 
   const index = selected ? pending.findIndex((a) => a.id === selected.id) : -1;
   const after = index < 0 ? 0 : pending.length - index - 1;
-  /** `09:39`, or null for a date we cannot read — never a thrown render. */
+  /** `09:39`, or null for a date we cannot read - never a thrown render. */
   const clock = (iso: string): string | null => {
     const at = new Date(iso);
     if (Number.isNaN(at.getTime())) return null;
@@ -392,7 +392,7 @@ export function ApprovalsScreen({
   };
   /*
    * ⚠⚠ A DEADLINE DAYS AWAY READ AS TODAY. "If nobody decides by 13:02" for
-   *   one expiring on Saturday is a time with no day — the history list's
+   *   one expiring on Saturday is a time with no day - the history list's
    *   defect again. A time for today, a weekday and time this week, a date
    *   beyond it.
    */
@@ -452,12 +452,12 @@ export function ApprovalsScreen({
       <div className={styles.layout}>
         {/*
           ════════════════════════════════════════════════════════════════════
-          ★★ 02's QUEUE — `[300]` from the header to the panel's bottom
+          ★★ 02's QUEUE - `[300]` from the header to the panel's bottom
           ════════════════════════════════════════════════════════════════════
           Rows at `14px 20px`, `#EDE9E1` between them and down the column's
           right edge; the one on screen is white with a 3px `#121212` edge.
-          Each: what is asked (13.5px), how long it has waited — or how long
-          is left, in red, when the deadline is near — and its risk as a pill.
+          Each: what is asked (13.5px), how long it has waited - or how long
+          is left, in red, when the deadline is near - and its risk as a pill.
         */}
         <div className={styles.queueColumn}>
           {/* The size as a fact: in the title for the eye, here for the ear. */}
@@ -473,7 +473,7 @@ export function ApprovalsScreen({
           >
             {/*
               03b: the request just decided stays at the head of the queue,
-              green, "done" — or "didn't run" when it did not — until you move
+              green, "done" - or "didn't run" when it did not - until you move
               on. It is not a button: it is no longer waiting on you.
             */}
             {moment ? (
@@ -502,7 +502,7 @@ export function ApprovalsScreen({
             {days.map((day) => (
               <li key={day.key} className={styles.queueDay}>
                 {/*
-                  No heading when the whole queue is TODAY's — 02's case, and a
+                  No heading when the whole queue is TODAY's - 02's case, and a
                   lone "Today" says nothing. Any other day, or a date we cannot
                   read, is still said: those are what the headings are for.
                 */}
@@ -583,7 +583,7 @@ export function ApprovalsScreen({
 
           {/*
             02's quiet row at the foot of the queue: what was already decided,
-            and the way to it — the history this screen keeps (`?view=decided`).
+            and the way to it - the history this screen keeps (`?view=decided`).
           */}
           {decidedToday === null ? null : (
             <Link
@@ -602,7 +602,7 @@ export function ApprovalsScreen({
           )}
           {/*
             02's foot: what never reaches you, and where to change it. The
-            limit itself is not stated — no policy field carries one.
+            limit itself is not stated - no policy field carries one.
           */}
           <p className={styles.queueFoot} data-testid="queue-foot">
             {refundLimit !== null ? (
@@ -665,10 +665,10 @@ export function ApprovalsScreen({
           <section className={styles.detail} data-testid="approval-detail" aria-live="off">
             {/*
               02's head: an eyebrow (who asked, when) and the request at 34px.
-              02's right-hand "Reversible · Yes — within 24h" is not drawn:
+              02's right-hand "Reversible · Yes - within 24h" is not drawn:
               there is no undo in this platform, and that sentence would be a
               promise read before an irreversible act. IRREVERSIBLE stays what
-              it is — a risk label, in the pills under the title.
+              it is - a risk label, in the pills under the title.
             */}
             <header className={styles.detailHeader}>
               <div className={styles.detailHeading}>
@@ -698,7 +698,7 @@ export function ApprovalsScreen({
                 </h2>
                 {/*
                   02's line under the title: the order and the call's own note.
-                  The risk pills are gone from here — the queue's chip says it.
+                  The risk pills are gone from here - the queue's chip says it.
                 */}
                 {selected.facts.order || selected.facts.note ? (
                   <p className={styles.detailFacts} data-testid="detail-facts">
@@ -713,7 +713,7 @@ export function ApprovalsScreen({
                   </p>
                 ) : null}
               </div>
-              {/* 02's top right — by what the action is; nothing where unknown. No Undo. */}
+              {/* 02's top right - by what the action is; nothing where unknown. No Undo. */}
               {reversibilityOf(selected.tool) ? (
                 <p className={styles.reversible} data-testid="reversible">
                   <span>{t('detail3.reversible')}</span>
@@ -729,7 +729,7 @@ export function ApprovalsScreen({
             {/*
               02's four cards in two rows: why, the customer, what approving
               does, and what waiting costs. Each fact the platform does not
-              hold is "—", never a guess.
+              hold is "-", never a guess.
             */}
             <div className={styles.detailCards}>
               {selected.reason || selected.policyRuleName ? (
@@ -754,7 +754,7 @@ export function ApprovalsScreen({
                 const dash = (value: string | null) =>
                   value ?? (
                     <span title={t('customer.unread')} data-dash="">
-                      —
+                      -
                     </span>
                   );
                 return (
@@ -860,7 +860,7 @@ export function ApprovalsScreen({
                     </kbd>
                   </button>
                   {/*
-                    02's "Edit amount" — or "Edit discount" on a coupon — only
+                    02's "Edit amount" - or "Edit discount" on a coupon - only
                     on the tools the platform lets an approver edit (backend
                     05979604, f16a5afa). Nothing to edit (a full refund): drawn,
                     with why. Any other tool: not drawn.
@@ -966,7 +966,7 @@ export function ApprovalsScreen({
 
                 {/*
                   02's reject bar, as Omer ruled: a closed choice, and "Other"
-                  to type one. A tap CHOOSES the reason — Reject rejects. The
+                  to type one. A tap CHOOSES the reason - Reject rejects. The
                   route answers 400 without one, so Reject waits for it.
                 */}
                 <div className={styles.rejectBar} role="group" aria-labelledby="reject-prompt">
@@ -1006,7 +1006,7 @@ export function ApprovalsScreen({
             ) : (
               /*
                 Past its deadline. The route answers 409, so offering a
-                decision here would be offering one that cannot be taken —
+                decision here would be offering one that cannot be taken -
                 and the countdown reaches zero while `status` is still PENDING
                 every single time, because the sweeper runs every five minutes.
               */
@@ -1054,7 +1054,7 @@ function dayKey(iso: string): string {
  *
  * ⚠ A date we cannot read says so. Labelling it "Today" would put an old request
  * at the top of today's group and hide exactly the thing these headings exist to
- * surface, and it is the reassuring direction — which is the one to refuse.
+ * surface, and it is the reassuring direction - which is the one to refuse.
  */
 function dayLabel(iso: string, now: Date, locale: string, t: (key: string) => string): string {
   const at = new Date(iso);

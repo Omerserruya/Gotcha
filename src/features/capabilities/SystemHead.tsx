@@ -7,11 +7,11 @@ import { IntegrationLogo } from './IntegrationLogo';
 import styles from './Capabilities.module.css';
 
 /**
- * 10's detail header: the selected system — a 38px tile, its name (16/600),
+ * 10's detail header: the selected system - a 38px tile, its name (16/600),
  * how often its actions ran, and its connection on the right.
  *
  * ⚠ 02 says "Used 1,840 times this week". `/tool-usage` is read without a
- * range, which the route answers with the LAST 30 DAYS — so the line names
+ * range, which the route answers with the LAST 30 DAYS - so the line names
  * that window, and the rows below it inherit it.
  *
  * "Narrow it for one employee" is drawn, not live: there are no

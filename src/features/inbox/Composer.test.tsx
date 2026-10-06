@@ -20,7 +20,7 @@ import type { MediaResult } from './send-media';
  * ════════════════════════════════════════════════════════════════════════════
  * Every other write in this project is mocked to throw because a test must never
  * press it. This one is different in kind: a composer's whole purpose is to be
- * pressed, so the tests DO press it — and the mock returns a decided outcome
+ * pressed, so the tests DO press it - and the mock returns a decided outcome
  * instead of reaching the action.
  *
  * The real `sendReply` is never imported by this file's runtime. `sent` records
@@ -32,8 +32,8 @@ const sent = vi.hoisted(() => vi.fn<(id: string, body: string) => Promise<SendRe
 vi.mock('./send-actions', () => ({ sendReply: sent }));
 
 /*
- * ★ THE OTHER TWO WAYS OUT, MOCKED THE SAME WAY. `sendMedia` is a send — the
- *   upload IS the send — and `composeDraft` is a billed model call. Neither
+ * ★ THE OTHER TWO WAYS OUT, MOCKED THE SAME WAY. `sendMedia` is a send - the
+ *   upload IS the send - and `composeDraft` is a billed model call. Neither
  *   real one is reachable from this file.
  */
 const media = vi.hoisted(() =>
@@ -76,7 +76,7 @@ describe('★★ it never says "sent"', () => {
      * ════════════════════════════════════════════════════════════════════════
      * The route writes a row and enqueues it. Delivery happens later through a
      * path the response cannot see, so "sent" would be a claim about a phone we
-     * have heard nothing from — and the operator who believes it stops watching
+     * have heard nothing from - and the operator who believes it stops watching
      * the one message that failed.
      *
      * Asserted in both directions: the true word present, the false one absent.
@@ -136,7 +136,7 @@ describe('★★ what it refuses to do', () => {
   it('★★ shows no optimistic echo of the reply', async () => {
     /*
      * An optimistic bubble is a message on screen that may not exist anywhere
-     * else — the same lie as "sent" in a different costume. The reply appears
+     * else - the same lie as "sent" in a different costume. The reply appears
      * when the page has re-read it from the server, with its real status.
      */
     const user = userEvent.setup();
@@ -147,7 +147,7 @@ describe('★★ what it refuses to do', () => {
     /*
      * The text stays in the box it was typed into, and nowhere else. Asserted as
      * "the only node carrying it is the textarea" rather than "no node carries
-     * it" — the first version looked for zero matches and found one, because a
+     * it" - the first version looked for zero matches and found one, because a
      * textarea's value IS its text content to a query. The assertion was wrong,
      * not the component.
      */
@@ -168,7 +168,7 @@ describe('★★ what it refuses to do', () => {
      * doing all the work and the other was never exercised.
      *
      * That matters more here than almost anywhere: a form can be submitted
-     * without its button — programmatically, or by a key press in another field —
+     * without its button - programmatically, or by a key press in another field -
      * and the failure mode is sending a stranger the same message twice, with no
      * undo.
      *
@@ -245,7 +245,7 @@ describe('★★ a failed send keeps the words', () => {
     /*
      * The conversation arrived on a channel whose credentials have since been
      * removed. Nothing about the message is at fault and retrying cannot help, so
-     * the sentence points at the channel — and says the reply is still here.
+     * the sentence points at the channel - and says the reply is still here.
      */
     const user = userEvent.setup();
     sent.mockResolvedValue({ ok: false, reason: 'channel_not_configured' });
@@ -268,11 +268,11 @@ describe('★★ a failed send keeps the words', () => {
   });
 });
 
-describe('★★ 02’s bar — the four controls that have a backend', () => {
+describe('★★ 02’s bar - the four controls that have a backend', () => {
   const user = () => userEvent.setup();
   const photo = () => new File(['x'], 'receipt.png', { type: 'image/png' });
 
-  it('⚠ draws no mic and no bookmark — neither has a backend', () => {
+  it('⚠ draws no mic and no bookmark - neither has a backend', () => {
     show();
     expect(screen.queryByRole('button', { name: /voice|record|mic/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /saved|bookmark|template/i })).toBeNull();
@@ -289,7 +289,7 @@ describe('★★ 02’s bar — the four controls that have a backend', () => {
     expect(screen.getByTestId('compose-shorter')).toBeEnabled();
   });
 
-  it('★★ Rewrite puts GOTCHA’s text in the BOX — it sends nothing — and says so', async () => {
+  it('★★ Rewrite puts GOTCHA’s text in the BOX - it sends nothing - and says so', async () => {
     const u = user();
     show();
     await u.type(screen.getByTestId('composer-body'), 'my draft');
@@ -324,7 +324,7 @@ describe('★★ 02’s bar — the four controls that have a backend', () => {
     expect(screen.queryByTestId('compose-undo')).toBeNull();
   });
 
-  it('⚠⚠ choosing a file HOLDS it — the upload is the send, so choosing is not', async () => {
+  it('⚠⚠ choosing a file HOLDS it - the upload is the send, so choosing is not', async () => {
     const u = user();
     show();
     await u.upload(screen.getByTestId('composer-image-input'), photo());
@@ -376,7 +376,7 @@ describe('⚠⚠ the box comes BACK after a send or a rework', () => {
    * As `useTransition`, the pending state never cleared once the async work
    * had set its result: the queued note showed, and the field, the chips and
    * Send stayed disabled. Traced, then replaced with a flag cleared in
-   * `finally`. Whether a browser stuck the same way was not established — the
+   * `finally`. Whether a browser stuck the same way was not established - the
    * flag is correct either way, and this pins it.
    */
   it('★ after a send, the field can be typed in again', async () => {
@@ -399,7 +399,7 @@ describe('⚠⚠ the box comes BACK after a send or a rework', () => {
 });
 
 describe('★★ out of AI units is said as what it is', () => {
-  it('★★ names the workspace’s units and where to top up — not "just now", not "our side"', async () => {
+  it('★★ names the workspace’s units and where to top up - not "just now", not "our side"', async () => {
     compose.mockResolvedValue({ ok: false, reason: 'units_exhausted' });
     const u = userEvent.setup();
     show();
@@ -413,7 +413,7 @@ describe('★★ out of AI units is said as what it is', () => {
   });
 });
 
-describe('★★ 02’s Reply — answering one message', () => {
+describe('★★ 02’s Reply - answering one message', () => {
   const reply = (target = { id: 'm9', who: 'Customer', preview: 'Where is my parcel?' }) =>
     act(() => {
       window.dispatchEvent(new CustomEvent('gotcha:reply-to', { detail: target }));
@@ -434,7 +434,7 @@ describe('★★ 02’s Reply — answering one message', () => {
     await waitFor(() => expect(screen.queryByTestId('composer-replying')).toBeNull());
   });
 
-  it('★ can be cancelled — and then the reply is an ordinary one', async () => {
+  it('★ can be cancelled - and then the reply is an ordinary one', async () => {
     const u = userEvent.setup();
     show();
     reply();
@@ -444,7 +444,7 @@ describe('★★ 02’s Reply — answering one message', () => {
     await waitFor(() => expect(sent).toHaveBeenCalledWith('c1', 'Hi', undefined));
   });
 
-  it('⚠⚠ a file and a reply together: Send waits and says why — neither is dropped', async () => {
+  it('⚠⚠ a file and a reply together: Send waits and says why - neither is dropped', async () => {
     const u = userEvent.setup();
     show();
     await u.upload(screen.getByTestId('composer-file-input'), new File(['x'], 'a.png'));
@@ -469,7 +469,7 @@ describe('★★ 02’s Reply — answering one message', () => {
   });
 });
 
-describe('★★ up to five files — each its own upload, the words once', () => {
+describe('★★ up to five files - each its own upload, the words once', () => {
   const user = () => userEvent.setup();
   const file = (name: string, type = 'image/png') => new File(['x'], name, { type });
 
@@ -528,14 +528,14 @@ describe('★★ up to five files — each its own upload, the words once', () =
   });
 });
 
-describe('★★ the Copilot wall fills the box — and sends nothing', () => {
+describe('★★ the Copilot wall fills the box - and sends nothing', () => {
   const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
-  it('★ Use this: the text, the caret at its end, ready to send — nothing sent', async () => {
+  it('★ Use this: the text, the caret at its end, ready to send - nothing sent', async () => {
     show();
-    act(() => fillComposer('Sorry, Dana — on its way.'));
+    act(() => fillComposer('Sorry, Dana - on its way.'));
     const box = screen.getByTestId('composer-body') as HTMLTextAreaElement;
-    expect(box).toHaveValue('Sorry, Dana — on its way.');
+    expect(box).toHaveValue('Sorry, Dana - on its way.');
     await act(frame);
     expect(box).toHaveFocus();
     expect(box.selectionStart).toBe(box.value.length);

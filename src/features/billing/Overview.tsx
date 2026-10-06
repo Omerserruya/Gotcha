@@ -23,10 +23,10 @@ import styles from './Billing.module.css';
 
 /**
  * 17's plan, up front and dark: what you are on, what it costs, what comes
- * with it, and the two ways out of it — Change plan (17b) and Buy credits
+ * with it, and the two ways out of it - Change plan (17b) and Buy credits
  * (17d).
  *
- * **The currency is whatever the subscription carries** — the demo tenant is
+ * **The currency is whatever the subscription carries** - the demo tenant is
  * charged `$1,499.00 USD`, not 02's `₪1,290`. 02's "3 AI employees · All
  * channels" are not on any plan read, so they are not drawn.
  */
@@ -83,7 +83,7 @@ export async function PlanHero({
           <>
             <p className={styles.heroNameRow}>
               {/*
-                The plan's NAME, not its key — the key only when the plan is
+                The plan's NAME, not its key - the key only when the plan is
                 not in the list at all: an unrecognised plan is still the one
                 they are paying for.
               */}
@@ -125,7 +125,7 @@ export async function PlanHero({
           </>
         ) : (
           <p className={styles.heroName} data-testid="plan-unavailable" title={t('planUnread')}>
-            —
+            -
           </p>
         )}
       </div>
@@ -155,12 +155,12 @@ const KINDS = [
 ] as const;
 
 /**
- * "Where credits went" — each kind of work with its average cost, its count
+ * "Where credits went" - each kind of work with its average cost, its count
  * and its credits, so the estimate above can be checked.
  *
  * Nothing serves credits per kind of work, so the average and the credits are
- * "—" on every row; the count is drawn where the breakdown has it. The rows
- * are drawn either way: a missing figure is "—", never zero, because "no
+ * "-" on every row; the count is drawn where the breakdown has it. The rows
+ * are drawn either way: a missing figure is "-", never zero, because "no
  * outbound messages" and "we did not count" are different, and on a billing
  * screen the difference is money.
  */
@@ -182,13 +182,13 @@ export async function CreditsWent({ breakdown }: { readonly breakdown: UsageBrea
             <li key={key} className={styles.wentRow} data-testid={`breakdown-${key}`}>
               <span className={styles.wentName}>{t(`went.kind.${key}`)}</span>
               <span className={styles.wentAvg} title={t('went.noCredits')}>
-                —
+                -
               </span>
               <span className={styles.wentCount} data-testid={`breakdown-${key}-count`}>
-                {n === null ? '—' : number.format(n)}
+                {n === null ? '-' : number.format(n)}
               </span>
               <span className={styles.wentCredits} title={t('went.noCredits')}>
-                —
+                -
               </span>
             </li>
           );
@@ -199,7 +199,7 @@ export async function CreditsWent({ breakdown }: { readonly breakdown: UsageBrea
 }
 
 /**
- * "When credits run low" — the rule in one sentence and its ceiling; the rule
+ * "When credits run low" - the rule in one sentence and its ceiling; the rule
  * itself is 17c, behind Change.
  */
 export async function RunningLow({
@@ -251,7 +251,7 @@ export async function RunningLow({
 }
 
 /**
- * "Billing" — card, who is invoiced, where receipts go, the last invoices. The
+ * "Billing" - card, who is invoiced, where receipts go, the last invoices. The
  * details themselves are 17e, behind Edit details; every invoice is its own
  * page, behind All.
  */
@@ -272,13 +272,13 @@ export async function BillingCard({
 
   const card =
     methods === null
-      ? { text: '—', title: t('billing.cardUnread') }
+      ? { text: '-', title: t('billing.cardUnread') }
       : methods.length === 0 || !hasSomethingToCharge(methods)
         ? { text: t('billing.noCard'), title: undefined }
         : {
             text: t('billing.card', {
               brand: methods[0]!.brand ?? t('billing.cardBrand'),
-              last4: methods[0]!.last4 ?? '—',
+              last4: methods[0]!.last4 ?? '-',
             }),
             title: undefined,
           };
@@ -334,7 +334,7 @@ export async function BillingCard({
         <div className={styles.billingRow} data-testid="billing-row-invoiced">
           <dt>{t('billing.invoicedTo')}</dt>
           <dd title={invoicedTo ? undefined : t(`billing.reading.${reading}`)}>
-            {invoicedTo ?? '—'}
+            {invoicedTo ?? '-'}
           </dd>
         </div>
         <div className={styles.billingRow} data-testid="billing-row-receipts">
@@ -342,13 +342,13 @@ export async function BillingCard({
           <dd
             title={present && profile?.billingEmail ? undefined : t(`billing.reading.${reading}`)}
           >
-            {(present && profile?.billingEmail) || '—'}
+            {(present && profile?.billingEmail) || '-'}
           </dd>
         </div>
         <div className={styles.billingRow} data-testid="billing-row-invoices">
           <dt>{t('billing.invoices')}</dt>
           <dd title={invoices === null ? t('billing.invoicesUnread') : undefined}>
-            {invoices === null ? '—' : recent.length > 0 ? recent.join(' · ') : t('billing.none')}
+            {invoices === null ? '-' : recent.length > 0 ? recent.join(' · ') : t('billing.none')}
           </dd>
           {invoices !== null && invoices.length > 0 ? (
             <Link
@@ -371,21 +371,21 @@ export async function BillingCard({
 }
 
 /**
- * 02's value line — hours your team did not spend, and revenue from
- * outreach. Nothing computes either, so the line is drawn with "—".
+ * 02's value line - hours your team did not spend, and revenue from
+ * outreach. Nothing computes either, so the line is drawn with "-".
  */
 export async function CycleValue() {
   const t = await getTranslations('billing.overview');
   return (
     <p className={styles.cycleValue} data-testid="cycle-value" title={t('value.none')}>
-      <span className={styles.cycleValueLabel}>{t('value.label')}</span> · —
+      <span className={styles.cycleValueLabel}>{t('value.label')}</span> · -
     </p>
   );
 }
 
 /**
- * 17d when the packages could not be read: 02's dialog in its shape — three
- * empty tiles, "Pay with" and a Pay button that cannot be pressed — with the
+ * 17d when the packages could not be read: 02's dialog in its shape - three
+ * empty tiles, "Pay with" and a Pay button that cannot be pressed - with the
  * failed read said once. Never an empty dialog, never "none on sale".
  */
 export async function BuyUnavailable({
@@ -401,7 +401,7 @@ export async function BuyUnavailable({
       <ul className={styles.buyShapeTiles} aria-hidden="true">
         {[0, 1, 2].map((i) => (
           <li key={i} className={styles.buyShapeTile}>
-            —
+            -
           </li>
         ))}
       </ul>
@@ -409,9 +409,9 @@ export async function BuyUnavailable({
         <span className={styles.buyShapeLabel}>{t('payWith')}</span>
         <span className={styles.buyShapeCard}>
           {methods === null
-            ? '—'
+            ? '-'
             : card
-              ? `${card.brand ?? t('card')} · ${card.last4 ?? '—'}`
+              ? `${card.brand ?? t('card')} · ${card.last4 ?? '-'}`
               : t('noCard')}
         </span>
       </p>

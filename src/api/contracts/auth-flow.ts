@@ -10,7 +10,7 @@ import { z } from 'zod';
  * strict `z.object` is right: it names what we rely on and a surprise is a
  * conversation. **This describes a third party's API on a version nobody
  * promised us.** A strict object here strips an unknown field silently, and from
- * inside this codebase that is indistinguishable from Authentik not sending it —
+ * inside this codebase that is indistinguishable from Authentik not sending it -
  * which is the defect that hid `Message.status`, `taxed` and `upgradePath` this
  * week, three times, on contracts we DID own.
  *
@@ -21,13 +21,13 @@ import { z } from 'zod';
  * ★★ AND THE IMPORTANT PART IS THE FALLBACK, NOT THE HAPPY PATH
  * ════════════════════════════════════════════════════════════════════════════
  * Driven on 2026-09-28: for a user with **no enrolled MFA device**, this flow is
- * two stages — `ak-stage-identification` (which takes the email AND the password
+ * two stages - `ak-stage-identification` (which takes the email AND the password
  * in one POST) and `ak-stage-user-login` (the "stay signed in" question).
  *
  * ⚠ WHAT THAT MEASUREMENT DOES NOT SAY, AND WAS FIRST REPORTED AS SAYING.
  * Both stages returned `device_challenges: []`, which was read as "this flow has
  * no authenticator stage". **It is equally consistent with "the flow has one and
- * this user has never enrolled a device"** — Authentik skips that stage
+ * this user has never enrolled a device"** - Authentik skips that stage
  * per-user. Settling it needs the flow's stage bindings, and
  * `/api/v3/flows/instances/…`, `/flows/bindings/` and `/stages/all/` all answer
  * **403** without admin credentials.
@@ -60,7 +60,7 @@ import { z } from 'zod';
  *   ★★ AND `device_classes` ALLOWS FIVE, OF WHICH ONLY TWO ARE CODE ENTRY.
  *     `totp` and `static` are digits somebody types. **`webauthn` is a browser
  *     credential prompt, `duo` is a push notification, and `sms` is an
- *     out-of-band journey of its own** — so `chooseFactor` does not lead to "a
+ *     out-of-band journey of its own** - so `chooseFactor` does not lead to "a
  *     code box" in general, and a renderer built around one would be wrong for
  *     three of the five the flow permits. What each of those three needs on the
  *     wire is unobserved; what is certain is that it is not six digits.
@@ -71,12 +71,12 @@ import { z } from 'zod';
  *   `non_field_errors: [{ string: "Empty response" }]`. **It does not invent
  *   component names for stages that are not bound to the flow.**
  *
- *   Evidence, not proof — it came from an anomalous run nobody could reproduce
+ *   Evidence, not proof - it came from an anomalous run nobody could reproduce
  *   cleanly, and the bindings still answer 403. But it is strong enough that the
  *   handover below should be read as **the ordinary path for a colleague with
  *   two-step set up**, not as a guard against a hypothetical.
  *
- * ★ That is not a hypothetical worry about the future — it is the ordinary
+ * ★ That is not a hypothetical worry about the future - it is the ordinary
  *   present for any colleague who has set up two-step. It is the strongest
  *   reason the handover below exists.
  *
@@ -96,7 +96,7 @@ import { z } from 'zod';
  * Field errors, keyed by field name.
  *
  * Authentik puts errors that belong to no field under `non_field_errors`, which
- * is where a wrong password lands — the stage will not say *which* of email or
+ * is where a wrong password lands - the stage will not say *which* of email or
  * password was wrong, deliberately, and neither should we.
  */
 export const NON_FIELD = 'non_field_errors';
@@ -126,7 +126,7 @@ export const identificationChallengeSchema = z.looseObject({
   /** `true` on this tenant: the password is part of THIS stage, not the next. */
   password_fields: z.boolean().default(false),
   /**
-   * Where "Forgot it?" goes. **Read from the challenge, never hardcoded** — it
+   * Where "Forgot it?" goes. **Read from the challenge, never hardcoded** - it
    * is a flow slug an administrator can change, and a stale path here sends
    * somebody who has forgotten their password to a 404.
    */
@@ -135,7 +135,7 @@ export const identificationChallengeSchema = z.looseObject({
   response_errors: flowErrorsSchema,
 });
 
-/** "Stay signed in?" — a stage, which is why it can live in our own panel. */
+/** "Stay signed in?" - a stage, which is why it can live in our own panel. */
 export const userLoginChallengeSchema = z.looseObject({
   component: z.literal('ak-stage-user-login'),
   flow_info: flowInfoSchema,
@@ -147,7 +147,7 @@ export const userLoginChallengeSchema = z.looseObject({
  * Authentik's device classes for a validate stage.
  *
  * ★ `static` IS RECOVERY CODES, AND IT ARRIVES AS A PEER. Not a link under the
- *   code box — an entry in the same `device_challenges` list as the
+ *   code box - an entry in the same `device_challenges` list as the
  *   authenticator app. So this stage is not "enter your code", it is **a choice
  *   between devices**, and any panel that renders it has to express that.
  *
@@ -169,11 +169,11 @@ export const deviceChallengeSchema = z.looseObject({
 export type DeviceChallenge = z.infer<typeof deviceChallengeSchema>;
 
 /**
- * Second factor — measured 2026-09-28 against an enrolled account.
+ * Second factor - measured 2026-09-28 against an enrolled account.
  *
  * ⚠⚠ THE SUBMIT SHAPE IS NOT KNOWN AND IS NOT GUESSED. Posting `{}` answers
- * `non_field_errors: [{ string: "Empty response" }]`, which — unlike
- * `ak-stage-user-login`'s `remember_me` — **does not name the field.** The
+ * `non_field_errors: [{ string: "Empty response" }]`, which - unlike
+ * `ak-stage-user-login`'s `remember_me` - **does not name the field.** The
  * self-describing trick does not work on this stage.
  *
  * And it cannot be probed by trial: every malformed attempt is a failed
@@ -188,15 +188,15 @@ export const authenticatorValidateChallengeSchema = z.looseObject({
   component: z.literal('ak-stage-authenticator-validate'),
   flow_info: flowInfoSchema,
   /**
-   * ⚠ A USERNAME, NOT AN EMAIL — observed as `akadmin`. The design's panel puts
+   * ⚠ A USERNAME, NOT AN EMAIL - observed as `akadmin`. The design's panel puts
    * "Welcome back" over an identity, and this field will not always be a pretty
    * name. Whatever renders it must not assume an address.
    */
   pending_user: z.string().default(''),
   device_challenges: z.array(deviceChallengeSchema).default([]),
   /**
-   * Empty for an already-enrolled user. **This is where 00b's second half —
-   * enrolment — would appear**, for a user in a workspace that requires two-step
+   * Empty for an already-enrolled user. **This is where 00b's second half -
+   * enrolment - would appear**, for a user in a workspace that requires two-step
    * and has no device. Still unobserved.
    */
   configuration_stages: z.array(z.looseObject({})).default([]),
@@ -205,7 +205,7 @@ export const authenticatorValidateChallengeSchema = z.looseObject({
 export type AuthenticatorValidateChallenge = z.infer<typeof authenticatorValidateChallengeSchema>;
 
 /**
- * What the validate stage accepts — from Authentik's own OpenAPI schema
+ * What the validate stage accepts - from Authentik's own OpenAPI schema
  * (`GET /api/v3/schema/`, `2024.10.5`), **and confirmed against the live stage
  * on 2026-09-28**: a real TOTP code was submitted with this exact body and the
  * flow advanced to `ak-stage-user-login` with no `response_errors`.
@@ -213,7 +213,7 @@ export type AuthenticatorValidateChallenge = z.infer<typeof authenticatorValidat
  * ★ So three things are measured rather than read: `code` as a **string** is
  *   correct here, `selected_challenge` takes the device object back **verbatim**
  *   (the confirmation echoed the challenge unmodified), and validate really does
- *   precede `user-login` — the bindings and the behaviour agree.
+ *   precede `user-login` - the bindings and the behaviour agree.
  *
  * ⚠ `static` IS NOT CONFIRMED. It shares the `code` field per the schema and no
  *   recovery code has been fired, because they are single-use and burning one to
@@ -235,7 +235,7 @@ export type AuthenticatorValidateChallenge = z.infer<typeof authenticatorValidat
  *   a code box is wrong for three of the five classes the flow permits, and that
  *   is now a fact about the contract rather than a reading of Authentik's docs.
  *
- * ★ `selected_challenge` takes the **entire** device object back — all four of
+ * ★ `selected_challenge` takes the **entire** device object back - all four of
  *   `device_class`, `device_uid`, `challenge` and `last_used` are required. So
  *   the picker does not invent an identifier; it hands back exactly what it was
  *   given, which is also why nothing here needs to understand `challenge`.
@@ -335,13 +335,13 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
  * ★★ `to` MEANS DIFFERENT THINGS DEPENDING ON WHICH FLOW PRODUCED IT
  * ═══════════════════════════════════════════════════════════════════════════════
  *   AUTHENTICATION flow, measured 2026-09-28   to: "/"
- *       — Authentik's own root. Following it lands somebody who has just
+ *       - Authentik's own root. Following it lands somebody who has just
  *         signed in successfully on a stranger's home page.
  *   AUTHORIZATION flow, measured 2026-09-30    to: "https://…/api/auth/callback?code=…&state=…"
- *       — our own callback, carrying the code we are waiting for.
+ *       - our own callback, carrying the code we are waiting for.
  *
  * **One field, two meanings, and only the second is followable.** So this does
- * not ask "is `to` safe" in the abstract — it asks whether `to` IS the
+ * not ask "is `to` safe" in the abstract - it asks whether `to` IS the
  * callback we registered, and answers null for everything else.
  *
  * ★ That is the reason it takes `expectedCallback` rather than an origin or a
@@ -351,14 +351,14 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
  *
  * ⚠ A relative `to` is refused outright. It would resolve against whichever
  *   origin we happened to resolve it with, and the one meaningful relative
- *   value observed — `/` — is precisely the one that must not be followed.
+ *   value observed - `/` - is precisely the one that must not be followed.
  */
 /**
  * Whether a URL we were handed is a specific endpoint of the provider's.
  *
  * ★ Named for the question rather than for one caller. It started life as
- *   `isAuthorizeEndpoint` and the second caller — sign-out, checking an
- *   end-session URL — made the name the narrower thing, not the function.
+ *   `isAuthorizeEndpoint` and the second caller - sign-out, checking an
+ *   end-session URL - made the name the narrower thing, not the function.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * ⚠⚠ WITHOUT THIS, THE SIGN-IN PAGE IS A FETCH-AND-REDIRECT ANYONE CAN AIM
@@ -368,8 +368,8 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
  * whatever it is handed with `credentials: 'include'`, and then navigates to
  * whatever comes back, is a confused deputy wearing a sign-in screen.
  *
- * ★ So: ORIGIN AND PATHNAME, both exact. Not a prefix — that admits
- *   `/application/o/authorize-evil/`. Not the origin alone — that admits
+ * ★ So: ORIGIN AND PATHNAME, both exact. Not a prefix - that admits
+ *   `/application/o/authorize-evil/`. Not the origin alone - that admits
  *   every other endpoint the provider has. The authorize endpoint is one
  *   known URL and equality is available, so equality is what is used.
  *
@@ -379,7 +379,7 @@ export type RedirectChallenge = z.infer<typeof redirectChallengeSchema>;
  *   that class in this repository already.
  *
  * ⚠ The query string is NOT checked and must not be. It carries `state`, the
- *   PKCE challenge and the nonce, all minted by our own route this request —
+ *   PKCE challenge and the nonce, all minted by our own route this request -
  *   and the response's worth is decided later by `followableCompletion`,
  *   which requires the completion to be our registered callback.
  */
@@ -411,7 +411,7 @@ export function followableCompletion(to: string, expectedCallback: string): stri
 
   /*
    * ⚠ AND IT MUST CARRY A CODE. A completion pointing at our callback with no
-   *   code is not a sign-in — it is a redirect loop back into a route that
+   *   code is not a sign-in - it is a redirect loop back into a route that
    *   will refuse it and send the person to `/sign-in?error=`, which looks
    *   like a failed password rather than a broken hop.
    */
@@ -424,25 +424,25 @@ export function followableCompletion(to: string, expectedCallback: string): stri
  * What the panel should do next.
  *
  * `handOver` carries the reason so the fallback is explicable rather than a
- * shrug — and so a log line says which component we did not know.
+ * shrug - and so a log line says which component we did not know.
  */
 export type FlowStep =
   | { readonly kind: 'identify'; readonly challenge: IdentificationChallenge }
   /**
-   * An identification stage that wants an identifier and no password — the
+   * An identification stage that wants an identifier and no password - the
    * recovery flow's first screen. Reported rather than refused: whether it can
    * be rendered is the caller's question, not the contract's.
    */
   | { readonly kind: 'identifyOnly'; readonly challenge: IdentificationChallenge }
   | { readonly kind: 'staySignedIn'; readonly challenge: UserLoginChallenge }
   /**
-   * A second factor is required. **Parsed, and deliberately not rendered** — the
+   * A second factor is required. **Parsed, and deliberately not rendered** - the
    * submit shape is the one unknown, and a device picker that cannot submit is a
    * control that does nothing. The panel hands over on this, specifically.
    */
   | { readonly kind: 'chooseFactor'; readonly challenge: AuthenticatorValidateChallenge }
   /**
-   * Sign-in succeeded. **There is nothing here to navigate to** — `idpPath` is
+   * Sign-in succeeded. **There is nothing here to navigate to** - `idpPath` is
    * Authentik's own destination and the panel's next move is always our
    * `/api/auth/login`, which runs the OIDC exchange that gives us OUR session.
    * Carried for logging only, and named so that following it reads as a mistake.
@@ -458,7 +458,7 @@ export type FlowStep =
  *   over to the identity provider's own page.
  *
  * ⚠ That handover used to be described here as one that "still works". It is
- *   the LEAST walked path in the flow — by definition, since it fires when the
+ *   the LEAST walked path in the flow - by definition, since it fires when the
  *   body is one we could not read. The single account of what it does, and of
  *   what about it is unobserved, is in `features/auth/SecondFactor.tsx`; three
  *   copies of that sentence went stale together and are not restated here.
@@ -470,20 +470,20 @@ export function readChallenge(raw: unknown): FlowStep {
   const identify = identificationChallengeSchema.safeParse(raw);
   if (identify.success) {
     /*
-     * ★★ AN IDENTIFIER WITHOUT A PASSWORD IS NOT 00a — WHICH IS NOT THE SAME
+     * ★★ AN IDENTIFIER WITHOUT A PASSWORD IS NOT 00a - WHICH IS NOT THE SAME
      *    AS "NOT OURS", AND THIS USED TO SAY IT WAS.
      *
      * `password_fields` is true on the authentication flow, which is what makes
      * 00a a single submit. This branch returned `handOver` on the reasoning
      * that a flow asking for them separately is no longer the design's
-     * one-action screen — correct for sign-in, and **wrong as a universal
+     * one-action screen - correct for sign-in, and **wrong as a universal
      * rule**.
      *
      * ⚠ The RECOVERY flow's first stage is this exact shape: the same
      *   `ak-stage-identification` component with `password_fields: false`,
      *   because asking for an email and no password is what recovery IS. So
      *   this line, not Authentik, is why "Forgot it?" landed on the provider's
-     *   own UI — a guard of ours, enforcing a policy about one screen on every
+     *   own UI - a guard of ours, enforcing a policy about one screen on every
      *   screen.
      *
      * ★ It now REPORTS the stage and lets the caller decide. `SignInPanel`
@@ -516,8 +516,8 @@ export function readChallenge(raw: unknown): FlowStep {
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ A CHALLENGE DOES NOT DESCRIBE ITS OWN INPUTS
  * ════════════════════════════════════════════════════════════════════════════
- * `ak-stage-user-login` returns four keys — `flow_info`, `component`,
- * `pending_user`, `pending_user_avatar` — and **requires a field none of them
+ * `ak-stage-user-login` returns four keys - `flow_info`, `component`,
+ * `pending_user`, `pending_user_avatar` - and **requires a field none of them
  * mention.** Posting `{}` answers:
  *
  *     response_errors: { remember_me: [{ string: "This field is required." }] }
@@ -526,13 +526,13 @@ export function readChallenge(raw: unknown): FlowStep {
  * runtime, by a user, that a field it has never heard of is missing.
  *
  * ★ The method generalises and is the only self-describing thing the executor
- *   offers: **post an empty body to a new stage and read `response_errors` — the
+ *   offers: **post an empty body to a new stage and read `response_errors` - the
  *   errors are the field list.** Worth doing before writing any future renderer.
  *
  * ★★ AND IT MEANS THE CHECKBOX IS NOT DECORATIVE. The design's *"Keep me signed
  *   in on this device"* maps to this field; the flow refuses to complete without
  *   an answer. What it does NOT tell us is whether `false` shortens the session
- *   or what the configured length is — so **the copy must not say "30 days"**
+ *   or what the configured length is - so **the copy must not say "30 days"**
  *   until somebody with admin access confirms it, on the same rule as the
  *   lockout number that is also not being written.
  */
@@ -577,7 +577,7 @@ export const AUTHENTICATION_FLOW = 'default-authentication-flow';
  * ⚠ THE RESULT IS USED TO DRIVE A FLOW, so the slug is checked rather than
  *   trusted: lowercase, digits and hyphens, bounded. That refuses path
  *   traversal and anything with a scheme or host in it. It does NOT pretend to
- *   be an authorisation check — the executor is the provider's own and a
+ *   be an authorisation check - the executor is the provider's own and a
  *   person can reach any flow of theirs by typing its URL. What this prevents
  *   is OUR code composing a request out of an arbitrary string.
  */
@@ -592,7 +592,7 @@ export function recoveryFlowSlug(recoveryUrl: string | null | undefined): string
  * nothing.
  *
  * ★ `non_field_errors` FIRST, AND THAT IS THE POINT. Authentik deliberately does
- *   not say whether the email or the password was wrong — telling an attacker
+ *   not say whether the email or the password was wrong - telling an attacker
  *   which half they got right is how an address list becomes an account list. We
  *   keep that property by preferring the non-field message and never attributing
  *   a failure to a field ourselves.

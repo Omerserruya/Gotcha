@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
  * A module on the server may take only COMPONENTS and TYPES from a module
  * with `'use client'`.
  *
- * Anything else — a function, a constant — reaches the server as a client
+ * Anything else - a function, a constant - reaches the server as a client
  * reference, and calling it throws ("Attempted to call isAddWay() from the
  * server but isAddWay is on the client"). 08b's page did exactly that, and
  * its page test passed, because vitest ignores the directive. Only a build,

@@ -97,7 +97,7 @@ export function ReportFoot({
 }: {
   readonly importId: string;
   readonly count: number;
-  /** "Finish later" — a link the server renders. */
+  /** "Finish later" - a link the server renders. */
   readonly later: ReactNode;
   readonly noteClassName?: string;
 }) {

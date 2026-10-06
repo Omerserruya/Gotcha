@@ -22,14 +22,14 @@ import { logger } from '@/observability/logger';
  * What screen 03 reads.
  *
  * ── WHY THE DECIDED LIST IS A SECOND CALL ──
- * `GET /api/approvals` filters on **one** status — `where = { tenantId,
- * status }`, defaulting to PENDING — and carries no date filter of any kind.
+ * `GET /api/approvals` filters on **one** status - `where = { tenantId,
+ * status }`, defaulting to PENDING - and carries no date filter of any kind.
  * So "what you decided today" is a separate call per status, narrowed here,
  * and reachable only as far back as the most recent 100 rows of that status.
  *
  * That ceiling is real and the screen says so rather than implying the list is
  * complete. On a tenant deciding more than 100 approvals between now and the
- * start of the day, today's earliest decisions fall outside the window — and a
+ * start of the day, today's earliest decisions fall outside the window - and a
  * count captioned "today" that silently means "of the last 100" is the kind of
  * number somebody plans around.
  *
@@ -41,13 +41,13 @@ import { logger } from '@/observability/logger';
  * front of a person is the defect that shipped `ai_voice` onto billing.
  *
  * Each read degrades on its own. `null` is a failed read and is never conflated
- * with an empty queue — on this screen those are opposite facts: an empty queue
+ * with an empty queue - on this screen those are opposite facts: an empty queue
  * means nothing needs you, a failed read means you do not know.
  */
 export interface ApprovalsData {
   /** Awaiting a decision. `null` is a failed read, never "none". */
   readonly pending: readonly Approval[] | null;
-  /** Approved and rejected, newest first. Bounded — see the note above. */
+  /** Approved and rejected, newest first. Bounded - see the note above. */
   readonly decided: readonly Approval[] | null;
   /** For naming the AI employee behind a request. */
   readonly aiEmployees: readonly AiEmployee[] | null;
@@ -76,12 +76,12 @@ export interface ApprovalsData {
   /**
    * Refunds under this never reach you: an enabled REFUND policy's
    * `managerApprovalAboveAmount` (`GET /api/business-policies`). `null` when
-   * there is none — dev holds no rows — or the read failed; then no number.
+   * there is none - dev holds no rows - or the read failed; then no number.
    */
   readonly refundLimit: number | null;
 }
 
-/** 03c names the customers on the rows a person will see — not on all 200. */
+/** 03c names the customers on the rows a person will see - not on all 200. */
 const NAMED_ROWS = 40;
 
 /** The route's own page size. Hitting it means the window may be short. */
@@ -148,8 +148,8 @@ export async function loadApprovals(): Promise<ApprovalsData> {
 /**
  * Who asked, in words.
  *
- * `flow:<id>` resolves to nothing nameable — a flow is not in the employee
- * roster — so it returns null and the caller says "an automation" rather than
+ * `flow:<id>` resolves to nothing nameable - a flow is not in the employee
+ * roster - so it returns null and the caller says "an automation" rather than
  * printing an id. `bot` is the same: real, unnamed, and not a person.
  */
 export function requesterName(
@@ -165,13 +165,13 @@ export function requesterName(
 /**
  * 02's header figures for 03c: "Approved this week 42 · Avg decision 16s".
  *
- * Computed from the decisions already loaded — no new read. Over the last
+ * Computed from the decisions already loaded - no new read. Over the last
  * seven days: how many were approved, and the mean time from asking to
  * deciding across approvals and rejections.
  *
  * ⚠ `null` when the list may be cut. `GET /api/approvals` caps at 100 per
  *   status with no date filter, so a week busier than that would be counted
- *   short — a figure somebody plans around, quietly wrong. Absent beats low.
+ *   short - a figure somebody plans around, quietly wrong. Absent beats low.
  */
 export function decisionStats(
   decided: readonly Approval[] | null,

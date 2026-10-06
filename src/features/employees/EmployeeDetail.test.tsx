@@ -55,7 +55,7 @@ const show = async (
     }),
   );
 
-describe('★★ 07’s detail — what it is, from what the route already sends', () => {
+describe('★★ 07’s detail - what it is, from what the route already sends', () => {
   it('★ the line under the name is its responsibility, else its goal, else its role', async () => {
     const { unmount } = await show({ identity: { responsibility: 'Anything after the sale.' } });
     expect(screen.getByTestId('detail-line')).toHaveTextContent('Anything after the sale.');
@@ -69,22 +69,22 @@ describe('★★ 07’s detail — what it is, from what the route already sends
     );
   });
 
-  it('★★ the strip: all-time handled, the alone rate, and "—" for what nothing records', async () => {
+  it('★★ the strip: all-time handled, the alone rate, and "-" for what nothing records', async () => {
     await show({ handledConversations: 40, resolvedAlone: 30 });
     const strip = screen.getByTestId('detail-strip');
     expect(strip).toHaveTextContent('Handled in all40');
     expect(strip).toHaveTextContent('Resolved alone75%');
-    expect(strip).toHaveTextContent('Passed to a person—');
-    expect(strip).toHaveTextContent('Customer rating—');
+    expect(strip).toHaveTextContent('Passed to a person-');
+    expect(strip).toHaveTextContent('Customer rating-');
     expect(strip).not.toHaveTextContent(/today/i);
   });
 
-  it('★ nothing routed yet: the alone rate is "—", never 0%', async () => {
+  it('★ nothing routed yet: the alone rate is "-", never 0%', async () => {
     await show({ handledConversations: 0, resolvedAlone: 0 });
-    expect(screen.getByTestId('detail-strip')).toHaveTextContent('Resolved alone—');
+    expect(screen.getByTestId('detail-strip')).toHaveTextContent('Resolved alone-');
   });
 
-  it('★★ answers on channels by name — whichever case they were stored in', async () => {
+  it('★★ answers on channels by name - whichever case they were stored in', async () => {
     // Documented lowercase; the deleted list's test used the enum's case.
     for (const stored of [
       ['whatsapp', 'instagram'],
@@ -176,7 +176,7 @@ describe('★★ 07’s detail — what it is, from what the route already sends
     expect(card).not.toHaveTextContent('Order over');
   });
 
-  it('★★ a malformed field cannot reject the employee — it reads as empty', () => {
+  it('★★ a malformed field cannot reject the employee - it reads as empty', () => {
     const parsed = employeeSchema.parse({
       id: 'a',
       name: 'X',
@@ -195,7 +195,7 @@ describe('★★ 07’s detail — what it is, from what the route already sends
     expect(screen.getByTestId('card-worth')).toHaveTextContent('Nothing to suggest yet.');
   });
 
-  it('★ 07f — Edit opens the sheet over this employee', async () => {
+  it('★ 07f - Edit opens the sheet over this employee', async () => {
     await show();
     const edit = screen.getByTestId('edit');
     expect(edit).not.toHaveAttribute('aria-disabled');

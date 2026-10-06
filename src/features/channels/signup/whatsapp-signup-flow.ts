@@ -2,14 +2,14 @@
  * ════════════════════════════════════════════════════════════════════════════
  * ★ A COPY OF
  *   ChatCenter/frontend/src/lib/whatsapp-signup-flow.ts
- *   — verbatim when it was made, and **no longer**. See the end of this note.
+ *   - verbatim when it was made, and **no longer**. See the end of this note.
  *
  * Copied, not reimplemented, and the reason is one line inside it:
  *
  *     `endsWith("facebook.com")` alone would accept `evilfacebook.com`
  *
  * That is a bug somebody already found and fixed once. Rewriting this module
- * from memory in a second repository is exactly how it comes back — and it
+ * from memory in a second repository is exactly how it comes back - and it
  * would come back SILENTLY, because a wrong origin check passes every test
  * that does not specifically attack it.
  *
@@ -17,7 +17,7 @@
  * against nothing, so the property is pinned here by the same assertions that
  * pin it there, rather than by anyone's reading of them.
  *
- * The two repositories share no build, no types and no test — only a runtime
+ * The two repositories share no build, no types and no test - only a runtime
  * contract with Meta. Whether this logic should live in a shared package is an
  * architecture decision with Omer, not something to settle by picking a repo.
  * Until then this is a duplicate WITH A POINTER, which is a chore; a duplicate
@@ -34,14 +34,14 @@
  *
  * **It was verbatim. We drifted; they did not.** `750625b` replaced eight
  * `any`s with `unknown` plus the `field()`/`text()` accessors below, to satisfy
- * `@typescript-eslint/no-explicit-any` — a **repo-wide lint gate** with no way
+ * `@typescript-eslint/no-explicit-any` - a **repo-wide lint gate** with no way
  * to know that this one file answers to another repository. I wrote that
  * commit and did not think of it as "changing this file". I thought of it as
  * fixing eleven lint errors.
  *
  * ★ THAT IS A STRONGER ARGUMENT THAN "TWO COPIES MIGHT DRIFT". A
  *   cross-repository sync instruction living in a comment is invisible to
- *   every gate this project runs. It did not fail through carelessness — the
+ *   every gate this project runs. It did not fail through carelessness - the
  *   mechanism that changed the file was not reading comments.
  *
  * ⚠ AND THE DRIFT CARRIED A BUG FIX THAT HAS NOT PROPAGATED. `750625b` also
@@ -50,8 +50,8 @@
  *   still becomes a waba id of `null` further down **over there**. Not fixed
  *   here: that repository is read-only to this session. Reported instead.
  *
- * ★ The security-critical line is still identical in both, modulo quotes —
- *   `host === 'facebook.com' || host.endsWith('.facebook.com')` — which is the
+ * ★ The security-critical line is still identical in both, modulo quotes -
+ *   `host === 'facebook.com' || host.endsWith('.facebook.com')` - which is the
  *   part the copy exists for, and it survived because the lint rule happened
  *   not to touch it. **Luck, not design.**
  * ════════════════════════════════════════════════════════════════════════════
@@ -68,7 +68,7 @@
  * ⚠ NOTHING IN THIS APP CALLS ANY OF IT YET, AND THAT IS THE STATE TO KNOW
  * ═════════════════════════════════════════════════════════════════════════════
  * The launcher component does not exist, so there is **no `message` listener
- * anywhere in this codebase** — checked, not assumed. `isMetaOrigin` is
+ * anywhere in this codebase** - checked, not assumed. `isMetaOrigin` is
  * therefore dormant rather than bypassed: there is no unguarded handler.
  * `scripts/unused-guard-sweep.ts` reports it with no callers, and this is the
  * answer.
@@ -76,7 +76,7 @@
  * ★★ SO THE ONE THING THAT MATTERS WHEN SOMEBODY BUILDS THE LAUNCHER: the
  *   origin check has to be WIRED to the listener, not merely present. A guard
  *   that exists and is never called is worse than none, because the file's
- *   existence is the reassurance — `safeLinkUrl` sat here with passing tests
+ *   existence is the reassurance - `safeLinkUrl` sat here with passing tests
  *   and zero callers while two screens rendered somebody else's string into an
  *   `href`. Every `message` handler starts by refusing an origin this module
  *   does not recognise.
@@ -141,7 +141,7 @@ function field(value: unknown, key: string): unknown {
     : undefined;
 }
 
-/** A string field, or undefined — never an empty string masquerading as one. */
+/** A string field, or undefined - never an empty string masquerading as one. */
 function text(value: unknown, key: string): string | undefined {
   const found = field(value, key);
   return typeof found === 'string' && found !== '' ? found : undefined;

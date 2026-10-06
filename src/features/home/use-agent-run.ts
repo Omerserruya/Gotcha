@@ -12,7 +12,7 @@ import { appPath } from '@/lib/base-path';
  * What the surface shows while the agent is working.
  *
  * `answer` grows a token at a time; `steps` is the visible trace. The design
- * asks for exactly this — "AI work is a visible trace you can stop" — and the
+ * asks for exactly this - "AI work is a visible trace you can stop" - and the
  * brief is explicit that the trace shows operational steps, never reasoning.
  */
 export interface AgentRunState {
@@ -37,7 +37,7 @@ const IDLE: AgentRunState = { status: 'idle', answer: '', steps: [] };
  * Runs one agent turn and exposes the stream as state.
  *
  * The session id is minted once per mount and reused, because agent memory is
- * keyed on `(tenant, user, sessionId)` — a fresh id per message would give the
+ * keyed on `(tenant, user, sessionId)` - a fresh id per message would give the
  * agent amnesia between turns.
  *
  * A run in flight is aborted when a new one starts or the component unmounts;
@@ -87,8 +87,8 @@ export function useAgentRun() {
          * ★ THE SECOND BFF CALLER, AND IT DOES NOT GO THROUGH `browserApi`.
          * An SSE stream built as a template literal, which is why a search for
          * `fetch('/…')` did not find it. Under a base path it would have
-         * streamed from the root — the legacy application's origin for that
-         * path — while every other client call went to the right place.
+         * streamed from the root - the legacy application's origin for that
+         * path - while every other client call went to the right place.
          */
         url: appPath(`/api/bff${agentEndpoints.run().path}` as `/${string}`),
         body: { message, sessionId: sessionRef.current },
@@ -98,7 +98,7 @@ export function useAgentRun() {
       for await (const frame of stream) {
         const parsed = agentEventSchema.safeParse(safeJson(frame.data));
         if (!parsed.success) {
-          // One unrecognised frame must not end the run — the backend adds
+          // One unrecognised frame must not end the run - the backend adds
           // event types without versioning.
           logger.debug('agent.unrecognised_event', { event: frame.event });
           continue;

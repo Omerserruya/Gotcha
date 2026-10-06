@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * What GOTCHA is allowed to do — screen 10.
+ * What GOTCHA is allowed to do - screen 10.
  *
  * Shapes read from `services/ai/src/routes/tool-permissions.ts`, and the
  * values below were **measured through the endpoint with a real session**
@@ -19,7 +19,7 @@ import { z } from 'zod';
  * }
  * ```
  * It is **not stored and not assessed**. `create_update` is the fallback, so
- * *"13 capabilities are create/update risk"* is false — **13 matched no
+ * *"13 capabilities are create/update risk"* is false - **13 matched no
  * pattern at all.**
  *
  * And the consequence is in this tenant's own rows:
@@ -41,13 +41,13 @@ import { z } from 'zod';
  * Three of those uniform values are worth stating outright rather than
  * rendering as a column of repeats:
  *
- *   `allowModification: false` everywhere — nobody can edit an approved
+ *   `allowModification: false` everywhere - nobody can edit an approved
  *       action before it runs, which is the permission Approvals found is
  *       read by nothing.
- *   `expiresAfterMin: 30` everywhere — every approval request dies after
+ *   `expiresAfterMin: 30` everywhere - every approval request dies after
  *       thirty minutes, and Approvals found 13 of 27 approved actions never
  *       executed.
- *   `approverRole: null` everywhere — *"who approves this"* has no answer.
+ *   `approverRole: null` everywhere - *"who approves this"* has no answer.
  *       That is an **absent**, not an empty.
  *
  * ── AND THERE IS NO "WHAT IT CAN SEE" SIDE ──
@@ -57,7 +57,7 @@ import { z } from 'zod';
  */
 
 /**
- * **Ordered least to most consequential**, and that ordering is contractual —
+ * **Ordered least to most consequential**, and that ordering is contractual -
  * `tool-availability.ts` says the UI groups by these and *"the ordering is the
  * display order, so it is part of the contract"*, with tests. Do not reorder.
  */
@@ -78,7 +78,7 @@ export const capabilitySchema = z.object({
   /**
    * Built-in rows: `messaging` · `crm` · `broadcast` · `identity` · `workflow`.
    * Integration rows (backend c37f1cf7): the catalogue's `READ` · `WRITE` ·
-   * `DELETE` · `ACTION`, or `null` — kept as `''`.
+   * `DELETE` · `ACTION`, or `null` - kept as `''`.
    */
   category: z
     .string()
@@ -97,7 +97,7 @@ export const capabilitySchema = z.object({
   expiresAfterMin: z.number().nullable().default(null),
   /**
    * False on every row. The permission governing editing an approved action's
-   * parameters — and **no code path reads it**, which Approvals established.
+   * parameters - and **no code path reads it**, which Approvals established.
    */
   allowModification: z.boolean().default(false),
   /**
@@ -115,13 +115,13 @@ export const capabilitySchema = z.object({
    * ★★ `undefined` HERE MEANS "WE DO NOT KNOW", AND THE ROUTE SAYS SO
    * ════════════════════════════════════════════════════════════════════════
    * *"A tool whose provider we have no record of is not reported as
-   * disconnected — we simply do not know, and guessing 'broken' is its own
+   * disconnected - we simply do not know, and guessing 'broken' is its own
    * false statement."*
    *
    * So this is `.optional()` and **not** `.nullable().default(false)`. A
    * default would turn every tool with an unrecognised provider into a
    * disconnected one, which is the same manufactured claim as `voiceEnabled`
-   * collapsing to false — and here it would grey out a control that works.
+   * collapsing to false - and here it would grey out a control that works.
    */
   integrationConnected: z.boolean().optional(),
   /**
@@ -130,7 +130,7 @@ export const capabilitySchema = z.object({
    * The route's comment: *"Sent as a decided boolean rather than leaving the
    * UI to re-derive it from two scope lists, because a second derivation is
    * a second chance to disagree with the runtime."* It comes from
-   * `toolBlockedByMissingScopes` — the same function the bot's own tool
+   * `toolBlockedByMissingScopes` - the same function the bot's own tool
    * surface uses.
    *
    * `undefined` means the caller could not supply a verdict, which **never
@@ -147,7 +147,7 @@ export const capabilitySchema = z.object({
 
   /**
    * `not_provisioned` is a catalogue action with no tenant row yet: it is off,
-   * and settable — the PUT provisions it on a CONNECTED integration. Absent on
+   * and settable - the PUT provisions it on a CONNECTED integration. Absent on
    * built-in rows. An unknown value is absent, not a rejected list.
    */
   state: z.enum(['enabled', 'disabled', 'not_provisioned']).optional().catch(undefined),
@@ -155,7 +155,7 @@ export const capabilitySchema = z.object({
   integrationStatus: z.string().optional(),
   catalogToolId: z.string().optional(),
   /**
-   * The catalogue's own risk level — stored, unlike `riskGroup`, which is a
+   * The catalogue's own risk level - stored, unlike `riskGroup`, which is a
    * regex over the name. `null` when the catalogue gives none.
    */
   riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullable().default(null).catch(null),
@@ -167,7 +167,7 @@ export const capabilityListSchema = z.array(capabilitySchema);
 /**
  * What GOTCHA does when this capability comes up.
  *
- * The design promises three settings — *do it · ask me first · never* — and
+ * The design promises three settings - *do it · ask me first · never* - and
  * two of the three are real: `enabled` and `requiresApproval`. "Never" is
  * `enabled: false`.
  */
@@ -179,7 +179,7 @@ export function capabilityStance(capability: Capability): CapabilityStance {
 }
 
 /**
- * True when every row shares a value — so the screen can say it once instead
+ * True when every row shares a value - so the screen can say it once instead
  * of repeating it seventeen times.
  *
  * A column of identical values reads as seventeen decisions. One sentence
@@ -224,13 +224,13 @@ export function hasOwnWords(toolName: string): boolean {
  * A readable name for a capability this app has no sentence for.
  *
  * **Never the platform's `description`.** Those are written for whoever calls
- * the tool, not for the merchant reading this screen — they carry backticks,
+ * the tool, not for the merchant reading this screen - they carry backticks,
  * parenthetical *"(autonomous bot only)"* notes and instructions to call other
  * tools by their function names. Seventeen rows of that reads like an API
  * reference on a shopkeeper's screen.
  *
  * So an unmapped tool falls back to its own name, made readable. That is
- * short, true, and leaks no implementation prose — and a missing translation
+ * short, true, and leaks no implementation prose - and a missing translation
  * looks like a missing translation rather than like documentation.
  */
 /**
@@ -294,7 +294,7 @@ const BRANDS = new Map([
  *
  * Shared by the tool names and the integration categories, because both are
  * free-text platform columns with no catalogue to look a label up in. Where a
- * catalogue DOES exist — channels, integration states, permissions — use it;
+ * catalogue DOES exist - channels, integration states, permissions - use it;
  * this is for the cases where there is nothing to translate against, and it is
  * strictly better than printing the code.
  */
@@ -308,7 +308,7 @@ const BRANDS = new Map([
  * on its `@`, `:` or `/`; a date or a percentage fails on its leading digit.
  *
  * This is the property, not the instance. Two instruments missed `WHATSAPP`
- * this week — mine because I swept where text appears rather than what it
+ * this week - mine because I swept where text appears rather than what it
  * does, the supervisor's because its pattern **required an underscore**, which
  * is sound reasoning about acronyms and is exactly how a screaming identifier
  * that happens to be one word walks through. So the rule here is not "has an
@@ -333,7 +333,7 @@ export function looksLikeCode(value: string): boolean {
  *
  * Fixing the channel in that one sentence fixes today's screenshot. The next
  * `kind` the analytics service adds, and the next placeholder added to an
- * existing message, would each get the same free pass — so the humanising
+ * existing message, would each get the same free pass - so the humanising
  * belongs at the spread, where every key goes through it, rather than at the
  * placeholder somebody noticed.
  *
@@ -391,7 +391,7 @@ export function humaniseCode(code: string): string {
       return part === part.toUpperCase() ? lower : part;
     });
     const joined = parts.join('-');
-    /* Only the first word is capitalised — a sentence, not a title. */
+    /* Only the first word is capitalised - a sentence, not a title. */
     if (index > 0) return joined;
     const head = parts[0]!;
     return ACRONYMS.has(head.toLowerCase()) ||
@@ -442,7 +442,7 @@ export function groupByCategory(capabilities: readonly Capability[]): readonly C
  *
  *   always_allow      do it
  *   require_approval  ask me
- *   disabled          never — and the admin chose it
+ *   disabled          never - and the admin chose it
  *   unavailable       the switch is not the admin's to press right now
  *
  * The fourth is the one worth having: a greyed row that says WHY beats a
@@ -462,7 +462,7 @@ export type PermissionState = (typeof PERMISSION_STATES)[number];
  *
  * ⚠ TWO OF THESE CANNOT ARRIVE FROM `/api/tool-permissions`.
  * `plan_not_entitled` and `no_catalog_entry` are resolved from `planEntitled`
- * and `hasCatalogEntry`, and that route sends neither — it builds its rows by
+ * and `hasCatalogEntry`, and that route sends neither - it builds its rows by
  * hand rather than calling the shared resolver. They are named here because
  * the domain has five and a `z.enum` missing a member rejects the whole
  * response the day a second caller appears; they are not rendered as states
@@ -488,7 +488,7 @@ export interface Availability {
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ A PORT OF `resolveToolAvailability`, ORDER INCLUDED — AND THE ORDER IS
+ * ★★ A PORT OF `resolveToolAvailability`, ORDER INCLUDED - AND THE ORDER IS
  *    THE POINT
  * ════════════════════════════════════════════════════════════════════════════
  * The shared lib's own comment: *"Reasons are checked in the order the admin
@@ -497,7 +497,7 @@ export interface Availability {
  * and a missing scope cannot be fixed by toggling the switch. **Reporting the
  * wrong one sends them to the wrong screen.**"*
  *
- * So this is not "check the flags in any order and return the first true" —
+ * So this is not "check the flags in any order and return the first true" -
  * the sequence encodes which repair supersedes which, and reordering it
  * would send somebody to grant a scope on an integration that is not
  * connected.
@@ -506,14 +506,14 @@ export interface Availability {
  * The route does not call the resolver; it hands us the decided booleans.
  * Given those, the mapping to a state is arithmetic, and doing it here keeps
  * the screen and the runtime agreeing by construction. What this must never
- * do is re-derive `scopeBlocked` when the runtime supplied it — that is the
+ * do is re-derive `scopeBlocked` when the runtime supplied it - that is the
  * second derivation the route's comment warns about.
  */
 export function resolveAvailability(capability: Capability): Availability {
   const base = { missingScopes: [] as readonly string[] };
 
   // `plan_not_entitled` and `no_catalog_entry` would be checked first, and
-  // are unreachable from this endpoint — see UNAVAILABLE_REASONS.
+  // are unreachable from this endpoint - see UNAVAILABLE_REASONS.
 
   /*
    * ★ `=== false`, NOT `!connected`. `undefined` is "we have no record of
@@ -566,7 +566,7 @@ export function resolveAvailability(capability: Capability): Availability {
   }
 
   // Everything the platform controls is satisfied, so the switch really is
-  // the admin's — which is what `reason: 'ok'` says.
+  // the admin's - which is what `reason: 'ok'` says.
   if (!capability.enabled) {
     return { ...base, state: 'disabled', reason: 'ok', overriddenByPlatform: false };
   }
@@ -586,7 +586,7 @@ export function isTheAdminsChoice(availability: Availability): boolean {
 /* ── How often each tool has actually been used ──────────────────────────── */
 
 /**
- * `GET /api/analytics/tool-usage` — `analytics:dashboard:read`.
+ * `GET /api/analytics/tool-usage` - `analytics:dashboard:read`.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ IT READS TWO TABLES, AND THAT IS WHY IT IS THE RIGHT SOURCE
@@ -597,7 +597,7 @@ export function isTheAdminsChoice(availability: Availability): boolean {
  * were in the other table, and nothing joined them up."*
  *
  * So a usage panel built on this is NOT blind to adapter-run tools. A panel
- * built on a `ToolExecution` groupBy would be — that is the shape to avoid,
+ * built on a `ToolExecution` groupBy would be - that is the shape to avoid,
  * and the reason this endpoint exists.
  */
 export const toolUsageSchema = z.object({
@@ -612,7 +612,7 @@ export const toolUsageSchema = z.object({
    */
   refusedCount: z.number().default(0),
   /**
-   * ★★ OPTIONAL, NOT DEFAULTED — SEE `neverFailed`.
+   * ★★ OPTIONAL, NOT DEFAULTED - SEE `neverFailed`.
    *
    * A service that does not report errors at all would default to `0` and
    * let the screen print *"never failed"*. Absent is "we were not told",
@@ -621,7 +621,7 @@ export const toolUsageSchema = z.object({
   erroredCount: z.number().optional(),
   /**
    * ★★ FAILURES FROM BEFORE THE REASON WAS RECORDED, AND NOT COUNTED AS
-   * ERRORS — the service refuses to guess which kind they were.
+   * ERRORS - the service refuses to guess which kind they were.
    *
    * This is what stops the screen saying the design's *"never failed"*. See
    * `neverFailed`.
@@ -629,7 +629,7 @@ export const toolUsageSchema = z.object({
    * ★★ AND IT IS `.optional()`, WHICH IS THE WHOLE POINT.
    *
    * It shipped as `.default(0)`. A service that does not report this field
-   * — every service older than it — then had `unclassifiedFailureCount: 0`
+   * - every service older than it - then had `unclassifiedFailureCount: 0`
    * and `neverFailed` returned **true**, printing the exact caption this
    * field exists to prevent.
    *
@@ -661,7 +661,7 @@ export const toolUsageListSchema = z.array(toolUsageSchema);
  *
  * So there are three answers, not two:
  *
- *   true   no errors and nothing unclassified — the claim is safe
+ *   true   no errors and nothing unclassified - the claim is safe
  *   false  something errored
  *   null   nothing errored, but some attempts we cannot classify. "Never
  *          failed" would be an assertion about rows nobody can read.
@@ -670,7 +670,7 @@ export function neverFailed(usage: ToolUsage): boolean | null {
   /*
    * ★ A FIELD WE WERE NOT SENT CANNOT SUPPORT A CLAIM.
    *
-   * Absent means the service does not report it — not that it counted none.
+   * Absent means the service does not report it - not that it counted none.
    * Either absence makes "never failed" unsayable, because the claim needs
    * BOTH counters to be zero and we would be asserting one of them.
    */
@@ -717,7 +717,7 @@ export type NoAutomationReason = 'changes_orders_or_money' | 'unclassified' | nu
  *
  * Neither "cancel" nor "return" appears in `FINANCIAL_RE`, `DELETE_RE`,
  * `ADMIN_RE` or `SENSITIVE_RE`. The design puts both under *"Changing orders
- * and money"* reading *"Comes to Approvals"* — so the classifier disagrees
+ * and money"* reading *"Comes to Approvals"* - so the classifier disagrees
  * with the design about two of them, permissively.
  *
  * **`create_update` is not a judgement. It is the absence of four
@@ -745,7 +745,7 @@ export type NoAutomationReason = 'changes_orders_or_money' | 'unclassified' | nu
  * Not recoverable, and least visible afterwards.
  *
  * ⚠ AND THIS IS NOT THE ONLY GUARD IT SHOULD BE.
- * `PUT /api/tool-permissions/:toolName` does not call `mayBeAlwaysAllowed` —
+ * `PUT /api/tool-permissions/:toolName` does not call `mayBeAlwaysAllowed` -
  * it stores `requiresApproval: false` on a refund if asked. A UI-only guard
  * is one anybody with curl steps over. Backend has the enforcement; this one
  * exists because it is the guard that explains itself to a person.
@@ -779,7 +779,7 @@ export function currentChoice(capability: Capability): AdminChoice {
  *
  * ★ BOTH FIELDS, ALWAYS. The route applies `requiresApproval` only when it
  * is present, so sending `{ enabled: true }` alone on a tool currently set
- * to Never would enable it at whatever approval setting it last had — which
+ * to Never would enable it at whatever approval setting it last had - which
  * on a financial tool could be none. Every transition states both.
  */
 export function bodyFor(choice: AdminChoice): {
@@ -795,7 +795,7 @@ export const INTEGRATION_CATEGORIES = ['ACTION', 'WRITE', 'DELETE', 'READ'] as c
 export type IntegrationCategory = (typeof INTEGRATION_CATEGORIES)[number];
 
 /**
- * An integration's rows by what they do — the catalogue's category, riskier
+ * An integration's rows by what they do - the catalogue's category, riskier
  * first; a row with none (or one this list does not know) goes last, under no
  * head. Empty groups are left out.
  */

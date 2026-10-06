@@ -28,8 +28,8 @@ import { PreferenceMatrix } from './PreferenceMatrix';
 const prefs = (over: Record<string, unknown> = {}) =>
   notificationPreferencesSchema.parse({ inApp: true, email: false, whatsapp: true, ...over });
 
-describe('★ 15 — "Tell me when" × the channels', () => {
-  it('★ a cell is the channel reaching you — approvals also need the approvals switch', async () => {
+describe('★ 15 - "Tell me when" × the channels', () => {
+  it('★ a cell is the channel reaching you - approvals also need the approvals switch', async () => {
     render(
       await PreferenceMatrix({
         preferences: prefs({ approvals: false }),
@@ -43,23 +43,23 @@ describe('★ 15 — "Tell me when" × the channels', () => {
     expect(screen.getByTestId('pref-approval-inApp')).toHaveAttribute('data-on', 'no');
   });
 
-  it('★★ a row no event sends is "—", never an "off" switch', async () => {
+  it('★★ a row no event sends is "-", never an "off" switch', async () => {
     render(
       await PreferenceMatrix({ preferences: prefs(), volume: null, whatsappDestination: null }),
     );
     const row = screen.getByTestId('pref-row-actionFailed');
     expect(row).toHaveTextContent('Nothing sends this yet');
     expect(row.querySelectorAll('[role="img"]')).toHaveLength(0);
-    expect(row.textContent?.match(/—/g)).toHaveLength(3);
+    expect(row.textContent?.match(/-/g)).toHaveLength(3);
   });
 
-  it('⚠ a failed preferences read is "—" everywhere, not every switch off', async () => {
+  it('⚠ a failed preferences read is "-" everywhere, not every switch off', async () => {
     render(await PreferenceMatrix({ preferences: null, volume: null, whatsappDestination: null }));
     expect(screen.queryByTestId('pref-campaign-inApp')).toBeNull();
-    expect(screen.getByTestId('pref-quiet')).toHaveTextContent('—');
+    expect(screen.getByTestId('pref-quiet')).toHaveTextContent('-');
   });
 
-  it('the cards: the window, where WhatsApp goes, and how many — "at least" when it is', async () => {
+  it('the cards: the window, where WhatsApp goes, and how many - "at least" when it is', async () => {
     render(
       await PreferenceMatrix({
         preferences: prefs({ quietHours: { from: '21:00', to: '08:00' } }),
@@ -67,7 +67,7 @@ describe('★ 15 — "Tell me when" × the channels', () => {
         whatsappDestination: '+972 54 220 8814',
       }),
     );
-    expect(screen.getByTestId('pref-quiet')).toHaveTextContent('21:00 – 08:00');
+    expect(screen.getByTestId('pref-quiet')).toHaveTextContent('21:00 - 08:00');
     expect(screen.getByTestId('pref-whatsapp')).toHaveTextContent('+972 54 220 8814');
     expect(screen.getByTestId('pref-volume')).toHaveTextContent('You get at least 6 a day');
   });

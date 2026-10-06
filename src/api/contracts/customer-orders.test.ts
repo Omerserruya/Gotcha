@@ -30,7 +30,7 @@ const order = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('★★ money is a decimal string on the wire', () => {
-  it('★★ an `ok` response with string amounts parses — the number-typed contract threw here', () => {
+  it('★★ an `ok` response with string amounts parses - the number-typed contract threw here', () => {
     const parsed = commerceContextSchema.parse({
       state: 'ok',
       data: {
@@ -44,7 +44,7 @@ describe('★★ money is a decimal string on the wire', () => {
     expect(first.refundableMaximum.amount).toBe(358);
   });
 
-  it('⚠ empty, absent and unparseable are null — never a confident 0', () => {
+  it('⚠ empty, absent and unparseable are null - never a confident 0', () => {
     expect(moneySchema.parse({ amount: '', currency: 'ILS' }).amount).toBeNull();
     expect(moneySchema.parse({ currency: 'ILS' }).amount).toBeNull();
     expect(moneySchema.parse({ amount: 'n/a', currency: 'ILS' }).amount).toBeNull();
@@ -53,7 +53,7 @@ describe('★★ money is a decimal string on the wire', () => {
   });
 });
 
-describe('★★ the fields 04d draws arrive — they were on the wire and stripped', () => {
+describe('★★ the fields 04d draws arrive - they were on the wire and stripped', () => {
   it('the admin link, the milestones, the detail, and the summary’s figures', () => {
     const parsed = commerceContextSchema.parse({
       state: 'ok',
@@ -115,7 +115,7 @@ describe('★★ the fields 04d draws arrive — they were on the wire and strip
   });
 });
 
-describe('★★ shopifyAdminHref — a Shopify admin link, or nothing', () => {
+describe('★★ shopifyAdminHref - a Shopify admin link, or nothing', () => {
   it('passes the shape the service builds', () => {
     expect(shopifyAdminHref('https://store.myshopify.com/admin/orders/1')).toBe(
       'https://store.myshopify.com/admin/orders/1',

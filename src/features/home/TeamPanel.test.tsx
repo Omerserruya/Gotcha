@@ -11,14 +11,14 @@ import he from '@/i18n/messages/he/home.json';
 import { TeamPanel } from './TeamPanel';
 
 /**
- * "Away until 11:00" — in the page's language, not the server's.
+ * "Away until 11:00" - in the page's language, not the server's.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHY THIS IS A UNIT TEST AND NOT A SCREENSHOT
  * ════════════════════════════════════════════════════════════════════════════
  * The defect only renders when somebody is AWAY with an `awayUntil` set, and
  * the demo tenant may have nobody away. **A clean Hebrew shot of screen 01
- * would not mean the formatter is fixed — it would mean the branch was never
+ * would not mean the formatter is fixed - it would mean the branch was never
  * exercised**, which is the distinction this project has now made in nine
  * different places.
  *
@@ -26,8 +26,8 @@ import { TeamPanel } from './TeamPanel';
  *
  * ── THE DEFECT ──
  * `secondLine` called `until.toLocaleTimeString(undefined, …)` in a SERVER
- * component. `undefined` resolves to the Node process's locale — `en-US` on
- * this machine, and whatever `LANG` a container is started with in general —
+ * component. `undefined` resolves to the Node process's locale - `en-US` on
+ * this machine, and whatever `LANG` a container is started with in general -
  * for every reader in every language. On a Hebrew page it printed `02:30 PM`
  * beside `14:30` times drawn through `getFormatter()` elsewhere on the same
  * screen.
@@ -85,7 +85,7 @@ describe('★★ the away time follows the page, not the process', () => {
     /*
      * THE ASSERTION THAT WOULD HAVE CAUGHT IT. `he-IL` has no AM/PM, so the
      * presence of those letters is the defect itself rather than a proxy for
-     * it — and `14:30` is what every other time on that screen shows.
+     * it - and `14:30` is what every other time on that screen shows.
      */
     await show('he');
 
@@ -103,7 +103,7 @@ describe('★★ the away time follows the page, not the process', () => {
   });
 
   it('★ a member with no away time is described by load instead', async () => {
-    // The branch that renders when the one above does not — so a test failing
+    // The branch that renders when the one above does not - so a test failing
     // on the clock cannot be passed by removing the sentence.
     current = 'he';
     render(
@@ -116,15 +116,15 @@ describe('★★ the away time follows the page, not the process', () => {
   });
 });
 
-describe('★ 01 — the panel is always drawn: no team and no read are states', () => {
+describe('★ 01 - the panel is always drawn: no team and no read are states', () => {
   it.each([
     [[], /No one on the team yet/],
     [null, /couldn't read/],
-  ] as const)('%j → its title and "—", and no count of nobody', async (value, reason) => {
+  ] as const)('%j → its title and "-", and no count of nobody', async (value, reason) => {
     current = 'en';
     render(await TeamPanel({ team: value as never, presence: new Map() }));
     expect(screen.getByTestId('team-panel')).toHaveTextContent('Your team right now');
-    expect(screen.getByTestId('team-none')).toHaveTextContent('—');
+    expect(screen.getByTestId('team-none')).toHaveTextContent('-');
     expect(screen.getByTestId('team-none')).toHaveAttribute('title', expect.stringMatching(reason));
     expect(screen.getByTestId('team-panel')).not.toHaveTextContent(/online/i);
   });
@@ -153,7 +153,7 @@ const WIRE = [
   },
 ];
 
-describe('★★ Home — "Your team right now" reads people and AI together', () => {
+describe('★★ Home - "Your team right now" reads people and AI together', () => {
   it('the real shape parses: email null, claimedToday null, kind', () => {
     const parsed = teamSchema.parse(WIRE);
     expect(parsed.map((m) => m.kind)).toEqual(['human', 'ai']);

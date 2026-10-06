@@ -24,7 +24,7 @@ import {
  *
  * Almost none of this is reachable by a capture on this tenant: Shopify is in
  * ERROR, so the live response is `connection_unhealthy` and the seven other
- * states — including every order card — are unit-only.
+ * states - including every order card - are unit-only.
  */
 
 vi.mock('@/i18n/navigation', () => ({
@@ -49,7 +49,7 @@ vi.mock('next-intl/server', () => ({
 
 /*
  * `conversationId` defaults to null here, so the order-card tests assert the
- * SAID-not-offered branch. The action controls have their own file — they
+ * SAID-not-offered branch. The action controls have their own file - they
  * are a client component and belong with the outcomes they render.
  */
 const show = async (orders: CommerceContextResponse | null, conversationId: string | null = null) =>
@@ -57,7 +57,7 @@ const show = async (orders: CommerceContextResponse | null, conversationId: stri
     /*
      * Wrapped, because `OrderActions` is a CLIENT component inside this
      * server tree and `useTranslations` needs a context the server mock does
-     * not supply. Fourth time this session — the tell is always the same
+     * not supply. Fourth time this session - the tell is always the same
      * sentence about `NextIntlClientProvider`, and it names the component
      * rather than the harness.
      */
@@ -97,7 +97,7 @@ describe('★★ eight states, rendered as eight', () => {
   it('gives every non-ok state its own sentence', async () => {
     /*
      * `CommerceContextResponse`'s own comment asks for this: the frontend
-     * "renders an explicit UI for each state — it never guesses from a bare
+     * "renders an explicit UI for each state - it never guesses from a bare
      * error". Collapsing them destroys five different repairs.
      *
      * Asserted over ALL of them from the constant, so a state added to the
@@ -239,7 +239,7 @@ describe('★ with no conversation to act through, what could be done is still S
     /*
      * The actions post to `/commerce-context/:conversationId/actions`. A
      * person with no conversation has nowhere for one to route, so the
-     * controls are absent rather than broken — and what could be done is
+     * controls are absent rather than broken - and what could be done is
      * still said, because it is a fact about the order.
      */
     const { container } = await show(
@@ -335,7 +335,7 @@ const wire = (over: Record<string, unknown> = {}) =>
     ...over,
   });
 
-describe('★★ 04d — the open order, drawn whole', () => {
+describe('★★ 04d - the open order, drawn whole', () => {
   it('★ the lead: count, spend and open, from the summary; and when it was read', async () => {
     await show(
       commerceContextSchema.parse({
@@ -358,7 +358,7 @@ describe('★★ 04d — the open order, drawn whole', () => {
     expect(lead).toHaveTextContent(/From Shopify · synced 2 minutes ago/);
   });
 
-  it('★★ one status chip — what happened last — and payment only when it is news', async () => {
+  it('★★ one status chip - what happened last - and payment only when it is news', async () => {
     await show(
       ok([
         wire({ orderId: 'a' }),
@@ -385,11 +385,11 @@ describe('★★ 04d — the open order, drawn whole', () => {
       'ahead',
     ]);
     expect(steps[0]).toHaveTextContent('Order placed');
-    // Reached with no time from Shopify: the step stays, its date is "—".
-    expect(steps[3]).toHaveTextContent('—');
+    // Reached with no time from Shopify: the step stays, its date is "-".
+    expect(steps[3]).toHaveTextContent('-');
   });
 
-  it('★ line items from the detail, with their prices; the facts with "—" where none', async () => {
+  it('★ line items from the detail, with their prices; the facts with "-" where none', async () => {
     await show(ok([wire()]));
     const card = screen.getByTestId('order-o1');
     expect(card).toHaveTextContent('Linen pillowcases · Sand · pair');
@@ -397,16 +397,16 @@ describe('★★ 04d — the open order, drawn whole', () => {
     expect(card).toHaveTextContent('179');
     expect(card).toHaveTextContent('RR204917IL · Israel Post');
     expect(card).toHaveTextContent('Ben Yehuda 18, Tel Aviv');
-    expect(card).toHaveTextContent(/Carrier case\s*—/);
+    expect(card).toHaveTextContent(/Carrier case\s*-/);
   });
 
-  it('⚠ without the detail the items still show, priced "—"', async () => {
+  it('⚠ without the detail the items still show, priced "-"', async () => {
     await show(ok([order()]));
     expect(screen.getByTestId('order-o1')).toHaveTextContent('Olive oil');
-    expect(screen.getByTestId('order-o1')).toHaveTextContent('—');
+    expect(screen.getByTestId('order-o1')).toHaveTextContent('-');
   });
 
-  it('★★ "Open in Shopify" is the guarded admin link — or drawn without one', async () => {
+  it('★★ "Open in Shopify" is the guarded admin link - or drawn without one', async () => {
     await show(
       ok([
         wire({ orderId: 'good' }),
@@ -435,7 +435,7 @@ describe('★★ 04d — the open order, drawn whole', () => {
   });
 });
 
-describe('★ 04d’s filters: All, Open, Returns — by the platform’s keys', () => {
+describe('★ 04d’s filters: All, Open, Returns - by the platform’s keys', () => {
   const delivered = wire({
     orderId: 'done',
     shipping: { key: 'delivered', label: 'Delivered', tone: 'positive' },
@@ -481,7 +481,7 @@ describe('★ 04d’s filters: All, Open, Returns — by the platform’s keys',
   });
 });
 
-describe('★★ 04d’s side — the summary’s own figures, and "—" for what nothing records', () => {
+describe('★★ 04d’s side - the summary’s own figures, and "-" for what nothing records', () => {
   it('average, open, the address on file, refunded-or-cancelled', async () => {
     render(
       await OrdersSide({
@@ -502,19 +502,19 @@ describe('★★ 04d’s side — the summary’s own figures, and "—" for wha
     const across = screen.getByTestId('orders-across');
     expect(across).toHaveTextContent('357');
     expect(across).toHaveTextContent('open now1');
-    expect(across).toHaveTextContent('arrived on time—');
+    expect(across).toHaveTextContent('arrived on time-');
     const onFile = screen.getByTestId('orders-on-file');
     expect(onFile).toHaveTextContent('Ben Yehuda 18, Tel Aviv');
-    expect(onFile).toHaveTextContent('Payment—');
+    expect(onFile).toHaveTextContent('Payment-');
     expect(onFile).toHaveTextContent('2 refunded or cancelled');
     expect(screen.getByTestId('orders-buys')).toHaveTextContent('Nothing yet.');
     expect(screen.getByTestId('promise-card')).toBeInTheDocument();
   });
 
-  it('⚠ no read, no summary: every block stays, every figure "—"', async () => {
+  it('⚠ no read, no summary: every block stays, every figure "-"', async () => {
     render(await OrdersSide({ orders: null }));
     const across = screen.getByTestId('orders-across');
-    expect(across.textContent?.match(/—/g)).toHaveLength(3);
-    expect(screen.getByTestId('orders-on-file').textContent?.match(/—/g)).toHaveLength(3);
+    expect(across.textContent?.match(/-/g)).toHaveLength(3);
+    expect(screen.getByTestId('orders-on-file').textContent?.match(/-/g)).toHaveLength(3);
   });
 });

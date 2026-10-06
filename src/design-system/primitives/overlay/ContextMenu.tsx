@@ -16,7 +16,7 @@ export const ContextMenu = RadixContextMenu.Root;
 export const ContextMenuTrigger = RadixContextMenu.Trigger;
 
 /**
- * `dark` is 02's inbox menu — `#171717`, the panel's dark wall colour. The
+ * `dark` is 02's inbox menu - `#171717`, the panel's dark wall colour. The
  * light default is every other menu in the product.
  */
 export type MenuAppearance = 'light' | 'dark';
@@ -61,7 +61,7 @@ export function ContextMenuSeparator() {
   return <RadixContextMenu.Separator className={styles.separator} />;
 }
 
-/** A submenu — 02's "Assign to someone ›". */
+/** A submenu - 02's "Assign to someone ›". */
 export const ContextMenuSub = RadixContextMenu.Sub;
 
 export function ContextMenuSubTrigger({

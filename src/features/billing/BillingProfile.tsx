@@ -11,12 +11,12 @@ import {
 import styles from './Billing.module.css';
 
 /**
- * Screen 17e — who the bill is made out to, and what it charges.
+ * Screen 17e - who the bill is made out to, and what it charges.
  *
  * ── THE FACT THIS SCREEN EXISTS TO SURFACE ──
  * This tenant has **no payment method on file and four FAILED invoices.**
  * Those two are stated together, because a card that does not exist cannot
- * be charged — that is arithmetic rather than a diagnosis, and it is the
+ * be charged - that is arithmetic rather than a diagnosis, and it is the
  * only actionable thing on the page.
  *
  * The screen does not claim it is *the* reason all four failed; Backend owns
@@ -30,7 +30,7 @@ import styles from './Billing.module.css';
  * ── WHAT THE DESIGN ASKS FOR AND IS NOT THERE ──
  * **Invoice recipients (plural), a PO number, and a profile language.**
  * `billingEmail` is one address, so *"send invoices to finance@ and to the
- * owner"* is not expressible — and a second field that quietly overwrote the
+ * owner"* is not expressible - and a second field that quietly overwrote the
  * first would be worse than none.
  */
 export async function BillingProfileSection({
@@ -41,13 +41,13 @@ export async function BillingProfileSection({
   readonly profile: Profile | null;
   readonly methods: readonly PaymentMethod[] | null;
   /**
-   * How many charges have already failed — **`null` means we could not find
+   * How many charges have already failed - **`null` means we could not find
    * out**, which is not zero.
    *
    * It used to be a plain `number`, defaulted from `invoices ?? []`. A failed
    * invoices read therefore produced 0, and the sentence quietly demoted
    * itself from *"and 4 charges have already failed"* to *"there's nothing to
-   * charge"* — dropping the half that makes it urgent, with nothing to
+   * charge"* - dropping the half that makes it urgent, with nothing to
    * indicate anything was missing.
    */
   readonly failedInvoiceCount: number | null;
@@ -61,7 +61,7 @@ export async function BillingProfileSection({
 
   /*
     17e, measured: Payment method; "Tax invoice made out to" as 02's fields;
-    "Send invoices and receipts to". Read state — the values as stored, in
+    "Send invoices and receipts to". Read state - the values as stored, in
     02's boxes, and nothing here writes yet.
   */
   return (
@@ -90,7 +90,7 @@ export async function BillingProfileSection({
       ) : (
         /*
           02's card row in every state: "No card on file" when the read said
-          so, "—" when it could not say. The sentence below says the rest.
+          so, "-" when it could not say. The sentence below says the rest.
         */
         <div
           className={styles.detailsCard}
@@ -99,7 +99,7 @@ export async function BillingProfileSection({
         >
           <span className={styles.detailsBrand} aria-hidden="true" />
           <span className={styles.detailsCardText}>
-            {methods === null ? '—' : t('profile.noCardRow')}
+            {methods === null ? '-' : t('profile.noCardRow')}
           </span>
           <span className={styles.detailsAction} aria-disabled="true" title={t('profile.notYet')}>
             {t('profile.addCard')}
@@ -113,7 +113,7 @@ export async function BillingProfileSection({
         VANISH SILENTLY.
         ════════════════════════════════════════════════════════════════════
         This block depends on TWO parallel reads, and it failed roughly one
-        capture in six — a different viewport each time, with a clear request
+        capture in six - a different viewport each time, with a clear request
         budget. The condition was `methods !== null && ...`, so when the
         payment-methods fetch lost, the whole warning disappeared and the page
         looked complete.
@@ -134,7 +134,7 @@ export async function BillingProfileSection({
         <p className={styles.noCard} data-testid="nothing-to-charge">
           {failedInvoiceCount === null
             ? /*
-                There IS no payment method — that much we read successfully —
+                There IS no payment method - that much we read successfully -
                 but we could not count the failures. Said rather than rounded
                 to zero, because zero is the reassuring answer and it is one
                 we do not have.
@@ -157,7 +157,7 @@ export async function BillingProfileSection({
         different thing from `no_billing_profile` and must read differently."
 
         The first one is the sharpest: with no billable entity, "add your
-        billing details" is not even the right instruction — there is nothing
+        billing details" is not even the right instruction - there is nothing
         to add them to.
       */}
       {reading === 'no_account' ? (
@@ -174,7 +174,7 @@ export async function BillingProfileSection({
         </p>
       ) : null}
       {/*
-        02's boxes in every state — the values when there are any, "—" when
+        02's boxes in every state - the values when there are any, "-" when
         there are none. What the state IS is the one line above.
       */}
       <>
@@ -183,7 +183,7 @@ export async function BillingProfileSection({
           <Field label={t('profile.vatId')} value={profile?.vatId ?? null} />
           <Field label={t('profile.address')} value={profile?.billingAddress ?? null} />
           <Field label={t('profile.country')} value={profile?.billingCountry ?? null} />
-          {/* 02's two more fields have no column: "—", and why. */}
+          {/* 02's two more fields have no column: "-", and why. */}
           <Field label={t('profile.po')} value={null} none={t('profile.noField')} />
           <Field label={t('profile.language')} value={null} none={t('profile.noField')} />
         </div>
@@ -196,7 +196,7 @@ export async function BillingProfileSection({
           {profile?.billingEmail ? (
             <span className={styles.detailsChip}>{profile.billingEmail}</span>
           ) : (
-            <span className={styles.lowNone}>—</span>
+            <span className={styles.lowNone}>-</span>
           )}
         </p>
       </>
@@ -225,7 +225,7 @@ function Field({
     <label className={styles.detailsField}>
       <span className={styles.detailsLabel}>{label}</span>
       <span className={styles.detailsBox} title={value === null ? none : undefined}>
-        {value ?? '—'}
+        {value ?? '-'}
       </span>
     </label>
   );

@@ -39,7 +39,7 @@
   /*
    * Visible to assistive technology, invisible on screen.
    *
-   * Not `display: none` and not `visibility: hidden` — both remove the element
+   * Not `display: none` and not `visibility: hidden` - both remove the element
    * from the accessibility tree, which defeats the point. This is the clip
    * technique: the element still exists and is still announced.
    */

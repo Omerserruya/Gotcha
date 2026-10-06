@@ -47,14 +47,14 @@ const detail = (over: Partial<CustomerDetail> = {}): CustomerDetail => ({
 });
 
 describe('★★ 04b’s header', () => {
-  it('★★ the summary is there, in its own element — the one serif italic', async () => {
+  it('★★ the summary is there, in its own element - the one serif italic', async () => {
     const summary = FIXTURE_DETAIL.brief?.summary;
     render(await CustomerHeader({ detail: detail(), contactId: 'k1' }));
     if (summary)
       expect(screen.getByTestId('customer-summary')).toHaveTextContent(summary.slice(0, 20));
   });
 
-  it('⚠ no summary keeps the line, quietly — not an omission', async () => {
+  it('⚠ no summary keeps the line, quietly - not an omission', async () => {
     render(await CustomerHeader({ detail: detail({ brief: null }), contactId: 'k1' }));
     const line = screen.getByTestId('customer-summary');
     expect(line).toHaveAttribute('data-empty');
@@ -80,7 +80,7 @@ describe('★★ 04b’s header', () => {
   });
 });
 
-describe('★ the tabs — 04c–04f', () => {
+describe('★ the tabs - 04c-04f', () => {
   it('marks the open one, and an unknown tab is Everything', async () => {
     expect(parseCustomerTab('orders')).toBe('orders');
     expect(parseCustomerTab('nope')).toBe('everything');
@@ -106,7 +106,7 @@ describe('★★ the timeline: one stream, conversations, orders, actions and no
     const tones = [...screen.getByTestId('customer-timeline').querySelectorAll('li')].map((li) =>
       li.getAttribute('data-tone'),
     );
-    // Conversations only — whatever their dot: open-and-theirs, resolved, or plain.
+    // Conversations only - whatever their dot: open-and-theirs, resolved, or plain.
     expect(tones.every((tone) => ['attention', 'resolved', 'conversation'].includes(tone!))).toBe(
       true,
     );
@@ -131,7 +131,7 @@ describe('★★ the timeline: one stream, conversations, orders, actions and no
   it('★★ GOTCHA’s actions are rows: the approvals it asked for, in violet, with their outcome', async () => {
     /*
       Measured on dev: 28 approvals on one customer and not one on the
-      screen — the timeline route returns messages only. The loader reads
+      screen - the timeline route returns messages only. The loader reads
       them from the approvals list; this is the screen's half.
     */
     const first = FIXTURE_DETAIL.timeline!.events.find((e) => e.type === 'message')!;
@@ -177,13 +177,13 @@ describe('★★ the timeline: one stream, conversations, orders, actions and no
   });
 });
 
-describe('★★ the side: WORTH, GOTCHA remembers, Reach them, the pinned note — all drawn', () => {
-  it('⚠⚠ lifetime and refunds are "—": only recent orders are read', async () => {
+describe('★★ the side: WORTH, GOTCHA remembers, Reach them, the pinned note - all drawn', () => {
+  it('⚠⚠ lifetime and refunds are "-": only recent orders are read', async () => {
     render(await CustomerSide({ detail: detail() }));
     const worth = screen.getByTestId('customer-worth');
     expect(worth).toHaveTextContent('lifetime');
     expect(worth).toHaveTextContent('refunds');
-    expect(worth.textContent?.match(/—/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(worth.textContent?.match(/-/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
   it('★ every block stays when its data is empty', async () => {
@@ -192,14 +192,14 @@ describe('★★ the side: WORTH, GOTCHA remembers, Reach them, the pinned note 
         detail: detail({ orders: null, memory: null, timeline: null, notes: [] }),
       }),
     );
-    expect(screen.getByTestId('worth-orders')).toHaveTextContent('—');
+    expect(screen.getByTestId('worth-orders')).toHaveTextContent('-');
     expect(screen.getByTestId('customer-remembers')).toHaveTextContent('Nothing yet.');
     expect(screen.getByTestId('customer-reach')).toHaveTextContent('No handle recorded.');
     expect(screen.getByTestId('customer-pinned-note')).toHaveTextContent('No notes yet.');
   });
 });
 
-describe('★★ 02’s dates are day first — "25 Aug", not "Aug 25"', () => {
+describe('★★ 02’s dates are day first - "25 Aug", not "Aug 25"', () => {
   const format = createFormatter({ locale: 'en', timeZone: 'UTC' });
   const now = new Date('2026-10-02T12:00:00.000Z');
 

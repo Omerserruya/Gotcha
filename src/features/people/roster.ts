@@ -26,7 +26,7 @@ export interface RosterRow {
   readonly email: string | null;
   readonly initials: string;
   /**
-   * What this row may do — the assigned role's name.
+   * What this row may do - the assigned role's name.
    *
    * Never a money limit. The policy engine scopes amounts per action kind and
    * tenant-wide, with no notion of a subject, so a per-person figure is not
@@ -88,7 +88,7 @@ function personRow(member: Member, presence: AgentPresence | undefined): RosterR
     email: member.email ?? null,
     initials: initialsOf(name),
     // `roleName` is the assigned built-in role. `legacyRole` is the old enum,
-    // used only when no role has been assigned — it is a coarser answer to the
+    // used only when no role has been assigned - it is a coarser answer to the
     // same question, not a different one.
     canDo: member.roleName ?? member.legacyRole ?? null,
     teams: member.departments
@@ -129,7 +129,7 @@ function aiRow(ai: AiEmployee): RosterRow {
  * **Grouped rather than interleaved, deliberately.** Sorting the two kinds
  * together by name would scatter them, and they answer different questions: a
  * person is who you ask, an AI employee is what is running. Their controls
- * differ too — you deactivate a colleague and you pause an employee — so a
+ * differ too - you deactivate a colleague and you pause an employee - so a
  * paused AI sitting between two colleagues would put unlike rows side by side
  * for no reason other than their initials.
  *

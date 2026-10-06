@@ -42,7 +42,7 @@ describe('★★ signed out is sign-in, with the way back', () => {
     await expect(render()).rejects.toThrow(SIGN_IN);
   });
 
-  it('★★ the platform refuses the token (401): sign-in — no partial screen', async () => {
+  it('★★ the platform refuses the token (401): sign-in - no partial screen', async () => {
     get.mockRejectedValue(new ApiError({ kind: 'authentication', status: 401 }));
     await expect(render()).rejects.toThrow(SIGN_IN);
   });

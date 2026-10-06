@@ -13,7 +13,7 @@ import { StreamLive } from './StreamLive';
  * A SEND ANSWERS 201 WITH THE ROW AT `PENDING`
  * ════════════════════════════════════════════════════════════════════════════
  * Everything after that happens in the outgoing worker and the provider webhook.
- * `revalidatePath` re-reads once, at send time, when there is nothing new to see —
+ * `revalidatePath` re-reads once, at send time, when there is nothing new to see -
  * so without this the stream shows `PENDING` for ever and the composer's *"it will
  * say so if it fails"* is a sentence we wrote rather than a behaviour.
  */
@@ -73,7 +73,7 @@ describe('★★ a delivery change re-reads the conversation', () => {
   it('★★ coalesces a burst into one re-read', () => {
     /*
      * One message goes SENT, then DELIVERED, then READ. Three frames, one
-     * re-render — and the screen ends up showing the last state either way.
+     * re-render - and the screen ends up showing the last state either way.
      */
     render(<StreamLive conversationId="c1" />);
     act(() => {

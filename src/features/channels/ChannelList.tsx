@@ -25,7 +25,7 @@ import { Link } from '@/i18n/navigation';
  * though the contract already strips it.
  *
  * The volume number is the reason this is a health check rather than a
- * settings list — so when it could not be loaded the row says nothing rather
+ * settings list - so when it could not be loaded the row says nothing rather
  * than showing a zero. "No conversations" and "we could not ask" are different
  * facts and only one of them is reassuring.
  */
@@ -54,13 +54,13 @@ export async function ChannelList({
   /**
    * The line under the name: identity, then the two numbers.
    *
-   * "12 open now · 1,480 started in the last 30 days" — the snapshot for
+   * "12 open now · 1,480 started in the last 30 days" - the snapshot for
    * triage and the window for health.
    *
    * The two are DIFFERENT MEASURES and the copy says so. One is open right
    * now, whatever it started; the other is what arrived in the window,
    * whatever its status. Captioning them as one measure at two zoom levels
-   * would be wrong — a conversation running since August is in neither the
+   * would be wrong - a conversation running since August is in neither the
    * September window nor, if it closed, the open count.
    *
    * The window is NAMED, never called "this week" over a longer figure: a
@@ -78,7 +78,7 @@ export async function ChannelList({
         t('inWindow', { count: number.format(row.windowConversations), days: windowDays }),
       );
     }
-    // Who answers it — the one routing a channel stores — at the line's end,
+    // Who answers it - the one routing a channel stores - at the line's end,
     // where 02 has no column for it.
     if (row.responseMode) parts.push(t(`mode.${row.responseMode}` as 'mode.AI_AUTO_REPLY'));
     return parts.join(' · ');
@@ -91,7 +91,7 @@ export async function ChannelList({
     <>
       {/*
         02's warning above the list: the channel that needs attention, in the
-        platform's own words — one banner, the first that is troubled; the
+        platform's own words - one banner, the first that is troubled; the
         rest still say so on their rows.
       */}
       {troubledRows[0] ? (
@@ -144,8 +144,8 @@ export async function ChannelList({
               <div className={styles.identity}>
                 {/*
                 ★★ THIS HAD NO FALLBACK AT ALL. A channel absent from
-                `channels.json` rendered `name.TELEGRAM` — the KEY, not even the
-                enum — because next-intl returns the key it could not resolve.
+                `channels.json` rendered `name.TELEGRAM` - the KEY, not even the
+                enum - because next-intl returns the key it could not resolve.
                 The other nine sites at least degraded to the platform's word.
               */}
                 <span className={styles.name}>
@@ -171,7 +171,7 @@ export async function ChannelList({
 
               {/* 02's "Settings" on the row: WhatsApp's numbers, health and repairs (13b). */}
               {row.channel === 'WEBCHAT' && row.widgetId ? (
-                // Web chat's settings are its embed code — reachable any time after Create.
+                // Web chat's settings are its embed code - reachable any time after Create.
                 <Link
                   href={
                     embed === row.id
@@ -218,7 +218,7 @@ export async function ChannelList({
 }
 
 /**
- * A provider whose app credentials are absent can never complete OAuth — drawn
+ * A provider whose app credentials are absent can never complete OAuth - drawn
  * "not set up" from the start, not a Connect that dead-ends. Unread: live.
  */
 function notSetUp(

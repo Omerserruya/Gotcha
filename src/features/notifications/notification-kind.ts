@@ -5,7 +5,7 @@ import type { Notification } from '@/api/contracts/notifications';
  * (`services/notifications/src/services/event-catalogue.ts`).
  *
  * `eventType` is free text, so only keys the catalogue names are sorted; an
- * unknown one is in "Everything" and in neither filter — never guessed.
+ * unknown one is in "Everything" and in neither filter - never guessed.
  */
 const DECISION = new Set(['tool.approval_required', 'conversation.escalated']);
 const BROKEN = new Set([

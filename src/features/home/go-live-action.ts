@@ -17,7 +17,7 @@ export type GoLiveResult =
     };
 
 /**
- * Go live — a write that puts GOTCHA in front of real customers, made only
+ * Go live - a write that puts GOTCHA in front of real customers, made only
  * on the owner's second press. The route's own guards stand: it is never
  * told to skip the store.
  */

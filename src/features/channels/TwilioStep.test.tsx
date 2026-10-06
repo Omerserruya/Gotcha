@@ -30,7 +30,7 @@ async function fill(sid = SID) {
   await userEvent.type(screen.getByTestId('twilio-token'), 'tok');
 }
 
-describe('★★ Phone calls with your own Twilio — inside the Connect panel', () => {
+describe('★★ Phone calls with your own Twilio - inside the Connect panel', () => {
   it('a malformed Account SID is said, and nothing is sent', async () => {
     show();
     await fill('AC123');

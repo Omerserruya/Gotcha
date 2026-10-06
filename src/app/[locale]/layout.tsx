@@ -91,8 +91,8 @@ export default async function LocaleLayout({
           ════════════════════════════════════════════════════════════════════
           With no `messages` prop it hands the client EVERY namespace in the
           request config. Measured on the deployed sign-in page: 143,757 bytes
-          and 1,097 message-shaped strings — "Approvals", "Studio",
-          "conversation" x121, "refund" x20 — the product's entire vocabulary,
+          and 1,097 message-shaped strings - "Approvals", "Studio",
+          "conversation" x121, "refund" x20 - the product's entire vocabulary,
           on a page nobody has authenticated to reach.
 
           What survives here is only what the route error boundary needs, since

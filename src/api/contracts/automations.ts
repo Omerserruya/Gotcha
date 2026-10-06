@@ -1,19 +1,19 @@
 import { z } from 'zod';
 
 /**
- * Automations — screen 09.
+ * Automations - screen 09.
  *
  * Shapes read from `services/chatbot/src/routes/chatbot.ts` and the
  * `ChatbotFlow` model.
  *
  * ── A BARE ARRAY ──
- * `res.json(flows)` — no envelope at all. That is the **fourth** response
+ * `res.json(flows)` - no envelope at all. That is the **fourth** response
  * shape on this platform, after `{ data }`, `{ data, nextCursor }` and bare
  * `{ subscription }`, so this one is read with `raw` and parsed as an array.
  *
  * ── A COUNT, AND NO HISTORY ──
  * `runCount` is an `Int` described as *"number of times this flow has been
- * executed"*, and **there are no run-record models of any kind** — no
+ * executed"*, and **there are no run-record models of any kind** - no
  * `FlowRun`, no `FlowExecution`, nothing. So:
  *
  *   - *"Ran 46 times **this week**"* is not derivable. The counter is
@@ -26,13 +26,13 @@ import { z } from 'zod';
  *
  * ── WHAT ELSE IS NOT MODELLED ──
  * **`isActive` is a boolean.** No actor and no timestamp, so *"Paused by you
- * on 12 Aug"* cannot be said — only that it is paused.
+ * on 12 Aug"* cannot be said - only that it is paused.
  *
  * **`channel` is one channel or null, and null means all.** *"Runs on
  * WhatsApp, Instagram and email"* is not expressible: a flow covers exactly
  * one channel or every channel.
  *
- * **`₪12,400 recovered`** is attributed revenue — its **fifth** appearance
+ * **`₪12,400 recovered`** is attributed revenue - its **fifth** appearance
  * across five screens, and still with no inputs anywhere.
  */
 
@@ -43,7 +43,7 @@ export const automationSchema = z.object({
   isActive: z.boolean().default(false),
   /** `null` means every channel. One value means exactly that one. */
   channel: z.string().nullable().default(null),
-  /** Free text describing the trigger — not a structured condition. */
+  /** Free text describing the trigger - not a structured condition. */
   trigger: z.string().nullable().default(null),
   /**
    * Cumulative, for all time. **Never per-week**: the counter has no clock
@@ -53,7 +53,7 @@ export const automationSchema = z.object({
   updatedAt: z.string().nullable().default(null),
   /*
    * The flow graph (09's THEN). Only each node's TYPE and the edges are
-   * named — node `data` carries message bodies and HTTP targets that no
+   * named - node `data` carries message bodies and HTTP targets that no
    * card shows. `.catch`-ed: a graph this contract did not foresee must not
    * reject the list.
    */
@@ -82,7 +82,7 @@ export const STEP_TYPES = [
 ] as const;
 
 /**
- * 09's THEN: the flow's steps in the order it runs them — from the node no
+ * 09's THEN: the flow's steps in the order it runs them - from the node no
  * edge leads into, along each node's one way out. Where a node has more than
  * one way out the flow BRANCHES, and the walk stops there and says so rather
  * than guessing which way is "the" case. A cycle stops the walk too.
@@ -109,7 +109,7 @@ export function flowSteps(automation: Automation): {
   }
 }
 
-/** The route answers a bare array — no envelope. */
+/** The route answers a bare array - no envelope. */
 export const automationListSchema = z.array(automationSchema);
 
 /**

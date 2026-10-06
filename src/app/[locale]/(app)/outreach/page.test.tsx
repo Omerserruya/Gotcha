@@ -60,7 +60,7 @@ const page = async (campaign?: string) => {
   return Page({ searchParams: Promise.resolve(campaign ? { campaign } : {}) });
 };
 
-describe('★★ 05 — reaching out', () => {
+describe('★★ 05 - reaching out', () => {
   it('★ 02’s title, and a status sentence counted from the campaigns', async () => {
     const props = propsOf<{ title: string; description: string; flush?: boolean }>(
       await page(),
@@ -77,7 +77,7 @@ describe('★★ 05 — reaching out', () => {
     ).toBe('done');
   });
 
-  it('⚠ and the first one when the URL names none — or one that is not there', async () => {
+  it('⚠ and the first one when the URL names none - or one that is not there', async () => {
     expect(propsOf<{ campaign: { id: string } }>(await page(), CampaignCard)?.campaign.id).toBe(
       's1',
     );
@@ -87,7 +87,7 @@ describe('★★ 05 — reaching out', () => {
   });
 });
 
-describe('★★ 05 — creating outreach, as drafts (Omer, 2026-10-04)', () => {
+describe('★★ 05 - creating outreach, as drafts (Omer, 2026-10-04)', () => {
   const at = async (query: Record<string, string>) => {
     loadOutreach.mockResolvedValue({
       inFlight: [c('a', 'SENDING')],

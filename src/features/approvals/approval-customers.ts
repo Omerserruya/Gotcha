@@ -10,11 +10,11 @@ import { customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 /**
- * 03's "The customer" card, per pending request — every fact `null` where its
- * read is not possible or failed, and drawn as "—" then.
+ * 03's "The customer" card, per pending request - every fact `null` where its
+ * read is not possible or failed, and drawn as "-" then.
  *
  *   name     the contact's, else the conversation's `customerName`
- *   since    the contact's `createdAt` — with you since
+ *   since    the contact's `createdAt` - with you since
  *   lifetime the store's lifetime spend (commerce context; needs a conversation)
  *   refunds  refunded-or-cancelled orders (the same read)
  *   mood     the written brief's mood (`POST /api/customer-summary`, no refresh)

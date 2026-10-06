@@ -18,17 +18,17 @@ const RESOLVE_AT: Record<string, '/studio/knowledge' | '/settings/systems'> = {
 };
 
 /**
- * 07e, measured: "Hired" — a 720 dialog over Studio, 120 from the top.
+ * 07e, measured: "Hired" - a 720 dialog over Studio, 120 from the top.
  *
  * It follows a hire, which is not live, so it is reached at `?hired=<id>`
  * for an employee that exists, and says what is true of it:
  *
- *   the head            its status and when it was created — nothing
+ *   the head            its status and when it was created - nothing
  *                       records who hired it
  *   It answers …        its status and its channels; Change opens 07f
  *   Handover rules      the rules that are on; Adjust opens 07f
  *   The readiness card  the last readiness test's first recommendation,
- *                       persisted by the platform — never a fresh run
+ *                       persisted by the platform - never a fresh run
  *
  * ── DRAWN, AND WHY ──
  *   Drafts first        no watch-only mode: `ACTIVE | DRAFT | PAUSED`
@@ -85,7 +85,7 @@ export async function HiredDialog({
                       hour12: false,
                     }),
                   })
-                : '—'}
+                : '-'}
             </p>
           </div>
         </header>
@@ -95,17 +95,17 @@ export async function HiredDialog({
             <li className={styles.row} data-testid="hired-watch">
               <div className={styles.rowText}>
                 <span className={styles.rowTitle}>{t('watch')}</span>
-                <span className={styles.rowSub}>—</span>
+                <span className={styles.rowSub}>-</span>
               </div>
               <span className={styles.pill} title={t('watchNone')}>
-                —
+                -
               </span>
             </li>
             <li className={styles.row} data-testid="hired-answers">
               <div className={styles.rowText}>
                 <span className={styles.rowTitle}>{t(`answers.${employee.status}`)}</span>
                 <span className={styles.rowSub}>
-                  {channels.length > 0 ? channels.join(' · ') : '—'}
+                  {channels.length > 0 ? channels.join(' · ') : '-'}
                 </span>
               </div>
               <Link href={edit} className={styles.small} scroll={false} data-testid="hired-change">
@@ -118,7 +118,7 @@ export async function HiredDialog({
                   {rules.length > 0 ? t('rules', { count: rules.length }) : t('noRules')}
                 </span>
                 <span className={styles.rowSub}>
-                  {rules.length > 0 ? <UserText>{rules.join(' · ')}</UserText> : '—'}
+                  {rules.length > 0 ? <UserText>{rules.join(' · ')}</UserText> : '-'}
                 </span>
               </div>
               <Link href={edit} className={styles.small} scroll={false} data-testid="hired-adjust">
@@ -148,7 +148,7 @@ export async function HiredDialog({
                 </p>
                 <p className={styles.gapBody}>
                   <UserText>
-                    {first.detail.trim() ? `${first.title} — ${first.detail}` : first.title}
+                    {first.detail.trim() ? `${first.title} - ${first.detail}` : first.title}
                   </UserText>
                 </p>
               </div>

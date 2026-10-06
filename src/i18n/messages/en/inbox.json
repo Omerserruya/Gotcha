@@ -5,7 +5,7 @@
     "unavailable": "We couldn't read this conversation just now.",
     "empty": "Nothing has been said here yet.",
     "quotedMissing": "Replying to an earlier message we don't have.",
-    "voiceNoTranscript": "A voice note. GOTCHA can't read it out for you — you'll need to listen.",
+    "voiceNoTranscript": "A voice note. GOTCHA can't read it out for you - you'll need to listen.",
     "unknownType": "Something was sent here that we can't show yet.",
     "customerRead": "read",
     "delivered": "delivered",
@@ -38,7 +38,7 @@
     },
     "reply": "Reply",
     "replyTo": "Reply to this message",
-    "mediaUnavailable": "This attachment couldn't be fetched — WhatsApp keeps media only a few days.",
+    "mediaUnavailable": "This attachment couldn't be fetched - WhatsApp keeps media only a few days.",
     "openPhoto": "Open the photo",
     "file": "Download the file",
     "contact": "A contact",
@@ -54,7 +54,7 @@
     "unknownChannel": "Unknown channel",
     "undated": "{count, plural, =1 {One conversation has no last-message time, so we can't place it in the order above} other {# conversations have no last-message time, so we can't place them in the order above}}",
     "capAll": "{count, plural, =0 {} =1 {One conversation, and that's all of them.} other {# conversations, and that's all of them.}}",
-    "undatedThisPage": "{count, plural, =1 {One conversation on this page has no last-message time} other {# conversations on this page have no last-message time}} — and any others are at the very end of the queue, past the pages you've loaded.",
+    "undatedThisPage": "{count, plural, =1 {One conversation on this page has no last-message time} other {# conversations on this page have no last-message time}} - and any others are at the very end of the queue, past the pages you've loaded.",
     "undatedInView": "{count, plural, =0 {No conversation here is missing a last-message time.} =1 {One conversation in this view has no last-message time, so we can't place it in the order} other {# conversations in this view have no last-message time, so we can't place them in the order}}",
     "label": "Waiting",
     "waitingFor": {
@@ -82,14 +82,14 @@
       "greets": "Sends your workspace’s greeting to the customer",
       "greetsMaybe": "May send your workspace’s greeting to the customer",
       "several": "{count} conversations",
-      "partial": "Done for {done} of {total}. The rest didn’t go through — reload to see where things stand.",
+      "partial": "Done for {done} of {total}. The rest didn’t go through - reload to see where things stand.",
       "failed": "That didn’t go through, and nothing changed. Try again in a moment.",
       "confirmTitle": "{count, plural, one {Delete this conversation?} other {Delete # conversations?}}",
       "confirmBody": "{count, plural, one {It and every message in it are deleted for everyone. This can’t be undone.} other {They and every message in them are deleted for everyone. This can’t be undone.}}",
-      "confirmActive": "{count, plural, one {It is still open — deleting it ends it now.} other {# of them are still open — deleting them ends them now.}}",
+      "confirmActive": "{count, plural, one {It is still open - deleting it ends it now.} other {# of them are still open - deleting them ends them now.}}",
       "confirm": "Delete",
       "cancel": "Keep it",
-      "selected": "{count} selected — right-click for actions",
+      "selected": "{count} selected - right-click for actions",
       "clearSelection": "Clear the selection",
       "stopAi": "Stop AI",
       "backToAi": "Back to the AI"
@@ -99,7 +99,7 @@
     "unnamed": "Someone",
     "unavailable": "We couldn't read who this is just now.",
     "noHandles": "No channel handle is recorded for this person.",
-    "joinedUp": "Their channels — every one we've matched to this person.",
+    "joinedUp": "Their channels - every one we've matched to this person.",
     "thisChannelOnly": "The channel this conversation came in on. We can't show their other channels from here yet."
   },
   "verbs": {
@@ -112,7 +112,7 @@
     "greetingMaybe": "If your workspace has a greeting set up, taking control sends it to this customer with your name in it. We can't check that from here.",
     "noAiEmployee": "There's no AI employee on this conversation, so there's nobody to hand it back to. Whoever set up GOTCHA can assign one.",
     "problem": {
-      "already_claimed": "A colleague took this one first, so nothing changed. Ask them before taking it over — the customer would get a second greeting.",
+      "already_claimed": "A colleague took this one first, so nothing changed. Ask them before taking it over - the customer would get a second greeting.",
       "no_ai_employee": "There's no AI employee on this conversation to hand it back to, so nothing changed.",
       "not_yours": "You can only transfer a conversation you're holding. Take control first, and then you can pass it on.",
       "not_found": "This conversation, or the person you picked, isn't there any more. Reload to see where things stand.",
@@ -137,7 +137,7 @@
       "returning": "Returning · {count} orders",
       "count": "{count, plural, one {# order} other {# orders}}"
     },
-    "notAvailable": "This conversation isn’t available — it may have been deleted, or it isn’t yours to see.",
+    "notAvailable": "This conversation isn’t available - it may have been deleted, or it isn’t yours to see.",
     "openFailed": "We couldn’t open this conversation just now. This is our side, not yours."
   },
   "context": {
@@ -192,7 +192,7 @@
       "label": "Rework the draft with GOTCHA",
       "failed": "GOTCHA couldn’t rework the draft just now. Your text is unchanged.",
       "blank": "GOTCHA came back with nothing, so your text is unchanged.",
-      "done": "GOTCHA rewrote the draft. Read it before you send — Undo puts yours back.",
+      "done": "GOTCHA rewrote the draft. Read it before you send - Undo puts yours back.",
       "unitsExhausted": "This workspace has used up its AI units, so GOTCHA can’t rework drafts until it’s topped up. Your text is unchanged.",
       "unitsLink": "Usage & billing"
     },
@@ -241,7 +241,7 @@
       "idle": "Nothing is running right now.",
       "workingOn": "Working on this",
       "stop": "stop",
-      "stopTitle": "Stop the AI on this conversation — the same as Stop AI above. Nobody is assigned.",
+      "stopTitle": "Stop the AI on this conversation - the same as Stop AI above. Nobody is assigned.",
       "stopFailed": "Couldn’t stop the AI just now. Try Stop AI above.",
       "none": "Nothing yet",
       "steps": "{count, plural, =1 {1 step} other {# steps}}",
@@ -282,7 +282,7 @@
       "reading": "Reading what GOTCHA would say…",
       "waiting": "Suggestions come when the customer writes.",
       "writing": "Writing suggestions…",
-      "stale": "The customer wrote since — new ones are on the way.",
+      "stale": "The customer wrote since - new ones are on the way.",
       "recommended": "Recommended",
       "another": "Another way",
       "use": "Use this",
@@ -292,7 +292,7 @@
       "retry": "Try again",
       "trying": "Asking…",
       "wait": "Try again in {seconds}s",
-      "waitUnnamed": "Just refreshed — try again in a moment."
+      "waitUnnamed": "Just refreshed - try again in a moment."
     },
     "orders": {
       "title": "Orders",
@@ -314,7 +314,7 @@
         "email": "Matched by email",
         "phone": "Matched by phone"
       },
-      "storeNotChosen": "Two stores are connected — choose which one is your store in Business core.",
+      "storeNotChosen": "Two stores are connected - choose which one is your store in Business core.",
       "chooseStore": "Choose the store",
       "storeUnreachable": "Your store couldn’t be reached just now, so its orders can’t be shown.",
       "noIdentifiers": "There’s no email or phone on this customer to find their orders by.",
@@ -341,14 +341,14 @@
       "learned": "What GOTCHA learned",
       "howItLearns": "It learns from what they say in conversations, and from what your team enters about them.",
       "fromBefore": "From before",
-      "fromBeforeTitle": "Learned from an imported history — background, not confirmed.",
+      "fromBeforeTitle": "Learned from an imported history - background, not confirmed.",
       "source": {
         "conversation": "from a conversation",
         "person": "entered by a person",
         "crm": "from your CRM",
         "worked_out": "worked out"
       },
-      "visitor": "An unidentified visitor — history, memory and orders appear once they’re identified."
+      "visitor": "An unidentified visitor - history, memory and orders appear once they’re identified."
     },
     "history": {
       "title": "History across all channels",

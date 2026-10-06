@@ -5,10 +5,10 @@ import { Link } from '@/i18n/navigation';
 import styles from './Outreach.module.css';
 
 /**
- * 05's "start from a task" — Message, Campaign, Email, Phone call — as 02
+ * 05's "start from a task" - Message, Campaign, Email, Phone call - as 02
  * draws them over the list. Campaign and Email open the draft drawer; Phone
- * call goes to the dialer. Message — a one-off to someone not yet in a
- * conversation — has no flow, so it is drawn with why.
+ * call goes to the dialer. Message - a one-off to someone not yet in a
+ * conversation - has no flow, so it is drawn with why.
  */
 export async function TaskCards({ hasEmail }: { readonly hasEmail: boolean }) {
   const t = await getTranslations('outreach.tasks');

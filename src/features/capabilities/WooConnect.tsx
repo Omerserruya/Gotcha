@@ -7,7 +7,7 @@ import { startWooOAuth, type WooStart } from './connect-actions';
 import styles from './Capabilities.module.css';
 
 /**
- * B: WooCommerce through the store's own approval (backend ecd64c4d) — in
+ * B: WooCommerce through the store's own approval (backend ecd64c4d) - in
  * place of the key form. Only the store address; the store asks its owner
  * to approve GOTCHA and returns here (`?system=woocommerce&connected=1`).
  */

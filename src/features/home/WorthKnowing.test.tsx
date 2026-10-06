@@ -22,7 +22,7 @@ import { WorthKnowing } from './WorthKnowing';
  *
  * The tests below are deliberately about the SPREAD and not about `{channel}`.
  * Fixing the one placeholder somebody photographed leaves every future
- * placeholder, and every `kind` the service adds, with the same free pass —
+ * placeholder, and every `kind` the service adds, with the same free pass -
  * which is the difference between a site and a hole.
  */
 
@@ -72,14 +72,14 @@ describe('★★ no platform identifier reaches the sentence', () => {
     expect(screen.getByText(/conversations came through/)).toHaveTextContent('Web chat');
   });
 
-  it('★★ humanises a key nobody wrote a resolver for — the hole, not the site', async () => {
+  it('★★ humanises a key nobody wrote a resolver for - the hole, not the site', async () => {
     /*
      * ════════════════════════════════════════════════════════════════════════
      * THE ASSERTION THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT
      * ════════════════════════════════════════════════════════════════════════
      * There is no resolver for `department`, and there is no catalogue for it.
      * It must still not arrive as `customer_success`. This fails for any
-     * implementation that humanises `{channel}` alone — which is what fixing
+     * implementation that humanises `{channel}` alone - which is what fixing
      * the screenshot would have produced.
      *
      * `kind.fallback` takes no placeholders, so the kind here is a KNOWN one

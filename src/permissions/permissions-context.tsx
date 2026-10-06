@@ -26,8 +26,8 @@ interface PermissionsContextValue {
    * When the set could not be loaded this answers `true` for everything. That
    * is deliberate: the brief is explicit that "the backend remains the
    * security authority; frontend permission gating is UX, not security". So
-   * the failure mode is a control that turns out to be refused — recoverable,
-   * and the error says why — rather than a product that appears to have
+   * the failure mode is a control that turns out to be refused - recoverable,
+   * and the error says why - rather than a product that appears to have
    * vanished. Hiding on uncertainty is the worse of the two.
    */
   readonly canSee: (permission?: PermissionString) => boolean;
@@ -85,7 +85,7 @@ export function usePermissions(): PermissionsContextValue {
  * Resolves one permission into a capability.
  *
  * `whenMissing` is the interesting parameter. Hiding an action the user cannot
- * perform is right for navigation — a section they will never use is noise.
+ * perform is right for navigation - a section they will never use is noise.
  * It is wrong for an action inside a workflow they are halfway through, where
  * a disabled control saying "you need the Refunds permission" is the
  * difference between a user who asks their admin and one who files a bug.
@@ -93,14 +93,14 @@ export function usePermissions(): PermissionsContextValue {
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ `'hide'` IS UNREACHABLE TODAY AND WOULD NOT WORK IF YOU REACHED IT
  * ════════════════════════════════════════════════════════════════════════════
- * Found by `scripts/unused-guard-sweep.ts`: `isVisible` — the ONLY reader of
- * `status === 'hidden'` in the codebase — has no callers. Nothing else tests
+ * Found by `scripts/unused-guard-sweep.ts`: `isVisible` - the ONLY reader of
+ * `status === 'hidden'` in the codebase - has no callers. Nothing else tests
  * for it either. No call site passes `'hide'`, so the branch has never run.
  *
  * ★ Which means the first person to pass it gets the quiet wrong answer: the
  *   consumer will reach for `isEnabled`, which is false for `hidden`, and
- *   render a **disabled control with no reason beside it** — the one state
- *   this doc comment argues against — instead of no control at all.
+ *   render a **disabled control with no reason beside it** - the one state
+ *   this doc comment argues against - instead of no control at all.
  *
  * So passing `'hide'` is not enough on its own. The call site must also ask
  * `isVisible(capability)` and render nothing when it is false. Written here

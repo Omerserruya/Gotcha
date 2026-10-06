@@ -23,16 +23,16 @@ import styles from './Wall.module.css';
 /**
  * 02's "Order #1842 · 2 of 6" ‹ ›.
  *
- * This person's orders by contact (Backend e30900fd) — WooCommerce or
- * Shopify, one card shape — or, with no contact to read for, the
+ * This person's orders by contact (Backend e30900fd) - WooCommerce or
+ * Shopify, one card shape - or, with no contact to read for, the
  * conversation's own commerce context (04d's read and eight states).
  *
  * ★ WOO IS READ-ONLY. Its cards carry no eligibility (`reasonIfNot:
  *   actions_not_supported_for_store`): Refund and Replace are drawn,
- *   disabled, saying why — and its admin link is WooCommerce's.
+ *   disabled, saying why - and its admin link is WooCommerce's.
  *
- * ⚠ REFUND AND REPLACE ARE REAL. They are 04d's `OrderActions` — permission,
- *   policy, approval and an idempotency key per attempt — and on dev they are
+ * ⚠ REFUND AND REPLACE ARE REAL. They are 04d's `OrderActions` - permission,
+ *   policy, approval and an idempotency key per attempt - and on dev they are
  *   not pressed on a real conversation (Omer, 2026-10-06).
  */
 export function OrdersCarousel({
@@ -150,17 +150,17 @@ export function OrdersCarousel({
         )}
         <div className={styles.orderFacts}>
           <span className={styles.orderTitle}>
-            {item ? <UserText>{item.title}</UserText> : '—'}
+            {item ? <UserText>{item.title}</UserText> : '-'}
             {order.extraItemCount > 0 ? ` ${t('more', { count: order.extraItemCount })}` : null}
           </span>
           <span className={styles.orderLine}>
             <span className={styles.meta}>
-              {[placed ?? '—', money(order.total) ?? '—'].join(' · ')}
+              {[placed ?? '-', money(order.total) ?? '-'].join(' · ')}
             </span>
             {order.financial ? <Chip chip={order.financial} /> : null}
           </span>
           <span className={styles.orderLine}>
-            <span className={styles.meta}>{progress?.label ?? '—'}</span>
+            <span className={styles.meta}>{progress?.label ?? '-'}</span>
             {order.cancelled ? (
               <span className={styles.chipText} data-tone="danger">
                 {t('cancelled')}

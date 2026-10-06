@@ -30,7 +30,7 @@ describe('★★ day-first, 24-hour entry', () => {
     ['31/04/2026', null],
     ['10/32/2026', null],
     ['2026-10-04', null],
-  ])('parseDay(%j) → %j — day first, a real day only', (raw, out) => {
+  ])('parseDay(%j) → %j - day first, a real day only', (raw, out) => {
     expect(parseDay(raw)).toBe(out);
   });
 

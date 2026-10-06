@@ -3,8 +3,8 @@
  * decided, nothing sent.
  *
  * ★ NOT IN `actions.ts`: a `'use server'` file may export only async functions.
- *   A constant there made Next refuse the WHOLE module at runtime — approve,
- *   reject and edit all answered 500 — and vitest, which ignores the
+ *   A constant there made Next refuse the WHOLE module at runtime - approve,
+ *   reject and edit all answered 500 - and vitest, which ignores the
  *   directive, passed. `use-server-exports.test.ts` now guards the rule.
  */
 export const EDIT_REFUSALS = [

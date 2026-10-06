@@ -8,13 +8,13 @@ import { usePermissions } from '@/permissions/permissions-context';
 import styles from './Studio.module.css';
 
 /**
- * Studio's index — screen 12 of Wave 3's list, and until now an 18-line
+ * Studio's index - screen 12 of Wave 3's list, and until now an 18-line
  * placeholder that rendered a title and nothing else.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ IT BORROWS EVERY WORD. NOTHING HERE IS NEW COPY.
  * ════════════════════════════════════════════════════════════════════════════
- * Each card shows the destination screen's OWN title and description — "What
+ * Each card shows the destination screen's OWN title and description - "What
  * GOTCHA knows / Where it learned about your business, and the questions it
  * could not answer." A summary written here would be a second vocabulary for
  * the same four things, and a second vocabulary is a second thing to drift: the
@@ -25,7 +25,7 @@ import styles from './Studio.module.css';
  * describing anything.
  *
  * ── AND IT IS GIVEN THE NAVIGATION, NOT A LIST OF ITS OWN ──
- * The page passes `STUDIO_SECTIONS` — what the sidebar renders — so a fifth area
+ * The page passes `STUDIO_SECTIONS` - what the sidebar renders - so a fifth area
  * appears here without anybody remembering this file exists, which is the only
  * arrangement that survives somebody adding a fifth area.
  *
@@ -105,12 +105,12 @@ export function StudioIndex({ areas }: { readonly areas: readonly StudioArea[] }
     /*
       ★★ NO LEAD SENTENCE. It read "Where GOTCHA is taught what to know, what it
       may do, and who does it." directly under a page description reading "Where
-      GOTCHA is taught." — **the second contained the first verbatim**, which is
+      GOTCHA is taught." - **the second contained the first verbatim**, which is
       the one shape of duplication that is not a judgement call.
 
       The page description is now the informative one and this says nothing,
       because four cards naming four areas do not need an introduction. The
-      alternative — two sentences doing one job — is how the Automations screen
+      alternative - two sentences doing one job - is how the Automations screen
       was misread as duplicated when it was not.
     */
     <div className={styles.index} data-testid="studio-index">

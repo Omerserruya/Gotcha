@@ -16,14 +16,14 @@ import { ApprovalsScreen } from './ApprovalsScreen';
  * The keyboard surface, tested rather than photographed.
  *
  * **This tenant has zero PENDING approvals**, so the queue, the decision and
- * the moment-after cannot appear in a capture at all — the acceptance evidence
+ * the moment-after cannot appear in a capture at all - the acceptance evidence
  * covers 03c, which is the state the tenant is actually in. Seeding a pending
  * approval is not an option either: an ApprovalRequest is a bot-initiated
  * request to perform a real action, approving it moves real money, and there
  * is no create route because the only thing that makes one is the bot path.
  *
  * So these are the only place the keyboard model is checked, and they assert
- * behaviour rather than markup: what a key does, and — more importantly — what
+ * behaviour rather than markup: what a key does, and - more importantly - what
  * it does not do.
  */
 
@@ -102,7 +102,7 @@ beforeEach(() => {
 describe('A does not approve', () => {
   it('moves focus to Approve and decides nothing', async () => {
     // The design drew A as a single keypress that approves. It was drawn
-    // assuming an Undo exists, and none does — anywhere in this platform.
+    // assuming an Undo exists, and none does - anywhere in this platform.
     const user = userEvent.setup();
     renderScreen([approval()]);
 
@@ -138,7 +138,7 @@ describe('A does not approve', () => {
 
 describe('shortcuts never fire from a text field', () => {
   it('types the letters instead of acting on them', async () => {
-    // The rejection reason is on the same screen. "Rejected — arrived
+    // The rejection reason is on the same screen. "Rejected - arrived
     // damaged" firing R, E, A and D is not hypothetical.
     const user = userEvent.setup();
     renderScreen([approval()]);
@@ -177,7 +177,7 @@ describe('R goes to the reasons, because the route demands one', () => {
     expect(reject).not.toHaveBeenCalled();
   });
 
-  it('★ Reject waits for a reason — nothing reaches the server without one', async () => {
+  it('★ Reject waits for a reason - nothing reaches the server without one', async () => {
     const user = userEvent.setup();
     renderScreen([approval()]);
 
@@ -215,7 +215,7 @@ describe('a lapsed row offers no decision', () => {
 
   it('shows why instead of an Approve button', () => {
     // The route answers 409, and the countdown reaches zero while status is
-    // still PENDING every time — the sweeper runs on a five-minute cron.
+    // still PENDING every time - the sweeper runs on a five-minute cron.
     renderScreen([lapsed]);
 
     expect(screen.queryByTestId('approve')).toBeNull();
@@ -307,7 +307,7 @@ describe('the moment after keeps the two axes apart', () => {
 });
 
 describe('nothing on this screen promises a reversal', () => {
-  it('★ says whether it can be put back by what it is — a refund cannot — and no window, no Undo', () => {
+  it('★ says whether it can be put back by what it is - a refund cannot - and no window, no Undo', () => {
     // Omer, 2026-10-04: "Reversible" by action type; Undo is gone.
     renderScreen([approval({ tool: 'shopify.process_refund', riskTags: ['IRREVERSIBLE'] })]);
 
@@ -340,7 +340,7 @@ describe('★★ 28 rows in one column, given structure rather than pages', () =
    *
    * The oldest request is the one that most needs deciding and it sorts to the
    * far end. Behind a "show more", the item nobody has looked at becomes the item
-   * nobody will look at — and `expiresAt` is real here, so a request that lapses
+   * nobody will look at - and `expiresAt` is real here, so a request that lapses
    * because it was on page two would be a defect we chose to build.
    *
    * These tests therefore assert BOTH: that the structure arrived, and that
@@ -375,7 +375,7 @@ describe('★★ 28 rows in one column, given structure rather than pages', () =
     expect(screen.getByText('Today')).toBeInTheDocument();
     expect(screen.getByText('Yesterday')).toBeInTheDocument();
     /*
-     * The third is neither, so it gets the date itself — asserted through its
+     * The third is neither, so it gets the date itself - asserted through its
      * group key rather than the formatted string. `Intl` decides whether `en`
      * medium reads "Sep 15, 2026" or "15 Sep 2026", and pinning one of those
      * would make this test a claim about a locale database.
@@ -386,7 +386,7 @@ describe('★★ 28 rows in one column, given structure rather than pages', () =
     expect(older.textContent).not.toMatch(/Today|Yesterday/);
   });
 
-  it('★ a queue that is all today’s needs no heading — 02 draws none', async () => {
+  it('★ a queue that is all today’s needs no heading - 02 draws none', async () => {
     renderScreen([
       approval({ id: 'a1', createdAt: '2026-09-19T09:00:00.000Z' }),
       approval({ id: 'a2', createdAt: '2026-09-19T08:00:00.000Z' }),
@@ -419,7 +419,7 @@ describe('★★ 28 rows in one column, given structure rather than pages', () =
     /*
      * The server ranked this list. Re-sorting by date to avoid splitting a day
      * would silently reorder a decision queue, which is worse than a day
-     * appearing twice — so the groups are cut in the order given, and this
+     * appearing twice - so the groups are cut in the order given, and this
      * asserts the order survives.
      */
     renderScreen([
@@ -435,8 +435,8 @@ describe('★★ 28 rows in one column, given structure rather than pages', () =
 
   it('★★ keeps the keyboard walk working across a day boundary', async () => {
     /*
-     * The separators are nested lists, so `move()` — which finds rows by
-     * `data-id` — is unaffected by construction. Asserted anyway: "by
+     * The separators are nested lists, so `move()` - which finds rows by
+     * `data-id` - is unaffected by construction. Asserted anyway: "by
      * construction" is what I would have said about five other things this week.
      */
     const user = userEvent.setup();
@@ -449,13 +449,13 @@ describe('★★ 28 rows in one column, given structure rather than pages', () =
   });
 });
 
-describe('★★ 03, measured — what the new layout says', () => {
+describe('★★ 03, measured - what the new layout says', () => {
   it('★ a row shows how long it has waited', () => {
     renderScreen([approval()]);
     expect(screen.getByTestId('queue-a1')).toHaveTextContent('1h');
   });
 
-  it('★★ and how long is LEFT, when the deadline is within the hour — 02’s "38m left"', () => {
+  it('★★ and how long is LEFT, when the deadline is within the hour - 02’s "38m left"', () => {
     renderScreen([approval({ expiresAt: '2026-09-19T10:38:00.000Z' })]);
     expect(screen.getByTestId('queue-a1')).toHaveTextContent('38m left');
   });
@@ -472,7 +472,7 @@ describe('★★ 03, measured — what the new layout says', () => {
     expect(screen.getByTestId('next-hint')).toHaveTextContent('2 more after this · ↓ for the next');
   });
 
-  it('⚠⚠ a one-tap reason CHOOSES the reason — it does not reject; Reject sends it', async () => {
+  it('⚠⚠ a one-tap reason CHOOSES the reason - it does not reject; Reject sends it', async () => {
     reject.mockResolvedValue({ ok: true });
     renderScreen([approval()]);
     // Omer's closed choice, and "Other".
@@ -489,14 +489,14 @@ describe('★★ 03, measured — what the new layout says', () => {
     expect(reject).toHaveBeenCalledWith('a1', 'Too generous');
   });
 
-  it('⚠ an unreadable date never throws the render — the eyebrow simply has no time', () => {
+  it('⚠ an unreadable date never throws the render - the eyebrow simply has no time', () => {
     renderScreen([approval({ createdAt: 'not-a-date' })]);
     expect(screen.getByTestId('requested-by')).toHaveTextContent('Requested by an automation');
   });
 });
 
 describe('★★ the supervisor’s three, against the test items', () => {
-  it('⚠⚠ no tag reaches the screen as a raw code — MOVES_MONEY reads "Moves money"', () => {
+  it('⚠⚠ no tag reaches the screen as a raw code - MOVES_MONEY reads "Moves money"', () => {
     renderScreen([approval({ riskTags: ['MOVES_MONEY'] })]);
     // The queue's chip says it; the detail no longer repeats it as a pill.
     expect(screen.getByTestId('queue-a1')).toHaveTextContent('Moves money');
@@ -504,7 +504,7 @@ describe('★★ the supervisor’s three, against the test items', () => {
     expect(document.body.textContent).not.toContain('MOVES_MONEY');
   });
 
-  it('⚠⚠ a deadline on another day names the day — "by 13:02" read as today', () => {
+  it('⚠⚠ a deadline on another day names the day - "by 13:02" read as today', () => {
     // NOW is Saturday 19 Sep 10:00 UTC; this expires Monday.
     renderScreen([approval({ expiresAt: '2026-09-21T13:02:00.000Z' })]);
     const card = screen.getByTestId('if-you-leave-it');
@@ -531,7 +531,7 @@ describe('★★ the supervisor’s three, against the test items', () => {
 });
 
 describe('⚠⚠ every risk tag the platform writes has words', () => {
-  it('★★ every tag the platform WRITES has a label — iterated, so a new one cannot slip by', async () => {
+  it('★★ every tag the platform WRITES has a label - iterated, so a new one cannot slip by', async () => {
     const labels = (await import('@/i18n/messages/en/approvals.json')).default.risk as Record<
       string,
       string
@@ -543,7 +543,7 @@ describe('⚠⚠ every risk tag the platform writes has words', () => {
   });
 });
 
-describe('★ REQUIRES_APPROVAL is not a pill here — every item on this screen requires it', () => {
+describe('★ REQUIRES_APPROVAL is not a pill here - every item on this screen requires it', () => {
   it('is left out, and any other tag beside it still shows', () => {
     renderScreen([approval({ riskTags: ['REQUIRES_APPROVAL', 'IRREVERSIBLE'] })]);
     expect(screen.getByTestId('queue-a1')).toHaveTextContent("Can't be taken back");
@@ -551,7 +551,7 @@ describe('★ REQUIRES_APPROVAL is not a pill here — every item on this screen
   });
 });
 
-describe('★★ 03b — the moment after owns the pane until you move on', () => {
+describe('★★ 03b - the moment after owns the pane until you move on', () => {
   const two = [
     approval({ id: 'a1', summary: 'Refund 179 for order 1842' }),
     approval({ id: 'a2', summary: 'Cancel order 4812', expiresAt: '2026-09-19T10:38:00.000Z' }),
@@ -612,7 +612,7 @@ describe('★★ 03b — the moment after owns the pane until you move on', () =
     expect(screen.queryByTestId('queue-done')).toBeNull();
   });
 
-  it('★ one keystroke away: A after a decision opens the next — and decides nothing', async () => {
+  it('★ one keystroke away: A after a decision opens the next - and decides nothing', async () => {
     decidedOk();
     const user = userEvent.setup();
     renderWith(two);
@@ -645,7 +645,7 @@ describe('★★ 03b — the moment after owns the pane until you move on', () =
     );
   });
 
-  it('★★ Undo is drawn after the decision and NOT live — there is no undo; and never before', async () => {
+  it('★★ Undo is drawn after the decision and NOT live - there is no undo; and never before', async () => {
     decidedOk();
     const user = userEvent.setup();
     renderWith(two);
@@ -658,17 +658,17 @@ describe('★★ 03b — the moment after owns the pane until you move on', () =
     expect(undo.tagName).not.toBe('BUTTON');
   });
 
-  it('what was sent: its state from customerNotifiedAt; the text is "—", never invented', async () => {
+  it('what was sent: its state from customerNotifiedAt; the text is "-", never invented', async () => {
     decidedOk();
     const user = userEvent.setup();
     renderWith(two);
     await user.click(screen.getByTestId('approve'));
     const sent = await screen.findByTestId('moment-sent');
     expect(sent).toHaveTextContent('Already sent');
-    expect(sent).toHaveTextContent('—');
+    expect(sent).toHaveTextContent('-');
   });
 
-  it('⚠ not notified: "Not sent yet" — never "sent" on a guess', async () => {
+  it('⚠ not notified: "Not sent yet" - never "sent" on a guess', async () => {
     approve.mockResolvedValue({
       ok: true,
       dispatched: true,
@@ -682,7 +682,7 @@ describe('★★ 03b — the moment after owns the pane until you move on', () =
     expect(sent).not.toHaveTextContent('Already sent');
   });
 
-  it('★ the pattern appears after a run of the same kind — counted from the history, this one once', async () => {
+  it('★ the pattern appears after a run of the same kind - counted from the history, this one once', async () => {
     decidedOk();
     const user = userEvent.setup();
     renderWith(two, [
@@ -699,7 +699,7 @@ describe('★★ 03b — the moment after owns the pane until you move on', () =
     expect(pattern).toHaveTextContent('3 approved like this here, 1 rejected.');
   });
 
-  it('⚠ the first of its kind gets no offer — a run is what makes one', async () => {
+  it('⚠ the first of its kind gets no offer - a run is what makes one', async () => {
     decidedOk();
     const user = userEvent.setup();
     renderWith(two, [{ id: 'h4', tool: 'cancel_order', status: 'APPROVED' }]);
@@ -722,7 +722,7 @@ describe('★★ 03b — the moment after owns the pane until you move on', () =
   });
 });
 
-describe('★★ 03b, measured on dev — a failure said in words, retry on the dispatch, no Undo on nothing', () => {
+describe('★★ 03b, measured on dev - a failure said in words, retry on the dispatch, no Undo on nothing', () => {
   const SHOPIFY_401 =
     'Token refresh failed for shopify: shopify_token_refresh_failed_401: <!DOCTYPE html> <html lang="en"> <head> <meta charset="utf-8"> <title>unauthorized - Oauth error invalid_request</title></head><body>…</body></html>';
   const failedWith = (error: string) =>
@@ -739,7 +739,7 @@ describe('★★ 03b, measured on dev — a failure said in words, retry on the 
       }),
     });
 
-  it('★★ a revoked store token: a sentence, the way to fix it — and no HTML anywhere', async () => {
+  it('★★ a revoked store token: a sentence, the way to fix it - and no HTML anywhere', async () => {
     failedWith(SHOPIFY_401);
     const user = userEvent.setup();
     renderScreen([approval(), approval({ id: 'a2' })]);
@@ -747,7 +747,7 @@ describe('★★ 03b, measured on dev — a failure said in words, retry on the 
     const why = await screen.findByTestId('moment-error');
     expect(why).toHaveAttribute('data-failure', 'connection');
     expect(why).toHaveTextContent(
-      "The store connection needs reconnecting — Shopify refused GOTCHA's access.",
+      "The store connection needs reconnecting - Shopify refused GOTCHA's access.",
     );
     expect(screen.getByTestId('moment-reconnect')).toHaveAttribute('href', '/settings/systems?');
     expect(document.body.textContent).not.toMatch(/<!DOCTYPE|<html|<title>/i);

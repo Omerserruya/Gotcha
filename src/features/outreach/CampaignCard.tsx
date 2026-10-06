@@ -14,8 +14,8 @@ import { campaignWhen } from './when';
  * One campaign, on screen 05 and again as the result card on 05b.
  *
  * ── TWO NUMBERS, NOT FIVE, AND THIS COMMENT SAID FIVE ──
- * It read: *"Sent, delivered, opened, replied — **all four genuinely
- * written** — and failed."*
+ * It read: *"Sent, delivered, opened, replied - **all four genuinely
+ * written** - and failed."*
  *
  * ★★ THREE OF THOSE FOUR ARE NEVER WRITTEN. `deliveredCount`, `readCount`
  * and `repliedCount` are initialised to zero and nothing in the monorepo
@@ -39,7 +39,7 @@ import { campaignWhen } from './when';
  * ── AND THE LINE THE DESIGN DID NOT ASK FOR IS GONE WITH THEM ──
  * *"opened it and said nothing"* was `readCount − repliedCount`, described
  * here as "two numbers that exist". It was `0 − 0` for every campaign that
- * has ever run, and its guard was `> 0`, so it never rendered at all — **a
+ * has ever run, and its guard was `> 0`, so it never rendered at all - **a
  * branch that cannot be entered looks exactly like one that is simply
  * rare.** It comes back when the aggregate does.
  */
@@ -73,7 +73,7 @@ export async function CampaignCard({
   const now = new Date();
   const at = (iso: string | null) => campaignWhen(iso, now, format);
   /*
-   * ONE sentence for when — "Sending since Wednesday 14:18" — not the status
+   * ONE sentence for when - "Sending since Wednesday 14:18" - not the status
    * and then the sentence, which said "Sending" twice. The bare status only
    * where there is no moment to state.
    */
@@ -88,7 +88,7 @@ export async function CampaignCard({
 
   /*
     ════════════════════════════════════════════════════════════════════════
-    ★★ 05's RIGHT-HAND COLUMN — the selected campaign as its fields
+    ★★ 05's RIGHT-HAND COLUMN - the selected campaign as its fields
     ════════════════════════════════════════════════════════════════════════
     Measured: an eyebrow at 9px/500 in capitals, then Who · Where · When ·
     Delivery, each an 11.5px label over 13px text, `#EDE9E1` above every
@@ -132,7 +132,7 @@ export async function CampaignCard({
                 {t('counter.sent')} {format.number(campaign.sentCount)}
               </span>
               {/*
-                Always shown, including when zero — "nothing failed" is a fact
+                Always shown, including when zero - "nothing failed" is a fact
                 worth stating on a screen about messages reaching people.
               */}
               <span data-testid={`failed-${campaign.id}`}>

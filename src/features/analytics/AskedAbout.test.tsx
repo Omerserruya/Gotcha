@@ -33,7 +33,7 @@ describe('★★ the caption is load-bearing', () => {
     expect(caption.getAttribute('title')).toMatch(/hasn't learned to merge them/i);
   });
 
-  it('renders the label verbatim — we did not write it', async () => {
+  it('renders the label verbatim - we did not write it', async () => {
     await show([topic({ question: 'wheres my package' })]);
     expect(screen.getByTestId('topic-wheres my package')).toHaveTextContent('wheres my package');
   });
@@ -43,7 +43,7 @@ describe('★★ what is deliberately absent', () => {
   it('★★ renders no change column and no new-topic flag', async () => {
     /*
      * Both are DERIVABLE from two queries, and both are out. The label is
-     * unstable, so an unmerged variant would read as a brand-new topic — a
+     * unstable, so an unmerged variant would read as a brand-new topic - a
      * spelling difference rendered as the most attention-grabbing thing on
      * the panel. Derivable is not the same as true.
      */
@@ -54,7 +54,7 @@ describe('★★ what is deliberately absent', () => {
 
   it('★★ never renders "automatable", under either name', async () => {
     /*
-     * The route sends `automatable: count > 5` — a threshold relabelled as a
+     * The route sends `automatable: count > 5` - a threshold relabelled as a
      * property. As "GOTCHA could handle this" it asserts a capability from a
      * frequency; as "asked more than 5 times" it is a worse way of printing
      * the count beside it.

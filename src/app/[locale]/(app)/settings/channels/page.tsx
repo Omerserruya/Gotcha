@@ -22,13 +22,13 @@ import { Drawer } from '@/shell/Drawer';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Channels — screen 13.
+ * Settings · Channels - screen 13.
  *
  * *"Where customers reach you. Connecting is a two-step task, not an
  * integration form."*
  *
  * The list first, and captured before any connect flow exists. Three things
- * the design draws are absent because nothing behind them can store a value —
+ * the design draws are absent because nothing behind them can store a value -
  * a per-channel owner, a per-channel greeting and hours, and a Connect button
  * for phone calls. See `contracts/channels.ts`.
  */
@@ -81,7 +81,7 @@ export default async function Page({
     </span>
   );
   /*
-    13e / 13f replace 13b while one is open — the same drawer shell, their
+    13e / 13f replace 13b while one is open - the same drawer shell, their
     own head. A view with no import to show falls back to 13b.
   */
   const view =
@@ -112,7 +112,7 @@ export default async function Page({
 
       {/*
         13b: WhatsApp's settings as a panel OVER this page (`?panel=whatsapp`),
-        not a page of its own — reached from the WhatsApp row's "Settings".
+        not a page of its own - reached from the WhatsApp row's "Settings".
       */}
       {view === 'connect' && whatsapp ? (
         // 13c → 13d: Connect WhatsApp, one sheet, four steps.

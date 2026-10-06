@@ -1,7 +1,7 @@
 import { collapseToPeople, type CustomerRow } from '@/api/contracts/customers';
 
 /**
- * 04's rows as 02 writes them — "what is true about that person today" —
+ * 04's rows as 02 writes them - "what is true about that person today" -
  * from what the platform holds. The contact itself carries none of it:
  * `lastInteractionAt` is never written. Their CONVERSATIONS do, so each
  * person is joined to their newest one by the identities they write from.
@@ -29,7 +29,7 @@ export interface PersonToday {
   readonly talking: boolean;
   /** …and the last word was theirs: they are waiting on you. */
   readonly waiting: boolean;
-  /** The platform counts them as gone quiet (`dormant-customers`) — the segment. */
+  /** The platform counts them as gone quiet (`dormant-customers`) - the segment. */
   readonly quiet: boolean;
   /** No word for 90 days: 02 dims the row. A look, not the segment. */
   readonly faded: boolean;
@@ -90,7 +90,7 @@ export function inSegment(person: PersonToday, segment: Segment): boolean {
   return segment === 'everyone' || (segment === 'talking' ? person.talking : person.quiet);
 }
 
-/** "12m ago", "Yesterday", "2 days", "4 months" — 02's last-contact column. */
+/** "12m ago", "Yesterday", "2 days", "4 months" - 02's last-contact column. */
 export function sinceWords(iso: string, now: Date): { key: string; n?: number } {
   const ms = now.getTime() - Date.parse(iso);
   const minutes = Math.max(0, Math.round(ms / 60_000));
@@ -104,7 +104,7 @@ export function sinceWords(iso: string, now: Date): { key: string; n?: number } 
 }
 
 /**
- * "Two accounts look like one person" — matched on a shared phone or email,
+ * "Two accounts look like one person" - matched on a shared phone or email,
  * as the design says, between rows the unifier has NOT already joined. A
  * suggestion only: merging is a person's call.
  */

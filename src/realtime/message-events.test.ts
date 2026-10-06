@@ -11,7 +11,7 @@ import { translators } from './events';
  * `message.received` and `message.delivery_changed` sat in the union in
  * `events.ts` from the day it was written. Nothing translated them and nothing
  * subscribed, so the socket delivered the frames and this layer dropped every
- * one — and from inside the app that is indistinguishable from the platform not
+ * one - and from inside the app that is indistinguishable from the platform not
  * emitting them.
  *
  * It became load-bearing when the composer shipped, because its copy says *"it
@@ -29,12 +29,12 @@ const translate = (wireEvent: string, payload: unknown) => {
   return null;
 };
 
-describe('★★ message:status — the wire name is colon-separated', () => {
+describe('★★ message:status - the wire name is colon-separated', () => {
   it('★★ translates the platform’s own event name, not ours', () => {
     /*
      * `message.service.ts` emits `message:status`. Our type is
      * `message.delivery_changed`. Matching our name against the wire would have
-     * compiled and never fired — the same trap as matching `cause.code` on a
+     * compiled and never fired - the same trap as matching `cause.code` on a
      * route that sends none. This asserts the name we actually listen for.
      */
     expect(
@@ -57,7 +57,7 @@ describe('★★ message:status — the wire name is colon-separated', () => {
   it('reads the fields flat as well as nested, because the publisher sends both', () => {
     /*
      * `getIO().emit` sends the payload flat; `publishEvent` wraps it in `data`.
-     * Both reach this layer through the same socket, so both have to work — and
+     * Both reach this layer through the same socket, so both have to work - and
      * a translator that handled one would drop half the events with no signal.
      */
     expect(
@@ -73,7 +73,7 @@ describe('★★ message:status — the wire name is colon-separated', () => {
     /*
      * A frame with no `conversationId` could refresh the wrong conversation, and
      * on this screen the wrong conversation is somebody else's customer. Dropped
-     * rather than guessed — the same rule the transcript translator applies.
+     * rather than guessed - the same rule the transcript translator applies.
      */
     expect(translate('message:status', { tenantId: 't1', data: { messageId: 'm1' } })).toBeNull();
     expect(
@@ -90,11 +90,11 @@ describe('★★ message:status — the wire name is colon-separated', () => {
   });
 });
 
-describe('★★ message:new — an inbound reply while the agent is reading', () => {
+describe('★★ message:new - an inbound reply while the agent is reading', () => {
   it('translates it, and accepts `id` as well as `messageId`', () => {
     /*
      * `create` sends `messageId`; some publishers send the row as `id`. Accepting
-     * both is not generosity — it is the difference between a stale screen and a
+     * both is not generosity - it is the difference between a stale screen and a
      * current one, and the cost of being wrong is an agent answering a message
      * that has already been superseded.
      */

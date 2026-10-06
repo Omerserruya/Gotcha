@@ -14,14 +14,14 @@ import { ConversationHeader } from './ConversationHeader';
 import { initials } from './initials';
 
 /**
- * Screen 02's header — the three facts that were nowhere on the screen.
+ * Screen 02's header - the three facts that were nowhere on the screen.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * THE CONVERSATION COLUMN BEGAN AT THE VERBS AND WENT STRAIGHT INTO MESSAGES
  * ════════════════════════════════════════════════════════════════════════════
  * So an agent arriving from the queue, or from a link, read a wall of text with
  * no statement of who it is with, on what channel, or how long they have been
- * waiting. Every field was already loaded for the queue row beside it — the
+ * waiting. Every field was already loaded for the queue row beside it - the
  * screen simply said none of it once the row was opened.
  */
 
@@ -50,7 +50,7 @@ describe('★★ who this is, on what channel, and how long they have waited', (
   it('★★ names the customer and isolates the name', async () => {
     /*
      * A Hebrew name in an English page reorders the line around it without
-     * `bdi` — the defect that shipped on five other surfaces and was found only
+     * `bdi` - the defect that shipped on five other surfaces and was found only
      * by a person looking at a screenshot.
      */
     await show({ customerName: 'דנה כהן' });
@@ -62,7 +62,7 @@ describe('★★ who this is, on what channel, and how long they have waited', (
   it('★★ says plainly that there is no name, rather than inventing "Someone"', async () => {
     /*
      * A first message from a number nobody has met is an ordinary state. The
-     * handle below identifies them, so the heading tells the truth — and every
+     * handle below identifies them, so the heading tells the truth - and every
      * queue row reading "Someone" was this week's most visible defect.
      */
     await show({ customerName: null });
@@ -109,19 +109,19 @@ describe('★★ who this is, on what channel, and how long they have waited', (
     /*
      * `lastMessageAt` is a denormalised cache maintained by convention, so its
      * absence is real and common. "0m" would sort it as the freshest thing on
-     * the screen and read as just-arrived — the reassuring direction.
+     * the screen and read as just-arrived - the reassuring direction.
      */
     await show({ lastMessageAt: null });
     expect(screen.queryByTestId('conversation-waiting')).toBeNull();
     // One line in 02's subline, so the line says the fact and the reason is
-    // the tooltip — still there, and still not "0m".
+    // the tooltip - still there, and still not "0m".
     const unknown = screen.getByTestId('conversation-waiting-unknown');
     expect(unknown).toHaveTextContent(/wait unknown/i);
     expect(unknown).toHaveAttribute('title', expect.stringMatching(/can’t say how long/i));
   });
 });
 
-describe('★★ 02’s chip — "Returning · 6 orders" — from the count we already had', () => {
+describe('★★ 02’s chip - "Returning · 6 orders" - from the count we already had', () => {
   const ctx = (raw: unknown) => commerceContextSchema.parse(raw);
   /*
    * The chip streams in beside the name (`OrdersChip`, in a `<Suspense>` the
@@ -156,7 +156,7 @@ describe('★★ 02’s chip — "Returning · 6 orders" — from the count we a
     expect(chip).not.toHaveTextContent(/returning/i);
   });
 
-  it('⚠⚠ no chip for 0 — the contract defaults the count to 0, so 0 may mean "not sent"', async () => {
+  it('⚠⚠ no chip for 0 - the contract defaults the count to 0, so 0 may mean "not sent"', async () => {
     await showWith(ctx({ state: 'ok', data: { summary: {} } }));
     expect(screen.queryByTestId('conversation-orders')).toBeNull();
   });
@@ -181,12 +181,12 @@ describe('★★ Wave 3 geometry, read from the stylesheet', () => {
     /\/\*[\s\S]*?\*\//g,
     '',
   );
-  // A rule of its OWN — not a selector list's second entry, which shares the
+  // A rule of its OWN - not a selector list's second entry, which shares the
   // first one's declarations and would answer for a rule that may not exist.
   const rule = (selector: string) =>
     new RegExp(`(?<!,\\s*)\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
-  it('★★ the header is ONE row across the panel, on the panel — not a card', () => {
+  it('★★ the header is ONE row across the panel, on the panel - not a card', () => {
     const bar = rule('openBar');
     expect(bar).toMatch(/padding:\s*var\(--space-16\) 22px/);
     expect(bar).toMatch(/border-block-end:\s*1px solid var\(--border-subtle\)/);
@@ -195,7 +195,7 @@ describe('★★ Wave 3 geometry, read from the stylesheet', () => {
     expect(bar).toMatch(/line-height:\s*normal/);
   });
 
-  it('⚠ the name row is reserved at the chip’s 18 — it streams in later, and must not move anything', () => {
+  it('⚠ the name row is reserved at the chip’s 18 - it streams in later, and must not move anything', () => {
     expect(rule('openNameRow')).toMatch(/min-block-size:\s*18px/);
   });
 

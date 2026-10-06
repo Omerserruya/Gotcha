@@ -31,7 +31,7 @@ vi.mock('@/features/billing/load-billing', () => ({
     profile: null,
     paymentMethods: null,
     credits: null,
-    // A failed read — the shape `loadBilling` returns for one: null, not [].
+    // A failed read - the shape `loadBilling` returns for one: null, not [].
     packages: null,
   }),
 }));
@@ -66,7 +66,7 @@ import Page from './page';
 const open = async (panel?: string) =>
   render(await Page({ searchParams: Promise.resolve(panel ? { panel } : {}) }));
 
-describe('★ 17 — 02’s screen, and 17c/d/e over it', () => {
+describe('★ 17 - 02’s screen, and 17c/d/e over it', () => {
   it('17 alone: the hero, both columns, no overlay', async () => {
     await open();
     for (const id of ['hero', 'credits', 'went', 'low', 'billing', 'value']) {
@@ -88,14 +88,14 @@ describe('★ 17 — 02’s screen, and 17c/d/e over it', () => {
   });
 });
 
-describe('★ 17 — the left column runs to the frame’s bottom', () => {
+describe('★ 17 - the left column runs to the frame’s bottom', () => {
   it('the section fills', async () => {
     await open();
     expect(screen.getByTestId('settings-section')).toHaveAttribute('data-fill', 'yes');
   });
 });
 
-describe('★ 17d — nothing to buy says why, rather than a blank dialog', () => {
+describe('★ 17d - nothing to buy says why, rather than a blank dialog', () => {
   it('a failed packages read draws the dialog’s shape, not the shelf’s reasons', async () => {
     await open('buy');
     expect(screen.getByTestId('buy-unavailable')).toBeInTheDocument();

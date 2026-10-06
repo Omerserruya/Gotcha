@@ -20,7 +20,7 @@ vi.mock('@/i18n/navigation', () => ({
 import { WhatsAppPanel } from './WhatsAppPanel';
 
 describe('★ 13b is a panel over Channels', () => {
-  it('its head, its way back, and its tabs — Numbers live, the rest drawn', async () => {
+  it('its head, its way back, and its tabs - Numbers live, the rest drawn', async () => {
     render(await WhatsAppPanel({ line: 'One number', children: <p>numbers here</p> }));
     const panel = screen.getByTestId('whatsapp-panel');
     expect(panel).toHaveTextContent('WhatsApp');
@@ -33,7 +33,7 @@ describe('★ 13b is a panel over Channels', () => {
     expect(panel).toHaveTextContent('numbers here');
   });
 
-  it('★ measured on dev: the foot says its three things in words — not two bare icons', async () => {
+  it('★ measured on dev: the foot says its three things in words - not two bare icons', async () => {
     // 13f's actions once replaced `whatsapp.foot` whole and took these labels with them.
     render(await WhatsAppPanel({ line: 'One number', children: <p>numbers here</p> }));
     const panel = screen.getByTestId('whatsapp-panel');

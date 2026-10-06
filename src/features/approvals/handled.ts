@@ -2,7 +2,7 @@ import type { Approval } from '@/api/contracts/approvals';
 import type { ToolUsage } from '@/api/contracts/capabilities';
 
 /**
- * 03c's dark card — "handled without asking you · today".
+ * 03c's dark card - "handled without asking you · today".
  *
  * ★ HOW IT IS COUNTED, BECAUSE NOTHING COUNTS IT FOR US. `tool-usage` gives
  * each tool's successful runs from an instant (ToolExecution plus the
@@ -19,8 +19,8 @@ export interface HandledToday {
   readonly returns: number;
   /**
    * Runs that were tried and did not succeed today. A broken connection makes
-   * "nothing ran" technically true and hides the state — 356 Shopify lookups
-   * failing on dev — so the failures are counted, and by whose system.
+   * "nothing ran" technically true and hides the state - 356 Shopify lookups
+   * failing on dev - so the failures are counted, and by whose system.
    */
   readonly failed: number;
   /** The systems those failures were on (`shopify` of `shopify.get_order`). */

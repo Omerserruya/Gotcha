@@ -15,7 +15,7 @@ import { PersonPanel } from './PersonPanel';
  * Agent allowing refunds, the person is listed as an Agent, and the person
  * cannot refund. Every screen tells the truth and the reader ends up wrong.
  *
- * This tenant has zero grants, so none of this can be captured — which is
+ * This tenant has zero grants, so none of this can be captured - which is
  * exactly when it is cheapest to get right.
  */
 
@@ -174,7 +174,7 @@ describe('exceptions to a role', () => {
 });
 
 describe('what this panel does not claim', () => {
-  it('★ 02: "Ends 30 Sep"; once past, muted "Ended 3 Oct" — the row stays, with Remove', async () => {
+  it('★ 02: "Ends 30 Sep"; once past, muted "Ended 3 Oct" - the row stays, with Remove', async () => {
     await renderPanel({
       grants: [
         {
@@ -203,12 +203,12 @@ describe('what this panel does not claim', () => {
     expect(screen.getByTestId('grant-ends-conversation:assign:any')).toHaveTextContent('Ended');
   });
 
-  it('draws 02’s workload line as "—": nothing stores a cap or auto-assign', async () => {
-    // Searched the whole schema and every service — the only `maxConcurrent`
+  it('draws 02’s workload line as "-": nothing stores a cap or auto-assign', async () => {
+    // Searched the whole schema and every service - the only `maxConcurrent`
     // is a voice-gateway socket limit from an env var. So no number, ever.
     await renderPanel();
     const line = screen.getByTestId('person-workload');
-    expect(line).toHaveTextContent('Most conversations at once—Gets new ones automatically—');
+    expect(line).toHaveTextContent('Most conversations at once-Gets new ones automatically-');
     expect(line).toHaveAttribute('title', expect.stringMatching(/no field/i));
   });
 
@@ -243,7 +243,7 @@ describe('★★ the catalogue’s name, not the permission key', () => {
 
   it('★★ shows the display name where the catalogue has one', async () => {
     /*
-     * `grant.feature` was rendered raw — `commerce:refunds:write` on the screen
+     * `grant.feature` was rendered raw - `commerce:refunds:write` on the screen
      * a manager uses to decide what somebody may do. `displayName` has existed
      * for as long as the catalogue has.
      */
@@ -256,7 +256,7 @@ describe('★★ the catalogue’s name, not the permission key', () => {
   it('★★ shows the KEY for a permission the catalogue does not describe, and says so', async () => {
     /*
      * The opposite decision from the channel enum, deliberately. An override on
-     * a permission the catalogue has never heard of is not noise — it is
+     * a permission the catalogue has never heard of is not noise - it is
      * somebody granting something the product cannot explain, and that is the
      * more interesting of the two states. Hiding the key would hide it.
      */
@@ -318,7 +318,7 @@ describe('★★ the remove path, drawn and never pressed', () => {
   });
 });
 
-describe('★ 12d — 02’s drawer', () => {
+describe('★ 12d - 02’s drawer', () => {
   const member = {
     id: 'u1',
     isActive: true,
@@ -328,7 +328,7 @@ describe('★ 12d — 02’s drawer', () => {
     openConversations: 4,
   };
 
-  it('the head’s chips, Details with "—" where there is no field, the role card', async () => {
+  it('the head’s chips, Details with "-" where there is no field, the role card', async () => {
     render(
       await PersonPanel({
         person: person(),
@@ -338,7 +338,7 @@ describe('★ 12d — 02’s drawer', () => {
       }),
     );
     expect(screen.getByTestId('person-open')).toHaveTextContent('4 open');
-    expect(screen.getByText('Job title').nextElementSibling).toHaveTextContent('—');
+    expect(screen.getByText('Job title').nextElementSibling).toHaveTextContent('-');
     expect(screen.getByTestId('person-role')).toHaveTextContent(
       'AgentAnswers conversations in their teams · ',
     );

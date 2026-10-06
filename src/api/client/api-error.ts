@@ -52,7 +52,7 @@ export interface ApiErrorInit {
   readonly developerMessage?: string;
   /**
    * A sentence the backend wrote FOR the merchant (`{ message }`), rendered
-   * verbatim — and only where that route's contract says so (the key form's
+   * verbatim - and only where that route's contract says so (the key form's
    * 422, backend 1aaaefe4). Anywhere else, ignore it.
    */
   readonly userMessage?: string;
@@ -64,7 +64,7 @@ export interface ApiErrorInit {
   readonly route?: string;
   /**
    * Machine-readable reason from the tenant gate (402) and from the routes
-   * that send a `code` field — the entitlement envelope in
+   * that send a `code` field - the entitlement envelope in
    * `packages/shared`, and `auth`'s workspace routes.
    *
    * ⚠ MOST ROUTE-LEVEL REFUSALS DO NOT SEND ONE. A service that answers

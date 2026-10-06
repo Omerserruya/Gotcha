@@ -19,7 +19,7 @@ export interface NotificationsData {
 /**
  * The notification list and its unread count.
  *
- * `raw` on the list because the page is `{ data, nextCursor }` — `data` sits
+ * `raw` on the list because the page is `{ data, nextCursor }` - `data` sits
  * beside the cursor rather than wrapping it, so unwrapping would silently
  * throw pagination away.
  */

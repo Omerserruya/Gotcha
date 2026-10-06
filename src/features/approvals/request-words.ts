@@ -1,7 +1,7 @@
 import type { Approval } from '@/api/contracts/approvals';
 
 /**
- * 03's words for a pending request, from its own facts — a message key under
+ * 03's words for a pending request, from its own facts - a message key under
  * `approvals.request` and its values, so the wording stays in the catalogue.
  * Only what is known is said; with nothing, the platform's own summary.
  */
@@ -17,7 +17,7 @@ const kindOf = (tool: string) => {
   return /refund/.test(slug) ? 'refund' : slug === 'cancel_order' ? 'cancel' : 'other';
 };
 
-/** The queue's short title — 02's "Refund ₪179", "Cancel order #4812". */
+/** The queue's short title - 02's "Refund ₪179", "Cancel order #4812". */
 export function queueTitle(approval: Facts, amount: string | null): Words | null {
   const kind = kindOf(approval.tool);
   if (kind === 'refund' && amount) return { key: 'queueRefund', values: { amount } };
@@ -28,7 +28,7 @@ export function queueTitle(approval: Facts, amount: string | null): Words | null
   return null;
 }
 
-/** The detail's title — 02's "Refund ₪179 to Dana Cohen". */
+/** The detail's title - 02's "Refund ₪179 to Dana Cohen". */
 export function requestTitle(
   approval: Facts,
   name: string | null,
@@ -52,7 +52,7 @@ export function requestTitle(
 }
 
 /**
- * "What happens if you approve" — each step one the platform takes. The
+ * "What happens if you approve" - each step one the platform takes. The
  * customer is told only where there is a conversation to tell them in
  * (`sendApprovalContinuation`); nothing claims the conversation is resolved.
  */
@@ -85,7 +85,7 @@ export function approveChain(
   return steps;
 }
 
-/** "Why GOTCHA recommends it" as 02's bullets — one per sentence or line. */
+/** "Why GOTCHA recommends it" as 02's bullets - one per sentence or line. */
 export function whyBullets(reason: string): readonly string[] {
   return reason
     .split(/\n+|(?<=[.!?])\s+(?=[A-Z֐-׿0-9"'(])/)
@@ -94,7 +94,7 @@ export function whyBullets(reason: string): readonly string[] {
 }
 
 /**
- * 02's "Reversible", by what the action is (Omer, 2026-10-04) — and nothing
+ * 02's "Reversible", by what the action is (Omer, 2026-10-04) - and nothing
  * where it is not known. Money moved, an order cancelled, a message sent:
  * no. A note, a tag, an address on an order not yet shipped: yes. There is
  * no Undo here; this says whether it CAN be put back, not that we will.
@@ -116,7 +116,7 @@ export function reversibilityOf(tool: string): 'yes' | 'no' | null {
 }
 
 /**
- * The tools an approver may edit, the one field each takes and its unit —
+ * The tools an approver may edit, the one field each takes and its unit -
  * backend 05979604 (amount) and f16a5afa (percentage): `major` up to two
  * decimals, `minor` whole numbers, `percent` up to two decimals and never
  * above 100. On any other tool there is no edit at all.
@@ -138,11 +138,11 @@ export const EDITABLE: Readonly<
 };
 export type EditUnit = 'major' | 'minor' | 'percent';
 
-/** What may be edited on this request, and from what — `null` when nothing may. */
+/** What may be edited on this request, and from what - `null` when nothing may. */
 export function editTarget(approval: Pick<Approval, 'tool' | 'facts'>): {
   readonly field: 'amount' | 'percentage';
   readonly unit: EditUnit;
-  /** `null`: the call carries none to edit (a full refund) — drawn, with why. */
+  /** `null`: the call carries none to edit (a full refund) - drawn, with why. */
   readonly original: number | null;
 } | null {
   const rule = EDITABLE[approval.tool];

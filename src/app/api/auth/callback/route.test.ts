@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOGIN_STATE_COOKIE } from '@/auth/login-state';
 
 /**
- * The endpoint that mints the session — and it had no tests at all.
+ * The endpoint that mints the session - and it had no tests at all.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THE MOST SECURITY-CRITICAL ROUTE IN THE APP WAS THE LEAST COVERED
  * ════════════════════════════════════════════════════════════════════════════
- * Everything else in the sign-in path has tests — the panel, the contract, the
+ * Everything else in the sign-in path has tests - the panel, the contract, the
  * proxy, the login route. This is the one that turns a code into a session,
  * and there was no `route.test.ts` beside it. Found by needing to assert a
  * two-branch conditional and discovering there was nowhere to put it.
@@ -95,7 +95,7 @@ describe('⚠⚠ the nonce is expected only when one was sent', () => {
      * ════════════════════════════════════════════════════════════════════════
      * `openid-client` documents the parameter as: "When `undefined` the
      * expectation is that there is no `nonce` in the ID Token." That makes it
-     * symmetric — and it means a sign-in started before this deploy, whose
+     * symmetric - and it means a sign-in started before this deploy, whose
      * token carries no nonce, must reach the exchange with the key ABSENT and
      * not merely undefined-valued.
      *

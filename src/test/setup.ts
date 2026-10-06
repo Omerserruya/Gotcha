@@ -5,10 +5,10 @@ import { beforeAll, expect } from 'vitest';
 
 /**
  * Text as a person reads it: without the four Unicode direction isolates
- * (U+2066–U+2069). Sentences carry a customer's name or an order number
+ * (U+2066-U+2069). Sentences carry a customer's name or an order number
  * wrapped in FSI…PDI so Hebrew cannot reorder them (`approvals/isolate.ts`);
  * they are invisible, so an assertion about what the screen SAYS ignores them.
- * Anything else — a missing element, `.not` — behaves as jest-dom's own.
+ * Anything else - a missing element, `.not` - behaves as jest-dom's own.
  */
 const ISOLATES = /[\u2066-\u2069]/g;
 // Not the /g one: `.test` on a global regex keeps `lastIndex` between calls.

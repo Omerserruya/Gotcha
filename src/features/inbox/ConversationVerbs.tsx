@@ -20,20 +20,20 @@ import styles from './Inbox.module.css';
  * ════════════════════════════════════════════════════════════════════════════
  * `claim()` ends in `sendAutoGreeting`, on claim **and on reclaim**. So the
  * button says so before it is pressed, and it is not drawn at all when the
- * conversation is already yours — a second press would greet the customer a
+ * conversation is already yours - a second press would greet the customer a
  * second time for no change in state.
  *
  * ── THE THREE VERBS, AND THE ONE THAT IS NOT HERE ──
- *   Take control        claim — from the AI, or from nobody
+ *   Take control        claim - from the AI, or from nobody
  *   Return to the AI    the only thing that clears the handover latch
  *   Transfer to someone reassign, to a named colleague
  *
- * **"Put back in the queue" is not here — it is in the queue's right-click
+ * **"Put back in the queue" is not here - it is in the queue's right-click
  * menu.** Omer first ruled it out, then approved 02's seven-item menu with it
  * in (2026-10-02, the newer ruling stands). The caveat travels with it:
  * `release()` clears the assignment without clearing `isHandedOver`, so a
  * released conversation returns to the human queue with the AI still switched
- * off — it waits for a person. Raised with Omer for when the inbox is revisited.
+ * off - it waits for a person. Raised with Omer for when the inbox is revisited.
  */
 export function ConversationVerbs({
   conversationId,
@@ -47,12 +47,12 @@ export function ConversationVerbs({
   readonly conversationId: string;
   /** Is this conversation assigned to the person looking at it? */
   readonly mine: boolean;
-  /** `isHandedOver` — a human has taken it, whoever that is. */
+  /** `isHandedOver` - a human has taken it, whoever that is. */
   readonly handedOver: boolean;
   /**
    * Is an AI employee bound to it? `null` when we could not find out, which
    * is not "no": `return-to-ai` 409s when there is none, and offering the
-   * control on a guess is better than withholding it on one — the refusal is
+   * control on a guess is better than withholding it on one - the refusal is
    * harmless and says why, while a missing button is unexplainable.
    */
   readonly hasAiEmployee: boolean | null;
@@ -68,7 +68,7 @@ export function ConversationVerbs({
    * Whether this conversation is already closed.
    *
    * ⚠ Resolve is not offered on something already resolved. The route would
-   *   accept it — `close` on a CLOSED conversation is a no-op — and a button
+   *   accept it - `close` on a CLOSED conversation is a no-op - and a button
    *   whose only effect is nothing is how a screen teaches somebody that its
    *   controls are decorative.
    */
@@ -88,7 +88,7 @@ export function ConversationVerbs({
     <div className={styles.verbs} data-testid={`verbs-${conversationId}`}>
       {/*
         ★★ NOT DRAWN WHEN IT IS ALREADY YOURS.
-        Re-claiming is allowed by the route and changes nothing — except that
+        Re-claiming is allowed by the route and changes nothing - except that
         it greets the customer again. A button whose only effect is a second
         "Hi, I'm Dana, taking over from here" is worse than no button.
       */}
@@ -123,13 +123,13 @@ export function ConversationVerbs({
 
       {/*
         ════════════════════════════════════════════════════════════════════
-        ★★ RESOLVE — 02's THIRD BUTTON, AND THE ROUTE EXISTED ALL ALONG
+        ★★ RESOLVE - 02's THIRD BUTTON, AND THE ROUTE EXISTED ALL ALONG
         ════════════════════════════════════════════════════════════════════
         The design's conversation header carries three: Assign · Pause AI ·
         Resolve, the last one filled `#121212`. We drew one.
 
         ★ `closeConversation` posts to `/conversations/{id}/close`, which the
-          platform has always had — it was missing from THIS app, not from
+          platform has always had - it was missing from THIS app, not from
           the API. Measured against the OpenAPI rather than assumed.
 
         ⚠ Not offered on something already closed: the route accepts it as a
@@ -196,7 +196,7 @@ export function ConversationVerbs({
 
         Three states, because we cannot always find out: the setting is
         readable by admins only, and most people pressing this are not
-        admins. `false` — a workspace with no greeting — says nothing at all,
+        admins. `false` - a workspace with no greeting - says nothing at all,
         since a warning about something that cannot happen is noise on every
         conversation.
       */}

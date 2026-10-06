@@ -1,27 +1,27 @@
 import { z } from 'zod';
 
 /**
- * Screen 04d — one customer's orders.
+ * Screen 04d - one customer's orders.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE PLATFORM HANDS US EIGHT STATES AND ASKS US NOT TO COLLAPSE THEM
  * ════════════════════════════════════════════════════════════════════════════
  * `CommerceContextResponse` is a discriminated union, and its own comment
- * says the frontend *"renders an explicit UI for each state — it never
+ * says the frontend *"renders an explicit UI for each state - it never
  * guesses from a bare error"*.
  *
  * Two of them are the distinction this project has made on three screens
  * already, made here by Backend before we arrived:
  *
  *   not_connected         nothing was ever connected
- *   connection_unhealthy  connected, and broken — "connect one" is the wrong
+ *   connection_unhealthy  connected, and broken - "connect one" is the wrong
  *                         instruction for somebody who already did the work
  *
  * And three more that a single "couldn't load orders" would destroy:
  * `customer_not_linked` (the shop has no record of this person),
  * `verification_required` (we will not show one customer's orders to
  * another), and `missing_scopes` (the connection is fine and the app was
- * never granted permission to read orders — a repair in the provider, not
+ * never granted permission to read orders - a repair in the provider, not
  * here).
  *
  * ── THE CHIPS ARE THEIRS, NOT OURS ──
@@ -31,7 +31,7 @@ import { z } from 'zod';
  * would be a second, vaguer copy of a sentence they already wrote.
  *
  * `refundChip` is derived from refunded-versus-total rather than from a raw
- * enum — their comment says so — which is the same refusal we have been
+ * enum - their comment says so - which is the same refusal we have been
  * applying all week, arriving from the other direction.
  */
 
@@ -45,7 +45,7 @@ import { z } from 'zod';
  * float`. With `z.number()` here, EVERY `ok` response failed to parse and 04d
  * would have said it could not read the orders the moment a store connected.
  * It never fired because the only state this tenant produces carries no
- * money — the dormant-branch shape again, found while drawing 04d's prices.
+ * money - the dormant-branch shape again, found while drawing 04d's prices.
  *
  * A string is read as a number for formatting only; nothing here sums across
  * currencies. Empty, absent and unparseable are all `null`, never 0: a missing
@@ -89,7 +89,7 @@ export const orderItemSchema = z.object({
 
 /**
  * Shopify's milestones for one order, localised server-side: placed,
- * payment, fulfilled, shipped, delivered — then cancelled or refunded when
+ * payment, fulfilled, shipped, delivered - then cancelled or refunded when
  * those happened. 04d's tracker. `at` is null when the step was reached and
  * Shopify gave no time.
  */
@@ -102,7 +102,7 @@ export const milestoneSchema = z.object({
 });
 export type Milestone = z.infer<typeof milestoneSchema>;
 
-/** The expandable detail — every field optional, as theirs is. */
+/** The expandable detail - every field optional, as theirs is. */
 export const orderDetailSchema = z.object({
   lineItems: z
     .array(
@@ -171,7 +171,7 @@ export const orderCardSchema = z.object({
    * ★★ COMPUTED FROM THE VIEWER'S OWN PERMISSIONS.
    *
    * The service's cache key includes a permission signature, because
-   * capabilities and per-order eligibility are derived from who is looking —
+   * capabilities and per-order eligibility are derived from who is looking -
    * *"otherwise two agents with different commerce grants viewing the same
    * conversation would share one entry and see the wrong capabilities."*
    *
@@ -223,8 +223,8 @@ export const commerceSummarySchema = z.object({
   phone: z.string().nullish().default(null),
   currency: z.string().nullish().default(null),
   /**
-   * Named for 04d's side and 04b's WORTH — all on the wire, stripped until
-   * now. Each absent when the provider gave no value, and drawn as "—" then.
+   * Named for 04d's side and 04b's WORTH - all on the wire, stripped until
+   * now. Each absent when the provider gave no value, and drawn as "-" then.
    */
   averageOrderValue: moneySchema.nullish().default(null),
   customerSince: z.string().nullish().default(null),
@@ -251,7 +251,7 @@ export const commerceContextSchema = z.object({
        * ★★ NAMED BECAUSE 04e NEEDS IT, AND IT WAS ON THE WIRE ALL ALONG.
        *
        * `z.object` strips what the schema does not name, so this arrived on
-       * every `ok` response and was discarded before anything could use it —
+       * every `ok` response and was discarded before anything could use it -
        * the third time today a field we needed was already being sent.
        *
        * It is the **provider's** customer id, resolved server-side from the
@@ -259,7 +259,7 @@ export const commerceContextSchema = z.object({
        * resolved ONLY from the trusted linkage."* We never derive it and
        * never accept one from a client.
        *
-       * 04e's audit log cannot attribute customer-keyed rows without it —
+       * 04e's audit log cannot attribute customer-keyed rows without it -
        * `targetId` there is a Shopify id and the endpoint says it cannot
        * derive one from a contact. So this is what turns a declared gap into
        * rows on screen. See `shopifyCustomerIdIn`.
@@ -307,7 +307,7 @@ export function ordersIn(context: CommerceContextResponse | null): readonly Orde
  * this screen about.
  *
  * Derived from the platform's own tones rather than from our reading of a
- * status string — so if they decide a state is alarming, this screen agrees
+ * status string - so if they decide a state is alarming, this screen agrees
  * with the Inbox instead of disagreeing with it.
  */
 export function isTroubled(order: OrderCard): boolean {
@@ -334,7 +334,7 @@ export function orderToExpand(orders: readonly OrderCard[]): OrderCard | null {
 /**
  * Could anything be done to this order, by the person looking at it?
  *
- * Used to decide whether to say what is possible — NOT to draw a control.
+ * Used to decide whether to say what is possible - NOT to draw a control.
  * See the note in `CustomerOrders.tsx` about why this screen performs no
  * order actions.
  */
@@ -348,7 +348,7 @@ export function anythingPossible(order: OrderCard): boolean {
 /**
  * The four order actions, and the tools they are.
  *
- * `TOOL_FOR` in `commerce-actions.service.ts`. There is no address change —
+ * `TOOL_FOR` in `commerce-actions.service.ts`. There is no address change -
  * cancel, refund, return and exchange is the whole set, so 04d's *"change
  * address"* has nothing behind it and is not drawn.
  */
@@ -362,7 +362,7 @@ export type OrderAction = (typeof ORDER_ACTIONS)[number];
  * queue screen 03 renders, holding until a person decides. Rendered as
  * either of the others it would be a lie in a different direction each time.
  *
- * `executed` carries the VERIFIED order card — the service runs a
+ * `executed` carries the VERIFIED order card - the service runs a
  * post-action verify and returns what the provider actually reports, and its
  * header says *"a button click never mutates order state in the UI; the
  * caller updates only from the verified result returned here."* So the new
@@ -398,7 +398,7 @@ export function isWaitingOnAPerson(result: OrderActionResult | null): boolean {
  *
  * Parsed, not prefix-checked: the URL parser strips tab and newline before
  * reading, so `https:` plus a prefix test is not a URL check. https only, and
- * a Shopify admin host — `*.myshopify.com` or `admin.shopify.com` — so a
+ * a Shopify admin host - `*.myshopify.com` or `admin.shopify.com` - so a
  * corrupted shop domain cannot turn "Open in Shopify" into a link elsewhere.
  */
 export function shopifyAdminHref(adminUrl: string | null | undefined): string | null {
@@ -420,7 +420,7 @@ export function shopifyAdminHref(adminUrl: string | null | undefined): string | 
 /**
  * How the store's customer was matched to this person. `verified` is
  * Shopify's trusted linkage; Woo matches on an exact billing email or phone,
- * and the card says which — a match by phone is a claim a reader may weigh.
+ * and the card says which - a match by phone is a claim a reader may weigh.
  */
 export const MATCHED_BY = ['verified', 'email', 'phone'] as const;
 export type MatchedBy = (typeof MATCHED_BY)[number];
@@ -438,7 +438,7 @@ export type NoStoreReason = (typeof NO_STORE_REASONS)[number];
 export const ACTIONS_NOT_SUPPORTED = 'actions_not_supported_for_store';
 
 /**
- * `GET /api/commerce-context/customers/:contactId/orders?limit=&locale=` —
+ * `GET /api/commerce-context/customers/:contactId/orders?limit=&locale=` -
  * one OrderCard shape for WooCommerce and Shopify:
  *
  *   { source: "woocommerce", orders }
@@ -464,7 +464,7 @@ export type MatchedOrderCard = CustomerOrders['orders'][number];
 /**
  * A WooCommerce order's admin link, or `null`. The route builds it from the
  * store's own URL (`…/wp-admin/post.php?post=<id>&action=edit`); we check it
- * is that and nothing else — https, no credentials, the edit page — since the
+ * is that and nothing else - https, no credentials, the edit page - since the
  * host is the merchant's and cannot be listed.
  */
 export function wooAdminHref(adminUrl: string | null | undefined): string | null {

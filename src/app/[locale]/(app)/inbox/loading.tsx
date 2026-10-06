@@ -3,7 +3,7 @@ import { ConversationSkeleton, QueueSkeleton } from '@/features/inbox/Skeletons'
 import { PageContainer } from '@/shell/PageContainer';
 
 /**
- * The inbox before its first read — Omer's "content placeholders".
+ * The inbox before its first read - Omer's "content placeholders".
  *
  * ★ The same frame the page draws (`screen`, the two panels, the bleed), with
  *   placeholders in the shape of each panel's content where the content will

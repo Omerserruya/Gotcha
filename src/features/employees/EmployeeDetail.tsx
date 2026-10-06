@@ -28,7 +28,7 @@ import { PauseEmployee } from './PauseEmployee';
 const MAY_DO_ROWS = 6;
 
 /**
- * Screen 07's detail — the selected employee, measured.
+ * Screen 07's detail - the selected employee, measured.
  *
  * The name (30/600) over what it is responsible for, Pause/Edit on the
  * right; a strip of four; then three columns of cards.
@@ -37,14 +37,14 @@ const MAY_DO_ROWS = 6;
  *   the line under the name   `identity.responsibility`, else `goal`
  *   Answers on                `channels`
  *   How it answers            `tone` and `languages`
- *   What it may do            the tenant's capabilities — 10's own line says
+ *   What it may do            the tenant's capabilities - 10's own line says
  *                             they apply to every AI employee, and the card
  *                             says so: there are no per-employee overrides
  *   What it knows             its knowledge sources, readable or switched off
  *   Connected tools           the business's connected systems
  *   When it hands over        its handover rules that are on
  *
- * ── DRAWN, IN THEIR SHAPE ("—" or a sentence), AND WHY ──
+ * ── DRAWN, IN THEIR SHAPE ("-" or a sentence), AND WHY ──
  *   Handled TODAY             the count has no clock: the strip says "in all"
  *   Passed to a human         no handover cause is recorded
  *   Customer rating           nothing rates a conversation
@@ -71,7 +71,7 @@ export async function EmployeeDetail({
   const responsibility = responsibilityOf(employee);
   const rate = aloneRate(employee);
   /*
-    ★ The agent's channels are stored as the builder sent them — documented
+    ★ The agent's channels are stored as the builder sent them - documented
     lowercase (`whatsapp`), where `channelName` knows the platform's enum
     (`WHATSAPP`). Unnormalised, every channel read "Another channel".
   */
@@ -136,15 +136,15 @@ export async function EmployeeDetail({
         </div>
         <div className={styles.cell}>
           <dt>{t('detail.strip.alone')}</dt>
-          <dd>{rate === null ? '—' : format.number(rate, { style: 'percent' })}</dd>
+          <dd>{rate === null ? '-' : format.number(rate, { style: 'percent' })}</dd>
         </div>
         <div className={styles.cell}>
           <dt>{t('detail.strip.passed')}</dt>
-          <dd>—</dd>
+          <dd>-</dd>
         </div>
         <div className={styles.cell}>
           <dt>{t('detail.strip.rating')}</dt>
-          <dd>—</dd>
+          <dd>-</dd>
         </div>
       </dl>
 

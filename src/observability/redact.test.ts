@@ -41,7 +41,7 @@ describe('⚠⚠ an error message is a string like any other', () => {
   it('⚠⚠ is capped at the same length as every other string', () => {
     /*
      * It was the ONLY path with no cap, and the one most likely to carry a
-     * whole response body — an upstream failure is exactly where one ends up,
+     * whole response body - an upstream failure is exactly where one ends up,
      * and `cause` is logged at 900+ call sites.
      *
      * Measured before the fix: a 2,000-character field came back 513
@@ -73,7 +73,7 @@ describe('★★ the ruling: cap the message, keep the beginning', () => {
   it('⚠⚠ keeps the START of a long message, not the end and not nothing', () => {
     /*
      * ★ THIS IS THE DIRECTION THAT MATTERS. A cap returning '' would pass
-     *   every "nothing leaked" assertion and make every log line useless —
+     *   every "nothing leaked" assertion and make every log line useless -
      *   a guard that holds by refusing to do its job.
      */
     const message = `DIAGNOSTIC-PREFIX ${'x'.repeat(4000)}`;
@@ -91,14 +91,14 @@ describe('★★ the ruling: cap the message, keep the beginning', () => {
     expect(capped.message).not.toContain('y'.repeat(1000));
   });
 
-  it('★ a short message is untouched — the cap is a ceiling, not a transform', () => {
+  it('★ a short message is untouched - the cap is a ceiling, not a transform', () => {
     expect(redact(new Error('connect ECONNREFUSED 10.0.0.4:5432'))).toEqual({
       name: 'Error',
       message: 'connect ECONNREFUSED 10.0.0.4:5432',
     });
   });
 
-  it('⚠ while `message` as a FIELD is still blinded — the asymmetry is deliberate', () => {
+  it('⚠ while `message` as a FIELD is still blinded - the asymmetry is deliberate', () => {
     // Two rules for one word. A future reader finding this inconsistent should
     // read the note in `redact.ts` before making them agree.
     expect(redact({ message: 'a customer said something' })).toEqual({ message: REDACTED });

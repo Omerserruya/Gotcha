@@ -2,8 +2,8 @@
  * Password recovery, screen one.
  *
  * ★★ EVERY VALUE HERE IS ALREADY IN THE SYSTEM. The design has no recovery
- *    screen — 69 rendered frames in `Directions.dc.html` and not one heading
- *    mentions reset, recovery, forgot or password — so rather than invent
+ *    screen - 69 rendered frames in `Directions.dc.html` and not one heading
+ *    mentions reset, recovery, forgot or password - so rather than invent
  *    numbers, this borrows 00a's: the same field, label, input and spacing
  *    tokens the sign-in panel uses.
  */
@@ -57,8 +57,8 @@
 
   /*
    * ⚠ THIS FIRST USED `--text-danger`, WHICH DOES NOT EXIST.
-   *   `stylelint` passed it — nothing in this project checks that a custom
-   *   property is defined — and an undefined one makes the whole declaration
+   *   `stylelint` passed it - nothing in this project checks that a custom
+   *   property is defined - and an undefined one makes the whole declaration
    *   invalid, so the text would have rendered in the inherited colour. That
    *   is the `--font-serif-style` defect from this morning, which I fixed, in
    *   code I wrote hours later.

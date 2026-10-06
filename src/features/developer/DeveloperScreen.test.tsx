@@ -11,12 +11,12 @@ vi.mock('next-intl/server', () => ({
 
 import { DeveloperScreen } from './DeveloperScreen';
 
-describe('★ 18 — 02’s three cards, drawn with nothing behind them', () => {
-  it('each card is there with its "—", and why on its title', async () => {
+describe('★ 18 - 02’s three cards, drawn with nothing behind them', () => {
+  it('each card is there with its "-", and why on its title', async () => {
     render(await DeveloperScreen());
     for (const id of ['keys', 'webhooks', 'access']) {
       const none = screen.getByTestId(`developer-${id}-none`);
-      expect(none).toHaveTextContent(/^—$/);
+      expect(none).toHaveTextContent(/^-$/);
       expect(none).toHaveAttribute('title', expect.stringMatching(/\S/));
     }
   });

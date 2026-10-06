@@ -5,7 +5,7 @@ import { channelMark } from '@/features/inbox/channel-marks';
 import styles from './Channels.module.css';
 
 /**
- * 02's 34px tile on EVERY channel row — connected, connectable or calls —
+ * 02's 34px tile on EVERY channel row - connected, connectable or calls -
  * so the names line up down the list: the channel's mark on its own surface.
  */
 export function ChannelTile({ channel }: { readonly channel: string }) {

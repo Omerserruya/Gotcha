@@ -7,7 +7,7 @@ import styles from './Notifications.module.css';
  * The tenant's notification rules, grouped by the event they answer to.
  *
  * A list and not a matrix. One event can carry several rules with different
- * recipients and different channels, and **all of them apply** — the unique
+ * recipients and different channels, and **all of them apply** - the unique
  * indexes that would have made a grid honest were dropped on purpose so that
  * per-recipient routing works. A grid would have to choose one rule per cell
  * and would misdescribe every event that has two.
@@ -119,7 +119,7 @@ function Rule({
 
       {/*
         Everything below is a reason this rule does less than it looks like it
-        does. Each is stated as a consequence — what does not happen — rather
+        does. Each is stated as a consequence - what does not happen - rather
         than as a status word, because "shadowed" and "undeliverable" mean
         nothing to the person who has to decide what to do about it.
       */}

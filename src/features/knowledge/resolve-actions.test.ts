@@ -9,13 +9,13 @@ import { ApiError } from '@/api/client/api-error';
  * WHY THIS FILE EXISTS AND `Resolve.test.tsx` IS NOT ENOUGH
  * ════════════════════════════════════════════════════════════════════════════
  * That file hands `ResolveResult` values to a component and checks the
- * sentences. **Props are a stand-in for a parse** — every one of those tests
+ * sentences. **Props are a stand-in for a parse** - every one of those tests
  * passes with the body key wrong, the endpoint wrong, and `force` sent.
  *
  * The body key is the whole button: the route reads `req.body?.answer`, and
  * with any other name the next branch is `if (candidate.conflict &&
  * !editedAnswer)` → 400. Wrong key, and the control refuses every conflicted
- * row — which is every row it is drawn on. So it is asserted here, on the
+ * row - which is every row it is drawn on. So it is asserted here, on the
  * request, where getting it wrong is visible.
  *
  * `serverApi` is mocked, so nothing reaches the platform.
@@ -51,7 +51,7 @@ describe('★★ the request the route actually reads', () => {
     const body = post.mock.calls[0]![0].body;
     expect(body).toEqual({ answer: '₪850 minimum' });
     // Named explicitly: `editedAnswer` is the plausible wrong key, it is the
-    // name used at both other ends of the route, and it fails silently-ish —
+    // name used at both other ends of the route, and it fails silently-ish -
     // as a refusal on every row rather than as an error anyone would debug.
     expect(body).not.toHaveProperty('editedAnswer');
   });
@@ -136,7 +136,7 @@ describe('★★ whether the AI can answer with it is a second question', () => 
   });
 
   it('★★ a failed confirmation read is unknown, never in use', async () => {
-    // That read is gated on `ai:knowledge:read` — a DIFFERENT permission from
+    // That read is gated on `ai:knowledge:read` - a DIFFERENT permission from
     // the write that just succeeded. A writer without it is ordinary, and
     // "in use" would be a claim built on a request that never answered.
     get.mockRejectedValue(new ApiError({ kind: 'authorization', status: 403 }));

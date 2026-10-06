@@ -70,7 +70,7 @@ describe('languages the workspace was never told about', () => {
 
   it('matches on the language, not the tag', () => {
     // "he-IL" and "he" are one language to somebody choosing which to answer
-    // in — the service normalises, and so does this.
+    // in - the service normalises, and so does this.
     expect(unstoredLanguages(MEASURED, 'he-IL').map((r) => r.locale)).toEqual(['en']);
   });
 

@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * Settings · Channels — screen 13.
+   * Settings · Channels - screen 13.
    *
    * One card, a hairline between rows, so the channels read as one list and
    * the list reads as a health check.
@@ -16,7 +16,7 @@
     overflow: hidden;
   }
 
-  /* A row: `padding:15px 18px`, gap 16 — tile, name over line, state, Settings. */
+  /* A row: `padding:15px 18px`, gap 16 - tile, name over line, state, Settings. */
   .row {
     display: flex;
     align-items: center;
@@ -237,7 +237,7 @@
     flex-wrap: wrap;
   }
 
-  /* Why this channel cannot be connected here. Not an error — a state. */
+  /* Why this channel cannot be connected here. Not an error - a state. */
   .connectNote {
     margin: 0;
     font-size: var(--font-size-meta);
@@ -257,7 +257,7 @@
     color: var(--intent-urgent-text);
   }
 
-  /* "Connect": 02's primary — dark and filled. */
+  /* "Connect": 02's primary - dark and filled. */
   .connectOpen {
     flex: none;
     font-size: var(--font-size-caption);
@@ -400,7 +400,7 @@
   }
 
   /*
-   * The verdict. Four values, not two — a number receiving while Meta blocks
+   * The verdict. Four values, not two - a number receiving while Meta blocks
    * its replies is doing half its job, and the half it is doing is the one the
    * customer's inbox depends on.
    */
@@ -499,9 +499,9 @@
   }
 
   /*
-   * Templates paused — above the list, because it is about the business.
+   * Templates paused - above the list, because it is about the business.
    *
-   * `intent-blocked`, which is the amber set — NOT `intent-urgent`, which is
+   * `intent-blocked`, which is the amber set - NOT `intent-urgent`, which is
    * red. The channel is not down and a red block would say it was.
    *
    * The token is also semantically right rather than merely the right colour:
@@ -510,7 +510,7 @@
    *
    * (Written first against `--intent-caution-*`, which does not exist. The
    * `var(x, fallback)` would have rendered plausibly forever and nothing
-   * would have failed — a token name is not checked by anything.)
+   * would have failed - a token name is not checked by anything.)
    */
   .templatesPaused {
     display: flex;
@@ -569,7 +569,7 @@
    *
    * `ConnectPanel` (13a/b) and `ConnectNumbers` (13c/d) both used `styles.connect`.
    * The block here declared only flex/column/gap, which is what its author
-   * believed the number step got — but the earlier `.connect` rule applies too, so
+   * believed the number step got - but the earlier `.connect` rule applies too, so
    * it has always also carried `grid-column: 1 / -1`, a card background, a border
    * and padding it never asked for.
    *
@@ -580,7 +580,7 @@
    * ⚠ RENAMED WITHOUT CHANGING WHAT RENDERS. The merged set below is exactly what
    * the number step has been getting all along, so this commit is a
    * de-duplication and not a redesign. Whether the number step *should* be a card
-   * is a question for somebody looking at it — and now it can be answered in one
+   * is a question for somebody looking at it - and now it can be answered in one
    * place instead of two.
    */
   .connectNumbers {
@@ -1154,7 +1154,7 @@
     text-decoration: none;
   }
 
-  /* 02: waiting, the button is pale — light fill, light text — not a grey copy of itself. */
+  /* 02: waiting, the button is pale - light fill, light text - not a grey copy of itself. */
   .learnPrimary[aria-disabled='true'] {
     background-color: var(--panel-well);
     color: var(--text-faint);
@@ -1468,7 +1468,7 @@
     gap: 18px;
   }
 
-  /* Omer, 13c: one quiet line under the two — the subtle colour, 11.5px. */
+  /* Omer, 13c: one quiet line under the two - the subtle colour, 11.5px. */
   .pathsAgain {
     margin: 0;
     color: var(--text-subtle);
@@ -1687,7 +1687,7 @@
     white-space: nowrap;
   }
 
-  /* 13f's decisions: 02's pills, ~22 tall, radius 6 — bordered; the one to press black. */
+  /* 13f's decisions: 02's pills, ~22 tall, radius 6 - bordered; the one to press black. */
   button.reportAction {
     display: inline-flex;
     align-items: center;

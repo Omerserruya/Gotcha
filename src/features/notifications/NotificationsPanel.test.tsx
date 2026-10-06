@@ -90,7 +90,7 @@ beforeEach(() => {
   loadNotifications.mockReset();
 });
 
-describe('★★ 01d — a panel of decisions and failures', () => {
+describe('★★ 01d - a panel of decisions and failures', () => {
   it('the head: "N new", Mark all read, Settings', async () => {
     await panel({ items: ITEMS, unread: 2, failed: false });
     expect(screen.getByTestId('notifications-new')).toHaveTextContent('2 new');

@@ -11,18 +11,18 @@
  * to those it can, and the menu says how many.
  *
  *   Assign to me          /claim      any conversation not already yours
- *   Assign to someone ›   /reassign   an ADMIN, or the person holding it —
+ *   Assign to someone ›   /reassign   an ADMIN, or the person holding it -
  *                                     the route 403s anyone else
  *   Put back in the queue /release    held by somebody; by them or an ADMIN
- *   Stop AI               /claim      the AI is driving it (Omer) — on those
+ *   Stop AI               /claim      the AI is driving it (Omer) - on those
  *                                     rows it stands in for "Assign to me":
  *                                     the same route, said for what it does
  *   Back to the AI        /return-to-ai  taken from an AI that is still on it
  *   Mark resolved         /close      anything not already CLOSED
- *   Delete                DELETE      ADMIN and SYSTEM_ADMIN only — the route
+ *   Delete                DELETE      ADMIN and SYSTEM_ADMIN only - the route
  *                                     403s everyone else
  *
- * Not here, and on purpose: Mark as unread and Archive — the routes exist,
+ * Not here, and on purpose: Mark as unread and Archive - the routes exist,
  * Omer did not ask for them (2026-10-05).
  */
 

@@ -14,7 +14,7 @@ import { waitLabel } from './queue-row';
  * ════════════════════════════════════════════════════════════════════════════
  * The inbox queue printed `SHOPIFY_LIVE_CHAT` and `47061m`; both were fixed
  * there and nowhere else. A browser walk with no fixtures then found the same
- * two defects on four more screens — `SHOPIFY_LIVE_CHAT` on Home's rows AND its
+ * two defects on four more screens - `SHOPIFY_LIVE_CHAT` on Home's rows AND its
  * channel bar, `1444h` on Home's activity card, `PROJECT_MANAGEMENT` on the
  * integration rail, and `Crm` / `Ai` as headings on Permissions.
  *
@@ -45,7 +45,7 @@ describe('★★ a duration that outgrows its unit changes unit', () => {
     expect(at(3 * 60)).toBe('wait.hours:3');
   });
 
-  it('★★ days beyond that — this capped at hours, on the first screen a merchant opens', () => {
+  it('★★ days beyond that - this capped at hours, on the first screen a merchant opens', () => {
     /*
      * Two months of waiting used to render as a four-digit hour count. The
      * number exists to be read at a glance and a glance cannot divide by 24.
@@ -102,7 +102,7 @@ describe('★★ acronyms in platform identifiers are acronyms', () => {
   it('★★ a brand keeps its own casing, and WHATSAPP is not shouting', () => {
     /*
      * `whatsapp` was in the acronym list for one draft and came out
-     * `WHATSAPP` — a different kind of wrong from `Whatsapp` and worse,
+     * `WHATSAPP` - a different kind of wrong from `Whatsapp` and worse,
      * because it reads as emphasis rather than as a missing capital.
      */
     expect(humaniseCode('whatsapp')).toBe('WhatsApp');
@@ -130,7 +130,7 @@ describe("★★ no stylesheet capitalises a value on the product's behalf", () 
      * person reading the page found it.
      *
      * ★ `capitalize` is the dangerous one and `uppercase` is not, which is why
-     * this forbids exactly one. `capitalize` LOOKS LIKE NAMING — it turns
+     * this forbids exactly one. `capitalize` LOOKS LIKE NAMING - it turns
      * `crm` into something that reads as a word and is not one. `uppercase` on
      * a platform value produces SHOUTING, which is conspicuous, caught by a
      * different check, and the reason eight section labels legitimately use it.
@@ -154,7 +154,7 @@ describe("★★ no stylesheet capitalises a value on the product's behalf", () 
     const files = await walk(join(process.cwd(), 'src'));
     /*
      * ⚠ The guard on the guard. A path that resolves to nothing makes this test
-     * pass for ever, and a check that cannot fail is worse than no check —
+     * pass for ever, and a check that cannot fail is worse than no check -
      * a failed read is not a flake, it is a failed read.
      */
     expect(files.length).toBeGreaterThan(10);
@@ -178,7 +178,7 @@ describe('★★ nobody writes the thirteenth channel renderer by hand', () => {
      *     channelLabelKey(x) ? t(`name.${x}` as 'name.WHATSAPP') : t('name.other')
      *
      * Copied at twelve sites, three of which dropped the guard and the fallback
-     * and so rendered `name.TELEGRAM` — the message KEY — for any channel the
+     * and so rendered `name.TELEGRAM` - the message KEY - for any channel the
      * catalogue had not heard of. `channelName` is now the only place that shape
      * lives.
      *
@@ -210,7 +210,7 @@ describe('★★ nobody writes the thirteenth channel renderer by hand', () => {
     expect(files.length).toBeGreaterThan(100);
 
     /*
-     * The one place allowed to build the key — `channelName` itself. Named
+     * The one place allowed to build the key - `channelName` itself. Named
      * rather than pattern-excluded, so moving the helper makes this fail and the
      * next person has to decide deliberately where the idiom lives.
      */

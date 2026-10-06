@@ -56,7 +56,7 @@
     font-weight: 400;
   }
 
-  /* What people ask about — a list, never a ranking with a verdict. */
+  /* What people ask about - a list, never a ranking with a verdict. */
 
   .topicList {
     display: flex;
@@ -82,12 +82,12 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * Screen 06, measured — the statement, the strip, two cards
+   * Screen 06, measured - the statement, the strip, two cards
    * ════════════════════════════════════════════════════════════════════════
    */
   /*
    * The body is a window (`PageContainer fill`): this column takes its height,
-   * and its last row takes what is left, down to the frame's bottom — 02's
+   * and its last row takes what is left, down to the frame's bottom - 02's
    * footers sit at the bottom of their cards, not under the content.
    */
   .screen {
@@ -287,7 +287,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 06b, measured — what GOTCHA did
+   * 06b, measured - what GOTCHA did
    * ════════════════════════════════════════════════════════════════════════
    */
   .gScreen {
@@ -484,7 +484,7 @@
     border-radius: var(--radius-card);
   }
 
-  /* 06's "Conversations a day": a white card, seven stacked columns — team light over GOTCHA dark. */
+  /* 06's "Conversations a day": a white card, seven stacked columns - team light over GOTCHA dark. */
   .dChart {
     min-inline-size: 0;
     display: flex;
@@ -669,7 +669,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 06c, measured — the team, one table
+   * 06c, measured - the team, one table
    * ════════════════════════════════════════════════════════════════════════
    */
   .gHeroAmber {
@@ -694,7 +694,7 @@
     border-radius: var(--radius-card);
   }
 
-  /* Columns: the person, then 105 · 105 · 105 · 105 · 170 — 02's 130 · 130 · 130 · 150 with "Taken today" added, rebalanced so the last head is one line. */
+  /* Columns: the person, then 105 · 105 · 105 · 105 · 170 - 02's 130 · 130 · 130 · 150 with "Taken today" added, rebalanced so the last head is one line. */
   .tHead,
   .tRow {
     display: grid;
@@ -800,7 +800,7 @@
     color: var(--text-subtle);
   }
 
-  /* The week's load: seven 8px bars, 3 apart — a 3px baseline while nothing measures it. */
+  /* The week's load: seven 8px bars, 3 apart - a 3px baseline while nothing measures it. */
   .tLoad {
     display: flex;
     align-items: flex-end;
@@ -834,7 +834,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 06d, measured — what conversations are worth
+   * 06d, measured - what conversations are worth
    * ════════════════════════════════════════════════════════════════════════
    */
   /* "What you lost": the alert card, 300 wide, `padding:18px 20px`. */
@@ -992,7 +992,7 @@
 
   /*
    * ════════════════════════════════════════════════════════════════════════
-   * 06e, measured — what people are asking about
+   * 06e, measured - what people are asking about
    * ════════════════════════════════════════════════════════════════════════
    */
   .gCardActions {

@@ -64,7 +64,7 @@ const propsOf = <T,>(tree: ReactNode, type: unknown): T | null => {
   return found;
 };
 
-describe('★★ 04b — the card, its tabs, its side', () => {
+describe('★★ 04b - the card, its tabs, its side', () => {
   it('a screen, flush, with the side column always', async () => {
     const tree = await page();
     expect(mounted(tree)).toContain(PageContainer);
@@ -76,7 +76,7 @@ describe('★★ 04b — the card, its tabs, its side', () => {
   });
 
   it.each(['conversations', 'orders', 'actions', 'notes'])(
-    '★★ ?tab=%s has 04c–04f’s compact header and tab row, not 04b’s header',
+    '★★ ?tab=%s has 04c-04f’s compact header and tab row, not 04b’s header',
     async (tab) => {
       const types = mounted(await page(tab));
       expect(types).toContain(CustomerTopBar);
@@ -119,7 +119,7 @@ describe('★★ 04b — the card, its tabs, its side', () => {
   });
 });
 
-describe('★ ?more= — older conversations, 50 events a step', () => {
+describe('★ ?more= - older conversations, 50 events a step', () => {
   it('★ asks the loader for the larger page, and hands the step to 04c', async () => {
     const { loadCustomer } = await import('@/features/customers/load-customer');
     vi.mocked(loadCustomer).mockClear();
@@ -128,7 +128,7 @@ describe('★ ?more= — older conversations, 50 events a step', () => {
     expect(propsOf<{ more: number }>(tree, ConversationsTab)?.more).toBe(2);
   });
 
-  it('⚠ only on the conversations tab — the others keep the route’s own page', async () => {
+  it('⚠ only on the conversations tab - the others keep the route’s own page', async () => {
     const { loadCustomer } = await import('@/features/customers/load-customer');
     vi.mocked(loadCustomer).mockClear();
     await page('orders', undefined, '2');
@@ -136,7 +136,7 @@ describe('★ ?more= — older conversations, 50 events a step', () => {
   });
 });
 
-describe('★★ 04d — its filters in the tab row, its own side', () => {
+describe('★★ 04d - its filters in the tab row, its own side', () => {
   it('All/Open/Returns on the right of the tabs; "Across their orders" in the side', async () => {
     const tree = await page('orders', undefined, undefined, 'returns');
     const types = mounted(tree);
@@ -157,7 +157,7 @@ describe('★★ 04d — its filters in the tab row, its own side', () => {
   });
 });
 
-describe('★★ 04e — its filters, the approvals, its own side', () => {
+describe('★★ 04e - its filters, the approvals, its own side', () => {
   it('All/GOTCHA/Team/Money in the tab row; the approvals reach the spine; "Who did what" in the side', async () => {
     const tree = await page('actions', undefined, undefined, 'money');
     const types = mounted(tree);
@@ -179,7 +179,7 @@ describe('★★ 04e — its filters, the approvals, its own side', () => {
   });
 });
 
-describe('★★ 04f — its filters, its side, the name for the composer', () => {
+describe('★★ 04f - its filters, its side, the name for the composer', () => {
   it('All/GOTCHA may use/Team only in the tab row; "Notes" and "What GOTCHA reads" in the side', async () => {
     const tree = await page('notes', undefined, undefined, 'teamOnly');
     const types = mounted(tree);

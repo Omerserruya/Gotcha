@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { connectionSchema } from './integrations';
 
-describe('★ 14d — the store host from the connection, and nothing else of its config', () => {
+describe('★ 14d - the store host from the connection, and nothing else of its config', () => {
   it('reads config.shopDomain', () => {
     const c = connectionSchema.parse({
       id: 'c1',

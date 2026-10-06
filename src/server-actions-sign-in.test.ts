@@ -11,7 +11,7 @@ import { ApiError } from '@/api/client/api-error';
  * `'use server'` file must call it before anything else, so a catch added
  * tomorrow cannot quietly turn a signed-out session into a failed write.
  *
- * Blind spot, named: a promise's `.catch(cb)` is not walked — no action file
+ * Blind spot, named: a promise's `.catch(cb)` is not walked - no action file
  * uses one today (the `.catch(` there are zod's).
  */
 const ROOT = join(process.cwd(), 'src');
@@ -47,7 +47,7 @@ describe('★★ every catch in a server action sends a signed-out session to si
     expect(catchesSkippingSignIn(readFileSync(join(ROOT, path), 'utf8'))).toEqual([]);
   });
 
-  it('★ the check catches the shapes it must — run against them', () => {
+  it('★ the check catches the shapes it must - run against them', () => {
     expect(catchesSkippingSignIn('try { a(); } catch (cause) {\n  return failed;\n}')).toEqual([1]);
     expect(catchesSkippingSignIn('try { a(); } catch {\n  return failed;\n}')).toEqual([1]);
     expect(

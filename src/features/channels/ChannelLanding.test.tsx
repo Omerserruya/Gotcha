@@ -55,10 +55,10 @@ describe('★★ the way back, read off the URL', () => {
 });
 
 describe('★★ said once, and the URL tidied', () => {
-  it('"Instagram connected — 1 account."; the list stays the list', () => {
+  it('"Instagram connected - 1 account."; the list stays the list', () => {
     show({ channel: 'INSTAGRAM', outcome: 'connected', count: 1, pending: false });
     expect(screen.getByTestId('channel-landing')).toHaveTextContent(
-      'Instagram connected — 1 account.',
+      'Instagram connected - 1 account.',
     );
     expect(replace).toHaveBeenCalledWith('/settings/channels', { scroll: false });
   });

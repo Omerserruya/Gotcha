@@ -61,7 +61,7 @@ describe('the list it was given', () => {
 });
 
 describe('★ 11 draws a read state; the editing opens in place', () => {
-  it('the rules as bullets and "Add a rule" — no field, no Remove until it is opened', () => {
+  it('the rules as bullets and "Add a rule" - no field, no Remove until it is opened', () => {
     renderClaims();
     expect(screen.queryByLabelText(/new rule/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /^remove$/i })).toBeNull();

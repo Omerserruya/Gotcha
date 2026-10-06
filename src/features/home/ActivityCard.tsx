@@ -6,7 +6,7 @@ import { ABSENT, eventMessage } from './activity-event';
 import styles from './Home.module.css';
 
 /**
- * "GOTCHA is working" — the dark card on Home.
+ * "GOTCHA is working" - the dark card on Home.
  *
  * The server sends `kind` + `values` and never a rendered sentence, so the
  * wording, the order of the clauses and the direction of the text are decided
@@ -78,7 +78,7 @@ export async function ActivityCard({
               {t('timeSaved')}{' '}
               <span className={styles.activityTimeSavedValue} data-testid="time-saved">
                 {/* Derived from what GOTCHA handled: nothing handled, no figure. */}
-                {nothingHandled ? '—' : formatDuration(timeSaved.secondsSaved, t, format)}
+                {nothingHandled ? '-' : formatDuration(timeSaved.secondsSaved, t, format)}
               </span>
             </span>
             {nothingHandled ? null : (
@@ -142,7 +142,7 @@ function formatDuration(seconds: number, t: Translate, format: Format): string {
   const minutes = Math.max(0, Math.round(seconds / 60));
   /*
    * ★★ DAYS, BECAUSE HOURS DID NOT STOP. This capped at hours, so a browser
-   * walk found **`1444h`** on Home — sixty days, printed as a four-digit hour
+   * walk found **`1444h`** on Home - sixty days, printed as a four-digit hour
    * count on the card a person reads first. The same defect as the inbox
    * queue's `47061m`, in a different unit, found on a different screen after
    * the first was fixed.

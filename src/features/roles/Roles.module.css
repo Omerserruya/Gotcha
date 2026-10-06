@@ -5,7 +5,7 @@
    * A role is a name and a set of permission keys. The design describes each
    * one in prose including money limits; there is no amount column anywhere,
    * so this screen counts permissions and says outright that roles carry no
-   * limits — rather than leaving a reader to assume the cap is elsewhere.
+   * limits - rather than leaving a reader to assume the cap is elsewhere.
    */
 
   .screen {
@@ -53,7 +53,7 @@
   /*
    * ★★ NO `text-transform`. IT WAS CAPITALISING A PLATFORM IDENTIFIER.
    * `group.domain` reached the DOM as `crm` and this rule rendered it as
-   * `Crm` — so the source was lowercase (a source sweep saw nothing), it had
+   * `Crm` - so the source was lowercase (a source sweep saw nothing), it had
    * no underscore (a screaming-identifier probe saw nothing), and the only
    * instrument that could see it was a person looking at the page.
    *
@@ -211,8 +211,8 @@
   /* ── 12e · taking a permission away ─────────────────────────────────── */
   /*
    * Deliberately NOT the same control as adding. Adding and removing have
-   * opposite visibility — an addition shows the moment it is used, a removal
-   * is invisible everywhere but the person panel — so the controls must not
+   * opposite visibility - an addition shows the moment it is used, a removal
+   * is invisible everywhere but the person panel - so the controls must not
    * look comparable.
    */
   .removeStart {
@@ -709,7 +709,7 @@
   /*
    * 02: a floating dialog (~470, r16) over the 12d drawer, which stays in
    * view behind it. The list scrolls; head and foot stay put. No shadow in
-   * this system — depth is the stronger edge.
+   * this system - depth is the stronger edge.
    */
   .grantPicker {
     position: absolute;
@@ -1143,7 +1143,7 @@
 }
 
 @layer features {
-  /* 12b's PEOPLE: 02's faces — 26px, warm, initials at 10/600, 4px apart. */
+  /* 12b's PEOPLE: 02's faces - 26px, warm, initials at 10/600, 4px apart. */
   .faces {
     display: inline-flex;
     align-items: center;
@@ -1170,7 +1170,7 @@
 }
 
 @layer features {
-  /* 12c's Start from: 02's box — the role's name and a chevron. */
+  /* 12c's Start from: 02's box - the role's name and a chevron. */
   .selectBox {
     position: relative;
     display: block;
@@ -1192,7 +1192,7 @@
     pointer-events: none;
   }
 
-  /* 12c's bar at the form's end — after the grid, never over it. */
+  /* 12c's bar at the form's end - after the grid, never over it. */
   .formBar {
     display: flex;
     align-items: center;

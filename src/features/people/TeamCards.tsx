@@ -6,7 +6,7 @@ import { AddTeam } from './AddTeam';
 import styles from './People.module.css';
 
 /**
- * Teams — `Department` in the backend.
+ * Teams - `Department` in the backend.
  *
  * Two things the design draws are absent, both deliberately:
  *
@@ -14,7 +14,7 @@ import styles from './People.module.css';
  *     department link. Nothing routes a channel to a team, anywhere.
  *   - **"Escalations go to Tomer first".** `escalationPolicy` has one writer,
  *     fed by an onboarding payload no client populates, and the departments
- *     CRUD route cannot touch it. It is unreachable rather than unpopulated —
+ *     CRUD route cannot touch it. It is unreachable rather than unpopulated -
  *     which is why there is no "Not set" here either. An affordance offering a
  *     state the product cannot reach sends the reader looking for a control
  *     that exists on no screen.

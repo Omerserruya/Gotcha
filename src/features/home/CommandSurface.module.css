@@ -1,14 +1,14 @@
 @layer features {
   /*
    * The ask box. The design draws it as a dark panel inside the light work
-   * surface — the one place on Home where the frame's ink comes inside.
+   * surface - the one place on Home where the frame's ink comes inside.
    */
   /*
    * `margin: 24px auto 0; width: 880px; padding: 18px 20px 16px` in the source.
    *
    * The 24px above it is the whole reason the greeting reads as its own
    * moment. Without it the ask box butts straight into the sentence above and
-   * the two become one undifferentiated block — which is exactly what
+   * the two become one undifferentiated block - which is exactly what
    * happened before this line existed.
    */
   .surface {

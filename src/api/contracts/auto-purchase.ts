@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Topping up, and what happens when you stop — screen 17d.
+ * Topping up, and what happens when you stop - screen 17d.
  *
  * `GET /api/billing/auto-purchase` → `{ policy, currency, paygRate }`. The
  * currency travels with the answer even when no policy row exists, so the
@@ -15,13 +15,13 @@ import { z } from 'zod';
  *   `STOP_AI`          the AI stops answering. The default.
  *   `HUMAN_ONLY`       the AI stops; people carry on.
  *   `REQUIRE_APPROVAL` the AI keeps going, and every action waits for a person.
- *   `PREPAID_ONLY`     never buy more — run on what was bought in advance.
+ *   `PREPAID_ONLY`     never buy more - run on what was bought in advance.
  *   `PAYG`             keep serving past zero and bill it at the end of the cycle.
  *
  * **These are not five settings of one thing.** `STOP_AI` and `PAYG` are
  * opposite answers to "we ran out": one stops the product, the other keeps
  * spending. A control that presents them as a list of equals is accurate and
- * unhelpful — the screen says what each one does to the people using GOTCHA
+ * unhelpful - the screen says what each one does to the people using GOTCHA
  * tomorrow.
  *
  * **And only four of the five can be chosen.** The validator on
@@ -33,7 +33,7 @@ import { z } from 'zod';
  * `warningThresholdPct` (80 by default) tells the owner, and
  * `thresholdPct` (10) triggers the purchase. The design draws a single cap.
  * **A warning that fires at the same moment as the action it warns about is
- * not a warning**, which is presumably why they are separate — and a screen
+ * not a warning**, which is presumably why they are separate - and a screen
  * showing only one of them hides the fact that someone is told first.
  */
 
@@ -62,7 +62,7 @@ export type LimitBehavior = (typeof LIMIT_BEHAVIORS)[number];
  * ```
  *
  * **`PAYG` is honoured and unsettable.** Offering it would be a control that
- * answers 400 — or worse, one a merchant believes saved. It is shown as
+ * answers 400 - or worse, one a merchant believes saved. It is shown as
  * unavailable **with the reason**, rather than hidden, because the cap
  * warning on this screen is *about* PAYG and a warning about an invisible
  * option is a puzzle.
@@ -82,7 +82,7 @@ export const autoPurchaseSchema = z.object({
   enabled: z.boolean().default(false),
   /** Buy more when remaining credit falls to this percentage. */
   thresholdPct: z.number().default(10),
-  /** Tell the owner at this percentage — **before** the purchase threshold. */
+  /** Tell the owner at this percentage - **before** the purchase threshold. */
   warningThresholdPct: z.number().default(80),
   /** Decimal string. Null means no cap has been set. */
   maxMonthlySpend: z.string().nullable().default(null),
@@ -102,7 +102,7 @@ export const autoPurchaseResponseSchema = z
     paygRate: z.string().nullable().default(null),
   })
   .transform(({ policy, currency, paygRate }) => ({
-    /** `null` when nothing has been configured — not a policy of defaults. */
+    /** `null` when nothing has been configured - not a policy of defaults. */
     policy: policy === null ? null : autoPurchaseSchema.parse(policy),
     currency,
     paygRate,
@@ -111,7 +111,7 @@ export const autoPurchaseResponseSchema = z
 /**
  * How much of the cap is already spent, as a fraction.
  *
- * `null` when there is no cap — **not zero**. "No limit set" and "nothing
+ * `null` when there is no cap - **not zero**. "No limit set" and "nothing
  * spent against the limit" are different facts, and a bar at 0% would state
  * the second about a tenant in the first position.
  */

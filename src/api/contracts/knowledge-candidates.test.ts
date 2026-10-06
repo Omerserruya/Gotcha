@@ -47,7 +47,7 @@ describe('★ four groups, and the fourth is not a rejection', () => {
 describe('★ a conflict cannot be approved as it stands', () => {
   it('refuses a one-press approval', () => {
     /*
-     * "There is no 'the' answer to approve — that is what conflicted means."
+     * "There is no 'the' answer to approve - that is what conflicted means."
      * The API returns `conflict_requires_answer` rather than enshrining
      * whichever variant happened to be most common.
      */
@@ -64,8 +64,8 @@ describe('★ a conflict cannot be approved as it stands', () => {
 describe('★ "Approve all" cannot take a conflict, however it is pressed', () => {
   it('counts only what the server would accept', () => {
     /*
-     * The eligible set is computed server-side — PENDING, not conflicted,
-     * above a confidence floor — and the client cannot pass a list. So the
+     * The eligible set is computed server-side - PENDING, not conflicted,
+     * above a confidence floor - and the client cannot pass a list. So the
      * button is safe by construction, which is a promise worth rendering
      * rather than a footnote.
      */
@@ -94,7 +94,7 @@ describe('★ "Approve all" cannot take a conflict, however it is pressed', () =
      * `bulkApprovable` is on every candidate and the route states why it is
      * there: *"so the bulk endpoint and the button can never disagree about
      * what 'safe' means."* The contract stripped it and this function derived
-     * its own answer — which is exactly the disagreement it exists to prevent.
+     * its own answer - which is exactly the disagreement it exists to prevent.
      *
      * So the case that matters is the one where the two answers differ. A
      * candidate the server marks approvable at a confidence BELOW the floor we
@@ -107,7 +107,7 @@ describe('★ "Approve all" cannot take a conflict, however it is pressed', () =
      * ★ AND THE NUMBERS ARE CHOSEN SO THE TWO RULES GIVE DIFFERENT COUNTS.
      *
      * A first version used one candidate the server accepts below the floor AND
-     * one it rejects above it — the sets differ, the COUNT is 1 either way, and
+     * one it rejects above it - the sets differ, the COUNT is 1 either way, and
      * the test passed against a version that ignored `bulkApprovable`
      * entirely. A mutation found it. Asserting a total cannot distinguish two
      * rules that happen to select the same number of different things.
@@ -128,7 +128,7 @@ describe('★ "Approve all" cannot take a conflict, however it is pressed', () =
   });
 
   it('★★ derives only when the service did not say, and from the floor it sent', () => {
-    // `undefined` is "we were not told" — an older service. `false` would be a
+    // `undefined` is "we were not told" - an older service. `false` would be a
     // claim the server excluded it, which is why the field is optional and
     // never defaulted.
     const list = [candidate({ confidence: 0.9 }), candidate({ id: 'c2', confidence: 0.2 })];
@@ -149,7 +149,7 @@ describe('★ "Approve all" cannot take a conflict, however it is pressed', () =
     const list = [candidate({ confidence: 0.9 }), candidate({ id: 'c2', confidence: 0.01 })];
 
     expect(bulkWouldTake(list, undefined)).toBe(0);
-    // What the defaulted version would have said — both of them.
+    // What the defaulted version would have said - both of them.
     expect(bulkWouldTake(list, 0)).toBe(2);
   });
 
@@ -186,7 +186,7 @@ describe('★★ the fields the candidates response was throwing away', () => {
      */
     const parsed = candidateListSchema.parse({ candidates: [] });
     expect(parsed.bulkApproveMinConfidence).toBeUndefined();
-    // Counts, by contrast, default to {} — reporting nothing, not zero of each.
+    // Counts, by contrast, default to {} - reporting nothing, not zero of each.
     expect(parsed.counts).toEqual({});
   });
 });
@@ -194,7 +194,7 @@ describe('★★ the fields the candidates response was throwing away', () => {
 describe('★ correct and unsafe to assert are different things', () => {
   it('carries the live-lookup flag independently of confidence', () => {
     /*
-     * "'We usually do viewings Thursday and Friday' is true — but an agent
+     * "'We usually do viewings Thursday and Friday' is true - but an agent
      * that states it as fact will promise a slot nobody checked."
      *
      * So a candidate can be maximally confident AND unsafe to state. The flag
@@ -202,7 +202,7 @@ describe('★ correct and unsafe to assert are different things', () => {
      */
     const live = candidate({ requiresLiveLookup: true, confidence: 1 });
     expect(live.requiresLiveLookup).toBe(true);
-    // And it is still approvable — the caveat is about how it is USED.
+    // And it is still approvable - the caveat is about how it is USED.
     expect(approvableAsIs(live)).toBe(true);
   });
 });
@@ -224,14 +224,14 @@ describe('the reviewer’s actual decision input', () => {
 
   it('★ an unknown curation verdict loses the FIELD, not the whole list', () => {
     /*
-     * `curation_verdict` is `String?` in the schema — no Prisma enum, no TS
+     * `curation_verdict` is `String?` in the schema - no Prisma enum, no TS
      * union, and the only writer picks two values inline. So unlike every
      * other enum in these contracts, this one has no declared domain to
      * audit against: "complete" is not a claim anybody can make about it
      * today or keep true tomorrow.
      *
      * Without `.catch`, the next verdict the platform invents would fail the
-     * parse — and one invalid member takes down the ENTIRE response, not the
+     * parse - and one invalid member takes down the ENTIRE response, not the
      * field. That is exactly what `roles.2.source` did to screen 14: a 200
      * with a valid body, and five parts rendering nothing.
      *
@@ -245,14 +245,14 @@ describe('the reviewer’s actual decision input', () => {
   });
 
   it('still keeps the verdicts it does know', () => {
-    // `.catch` must not swallow the real values into null — that would make
+    // `.catch` must not swallow the real values into null - that would make
     // the degradation total and silent, which is worse than the parse error.
     expect(candidate({ curationVerdict: 'live_data' }).curationVerdict).toBe('live_data');
     expect(candidate({ curationVerdict: 'rewritten' }).curationVerdict).toBe('rewritten');
   });
 });
 
-describe('★★ 13f “Ready to add” — the server’s verdict, then its floor', () => {
+describe('★★ 13f “Ready to add” - the server’s verdict, then its floor', () => {
   const c = (over: Record<string, unknown>) =>
     candidateSchema.parse({
       id: 'x',
@@ -268,14 +268,14 @@ describe('★★ 13f “Ready to add” — the server’s verdict, then its flo
     expect(readyToAdd(c({ bulkApprovable: true, confidence: 0.1 }), 0.8)).toBe(true);
   });
 
-  it('without a verdict: clean and at the floor; no floor told — never', () => {
+  it('without a verdict: clean and at the floor; no floor told - never', () => {
     expect(readyToAdd(c({}), 0.8)).toBe(true);
     expect(readyToAdd(c({ confidence: 0.7 }), 0.8)).toBe(false);
     expect(readyToAdd(c({ conflict: true }), 0.8)).toBe(false);
     expect(readyToAdd(c({}), undefined)).toBe(false);
   });
 
-  it('a live lookup is ready when the route takes it — the route writes the caveat in; anything not waiting never is', () => {
+  it('a live lookup is ready when the route takes it - the route writes the caveat in; anything not waiting never is', () => {
     expect(readyToAdd(c({ requiresLiveLookup: true, bulkApprovable: true }), 0.8)).toBe(true);
     expect(readyToAdd(c({ requiresLiveLookup: true }), 0.8)).toBe(true);
     expect(readyToAdd(c({ status: 'APPROVED' }), 0.8)).toBe(false);

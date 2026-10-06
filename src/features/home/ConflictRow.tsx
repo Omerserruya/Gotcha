@@ -12,7 +12,7 @@ import { resolveConflict } from './resolve-conflict';
  * One row of the quiet-day card: something GOTCHA learned that two sources
  * disagree about.
  *
- * Two actions, weighted as the design weights them — accepting the new value
+ * Two actions, weighted as the design weights them - accepting the new value
  * is the filled button, keeping the current one is outlined. The row carries
  * an amber edge because it is blocking: until it is settled, every question
  * touching that field goes to a person.
@@ -79,5 +79,5 @@ function Title({ children }: { children: string }) {
 
 /** `minimum_order` reads better as "minimum order". */
 function humanise(fieldKey: string | undefined): string {
-  return (fieldKey ?? '').replace(/[_-]+/g, ' ').trim() || '—';
+  return (fieldKey ?? '').replace(/[_-]+/g, ' ').trim() || '-';
 }

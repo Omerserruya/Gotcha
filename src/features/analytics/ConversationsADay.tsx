@@ -6,8 +6,8 @@ import styles from './Analytics.module.css';
 
 /**
  * 06 and 06b's day chart: seven columns, the dark part beneath the light one,
- * each day's height against the busiest. Unread (`null`), the axis stays —
- * the last seven days, empty — and a sentence says so; no figure is invented.
+ * each day's height against the busiest. Unread (`null`), the axis stays -
+ * the last seven days, empty - and a sentence says so; no figure is invented.
  */
 async function StackedDays({
   testId,
@@ -93,7 +93,7 @@ async function StackedDays({
   );
 }
 
-/** 06 Overview: answered each day — GOTCHA alone (dark), a person replied (light). */
+/** 06 Overview: answered each day - GOTCHA alone (dark), a person replied (light). */
 export async function ConversationsADay({
   daily,
   fallbackDays,
@@ -115,7 +115,7 @@ export async function ConversationsADay({
   });
 }
 
-/** 06b: started each day — GOTCHA alone (dark), passed over to a person (light). */
+/** 06b: started each day - GOTCHA alone (dark), passed over to a person (light). */
 export async function AloneChart({
   daily,
   fallbackDays,

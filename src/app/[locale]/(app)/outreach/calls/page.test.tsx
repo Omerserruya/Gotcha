@@ -51,7 +51,7 @@ beforeEach(() => {
     .mockResolvedValue({ rows: [], total: 0, truncated: false, searchedField: null });
 });
 
-describe('★★ 05d — one frame in every state', () => {
+describe('★★ 05d - one frame in every state', () => {
   it.each([
     [{ voiceEnabled: null }, 'unknown'],
     [{ voiceEnabled: false, calls: null }, 'off'],
@@ -81,7 +81,7 @@ describe('★★ 05d — one frame in every state', () => {
     expect(find<{ line: string }>(await page(), DialerCard)?.line).toBe(line);
   });
 
-  it('★ the summary is the WEEK’s — the strip says "this week"', async () => {
+  it('★ the summary is the WEEK’s - the strip says "this week"', async () => {
     await page();
     expect(loadCalls).toHaveBeenCalledWith({ summaryDays: 7 });
   });
@@ -111,8 +111,8 @@ describe('★★ 05d — one frame in every state', () => {
   });
 });
 
-describe('★★ 05e — a call in progress is the page', () => {
-  it('the live call, with its person, direction and start — and not 05d’s frame', async () => {
+describe('★★ 05e - a call in progress is the page', () => {
+  it('the live call, with its person, direction and start - and not 05d’s frame', async () => {
     loadLiveCall.mockResolvedValue({
       call: {
         id: 'v1',

@@ -29,18 +29,18 @@ import { TopicsHero } from './TopicsTab';
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ ONE RULE ACROSS EVERY ANALYTICS TAB: NO FIGURE OF NOTHING
  * ════════════════════════════════════════════════════════════════════════════
- * Found piecemeal four times — "0%" answered first, "0h" saved, "It answered
- * first in 0 conversations … 0 hours", "Answered first by people: 0" — each
+ * Found piecemeal four times - "0%" answered first, "0h" saved, "It answered
+ * first in 0 conversations … 0 hours", "Answered first by people: 0" - each
  * fixed where it was seen. This is the one assertion instead of the fifth fix:
  * a week with NO conversations, rendered through every tab's figures and
  * dark cards, and nothing may present a share, hours or a conversation count
  * of that nothing as a result.
  *
- * Raw event counts may stay at 0 — "Needed approval 0" is a fact. What may
+ * Raw event counts may stay at 0 - "Needed approval 0" is a fact. What may
  * not appear is a percentage, an hours figure, or a count of conversations or
  * people when there were no conversations.
  *
- * ⚠ ADD EACH NEW TAB HERE. A tab not rendered below is not covered — see
+ * ⚠ ADD EACH NEW TAB HERE. A tab not rendered below is not covered - see
  * `tests-must-enumerate-the-registry`.
  */
 const EMPTY_WEEK = {
@@ -64,7 +64,7 @@ const FIGURES_OF_NOTHING: readonly RegExp[] = [
   /(^|[^\d.,])0\s+hours?\b/i, //           0 hours
   /(^|[^\d.,])0\s+conversations?\b/i, //   0 conversations
   /(^|[^\d.,])0\s+people\b/i, //           0 people
-  /(^|[^\d.,])0\s?[ms]\b/, // 0m, 0s — a duration of nothing
+  /(^|[^\d.,])0\s?[ms]\b/, // 0m, 0s - a duration of nothing
 ];
 
 const TABS: readonly [string, () => Promise<ReactElement>][] = [
@@ -92,7 +92,7 @@ const TABS: readonly [string, () => Promise<ReactElement>][] = [
 
 /**
  * Cells whose figure is DERIVED from conversations: in the empty week each
- * must read "—". A count after its label ("Answered first by people0") is
+ * must read "-". A count after its label ("Answered first by people0") is
  * invisible to the text patterns above, so these are named.
  */
 /* The team report for a week nobody wrote in (backend af4f0072's shape). */
@@ -129,11 +129,11 @@ describe('★★ a week with no conversations, through every tab', () => {
   });
 
   it.each(DERIVED_CELLS)(
-    '%s: every conversation-derived cell is "—"',
+    '%s: every conversation-derived cell is "-"',
     async (_name, part, cells) => {
       const { container } = render(await part());
       for (const id of cells) {
-        expect(container.querySelector(`[data-testid="${id}"] dd`)?.textContent, id).toBe('—');
+        expect(container.querySelector(`[data-testid="${id}"] dd`)?.textContent, id).toBe('-');
       }
     },
   );

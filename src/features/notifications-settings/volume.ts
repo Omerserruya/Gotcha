@@ -2,17 +2,17 @@
  * How many notifications this person actually receives.
  *
  * *"You get about 6 a day."* The design asks for observed volume, and nothing
- * serves a count over a window — `GET /api/notifications` pages (200 max,
+ * serves a count over a window - `GET /api/notifications` pages (200 max,
  * newest first, with `hasMore`) and `unread-count` counts unread rather than
  * arrivals.
  *
  * So it is counted from the newest page, which is exact **unless that page is
- * full and every row on it falls inside the window** — in which case there may
+ * full and every row on it falls inside the window** - in which case there may
  * be more we did not fetch, and the number is a floor rather than a figure.
  * The screen says which it is. Paging further to be sure would mean up to
  * dozens of round trips to put one sentence on a settings screen.
  *
- * What is NOT here is the design's projection — *"raising the automatic refund
+ * What is NOT here is the design's projection - *"raising the automatic refund
  * limit would cut it to roughly 2"*. That is a counterfactual over history, not
  * a query, and nothing computes it.
  */
@@ -47,7 +47,7 @@ export function observedVolume(
 
   /*
    * The page told us everything only if it was not truncated, OR if some of
-   * what it returned already falls outside the window — which proves we
+   * what it returned already falls outside the window - which proves we
    * reached back past the edge and nothing beyond it can count.
    */
   const sawPastTheEdge = inWindow < arrivals.length;

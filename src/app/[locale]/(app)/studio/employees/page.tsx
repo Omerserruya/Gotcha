@@ -30,7 +30,7 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Studio · AI employees — screen 07.
+ * Studio · AI employees - screen 07.
  *
  * ── THE FOURTH VERB, AND WHY THE SENTENCE GREW ──
  * The design says *"Hire, edit, pause, fire"*. `AIAgentStatus` is
@@ -38,18 +38,18 @@ import { pageMetadata } from '@/shell/page-metadata';
  *
  * The note above the list used to say only that. Then Delete was added, and
  * *"there is no way to retire one"* ended up sitting **directly above the most
- * destructive control on the screen** — so a reader denied the thing they
+ * destructive control on the screen** - so a reader denied the thing they
  * wanted would reach for the nearest thing to it. **Delete is not retirement:
  * retiring would keep the record and stop the work; delete destroys the
  * employee and leaves live conversations waiting for a person.**
  *
  * The sentence was still true and no longer sufficient. It now distinguishes
- * all three — pause keeps it, delete removes it, neither retires it — because
+ * all three - pause keeps it, delete removes it, neither retires it - because
  * **what someone concludes before opening the dialog is the part the dialog
  * cannot fix.**
  *
  * ── AND WHAT PAUSING ACTUALLY DOES ──
- * Nothing but stop replying. No handover, no reassignment, no notification —
+ * Nothing but stop replying. No handover, no reassignment, no notification -
  * so the confirmation names the people mid-conversation, with the number.
  *
  * ── WHAT IS ABSENT ──
@@ -59,7 +59,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  * conversations carry the flag**. A cause column would be a confident zero for
  * every employee.
  *
- * **No knowledge-coverage-by-topic and no escalation-analysis suggestions** —
+ * **No knowledge-coverage-by-topic and no escalation-analysis suggestions** -
  * neither has a source.
  */
 export default async function Page({
@@ -67,7 +67,7 @@ export default async function Page({
 }: {
   readonly searchParams?: Promise<{
     readonly employee?: string;
-    /** 07b–07d: the Hire sheet, and its step. */
+    /** 07b-07d: the Hire sheet, and its step. */
     readonly hire?: string;
     readonly step?: string;
     /** 07f: the Edit sheet over the selected employee. */
@@ -105,7 +105,7 @@ export default async function Page({
           current: currentChoice(c),
         }))
     : [];
-  // Named as 13 names them — never the enum ("SHOPIFY_LIVE_CHAT").
+  // Named as 13 names them - never the enum ("SHOPIFY_LIVE_CHAT").
   const tch = await getTranslations('channels');
   const hireChannels = [
     ...new Set(
@@ -126,8 +126,8 @@ export default async function Page({
     );
 
   /*
-    07, measured: 02's screen header — the title, a line that counts them,
-    and "Hire an employee" on the right — over a split: the list (330) and
+    07, measured: 02's screen header - the title, a line that counts them,
+    and "Hire an employee" on the right - over a split: the list (330) and
     the selected employee (888), each scrolling inside itself.
   */
   const summary = employees?.length
@@ -145,7 +145,7 @@ export default async function Page({
       title={t('title')}
       description={summary}
       actions={
-        // 07b–07d: the Hire sheet, read-only until creating is allowed.
+        // 07b-07d: the Hire sheet, read-only until creating is allowed.
         <Link
           href={{ pathname: '/studio/employees', query: { hire: '1' } }}
           className={styles.hire}

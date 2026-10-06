@@ -4,13 +4,13 @@ import { translate } from './events';
 import { SocketTransport } from './socket-transport';
 
 /**
- * The conversation room — and the event that only travels in it.
+ * The conversation room - and the event that only travels in it.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ v2 NEVER ASKED FOR A ROOM, SO NOTHING SENT TO ONE EVER ARRIVED
  * ════════════════════════════════════════════════════════════════════════════
- * The platform sends per-conversation events — the Copilot's suggestions, a
- * tool's lifecycle — to `conv:{id}`, and joins a socket to it only on
+ * The platform sends per-conversation events - the Copilot's suggestions, a
+ * tool's lifecycle - to `conv:{id}`, and joins a socket to it only on
  * `subscribe:conversation`. Our transport never emitted that, so every such
  * event was dropped before it reached a listener, and from inside the app that
  * looks exactly like the platform not sending it.
@@ -66,7 +66,7 @@ beforeEach(() => {
 });
 
 describe('★★ joinConversation', () => {
-  it('★★ asks for the room once connected — and again after every reconnect', async () => {
+  it('★★ asks for the room once connected - and again after every reconnect', async () => {
     const transport = await connectNow();
     transport.joinConversation('c1');
     expect(joins()).toEqual([]); // not connected yet: nothing to ask on
@@ -105,7 +105,7 @@ describe('★★ joinConversation', () => {
   });
 });
 
-describe('★★ copilot.suggestions.updated — the bus sends `data`, with the tenant inside', () => {
+describe('★★ copilot.suggestions.updated - the bus sends `data`, with the tenant inside', () => {
   it('★★ translates the frame as the bridge emits it', () => {
     // `io.to(channel).emit(event.event, event.data)`; publishConvEvent puts tenantId in data.
     expect(

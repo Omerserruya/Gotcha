@@ -13,22 +13,22 @@ import styles from './NewAutomation.module.css';
 type StepType = (typeof STEP_TYPES)[number];
 
 /**
- * 21, measured: "New automation" — Hire's 1000 sheet over 09. A sentence in
+ * 21, measured: "New automation" - Hire's 1000 sheet over 09. A sentence in
  * a dark bar, WHEN and THEN under it, what it would have caught, how to
  * start it, and Save.
  *
  * Read-only, as Hire is. What is local: the sentence, the WHEN (the flow's
- * `trigger` is free text), and the THEN — steps added from the runner's own
+ * `trigger` is free text), and the THEN - steps added from the runner's own
  * node types (`STEP_TYPES`) and removed. The body Save would send is
  * `POST /api/chatbot-flows` `{ name, trigger, nodes, edges }`, the steps
  * chained in order.
  *
  * ── DRAWN, AND WHY ──
  *   Build it             nothing turns a sentence into steps
- *   each step's settings a node's message, target or field — not drawn
+ *   each step's settings a node's message, target or field - not drawn
  *   last month           nothing replays past conversations against a rule
  *   Watch it for a week  no watch-only mode: a flow is on or off
- *   Save automation      writes a flow — waiting for approval
+ *   Save automation      writes a flow - waiting for approval
  *   Test on a past one   the same missing replay
  */
 export function NewAutomation() {
@@ -108,7 +108,7 @@ export function NewAutomation() {
                   <li key={i} className={styles.step} data-testid={`new-step-${i}`}>
                     <span className={styles.stepName}>{ts(type)}</span>
                     <span className={styles.stepMeta} title={t('settingsNone')}>
-                      —
+                      -
                     </span>
                     <button
                       type="button"
@@ -161,7 +161,7 @@ export function NewAutomation() {
             <section className={styles.caught} data-testid="new-caught">
               <h3 className={styles.caughtTitle}>{t('caught')}</h3>
               <p className={styles.caughtBody} title={t('caughtNone')}>
-                —
+                -
               </p>
             </section>
             <section className={styles.start}>

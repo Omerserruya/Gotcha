@@ -14,7 +14,7 @@ beforeEach(() => {
 });
 
 describe('★★ Go live at the wire', () => {
-  it('POST /api/onboarding/complete { skipEmployee: true } — never a second employee, never skipping the store', async () => {
+  it('POST /api/onboarding/complete { skipEmployee: true } - never a second employee, never skipping the store', async () => {
     post.mockResolvedValue({ data: { status: 'ACTIVE' } });
     expect(await goLive()).toEqual({ ok: true });
     const call = post.mock.calls[0]![0] as { endpoint: { path: string }; body: unknown };

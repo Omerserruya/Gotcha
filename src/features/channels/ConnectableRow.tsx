@@ -14,8 +14,8 @@ import { channelName } from '@/api/contracts/inbox';
  * A channel that could be connected, and the panel that connects it.
  *
  * The only client component on this screen. The list itself is server-rendered
- * — it is read-only, and `GET /api/channels` returns a `platformMeta` blob that
- * has no business in a browser payload — so interactivity is pushed down to
+ * - it is read-only, and `GET /api/channels` returns a `platformMeta` blob that
+ * has no business in a browser payload - so interactivity is pushed down to
  * the one row that needs it rather than dragging the table with it.
  *
  * The panel opens INSIDE the row, which is what the design means by

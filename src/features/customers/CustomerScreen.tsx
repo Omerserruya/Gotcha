@@ -12,19 +12,19 @@ import { displayHandle } from './phone';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
- * 04b — a person with a history, not a record.
+ * 04b - a person with a history, not a record.
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ EVERY ELEMENT OF 02's CARD IS DRAWN; WHAT HAS NO DATA SAYS "—"
+ * ★★ EVERY ELEMENT OF 02's CARD IS DRAWN; WHAT HAS NO DATA SAYS "-"
  * ════════════════════════════════════════════════════════════════════════════
  * Omer's bar is 1:1 with the design. So the header, the tabs, the timeline,
  * WORTH, GOTCHA REMEMBERS, REACH and the pinned note are all here, in 02's
  * measured boxes; a part the platform cannot fill keeps its shape and says
- * "—" or "nothing yet", never a paragraph about why.
+ * "-" or "nothing yet", never a paragraph about why.
  *
  *   filled      the summary (brief), the memory facts, the handles, the
  *               orders count, the timeline, the newest note
- *   "—"         lifetime value and refunds (only RECENT orders are read),
+ *   "-"         lifetime value and refunds (only RECENT orders are read),
  *               location, "with you since" when the history is cut
  */
 
@@ -53,8 +53,8 @@ export function initialsOf(name: string | null): string {
 }
 
 /**
- * 02's facts line — "with you since …", "reaches you on …" — for 04b's
- * header and 04c–04f's compact one alike, so the two cannot drift.
+ * 02's facts line - "with you since …", "reaches you on …" - for 04b's
+ * header and 04c-04f's compact one alike, so the two cannot drift.
  *
  * "With you since" only when the history is whole: the oldest event of a
  * page that has more would be a date that is merely the edge of the page.
@@ -73,7 +73,7 @@ export async function customerFacts(detail: CustomerDetail): Promise<readonly st
     detail.timeline && !detail.timeline.page.hasMore && events.length > 0
       ? events.reduce((min, e) => (e.createdAt < min ? e.createdAt : min), events[0]!.createdAt)
       : null;
-  // "With you since": when the contact was made — or an older word we hold (imported history).
+  // "With you since": when the contact was made - or an older word we hold (imported history).
   const created = detail.timeline?.contact?.createdAt ?? null;
   const since = created && oldest ? (oldest < created ? oldest : created) : (created ?? oldest);
   return [
@@ -89,7 +89,7 @@ export async function customerFacts(detail: CustomerDetail): Promise<readonly st
 /**
  * 02's short dates, day first: "Today", "25 Aug" this year, "Mar 24" for an
  * earlier one. Built from parts, because `{ day, month }` in `en` is
- * "Aug 25" — month first, which is not what 02 writes.
+ * "Aug 25" - month first, which is not what 02 writes.
  */
 export function shortDate(
   iso: string,
@@ -125,7 +125,7 @@ export async function CustomerHeader({
       </span>
       <div className={styles.cardWho}>
         <h1 className={styles.cardName}>{name ?? t('list.unnamed')}</h1>
-        <p className={styles.cardFacts}>{facts.length > 0 ? facts.join(' · ') : '—'}</p>
+        <p className={styles.cardFacts}>{facts.length > 0 ? facts.join(' · ') : '-'}</p>
         {/* The one place in the product that is serif italic: the character summary. */}
         <p
           className={styles.cardSummary}
@@ -145,7 +145,7 @@ export async function CustomerHeader({
         </Link>
         {/*
           Message opens their newest conversation. With none to open the
-          button is present and disabled — 02's control, not a dead link.
+          button is present and disabled - 02's control, not a dead link.
         */}
         {detail.conversationId ? (
           <Link
@@ -204,7 +204,7 @@ export type ConversationTone = 'attention' | 'resolved' | 'conversation';
 
 /**
  * Open with the customer's word last: it needs attention. Closed: resolved.
- * A status we could not read is plain grey — an unread status never turns a
+ * A status we could not read is plain grey - an unread status never turns a
  * dot orange.
  */
 export function conversationTone(
@@ -227,7 +227,7 @@ interface Row {
 /**
  * 02's timeline: conversations, orders, actions and notes in ONE stream, a
  * date in mono, a coloured dot, a title and a line. Channel is a mark on the
- * line, never a section — 02's own rule.
+ * line, never a section - 02's own rule.
  */
 export async function CustomerTimelineList({
   detail,
@@ -297,7 +297,7 @@ export async function CustomerTimelineList({
       }
     }
     /*
-      GOTCHA's actions — the approvals it asked for in their conversations.
+      GOTCHA's actions - the approvals it asked for in their conversations.
       The timeline route returns none of these; see `CustomerDetail.approvals`.
     */
     for (const approval of detail.approvals ?? []) {
@@ -397,7 +397,7 @@ export async function CustomerSide({ detail }: { readonly detail: CustomerDetail
   const format = await getFormatter();
   const summary =
     detail.orders?.state === 'ok' ? (detail.orders.data?.summary ?? detail.orders.summary) : null;
-  const orderCount = summary && summary.orderCount > 0 ? format.number(summary.orderCount) : '—';
+  const orderCount = summary && summary.orderCount > 0 ? format.number(summary.orderCount) : '-';
   const facts = detail.memory?.context?.facts ?? [];
   const handles = channelHandles(detail.timeline);
   const note = (detail.notes ?? []).find((n) => !n.deletedAt) ?? null;
@@ -408,14 +408,14 @@ export async function CustomerSide({ detail }: { readonly detail: CustomerDetail
         <h2 className={styles.sideEyebrow}>{t('card.worth')}</h2>
         <dl className={styles.worth}>
           {/*
-            Lifetime and refunds are "—": the commerce read carries RECENT
+            Lifetime and refunds are "-": the commerce read carries RECENT
             orders, and a sum of those is not a lifetime. The order count is
             the store's own total.
           */}
           {/* The label first in the markup, as a `dl` requires; CSS puts the value on top. */}
           <div>
             <dt>{t('card.lifetime')}</dt>
-            <dd className={styles.worthValue}>—</dd>
+            <dd className={styles.worthValue}>-</dd>
           </div>
           <div data-testid="worth-orders">
             <dt>{t('card.orders')}</dt>
@@ -423,7 +423,7 @@ export async function CustomerSide({ detail }: { readonly detail: CustomerDetail
           </div>
           <div>
             <dt>{t('card.refunds')}</dt>
-            <dd className={styles.worthValue}>—</dd>
+            <dd className={styles.worthValue}>-</dd>
           </div>
         </dl>
       </section>

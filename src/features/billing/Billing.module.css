@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * Settings · Usage & billing — screen 17.
+   * Settings · Usage & billing - screen 17.
    *
    * Runway first, because "how long am I good for" is the question someone
    * opened this screen with. Then the plan, the breakdown and the invoices.
@@ -157,7 +157,7 @@
     border-block-end: var(--border-width-thin) solid var(--border-emphasis);
   }
 
-  /* "We could not find out" — never the same as "there is nothing". */
+  /* "We could not find out" - never the same as "there is nothing". */
   .unavailable {
     margin: 0;
     font-size: var(--font-size-meta);
@@ -179,7 +179,7 @@
   /*
    * Four charges that did not go through is not a row in a table. It goes
    * above the list, because it is the reason a merchant would open this
-   * screen at all — and the screen used to say the feature did not exist.
+   * screen at all - and the screen used to say the feature did not exist.
    */
   .invoicesFailed {
     margin: 0 0 var(--space-12);
@@ -380,7 +380,7 @@
     color: var(--text-primary);
   }
 
-  /* "Nothing changes until then" — the reassurance, deliberately quieter. */
+  /* "Nothing changes until then" - the reassurance, deliberately quieter. */
   .pendingReassurance {
     margin: 0;
     max-inline-size: var(--size-reading);
@@ -587,7 +587,7 @@
   }
 
   /*
-   * What an estimate rests on, set quieter than the estimate itself — it is a
+   * What an estimate rests on, set quieter than the estimate itself - it is a
    * qualification, not a second number. But it is never absent: the route
    * ships two estimates from different bases and forbids substituting them,
    * so an unlabelled figure here would be a pricing claim made out of one
@@ -607,7 +607,7 @@
     gap: var(--space-4);
   }
 
-  /* Credits contracted but never granted — a state, not a shortfall. */
+  /* Credits contracted but never granted - a state, not a shortfall. */
   .creditsNotice {
     display: flex;
     flex-direction: column;
@@ -749,8 +749,8 @@
 
   /*
    * `.buyButton` is gone: the control is the `Button` primitive now, which
-   * carries its own states. What was here was ONLY a `:disabled` rule — no
-   * base style — so the button rendered as centred plain text on the screen
+   * carries its own states. What was here was ONLY a `:disabled` rule - no
+   * base style - so the button rendered as centred plain text on the screen
    * that charges a card.
    */
 
@@ -770,7 +770,7 @@
   }
 
   /*
-    An unsettled charge is NOT an error, and must not be styled as one — the
+    An unsettled charge is NOT an error, and must not be styled as one - the
     reader has to finish this sentence rather than dismiss it as a failure
     and press the button again.
   */
@@ -786,7 +786,7 @@
 
 @layer features {
   /*
-   * 17, measured. The plan: one dark band, 20 × 22, radius 16 — the tag, the
+   * 17, measured. The plan: one dark band, 20 × 22, radius 16 - the tag, the
    * name at 30 with its price, the facts at 12, and the two ways out.
    */
   .hero {

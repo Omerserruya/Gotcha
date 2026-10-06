@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Meta's JavaScript SDK, loaded once — after ChatCenter's `facebook-sdk.ts`,
+ * Meta's JavaScript SDK, loaded once - after ChatCenter's `facebook-sdk.ts`,
  * whose reasons carry over: the script is async, so a click must wait for
  * `ready`; and `connect.facebook.net` is blocked by most ad blockers, so a
  * timeout says "unavailable" rather than "try again".

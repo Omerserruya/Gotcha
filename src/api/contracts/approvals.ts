@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Approvals — screen 03, and its two other states 03b and 03c.
+ * Approvals - screen 03, and its two other states 03b and 03c.
  *
  * Shapes read from `services/conversation/src/routes/approvals.ts` and the
  * model at `packages/shared/prisma/schema.prisma:2148`.
@@ -16,8 +16,8 @@ import { z } from 'zod';
  *   the customer was simply never told anything."*
  *
  * So two independent axes, never collapsed into one badge:
- *   `status`         — what the human decided
- *   `executionState` — what happened next
+ *   `status`         - what the human decided
+ *   `executionState` - what happened next
  *
  * An approval that was granted and then failed to execute is the case this
  * screen exists for. The design drew four green ticks, which is the one
@@ -30,7 +30,7 @@ import { z } from 'zod';
  * four cross the wire today; `resumeEnvelope` is the full stored
  * ExecutionRequest. None of them is needed to decide anything.
  *
- * `params` is also untyped by construction — it is whatever the planning step
+ * `params` is also untyped by construction - it is whatever the planning step
  * wanted to pass to the tool, different per tool and guaranteed by nothing. So
  * the amount on screen comes from **`summary`**, which the backend writes for
  * exactly this purpose (*"Cancel order #12345 and refund $89.50"*). Parsing a
@@ -80,8 +80,8 @@ export const RISK_LEVELS = ['low', 'medium', 'high'] as const;
  *
  * ── THIS IS THE OPPOSITE CALL FROM `UNFIRING_EVENTS`, ON PURPOSE ──
  * Screen 15 refuses to offer an event nothing raises. This one insists on
- * showing a tag nothing translates. Both follow the same rule — **never let
- * the screen be less honest than the data** — and they point in opposite
+ * showing a tag nothing translates. Both follow the same rule - **never let
+ * the screen be less honest than the data** - and they point in opposite
  * directions because the risk does. There, the harm was showing something the
  * product cannot do. Here, the harm would be hiding something the product is
  * warning about.
@@ -90,7 +90,7 @@ export const RISK_LEVELS = ['low', 'medium', 'high'] as const;
  */
 /*
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ THE VOCABULARY IS WHAT THE WRITERS WRITE — AND IT IS OPEN
+ * ★★ THE VOCABULARY IS WHAT THE WRITERS WRITE - AND IT IS OPEN
  * ════════════════════════════════════════════════════════════════════════════
  * The first three came from the schema's own comment (`["HIGH","IRREVERSIBLE",
  * "FINANCIAL"]`), and no writer in the monorepo produces any of them. The
@@ -101,7 +101,7 @@ export const RISK_LEVELS = ['low', 'medium', 'high'] as const;
  *
  * Because action names make the set OPEN, a map can never be complete. So a
  * tag with a label gets it, and any other is turned into words by
- * `humanizeTag` — `MOVES_MONEY` reads "Moves money", `cancel_order` reads
+ * `humanizeTag` - `MOVES_MONEY` reads "Moves money", `cancel_order` reads
  * "Cancel order". Shown, never hidden (see above); never raw.
  */
 export const KNOWN_RISK_TAGS = [
@@ -123,7 +123,7 @@ export type KnownRiskTag = (typeof KNOWN_RISK_TAGS)[number];
  *   protects information: a warning must not vanish for want of a label.
  *   `REQUIRES_APPROVAL` (agent-tools writes it; 9 rows on dev carry it) is
  *   true of every item on this screen by definition, so as a pill it says
- *   nothing — it is the reason the row is here, not a risk of acting on it.
+ *   nothing - it is the reason the row is here, not a risk of acting on it.
  *   Every other tag still shows, labelled or turned into words.
  */
 export function visibleRiskTags(tags: readonly string[]): readonly string[] {
@@ -157,21 +157,21 @@ export const approvalSchema = z
     /** Denormalised on purpose so it survives the rule being deleted. */
     policyRuleName: z.string().nullable().default(null),
     riskLevel: z.enum(RISK_LEVELS).catch('medium'),
-    /** `["HIGH","IRREVERSIBLE","FINANCIAL"]`. A LABEL — see `IRREVERSIBLE`. */
+    /** `["HIGH","IRREVERSIBLE","FINANCIAL"]`. A LABEL - see `IRREVERSIBLE`. */
     riskTags: z.array(z.string()).default([]),
     status: z.enum(APPROVAL_STATUSES).catch('PENDING'),
-    /** `"bot"` | `"flow:<id>"` | `"ai-agent:<id>"` — never a person. */
+    /** `"bot"` | `"flow:<id>"` | `"ai-agent:<id>"` - never a person. */
     requestedBy: z.string().default('bot'),
     /** Null for anything with a `:` in `requestedBy`, which is every AI employee. */
     requestedByName: z.string().nullable().default(null),
     decidedByName: z.string().nullable().default(null),
     /**
-     * Where the decision was made — `whatsapp` for a manager's reply, `web` in
+     * Where the decision was made - `whatsapp` for a manager's reply, `web` in
      * the app, `null` on older rows. Was on the wire and stripped.
      */
     decisionChannel: z.string().nullish().default(null),
     /**
-     * The action's own parameters — read by the TRANSFORM below to give an old
+     * The action's own parameters - read by the TRANSFORM below to give an old
      * row a sentence, and then dropped. See there.
      */
     params: z.unknown().optional(),
@@ -197,7 +197,7 @@ export const approvalSchema = z
    * ⚠⚠ `params` IS READ HERE AND GOES NO FURTHER
    * ════════════════════════════════════════════════════════════════════════
    * The list route spreads the raw row, and `params` can carry anything the
-   * tool was given — a card number, in the test that guards this. The parse
+   * tool was given - a card number, in the test that guards this. The parse
    * runs on the server, so the sentence is derived HERE (`approvalSummary`)
    * and `params` is dropped in the same step: no screen, prop or client
    * bundle ever holds it.
@@ -216,12 +216,12 @@ export const approvalsSchema = z.array(approvalSchema);
 export type Approval = z.infer<typeof approvalSchema>;
 
 /**
- * What `POST /:id/approve` answers — and it is better than it looks.
+ * What `POST /:id/approve` answers - and it is better than it looks.
  *
  * `{ approval, dispatch }`, a bare envelope (the fourth shape in this
  * platform), where **`dispatch` is the outcome of the attempt that was just
- * made**. So the second of screen 03b's three facts — *did the thing actually
- * happen* — arrives in the response to the decision itself, synchronously, with
+ * made**. So the second of screen 03b's three facts - *did the thing actually
+ * happen* - arrives in the response to the decision itself, synchronously, with
  * no poll and no event subscription.
  *
  * That is the whole reason 03b is a screen rather than a toast. A decision that
@@ -243,7 +243,7 @@ export type ApproveResult = z.infer<typeof approveResultSchema>;
  *
  * **`decisionReason` is required**: the route answers 400 without one. So the
  * design's *"rejecting asks why in one tap"* is not a nicety the screen chose,
- * it is the contract — and the reason it gives is stored on `decisionReason`
+ * it is the contract - and the reason it gives is stored on `decisionReason`
  * and shown back on the decided list.
  */
 export const rejectResultSchema = z.object({ approval: approvalSchema });
@@ -256,8 +256,8 @@ export const rejectResultSchema = z.object({ approval: approvalSchema });
  * `{ approval, dispatch }`, reject answers bare `{ approval }`, and this one
  * answers `{ data }`.
  *
- * The route refuses `LEGACY_UNVERIFIED` with a 409 of its own — *"legacy
- * approval predates execution tracking"* — which is the server reaching the
+ * The route refuses `LEGACY_UNVERIFIED` with a 409 of its own - *"legacy
+ * approval predates execution tracking"* - which is the server reaching the
  * same conclusion as `isRetryable`, independently.
  */
 export const retryResultSchema = z.object({
@@ -271,8 +271,8 @@ export const retryResultSchema = z.object({
  * Past its deadline.
  *
  * **Computed here, never read from `status`.** A sweeper does flip PENDING to
- * EXPIRED — `idle-conversation.worker.ts:79`, started unconditionally, on a
- * five-minute cron — so this is a bounded window rather than a permanent lie.
+ * EXPIRED - `idle-conversation.worker.ts:79`, started unconditionally, on a
+ * five-minute cron - so this is a bounded window rather than a permanent lie.
  * But it is a window that is always open when it matters:
  *
  *   - up to **5 minutes** between the deadline passing and the sweep
@@ -338,13 +338,13 @@ export function isOutcomeUnknown(approval: Approval): boolean {
 /**
  * `IRREVERSIBLE` as the model means it: **a risk label, not a window.**
  *
- * There is no undo in this platform — no route, no gateway path, no
+ * There is no undo in this platform - no route, no gateway path, no
  * `undoneAt` or `reversalOf` field, enumerated across the whole repository.
  * `retry-execution` runs the action *forward*, which on a refund is the
  * opposite of undoing it.
  *
  * So nothing on this screen may state or imply a reversal window. The design's
- * *"Reversible · Yes — within 24h"* is removed entirely rather than softened:
+ * *"Reversible · Yes - within 24h"* is removed entirely rather than softened:
  * it is read **before** the irreversible act, and it would make someone
  * approve a refund they would otherwise have questioned.
  */
@@ -358,7 +358,7 @@ export function isFlaggedIrreversible(approval: Approval): boolean {
  * The list route resolves user ids to display names but explicitly skips
  * anything containing `":"`, so `requestedByName` is null for every
  * AI-employee request and the raw `ai-agent:clx…` is what reaches the browser.
- * Resolving it is ours to do — a machine identifier in front of a person is
+ * Resolving it is ours to do - a machine identifier in front of a person is
  * the defect that shipped `ai_voice` onto the billing screen.
  */
 export function aiEmployeeIdOf(approval: Approval): string | null {
@@ -369,14 +369,14 @@ export function aiEmployeeIdOf(approval: Approval): string | null {
 }
 
 /**
- * The row's sentence — the stored `summary`, unless it is not one.
+ * The row's sentence - the stored `summary`, unless it is not one.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ 27 OF 54 ROWS SAID "ai-bot inbox tool call"
  * ════════════════════════════════════════════════════════════════════════════
  * `summary` is a plain String, and writers used to put a debug breadcrumb, a
  * function signature (`issue_refund()`) or the tool's name in it. The platform
- * now writes a sentence with `describeApprovalAction(tool, params)` — for NEW
+ * now writes a sentence with `describeApprovalAction(tool, params)` - for NEW
  * rows. Old ones keep the breadcrumb, but every one still carries `tool` and
  * `params`, so the sentence is derived here from that record: real data, not
  * invented. (Backend could do this once in the list route; that is on hold.)
@@ -407,7 +407,7 @@ export function isNotASentence(summary: string, tool: string): boolean {
   );
 }
 
-/** A port of the platform's `describeApprovalAction` — see `approvalSummary`. */
+/** A port of the platform's `describeApprovalAction` - see `approvalSummary`. */
 export function describeApprovalAction(tool: string, params: unknown = {}): string {
   const bare = String(tool || '')
     .split('.')
@@ -444,7 +444,7 @@ export function describeApprovalAction(tool: string, params: unknown = {}): stri
  * ★★ THE PROVIDER'S TEXT NEVER REACHES THE SCREEN RAW
  * ════════════════════════════════════════════════════════════════════════════
  * Measured on dev: a revoked Shopify token came back as "Token refresh failed
- * for shopify: shopify_token_refresh_failed_401: <!DOCTYPE html> <html …" —
+ * for shopify: shopify_token_refresh_failed_401: <!DOCTYPE html> <html …" -
  * Shopify's whole error page, printed under the decision. The classes follow
  * the platform's own `toCustomerSafeReason` (`routes/approvals.ts`), with one
  * split it does not need: a refused CONNECTION (401, token, OAuth) is apart
@@ -481,7 +481,7 @@ export function classifyDispatchError(error: string | null | undefined): Dispatc
 /**
  * The provider's text for a tooltip: tags and everything inside an HTML
  * document dropped, whitespace collapsed, cut to `max`. For whoever is
- * debugging — never a line on the screen.
+ * debugging - never a line on the screen.
  */
 export function plainErrorText(error: string | null | undefined, max = 160): string | null {
   const text = String(error ?? '')
@@ -503,7 +503,7 @@ export function providerOf(tool: string): string | null {
 }
 
 /**
- * The two facts 03c's sentence needs from `params` — the order and the amount —
+ * The two facts 03c's sentence needs from `params` - the order and the amount -
  * lifted here so the parameters themselves still never leave the contract.
  * `currency` only when the call named one: an amount is never given a symbol
  * nobody stated.

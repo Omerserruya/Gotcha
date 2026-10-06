@@ -15,7 +15,7 @@ import { Drawer } from '@/shell/Drawer';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Workspace — screen 11.
+ * Settings · Workspace - screen 11.
  *
  * *"The facts every AI employee quotes to a customer, plus how the business
  * sounds."* Three independent reads, and a failure in one does not blank the

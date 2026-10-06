@@ -19,14 +19,14 @@ import { Link } from '@/i18n/navigation';
 import styles from './Billing.module.css';
 
 /**
- * Screen 17d — buying credits.
+ * Screen 17d - buying credits.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★ THE PRICE ON THE TILE IS NOT THE PRICE THAT IS CHARGED
  * ════════════════════════════════════════════════════════════════════════════
- * Catalogue prices are NET. `taxed` has been on the wire all along — the
+ * Catalogue prices are NET. `taxed` has been on the wire all along - the
  * route carries it so "the confirm dialog can state the amount that will
- * actually be charged rather than the one on the tile" — and our contract,
+ * actually be charged rather than the one on the tile" - and our contract,
  * being `object` rather than `looseObject`, was stripping it at the boundary.
  * Screen 17 could only ever have shown the net figure.
  *
@@ -42,7 +42,7 @@ import styles from './Billing.module.css';
  * ★ AND THE BUTTON DOES NOT WORK ON THIS TENANT, SO IT SAYS SO
  * ════════════════════════════════════════════════════════════════════════════
  * `buyCredits()` checks `no_billable_entity` FIRST. This workspace has no
- * billing profile and no payment method — the two facts screen 17e renders —
+ * billing profile and no payment method - the two facts screen 17e renders -
  * so every purchase would fail before it reached a card.
  *
  * A live button here would fail on every click and read as the page being
@@ -52,14 +52,14 @@ import styles from './Billing.module.css';
  *
  * ── WHY `intentKey` IS MINTED WITH THE CHOICE AND NOT WITH THE CLICK ──
  * The server turns a double-click into ONE charge by that key. Generated per
- * click it would be a new purchase each time — identical code, identical
+ * click it would be a new purchase each time - identical code, identical
  * appearance, and the protection silently gone.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ AND WHY IT IS A REF AND NOT A `useMemo`
  * ════════════════════════════════════════════════════════════════════════════
- * **React may discard a memo whenever it likes** — that is documented, not a
- * bug — and this key used to be `useMemo(() => …Date.now()…)`. A discard at a
+ * **React may discard a memo whenever it likes** - that is documented, not a
+ * bug - and this key used to be `useMemo(() => …Date.now()…)`. A discard at a
  * minute boundary minted a new key for a purchase already in flight, so the
  * double-charge guard rested on a cache React is free to throw away. Nothing
  * would have shown it: identical code, identical appearance, and the second
@@ -71,13 +71,13 @@ import styles from './Billing.module.css';
  *   must carry the same key. That is the entire reason the key exists, and it
  *   is the case where a fresh one charges a card twice for one intent.
  *
- *   MINT on a SETTLED outcome — a confirmed success, or a confirmed failure in
+ *   MINT on a SETTLED outcome - a confirmed success, or a confirmed failure in
  *   which nothing was charged. The attempt is finished and the next press is a
  *   new purchase. It matters on a decline too: an idempotency key caches the
  *   provider's answer, so reusing it after a card was refused can hand back
  *   the cached refusal to somebody who has since fixed their card.
  *
- *   MINT on a change of intent — a different pack, a different quantity, or
+ *   MINT on a change of intent - a different pack, a different quantity, or
  *   leaving and coming back. The customer is saying this is a different
  *   purchase.
  *
@@ -86,9 +86,9 @@ import styles from './Billing.module.css';
  *
  * The two failures are not symmetric, which is what decides every unclear
  * case. Reusing too long means a customer who wants two packs presses twice
- * and gets one — visible, and they can press again once the first settles.
+ * and gets one - visible, and they can press again once the first settles.
  * Minting too eagerly means a retry after an unsettled charge is charged
- * twice — invisible until the statement, and unrecoverable by pressing
+ * twice - invisible until the statement, and unrecoverable by pressing
  * anything. **Take the recoverable failure.**
  */
 export function BuyCredits({
@@ -120,7 +120,7 @@ export function BuyCredits({
    * ★ HELD AS THE RAW STRING, AND CLAMPED ON BLUR RATHER THAN ON EVERY KEY.
    *
    * The obvious version keeps a number and clamps in `onChange`. Clearing the
-   * box then produces `NaN`, which snaps the controlled value back to 1 — so
+   * box then produces `NaN`, which snaps the controlled value back to 1 - so
    * somebody who selects the field, deletes it and types "2" ends up with
    * "12", silently clamped to the pack's maximum.
    *
@@ -135,8 +135,8 @@ export function BuyCredits({
   const pkg: CreditPackage | undefined = sellable.find((p) => p.key === chosen);
 
   /*
-   * One fact is said once. When every pack shares its expiry — all four
-   * never expire on this tenant — it is one line under the tiles, not the
+   * One fact is said once. When every pack shares its expiry - all four
+   * never expire on this tenant - it is one line under the tiles, not the
    * same sentence in each of them.
    */
   const expiryOf = (p: CreditPackage) =>
@@ -159,7 +159,7 @@ export function BuyCredits({
    *
    * Blur normalises what the box SHOWS. This is what the total is computed
    * from and what the purchase sends, so neither can ever exceed the cap the
-   * route enforces — including in the case where somebody types past it and
+   * route enforces - including in the case where somebody types past it and
    * the click lands before the blur.
    */
   const quantity = pkg ? Math.min(typed, maxQuantity(pkg)) : typed;
@@ -176,8 +176,8 @@ export function BuyCredits({
 
   const total = pkg ? chargeable(pkg, quantity) : null;
   /*
-   * ★ ONE LOOKUP. `price` and `currency` are flat siblings on the wire — see
-   * `packagePrice` — and a price without a currency is not a price, so the
+   * ★ ONE LOOKUP. `price` and `currency` are flat siblings on the wire - see
+   * `packagePrice` - and a price without a currency is not a price, so the
    * pair travels together or not at all.
    */
   const price = pkg ? packagePrice(pkg) : null;
@@ -187,7 +187,7 @@ export function BuyCredits({
     if (!pkg || blocked) return;
     /*
      * Minted here, in an event handler, so nothing impure runs during a
-     * render — and read from the ref, so a re-render between this press and
+     * render - and read from the ref, so a re-render between this press and
      * the next cannot change it.
      */
     if (intentKeyRef.current?.intent !== intent) {
@@ -202,7 +202,7 @@ export function BuyCredits({
       /*
        * ★★ THE KEY IS RELEASED ONLY BY A SETTLED OUTCOME.
        * `unsettled` and `failed` both mean we do not know whether the card
-       * was charged, so a retry has to carry the same key — which is the one
+       * was charged, so a retry has to carry the same key - which is the one
        * case the key exists for. Everything else is finished: the next press
        * is a new purchase and gets a new key.
        */
@@ -242,7 +242,7 @@ export function BuyCredits({
               )}
               {/*
                 ★★ THE PRICE, WHICH NO PACK HAD. The design prices them and the
-                contract was reading a nested object the wire does not send —
+                contract was reading a nested object the wire does not send -
                 so every tile was priceless and every total was unsymbolled,
                 from one mismatch.
               */}
@@ -257,7 +257,7 @@ export function BuyCredits({
                 `billing`, so the same-looking key resolves somewhere that
                 does not exist.
 
-                The first draft got it wrong and the TEST PASSED — it
+                The first draft got it wrong and the TEST PASSED - it
                 asserted `/\S/`, and next-intl's dev fallback renders the key
                 path, which is not whitespace. In the production capture build
                 `getMessageFallback` returns `''`, so the line would have been
@@ -268,7 +268,7 @@ export function BuyCredits({
                 ★ THE ONLY PLACE PER-PACK EXPIRY EVER REACHES A CUSTOMER.
                 `/billing/credit-summary` strips `expiresAt` from the lots and
                 keeps only `grantType`, so AFTER the purchase nothing can tell
-                them when these credits die. Before it, this can — and it is
+                them when these credits die. Before it, this can - and it is
                 read per pack, never from the summary.
               */}
               {/* 02's "₪0.065 each": arithmetic on the two real numbers. */}
@@ -305,9 +305,9 @@ export function BuyCredits({
         <span className={styles.buyPayLabel}>{t('buy.payWith')}</span>
         <span className={styles.buyPayCard}>
           {card
-            ? `${card.brand ?? t('profile.unknownBrand')} · ${card.last4 ?? '—'}`
+            ? `${card.brand ?? t('profile.unknownBrand')} · ${card.last4 ?? '-'}`
             : hasPaymentMethod
-              ? '—'
+              ? '-'
               : t('profile.noCardRow')}
         </span>
       </p>
@@ -332,7 +332,7 @@ export function BuyCredits({
             }}
             onBlur={() => {
               /*
-                Clamped once they have finished, to the SERVER's own cap —
+                Clamped once they have finished, to the SERVER's own cap -
                 the route enforces `quantity_exceeds_maximum`. Doing it here
                 rather than per keystroke is what lets somebody retype the
                 field without the control fighting them.
@@ -345,7 +345,7 @@ export function BuyCredits({
       ) : null}
 
       {/*
-        NET, TAX, TOTAL — and the total is the one in bold, because it is the
+        NET, TAX, TOTAL - and the total is the one in bold, because it is the
         one that leaves the account.
       */}
       {total && pkg?.taxed ? (
@@ -365,11 +365,11 @@ export function BuyCredits({
                 ? t('buy.exempt')
                 : /*
                    * ════════════════════════════════════════════════════════
-                   * ★★ OUR LABEL, NOT THE PLATFORM'S — IT IS LOCALISED TO THE
+                   * ★★ OUR LABEL, NOT THE PLATFORM'S - IT IS LOCALISED TO THE
                    *    TENANT AND NOT TO THE READER
                    * ════════════════════════════════════════════════════════
                    * `taxed.label` was preferred, and for an Israeli tenant the
-                   * platform sends **`מע"מ`** — so a browser walk found Hebrew
+                   * platform sends **`מע"מ`** - so a browser walk found Hebrew
                    * in the money summary of the English screen. It is not a
                    * hardcoded string in this app: it is a correct label for
                    * the wrong audience.
@@ -383,7 +383,7 @@ export function BuyCredits({
                    * SECOND BEHAVIOUR THE CODE DOES NOT HAVE. It said the
                    * platform's label "is shown beside the rate when it says
                    * something our translation does not, and isolated". It is
-                   * not shown at all — `taxed.label` appears nowhere in this
+                   * not shown at all - `taxed.label` appears nowhere in this
                    * file but in this comment. I wrote the mitigation into the
                    * prose and not into the code, and a reader checking whether
                    * a non-VAT jurisdiction is handled would have been told yes.
@@ -419,7 +419,7 @@ export function BuyCredits({
         ★★ THE `Button` PRIMITIVE. THIS RENDERED AS CENTRED PLAIN TEXT.
         ════════════════════════════════════════════════════════════════════
         It was a raw `<button className={styles.buyButton}>`, and
-        `Billing.module.css` has **only** a `.buyButton:disabled` rule — no
+        `Billing.module.css` has **only** a `.buyButton:disabled` rule - no
         base rule at all. So the control had no background, no border and no
         padding: on the screen that takes money, the thing you press did not
         look like a thing you press.
@@ -428,7 +428,7 @@ export function BuyCredits({
         is right here because buying is the panel's one action.
       */}
       {/*
-        02: ONE button, the money in its label — "Pay ₪290 · incl. VAT
+        02: ONE button, the money in its label - "Pay ₪290 · incl. VAT
         ₪343.20". The net, tax and total stay above for a screen reader.
       */}
       <div className={styles.buyActions}>
@@ -497,7 +497,7 @@ export function BuyCredits({
             ★★ AND `failed` NO LONGER BORROWS THE DECLINED SENTENCE.
             It used to be the fallback, so a network drop, a 500 and a
             response that failed its contract all said *"nothing was
-            charged"* — a claim about the customer's money made from an error
+            charged"* - a claim about the customer's money made from an error
             that says nothing about it. A contract failure can follow a 200 in
             which the card WAS charged.
           */}
@@ -512,7 +512,7 @@ export function BuyCredits({
  * One sentence per outcome, and every outcome named.
  *
  * A `switch` with no default, so a new `BuyOutcome` member fails the build
- * here instead of silently inheriting whichever branch happens to be last —
+ * here instead of silently inheriting whichever branch happens to be last -
  * which is how `failed` came to tell people their card was not charged.
  */
 function outcomeSentence(

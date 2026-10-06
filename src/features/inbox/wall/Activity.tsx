@@ -31,14 +31,14 @@ const ActivityContext = createContext<Steps>(undefined);
  * header's "Working on this" and the body's "What it did".
  *
  * ★ ONE READ, THEN THE EVENTS. The list is read once when the wall opens on
- *   a conversation; each `ai.activity.updated` changes its row in place —
- *   running → completed with its duration — and nothing re-reads the list.
+ *   a conversation; each `ai.activity.updated` changes its row in place -
+ *   running → completed with its duration - and nothing re-reads the list.
  */
 export function ActivityProvider({
   conversationId,
   children,
 }: {
-  /** `null`: nothing open — nothing read, nothing joined. */
+  /** `null`: nothing open - nothing read, nothing joined. */
   readonly conversationId: string | null;
   readonly children: ReactNode;
 }) {
@@ -69,13 +69,13 @@ export function ActivityProvider({
   return <ActivityContext.Provider value={steps}>{children}</ActivityContext.Provider>;
 }
 
-/** 02's header, right side: "Working on this · stop" while a step runs, "—" otherwise. */
+/** 02's header, right side: "Working on this · stop" while a step runs, "-" otherwise. */
 export function WorkingState({
   conversationId,
   aiDriving,
 }: {
   readonly conversationId: string | null;
-  /** The AI answers this conversation now — so "stop" means something. */
+  /** The AI answers this conversation now - so "stop" means something. */
   readonly aiDriving: boolean;
 }) {
   const t = useTranslations('inbox.wall.activity');
@@ -92,7 +92,7 @@ export function WorkingState({
         data-testid="wall-working"
         data-working="no"
       >
-        —
+        -
       </span>
     );
   }
@@ -142,7 +142,7 @@ export function ActivityStrip() {
         <span className={styles.rule} aria-hidden="true" />
         <span data-testid="wall-activity-count" title={steps === null ? t('unread') : undefined}>
           {summary === null
-            ? '—'
+            ? '-'
             : summary.count === 0
               ? t('none')
               : `${t('steps', { count: summary.count })} · ${seconds(summary.totalMs)}`}
@@ -152,7 +152,7 @@ export function ActivityStrip() {
         <div className={styles.step}>
           <span className={styles.stepDot} aria-hidden="true" />
           <span className={styles.stepText} title={t('unread')}>
-            —
+            -
           </span>
         </div>
       ) : (
@@ -173,13 +173,13 @@ export function ActivityStrip() {
               <span
                 className={styles.stepResult}
                 data-status={step.status ?? 'unknown'}
-                // The provider's message on a failure — never the tool's arguments.
+                // The provider's message on a failure - never the tool's arguments.
                 title={step.error ?? undefined}
               >
                 {step.status === 'proposed' ? (
                   /*
                    * Somebody has to decide it, and Approvals is where. The
-                   * list — there is no route to a single approval.
+                   * list - there is no route to a single approval.
                    */
                   <Link
                     href="/approvals"
@@ -195,7 +195,7 @@ export function ActivityStrip() {
                     seconds(step.durationMs)
                   )
                 ) : step.status === null ? (
-                  '—'
+                  '-'
                 ) : (
                   t(`status.${step.status}`)
                 )}

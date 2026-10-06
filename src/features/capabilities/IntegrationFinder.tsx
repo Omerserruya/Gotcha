@@ -14,14 +14,14 @@ import { IntegrationLogo } from './IntegrationLogo';
 import styles from './Capabilities.module.css';
 
 /**
- * Screen 10's rail contents — what is connected, what could be, and a way to
+ * Screen 10's rail contents - what is connected, what could be, and a way to
  * find one of seventeen.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ WHY THIS IS A CLIENT COMPONENT AND THE RAIL AROUND IT IS NOT
  * ════════════════════════════════════════════════════════════════════════════
  * Only the filter needs state. The rail keeps the read and its failure branch on
- * the server, and hands the lists here — so a failed catalogue read still says
+ * the server, and hands the lists here - so a failed catalogue read still says
  * so without shipping a filter for a list that does not exist.
  *
  * ── WHAT THE SEARCH MATCHES, AND WHY IT SAYS SO ──
@@ -34,7 +34,7 @@ import styles from './Capabilities.module.css';
  * ── CONNECT IS ON EACH SYSTEM'S OWN SCREEN ──
  * Every available row opens `?system=<slug>`: the system's mark, what it is,
  * what it brings, and Connect (Omer, 2026-10-04). Its "Connect" here is the
- * way there, not a second control — how a system connects (a credentials
+ * way there, not a second control - how a system connects (a credentials
  * form, or OAuth at the provider) is that screen's to say. See
  * `AvailableSystem`.
  *
@@ -161,7 +161,7 @@ export function IntegrationFinder({
                   <IntegrationLogo slug={entry.slug} size="rail" />
                   <span className={styles.railName}>{entry.name}</span>
                   {/*
-                    ★ A BROKEN CONNECTION STAYS IN "CONNECTED", WITH ITS STATE —
+                    ★ A BROKEN CONNECTION STAYS IN "CONNECTED", WITH ITS STATE -
                     its NAME, never the enum. Plain connected says what it
                     brings instead: how many actions.
                   */}

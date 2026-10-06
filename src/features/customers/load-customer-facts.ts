@@ -22,7 +22,7 @@ import { logger } from '@/observability/logger';
  * What the commerce read said about a set of contacts.
  *  - `read`: the store was read; `byId` holds whoever it answered for.
  *  - `none`: there was nothing to read (no store, unreachable, not wired
- *    yet) — a reason, never zeros.
+ *    yet) - a reason, never zeros.
  *  - `null` (the whole value): the read itself failed.
  */
 export type CommerceFacts =
@@ -108,7 +108,7 @@ export async function loadSegments(): Promise<CommerceSegments | null> {
 const detailSchema = z.object({ data: customerRowSchema });
 
 /**
- * The customer an order number belongs to, as a list row — or `null`: not an
+ * The customer an order number belongs to, as a list row - or `null`: not an
  * order number, no such order, nobody matched, or the read failed. Only ever
  * ADDED to a search; it never replaces the name/phone/email match.
  */

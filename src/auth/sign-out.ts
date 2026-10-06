@@ -17,7 +17,7 @@ import { appPath } from '@/lib/base-path';
  *     popup window            TOP-LEVEL context     session DIES
  *     top-level navigation    top-level context     session DIES
  *
- * ★ The requirement is a TOP-LEVEL BROWSING CONTEXT — not a visible page. A
+ * ★ The requirement is a TOP-LEVEL BROWSING CONTEXT - not a visible page. A
  *   popup satisfied it without the person leaving our page, and that shipped.
  *
  * ★★ On 2026.2 the redirect is honoured: the provider's page is a
@@ -41,7 +41,7 @@ export async function signOut(): Promise<void> {
   /*
    * ★ `fetch` DOES NOT GET THE BASE PATH. `next/link` and `redirect()` do;
    * this is a plain web API and would post to `/api/auth/logout` at the root
-   * — which, beside the legacy product, is another application's route rather
+   * - which, beside the legacy product, is another application's route rather
    * than a 404.
    */
   const response = await fetch(appPath('/api/auth/logout'), {
@@ -65,7 +65,7 @@ export async function signOut(): Promise<void> {
  * ═════════════════════════════════════════════════════════════════════════════
  * `window.location.assign` is a plain web API: an absolute path resolves
  * against the ORIGIN, not against where this app is mounted. Under `/v2` it
- * sent the browser to `https://host/api/auth/login` — which, beside the legacy
+ * sent the browser to `https://host/api/auth/login` - which, beside the legacy
  * product, is not a 404. It is **the other application's login route.**
  *
  * So a session expiring mid-work handed the person to a different product's
@@ -74,8 +74,8 @@ export async function signOut(): Promise<void> {
  *
  * ★ THE SWEEP THAT SHOULD HAVE CAUGHT IT LOOKED AT THE WRONG GRANULARITY.
  *   When the sign-in anchor was fixed, the note recorded that "every other one
- *   — `sign-out.ts`, `browser-api.ts`, `login-state.ts`,
- *   `realtime-provider.tsx` — already calls `appPath`". **It does, in
+ *   - `sign-out.ts`, `browser-api.ts`, `login-state.ts`,
+ *   `realtime-provider.tsx` - already calls `appPath`". **It does, in
  *   `signOut` directly above.** A file can satisfy a check and still hold a
  *   second call site that does not, and a sweep organised by FILE cannot see
  *   it. Nor could one shaped like "a fetch with a root path": this is neither

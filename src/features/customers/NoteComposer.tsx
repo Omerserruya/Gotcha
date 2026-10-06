@@ -9,18 +9,18 @@ import { createNote, type NoteWriteResult } from './note-actions';
 import styles from './Customers.module.css';
 
 /**
- * Writing a note — and deciding whether GOTCHA may use it.
+ * Writing a note - and deciding whether GOTCHA may use it.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE TOGGLE DEFAULTS OFF AND IS RESET AFTER EVERY WRITE
  * ════════════════════════════════════════════════════════════════════════════
- * `aiUsable` decides whether the note is mirrored into the merchant's CRM —
+ * `aiUsable` decides whether the note is mirrored into the merchant's CRM -
  * and once it is there it returns through `recent_crm_notes` into the brief
  * and into the model's context, where no filter of ours can reach it.
  *
  * So it fails closed, exactly as the column does: *"a note is prompt-unsafe
  * until somebody says otherwise."* Carrying the previous note's setting
- * forward would be the most natural convenience to add and the wrong one —
+ * forward would be the most natural convenience to add and the wrong one -
  * somebody who marked one note AI-usable has not said anything about the
  * next, and the cost of guessing wrong is the bot repeating a private remark
  * to the customer it is about.
@@ -80,7 +80,7 @@ export function NoteComposer({
       <div className={styles.composerBar}>
         {/*
           ★ THE ONE CONTROL THE CUT KEPT, AND IT SAYS WHAT IT DOES.
-          02's segmented "Team only | GOTCHA may use" — the consequence, not a
+          02's segmented "Team only | GOTCHA may use" - the consequence, not a
           field name, because the consequence is that the sentence can come
           back out of the bot's mouth. Team only is the default: it fails
           closed, as the column does. What each choice does is its tooltip.
@@ -94,7 +94,7 @@ export function NoteComposer({
           {/*
             ★ BUTTONS WITH aria-checked, NOT NATIVE RADIOS. React sets a
             controlled radio's `checked` as a property, never the attribute,
-            so the chosen half was marked in colour and nowhere in the DOM —
+            so the chosen half was marked in colour and nowhere in the DOM -
             measured on dev as "no option selected". The state is now on the
             element, where an inspector and a screen reader both read it.
           */}

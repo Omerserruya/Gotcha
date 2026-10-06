@@ -12,7 +12,7 @@
     "team": "Sees their team's conversations",
     "department": "Sees their department's conversations",
     "workspace": "Sees everything in the workspace",
-    "none": "No reach set — they see what their role allows by default"
+    "none": "No reach set - they see what their role allows by default"
   },
   "overrides": {
     "heading": "Exceptions to their role",
@@ -22,17 +22,17 @@
     "because": "because {reason}",
     "notInCatalogue": "this permission is not in the catalogue, so we cannot say what it allows"
   },
-  "elsewhere": "Passwords and signed-in sessions live in your identity provider, not in GOTCHA — we don't hold either. Deactivating someone here keeps their history and stops them signing in.",
+  "elsewhere": "Passwords and signed-in sessions live in your identity provider, not in GOTCHA - we don't hold either. Deactivating someone here keeps their history and stops them signing in.",
   "catalog": {
     "heading": "What a role can allow",
-    "scopeIsPerRole": "A role has one reach, and it applies to everything the role does — not to each permission separately. Choose it once for the role.",
+    "scopeIsPerRole": "A role has one reach, and it applies to everything the role does - not to each permission separately. Choose it once for the role.",
     "notLevels": "Each line here is its own switch. There is no \"view / edit / manage\" ladder: reading a conversation and closing one are separate permissions, and someone can have either without the other.",
     "scopedMark": "Limited by the role’s reach"
   },
   "remove": {
     "start": "Take this away",
     "lead": "Take {permission} away from {name}?",
-    "where": "After this, nothing else in GOTCHA will show that it was taken away. It appears on this person's panel, and in the override count on Roles — nowhere else.",
+    "where": "After this, nothing else in GOTCHA will show that it was taken away. It appears on this person's panel, and in the override count on Roles - nowhere else.",
     "reasonLabel": "Why",
     "reasonPlaceholder": "Pending a review, on leave, requested by finance…",
     "reasonRequired": "Required. The person this affects will ask someone why, and this is the only place that answer lives.",
@@ -47,14 +47,14 @@
   "error": {
     "forbidden": "You don't have permission to change this.",
     "gone": "That person or permission no longer exists.",
-    "needs_reason": "Say why first — a removal without a reason leaves nobody able to explain it.",
+    "needs_reason": "Say why first - a removal without a reason leaves nobody able to explain it.",
     "failed": "That didn't go through.",
-    "past_date": "That date has already passed — pick one ahead."
+    "past_date": "That date has already passed - pick one ahead."
   },
   "form": {
     "heading": "New role",
     "startFrom": "Start from",
-    "startFromNone": "Nothing — start with no permissions",
+    "startFromNone": "Nothing - start with no permissions",
     "startFromHint": "Copies that role's permissions so you only change what differs. It does not link the two: later edits to {name} will not reach this one.",
     "name": "Name",
     "description": "What this role is for",
@@ -63,14 +63,14 @@
     "saving": "Creating…",
     "error": {
       "name_taken": "A role with that name already exists. Choose another name.",
-      "unknown_features": "The server refused some of these permissions. That is a mismatch between this list and what it will grant, not something you did — nothing was created.",
+      "unknown_features": "The server refused some of these permissions. That is a mismatch between this list and what it will grant, not something you did - nothing was created.",
       "forbidden": "You do not have permission to create roles.",
       "failed": "The role could not be created. Nothing was changed."
     },
-    "noLevels": "A permission is held or it is not. GOTCHA has no None / View / Edit / Manage levels — the design shows four and the catalogue stores one bit per permission.",
+    "noLevels": "A permission is held or it is not. GOTCHA has no None / View / Edit / Manage levels - the design shows four and the catalogue stores one bit per permission.",
     "noLimits": "Money limits cannot be set on a permission. There is no amount stored anywhere, so a role that may issue refunds may issue any refund.",
     "wildcardHeading": "This role grants permissions by pattern",
-    "wildcardBody": "It holds {patterns}. A pattern means “everything under this, including permissions added later” — so it is a standing instruction, not a list. Ticking the boxes it matches today would freeze it, and the role would stop keeping up the next time a permission is added.",
+    "wildcardBody": "It holds {patterns}. A pattern means “everything under this, including permissions added later” - so it is a standing instruction, not a list. Ticking the boxes it matches today would freeze it, and the role would stop keeping up the next time a permission is added.",
     "wildcardCannotSeed": "The checkbox list cannot express that, so this role cannot be used as a starting point. Choose one without patterns, or start from nothing.",
     "wildcardCount": "{count, plural, one {# pattern} other {# patterns}}",
     "row": {
@@ -157,7 +157,7 @@
     },
     "tableLabel": "What this role can do",
     "scopeAssigned": "Per assignment",
-    "scopeHint": "How far this reaches — own, team, department or workspace — is set when the role is given to someone, not here.",
+    "scopeHint": "How far this reaches - own, team, department or workspace - is set when the role is given to someone, not here.",
     "changedMark": "Changed",
     "changedFrom": "Changed from {name}",
     "comparedWith": "Compared with {name}",
@@ -197,7 +197,7 @@
     "extra": "Extra permissions",
     "save": "Save changes",
     "cancel": "Cancel",
-    "nothingToSave": "Nothing here is saved from this drawer yet — adding and removing a permission save themselves.",
+    "nothingToSave": "Nothing here is saved from this drawer yet - adding and removing a permission save themselves.",
     "ends": "Ends {date}",
     "ended": "Ended {date}"
   },

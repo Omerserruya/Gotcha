@@ -17,6 +17,7 @@ import { ContactCards, MessageMedia } from './MessageMedia';
 import { isPlaceholderCaption, mediaKind } from './media';
 import { ReplyButton } from './ReplyButton';
 import { STREAM_SCROLLER } from './stream-scroller';
+import { plainDashes } from '@/lib/plain-dashes';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 /**
@@ -26,7 +27,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * FOUR THINGS THE DESIGN PUTS HERE THAT ARE NOT DRAWN
  * ════════════════════════════════════════════════════════════════════════════
  *   "GOTCHA saw damage in this photo"   no vision path exists anywhere
- *   "Read what she said" on a voice note  nothing transcribes audio — see below
+ *   "Read what she said" on a voice note  nothing transcribes audio - see below
  *   reactions                            no model. Left out, not disabled
  *   a 3px intent edge per message        intent persists per CONVERSATION only;
  *                                        the per-message type exists in
@@ -86,7 +87,7 @@ export async function MessageStream({
          *
          * A divider instead: no side, no timestamp bubble, and it names who
          * did what. This is the visible consequence of the three buttons
-         * below the stream — pressing "take control" writes one of these.
+         * below the stream - pressing "take control" writes one of these.
          */
         const systemEvent = systemEventOf(message);
         if (systemEvent) {
@@ -102,7 +103,7 @@ export async function MessageStream({
                   /*
                    * Empty string rather than a placeholder name. The service
                    * writes `agentName: updated.assignedAgent?.name || "Agent"`
-                   * — so a missing name already arrives as the word "Agent",
+                   * - so a missing name already arrives as the word "Agent",
                    * and inventing a second fallback here would hide which of
                    * the two happened. ICU needs the argument present.
                    */
@@ -121,8 +122,8 @@ export async function MessageStream({
           ════════════════════════════════════════════════════════════════
           There is no reaction model in this platform. WhatsApp sends a type
           the adapter does not model, so it becomes a text message whose body
-          is the literal string `[reaction message]` — which is what an agent
-          reads today — and the emoji survives only on
+          is the literal string `[reaction message]` - which is what an agent
+          reads today - and the emoji survives only on
           `metadata.unsupported.raw`.
 
           Drawn as its own thin line rather than attached to the target,
@@ -158,7 +159,7 @@ export async function MessageStream({
         const quoted = quotedState(message);
         /*
           ★ AND ANYTHING ELSE THE PROVIDER COULD NOT GIVE US PROPERLY.
-          `[revoke message]`, `[edit message]`, `[unsupported message]` — an
+          `[revoke message]`, `[edit message]`, `[unsupported message]` - an
           agent reading a bracketed token cannot tell whether it is the
           customer's words or ours. Naming the provider's own type is all we
           can honestly do: for every type but `reaction`, we do not know what
@@ -180,7 +181,7 @@ export async function MessageStream({
             data-direction={message.direction}
             /*
               ★ THE TYPE WE COULD ACCOUNT FOR, OR NOTHING.
-              `messageType` is an unconstrained String — the observed values
+              `messageType` is an unconstrained String - the observed values
               are whatever writers have written. `renderableType` returns
               null for anything unrecognised, and a null attribute is better
               than a wrong one: a styling hook that said "system" for the
@@ -220,8 +221,8 @@ export async function MessageStream({
 
               {/*
               ★★ A REPLY WHOSE QUOTE WE NEVER STORED IS STILL A REPLY.
-              `replyToMessageId` can fail to resolve — the quoted message may
-              predate GOTCHA or have been deleted — while
+              `replyToMessageId` can fail to resolve - the quoted message may
+              predate GOTCHA or have been deleted - while
               `replyToExternalId` is the provider's and survives. Showing
               nothing would lose the fact that the customer was answering
               something, which is often what makes the message legible.
@@ -233,8 +234,8 @@ export async function MessageStream({
               ) : null}
 
               {/*
-                ★ The attachment itself, as 02 draws it — a photo to see, a voice
-                note to play, a file to download — or, when it could not be
+                ★ The attachment itself, as 02 draws it - a photo to see, a voice
+                note to play, a file to download - or, when it could not be
                 fetched, a sentence saying so. (Was "A photo." in words.)
               */}
               <MessageMedia message={message} t={(key) => t(`stream.${key}`)} />
@@ -252,8 +253,8 @@ export async function MessageStream({
               third case, and it looked like the handled one.
 
               So the fallback asks what actually got drawn. Every type with
-              no body and no branch — location, template, interactive,
-              system, and whatever is added next — lands here and says so.
+              no body and no branch - location, template, interactive,
+              system, and whatever is added next - lands here and says so.
             */}
               {unsupported !== null ? (
                 <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
@@ -262,7 +263,10 @@ export async function MessageStream({
               ) : message.body.trim() !== '' && !isPlaceholderCaption(message) ? (
                 /* Isolated: a customer writes in their language, not the page's. */
                 <p className={styles.body}>
-                  <UserText>{message.body}</UserText>
+                  {/* Our side's words (the AI's, mostly): plain hyphens. The customer's are theirs. */}
+                  <UserText>
+                    {message.direction === 'OUTBOUND' ? plainDashes(message.body) : message.body}
+                  </UserText>
                 </p>
               ) : !rendered ? (
                 <p className={styles.mediaNote} data-testid={`unknown-${message.id}`}>
@@ -280,7 +284,7 @@ export async function MessageStream({
                   hour12: false,
                 })}
               </time>
-              {/* 02's middle slot — "Support AI" — when there is a name to put there. */}
+              {/* 02's middle slot - "Support AI" - when there is a name to put there. */}
               {senderLabel(message) === null ? null : (
                 <span data-testid={`sender-${message.id}`}>{senderLabel(message)}</span>
               )}
@@ -295,7 +299,7 @@ export async function MessageStream({
                 ★★ A FAILED MESSAGE USED TO RENDER AS NOTHING AT ALL
                 ══════════════════════════════════════════════════════════════
                 This read `readAt` then `deliveredAt` and showed nothing
-                otherwise — so `PENDING` and `FAILED` were the same rendering:
+                otherwise - so `PENDING` and `FAILED` were the same rendering:
                 silence. An outbound reply the customer never received looked
                 exactly like one sent a second ago.
 
@@ -337,7 +341,7 @@ export async function MessageStream({
             </p>
 
             {/*
-              ★ 02's hover bar, with Reply — the one of its four actions with
+              ★ 02's hover bar, with Reply - the one of its four actions with
                 a backend. The target is described here, where the quote's
                 words already are, so the composer can show what is being
                 answered before anything is sent.

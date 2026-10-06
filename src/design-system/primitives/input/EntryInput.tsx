@@ -3,7 +3,7 @@
 import { useState, type InputHTMLAttributes } from 'react';
 
 /**
- * A text field for a value that has a typed form and a stored form — a day
+ * A text field for a value that has a typed form and a stored form - a day
  * written dd/mm/yyyy and stored yyyy-mm-dd, a clock written however and
  * stored HH:mm.
  *

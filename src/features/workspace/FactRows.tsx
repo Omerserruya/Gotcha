@@ -18,7 +18,7 @@ import { COMMON_CURRENCIES, currencyLabel, zoneFromInput, zoneLabel, zoneOptions
  * 02 edits them in three drawers and one place: name, website, what you sell
  * and address in 11b (`?panel=business`), opening hours in 11c
  * (`?panel=hours`), language in 11d (`?panel=language`). Only a single value
- * edits in its row — 11e, "Enter saves, Esc cancels" — and that is currency
+ * edits in its row - 11e, "Enter saves, Esc cancels" - and that is currency
  * & time zone.
  */
 
@@ -115,7 +115,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
   const hoursNeverSaved = workspace.hours == null;
   /*
     "Set, but switched off" only when there IS a week to switch off. Dev
-    stores `{ enabled: false }` and no schedule at all — that is "Not set",
+    stores `{ enabled: false }` and no schedule at all - that is "Not set",
     and the drawer would otherwise show seven closed days under the claim.
   */
   const hoursSwitchedOff =
@@ -131,7 +131,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
               (run) =>
                 `${
                   run.days.length > 1
-                    ? `${t(`dayShort.${run.days[0] as DayKey}`)}–${t(`dayShort.${run.days[run.days.length - 1] as DayKey}`)}`
+                    ? `${t(`dayShort.${run.days[0] as DayKey}`)}-${t(`dayShort.${run.days[run.days.length - 1] as DayKey}`)}`
                     : t(`dayShort.${run.days[0] as DayKey}`)
                 } ${t('hours.to', { open: run.open, close: run.close })}`,
             ),
@@ -160,8 +160,8 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
 
       {/*
         ★ THE WEBSITE ROW, WITHOUT THE PAGE COUNT THE DESIGN SHOWS. Neither
-        number reaches this screen — `GET /workspace` does not carry the
-        scan's `reach` — and "42 pages read" is the sentence the crawler's
+        number reaches this screen - `GET /workspace` does not carry the
+        scan's `reach` - and "42 pages read" is the sentence the crawler's
         own comment forbids for a store answering every path with one login
         page. The domain is the whole of what is known here. Its Edit opens
         11b, where the website is drawn and not live: `websiteDomain` is not
@@ -179,7 +179,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
       {row('hours', hoursValue, 'hours')}
 
       {/*
-        The business's MAIN language — `primaryLanguage`, what knowledge from
+        The business's MAIN language - `primaryLanguage`, what knowledge from
         the website is written in. Not the language replies go out in (each
         customer's own, by rule) and not the system language (the tenant's
         locale). 11d separates all three.
@@ -187,13 +187,13 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
       {row('language', storedLanguage ? languageName(storedLanguage) : null, 'language')}
 
       {/*
-        11e: the one row that edits in place — two values a person sets once
+        11e: the one row that edits in place - two values a person sets once
         and reads as one line. Enter saves, Esc cancels.
       */}
       {editing ? (
         /*
-          11e, measured: the edit happens ON the row — [₪ ILS ▾] [London
-          (GMT+1)] Save Cancel — with a hint under it. The label is the row's,
+          11e, measured: the edit happens ON the row - [₪ ILS ▾] [London
+          (GMT+1)] Save Cancel - with a hint under it. The label is the row's,
           once. Enter saves, Esc cancels.
         */
         <div
@@ -221,7 +221,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
               data-testid="currency-select"
               onChange={(e) => setCurrency(e.target.value)}
             >
-              {currency === '' ? <option value="">—</option> : null}
+              {currency === '' ? <option value="">-</option> : null}
               {[
                 ...new Set([
                   ...(workspace.currency ? [workspace.currency] : []),
@@ -235,7 +235,7 @@ export function FactRows({ workspace }: { readonly workspace: Workspace }) {
             </select>
             {/*
               ★ Searchable by city: "Type a city" finds the zone, shown as
-              02 writes it — "London (GMT+1)" — and saved as IANA.
+              02 writes it - "London (GMT+1)" - and saved as IANA.
             */}
             <input
               className={styles.inlineCombo}

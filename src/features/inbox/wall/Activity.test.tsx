@@ -77,7 +77,7 @@ beforeEach(() => {
   listeners.clear();
 });
 
-describe('★★ What it did — one read, then the events', () => {
+describe('★★ What it did - one read, then the events', () => {
   it('★ dev’s real pair: a lookup done in 28ms, a refund waiting for approval', async () => {
     read.mockResolvedValue([
       step('e2', {
@@ -130,7 +130,7 @@ describe('★★ What it did — one read, then the events', () => {
     expect(screen.queryByTestId('wall-step-e1')).toBeNull();
   });
 
-  it('★ unread is "—" with why, not "Nothing yet"', async () => {
+  it('★ unread is "-" with why, not "Nothing yet"', async () => {
     read.mockResolvedValue(null);
     show();
     await waitFor(() =>
@@ -139,7 +139,7 @@ describe('★★ What it did — one read, then the events', () => {
         expect.stringContaining('Couldn’t read'),
       ),
     );
-    expect(screen.getByTestId('wall-activity-count')).toHaveTextContent('—');
+    expect(screen.getByTestId('wall-activity-count')).toHaveTextContent('-');
   });
 
   it(`lists ${STEPS_SHOWN}, counts them all; an unknown label is "A step", a failure carries its message`, async () => {
@@ -156,7 +156,7 @@ describe('★★ What it did — one read, then the events', () => {
   });
 });
 
-describe('★★ "stop" is Stop AI — only while it works, only where the AI answers', () => {
+describe('★★ "stop" is Stop AI - only while it works, only where the AI answers', () => {
   it('presses the same action as the bar’s Stop AI', async () => {
     read.mockResolvedValue([
       step('e1', { status: 'running', completedAt: null, durationMs: null }),
@@ -184,7 +184,7 @@ describe('★ every label Backend can send has words, in both languages', () => 
   });
 });
 
-describe('★★ ai.activity.updated — the frame the orchestrator emits', () => {
+describe('★★ ai.activity.updated - the frame the orchestrator emits', () => {
   it('translates `data` with its id, label and status', () => {
     expect(
       translate('ai.activity.updated', {
@@ -206,7 +206,7 @@ describe('★★ ai.activity.updated — the frame the orchestrator emits', () =
     });
   });
 
-  it('an unknown status is null — one quiet step, not a dropped event', () => {
+  it('an unknown status is null - one quiet step, not a dropped event', () => {
     expect(
       translate('ai.activity.updated', {
         tenantId: 't1',

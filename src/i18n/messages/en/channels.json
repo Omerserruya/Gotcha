@@ -70,7 +70,7 @@
     "start": {
       "not_configured": "{channel} isn't set up on GOTCHA's side yet.",
       "forbidden": "Only an admin can connect a channel.",
-      "failed": "{channel} couldn't be opened — try again."
+      "failed": "{channel} couldn't be opened - try again."
     },
     "notSetUp": "Not set up yet"
   },
@@ -137,17 +137,17 @@
       "customers": "{read} of {total} customers looked at",
       "answers": "{count, plural, =0 {No answers found yet} one {# answer found} other {# answers found}}",
       "notCountedYet": "Nothing has been counted yet. The first numbers appear once the history finishes arriving.",
-      "safeToClose": "Safe to close this page — it keeps running.",
+      "safeToClose": "Safe to close this page - it keeps running.",
       "emailOnDone": "An email goes to the workspace owners when the report is ready.",
       "emailNeedsAddress": "That email only goes to owners who have an email address on their account.",
       "readyBody": "GOTCHA has finished reading. Nothing it learned is in use until you approve it.",
       "failedWithStage": "It stopped while {stage}. Nothing from this import is in use.",
       "failedBare": "It stopped before finishing. Nothing from this import is in use.",
-      "unavailableBody": "This number has no history GOTCHA can read — usually because it is new, or because the source declined to share it."
+      "unavailableBody": "This number has no history GOTCHA can read - usually because it is new, or because the source declined to share it."
     },
     "review": {
       "heading": "What GOTCHA learned",
-      "nothingUsedYet": "None of this is in use. GOTCHA only answers from what you approve here — an answer that is still waiting cannot reach a customer.",
+      "nothingUsedYet": "None of this is in use. GOTCHA only answers from what you approve here - an answer that is still waiting cannot reach a customer.",
       "evidenceNotTruth": "These are things your team actually said. That makes them evidence, not policy: an agent may have made an exception once, or been wrong.",
       "group": {
         "needs_a_look": "Needs a look",
@@ -159,13 +159,13 @@
       "empty": "Nothing in this group.",
       "evidence": "Said {occurrences, plural, one {once} other {# times}} to {customers, plural, one {one customer} other {# customers}}, {from} to {to}.",
       "evidenceNoDates": "Said {occurrences, plural, one {once} other {# times}} to {customers, plural, one {one customer} other {# customers}}.",
-      "liveLookup": "Do not let the AI state this as fact. It is true in general and depends on something that changes — stock, a calendar, a price — so the AI is told to check before answering rather than promise.",
+      "liveLookup": "Do not let the AI state this as fact. It is true in general and depends on something that changes - stock, a calendar, a price - so the AI is told to check before answering rather than promise.",
       "curation": {
         "kept": "Kept as your team wrote it.",
         "rewritten": "Reworded for clarity.",
         "live_data": "Marked as needing a live check."
       },
-      "conflict": "Your team gave more than one answer to this. Choose or write the right one — GOTCHA will not pick for you.",
+      "conflict": "Your team gave more than one answer to this. Choose or write the right one - GOTCHA will not pick for you.",
       "duplicateOf": "You already have an answer to this in your knowledge base.",
       "approve": "Approve",
       "reject": "Reject",
@@ -173,7 +173,7 @@
       "bulkSafe": "This only takes suggestions with no conflict and enough evidence behind them. The list is worked out here, not on this page, so it cannot approve a conflict however it is pressed.",
       "rerun": "Look again",
       "rerunSafe": "Looking again updates the counts on these suggestions. It does not ask you about anything you have already rejected.",
-      "noLanguageShortcut": "The design offers to add a missing reply language from here. There is nowhere to add one — GOTCHA stores a single language and answers each customer in their own regardless."
+      "noLanguageShortcut": "The design offers to add a missing reply language from here. There is nowhere to add one - GOTCHA stores a single language and answers each customer in their own regardless."
     },
     "close": "Close",
     "panelLine": "WhatsApp Business account · {count, plural, =0 {no numbers yet} one {one number} other {# numbers}}",
@@ -183,7 +183,7 @@
       "contacts": "Private contacts",
       "activity": "Activity"
     },
-    "tabNotYet": "This tab comes next — Numbers is ready.",
+    "tabNotYet": "This tab comes next - Numbers is ready.",
     "panelTitle": "WhatsApp",
     "footNotYet": "Not from here yet.",
     "foot": {
@@ -191,19 +191,19 @@
       "addAsk": "{count, plural, one {GOTCHA starts answering with this one. Add it?} other {GOTCHA starts answering with these #. Add them?}}",
       "addYes": "Yes, add them",
       "adding": "Adding…",
-      "added": "{count, plural, one {1 answer added} other {# answers added}}{skipped, plural, =0 {.} other {; # were skipped — they stay to review.}}",
+      "added": "{count, plural, one {1 answer added} other {# answers added}}{skipped, plural, =0 {.} other {; # were skipped - they stay to review.}}",
       "refused": {
         "forbidden": "You don't have permission to change what GOTCHA knows.",
-        "failed": "They weren't added — try again."
+        "failed": "They weren't added - try again."
       },
       "rerun": "Run the analysis again",
-      "rerunAsk": "This clears this report — the suggestions, the ones you decided too, and what it remembered about customers — and reads the history again. Answers already in your knowledge stay. Run it again?",
+      "rerunAsk": "This clears this report - the suggestions, the ones you decided too, and what it remembered about customers - and reads the history again. Answers already in your knowledge stay. Run it again?",
       "rerunYes": "Yes, run it again",
       "rerunning": "Starting…",
       "rerunRefused": {
-        "not_settled": "It's still running — run it again once it has finished.",
+        "not_settled": "It's still running - run it again once it has finished.",
         "forbidden": "You don't have permission to run it again.",
-        "failed": "It didn't start — try again."
+        "failed": "It didn't start - try again."
       },
       "cancel": "Not now",
       "refresh": "Refresh from Meta",
@@ -226,7 +226,7 @@
       },
       "modeYes": "Yes, switch",
       "modeNo": "Not now",
-      "modeFailed": "That didn’t switch — nothing changed."
+      "modeFailed": "That didn’t switch - nothing changed."
     },
     "addNumber": "+ Add another number",
     "learn": {
@@ -240,7 +240,7 @@
         "number": "Number",
         "learn": "Learn"
       },
-      "connected": "Connected — new messages already arrive in your inbox.",
+      "connected": "Connected - new messages already arrive in your inbox.",
       "connectedStep": "Number connected",
       "imported": "History imported",
       "conversations": "{count} conversations",
@@ -281,12 +281,12 @@
       "use": "Use {answer}",
       "edit": "Edit",
       "skip": "Skip",
-      "notLive": "Deciding from here comes next — nothing is used until it does.",
-      "readyCard": "{count, plural, one {# more is ready} other {# more are ready}} — high confidence, no conflicts",
+      "notLive": "Deciding from here comes next - nothing is used until it does.",
+      "readyCard": "{count, plural, one {# more is ready} other {# more are ready}} - high confidence, no conflicts",
       "addReady": "{count, plural, one {Add # ready answer} other {Add # ready answers}}",
       "later": "Finish later",
       "coexistence": "Coexistence · the app on your phone keeps working",
-      "closeAnytime": "You can close this — we'll email the workspace owners when the report is ready.",
+      "closeAnytime": "You can close this - we'll email the workspace owners when the report is ready.",
       "tab": {
         "needs_a_look": "Needs a look",
         "ready_to_add": "Ready to add",
@@ -319,7 +319,7 @@
         "mostCommon": "Most common",
         "business_app": {
           "title": "On the WhatsApp Business app",
-          "body": "Keep using the app on your phone — conversations show up in both places. GOTCHA can import up to 6 months of history to learn from."
+          "body": "Keep using the app on your phone - conversations show up in both places. GOTCHA can import up to 6 months of history to learn from."
         },
         "new": {
           "title": "Not on WhatsApp yet, or with another provider",
@@ -327,21 +327,21 @@
         },
         "note": "A Meta window opens. Finish there and you'll land back here to pick the number.",
         "continue": "Continue with Meta",
-        "again": "Meta asks this again in its window — pick the same answer there."
+        "again": "Meta asks this again in its window - pick the same answer there."
       },
       "needs": {
         "title": "You'll need",
         "login": "A Facebook login that's an admin of your business on Meta",
         "phone": "The phone with this number nearby, for a code",
-        "payment": "A payment method on the WhatsApp account — you can add it later"
+        "payment": "A payment method on the WhatsApp account - you can add it later"
       },
       "meta": {
-        "waiting": "Finish in the Meta window — this sheet waits for you.",
+        "waiting": "Finish in the Meta window - this sheet waits for you.",
         "reading": "Reading your numbers…"
       },
       "number": {
         "question": "Which number should GOTCHA answer?",
-        "lead": "{count, plural, one {Meta shared one number.} other {Meta shared # numbers. Connect one now — add the others later without signing in again.}}",
+        "lead": "{count, plural, one {Meta shared one number.} other {Meta shared # numbers. Connect one now - add the others later without signing in again.}}",
         "none": "Meta didn't share any numbers. Nothing was connected.",
         "flow": {
           "businessApp": "On the WhatsApp Business app · history can be imported",
@@ -356,40 +356,40 @@
         "ownerNotYet": "Who answers is set on the number once it's connected.",
         "import": "Import the last 6 months",
         "importBody": "Meta sends this once, only during setup. GOTCHA learns your answers, tone and customers from it. Nothing is sent to anyone.",
-        "importWhy": "Meta sends the history on its own when a Business app number connects — there is nothing to switch.",
+        "importWhy": "Meta sends the history on its own when a Business app number connects - there is nothing to switch.",
         "contacts": "Family or friends on this number? Mark chats GOTCHA should ignore.",
         "contactsNotYet": "Choosing contacts before the import comes next; private contacts can be added from the number's settings.",
         "connect": "Connect",
         "connectImport": "Connect and import",
         "back": "Back",
         "pending": "Meta needs one more step from you before this number works.",
-        "failed": "The number wasn't connected — try again."
+        "failed": "The number wasn't connected - try again."
       },
       "problem": {
         "notConfigured": "Meta's sign-up isn't set up for this workspace yet.",
-        "unavailable": "Meta's sign-in couldn't load here — an ad blocker or a company network often blocks it.",
-        "cancelled": "You closed Meta’s window — nothing was connected.",
-        "noCode": "Meta didn't hand back a way to read your numbers. Nothing was connected — try again.",
-        "inspectFailed": "We couldn't read the numbers on that account. Nothing was connected — try again."
+        "unavailable": "Meta's sign-in couldn't load here - an ad blocker or a company network often blocks it.",
+        "cancelled": "You closed Meta’s window - nothing was connected.",
+        "noCode": "Meta didn't hand back a way to read your numbers. Nothing was connected - try again.",
+        "inspectFailed": "We couldn't read the numbers on that account. Nothing was connected - try again."
       }
     },
     "decide": {
-      "approved": "Approved — GOTCHA answers with it now.",
-      "rejected": "Set aside — GOTCHA won’t use it.",
+      "approved": "Approved - GOTCHA answers with it now.",
+      "rejected": "Set aside - GOTCHA won’t use it.",
       "saveApprove": "Save and approve",
       "cancel": "Cancel",
       "refused": {
-        "already_covered": "Your knowledge already answers this — nothing new was added.",
-        "no_knowledge_base": "There is no knowledge base to add it to yet — create one in Studio → Knowledge.",
+        "already_covered": "Your knowledge already answers this - nothing new was added.",
+        "no_knowledge_base": "There is no knowledge base to add it to yet - create one in Studio → Knowledge.",
         "not_found": "This suggestion was already decided or is gone.",
         "forbidden": "You don't have permission to change what GOTCHA knows.",
-        "too_long": "That answer is too long to save — shorten it.",
-        "failed": "That didn’t go through — try again."
+        "too_long": "That answer is too long to save - shorten it.",
+        "failed": "That didn’t go through - try again."
       }
     }
   },
   "rowSettings": "Settings",
-  "rowSettingsNotYet": "Settings for this channel come next — WhatsApp's are ready.",
+  "rowSettingsNotYet": "Settings for this channel come next - WhatsApp's are ready.",
   "banner": {
     "title": "{channel} needs attention",
     "more": "{count, plural, one {and one more channel} other {and # more channels}}"
@@ -397,29 +397,29 @@
   "chipTrouble": "Needs attention",
   "landing": {
     "connected": "{channel} connected.",
-    "connectedCount": "{count, plural, =0 {{channel} connected — no accounts came with it.} one {{channel} connected — 1 account.} other {{channel} connected — # accounts.}}",
-    "pending": "{channel} is connected, and Meta needs one more step — finish it in the number’s settings.",
+    "connectedCount": "{count, plural, =0 {{channel} connected - no accounts came with it.} one {{channel} connected - 1 account.} other {{channel} connected - # accounts.}}",
+    "pending": "{channel} is connected, and Meta needs one more step - finish it in the number’s settings.",
     "error": {
-      "denied": "You cancelled at {channel} — nothing was connected.",
-      "token_exchange_failed": "{channel} didn't confirm the connection. Nothing was connected — try again.",
+      "denied": "You cancelled at {channel} - nothing was connected.",
+      "token_exchange_failed": "{channel} didn't confirm the connection. Nothing was connected - try again.",
       "state_already_used": "That sign-in was already used. Start again from Connect.",
       "invalid_state": "That sign-in couldn't be matched to this workspace. Start again from Connect.",
       "not_configured": "{channel} isn't set up on GOTCHA's side yet.",
       "already_connected": "{channel} is already connected to this workspace.",
       "gmail_no_email": "Google didn't share an email address, so Gmail wasn't connected.",
       "outlook_no_email": "Microsoft didn't share an email address, so Outlook wasn't connected.",
-      "no_pages": "No Facebook Page came with that sign-in — choose a Page you manage and try again.",
+      "no_pages": "No Facebook Page came with that sign-in - choose a Page you manage and try again.",
       "no_instagram_account": "No Instagram business account is linked to that Page. Link one in Meta, then try again.",
       "no_whatsapp_numbers": "Meta shared no WhatsApp numbers. Nothing was connected.",
-      "slack_no_team": "Slack didn't say which workspace — try again.",
-      "callback_error": "Something went wrong on the way back from {channel}. Nothing was connected — try again.",
+      "slack_no_team": "Slack didn't say which workspace - try again.",
+      "callback_error": "Something went wrong on the way back from {channel}. Nothing was connected - try again.",
       "other": "{channel} didn't connect. Try again."
     }
   },
   "twilio": {
     "friendlyName": "Name",
     "accountSid": "Account SID",
-    "accountSidHint": "From your Twilio console — starts with AC.",
+    "accountSidHint": "From your Twilio console - starts with AC.",
     "accountSidBad": "An Account SID is AC followed by 32 letters and digits.",
     "authToken": "Auth Token",
     "connect": "Check and continue",
@@ -430,14 +430,14 @@
     "activate": "{count, plural, one {Answer calls on 1 number} other {Answer calls on # numbers}}",
     "activating": "Setting up the numbers…",
     "done": "{count, plural, one {GOTCHA answers calls on 1 number now.} other {GOTCHA answers calls on # numbers now.}}",
-    "donePartly": "{done} set up; {failed} could not be — try those again from Phone calls.",
+    "donePartly": "{done} set up; {failed} could not be - try those again from Phone calls.",
     "close": "Done",
     "error": {
       "invalid": "Fill in every field, as Twilio gives them.",
-      "twilio": "Twilio didn't accept those details — check the Account SID and Auth Token.",
+      "twilio": "Twilio didn't accept those details - check the Account SID and Auth Token.",
       "not_offered": "Phone calls aren't available for this workspace yet.",
       "forbidden": "Only an admin can connect phone calls.",
-      "failed": "That didn't connect — try again."
+      "failed": "That didn't connect - try again."
     },
     "help": "Where to find these in the Twilio console → Account → API keys & tokens",
     "show": "Show",
@@ -447,7 +447,7 @@
     "lead": "Paste this before the closing </body> tag on every page where the chat should appear.",
     "copy": "Copy code",
     "copied": "Copied",
-    "copyFailed": "The code couldn't be copied — select it and copy it by hand.",
+    "copyFailed": "The code couldn't be copied - select it and copy it by hand.",
     "done": "Done"
   }
 }

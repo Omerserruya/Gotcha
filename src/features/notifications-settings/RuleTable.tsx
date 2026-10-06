@@ -9,17 +9,17 @@ import { RuleList } from './RuleList';
 import styles from './Notifications.module.css';
 
 /**
- * Settings · Notifications — screen 15.
+ * Settings · Notifications - screen 15.
  *
  * ── WHAT THIS SCREEN IS, AFTER THE RULING ──
  * The design drew a personal matrix: *"tell me when"*, eight events by three
- * channels, per user. That store exists and **nothing reads it** — the whole
+ * channels, per user. That store exists and **nothing reads it** - the whole
  * `UserNotificationPreference` table has two references in the repository and
  * both are its own route. Four switches and a quiet-hours window that no
  * dispatcher consults.
  *
- * What the dispatcher does read is `NotificationPreference`: a TENANT rule —
- * *"when X happens, notify these people, on these channels"* — scoped to a
+ * What the dispatcher does read is `NotificationPreference`: a TENANT rule -
+ * *"when X happens, notify these people, on these channels"* - scoped to a
  * department, with conditions and a priority. Omer chose to build the one that
  * works, so the screen's subject changed from a preference to a rule.
  *
@@ -31,7 +31,7 @@ import styles from './Notifications.module.css';
  * ── DAY ONE IS THE WHOLE SCREEN ──
  * This tenant has **zero rules**. So the first thing an admin ever sees is an
  * empty table, and it is designed as the primary state rather than as the
- * degraded one — the mistake we nearly made with screen 12's roster.
+ * degraded one - the mistake we nearly made with screen 12's roster.
  *
  * An empty rule table is not a failure and must not read as one. It means
  * GOTCHA is currently telling nobody about anything, which is a real and
@@ -53,7 +53,7 @@ export async function RuleTable({
   /** For naming the people a `users` rule addresses. `null` is a failed read. */
   readonly members: readonly Member[] | null;
 }) {
-  // `notifications-settings`, not `notifications` — the latter is screen 01d.
+  // `notifications-settings`, not `notifications` - the latter is screen 01d.
   const t = await getTranslations('notifications-settings');
 
   if (rules === null) {
@@ -78,7 +78,7 @@ export async function RuleTable({
         {/*
           The vocabulary, shown before the first rule exists rather than hidden
           behind a form. Someone deciding whether to write a rule needs to know
-          what GOTCHA can actually tell them about — and 22 events grouped by
+          what GOTCHA can actually tell them about - and 22 events grouped by
           family answers that in a way an empty table cannot.
         */}
         <div className={styles.families} data-testid="event-families">

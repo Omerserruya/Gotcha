@@ -19,7 +19,7 @@ const connectedOnly = (rows: ReturnType<typeof buildChannelRows>): ConnectedRow[
 describe('buildChannelRows', () => {
   it('renders a row per ACCOUNT, never per channel type', () => {
     // The tenant has WEBCHAT conversations and no WEBCHAT account. The list is
-    // driven by accounts, so a channel with no account cannot produce a row —
+    // driven by accounts, so a channel with no account cannot produce a row -
     // which is what stops "unattributed volume" ever needing a label. An
     // unmatched conversation means EITHER "it outlived its account" or "no
     // such account existed"; `onDelete: SetNull` makes those identical, and a
@@ -149,7 +149,7 @@ describe('buildChannelRows', () => {
     const rows = buildChannelRows([], [], true, 'en');
     const offered = rows.filter((r) => r.kind === 'connectable').map((r) => r.channel);
     // Shopify is installed from Shopify, so a Connect button here would send
-    // someone to the wrong place. (Voice IS connectable — see above.)
+    // someone to the wrong place. (Voice IS connectable - see above.)
     expect(offered).not.toContain('SHOPIFY_LIVE_CHAT');
     expect(offered).toContain('WHATSAPP');
   });

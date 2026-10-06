@@ -12,7 +12,7 @@ import { channelName } from '@/api/contracts/inbox';
  *
  * The design's arrangement exactly: counts divided by hairlines with the
  * channel split taking the remaining width, the whole strip ruled above and
- * below. No cards and no grid of tiles — the brief rules both out by name.
+ * below. No cards and no grid of tiles - the brief rules both out by name.
  *
  * The fourth figure is "waiting on approval", which analytics does not serve.
  * Rather than substitute a number that happens to be available, the slot keeps
@@ -42,7 +42,7 @@ export async function MetricStrip({
    * ★ THE PAGE'S LOCALE, NOT THE PROCESS'S.
    *
    * This was `new Intl.NumberFormat()` with no locale at all. In a server
-   * component that means Node's default — `en-US` here — for every reader in
+   * component that means Node's default - `en-US` here - for every reader in
    * every language, and it would follow whatever `LANG` the container happens
    * to be started with.
    *
@@ -60,12 +60,12 @@ export async function MetricStrip({
    * On a quiet morning the strip stops reporting throughput and starts
    * confirming there is nothing outstanding: "conversations so far" rather
    * than "today", "needing you" rather than "by your team". And the AI share
-   * reads "all of them" instead of a percentage — 100% is a number you have to
+   * reads "all of them" instead of a percentage - 100% is a number you have to
    * parse, "all of them" is the thing you wanted to know.
    */
   /*
     No conversations today: "Handled by GOTCHA 0" and "By your team 0" are
-    shares of nothing, so they are "—". The count itself, and the approvals
+    shares of nothing, so they are "-". The count itself, and the approvals
     waiting, are true zeros.
   */
   const nothingToday = overview.totalConversations === 0;
@@ -81,7 +81,7 @@ export async function MetricStrip({
 
       <Metric
         label={t('handledByGotcha')}
-        value={nothingToday ? '—' : format.number(overview.aiHandledCount)}
+        value={nothingToday ? '-' : format.number(overview.aiHandledCount)}
         share={
           everythingHandled
             ? t('allOfThem')
@@ -93,12 +93,12 @@ export async function MetricStrip({
 
       <Metric
         label={isQuiet ? t('needingYou') : t('byYourTeam')}
-        value={nothingToday ? '—' : format.number(overview.humanHandledCount)}
+        value={nothingToday ? '-' : format.number(overview.humanHandledCount)}
       />
 
       <Metric
         label={t('waitingOnApproval')}
-        value={pendingApproval === null ? '—' : format.number(pendingApproval)}
+        value={pendingApproval === null ? '-' : format.number(pendingApproval)}
       />
 
       {channels && channels.length > 0 ? (
@@ -171,7 +171,7 @@ function ChannelSplit({
           /*
            * ★★ THE CHANNEL'S NAME. The previous comment here argued that the
            * code should be shown as-is because "a translation key per channel
-           * would go stale the moment a new one is connected" — and
+           * would go stale the moment a new one is connected" - and
            * `channels.name.*` has had all ten in both languages since screen
            * 13 was built. The comment argued for the defect, and a browser
            * walk found `SHOPIFY_LIVE_CHAT` on the strip.

@@ -33,7 +33,7 @@ const KNOWN_ERRORS = ['expired', 'denied', 'exchange_failed'] as const;
 /**
  * One screen's rotating figures.
  *
- * ★ The SHELL is the same on both — 508px column, 250px stage, the 15s cycle,
+ * ★ The SHELL is the same on both - 508px column, 250px stage, the 15s cycle,
  *   the reduced-motion hold. Only the three statements differ, so this takes a
  *   key prefix rather than being written twice.
  */
@@ -80,7 +80,7 @@ export default async function SignInPage({
   const t = await getTranslations('auth');
   /*
    * Scoped to the editorial block so `Figures` can take a key prefix and be
-   * written once for both screens — `scale.eyebrow` and
+   * written once for both screens - `scale.eyebrow` and
    * `secondFactor.why.eyebrow` are the same shape from here.
    */
   const editorial = await getTranslations('auth.editorial');
@@ -90,7 +90,7 @@ export default async function SignInPage({
    * ★★ `appPath`, BECAUSE A PLAIN ANCHOR IS NOT PREFIXED AND THIS ONE LEFT THE APP
    * ════════════════════════════════════════════════════════════════════════════
    * Next prefixes `next/link` and `redirect()` with `basePath`. It does NOT
-   * touch a raw `<a href>` — the browser resolves that against the origin, so
+   * touch a raw `<a href>` - the browser resolves that against the origin, so
    * `/api/auth/login` under `/v2` became `https://dev.gotcha.co.il/api/auth/login`.
    *
    * Beside the legacy product that is not a 404. It is the OTHER application's
@@ -98,14 +98,14 @@ export default async function SignInPage({
    * flow: measured on 2026-09-28, the journey ended at
    * `http://localhost:3000/en/sign-in?error=expired`.
    *
-   * ★ The anchor is still a plain `<a>` on purpose — this leaves the app for
+   * ★ The anchor is still a plain `<a>` on purpose - this leaves the app for
    *   the identity provider, so client-side routing must not intercept it.
    *   That reasoning was right; what it missed is that opting out of the
    *   router also opts out of the prefix.
    *
    * ★ And this was the LAST unprefixed browser-facing path in the app. Every
-   *   other one — `sign-out.ts`, `browser-api.ts`, `login-state.ts`,
-   *   `realtime-provider.tsx` — already calls `appPath`. They are all `fetch`
+   *   other one - `sign-out.ts`, `browser-api.ts`, `login-state.ts`,
+   *   `realtime-provider.tsx` - already calls `appPath`. They are all `fetch`
    *   calls. This was the only `href`, so a sweep shaped like "a fetch with a
    *   root path" finds all of them and misses exactly this one.
    */
@@ -118,12 +118,12 @@ export default async function SignInPage({
    * password is accepted, the identity provider session is created, and the
    * browser then asks the AUTH host for a route only the PRODUCT host serves.
    * Behind a gateway allowlist that is a **404 at the end of a successful
-   * sign-in** — which reads as the panel being broken when the panel has just
+   * sign-in** - which reads as the panel being broken when the panel has just
    * finished its job.
    *
    * ★ `PRODUCT_LOGIN_URL` is the whole URL rather than an origin, because
-   *   `appUrl` would rebuild the path from THIS build’s `BASE_PATH` — empty on
-   *   a root-mounted auth build — and produce the product’s origin with the
+   *   `appUrl` would rebuild the path from THIS build’s `BASE_PATH` - empty on
+   *   a root-mounted auth build - and produce the product’s origin with the
    *   product’s mount point missing.
    *
    * ★ Unset, nothing changes: this is exactly the string it has always been.
@@ -134,7 +134,7 @@ export default async function SignInPage({
    * ★★ THE HAND-OVER CARRIES THE MARKER, OR THIS PANEL LOOPS ON ITSELF.
    * `/api/auth/login` now sends anyone WITHOUT it to the sign-in surface,
    * because reaching the OIDC start cold renders the provider's own login page
-   * — the screen the separation exists to prevent. This panel is the one
+   * - the screen the separation exists to prevent. This panel is the one
    * legitimate direct caller: by the time it navigates there it has already
    * created the provider session, so `authorize` returns silently.
    *
@@ -149,7 +149,7 @@ export default async function SignInPage({
    * ══════════════════════════════════════════════════════════════════════════
    * Everything else for this was shipped inert and walked: eight documents,
    * one Authentik page, identical to before. This line is the whole change in
-   * behaviour, which is why it is its own commit — it can be reverted without
+   * behaviour, which is why it is its own commit - it can be reverted without
    * touching the machinery, and the machinery can be read without it.
    *
    * ★ It is sent ONLY on the panel's hand-over. The front door, an expiring
@@ -173,7 +173,7 @@ export default async function SignInPage({
    * fetches it with credentials and navigates to the answer would make this
    * page a fetch-and-redirect anyone can aim.
    *
-   * ★ Checked on the SERVER, against the endpoint OIDC discovery reports —
+   * ★ Checked on the SERVER, against the endpoint OIDC discovery reports -
    *   not against a constant, and not in the browser. The client never sees a
    *   URL that has not already been compared to the real one.
    *
@@ -202,7 +202,7 @@ export default async function SignInPage({
             ⚠⚠ THE PRODUCT'S CALLBACK, NOT THIS ORIGIN'S.
             `appUrl('/api/auth/callback', APP_ORIGIN)` was here and it is wrong
             on exactly this page: `APP_ORIGIN` is the SIGN-IN host here, so the
-            provider's completion — which points at the product — was compared
+            provider's completion - which points at the product - was compared
             against a URL on the wrong origin and correctly refused.
             `PRODUCT_LOGIN_URL` is configured here precisely because this
             container has to know where the product is.
@@ -230,7 +230,7 @@ export default async function SignInPage({
       }
       /*
         ════════════════════════════════════════════════════════════════════
-        ★★ ONE SHELL, TWO SETS OF FIGURES — 00b HAS ITS OWN
+        ★★ ONE SHELL, TWO SETS OF FIGURES - 00b HAS ITS OWN
         ════════════════════════════════════════════════════════════════════
         The second-factor screen was wearing sign-in's three statements. The
         mock gives it three of its own, and they are an ARGUMENT for why the
@@ -251,12 +251,12 @@ export default async function SignInPage({
       }}
       ticks={
         /*
-          "…with the position marked by three ticks" — 00a, verbatim.
+          "…with the position marked by three ticks" - 00a, verbatim.
           Decorative and `aria-hidden` like the stage: they mark the position
           of copy a screen reader is deliberately not being read.
 
           Driven by the same 15s CSS cycle as the slides rather than by state,
-          so the two cannot disagree — and they belong inside the status row,
+          so the two cannot disagree - and they belong inside the status row,
           which is one flex row in the mock.
         */
         <div className={styles.editorialTicks} aria-hidden="true" data-testid="editorial-ticks">

@@ -1,7 +1,7 @@
 /**
  * Which systems connect at their provider AND come back here (backend
  * 381a5d1b's `redesign_studio` flow): HubSpot, Salesforce and Monday connect;
- * Shopify re-authorises the store already connected — a new store is
+ * Shopify re-authorises the store already connected - a new store is
  * installed from Shopify, whose way back is still the previous app's.
  *
  * Wix and Square carry no flow yet: drawn, with why. Stripe, Zoho, Google
@@ -26,7 +26,7 @@ export function oauthHere(slug: string, connected: boolean): boolean {
   return mode === 'connect' || (mode === 'reconnect' && connected);
 }
 
-/** The codes the return can carry — a closed set on the backend. */
+/** The codes the return can carry - a closed set on the backend. */
 export const OAUTH_FAILURES = [
   'denied',
   'token_exchange_failed',
@@ -48,7 +48,7 @@ export function oauthFailure(code: string | undefined): OAuthFailure | 'other' |
   return (OAUTH_FAILURES as readonly string[]).includes(code) ? (code as OAuthFailure) : 'other';
 }
 
-/** Salesforce's two login hosts — the only extra the start takes. */
+/** Salesforce's two login hosts - the only extra the start takes. */
 export const SALESFORCE_HOSTS = ['https://login.salesforce.com', 'https://test.salesforce.com'];
 
 /** The store address, as WooCommerce's approval needs it: https (http only outside production). */

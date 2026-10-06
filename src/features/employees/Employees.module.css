@@ -3,7 +3,7 @@
    * Screen 07 · Studio · AI employees.
    *
    * Cards, because each employee carries three numbers and one action whose
-   * confirmation needs room to say what it costs — which a table row has
+   * confirmation needs room to say what it costs - which a table row has
    * nowhere to put.
    */
 
@@ -169,7 +169,7 @@
   }
 
   /*
-   * What actually happened, from the server — not the forecast the dialog
+   * What actually happened, from the server - not the forecast the dialog
    * made. The two can legitimately differ, and only one of them is evidence.
    */
   .deleted {

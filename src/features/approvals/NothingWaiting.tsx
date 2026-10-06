@@ -16,22 +16,22 @@ import fill from '@/design-system/styles/fill.module.css';
 import styles from './Approvals.module.css';
 
 /**
- * Screen 03c — *"nothing waiting"*.
+ * Screen 03c - *"nothing waiting"*.
  *
  * Not a separate route: this **is** the Approvals screen when the queue is
- * empty, which is the point of the design note — *"the product working, not an
+ * empty, which is the point of the design note - *"the product working, not an
  * empty box"*. An empty approvals queue is the delegation succeeding, and it
  * must not read as a failure or as an absence.
  *
  * ── WHAT THE DESIGN LEADS WITH, AND WHY THIS DOES NOT ──
  * The design opens on *"31 actions, ₪2,840 of value, handled without asking
  * you today"* with a by-type breakdown. **The data for that exists and is
- * exactly right** — `PolicyDecision` is an append-only audit of every policy
+ * exactly right** - `PolicyDecision` is an append-only audit of every policy
  * evaluation, carrying `decision`, `actionKind`, `tool`, `maxAmount` and
  * `inputFacts`, indexed on `[tenantId, createdAt]`.
  *
  * **No route reads it.** Verified across every route file in the platform. So
- * the headline is unbuilt rather than fictional — a distinction worth keeping,
+ * the headline is unbuilt rather than fictional - a distinction worth keeping,
  * because it is one endpoint over correct data rather than machinery that does
  * not exist. It is requested, and until it lands this screen does not invent a
  * number, estimate one, or imply the figure is zero.
@@ -41,7 +41,7 @@ import styles from './Approvals.module.css';
  * reversible for 24h"*. There is no undo in this platform. Both are gone
  * rather than disabled: a greyed-out Undo still tells you one existed.
  *
- * *"What GOTCHA learned from your rejections"* is also absent — nothing
+ * *"What GOTCHA learned from your rejections"* is also absent - nothing
  * anywhere derives a threshold change from a rejection. The reason itself is
  * real and is shown; the learning claimed about it is not.
  */
@@ -102,7 +102,7 @@ export async function NothingWaiting({
   };
   const sentence = (approval: Approval) => {
     const asked = amountOf(approval);
-    // Edited: what ran, and what was asked — "Refunded 120 (was 179)".
+    // Edited: what ran, and what was asked - "Refunded 120 (was 179)".
     const ran =
       approval.editedAmount !== null && asked !== null
         ? t('decided.wasAmount', {
@@ -124,7 +124,7 @@ export async function NothingWaiting({
    * ★★ 03c: THE STATE IS THE PAGE TITLE, AND THIS IS THE RECORD
    * ════════════════════════════════════════════════════════════════════════
    * 02 says "Nothing waiting on you" in the title and gives the body to the
-   * record of decisions — one card, one row per decision: when, what, and
+   * record of decisions - one card, one row per decision: when, what, and
    * how it ended. Our two explanatory paragraphs above it are gone; 02 shows
    * states, it does not explain them.
    *
@@ -166,7 +166,7 @@ export async function NothingWaiting({
              *   status's tooltip does.
              */
             /*
-             * Who decided, and where — the status's tooltip. "someone" where the
+             * Who decided, and where - the status's tooltip. "someone" where the
              * platform holds no name: 26 of dev's 29 rows carry test-fixture
              * labels (`dev-e2e`, `qa-manager`), not user ids, and for those
              * "someone" is the truth.
@@ -200,7 +200,7 @@ export async function NothingWaiting({
                   {sentence(approval)}
                 </span>
                 {/*
-                  ★★ HOW IT ENDED, IN ONE WORD — and the two endings 02's tidy
+                  ★★ HOW IT ENDED, IN ONE WORD - and the two endings 02's tidy
                   column could never show, said as plainly: approved and then
                   failed to run, and approved before anything recorded whether
                   it ran. The full sentence is the tooltip.
@@ -262,12 +262,12 @@ export async function NothingWaiting({
 
       {/*
         `GET /api/approvals` takes one status, has no date filter, and caps at
-        100 per status — so the card says when it may be cut, in 02's footer
+        100 per status - so the card says when it may be cut, in 02's footer
         bar, as one line.
       */}
       {/*
         02's foot says a reason "teaches GOTCHA". Nothing reads a rejection's
-        reason (it is only ever written) — so the foot says what is true.
+        reason (it is only ever written) - so the foot says what is true.
       */}
       {decided && decided.length > 0 ? (
         <p className={styles.decidedFooter} data-testid="decided-foot">
@@ -282,7 +282,7 @@ export async function NothingWaiting({
 const systemName = (slug: string) => humaniseCode(slug);
 
 /**
- * 03c's dark card — what GOTCHA did today with nobody asked. See
+ * 03c's dark card - what GOTCHA did today with nobody asked. See
  * `handledToday` for how it is counted; never a value nobody recorded.
  */
 export async function HandledCard({
@@ -305,7 +305,7 @@ export async function HandledCard({
       <p className={styles.handledEyebrow}>{t('eyebrow')}</p>
       {handled === null ? (
         <p className={styles.handledLead} title={t('unread')} data-testid="handled-unread">
-          <span className={styles.handledNumber}>—</span>
+          <span className={styles.handledNumber}>-</span>
         </p>
       ) : handled.total === 0 && handled.failed === 0 ? (
         <p className={styles.handledLead} data-testid="handled-none">
@@ -318,7 +318,7 @@ export async function HandledCard({
         </p>
       )}
       {/*
-        Tried and failed today: said, with the repair — never hidden behind
+        Tried and failed today: said, with the repair - never hidden behind
         "nothing ran". One system named and linked; several, the systems page.
       */}
       {handled !== null && handled.failed > 0 ? (
@@ -352,9 +352,9 @@ export async function HandledCard({
                 ? t('refundsUnder', { limit: format.number(refundLimit) })
                 : t(key)}
             </dt>
-            {/* No figure of nothing: on a quiet day, or unread, each is "—". */}
+            {/* No figure of nothing: on a quiet day, or unread, each is "-". */}
             <dd title={value === undefined ? t('unread') : undefined}>
-              {value === undefined || !value ? '—' : format.number(value)}
+              {value === undefined || !value ? '-' : format.number(value)}
             </dd>
           </div>
         ))}
@@ -364,7 +364,7 @@ export async function HandledCard({
 }
 
 /**
- * 02's header figures — "Approved this week 42 · Avg decision 16s" — for the
+ * 02's header figures - "Approved this week 42 · Avg decision 16s" - for the
  * page's `actions` slot. Nothing when they cannot be stood behind.
  */
 export async function DecisionStats({
@@ -389,7 +389,7 @@ export async function DecisionStats({
         {t('stats.approvedWeek')} <strong>{stats.approvedThisWeek}</strong>
       </span>
       <span>
-        {t('stats.avgDecision')} <strong>{avg ?? '—'}</strong>
+        {t('stats.avgDecision')} <strong>{avg ?? '-'}</strong>
       </span>
     </p>
   );

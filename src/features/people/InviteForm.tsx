@@ -13,7 +13,7 @@ import styles from './People.module.css';
 /**
  * *"Invite happens inline on the page, with role and team set before sending."*
  *
- * Team, yes. **Role, no** — and the field is absent rather than disabled.
+ * Team, yes. **Role, no** - and the field is absent rather than disabled.
  * `POST /api/agents` passes a literal `"AGENT"` to `inviteUser`, so a selector
  * would be a control the write path ignores. Role IS assignable afterwards,
  * through a different route; doing it here would mean a second call that can
@@ -24,7 +24,7 @@ import styles from './People.module.css';
  *
  * The NAME field is not in the design, and is here because the backend
  * requires it. The alternative is deriving it from the email's local part,
- * which is what onboarding does — but that name is written into the identity
+ * which is what onboarding does - but that name is written into the identity
  * provider and into the invitation the person receives, so it would greet a
  * real human being as "omerts58". That is not a default worth picking
  * silently.
@@ -36,14 +36,14 @@ export function InviteForm({
   readonly teams: readonly Department[];
   /**
    * 12: the header's "Invite someone" opens this row (`?invite=1`) and its
-   * Cancel closes it — the URL holds the state, so header and row share it.
+   * Cancel closes it - the URL holds the state, so header and row share it.
    */
   readonly open: boolean;
 }) {
   const t = useTranslations('people');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  /* Several teams at once (Omer, 12: "you can allow several") — the route takes a list. */
+  /* Several teams at once (Omer, 12: "you can allow several") - the route takes a list. */
   const [teamIds, setTeamIds] = useState<readonly string[]>([]);
   const [result, setResult] = useState<PeopleWriteResult<{ setupLink?: string | null }> | null>(
     null,
@@ -57,7 +57,7 @@ export function InviteForm({
       setResult(outcome);
       if (outcome.ok) {
         // The fields clear but the panel STAYS OPEN, because the success
-        // message carries the setup link — closing it would throw away the
+        // message carries the setup link - closing it would throw away the
         // one copy of a link the admin may need to send by hand.
         setEmail('');
         setName('');
@@ -71,13 +71,13 @@ export function InviteForm({
   const fieldErrors = result && !result.ok && result.reason === 'invalid' ? result.fields : {};
 
   /*
-    12, measured: ONE inline row — email, name, role, team, Send invite,
-    Cancel — inside a violet edge. Each control keeps a label for a screen
+    12, measured: ONE inline row - email, name, role, team, Send invite,
+    Cancel - inside a violet edge. Each control keeps a label for a screen
     reader; the eye gets 02's row.
 
     ── WHAT THE ROUTE TAKES, AND SO WHAT THE ROW HOLDS ──
       name   REQUIRED by `POST /api/agents` (`z.string().min(1)`): 02 has no
-             name field, so it is one more input in the row — a constraint,
+             name field, so it is one more input in the row - a constraint,
              not a design choice. What it is for is on the field (`title`).
       role   the route invites every person as AGENT and takes no role: the
              control shows "Agent" and is not live.
@@ -116,7 +116,7 @@ export function InviteForm({
         <label className="srOnly" htmlFor="invite-role">
           {t('invite.role')}
         </label>
-        {/* 02's "Agent ▾" pill — fixed: the route invites every person as an agent. */}
+        {/* 02's "Agent ▾" pill - fixed: the route invites every person as an agent. */}
         <span
           id="invite-role"
           className={styles.inviteSelect}
@@ -173,7 +173,7 @@ export function InviteForm({
         >
           {isPending ? t('invite.sending') : t('invite.send')}
         </Button>
-        {/* Closing is leaving `?invite=1` — the state lives in the URL. */}
+        {/* Closing is leaving `?invite=1` - the state lives in the URL. */}
         <Link href="/settings/people" className={styles.inviteCancel} data-testid="invite-cancel">
           {t('cancel')}
         </Link>
@@ -221,7 +221,7 @@ function InviteOutcome({
             <p className={styles.inviteLinkLabel}>{t('invite.linkLabel')}</p>
             {/*
               Selectable text rather than a link. It is for copying to someone,
-              not for this admin to follow — clicking it would begin setting up
+              not for this admin to follow - clicking it would begin setting up
               somebody else's password in their own browser.
             */}
             <code className={styles.inviteLink} data-testid="invite-link">

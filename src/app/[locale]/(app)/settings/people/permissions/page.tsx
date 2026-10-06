@@ -7,13 +7,13 @@ import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Settings · People & teams · What a role can allow — screen 12c.
+ * Settings · People & teams · What a role can allow - screen 12c.
  *
  * ── THIS IS A CATALOGUE, NOT THE DESIGN'S GRID, AND THE REASON IS A WRITE ──
  * The design draws one row per area with **None / View / Edit / Manage**, a
  * scope per row and a money limit per row. The platform has sixty-three
- * permissions shaped `domain:feature:action` — `conversation:messages:read ·
- * reply · takeover · assign · close` — where **the action is the level and
+ * permissions shaped `domain:feature:action` - `conversation:messages:read ·
+ * reply · takeover · assign · close` - where **the action is the level and
  * each is an independent key**.
  *
  * A four-way radio must pick one value to stand for five booleans, so saving
@@ -24,7 +24,7 @@ import { pageMetadata } from '@/shell/page-metadata';
  * it is asserted: open a role, change nothing, save, get back what you had.
  *
  * ── AND TWO THINGS SAID ONCE ──
- * **Scope is per role** — one reach for everything the role does. A reader
+ * **Scope is per role** - one reach for everything the role does. A reader
  * arriving from the mockup expects it per row.
  *
  * **There are no levels.** Meeting sixty-three independent switches without

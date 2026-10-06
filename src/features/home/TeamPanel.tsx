@@ -10,9 +10,9 @@ import styles from './Home.module.css';
 /**
  * "Your team right now".
  *
- * Workload and availability arrive separately — `/api/analytics/agents` knows
+ * Workload and availability arrive separately - `/api/analytics/agents` knows
  * how much each person is carrying, `/api/agents/presence` knows whether they
- * are there — and are joined here on `agentId`.
+ * are there - and are joined here on `agentId`.
  *
  * The backend derives presence at read time, so a stale row already reads
  * OFFLINE and an elapsed away window already reads ONLINE. Nothing here has to
@@ -21,7 +21,7 @@ import styles from './Home.module.css';
  * One thing is still not an action: `rebalance`. Reassignment is
  * per-conversation, so it navigates into Inbox rather than pretending to
  * redistribute a queue. And the observation at the foot is derived here rather
- * than fetched — the backend has no such signal, but "one person is carrying
+ * than fetched - the backend has no such signal, but "one person is carrying
  * most of the queue" is arithmetic over data already in hand, and it is the
  * most useful line on the panel.
  */
@@ -37,7 +37,7 @@ export async function TeamPanel({
   const format = await getFormatter();
   /*
     `/api/analytics/agents` lists users with the AGENT role only, so a
-    workspace run by its admins has nobody here: drawn, "—", and why.
+    workspace run by its admins has nobody here: drawn, "-", and why.
   */
   if (team === null || team.length === 0) {
     return (
@@ -53,7 +53,7 @@ export async function TeamPanel({
             title={team === null ? t('unavailable') : t('none')}
             data-testid="team-none"
           >
-            —
+            -
           </p>
         </div>
       </section>
@@ -98,7 +98,7 @@ export async function TeamPanel({
               </span>
               {/*
                 The dot carries availability, and the row's text always says
-                the same thing in words — colour is never the only carrier.
+                the same thing in words - colour is never the only carrier.
               */}
               <span
                 className={[styles.presenceDot, presenceClass(presence.get(member.agentId))]
@@ -129,7 +129,7 @@ export async function TeamPanel({
  * Whoever is carrying at least double the median load.
  *
  * Median rather than mean so one very busy person does not raise the bar
- * enough to hide themselves. Silent unless the gap is real — an observation
+ * enough to hide themselves. Silent unless the gap is real - an observation
  * that appears every day stops being read.
  */
 function findImbalance(team: readonly Team[number][]): { name: string } | null {
@@ -148,7 +148,7 @@ function findImbalance(team: readonly Team[number][]): { name: string } | null {
 /**
  * The row's second line.
  *
- * Someone away until a stated time is described by that, not by their queue —
+ * Someone away until a stated time is described by that, not by their queue -
  * "away until 11:00" answers the question a colleague is actually asking.
  * Everyone else is described by load.
  */
@@ -168,14 +168,14 @@ function secondLine(
          * ★★ THE PAGE'S CLOCK, NOT THE SERVER'S.
          *
          * This was `toLocaleTimeString(undefined, …)` in a SERVER component,
-         * so `undefined` resolved to Node's locale — `en-US` here — for every
+         * so `undefined` resolved to Node's locale - `en-US` here - for every
          * reader. On a Hebrew page it printed **`02:30 PM`** beside `14:30`
          * times drawn through this same formatter elsewhere on the screen.
          *
          * And it would not have been read as a bug: a 12-hour clock next to
          * 24-hour ones inside one Hebrew screenshot looks like an
          * inconsistent design, and it would have been filed against the
-         * panel. That is the expensive kind of wrong evidence — not obviously
+         * panel. That is the expensive kind of wrong evidence - not obviously
          * broken, quietly wrong in a way a reviewer rationalises.
          */
         time: format.dateTime(until, { hour: '2-digit', minute: '2-digit', hour12: false }),
@@ -211,7 +211,7 @@ function initials(from: string): string {
 
 /** Minutes, because "replies in 3m" is the unit the design speaks in. */
 function formatReply(ms: number | null | undefined): string {
-  if (ms === null || ms === undefined) return '—';
+  if (ms === null || ms === undefined) return '-';
   const minutes = Math.round(ms / 60_000);
   return minutes < 1 ? '<1m' : `${minutes}m`;
 }

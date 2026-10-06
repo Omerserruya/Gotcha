@@ -16,7 +16,7 @@ import { LOCALE_CODES } from './locales';
  *
  * `loadMessages` maps over `NAMESPACES`, so a complete, both-locale,
  * key-for-key-matching catalogue that is missing from that array **does not
- * exist at runtime** — and three were. `inbox` was the loud one: a client
+ * exist at runtime** - and three were. `inbox` was the loud one: a client
  * component asking for a nested namespace throws, so screen 02 rendered no
  * heading at all and twelve capture tests reported *"is the app serving on
  * this origin?"*.
@@ -29,12 +29,12 @@ const LOAD_BEARING = [
   /*
    * The one that took a screen down. `useTranslations('inbox.verbs')` in
    * `ConversationVerbs` resolves this nested branch, and a missing NAMESPACE
-   * raises rather than returning '' — which is why this was fatal where a
+   * raises rather than returning '' - which is why this was fatal where a
    * missing key is silent.
    */
   ['inbox', 'verbs.claim'],
   ['inbox', 'stream.system.agent_claimed'],
-  /* Screen 06's two panels — the two branches its components read. */
+  /* Screen 06's two panels - the two branches its components read. */
   ['analytics', 'team.heading'],
   ['analytics', 'asked.heading'],
   /*
@@ -69,7 +69,7 @@ describe('★★ the loader, not the directory', () => {
   it('★ loads every registered namespace, and each one has content', async () => {
     /*
      * The other direction of the same defect: a name in `NAMESPACES` with no
-     * file is not an error — `loadNamespace` catches the failed import and
+     * file is not an error - `loadNamespace` catches the failed import and
      * returns `{}`. So the namespace resolves, every key under it is missing,
      * and missing keys are silent. An empty branch is the signature.
      */
@@ -81,7 +81,7 @@ describe('★★ the loader, not the directory', () => {
     );
     expect(
       empty,
-      'these namespaces loaded as {} — the import failed and was swallowed, so every ' +
+      'these namespaces loaded as {} - the import failed and was swallowed, so every ' +
         'key under them renders as nothing',
     ).toEqual([]);
   });

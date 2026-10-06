@@ -33,7 +33,7 @@ const dormant: QuietDayItem = {
   rank: 9,
 };
 
-describe('★★ 01b — one row per source, in the ranker’s order', () => {
+describe('★★ 01b - one row per source, in the ranker’s order', () => {
   it('two questions are ONE row: counted, listed, asked-times summed', () => {
     const rows = quietRows([gap('a', 'Dispatch cut-off?', 20, 1), gap('b', 'Gift wrap?', 13, 2)]);
     expect(rows).toHaveLength(1);
@@ -94,7 +94,7 @@ describe('★★ 01b — one row per source, in the ranker’s order', () => {
     expect(quietRows([{ ...dormant, source: 'knowledge_gap' }])).toEqual([]);
   });
 
-  it('the chip counts the ranker’s source — `unanswered_question`, not the kind', () => {
+  it('the chip counts the ranker’s source - `unanswered_question`, not the kind', () => {
     expect(openQuestionCount([gap('a', 'Q?', 3, 1), gap('b', 'R?', 3, 2), dormant])).toBe(2);
     expect(openQuestionCount([{ ...gap('a', 'Q?', 3, 1), source: 'knowledge_gap' }])).toBe(0);
   });

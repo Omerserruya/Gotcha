@@ -19,7 +19,7 @@ export interface RealtimeTransport {
   onStateChange(listener: (state: ConnectionState) => void): () => void;
   /**
    * Ask for one conversation's room (`conv:{id}`), where events scoped to it
-   * are sent — the tenant room never carries them. Returns the leave.
+   * are sent - the tenant room never carries them. Returns the leave.
    */
   joinConversation(conversationId: string): () => void;
 }
@@ -28,12 +28,12 @@ export interface RealtimeTransport {
  * How the socket authenticates its handshake.
  *
  * The access token lives in an HttpOnly cookie precisely so that scripts
- * cannot read it — which equally means the browser cannot put it in a
+ * cannot read it - which equally means the browser cannot put it in a
  * handshake. `POST /api/realtime/ticket` resolves that: it mints a
  * short-lived, single-use credential the page may safely hold.
  *
  * Returning null keeps the transport dormant, which is what should happen if
- * the ticket cannot be obtained — a socket is not worth degrading the token's
+ * the ticket cannot be obtained - a socket is not worth degrading the token's
  * confinement for.
  */
 export interface RealtimeCredentialProvider {

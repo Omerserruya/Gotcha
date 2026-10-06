@@ -48,7 +48,7 @@ export const QUEUE_CAP = 50;
 /**
  * ★ THE KEYSET SHAPE, AND `hasMore` IS LOAD-BEARING ON SCREEN.
  *
- * Passing `cursor` switches the route from offset to keyset — ordered
+ * Passing `cursor` switches the route from offset to keyset - ordered
  * `{ lastMessageAt: desc, nulls: last }` with a `(timestamp, id)` tiebreak,
  * so a new message between pages no longer skips a row.
  *
@@ -67,7 +67,7 @@ const queuePageSchema = z.object({
    * ════════════════════════════════════════════════════════════════════════
    * ★★ OPTIONAL, AND ABSENT IS NOT ZERO
    * ════════════════════════════════════════════════════════════════════════
-   * How many conversations in THIS VIEW have no `lastMessageAt` — scoped to
+   * How many conversations in THIS VIEW have no `lastMessageAt` - scoped to
    * the caller's filters including the visibility clause, and deliberately
    * **cursor-blind**, so it does not shrink as somebody pages.
    *
@@ -79,7 +79,7 @@ const queuePageSchema = z.object({
    *
    * `.optional()` and never `.default(0)`. A default would have the screen
    * assert *"no undated conversations"* on a service that cannot answer the
-   * question — the reassuring-direction failure, on the one instrument built
+   * question - the reassuring-direction failure, on the one instrument built
    * to detect a problem that is otherwise invisible. **The instrument would
    * report all-clear because it is not there.**
    *
@@ -96,7 +96,7 @@ const queuePageSchema = z.object({
  *
  * ★ THE COMPONENT TESTS CANNOT SEE THIS. They pass `undatedCount` straight
  * into the component, so `.optional()` versus `.default(0)` is invisible to
- * them — a mutation swapping the two passed every one of them. The
+ * them - a mutation swapping the two passed every one of them. The
  * distinction lives in the parse and has to be asserted there.
  *
  * Same shape as a test double being more forgiving than the real thing: the
@@ -110,15 +110,15 @@ const streamPageSchema = z.object({
 });
 
 /**
- * Everything about the OPEN conversation — the second round.
+ * Everything about the OPEN conversation - the second round.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ A PROMISE ON `InboxData`, NOT A FIELD THE PAGE WAITS FOR
  * ════════════════════════════════════════════════════════════════════════════
  * Omer: *"Why does it take time to load each conversation?"* The page awaited
  * this round before painting anything, so a click showed nothing until the
- * slowest of four reads returned. It is started here — it runs while the page
- * renders — and read inside `<Suspense>`: the frame, the queue and the header
+ * slowest of four reads returned. It is started here - it runs while the page
+ * renders - and read inside `<Suspense>`: the frame, the queue and the header
  * paint at once, and the conversation streams in when it is ready.
  *
  * ★ It never rejects. Each read catches its own failure, as before, so a
@@ -130,7 +130,7 @@ export interface ConversationDetail {
   readonly orders: CommerceContextResponse | null;
   /*
    * ⚠ NO SUGGESTIONS HERE. This promise is re-run on every `router.refresh()`
-   *   — a delivery change, a new message — and Omer's rule is one read on
+   *   - a delivery change, a new message - and Omer's rule is one read on
    *   open, then only the realtime event or "Try again". The wall's
    *   `SuggestionCarousel` reads them itself.
    */
@@ -138,18 +138,18 @@ export interface ConversationDetail {
 
 export interface InboxData {
   readonly rows: readonly ConversationRow[] | null;
-  /** More pages exist. `false` when the read failed — we claim nothing. */
+  /** More pages exist. `false` when the read failed - we claim nothing. */
   readonly hasMore: boolean;
   readonly nextCursor: string | null;
   /**
    * Undated conversations in this view, or `undefined` when the service
-   * cannot answer. Never zero by default — see the schema.
+   * cannot answer. Never zero by default - see the schema.
    */
   readonly undatedCount: number | undefined;
   readonly open: ConversationRow | null;
   /**
    * `?c=` named a conversation and it could not be opened: `unavailable`
-   * (404/403 — gone, or not this person's to see), `failed` (any other
+   * (404/403 - gone, or not this person's to see), `failed` (any other
    * error). `null` when nothing was asked for, or it opened.
    */
   readonly missing: 'unavailable' | 'failed' | null;
@@ -182,11 +182,11 @@ export async function loadInbox(
    * ⚠⚠ THIS WAS THREE ROUNDS DEEP AND ONLY TWO OF THEM WERE NECESSARY
    * ═════════════════════════════════════════════════════════════════════════
    * Measured 2026-10-01: the inbox's time-to-first-byte is 738 ms against a
-   * 317 ms floor for a page with little data — **420 ms of fetching**, with
+   * 317 ms floor for a page with little data - **420 ms of fetching**, with
    * zero API calls from the browser. All of it is this function.
    *
    * `queue` was awaited ALONE, then `me`/`colleagues`/`greeting` waited behind
-   * it — and **none of those three reads anything from the queue.** They sat
+   * it - and **none of those three reads anything from the queue.** They sat
    * one full server-to-server round trip behind a result they do not use.
    *
    * ★ THE SECOND ROUND BELOW IS GENUINELY DEPENDENT AND STAYS. `open` is
@@ -195,13 +195,13 @@ export async function loadInbox(
    *   this one was not.
    *
    * ★ SAFE TO MERGE BECAUSE EVERY CALL CATCHES ITS OWN FAILURE. All four
-   *   resolve — `queue` to null, `me` to null, `colleagues` to [], `greeting`
-   *   to null — so a `Promise.all` over them cannot reject, and each degraded
+   *   resolve - `queue` to null, `me` to null, `colleagues` to [], `greeting`
+   *   to null - so a `Promise.all` over them cannot reject, and each degraded
    *   value still means exactly what it meant before.
    *
    * ⚠ `load-inbox.test.ts` asserts that all four are IN FLIGHT before any
    *   settles. Every other test of this function passes either way, because
-   *   the data is identical — only the order is the fix, so only a test about
+   *   the data is identical - only the order is the fix, so only a test about
    *   order protects it.
    */
   /*
@@ -222,7 +222,7 @@ export async function loadInbox(
    * ════════════════════════════════════════════════════════════════════════
    * "Assigned to me" needs `assignedAgentId=<the viewer's platform id>`, and
    * only `/auth/me` knows it. So for that view the queue chains off `meRead`.
-   * Every other view starts its queue immediately — four reads in flight,
+   * Every other view starts its queue immediately - four reads in flight,
    * exactly as `load-inbox.test.ts` asserts.
    *
    * ★ `colleagues` and `greeting` run alongside `me` either way: neither reads
@@ -235,7 +235,7 @@ export async function loadInbox(
           .get({
             endpoint: inboxEndpoints.list(),
             payload: queuePageSchema,
-            // `data` sits beside `page` — checked, not assumed.
+            // `data` sits beside `page` - checked, not assumed.
             raw: true,
             /*
              * ★ KEYSET, NOT OFFSET. `cursor` switches the route over; the first
@@ -243,7 +243,7 @@ export async function loadInbox(
              * start rather than falling back to `skip`.
              *
              * Offset on a recency ordering shows a duplicate and silently skips a
-             * row when a new message arrives between pages — somebody waiting who
+             * row when a new message arrives between pages - somebody waiting who
              * never appears. That is why this waited for the keyset rather than
              * scrolling on offset.
              */
@@ -294,7 +294,7 @@ export async function loadInbox(
 
   /*
    * The conversation to show. An explicit id wins; otherwise the first row
-   * the queue gave us — and NOT the first undated one, which has no claim to
+   * the queue gave us - and NOT the first undated one, which has no claim to
    * being most recent.
    */
   const listed = (conversationId ? rows?.find((r) => r.id === conversationId) : rows?.[0]) ?? null;
@@ -315,7 +315,7 @@ export async function loadInbox(
     nextCursor: queue?.page.nextCursor ?? null,
     /*
      * `?? undefined` and never `?? 0`. A failed read and a service that
-     * cannot count are the same fact here — nobody looked — and both must
+     * cannot count are the same fact here - nobody looked - and both must
      * stay distinguishable from a service that looked and found none.
      */
     undatedCount: queue?.undatedCount,
@@ -394,7 +394,7 @@ export async function loadConversation(conversationId: string): Promise<Conversa
      * ★★ NOT READ, AND NOT BECAUSE IT FAILED.
      *
      * The identity reads are keyed on a CONTACT id. `Conversation` has none
-     * — it carries `customerExternalId` and `channel`, the handle this
+     * - it carries `customerExternalId` and `channel`, the handle this
      * conversation arrived on. `resolveContactByChannelId` exists as a
      * shared function used by two services and **is not routed as a GET**,
      * so there is nothing to call.

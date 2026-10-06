@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * ★★ 02'S WEIGHTS STOP AT 600 — EXCEPT THE WORDMARK.
+ * ★★ 02'S WEIGHTS STOP AT 600 - EXCEPT THE WORDMARK.
  *
- * Measured over 02's source: 600 ×535, 500 ×441, 400 ×51, and 700 ×69 — every
+ * Measured over 02's source: 600 ×535, 500 ×441, 400 ×51, and 700 ×69 - every
  * one of the 700s the GOTCHA wordmark (tracked .22/.24em). Two holes let
  * 700 in: a module setting it, and the browser's own bold on a heading,
  * `b`, `strong` or `th` that no module weighed. One test for each.
@@ -42,7 +42,7 @@ describe('★★ nothing above 600 but the wordmark', () => {
     expect(found).toEqual([]);
   });
 
-  it('★ the browser’s own bold is reset to 600 — headings, b, strong, th', () => {
+  it('★ the browser’s own bold is reset to 600 - headings, b, strong, th', () => {
     const reset = readFileSync(join(ROOT, 'design-system/styles/reset.css'), 'utf8').replace(
       /\/\*[\s\S]*?\*\//g,
       '',

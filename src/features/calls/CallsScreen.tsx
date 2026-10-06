@@ -12,7 +12,7 @@ import { dialable, pastedNumber } from './dial';
 import styles from './Calls.module.css';
 
 /**
- * Screen 05d — phone calls, measured.
+ * Screen 05d - phone calls, measured.
  *
  * A 400 dialer card (02 draws it in focus, `#C9BCF7`) beside a 724 column:
  * the week's four figures, then the recent calls with their filters and a
@@ -20,7 +20,7 @@ import styles from './Calls.module.css';
  *
  * ⚠ NOTHING HERE PLACES A CALL. "Start a call", "Call Dana" and "Let GOTCHA
  * call her" would ring a real phone; like Send, that waits on Omer. The
- * search is live — it reads the customers list's own search — and the
+ * search is live - it reads the customers list's own search - and the
  * buttons are drawn and not live.
  */
 
@@ -31,7 +31,7 @@ export function parseCallFilter(raw: string | undefined): CallFilter {
   return (CALL_FILTERS as readonly string[]).includes(raw ?? '') ? (raw as CallFilter) : 'all';
 }
 
-/** Missed: an inbound call nobody answered. `answeredAt`, never `status` — see `wasAnswered`. */
+/** Missed: an inbound call nobody answered. `answeredAt`, never `status` - see `wasAnswered`. */
 export function isMissed(call: Call): boolean {
   return call.direction === 'inbound' && !wasAnswered(call);
 }
@@ -43,9 +43,9 @@ export function keepCall(call: Call, filter: CallFilter): boolean {
   return true;
 }
 
-/** "3m 12s", "52s" — 02's mono duration. Null is "—", never "0s". */
+/** "3m 12s", "52s" - 02's mono duration. Null is "-", never "0s". */
 export function callDuration(ms: number | null): string {
-  if (ms === null) return '—';
+  if (ms === null) return '-';
   const seconds = Math.round(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   return minutes > 0 ? `${minutes}m ${String(seconds % 60).padStart(2, '0')}s` : `${seconds}s`;
@@ -62,12 +62,12 @@ export async function DialerCard({
   /**
    * Whether the workspace can place a call at all: voice off, or on with no
    * number, is said on the Call button rather than refused after the click.
-   * Unknown is not a refusal — the route says.
+   * Unknown is not a refusal - the route says.
    */
   readonly line?: 'ok' | 'off' | 'noNumber';
   /** `null` when the search failed; empty when nobody matched. */
   readonly results: readonly CustomerRow[] | null;
-  /** Who went quiet — 02's first list; `null` when unread. */
+  /** Who went quiet - 02's first list; `null` when unread. */
   readonly quiet?: { readonly count: number; readonly capped: boolean } | null;
 }) {
   const t = await getTranslations('calls');
@@ -129,7 +129,7 @@ export async function DialerCard({
                       {row.displayName ?? displayHandle('VOICE', row.phone ?? row.externalId)}
                     </span>
                     <span className={styles.dialerLine}>
-                      {row.phone ? displayHandle('VOICE', row.phone) : (row.email ?? '—')}
+                      {row.phone ? displayHandle('VOICE', row.phone) : (row.email ?? '-')}
                     </span>
                   </span>
                   {/* 02's "Trade": the merchant's own tag on the person. */}
@@ -141,8 +141,8 @@ export async function DialerCard({
         )}
 
         {/*
-          02's "Or have GOTCHA call a list". The list is real — who went quiet
-          — and opens on Customers; GOTCHA calling it is not built, so the row
+          02's "Or have GOTCHA call a list". The list is real - who went quiet
+          - and opens on Customers; GOTCHA calling it is not built, so the row
           names the people and promises no call ("It asks one question…").
         */}
         <p className={`${styles.dialerEyebrow} ${styles.dialerEyebrowRule}`}>{t('dialer.lists')}</p>
@@ -177,7 +177,7 @@ export async function DialerCard({
       </div>
 
       <footer className={styles.dialerFoot}>
-        {/* 05d: live — the chosen person's phone, or a number pasted as it is. */}
+        {/* 05d: live - the chosen person's phone, or a number pasted as it is. */}
         <CallButton
           to={chosen ? dialable(chosen.phone) : pastedNumber(query)}
           blocked={
@@ -204,15 +204,15 @@ export async function CallStats({ week }: { readonly week: CallSummary | null })
   const t = await getTranslations('calls');
   const format = await getFormatter();
   const cells = [
-    { key: 'week', value: week ? format.number(week.total) : '—' },
+    { key: 'week', value: week ? format.number(week.total) : '-' },
     // Nothing records who answered: GOTCHA or a person.
-    { key: 'gotchaAnswered', value: '—' },
+    { key: 'gotchaAnswered', value: '-' },
     {
       key: 'average',
-      value: week && week.averageDurationMs !== null ? callDuration(week.averageDurationMs) : '—',
+      value: week && week.averageDurationMs !== null ? callDuration(week.averageDurationMs) : '-',
     },
     // Nothing ties a call to a sale.
-    { key: 'sale', value: '—' },
+    { key: 'sale', value: '-' },
   ] as const;
   return (
     <dl className={styles.stats} data-testid="call-stats">
@@ -233,9 +233,9 @@ export type CallsState = 'unknown' | 'off' | 'failed' | 'noNumber' | 'none' | 'o
  * 02's recent calls: direction, the person, the length, what came of it,
  * when, and the transcript.
  *
- * ⚠ "What came of it" is the call's own fact, not 02's summary sentence —
+ * ⚠ "What came of it" is the call's own fact, not 02's summary sentence -
  * no outcome summary is stored per call. Nobody picked up, it failed, or it
- * was answered and nothing more is known ("—").
+ * was answered and nothing more is known ("-").
  */
 export async function RecentCalls({
   calls,
@@ -252,7 +252,7 @@ export async function RecentCalls({
   const shown = calls.filter((call) => keepCall(call, filter));
 
   const when = (iso: string | null) => {
-    if (!iso) return '—';
+    if (!iso) return '-';
     const at = new Date(iso);
     const days = Math.floor(
       (new Date(now.toDateString()).getTime() - new Date(at.toDateString()).getTime()) / 86_400_000,
@@ -270,7 +270,7 @@ export async function RecentCalls({
     if (call.direction === 'outbound' && !wasAnswered(call)) {
       return { text: t('outcome.notAnswered'), tone: 'missed' };
     }
-    return { text: '—', tone: 'ok' };
+    return { text: '-', tone: 'ok' };
   };
 
   return (

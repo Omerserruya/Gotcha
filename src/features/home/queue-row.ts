@@ -2,7 +2,7 @@
  * The pure parts of a queue row.
  *
  * Separated so they can be tested without standing up a Server Component and
- * a translation runtime — these are the two places the row can quietly get a
+ * a translation runtime - these are the two places the row can quietly get a
  * customer's identity or their waiting time wrong.
  */
 
@@ -27,7 +27,7 @@ export function waitLabel(
    *
    * This capped at hours, so a row waiting two months read as a three- or
    * four-digit hour count. The same defect as the inbox queue's `47061m` and
-   * Home's activity card `1444h` — third unit, third screen, one cause: a
+   * Home's activity card `1444h` - third unit, third screen, one cause: a
    * scale that ends at the largest unit somebody happened to need.
    *
    * On the first screen a merchant opens, where the whole point of the number

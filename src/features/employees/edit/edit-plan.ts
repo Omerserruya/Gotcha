@@ -1,16 +1,16 @@
 import type { Employee } from '@/api/contracts/employees';
 
 /**
- * 07f — what "Edit an employee" can change, and the body Save would send.
+ * 07f - what "Edit an employee" can change, and the body Save would send.
  *
  * Each field is one of `PATCH /api/ai-agents/:id`'s allow-list, under its own
  * name:
  *
- *   responsibility   `identity.responsibility` — the whole `identity` is
+ *   responsibility   `identity.responsibility` - the whole `identity` is
  *                    sent back, since PATCH replaces the object
  *   tone             `tone`
- *   languages        `languages` — `{ english, hebrew, arabic }`
- *   handover         `escalationRules` — each rule as read (`type` and
+ *   languages        `languages` - `{ english, hebrew, arabic }`
+ *   handover         `escalationRules` - each rule as read (`type` and
  *                    `value` included), with `enabled` as the box says
  *
  * Save is drawn, not live, until Omer approves editing a working employee.

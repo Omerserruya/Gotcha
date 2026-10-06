@@ -49,7 +49,7 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
    * The gate used to send visitors to `/api/auth/login`, which starts the OIDC
    * flow immediately and lands on the identity provider's own page. **So nobody
    * ever saw the sign-in screen this application has.** It was reachable only by
-   * typing its URL — and every walk did exactly that, photographed the panel, and
+   * typing its URL - and every walk did exactly that, photographed the panel, and
    * reported it working.
    *
    * A test for "an unauthenticated request redirects" would have passed
@@ -73,8 +73,8 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
   it('⚠⚠ carries `returnTo`, or "back to where you were" is broken', () => {
     /*
      * The design requires that signing in returns somebody to the exact
-     * conversation they were reading. That round trip now has an extra hop — the
-     * panel — and `returnTo` has to survive it, because the panel appends it to
+     * conversation they were reading. That round trip now has an extra hop - the
+     * panel - and `returnTo` has to survive it, because the panel appends it to
      * the `/api/auth/login` it eventually calls.
      */
     const { location } = redirectFor('/en/inbox?c=abc');
@@ -105,7 +105,7 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
      *
      * ★ This app's cookie is `gotcha_session`, and the gate matches on
      *   `endsWith('_session')`. The first version of this test used
-     *   `gotcha_session_dev` — the LEGACY product's name, which ends in `_dev`
+     *   `gotcha_session_dev` - the LEGACY product's name, which ends in `_dev`
      *   and does not match. My fixture was wrong, not the gate; noted because it
      *   is the same prefix-versus-suffix trap that has cost two wrong readings
      *   today.
@@ -121,11 +121,11 @@ describe('⚠⚠ an unauthenticated visitor reaches OUR sign-in screen', () => {
      * ════════════════════════════════════════════════════════════════════════
      * Where `/v2` sends somebody depends on whether they have a session. A
      * stored copy sends a signed-out user onward by an entry recorded while
-     * they were signed in — and when this destination changed today, browsers
+     * they were signed in - and when this destination changed today, browsers
      * went on replaying the old one for an hour after the server had moved.
      *
      * ★ The precise claim, because the loose one is wrong: a bare 307 is NOT
-     *   heuristically cacheable — RFC 9111 §4.2.2 lists 200, 203, 204, 206,
+     *   heuristically cacheable - RFC 9111 §4.2.2 lists 200, 203, 204, 206,
      *   300, 301, 308, 404, 405, 410, 414, 501, and 307 is absent. This header
      *   speaks to the browser's own back/forward and in-memory caches, which
      *   obey `no-store` and do not consult that list.
@@ -165,7 +165,7 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
    * `PLATFORM_LOGIN_URL` means "do not use our panel at all". `SIGN_IN_URL`
    * means "our panel, on another host". Borrowing one variable for both would
    * make a deployment that wanted the second silently get the first, and the
-   * symptom would be somebody landing on the legacy product’s login — which
+   * symptom would be somebody landing on the legacy product’s login - which
    * looks like a working sign-in.
    */
   const gate = async (
@@ -199,7 +199,7 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
 
   it('⚠⚠ carries `returnTo` across the origin, or every deep link is lost', async () => {
     /*
-     * The round trip the design requires now crosses TWO origin boundaries —
+     * The round trip the design requires now crosses TWO origin boundaries -
      * here, and again when the panel hands over. Each hop has to keep it, and
      * a test of only the same-host form passed while this one dropped it.
      */
@@ -228,9 +228,9 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
      * POINTING THE GATE ELSEWHERE RELOCATES THE PANEL. IT DOES NOT REMOVE THIS
      * ONE.
      * ═══════════════════════════════════════════════════════════════════════════
-     * `/en/sign-in` would go on rendering a password field — working perfectly,
+     * `/en/sign-in` would go on rendering a password field - working perfectly,
      * reachable by bookmark, by an old link, or by the callback’s own
-     * `?error=expired` redirect — on the origin whose CSP is measured to allow
+     * `?error=expired` redirect - on the origin whose CSP is measured to allow
      * `unsafe-inline`, `unsafe-eval` and a third-party script host.
      *
      * Moving the panel to a clean origin and leaving a working copy on the
@@ -247,7 +247,7 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
 
   it('⚠⚠ carrying the whole query, not the parameters somebody listed', async () => {
     /*
-     * `error` arrives here too — the OIDC callback redirects to THIS path with
+     * `error` arrives here too - the OIDC callback redirects to THIS path with
      * `?error=expired`. A named list of the parameters we thought of is the
      * shape that drops the next one silently, and the symptom would be a
      * person sent back to a sign-in screen that has forgotten why.
@@ -264,7 +264,7 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
   it('⚠⚠ a same-origin target is ignored rather than looping on the front door', async () => {
     /*
      * `SIGN_IN_URL` naming this host would send `/sign-in` to itself, or to a
-     * form `intlMiddleware` bounces straight back — an inescapable redirect
+     * form `intlMiddleware` bounces straight back - an inescapable redirect
      * chain on the first page anybody sees. The variable exists for another
      * origin, so a value that is not one is a misconfiguration, and the safe
      * reading is today’s behaviour.
@@ -280,7 +280,7 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
     /*
      * The other loop. If both variables were ever present on the auth build it
      * would redirect sign-in away from the only host that serves it. Excluded
-     * by construction — `PRODUCT_LOGIN_URL` means "I am the sign-in origin" —
+     * by construction - `PRODUCT_LOGIN_URL` means "I am the sign-in origin" -
      * and asserted, because "by construction" is a claim.
      */
     const { status } = await gate(
@@ -304,8 +304,8 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
      * public host because nginx passes `Host` through, and "usually" is not
      * something to rest a loop guard on.
      *
-     * This is the case a container probe cannot construct — it cannot stand
-     * where the code stands — and it is trivial here, which is the division of
+     * This is the case a container probe cannot construct - it cannot stand
+     * where the code stands - and it is trivial here, which is the division of
      * labour rather than a gap.
      */
     const { status } = await gate({ SIGN_IN_URL: AUTH_SIGN_IN }, '/en/sign-in', {
@@ -332,7 +332,7 @@ describe('⚠⚠ the gate can send people to a sign-in screen on another origin'
 
   it('★★ and unset is today’s behaviour, unchanged', async () => {
     // Both directions. A gate that always used a configured URL would be
-    // broken on every deployment that has none — which is all of them today.
+    // broken on every deployment that has none - which is all of them today.
     const { status, location } = await gate({});
     expect(status).toBe(307);
     expect(new URL(location, 'https://dev.gotcha.co.il').pathname).toBe('/sign-in');
@@ -346,7 +346,7 @@ describe('⚠⚠ on the auth origin, this build serves sign-in and nothing else'
    * A SECOND REFUSAL, BECAUSE THE FIRST ONE IS ONE NGINX RULE
    * ═══════════════════════════════════════════════════════════════════════════
    * A root-mounted build compiles every route, so the gateway allowlist is a
-   * security control — and its first version permitted `/sign-in` while the
+   * security control - and its first version permitted `/sign-in` while the
    * app answered 307 to `/en/sign-in`, so the screen 404’d behind a redirect
    * that looked fine. These assert the app refuses too.
    *
@@ -375,7 +375,7 @@ describe('⚠⚠ on the auth origin, this build serves sign-in and nothing else'
   it('⚠⚠ refuses every product route, including ones nobody listed', async () => {
     /*
      * The last two matter most. An allowlist that covers the routes we thought
-     * of and leaks the one we did not passes every test built from the list —
+     * of and leaks the one we did not passes every test built from the list -
      * and the list is the thing most likely to be incomplete.
      */
     for (const path of [
@@ -395,7 +395,7 @@ describe('⚠⚠ on the auth origin, this build serves sign-in and nothing else'
   it('⚠⚠ refuses rather than redirecting, so nothing leaks across origins', async () => {
     /*
      * A 307 to the product would also "not serve" the route, and would mean
-     * the isolation is one `Location` header from gone — and it would tell an
+     * the isolation is one `Location` header from gone - and it would tell an
      * unauthenticated visitor that the route exists and where.
      */
     const { location } = await stubbed(AUTH_BUILD, '/en/inbox');
@@ -422,7 +422,7 @@ describe('⚠⚠ on the auth origin, this build serves sign-in and nothing else'
     /*
      * The failure mode that made a boolean flag the wrong shape: a value on the
      * wrong image 404s the whole product. Deriving it makes that unconstructible
-     * — but unconstructible is a claim, and this is the assertion.
+     * - but unconstructible is a claim, and this is the assertion.
      */
     expect((await stubbed({}, '/en/home', 'gotcha_session=abc')).status).not.toBe(404);
     expect((await stubbed({}, '/en/inbox', 'gotcha_session=abc')).status).not.toBe(404);
@@ -440,8 +440,8 @@ describe('⚠⚠ the variable that triggers the refusal can never be baked into 
    * ═══════════════════════════════════════════════════════════════════════════
    * `PRODUCT_LOGIN_URL` on the product’s own deployment 404s every route in the
    * product. Deriving the refusal from it rather than from a flag makes that
-   * combination nonsense — you would be telling the product where the product
-   * is — but nonsense is not the same as impossible.
+   * combination nonsense - you would be telling the product where the product
+   * is - but nonsense is not the same as impossible.
    *
    * ★ An `ENV` line in the Dockerfile would put it in EVERY container from that
    *   image, which is the one way it could arrive without anybody choosing it
@@ -461,7 +461,7 @@ describe('⚠⚠ the variable that triggers the refusal can never be baked into 
   it('★ and the example file ships it commented out', () => {
     /*
      * `.env.example` is copied by people starting from it. An uncommented line
-     * there is how a local run — or a deployment assembled from it — acquires
+     * there is how a local run - or a deployment assembled from it - acquires
      * the variable without anybody deciding to.
      */
     const example = readFileSync('.env.example', 'utf8');
@@ -478,7 +478,7 @@ describe('★★ the narrower policy reaches the page that has a password on it'
   it('★★ and every other page keeps it, or avatars break', () => {
     /*
      * Both directions. A narrowing that leaked into the product would stop
-     * customer photos loading and read as a backend failure — and a test that
+     * customer photos loading and read as a backend failure - and a test that
      * only checked sign-in could not tell the two apart.
      */
     expect(directive(cspFor('/en/home'), 'img-src')).toContain('https:');
@@ -488,8 +488,8 @@ describe('★★ the narrower policy reaches the page that has a password on it'
   it('★★ matches sign-in with and without a locale, and with a trailing slash', () => {
     /*
      * The pattern decides both the auth gate and now the policy. A locale it does
-     * not match would be a sign-in page that is ALSO treated as private — an
-     * infinite redirect — so this list is not cosmetic.
+     * not match would be a sign-in page that is ALSO treated as private - an
+     * infinite redirect - so this list is not cosmetic.
      */
     for (const path of ['/sign-in', '/en/sign-in', '/he/sign-in', '/en/sign-in/']) {
       expect(directive(cspFor(path), 'img-src'), path).toEqual(["'self'", 'data:']);
@@ -499,7 +499,7 @@ describe('★★ the narrower policy reaches the page that has a password on it'
   it('★★ does not match a path that merely starts with the same letters', () => {
     /*
      * `/sign-in-help` is not the sign-in page. A prefix match here would hand a
-     * narrower policy to an unrelated route — and, through the same pattern,
+     * narrower policy to an unrelated route - and, through the same pattern,
      * make it public. Prefix collisions have already cost a wrong count on the
      * security screen this week.
      */
@@ -515,7 +515,7 @@ describe('★★ the narrower policy reaches the page that has a password on it'
   });
 });
 
-describe('★★ 13c — which paths get Meta’s frames', () => {
+describe('★★ 13c - which paths get Meta’s frames', () => {
   it.each([
     ['/en/settings/channels', true],
     ['/he/settings/channels/whatsapp', true],

@@ -3,7 +3,7 @@
  *
  * ⚠ Sealing runs on Node's WebCrypto. Under jsdom, `TextEncoder` yields a
  *   Uint8Array from another realm and jose's own `instanceof` check rejects
- *   it — a jsdom artifact, not a real failure.
+ *   it - a jsdom artifact, not a real failure.
  *
  * ★ This is recorded verbatim at the top of `session.test.ts`, and I wrote
  *   this file without reading its sibling. The answer was already in the
@@ -30,14 +30,14 @@ const { sealIdToken, unsealIdToken, idTokenCookieOptions, ID_TOKEN_COOKIE, MAX_C
  * ════════════════════════════════════════════════════════════════════════════
  * ⚠⚠ THE 4 KB LIMIT IS PER COOKIE, NOT PER DOMAIN
  * ════════════════════════════════════════════════════════════════════════════
- * `sessionSchema` recorded that the id token is "deliberately NOT kept here —
+ * `sessionSchema` recorded that the id token is "deliberately NOT kept here -
  * see MAX_COOKIE_BYTES". That was true of the SESSION cookie and the
- * conclusion drawn from it — that we could not keep one at all — does not
+ * conclusion drawn from it - that we could not keep one at all - does not
  * follow. A second cookie has its own ceiling.
  *
  * The cost of not having it: RP-initiated logout can only offer `client_id`,
  * which says which application is asking but not who, so the provider asks the
- * person to confirm — on its own page, in its own vocabulary, with a button
+ * person to confirm - on its own page, in its own vocabulary, with a button
  * reading "Log out of GOTCHA" on a screen reached by logging out.
  */
 describe('⚠⚠ the id token survives a round trip and nothing else does', () => {
@@ -49,7 +49,7 @@ describe('⚠⚠ the id token survives a round trip and nothing else does', () =
   it('⚠⚠ fits a realistic token inside one cookie, with room', async () => {
     /*
      * ★ The number that was the open question. An Authentik id token is a
-     *   signed JWT of roughly 800–1,300 characters; this is a generous one.
+     *   signed JWT of roughly 800-1,300 characters; this is a generous one.
      *   Measured here rather than assumed, because "almost certainly fits" is
      *   the kind of claim today has punished.
      */
@@ -66,7 +66,7 @@ describe('⚠⚠ the id token survives a round trip and nothing else does', () =
     /*
      * A truncated `id_token_hint` is worse than an absent one: the provider
      * cannot verify it and its behaviour on a malformed hint is unspecified.
-     * The caller omits the cookie and falls back to `client_id` — a
+     * The caller omits the cookie and falls back to `client_id` - a
      * confirmation screen, which is a cost, where a broken hint risks a
      * sign-out that does not sign out.
      */

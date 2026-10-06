@@ -19,7 +19,7 @@ import { logger } from '@/observability/logger';
  * themselves, which is right. The second should send them to somebody who can
  * change the plan. The third should make them try again.
  *
- * This is the house rule — *an empty result must say whether anyone looked* —
+ * This is the house rule - *an empty result must say whether anyone looked* -
  * with a fourth case, because "looked and was refused" splits into "your plan"
  * and "the product does not have it".
  */
@@ -36,7 +36,7 @@ export type CopilotRead =
  * The client unwraps any top-level `data`, which is right for the envelope shape
  * and wrong here: without `raw` the mode is silently discarded, and the mode is
  * what decides which panel this is. Same trap as the automations list, different
- * shape — there `data` was absent entirely, here it has a sibling.
+ * shape - there `data` was absent entirely, here it has a sibling.
  */
 export async function loadCopilot(conversationId: string): Promise<CopilotRead> {
   try {

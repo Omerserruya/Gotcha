@@ -25,7 +25,7 @@ const template = (over: Partial<Template> = {}): Template => ({
   channel: 'WHATSAPP',
   channelAccountId: null,
   category: 'marketing',
-  body: 'Hi {{1}} — the {{2}} is back.',
+  body: 'Hi {{1}} - the {{2}} is back.',
   footer: null,
   status: 'APPROVED',
   rejectionReason: null,
@@ -46,7 +46,7 @@ describe('approval is a WhatsApp concept, not a template concept', () => {
   });
 
   it('needs approval when the channel is null, which means every channel', () => {
-    // A template usable anywhere inherits the strictest case — it could be
+    // A template usable anywhere inherits the strictest case - it could be
     // sent on WhatsApp, so it is subject to WhatsApp's review.
     expect(needsApproval(template({ channel: null }))).toBe(true);
   });
@@ -58,7 +58,7 @@ describe('approval is a WhatsApp concept, not a template concept', () => {
   it('reports an email template as exempt, never as approved', () => {
     /*
      * The design lists "Email only" beside "Ready to send", which reads as
-     * though somebody approved it. Nobody did — there is no reviewer. This is
+     * though somebody approved it. Nobody did - there is no reviewer. This is
      * the `succeeded: null` rendering as `false` mistake in another costume:
      * an absent question presented as an answered one.
      */
@@ -68,7 +68,7 @@ describe('approval is a WhatsApp concept, not a template concept', () => {
   });
 });
 
-describe('templateStance — five, because the design forgot one', () => {
+describe('templateStance - five, because the design forgot one', () => {
   it('maps the three the design drew', () => {
     expect(templateStance(template({ status: 'APPROVED' }))).toBe('ready');
     expect(templateStance(template({ status: 'PENDING_APPROVAL' }))).toBe('reviewing');
@@ -77,7 +77,7 @@ describe('templateStance — five, because the design forgot one', () => {
 
   it('gives DRAFT a state of its own', () => {
     // Written and never submitted. Real and common, and with no row in the
-    // design — so it would have rendered blank or borrowed a wrong label.
+    // design - so it would have rendered blank or borrowed a wrong label.
     expect(templateStance(template({ status: 'DRAFT' }))).toBe('unsent');
   });
 
@@ -88,7 +88,7 @@ describe('templateStance — five, because the design forgot one', () => {
 
 describe('localisations are rows, not a field', () => {
   it('gathers languages that share a name', () => {
-    // `@@unique([tenantId, name, language, channel])` — there is no
+    // `@@unique([tenantId, name, language, channel])` - there is no
     // `translations` field to be missing; this is a grouping.
     const groups = groupByName([
       template({ id: 'a', language: 'en' }),
@@ -118,7 +118,7 @@ describe('localisations are rows, not a field', () => {
 describe('a template carries nothing that could become a false claim', () => {
   it('exposes no ETA, no rewrite, no usage and no reply rate', () => {
     // None has a source. The `broadcasts` relation would give usage and reply
-    // rate, and the list route has no `include` — so a field here would be
+    // rate, and the list route has no `include` - so a field here would be
     // inventing what an endpoint has not yet been asked for.
     const surface = Object.keys(templateSchema.parse(template()));
     expect(
@@ -140,11 +140,11 @@ describe('a template carries nothing that could become a false claim', () => {
 });
 
 describe('★★ 05c’s preview is made of fields the list always sent', () => {
-  it('★ buttons and variables survive the parse — `z.object` stripped them before', () => {
+  it('★ buttons and variables survive the parse - `z.object` stripped them before', () => {
     const parsed = templateSchema.parse({
       id: 't9',
       name: 'Back in stock',
-      body: 'Hi {{1}} — the {{2}} is back.',
+      body: 'Hi {{1}} - the {{2}} is back.',
       buttons: [{ type: 'QUICK_REPLY', text: 'See it' }, { text: 'Not now' }],
       variables: [
         { key: '1', sample: 'Dana', description: 'The customer' },
@@ -162,10 +162,10 @@ describe('★★ 05c’s preview is made of fields the list always sent', () => 
   });
 });
 
-describe('★ bodyParts — each {{n}} its own part, labelled by sample, then description, then number', () => {
+describe('★ bodyParts - each {{n}} its own part, labelled by sample, then description, then number', () => {
   it('splits and labels', () => {
     const parts = bodyParts({
-      body: 'Hi {{1}} — the {{ 2 }} is back. {{3}}',
+      body: 'Hi {{1}} - the {{ 2 }} is back. {{3}}',
       variables: [
         { key: '1', sample: 'Dana', description: 'The customer' },
         { key: '2', sample: null, description: 'The product' },
@@ -174,7 +174,7 @@ describe('★ bodyParts — each {{n}} its own part, labelled by sample, then de
     expect(parts).toEqual([
       { text: 'Hi ' },
       { key: '1', variable: 'Dana' },
-      { text: ' — the ' },
+      { text: ' - the ' },
       { key: '2', variable: 'The product' },
       { text: ' is back. ' },
       { key: '3', variable: '3' },
@@ -193,7 +193,7 @@ describe('★ bodyParts — each {{n}} its own part, labelled by sample, then de
   });
 });
 
-describe('★★ templateStance — the isActive gate', () => {
+describe('★★ templateStance - the isActive gate', () => {
   it('approved and active is ready; approved and inactive is off', () => {
     expect(templateStance(templateSchema.parse({ id: 'a', name: 'a', status: 'APPROVED' }))).toBe(
       'ready',

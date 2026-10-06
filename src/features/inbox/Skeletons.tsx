@@ -6,7 +6,7 @@ import styles from './Inbox.module.css';
  * The inbox's placeholders, in the shape of what they stand in for.
  *
  * ════════════════════════════════════════════════════════════════════════════
- * ★★ OMER: "CONTENT PLACEHOLDERS" — AND THEY MUST NOT JUMP
+ * ★★ OMER: "CONTENT PLACEHOLDERS" - AND THEY MUST NOT JUMP
  * ════════════════════════════════════════════════════════════════════════════
  * Each one is built to the real thing's measured box, so the content lands in
  * the space the placeholder held:
@@ -68,7 +68,7 @@ export function QueueRowSkeleton() {
 /**
  * The conversation panel: header, stream, composer, and the Copilot wall.
  *
- * `header` replaces the header's placeholder lines with something real — the
+ * `header` replaces the header's placeholder lines with something real - the
  * clicked row's name, which `PendingPane` already has.
  */
 export function ConversationSkeleton({ header }: { readonly header?: ReactNode }) {

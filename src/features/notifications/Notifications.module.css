@@ -1,6 +1,6 @@
 @layer features {
   /*
-   * 01d, measured: the panel floats INSIDE the work surface — the rail stays
+   * 01d, measured: the panel floats INSIDE the work surface - the rail stays
    * as it is. The surface's content fades to .34 under a .18 scrim; drawn
    * here as one layer, the surface colour at 66% under 18% ink.
    */

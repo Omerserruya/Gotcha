@@ -15,7 +15,7 @@ import styles from './Capabilities.module.css';
  * again.
  *
  * ★ HELD IN STATE FROM THE FIRST RENDER. Cleaning the query re-renders the
- * page without it, and the outcome prop goes to `null` — so the page always
+ * page without it, and the outcome prop goes to `null` - so the page always
  * renders this, keyed by system, and the sentence stays until it is closed or
  * another system is opened. Reading the prop each render made it vanish the
  * moment the URL was tidied.

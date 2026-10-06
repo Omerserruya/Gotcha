@@ -17,7 +17,7 @@ import { logger } from '@/observability/logger';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 
 /**
- * 19's GO TO, for conversations: `GET /api/conversations?search=` — the one
+ * 19's GO TO, for conversations: `GET /api/conversations?search=` - the one
  * search the platform has. It matches the customer's name or their channel
  * id (`conversation.service.ts`), across every conversation the viewer may
  * read, automated ones included. Customers and orders are `searchPeople`'s.
@@ -99,14 +99,14 @@ export type OrderMiss =
 
 export type ActionHit = {
   readonly id: string;
-  /** The approval's own sentence — what it would do, to whom. */
+  /** The approval's own sentence - what it would do, to whom. */
   readonly summary: string;
 };
 
 /**
  * 19's customers and DO THIS. GO TO: the contacts search (name, phone or
  * email, by the query's shape) and, for an order number, the store's order's
- * customer. DO THIS: only what can actually be acted on — an approval
+ * customer. DO THIS: only what can actually be acted on - an approval
  * PENDING for one of those people. Nothing is invented from the words: no
  * pending approval, no section.
  */
@@ -162,7 +162,7 @@ export async function searchPeople(query: string): Promise<
 
 /*
  * The palette's two reads, here rather than borrowed from Customers: the
- * shell may not depend on a feature. Same routes, same rules — one field by
+ * shell may not depend on a feature. Same routes, same rules - one field by
  * the query's shape (an "@" is an email; digits and phone punctuation, a
  * phone; else a name), and an order number's customer as a list row.
  */

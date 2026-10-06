@@ -6,9 +6,9 @@ import { Link } from '@/i18n/navigation';
 import styles from './Notifications.module.css';
 import type { ObservedVolume } from './volume';
 
-/** 02's rows, each tied to the event that sends it — or to none. */
+/** 02's rows, each tied to the event that sends it - or to none. */
 /**
- * `about`: 02's static line under the event — what it covers, not data. The
+ * `about`: 02's static line under the event - what it covers, not data. The
  * approval row's line in 02 is a count ("3 so far today"); nothing counts it,
  * so it has none.
  */
@@ -25,14 +25,14 @@ const ROWS = [
 const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
 
 /**
- * Screen 15 — "Tell me when" × In app · Email · WhatsApp, measured.
+ * Screen 15 - "Tell me when" × In app · Email · WhatsApp, measured.
  *
  * ── WHAT A CELL MEANS, BECAUSE THE PLATFORM HAS NO PER-EVENT CHANNELS ──
  * Your preferences are three switches for every event (`inApp`, `email`,
  * `whatsapp`) and one for a single event (`approvals`). So a cell is ON when
- * that channel reaches you at all — and, for approvals, when approvals do.
+ * that channel reaches you at all - and, for approvals, when approvals do.
  * A row with no event behind it ("an action failed", "an AI employee stops
- * working", "complaints spike") sends nothing: its cells are "—", not off.
+ * working", "complaints spike") sends nothing: its cells are "-", not off.
  * Who is told at all is the workspace's rules (their own page, linked from the
  * foot); these only filter what
  * reaches you. Nothing writes preferences from here yet: the switches show
@@ -93,7 +93,7 @@ export async function PreferenceMatrix({
               {CHANNELS.map((channel) => (
                 <span key={channel} className={styles.matrixCell}>
                   {row.event === null || preferences === null ? (
-                    <span className={styles.matrixNone}>—</span>
+                    <span className={styles.matrixNone}>-</span>
                   ) : (
                     <span
                       className={styles.switch}
@@ -130,7 +130,7 @@ export async function PreferenceMatrix({
           <h2 className={styles.prefTitle}>{t('quiet.title')}</h2>
           <p className={styles.prefValue}>
             {preferences === null
-              ? '—'
+              ? '-'
               : preferences.quietHours
                 ? t('quiet.window', preferences.quietHours)
                 : t('quiet.none')}

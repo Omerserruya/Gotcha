@@ -42,7 +42,7 @@ describe('⚠⚠ the last hop, without the provider drawing it', () => {
      * ════════════════════════════════════════════════════════════════════════
      * `/api/auth/login?finish=1` is what redirected here. Returning to it
      * would redirect here again, forever. Going to `authorize` is exactly
-     * what the browser would have done without this component — the worst
+     * what the browser would have done without this component - the worst
      * outcome is the provider's page, which is where we started.
      */
     completeAuthorization.mockResolvedValue({ reason: 'stage', component: 'ak-stage-consent' });
@@ -71,17 +71,17 @@ describe('⚠⚠ the last hop, without the provider drawing it', () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith(AUTHORIZE));
   });
 
-  it('⚠⚠ SHOWS something — it owns the screen for about 2.6 seconds', () => {
+  it('⚠⚠ SHOWS something - it owns the screen for about 2.6 seconds', () => {
     /*
      * ══════════════════════════════════════════════════════════════════
      * THIS TEST USED TO ASSERT THE OPPOSITE, AND IT WAS RIGHT AT THE TIME
      * ══════════════════════════════════════════════════════════════════
-     * "Draws nothing — it is a hop, not a screen", on the reasoning that a
+     * "Draws nothing - it is a hop, not a screen", on the reasoning that a
      * spinner appearing and vanishing reads as a fault. **Measured from the
      * submit click: eight elements on `rgb(18,18,18)` from 2.6s to 5.2s.**
      *
      * ★ The reasoning was about a loader that ANIMATES IN. The conclusion
-     *   drawn from it — draw nothing at all — did not follow, and a reviewer
+     *   drawn from it - draw nothing at all - did not follow, and a reviewer
      *   asked why there is a black screen after sign-in.
      *
      * ★ So it shows the brand and the same sentence the panel uses while its
@@ -98,7 +98,7 @@ describe('⚠⚠ the last hop, without the provider drawing it', () => {
   });
 
   it('★★ and it says the same thing the panel says, not a new sentence', () => {
-    // `signIn.starting` — "One moment." Already bilingual, and the same
+    // `signIn.starting` - "One moment." Already bilingual, and the same
     // situation: a stage machine working between screens.
     completeAuthorization.mockResolvedValue({ reason: 'threw' });
     show();
@@ -150,7 +150,7 @@ describe('⚠⚠ it says what happened in the DOM, not only in a log', () => {
    * THE LOG DID NOT ARRIVE, ANYWHERE
    * ═════════════════════════════════════════════════════════════════════
    * Not the browser console, not either container. So "it ran and gave up"
-   * and "it never ran" were indistinguishable — the same collapse the
+   * and "it never ran" were indistinguishable - the same collapse the
    * four-reason outcome had just fixed one level down.
    *
    * ★ A log must survive a level filter, a sink, a bundle boundary and a
@@ -169,7 +169,7 @@ describe('⚠⚠ it says what happened in the DOM, not only in a log', () => {
   it('★★ is FINDABLE before anything resolves, which `null` was not', async () => {
     /*
      * The distinction that mattered. A component rendering `null` leaves
-     * nothing to look at, so a harness cannot tell it mounted — only that the
+     * nothing to look at, so a harness cannot tell it mounted - only that the
      * page was a different size.
      */
     let release!: (outcome: unknown) => void;
@@ -204,7 +204,7 @@ describe('⚠⚠ it says what happened in the DOM, not only in a log', () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
-  it('⚠ while without it, it still navigates — hold is opt-in', async () => {
+  it('⚠ while without it, it still navigates - hold is opt-in', async () => {
     completeAuthorization.mockResolvedValue({ reason: 'no-flow' });
     show();
     await waitFor(() => expect(replace).toHaveBeenCalledWith(AUTHORIZE));
@@ -218,7 +218,7 @@ describe('⚠⚠ the give-up that had no name', () => {
    * ════════════════════════════════════════════════════════════════════════
    * `completeAuthorization` SUCCEEDING and `followableCompletion` refusing its
    * answer is a fifth outcome. `answer.reason` is undefined on the success
-   * branch, so the attribute rendered empty while the phase said gave-up —
+   * branch, so the attribute rendered empty while the phase said gave-up -
    * the same collapse as the four nulls, one level up, in the code written to
    * fix it.
    */
@@ -236,7 +236,7 @@ describe('⚠⚠ the give-up that had no name', () => {
   it('⚠⚠ so a gave-up is NEVER nameless, whichever branch produced it', async () => {
     /*
      * ★ The general property, asserted as a property rather than case by case.
-     *   A sixth branch added later must not be able to report `""` — which is
+     *   A sixth branch added later must not be able to report `""` - which is
      *   exactly how the fifth arrived.
      */
     for (const answer of [
@@ -278,7 +278,7 @@ describe('⚠⚠ the eighth path: a back button onto a spent authorize URL', () 
    * the hop against a URL already redeemed; the executor cannot complete it,
    * the fallback goes to authorize as designed, and the provider draws a page.
    *
-   * ★ The fallback is not wrong — going to authorize is right when the URL is
+   * ★ The fallback is not wrong - going to authorize is right when the URL is
    *   live. The defect is that a SPENT url stayed reachable.
    */
   const replaceState = vi.fn();

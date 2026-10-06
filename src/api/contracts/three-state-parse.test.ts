@@ -9,7 +9,7 @@ import { importListSchema } from './historical-import';
  * ════════════════════════════════════════════════════════════════════════════
  * A distinction between "none" and "nobody could tell us" lives in a SCHEMA.
  * If every test of it hands a component a value directly, the schema is
- * untested and the mutation that collapses the distinction passes — which is
+ * untested and the mutation that collapses the distinction passes - which is
  * not a gap in coverage but **coverage pointed at the wrong layer, reported
  * as coverage of the right one.**
  *
@@ -20,13 +20,13 @@ import { importListSchema } from './historical-import';
  * assertion anywhere. The rest were already covered where they live.
  */
 
-describe('★★ `toolUsage` — the counters behind "never failed"', () => {
+describe('★★ `toolUsage` - the counters behind "never failed"', () => {
   it('★★ a service that reports neither counter cannot support the claim', () => {
     /*
      * THE DEFECT THIS SWEEP FOUND, AND IT WAS MINE.
      *
      * Both counters shipped as `.default(0)`. A service that does not report
-     * them — every service older than the field — parsed to zeroes, and
+     * them - every service older than the field - parsed to zeroes, and
      * `neverFailed` returned **true**: the screen printed *"never failed"*,
      * which is the exact caption the three-state function exists to prevent.
      *
@@ -67,13 +67,13 @@ describe('★★ `toolUsage` — the counters behind "never failed"', () => {
   });
 });
 
-describe('★ `importList` — required, so absence is not "no imports"', () => {
+describe('★ `importList` - required, so absence is not "no imports"', () => {
   it('★★ a body without `imports` FAILS rather than reading as none', () => {
     /*
      * Screen 08 reads this to decide `everImported`, which separates
      * "nothing contradicted itself" from "nobody has checked". An absent
      * `imports` defaulting to `[]` would say nobody has ever imported, on a
-     * response that did not answer — collapsing the very distinction the
+     * response that did not answer - collapsing the very distinction the
      * field was added for.
      */
     expect(() => importListSchema.parse({})).toThrow();

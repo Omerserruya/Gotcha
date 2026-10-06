@@ -15,7 +15,7 @@ import { AutoPurchase, optionOf } from './AutoPurchase';
 
 const policy = (over: Record<string, unknown> = {}) => autoPurchaseSchema.parse(over);
 
-describe('★ 17c — the stored answer is the marked card', () => {
+describe('★ 17c - the stored answer is the marked card', () => {
   it.each([
     [{ enabled: true }, 'pack'],
     [{ enabled: false, limitBehavior: 'PAYG' }, 'payg'],
@@ -33,8 +33,8 @@ describe('★ 17c — the stored answer is the marked card', () => {
   });
 });
 
-describe('★ 17c — alerts: what is stored, and "—" for what nothing sends', () => {
-  it('the warning threshold is on with the purchase; 02’s other two are "—"', async () => {
+describe('★ 17c - alerts: what is stored, and "-" for what nothing sends', () => {
+  it('the warning threshold is on with the purchase; 02’s other two are "-"', async () => {
     render(
       await AutoPurchase({
         policy: policy({ enabled: true, warningThresholdPct: 80 }),
@@ -42,7 +42,7 @@ describe('★ 17c — alerts: what is stored, and "—" for what nothing sends',
       }),
     );
     expect(screen.getByTestId('auto-warning')).toHaveTextContent(/80%.*before anything is bought/);
-    expect(screen.getByText('Every automatic purchase').closest('li')).toHaveTextContent('—');
+    expect(screen.getByText('Every automatic purchase').closest('li')).toHaveTextContent('-');
     expect(screen.getByText('When the monthly limit is hit').closest('li')).toHaveAttribute(
       'title',
       'Nothing sends this alert yet.',
@@ -71,7 +71,7 @@ describe('★ 17c — alerts: what is stored, and "—" for what nothing sends',
     expect(screen.getByTestId('auto-option-stop')).toHaveAttribute('data-current', 'yes');
     expect(screen.getByTestId('auto-option-pack')).toHaveAttribute('data-current', 'no');
     // No schema default is dressed up as a setting.
-    expect(screen.getByTestId('auto-cap')).toHaveTextContent('Most you could spend this month: —');
+    expect(screen.getByTestId('auto-cap')).toHaveTextContent('Most you could spend this month: -');
     expect(screen.queryByTestId('auto-warning')).toBeNull();
     expect(screen.getByTestId('auto-purchase')).not.toHaveTextContent(/80%/);
   });

@@ -71,7 +71,7 @@ const withEvents = (events: TimelineEvent[]): CustomerDetail => ({
   },
 });
 
-describe('★★ 04c–04f’s compact header', () => {
+describe('★★ 04c-04f’s compact header', () => {
   it('the crumb back to Customers, the name, and both actions', async () => {
     render(await CustomerTopBar({ detail: FIXTURE_DETAIL, contactId: 'k1' }));
     // The page's one h1 is the person, as on 04b.
@@ -85,7 +85,7 @@ describe('★★ 04c–04f’s compact header', () => {
     expect(screen.getByTestId('customer-message')).toBeInTheDocument();
   });
 
-  it('★★ the same facts line as 04b — never a lone "—" under the name', async () => {
+  it('★★ the same facts line as 04b - never a lone "-" under the name', async () => {
     const reaching: CustomerDetail = {
       ...FIXTURE_DETAIL,
       timeline: {
@@ -98,10 +98,10 @@ describe('★★ 04c–04f’s compact header', () => {
     };
     render(await CustomerTopBar({ detail: reaching, contactId: 'k1' }));
     expect(screen.getByTestId('customer-top-facts')).toHaveTextContent('reaches you on WhatsApp');
-    expect(screen.getByTestId('customer-top-bar').textContent).not.toMatch(/(^|\s)—(\s|$)/);
+    expect(screen.getByTestId('customer-top-bar').textContent).not.toMatch(/(^|\s) - (\s|$)/);
   });
 
-  it('⚠ with no facts at all, no line — rather than a dash that looks broken', async () => {
+  it('⚠ with no facts at all, no line - rather than a dash that looks broken', async () => {
     const bare: CustomerDetail = {
       ...FIXTURE_DETAIL,
       timeline: {
@@ -113,10 +113,10 @@ describe('★★ 04c–04f’s compact header', () => {
     };
     render(await CustomerTopBar({ detail: bare, contactId: 'k1' }));
     expect(screen.queryByTestId('customer-top-facts')).toBeNull();
-    expect(screen.getByTestId('customer-top-bar')).not.toHaveTextContent('—');
+    expect(screen.getByTestId('customer-top-bar')).not.toHaveTextContent('-');
   });
 
-  it('★ "with you since" is when the contact was made — whatever part of the history is here', async () => {
+  it('★ "with you since" is when the contact was made - whatever part of the history is here', async () => {
     const partial: CustomerDetail = {
       ...FIXTURE_DETAIL,
       timeline: {
@@ -128,7 +128,7 @@ describe('★★ 04c–04f’s compact header', () => {
     expect(screen.getByTestId('customer-top-bar')).toHaveTextContent('with you since March 2024');
   });
 
-  it('⚠ no created date and only part of the history: no "since" — the oldest word shown is not the first', async () => {
+  it('⚠ no created date and only part of the history: no "since" - the oldest word shown is not the first', async () => {
     const partial: CustomerDetail = {
       ...FIXTURE_DETAIL,
       timeline: {
@@ -182,7 +182,7 @@ describe('★ the tab row', () => {
   });
 });
 
-describe('★★ 04c — every conversation as a card on one spine', () => {
+describe('★★ 04c - every conversation as a card on one spine', () => {
   const detail = withEvents([
     message({
       id: 'm1',
@@ -263,7 +263,7 @@ describe('★★ 04c — every conversation as a card on one spine', () => {
   });
 });
 
-describe('★★ the true total, and the older ones below — one number on one screen', () => {
+describe('★★ the true total, and the older ones below - one number on one screen', () => {
   const page = (over: { conversations: number; hasMore: boolean }) =>
     ({
       ...FIXTURE_DETAIL,
@@ -278,7 +278,7 @@ describe('★★ the true total, and the older ones below — one number on one 
       },
     }) satisfies CustomerDetail;
 
-  it('★★ the heading says the person’s total, as the side does — not the page’s 20', async () => {
+  it('★★ the heading says the person’s total, as the side does - not the page’s 20', async () => {
     render(
       await ConversationsTab({
         detail: page({ conversations: 70, hasMore: true }),
@@ -350,15 +350,15 @@ describe('★★ the true total, and the older ones below — one number on one 
   });
 });
 
-describe('★★ 04c’s side — every block drawn, data or not', () => {
-  it('the three figures; "—" where there is none', async () => {
+describe('★★ 04c’s side - every block drawn, data or not', () => {
+  it('the three figures; "-" where there is none', async () => {
     render(
       await ConversationsSide({
         detail: { ...FIXTURE_DETAIL, timeline: null, brief: null },
       }),
     );
     const pattern = screen.getByTestId('customer-pattern');
-    expect(pattern.textContent?.match(/—/g)).toHaveLength(3);
+    expect(pattern.textContent?.match(/-/g)).toHaveLength(3);
     expect(screen.getByTestId('customer-writes')).toHaveTextContent('Nothing yet.');
     expect(screen.getByTestId('customer-asks')).toHaveTextContent('Nothing yet.');
     expect(screen.getByTestId('promise-card')).toHaveTextContent('No open promises.');

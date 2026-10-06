@@ -3,8 +3,8 @@
   "description": "WhatsApp needs each template approved before you can send it to someone who has not written first",
   "unavailable": "We couldn't read your templates just now.",
   "none": "No templates yet.",
-  "noneBody": "Until you have one, you can only continue conversations other people start — never begin one.",
-  "window": "Once someone writes to you, you can reply freely for 24 hours — no template needed.",
+  "noneBody": "Until you have one, you can only continue conversations other people start - never begin one.",
+  "window": "Once someone writes to you, you can reply freely for 24 hours - no template needed.",
   "stance": {
     "ready": "Ready to send",
     "reviewing": "Being reviewed",
@@ -50,7 +50,7 @@
     "title": "New template",
     "line": "Saved as a draft. It reaches Meta only when submitted.",
     "name": "Name",
-    "nameHint": "Lowercase letters, digits and underscores — Meta's rule.",
+    "nameHint": "Lowercase letters, digits and underscores - Meta's rule.",
     "language": "Language",
     "lang": {
       "he": "Hebrew",

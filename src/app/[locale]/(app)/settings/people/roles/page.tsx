@@ -11,12 +11,12 @@ import { SettingsSection } from '@/shell/SettingsSection';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * Settings · People & teams · Roles — screen 12b.
+ * Settings · People & teams · Roles - screen 12b.
  *
  * ── WHAT IS ABSENT, AND WHY ──
  * **No money limits.** The design describes three roles as allowing *"refunds
  * up to ₪1,000"* and *"up to ₪500"*. `TenantRoleFeature` is `(roleId,
- * feature)` — a composite key with **no other columns**. A role grants
+ * feature)` - a composite key with **no other columns**. A role grants
  * `billing.refund` or it does not, and no amount is stored or enforced
  * anywhere.
  *
@@ -50,7 +50,7 @@ export default async function Page({
   }
   const [roles, { members, aiEmployees, teams }] = await Promise.all([loadRoles(), loadPeople()]);
 
-  // The same header as 12 — 12b is People & teams with Roles open.
+  // The same header as 12 - 12b is People & teams with Roles open.
   const summary =
     members && aiEmployees && teams
       ? tp('summary', { people: members.length, ai: aiEmployees.length, teams: teams.length })

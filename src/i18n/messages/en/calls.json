@@ -50,7 +50,7 @@
     "ask": "Ask Copilot something…",
     "endFailed": "The call didn't end. Try again."
   },
-  "availabilityUnknown": "We couldn't check whether voice is set up for this workspace, so there's nothing reliable to show here yet. This is our side, not yours — try again in a moment.",
+  "availabilityUnknown": "We couldn't check whether voice is set up for this workspace, so there's nothing reliable to show here yet. This is our side, not yours - try again in a moment.",
   "dialer": {
     "title": "Who do you want to call?",
     "sub": "Search a person, or paste a number",
@@ -66,21 +66,21 @@
     "letGotcha": "Let GOTCHA call them",
     "notYet": "Calling from here isn't available yet.",
     "starting": "Calling…",
-    "ringing": "Ringing your line's phone — answer it, and they're connected.",
+    "ringing": "Ringing your line's phone - answer it, and they're connected.",
     "inPlatform": "This line dials from a browser phone, which this app doesn't have yet. Nothing was dialled.",
     "noNumber": "No phone number for this person.",
     "error": {
-      "invalid_destination": "That isn't a number the line can call — use the full international form, like +972 50 123 4567.",
+      "invalid_destination": "That isn't a number the line can call - use the full international form, like +972 50 123 4567.",
       "no_active_voice_channel": "There's no active phone line to call from.",
       "agent_phone_not_configured": "The line's agent has no phone number set, so nothing was dialled.",
       "caller_id_not_configured": "The line has no caller ID set, so nothing was dialled.",
       "forbidden": "You don't have permission to place calls.",
-      "failed": "The call didn't start. Nothing was dialled — try again."
+      "failed": "The call didn't start. Nothing was dialled - try again."
     },
     "listQuiet": "{count, plural, one {# person who went quiet} other {# people who went quiet}}",
     "listQuietCapped": "{count}+ people who went quiet",
     "listQuietLine": "See them on Customers",
-    "listNotYet": "GOTCHA can’t call a list yet — this opens the people."
+    "listNotYet": "GOTCHA can’t call a list yet - this opens the people."
   },
   "stats": {
     "week": "Calls this week",

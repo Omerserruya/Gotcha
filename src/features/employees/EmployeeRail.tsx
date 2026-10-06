@@ -6,8 +6,8 @@ import { Link } from '@/i18n/navigation';
 import styles from '@/features/studio/StudioSplit.module.css';
 
 /**
- * 07's list column: one row per employee — a dot, the name, and how many
- * conversations it holds, or that it is paused — with what it does under it.
+ * 07's list column: one row per employee - a dot, the name, and how many
+ * conversations it holds, or that it is paused - with what it does under it.
  *
  * ⚠ 02's row says "88 live". `openConversations` is OPEN + WAITING, and the
  * route's own note says WAITING is mostly waiting on the CUSTOMER, so the
@@ -65,7 +65,7 @@ export async function EmployeeRail({
       {/*
         02's foot, as far as it is true: knowledge is attached PER EMPLOYEE
         (each has its own sources), so a change reaches every employee that
-        reads that source — not "everyone".
+        reads that source - not "everyone".
       */}
       <p className={styles.listFoot} data-testid="list-foot">
         {t('rail.foot')}

@@ -21,7 +21,7 @@ describe('★★ an item is offered only where its route will act', () => {
     expect(menuPlan([row('a')], { ...agent, meId: null }).assignToMe).toEqual([]);
   });
 
-  it('⚠⚠ Assign to someone: an agent only for what they hold — the route 403s the rest', () => {
+  it('⚠⚠ Assign to someone: an agent only for what they hold - the route 403s the rest', () => {
     const plan = menuPlan(
       [
         row('mine', { assignedAgentId: 'me' }),
@@ -57,7 +57,7 @@ describe('★★ an item is offered only where its route will act', () => {
     expect(menuPlan([row('a'), row('b', { status: 'CLOSED' })], agent).resolve).toEqual(['a']);
   });
 
-  it('⚠⚠ Delete: ADMIN and SYSTEM_ADMIN only — and an UNREAD role is not admin', () => {
+  it('⚠⚠ Delete: ADMIN and SYSTEM_ADMIN only - and an UNREAD role is not admin', () => {
     expect(menuPlan([row('a')], agent).remove).toEqual([]);
     expect(menuPlan([row('a')], admin).remove).toEqual(['a']);
     expect(menuPlan([row('a')], { ...admin, role: 'SYSTEM_ADMIN' }).remove).toEqual(['a']);
@@ -70,7 +70,7 @@ describe('★★ Omer: Stop AI where the AI is driving; Back to the AI once take
   const ai = (id: string, over: Partial<MenuRow> = {}) =>
     row(id, { assignedAiAgentId: 'bot', isHandedOver: false, ...over });
 
-  it('the AI is driving: Stop AI — and not also "Assign to me", the same route twice', () => {
+  it('the AI is driving: Stop AI - and not also "Assign to me", the same route twice', () => {
     const plan = menuPlan([ai('a'), row('b')], agent);
     expect(plan.stopAi).toEqual(['a']);
     expect(plan.assignToMe).toEqual(['b']);
@@ -94,7 +94,7 @@ describe('★★ Omer: Stop AI where the AI is driving; Back to the AI once take
     expect(plan.backToAi).toEqual([]);
   });
 
-  it('Stop AI assigns nobody, so it needs no "me" — offered even when we could not read who is looking', () => {
+  it('Stop AI assigns nobody, so it needs no "me" - offered even when we could not read who is looking', () => {
     expect(
       menuPlan([row('a', { handledBy: 'ai_agent' })], { ...agent, meId: null }).stopAi,
     ).toEqual(['a']);

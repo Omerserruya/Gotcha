@@ -80,9 +80,9 @@ describe('⚠⚠ the password goes to the executor and nowhere else', () => {
   it('⚠⚠ submits it through the executor client, and never touches fetch itself', async () => {
     /*
      * The assertion the architecture rests on. `fetch` is stubbed to reject, so
-     * a component that called it directly — or through our own `browserApi`,
+     * a component that called it directly - or through our own `browserApi`,
      * which would put the credential on the same path as every request carrying
-     * our session cookie — fails loudly rather than quietly working.
+     * our session cookie - fails loudly rather than quietly working.
      */
     const user = userEvent.setup();
     show();
@@ -113,7 +113,7 @@ describe('★★ everything it cannot finish, it hands back', () => {
   it('★★ hands over when the flow will not start', async () => {
     /*
      * The panel has nothing to render without a stage. Handing over reaches the
-     * identity provider's own page, which has always worked — this screen is an
+     * identity provider's own page, which has always worked - this screen is an
      * optimisation over that path, not a replacement for it.
      */
     startFlow.mockResolvedValue(null);
@@ -124,14 +124,14 @@ describe('★★ everything it cannot finish, it hands back', () => {
   it('★★ hands over on a stage it has never heard of', async () => {
     /*
      * ★ NOT A HYPOTHETICAL. `ak-stage-authenticator-validate` is what a colleague
-     * who has already enrolled a device would meet here — the flow reports
+     * who has already enrolled a device would meet here - the flow reports
      * `device_challenges: []` only for users with none, and nobody has been able
      * to read the stage bindings to say whether the stage exists. So this is the
      * ordinary path for an MFA user, not a guard against a future admin change.
      *
      * ⚠ AND ONE THING NOBODY HAS OBSERVED: the handover happens AFTER their
      * password was accepted. Whether the identity provider's page resumes the
-     * in-progress flow — its state is a cookie — or asks for the password again
+     * in-progress flow - its state is a cookie - or asks for the password again
      * is unverified, and it is the difference between a seam and a retype.
      * Testable the moment somebody has an enrolled account.
     submitStage.mockResolvedValue({
@@ -216,7 +216,7 @@ describe('★★ what a refusal is allowed to say', () => {
 
     const problem = await screen.findByTestId('sign-in-problem');
     // Our screen now, carrying the provider's slug. It used to be a link
-    // straight to `/if/flow/…` — the provider's own UI, and the report.
+    // straight to `/if/flow/…` - the provider's own UI, and the report.
     expect(screen.getByTestId('recover-after-fail')).toHaveAttribute(
       'href',
       `${RECOVER}?flow=gotcha-recovery-self`,
@@ -228,7 +228,7 @@ describe('★★ what a refusal is allowed to say', () => {
     /*
      * The executor answers 200 with `response_errors` when it REFUSES, so a
      * transport failure means the proxy or the network. Rendering it as a wrong
-     * password sends somebody to reset a password that was right — and clearing
+     * password sends somebody to reset a password that was right - and clearing
      * the form would throw away a submit a second press often fixes.
      */
     submitStage.mockResolvedValue({ ok: false });
@@ -252,7 +252,7 @@ describe('★★ "keep me signed in" is a real answer to a required field', () =
     /*
      * `ak-stage-user-login` returns four keys and requires a field none of them
      * mention; posting `{}` answers "This field is required." So the checkbox is
-     * not decorative — the flow cannot complete without the person's answer.
+     * not decorative - the flow cannot complete without the person's answer.
      */
     submitStage.mockResolvedValueOnce({ ok: true, step: staySignedIn() });
     const user = userEvent.setup();
@@ -273,7 +273,7 @@ describe('★★ "keep me signed in" is a real answer to a required field', () =
   it('★★ does not promise a number of days that nothing here enforces', async () => {
     /*
      * The design's label says "for 30 days". Whether `false` shortens the session
-     * and what the configured length is are Authentik settings nobody has read —
+     * and what the configured length is are Authentik settings nobody has read -
      * so the sentence would be a promise about session length made by a screen
      * that cannot keep it. Same rule as the absent lockout count.
      */
@@ -315,7 +315,7 @@ describe('⚠⚠ the two controls the mock draws and the prose does not mention'
   it('⚠⚠ and shows nothing at all while it is still being typed', async () => {
     /*
      * Presence only, never absence. The design draws the affirmative state and
-     * nothing else — a field that turns red mid-word is the reason people
+     * nothing else - a field that turns red mid-word is the reason people
      * abandon forms, and `not-an-email` is what every address looks like
      * before it is finished.
      */
@@ -363,11 +363,11 @@ describe('★★ one way in', () => {
   it('★★ offers no second method and no social sign-in', async () => {
     /*
      * The design: "One way in: work email and password. No social sign-in and no
-     * second button to weigh up — nobody has to remember which method they picked
+     * second button to weigh up - nobody has to remember which method they picked
      * a year ago."
      *
      * ⚠⚠ THIS COUNTED BUTTONS AND HAD TO BE RE-AIMED. `getAllByRole('button')`
-     *    was 1, and it broke the day the design's own password reveal arrived —
+     *    was 1, and it broke the day the design's own password reveal arrived -
      *    **a correct screen failing a green test.** The rule is "no second
      *    sign-in METHOD"; the count was a proxy that held only while the form
      *    had exactly one control.
@@ -390,7 +390,7 @@ describe('★★ one way in', () => {
     /*
      * The intent of this test is unchanged and still the important one: the
      * slug is an administrator's to rename, and a stale one is a 404 for
-     * somebody already locked out. What changed is the destination — our
+     * somebody already locked out. What changed is the destination - our
      * screen instead of the provider's, carrying the name it advertises.
      */
     startFlow.mockResolvedValue(identify({ recovery_url: '/if/flow/renamed-recovery/' }));
@@ -404,7 +404,7 @@ describe('★★ one way in', () => {
   it('⚠⚠ falls back to the provider when the URL is not a flow path', async () => {
     /*
      * An absolute URL, or any shape `recoveryFlowSlug` cannot read, leaves us
-     * without a slug to drive. Linking at the provider then looks old — but
+     * without a slug to drive. Linking at the provider then looks old - but
      * leaving somebody locked out with NO way to reset a password is worse
      * than a screen that works and looks dated.
      */
@@ -423,13 +423,13 @@ describe('★★ one way in', () => {
      * ════════════════════════════════════════════════════════════════════════
      * A THIRD PARTY'S STRING, ON THE ONE PAGE WITH A PASSWORD FIELD
      * ════════════════════════════════════════════════════════════════════════
-     * `recovery_url` is `z.string().nullable()` in a LOOSE contract — the shape
+     * `recovery_url` is `z.string().nullable()` in a LOOSE contract - the shape
      * is Authentik's and by design we do not bound it. It rendered straight
      * into an `href`, where `javascript:` executes in the origin holding the
      * password. The narrowed CSP on this route does not stop it: a navigation
      * is not a script source.
      *
-     * Not a claim that Authentik would send one — the contract permits any
+     * Not a claim that Authentik would send one - the contract permits any
      * string and this is the most sensitive sink in the app.
      */
     for (const hostile of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>']) {
@@ -484,7 +484,7 @@ describe('⚠⚠ telling the layout which screen is on', () => {
    * THE LINK NOTHING WAS TESTING, FOUND BY A SURVIVING MUTATION
    * ════════════════════════════════════════════════════════════════════════
    * `SignInScreen` swaps the editorial, the status line and the footnote on
-   * this signal — and its own tests use a STUB panel, while these tests never
+   * this signal - and its own tests use a STUB panel, while these tests never
    * passed `onScreen`. So replacing the whole mapping with a constant
    * `'signIn'` broke nothing anywhere: 71 tests green with the feature
    * destroyed.
@@ -515,7 +515,7 @@ describe('⚠⚠ telling the layout which screen is on', () => {
 
     /*
      * ⚠ WAITS ON THE CALLBACK, NOT ON THE DOM. The first version awaited
-     *   `findByTestId('second-factor')` and then asserted — which passed most
+     *   `findByTestId('second-factor')` and then asserted - which passed most
      *   runs and failed about one in four. The element appears at the render
      *   commit; `onScreen` is called from an effect, which is flushed after
      *   it. Waiting on the markup is waiting on a PROXY for the thing being
@@ -599,7 +599,7 @@ describe('⚠⚠ where a completed flow sends the browser', () => {
      * `to: "/"` IS AUTHENTIK'S ROOT, NOT OURS
      * ════════════════════════════════════════════════════════════════════════
      * Measured on the authentication flow. Following it lands somebody who has
-     * just signed in successfully on a stranger's home page — and it is
+     * just signed in successfully on a stranger's home page - and it is
      * same-origin, relative and harmless-looking, which is why a generic URL
      * check would wave it through.
      */
@@ -627,7 +627,7 @@ describe('⚠⚠ where a completed flow sends the browser', () => {
   it('⚠⚠ and with no callback configured, behaves exactly as before', async () => {
     /*
      * The fallback is the point, not a safety net. Every path that is not a
-     * verified completion lands on `/api/auth/login` — which is what keeps the
+     * verified completion lands on `/api/auth/login` - which is what keeps the
      * eight stage types we do not render working: an unrecognised component
      * hands over to a page that COMPLETES, rather than hanging on a blank one.
      */
@@ -643,13 +643,13 @@ describe('⚠⚠ where a completed flow sends the browser', () => {
   });
 });
 
-describe('⚠⚠ "Keep me signed in" — on 00a, and it carries', () => {
+describe('⚠⚠ "Keep me signed in" - on 00a, and it carries', () => {
   it('★★ is on the sign-in form itself, where the mock draws it', async () => {
     show();
     await screen.findByTestId('sign-in-form');
     const box = screen.getByTestId('remember-me');
     expect(box).toBeInTheDocument();
-    // Drawn checked in the mock, so checked here — a real decision on a
+    // Drawn checked in the mock, so checked here - a real decision on a
     // shared machine, not a styling detail.
     expect(box).toBeChecked();
   });
@@ -659,7 +659,7 @@ describe('⚠⚠ "Keep me signed in" — on 00a, and it carries', () => {
      * The design's label reads "…on this device for 30 days". Whether `false`
      * shortens the session, and what the configured length is, are Authentik
      * settings nobody has read. Ruled 2026-09-30: show the control, drop the
-     * number — the same rule that keeps a lockout count off the failed
+     * number - the same rule that keeps a lockout count off the failed
      * password message.
      */
     show();
@@ -696,7 +696,7 @@ describe('⚠⚠ "Keep me signed in" — on 00a, and it carries', () => {
   it('⚠⚠ and posts it ONCE, or the last step of sign-in loops', async () => {
     /*
      * An effect that resubmits on every arrival of the stage would spin on the
-     * final step — and it would look like a hang rather than like a failure,
+     * final step - and it would look like a hang rather than like a failure,
      * which is the worst way for this to break.
      */
     startFlow.mockResolvedValue(staySignedIn());

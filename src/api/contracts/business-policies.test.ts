@@ -8,7 +8,7 @@ const policy = (over: Record<string, unknown> = {}) =>
   businessPoliciesSchema.parse({ policies: [{ actionKind: 'REFUND', ...over }] }).policies[0]!;
 
 describe('★★ each rule as the engine applies it', () => {
-  it('switched off is never — "action_disabled"', () => {
+  it('switched off is never - "action_disabled"', () => {
     expect(describePolicy('REFUND', policy({ enabled: false }))).toEqual({
       kind: 'REFUND',
       shape: 'never',
@@ -16,13 +16,13 @@ describe('★★ each rule as the engine applies it', () => {
     });
   });
 
-  it('★ with no rule, compensation, coupons and discounts are denied — `defaultDecisionWithoutPolicy`', () => {
+  it('★ with no rule, compensation, coupons and discounts are denied - `defaultDecisionWithoutPolicy`', () => {
     for (const kind of ['COMPENSATION', 'COUPON', 'DISCOUNT']) {
       expect(describePolicy(kind, undefined)).toEqual({ kind, shape: 'never', byDefault: true });
     }
   });
 
-  it('with no rule, refunds, cancels and record changes are allowed — and said to be unset', () => {
+  it('with no rule, refunds, cancels and record changes are allowed - and said to be unset', () => {
     for (const kind of ['REFUND', 'CANCEL_ORDER', 'CUSTOMER_WRITE']) {
       expect(describePolicy(kind, undefined)).toEqual({ kind, shape: 'unset' });
     }

@@ -19,7 +19,7 @@ import styles from './People.module.css';
  * the fields and dropping the values would be worse than not offering them.
  *
  * `queueMode` is not asked for either. It defaults to CLAIM server-side, and
- * it is a routing decision rather than part of naming a team — a control for
+ * it is a routing decision rather than part of naming a team - a control for
  * it belongs wherever the team is configured, not in the two fields that
  * create one.
  */

@@ -22,7 +22,7 @@ import type { ConversationFact } from './people-today';
 /**
  * The customer list.
  *
- * `POST /api/contacts/segment` with no rules — every local contact, with the
+ * `POST /api/contacts/segment` with no rules - every local contact, with the
  * route's genuine `prisma.contact.count` as the total. **Not** `GET
  * /api/contacts`, which is a CRM proxy search and returns nothing on a tenant
  * without a connected CRM.
@@ -34,13 +34,13 @@ import type { ConversationFact } from './people-today';
  *
  * Rules are **ANDed** by the route (`where.AND`), so sending name, phone and
  * email together would demand all three match. One field is chosen from the
- * shape of the query instead. **Order number remains unsearchable** — orders
- * are not local to this platform at all — and the screen says so rather than
+ * shape of the query instead. **Order number remains unsearchable** - orders
+ * are not local to this platform at all - and the screen says so rather than
  * reporting a bare "no results".
  *
  * ── A RULE THE SERVER DOES NOT RECOGNISE IS DROPPED IN SILENCE ──
  * `switch (rule.field)` has no default, so an unknown field is skipped and the
- * query returns **more** rows, not fewer — a failed filter looks exactly like
+ * query returns **more** rows, not fewer - a failed filter looks exactly like
  * a successful broad match. `SegmentField` below makes that a compile error
  * rather than a silent broadening, which is the only place it can be caught.
  *
@@ -53,7 +53,7 @@ import type { ConversationFact } from './people-today';
  */
 export interface CustomersData {
   readonly rows: readonly CustomerRow[] | null;
-  /** Matching contacts, which may exceed `rows.length` — the route takes 500. */
+  /** Matching contacts, which may exceed `rows.length` - the route takes 500. */
   readonly total: number;
   /** True when the count exceeds what was returned. */
   readonly truncated: boolean;
@@ -62,7 +62,7 @@ export interface CustomersData {
   /** The query looked like an order number, so the store's orders were asked too (04). */
   readonly orderSearched: boolean;
   /**
-   * The newest conversations, every status — what makes a row "today": its
+   * The newest conversations, every status - what makes a row "today": its
    * last word, whether it is open, who spoke last. `null` when unread.
    * The newest 100: a person whose last word is older than those is drawn
    * without one, never as someone who never wrote.
@@ -139,7 +139,7 @@ async function readToday(): Promise<Pick<CustomersData, 'conversations' | 'quiet
  * ignored by the route and widens the result set. This turns that into a
  * compile error.
  */
-/** Who went quiet (`dormant-customers`), counted — for 05d's "call a list". `null` when unread. */
+/** Who went quiet (`dormant-customers`), counted - for 05d's "call a list". `null` when unread. */
 export async function loadQuiet(): Promise<{
   readonly count: number;
   readonly capped: boolean;
@@ -183,7 +183,7 @@ export function fieldForQuery(query: string): 'name' | 'phone' | 'email' | null 
   const q = query.trim();
   if (!q) return null;
   if (q.includes('@')) return 'email';
-  // Digits and phone punctuation only — anything else is treated as a name,
+  // Digits and phone punctuation only - anything else is treated as a name,
   // which is the field a person reaches for first.
   if (/^[+\d][\d\s\-()]*$/.test(q)) return 'phone';
   return 'name';
@@ -208,7 +208,7 @@ export async function loadCustomers(
         CustomersData,
         'conversations' | 'quiet'
       >);
-  // 04's search: an order number finds its customer too — added, never instead.
+  // 04's search: an order number finds its customer too - added, never instead.
   const byOrder = withToday ? customerByOrder(q) : Promise.resolve(null);
   try {
     const result = await serverApi().post({
@@ -216,12 +216,12 @@ export async function loadCustomers(
       payload: customerListSchema,
       body: rulesForQuery(q),
       // `{ data, total }` sit side by side, so unwrapping `data` would throw
-      // the count away — and the count is the only honest total on the screen.
+      // the count away - and the count is the only honest total on the screen.
       raw: true,
     });
 
     /*
-     * Capture fixtures, applied to what the real read returned — so a failed
+     * Capture fixtures, applied to what the real read returned - so a failed
      * read stays a failed read. See `capture-fixtures.ts`: gated on
      * `E2E_SECURITY_FIXTURES=1` AND a loopback origin, failing closed.
      */
@@ -232,7 +232,7 @@ export async function loadCustomers(
 
     return {
       rows,
-      // Not `result.total` unless the page was actually filled — the route's
+      // Not `result.total` unless the page was actually filled - the route's
       // count includes the merged-away rows its list excludes.
       total: listedCount(rows.length, result.total),
       truncated: isTruncated(rows.length),

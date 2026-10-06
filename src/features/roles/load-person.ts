@@ -6,7 +6,7 @@ import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
 
 /**
- * One person — screen 12d.
+ * One person - screen 12d.
  *
  * `raw` because the transform needs the `{ data }` envelope intact: the route
  * nests `user` inside it beside `roles`, `grants` and the effective

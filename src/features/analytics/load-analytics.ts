@@ -33,9 +33,9 @@ import { logger } from '@/observability/logger';
  * ════════════════════════════════════════════════════════════════════════════
  * TWO PANELS, TWO INDEPENDENT FAILURES, AND NO HEADLINE
  * ════════════════════════════════════════════════════════════════════════════
- * Both reads are gated on permissions an ordinary agent may not hold —
+ * Both reads are gated on permissions an ordinary agent may not hold -
  * `analytics:workspace:read` for the team, `analytics:dashboard:read` for the
- * questions — so a 403 on one must not take the other with it. `null` means we
+ * questions - so a 403 on one must not take the other with it. `null` means we
  * could not read it, never "there is none", and each panel says so itself.
  *
  * ── WHAT IS NOT HERE, AND WHY ──
@@ -46,7 +46,7 @@ import { logger } from '@/observability/logger';
  *
  * **No "what GOTCHA did" section.** It was held on an escalation aggregation
  * and the aggregation does not exist: `ConversationHandover.reason` is a
- * four-value code — `escalation | takeover | assignment | routing` — with no
+ * four-value code - `escalation | takeover | assignment | routing` - with no
  * route over it, and nothing counts machine causes. The tab is left out rather
  * than shipped empty.
  *
@@ -56,12 +56,12 @@ export interface AnalyticsData {
   readonly topics: readonly AskedAbout[] | null;
   /**
    * 06's figures for the last seven days. `overview` computes its own prior
-   * period of the same length, so its deltas are "against the week before" —
+   * period of the same length, so its deltas are "against the week before" -
    * which is what the subline says.
    */
   readonly overview: AnalyticsOverview | null;
   readonly timeSaved: TimeSaved | null;
-  /** The findings — the same `insights` Home's "Worth knowing" reads. */
+  /** The findings - the same `insights` Home's "Worth knowing" reads. */
   readonly insights: readonly Insight[] | null;
 }
 
@@ -170,7 +170,7 @@ export async function loadGotcha(): Promise<GotchaData> {
 
 /** What 06c reads. Each `null` when its read failed; `hourly` keeps the days that answered. */
 export interface TeamData {
-  /** Who holds what right now — the hero's queue comparison. */
+  /** Who holds what right now - the hero's queue comparison. */
   readonly agents: readonly AgentLoad[] | null;
   /** 06c's table and cards (backend af4f0072); `null` when unread. */
   readonly report: TeamReport | null;
@@ -261,7 +261,7 @@ export async function loadTopics(now: Date = new Date()): Promise<TopicsData> {
 
 /**
  * The last `days` days, one row each (backend's series, UTC days). `null` when
- * unread — including the older route answering in its place.
+ * unread - including the older route answering in its place.
  */
 export async function loadDaily(days = 7): Promise<DailySeries | null> {
   return serverApi()

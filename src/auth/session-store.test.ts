@@ -7,7 +7,7 @@ import { resetServerEnvCache } from '@/config/env.server';
 
 /**
  * ★★ A render never spends the refresh token. With rotation, a refresh whose
- * new token cannot be written ends the session at the next one — the cause of
+ * new token cannot be written ends the session at the next one - the cause of
  * the hourly sign-out.
  */
 const jar = vi.hoisted(() => ({ value: undefined as string | undefined, writable: false }));

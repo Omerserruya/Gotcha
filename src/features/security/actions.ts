@@ -16,8 +16,8 @@ import { signInIfSignedOut } from '@/api/client/signed-out';
 /**
  * Writes for screen 16.
  *
- * Revoking a session is destructive in the way that matters here — it signs
- * somebody out — but it is the ONE destructive action on this project that is
+ * Revoking a session is destructive in the way that matters here - it signs
+ * somebody out - but it is the ONE destructive action on this project that is
  * meant to be pressed: it is the whole point of showing the list. It is also
  * recoverable in the only sense that counts, since the person can sign in
  * again.
@@ -65,7 +65,7 @@ export async function revokeSession(id: string): Promise<SecurityWriteResult> {
     /*
      * ★★ THE ANSWER IS READ, WHICH IT WAS NOT BEFORE.
      *
-     * This used to await the call, discard the result and report success —
+     * This used to await the call, discard the result and report success -
      * so a 200 whose body said `{ ok: false }` rendered "signed out". The
      * request not throwing is not the same fact as the session being gone.
      */
@@ -85,7 +85,7 @@ export async function revokeSession(id: string): Promise<SecurityWriteResult> {
 /**
  * Signs out every OTHER session, keeping the caller's.
  *
- * The backend keeps the current one deliberately — a control that signs you
+ * The backend keeps the current one deliberately - a control that signs you
  * out of the device you are using cannot report whether it worked.
  */
 export async function revokeOtherSessions(): Promise<SecurityWriteResult> {
@@ -111,7 +111,7 @@ export async function revokeOtherSessions(): Promise<SecurityWriteResult> {
 /**
  * Tenant MFA enforcement.
  *
- * Both fields are sent together because they are one policy with two levels —
+ * Both fields are sent together because they are one policy with two levels -
  * requiring it of everyone implies requiring it of admins, and sending one
  * without the other would let the two drift into a combination nobody chose.
  */

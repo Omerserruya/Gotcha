@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * The conversations picked with shift-click — 02's "Shift-click to pick
+ * The conversations picked with shift-click - 02's "Shift-click to pick
  * several", which the queue menu then acts on.
  *
  * A module-level store, like the pending click: the rows and the menu sit in

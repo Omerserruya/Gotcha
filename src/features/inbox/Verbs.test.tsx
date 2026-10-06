@@ -21,7 +21,7 @@ import { MessageStream } from './MessageStream';
  * The action module is mocked for this whole file and every function throws.
  *
  * What is tested is which controls exist in which state, and what the screen
- * says before anybody presses anything — which is the part that decides
+ * says before anybody presses anything - which is the part that decides
  * whether a person sends a stranger a message by accident.
  */
 
@@ -129,7 +129,7 @@ describe('★★ the greeting warning, which is the reason this is not just a bu
 describe('★★ which controls exist, and the one that never does', () => {
   it('★★ no claim button on a conversation that is already yours', () => {
     /*
-     * The route allows a reclaim and it changes nothing — except that it
+     * The route allows a reclaim and it changes nothing - except that it
      * greets the customer a SECOND time: *"send on both claim and reclaim"*.
      * A button whose only effect is another "Hi, I'm Dana, taking over" is
      * worse than no button.
@@ -164,7 +164,7 @@ describe('★★ which controls exist, and the one that never does', () => {
 
   it('★ return-to-the-AI only once a human holds it', () => {
     // It clears a latch that is not set on a conversation the AI is already
-    // answering — a control for a state the reader is already in.
+    // answering - a control for a state the reader is already in.
     show({ handedOver: false });
     expect(screen.queryByTestId('return-c1')).toBeNull();
     show({ handedOver: true });
@@ -242,7 +242,7 @@ describe('★★ a colleague’s action is not a message from the customer', () 
     expect(screen.queryByTestId('unknown-m-agent_claimed')).toBeNull();
   });
 
-  it('★ Stop AI’s divider: the route writes no name, so none is said — and it is not "can’t show"', async () => {
+  it('★ Stop AI’s divider: the route writes no name, so none is said - and it is not "can’t show"', async () => {
     await stream([systemMessage('ai_stopped')]);
     const divider = screen.getByTestId('system-m-ai_stopped');
     expect(divider.textContent).toBe('AI stopped');
@@ -262,7 +262,7 @@ describe('★★ a colleague’s action is not a message from the customer', () 
     /*
      * Omer ruled transfers go to a named person, so nothing here sends
      * `departmentId`. The platform still writes this divider when another
-     * client does — and skipping it would leave an unexplained gap exactly
+     * client does - and skipping it would leave an unexplained gap exactly
      * where somebody needs to know the conversation moved.
      */
     await stream([systemMessage('department_transferred')]);
@@ -343,13 +343,13 @@ describe('★★ both languages say all of it', () => {
   });
 });
 
-describe('⚠⚠ Resolve — 02’s third button, and the route existed all along', () => {
+describe('⚠⚠ Resolve - 02’s third button, and the route existed all along', () => {
   /*
    * ════════════════════════════════════════════════════════════════════════
    * THE DESIGN DRAWS THREE: ASSIGN · PAUSE AI · RESOLVE. WE DREW ONE.
    * ════════════════════════════════════════════════════════════════════════
    * `closeConversation` posts to `/conversations/{id}/close`, which the
-   * platform has always had — it was missing from THIS app, not from the API.
+   * platform has always had - it was missing from THIS app, not from the API.
    */
   it('★★ is offered on a live conversation', async () => {
     show({ resolved: false });
@@ -360,7 +360,7 @@ describe('⚠⚠ Resolve — 02’s third button, and the route existed all alon
     /*
      * ★ The route accepts it as a no-op. A button whose only effect is
      *   nothing is how a screen teaches somebody that its controls are
-     *   decorative — the same reason `claim` is not drawn on a conversation
+     *   decorative - the same reason `claim` is not drawn on a conversation
      *   that is already yours, where re-claiming would re-greet the customer.
      */
     show({ resolved: true });
@@ -380,7 +380,7 @@ describe('★ 02 fills ONE header button, and it is Resolve', () => {
   it('⚠ "Take control" is outlined like its siblings, not filled like Resolve', () => {
     /*
      * A surviving mutation filled it with nothing going red. 02 draws Assign
-     * and Pause AI outlined and only Resolve in #121212 — two filled buttons
+     * and Pause AI outlined and only Resolve in #121212 - two filled buttons
      * side by side would make the screen's one decisive action ambiguous.
      */
     show({ mine: false, handedOver: true, resolved: false });

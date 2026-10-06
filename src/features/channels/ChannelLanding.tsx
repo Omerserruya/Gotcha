@@ -10,7 +10,7 @@ import type { ChannelLanding as Landing } from './landing';
 import styles from './Channels.module.css';
 
 /**
- * The sentence the way back earns — "Instagram connected — 1 account." —
+ * The sentence the way back earns - "Instagram connected - 1 account." -
  * over the list, which already shows the row as connected. No new screen
  * (Omer: a screen after a callback only from a detailed design). Held in
  * state from the first render, then the URL is tidied; WhatsApp's way back
@@ -20,7 +20,7 @@ export function ChannelLanding({
   landing,
 }: {
   /**
-   * `null` once the URL is tidied — and the page keeps this mounted then, so
+   * `null` once the URL is tidied - and the page keeps this mounted then, so
    * the sentence held in state outlives the re-render (08b's lesson).
    */
   readonly landing: Landing | null;

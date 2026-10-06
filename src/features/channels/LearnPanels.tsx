@@ -29,7 +29,7 @@ function reasonInWords(reason: string): string {
 
 /**
  * 13b's way into 13e / 13f: one row under the number card while there is an
- * import — "Learning in progress · 64%", "Report ready · 151 answers",
+ * import - "Learning in progress · 64%", "Report ready · 151 answers",
  * "Stopped", or "No history to learn from".
  */
 export async function LearningRow({ status }: { readonly status: ImportStatus }) {
@@ -60,13 +60,13 @@ export async function LearningRow({ status }: { readonly status: ImportStatus })
 type StepState = 'done' | 'active' | 'waiting' | 'failed';
 
 /**
- * 13e, measured: "Setting up {number}" — the stepper (Where it lives ✓ ·
+ * 13e, measured: "Setting up {number}" - the stepper (Where it lives ✓ ·
  * Meta ✓ · Number ✓ · ④ Learn), whether messages already arrive, a
  * timeline, "So far", and the way out.
  *
  * The timeline is the platform's two stages, not five steps. `transferring`
  * is "History imported"; `analyzing` is ONE stage in which learning how you
- * write, finding answers and remembering customers happen together — so
+ * write, finding answers and remembering customers happen together - so
  * those three rows share its state and each carries its own measured count,
  * and none is drawn as waiting on the one before.
  */
@@ -78,7 +78,7 @@ export async function ImportPanel({
   readonly status: ImportStatus;
   /** Does the number already receive? Only then is "Connected" said. */
   readonly receiving: boolean;
-  /** The number stays on the Business app (coexistence) — said under "Number connected". */
+  /** The number stays on the Business app (coexistence) - said under "Number connected". */
   readonly coexistence?: boolean;
 }) {
   const t = await getTranslations('channels.whatsapp');
@@ -310,7 +310,7 @@ export async function ImportPanel({
 }
 
 /**
- * 02's tabs: Needs a look · Ready to add · Rejected — and Already covered
+ * 02's tabs: Needs a look · Ready to add · Rejected - and Already covered
  * only when there is any. What has been approved is in use, not to review.
  */
 const TABS = ['needs_a_look', 'ready_to_add', 'rejected', 'already_covered'] as const;
@@ -325,12 +325,12 @@ function tabOf(c: Candidate, floor: number | undefined): ReportTab | null {
 
 /**
  * 13f, measured: "What GOTCHA learned from {number}" · "Nothing is used
- * until you approve it." — the strip of four, three cards, the tabs, the
+ * until you approve it." - the strip of four, three cards, the tabs, the
  * candidates as cards in two columns, the ready-in-bulk card, the footer.
  *
  * Approve, a variant to use, Edit and Reject are live (Omer, decision 13);
  * adding the ready ones in bulk and running the analysis again too (Omer,
- * 2026-10-05) — each asks before it acts.
+ * 2026-10-05) - each asks before it acts.
  */
 export async function ReportPanel({
   status,
@@ -355,7 +355,7 @@ export async function ReportPanel({
   const shown = inTab(current);
   const ready = inTab('ready_to_add');
 
-  /* 02: a chip only for a reason to look — never a figure, which sits on the right. */
+  /* 02: a chip only for a reason to look - never a figure, which sits on the right. */
   const chipOf = (c: Candidate): { text: string; tone: string } | null =>
     c.conflict
       ? { text: t('learn.chip.conflict'), tone: 'warn' }
@@ -372,10 +372,10 @@ export async function ReportPanel({
           {[
             [
               'conversations',
-              status.conversationsExtracted > 0 ? n.format(status.conversationsExtracted) : '—',
+              status.conversationsExtracted > 0 ? n.format(status.conversationsExtracted) : '-',
             ],
-            ['customers', status.customersTotal > 0 ? n.format(status.customersTotal) : '—'],
-            ['period', '—'],
+            ['customers', status.customersTotal > 0 ? n.format(status.customersTotal) : '-'],
+            ['period', '-'],
             ['answers', n.format(status.knowledgeCandidateCount)],
           ].map(([key, value]) => (
             <div key={key} className={styles.reportStat} data-testid={`report-stat-${key}`}>
@@ -388,20 +388,20 @@ export async function ReportPanel({
         <div className={styles.reportCards}>
           <section className={styles.reportCard} title={t('learn.noImportData')}>
             <h3 className={styles.soFarTitle}>{t('learn.card.languages')}</h3>
-            <p className={styles.timelineSub}>—</p>
+            <p className={styles.timelineSub}>-</p>
           </section>
           <section className={styles.reportCard} title={t('learn.noImportData')}>
             <h3 className={styles.soFarTitle}>{t('learn.card.sound')}</h3>
-            <p className={styles.timelineSub}>—</p>
+            <p className={styles.timelineSub}>-</p>
           </section>
           <section className={styles.reportCard}>
             <h3 className={styles.soFarTitle}>{t('learn.card.customers')}</h3>
             <p className={styles.timelineSub} data-testid="report-customers">
               {status.customersAnalyzed > 0
                 ? t('learn.customersRead', { count: n.format(status.customersAnalyzed) })
-                : '—'}
+                : '-'}
             </p>
-            {/* 02's "Preview five" — no route returns the profiles yet. */}
+            {/* 02's "Preview five" - no route returns the profiles yet. */}
             <span
               className={styles.reportPreview}
               aria-disabled="true"

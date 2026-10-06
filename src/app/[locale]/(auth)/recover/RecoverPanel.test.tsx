@@ -9,7 +9,7 @@ import messages from '@/i18n/messages/en/auth.json';
 /**
  * Password recovery, screen one.
  *
- * ★ The design has no recovery screen — 69 rendered frames in
+ * ★ The design has no recovery screen - 69 rendered frames in
  *   `Directions.dc.html` and not one heading mentions reset, recovery, forgot
  *   or password. So these tests pin BEHAVIOUR rather than a mock's values;
  *   there are none to pin.
@@ -51,7 +51,7 @@ beforeEach(() => {
 describe('⚠⚠ the screen "Forgot it?" now reaches', () => {
   it('★★ drives the RECOVERY flow, not the authentication one', async () => {
     /*
-     * The whole point. `startFlow()` with no argument opens the sign-in flow —
+     * The whole point. `startFlow()` with no argument opens the sign-in flow -
      * which would show this person a password field on a screen they reached
      * because they do not have the password.
      */
@@ -69,7 +69,7 @@ describe('⚠⚠ the screen "Forgot it?" now reaches', () => {
     /*
      * Rendering the form early would let somebody type an address into a flow
      * that has not opened, and the submit would start a fresh one underneath
-     * them — the symptom being a stage that repeats.
+     * them - the symptom being a stage that repeats.
      */
     let release!: (step: FlowStep) => void;
     startFlow.mockReturnValue(new Promise<FlowStep>((resolve) => (release = resolve)));
@@ -127,7 +127,7 @@ describe('⚠⚠ the screen "Forgot it?" now reaches', () => {
 
   it('⚠ a transport failure keeps what was typed', async () => {
     /*
-     * `ok: false` is not a refusal — it is the network. Moving somebody to a
+     * `ok: false` is not a refusal - it is the network. Moving somebody to a
      * confirmation screen would claim mail was sent when nothing was, and
      * clearing the field makes them type it again for a problem a second press
      * often fixes.

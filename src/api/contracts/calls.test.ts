@@ -90,7 +90,7 @@ describe('an average with no sample is not zero', () => {
 
 describe('the transcript is messages, not a column', () => {
   it('carries the speaker on every line', () => {
-    // `senderName` is "Agent" or "Customer" — the speaker separation the
+    // `senderName` is "Agent" or "Customer" - the speaker separation the
     // design asks for, written by the stream router one row per FINAL
     // utterance. Searching the schema for a transcript field finds nothing,
     // which is how two people concluded it was not stored.
@@ -108,7 +108,7 @@ describe('the transcript is messages, not a column', () => {
 
 describe('a call carries nothing that could become a false claim', () => {
   it('exposes no conversion, no sentiment, no transcript blob', () => {
-    // "Ended in a sale" is `converted` — the fourth appearance across four
+    // "Ended in a sale" is `converted` - the fourth appearance across four
     // screens, and a concept nowhere in this platform.
     const surface = Object.keys(callSchema.parse(call()));
     expect(
