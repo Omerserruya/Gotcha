@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useMemo, useState, useTransition } from 'react';
 
@@ -41,12 +42,18 @@ export function RoleForm({
   readonly initialSourceId?: string;
 }) {
   const t = useTranslations('roles');
-  const [sourceId, setSourceId] = useState(initialSourceId);
+  /*
+   * 02 starts from Agent: "you start from an existing role and only touch
+   * what's different" — so the Compared card is there from the first look.
+   * 12b's Duplicate (`?from=`) wins; no Agent role, nothing.
+   */
+  const startId = initialSourceId || (roles.find((r) => r.builtinKey === 'AGENT')?.id ?? '');
+  const [sourceId, setSourceId] = useState(startId);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   // Seeded as `startFrom` would seed it — including its refusal of a pattern role.
   const [selected, setSelected] = useState<readonly string[]>(() => {
-    const role = roles.find((r) => r.id === initialSourceId);
+    const role = roles.find((r) => r.id === startId);
     return role && gridCanRepresent(role.features) ? [...role.features] : [];
   });
   const [error, setError] = useState<string | null>(null);
@@ -129,22 +136,26 @@ export function RoleForm({
           </label>
           <label className={drawer.field}>
             <span className={drawer.fieldLabel}>{t('form.startFrom')}</span>
-            <select
-              className={drawer.box}
-              data-testid="role-source"
-              value={sourceId}
-              title={
-                source && !patterned ? t('form.startFromHint', { name: source.name }) : undefined
-              }
-              onChange={(e) => startFrom(e.target.value)}
-            >
-              <option value="">{t('form.startFromNone')}</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
+            {/* 02's box: the role's name and a chevron, never a clipped placeholder. */}
+            <span className={styles.selectBox}>
+              <select
+                className={`${drawer.box} ${styles.selectInner}`}
+                data-testid="role-source"
+                value={sourceId}
+                title={
+                  source && !patterned ? t('form.startFromHint', { name: source.name }) : undefined
+                }
+                onChange={(e) => startFrom(e.target.value)}
+              >
+                <option value="">{t('form.startFromNone')}</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={13} className={styles.selectChevron} aria-hidden="true" />
+            </span>
           </label>
         </div>
         <label className={drawer.field}>
@@ -275,6 +286,28 @@ export function RoleForm({
         <p className="srOnly" data-testid="role-selected">
           {t('form.selected', { count: selected.length })}
         </p>
+
+        {/* 02's bar at the form's end — it stays in view while the grid scrolls. */}
+        <div className={styles.formBar} data-testid="role-bar">
+          <button
+            type="button"
+            className={styles.createButton}
+            disabled={isPending || !name.trim() || patterned}
+            title={patterned ? t('form.wildcardCannotSeed') : undefined}
+            data-testid="role-save"
+            onClick={submit}
+          >
+            {isPending ? t('form.saving') : t('form.save')}
+          </button>
+          <Link href="/settings/people/roles" className={drawer.drawerCancel}>
+            {t('form.cancel')}
+          </Link>
+        </div>
+        {error ? (
+          <p className={styles.formError} data-testid="role-error">
+            {error}
+          </p>
+        ) : null}
       </div>
 
       <aside className={styles.newRoleSide}>
@@ -308,27 +341,6 @@ export function RoleForm({
             {t('form.addPerson')}
           </span>
         </section>
-
-        <div className={styles.sideActions}>
-          <button
-            type="button"
-            className={styles.createButton}
-            disabled={isPending || !name.trim() || patterned}
-            title={patterned ? t('form.wildcardCannotSeed') : undefined}
-            data-testid="role-save"
-            onClick={submit}
-          >
-            {isPending ? t('form.saving') : t('form.save')}
-          </button>
-          <Link href="/settings/people/roles" className={drawer.drawerCancel}>
-            {t('form.cancel')}
-          </Link>
-        </div>
-        {error ? (
-          <p className={styles.formError} data-testid="role-error">
-            {error}
-          </p>
-        ) : null}
       </aside>
     </section>
   );

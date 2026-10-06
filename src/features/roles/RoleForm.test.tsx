@@ -175,3 +175,26 @@ describe('the two refusals need different actions', () => {
     expect(error).toHaveTextContent(/nothing was created/i);
   });
 });
+
+describe('★ 12c — 02 starts from Agent, and says what differs from the start', () => {
+  const withAgent: readonly Role[] = [
+    { ...role('ra', 'Agent', ['conversation:messages:read']), builtinKey: 'AGENT' },
+    role('r2', 'Owner', ['*']),
+  ];
+  it('no ?from=: Agent is chosen and seeded, and "Compared with Agent" is there', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ roles: messages }}>
+        <RoleForm permissions={PERMISSIONS} roles={withAgent} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('role-source')).toHaveValue('ra');
+    expect(screen.getByTestId('role-compared')).toHaveTextContent('Agent');
+  });
+
+  it('Create role and Cancel sit in the bar at the form’s end', () => {
+    renderForm();
+    const bar = screen.getByTestId('role-bar');
+    expect(bar).toContainElement(screen.getByTestId('role-save'));
+    expect(bar).toHaveTextContent('Cancel');
+  });
+});

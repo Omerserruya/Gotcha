@@ -1112,13 +1112,6 @@
     cursor: not-allowed;
   }
 
-  .sideActions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-10);
-    margin-block-start: auto;
-  }
-
   .createButton {
     padding-block: var(--space-10);
     padding-inline: var(--space-18);
@@ -1173,5 +1166,41 @@
   .faceMore {
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
+  }
+}
+
+@layer features {
+  /* 12c's Start from: 02's box — the role's name and a chevron. */
+  .selectBox {
+    position: relative;
+    display: block;
+  }
+
+  .selectInner {
+    inline-size: 100%;
+    padding-inline-end: var(--space-26);
+    appearance: none;
+    text-overflow: ellipsis;
+  }
+
+  .selectChevron {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: var(--space-12);
+    translate: 0 -50%;
+    color: var(--text-subtle);
+    pointer-events: none;
+  }
+
+  /* 12c's bar at the form's end: in view while the grid scrolls. */
+  .formBar {
+    position: sticky;
+    inset-block-end: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-14);
+    border-block-start: 1px solid var(--border-subtle);
+    background-color: var(--panel-base);
   }
 }
