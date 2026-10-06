@@ -1322,6 +1322,9 @@ export const inboxEndpoints = {
    * [{key, value, confidence, source, observedAt}], historical: { summary,
    * facts } | null } }`. Keyed on the conversation; 404 outside the tenant.
    */
+  /** Backend ed0f1c9c — the AI's steps here, newest first. See `contracts/ai-activity.ts`. */
+  aiActivity: (conversationId: string) =>
+    endpoint('/api/ai-assist/{conversationId}/ai-activity', { conversationId }),
   customerMemory: (conversationId: string) =>
     endpoint('/api/ai-assist/{conversationId}/customer-memory', { conversationId }),
   suggestionsRefresh: (conversationId: string) =>

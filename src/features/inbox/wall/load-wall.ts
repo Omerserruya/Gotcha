@@ -122,11 +122,11 @@ export async function loadWallPerson(
 ): Promise<WallPerson> {
   const api = serverApi();
   /*
-   * ⚠ `contactId` IS NULL UNTIL BACKEND SENDS IT on the conversation row
-   *   (asked 2026-10-06). The only (channel, handle) → contact route, `POST
-   *   /identity/resolve`, CREATES one on a miss — a write on a read, never
-   *   made from here. Until then the contact-keyed reads are not made and
-   *   each block says "—" with why. Memory is keyed on the conversation: read now.
+   * `contactId` is the conversation row's own (Backend c240bea4). It can be
+   *   null — an older conversation's contact gone, say — and then the
+   *   contact-keyed reads are not made and each block says "—" with why.
+   *   `POST /identity/resolve` is never the fallback: it CREATES on a miss.
+   *   Memory is keyed on the conversation and is read either way.
    */
   const [commerce, insights, memory, history] = await Promise.all([
     contactId ? loadCommerce([contactId]) : Promise.resolve(null),

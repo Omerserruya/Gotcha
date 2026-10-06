@@ -7,6 +7,7 @@ import { Link } from '@/i18n/navigation';
 import { initials } from '../initials';
 import type { ConversationDetail } from '../load-inbox';
 import { loadWallPerson, type WallMemory, type WallPerson } from './load-wall';
+import { ActivityStrip, WorkingState } from './Activity';
 import { OrdersCarousel } from './OrdersCarousel';
 import { SuggestionCarousel } from './SuggestionCarousel';
 import { WallBody } from './WallBody';
@@ -28,44 +29,24 @@ import styles from './Wall.module.css';
  *   "—", with a title naming what it waits for. Never a zero, never a guess.
  */
 
-/** 02's 45px header. The live AI-activity contract is Backend's, pending. */
-export async function WallHeader() {
+/**
+ * 02's 45px header: "Copilot", then "Working on this · stop" while a step of
+ * the AI's runs (`WorkingState`, from the activity the provider holds).
+ */
+export async function WallHeader({
+  conversationId,
+  aiDriving,
+}: {
+  readonly conversationId: string | null;
+  readonly aiDriving: boolean;
+}) {
   const t = await getTranslations('inbox.wall');
   return (
     <div className={styles.header} data-testid="wall-header">
       <span className={styles.dot} aria-hidden="true" />
       <span className={styles.headerName}>{t('name')}</span>
-      <span className={styles.headerState} title={t('activity.pending')} data-testid="wall-working">
-        —
-      </span>
-      <button
-        type="button"
-        className={styles.textButton}
-        disabled
-        title={t('activity.stopPending')}
-        data-testid="wall-stop"
-      >
-        {t('activity.stop')}
-      </button>
+      <WorkingState conversationId={conversationId} aiDriving={aiDriving} />
     </div>
-  );
-}
-
-/** "What it did · 5 steps · 4s", in shape: the steps arrive with the activity contract. */
-export async function ActivityStrip() {
-  const t = await getTranslations('inbox.wall.activity');
-  return (
-    <section className={styles.activity} data-testid="wall-activity" title={t('pending')}>
-      <div className={styles.activityHead}>
-        <span>{t('title')}</span>
-        <span className={styles.rule} aria-hidden="true" />
-        <span>—</span>
-      </div>
-      <div className={styles.step}>
-        <span className={styles.stepDot} aria-hidden="true" />
-        <span className={styles.stepText}>—</span>
-      </div>
-    </section>
   );
 }
 
@@ -77,15 +58,35 @@ export async function CopilotWall({
   readonly detail: Promise<ConversationDetail>;
   readonly conversation: {
     readonly id: string;
-    /** Backend is adding it to the row (asked 2026-10-06); `null` until then. */
+    /** The row's own (Backend c240bea4); `null` for an unidentified visitor. */
     readonly contactId: string | null;
     readonly customerName: string | null;
+    readonly channel: string | null;
   };
 }) {
   const { timeline, orders } = await detail;
   const contactId = conversation.contactId ?? timeline?.contact?.id ?? null;
-  const person = await loadWallPerson(contactId, conversation.id);
   const t = await getTranslations('inbox.wall.person');
+
+  /*
+   * ★ AN UNIDENTIFIED VISITOR (Backend c240bea4): Shopify live chat has no
+   *   contact until the visitor is identified — by design, not a failed
+   *   read. One line says so, in place of three blocks of "—"; nothing is
+   *   read for a person who is not one yet.
+   */
+  if (contactId === null && conversation.channel === 'SHOPIFY_LIVE_CHAT') {
+    return (
+      <WallBody history={null} why="" showHistory={false}>
+        <ActivityStrip />
+        <SuggestionCarousel conversationId={conversation.id} />
+        <p className={styles.visitor} data-testid="wall-visitor">
+          {t('visitor')}
+        </p>
+      </WallBody>
+    );
+  }
+
+  const person = await loadWallPerson(contactId, conversation.id);
   const cards = ordersIn(orders);
 
   return (

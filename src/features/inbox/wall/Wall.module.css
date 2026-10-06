@@ -95,9 +95,64 @@
     background-color: var(--frame-dot-idle);
   }
 
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* 02's dots: green done, violet running, amber waiting, red failed. */
+  .stepDot[data-status='completed'] {
+    background-color: var(--signal-done);
+  }
+
+  .stepDot[data-status='running'],
+  .stepDot[data-status='approved'] {
+    background-color: var(--signal-ai);
+  }
+
+  .stepDot[data-status='proposed'] {
+    background-color: var(--signal-waiting);
+  }
+
+  .stepDot[data-status='failed'],
+  .stepDot[data-status='denied'] {
+    background-color: var(--menu-dark-danger);
+  }
+
   .stepText {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
     font-size: 12px;
     color: var(--frame-text-body);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .stepResult {
+    flex: none;
+    font-size: 11px;
+    color: var(--menu-dark-icon);
+  }
+
+  .stepResult[data-status='proposed'] {
+    color: var(--signal-waiting);
+  }
+
+  .stepResult[data-status='failed'] {
+    color: var(--menu-dark-danger);
+  }
+
+  .visitor {
+    margin: 0;
+    padding: 13px 18px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--menu-dark-icon);
   }
 
   /* ── Sections ── */

@@ -29,7 +29,12 @@ vi.mock('@/i18n/navigation', () => ({
 const person = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<WallPerson>>());
 vi.mock('./load-wall', () => ({ loadWallPerson: person }));
 vi.mock('./SuggestionCarousel', () => ({ SuggestionCarousel: () => null }));
-vi.mock('./wall-actions', () => ({ conversationMessages: vi.fn() }));
+vi.mock('./wall-actions', () => ({ conversationMessages: vi.fn(), readActivity: vi.fn() }));
+vi.mock('../conversation-actions', () => ({ stopAi: vi.fn() }));
+vi.mock('@/realtime/realtime-provider', () => ({
+  useRealtimeEvent: () => undefined,
+  useConversationRoom: () => undefined,
+}));
 vi.mock('@/features/customers/order-actions', () => ({ runOrderAction: vi.fn() }));
 
 import { CopilotWall, WallHeader } from './CopilotWall';
@@ -58,25 +63,52 @@ const blank: WallPerson = { commerce: null, mood: null, memory: null, history: n
 const detail = (over: Partial<ConversationDetail> = {}): Promise<ConversationDetail> =>
   Promise.resolve({ messages: [], timeline: null, orders: null, ...over } as ConversationDetail);
 
-const wall = (contactId: string | null = null, over: Partial<ConversationDetail> = {}) =>
+const wall = (
+  contactId: string | null = null,
+  over: Partial<ConversationDetail> = {},
+  channel: string | null = 'WHATSAPP',
+) =>
   CopilotWall({
     detail: detail(over),
-    conversation: { id: 'c1', contactId, customerName: 'Dana Cohen' },
+    conversation: { id: 'c1', contactId, customerName: 'Dana Cohen', channel },
   });
 
 beforeEach(() => {
   person.mockReset().mockResolvedValue(blank);
 });
 
-describe('★ the header: the shape, with "—" until the activity contract', () => {
-  it('Copilot, "—" with why, and stop drawn disabled', async () => {
-    await show(WallHeader());
+describe('★ the header outside a provider', () => {
+  it('Copilot, and "—": nothing running, so no stop', async () => {
+    await show(WallHeader({ conversationId: 'c1', aiDriving: true }));
     expect(screen.getByText('Copilot')).toBeInTheDocument();
-    expect(screen.getByTestId('wall-working')).toHaveAttribute(
-      'title',
-      expect.stringContaining('AI-activity contract'),
+    expect(screen.getByTestId('wall-working')).toHaveAttribute('data-working', 'no');
+    expect(screen.queryByTestId('wall-stop')).toBeNull();
+  });
+});
+
+describe('★★ an unidentified visitor (c240bea4) — one line, not three blocks of "—"', () => {
+  it('Shopify live chat with no contact: the line; no person, orders, history or reads', async () => {
+    await show(wall(null, {}, 'SHOPIFY_LIVE_CHAT'));
+    expect(screen.getByTestId('wall-visitor')).toHaveTextContent(
+      'An unidentified visitor — history, memory and orders appear once they’re identified.',
     );
-    expect(screen.getByTestId('wall-stop')).toBeDisabled();
+    expect(screen.queryByTestId('wall-person')).toBeNull();
+    expect(screen.queryByTestId('wall-orders')).toBeNull();
+    expect(screen.queryByTestId('wall-history')).toBeNull();
+    expect(person).not.toHaveBeenCalled();
+    // What the AI does still shows: a visitor is still a conversation.
+    expect(screen.getByTestId('wall-activity')).toBeInTheDocument();
+  });
+
+  it('★ a visitor once identified is a person', async () => {
+    await show(wall('k1', {}, 'SHOPIFY_LIVE_CHAT'));
+    expect(screen.queryByTestId('wall-visitor')).toBeNull();
+    expect(screen.getByTestId('wall-person')).toBeInTheDocument();
+  });
+
+  it('⚠ any other channel without a contact is "—", not "a visitor"', async () => {
+    await show(wall(null));
+    expect(screen.queryByTestId('wall-visitor')).toBeNull();
   });
 });
 

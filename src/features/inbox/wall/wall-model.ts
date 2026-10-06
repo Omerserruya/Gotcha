@@ -1,3 +1,4 @@
+import type { ActivityStatus, ActivityStep } from '@/api/contracts/ai-activity';
 import { copilotSentinel, isDraft, type Suggestion } from '@/api/contracts/copilot';
 import { type OrderCard } from '@/api/contracts/customer-orders';
 
@@ -144,4 +145,66 @@ export function saysRecommended(approach: string, word: string): boolean {
   return [word, 'recommended'].some(
     (w) => w.trim() && head.startsWith(w.trim().toLocaleLowerCase()),
   );
+}
+
+/** One `ai.activity.updated`, as the wall needs it. */
+export interface StepChange {
+  readonly stepId: string;
+  readonly tool: string;
+  readonly labelKey: string;
+  readonly status: ActivityStatus | null;
+  readonly ts: string | null;
+}
+
+const ENDED: readonly (ActivityStatus | null)[] = ['completed', 'failed', 'denied'];
+
+/**
+ * A step changed: that row updated in place, or a new one at the top (newest
+ * first, as the route sends them). Times come from the event's own `ts`, so
+ * "running → completed" gets its duration without re-reading the list.
+ */
+export function applyStep(steps: readonly ActivityStep[], change: StepChange): ActivityStep[] {
+  const at = change.ts;
+  const existing = steps.find((s) => s.id === change.stepId);
+  const base: ActivityStep = existing ?? {
+    id: change.stepId,
+    tool: change.tool,
+    labelKey: change.labelKey,
+    status: null,
+    proposedAt: at,
+    startedAt: null,
+    completedAt: null,
+    durationMs: null,
+    error: null,
+  };
+  const startedAt = change.status === 'running' ? (base.startedAt ?? at) : base.startedAt;
+  const completedAt = ENDED.includes(change.status) ? (base.completedAt ?? at) : base.completedAt;
+  const durationMs =
+    base.durationMs ??
+    (startedAt && completedAt
+      ? Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)) || null
+      : null);
+  const next: ActivityStep = {
+    ...base,
+    tool: change.tool || base.tool,
+    labelKey: change.labelKey || base.labelKey,
+    status: change.status ?? base.status,
+    startedAt,
+    completedAt,
+    durationMs: Number.isNaN(durationMs) ? null : durationMs,
+  };
+  return existing ? steps.map((s) => (s.id === next.id ? next : s)) : [next, ...steps];
+}
+
+/** "N steps · Xs", and whether anything is running now. */
+export function activitySummary(steps: readonly ActivityStep[]): {
+  readonly count: number;
+  readonly totalMs: number;
+  readonly running: boolean;
+} {
+  return {
+    count: steps.length,
+    totalMs: steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0),
+    running: steps.some((s) => s.status === 'running'),
+  };
 }

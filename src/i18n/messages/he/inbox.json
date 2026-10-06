@@ -235,9 +235,44 @@
     "nothingOpen": "פתחו שיחה כדי לראות מה GOTCHA יודע על האדם שבה.",
     "activity": {
       "title": "מה הוא עשה",
-      "pending": "מה GOTCHA עושה בשיחה הזו, צעד אחר צעד, יגיע עם חוזה פעילות ה-AI שהצוות בונה.",
+      "unread": "לא הצלחנו לקרוא כרגע מה ה-AI עשה כאן.",
+      "idle": "שום דבר לא רץ כרגע.",
+      "workingOn": "עובד על זה",
       "stop": "עצירה",
-      "stopPending": "עצירת צעד שרץ תגיע עם חוזה פעילות ה-AI. כדי לעצור את ה-AI בשיחה הזו, השתמשו ב\"עצירת AI\" למעלה."
+      "stopTitle": "עצירת ה-AI בשיחה הזו — כמו \"עצירת AI\" למעלה. אף אחד לא משויך.",
+      "stopFailed": "לא הצלחנו לעצור את ה-AI כרגע. נסו את \"עצירת AI\" למעלה.",
+      "none": "עוד כלום",
+      "steps": "{count, plural, =1 {צעד אחד} other {# צעדים}}",
+      "ms": "{ms} מ\"ש",
+      "seconds": "{s} שנ'",
+      "label": {
+        "looking_up_order": "חיפוש ההזמנה",
+        "checking_products": "בדיקת המוצרים",
+        "processing_refund": "החזר כספי",
+        "cancelling_order": "ביטול ההזמנה",
+        "handling_return": "טיפול בהחזרה",
+        "checking_delivery": "בדיקת המשלוח",
+        "updating_order": "עדכון ההזמנה",
+        "creating_discount": "יצירת הנחה",
+        "sending_order_email": "שליחת מייל ההזמנה",
+        "adding_note": "הוספת הערה",
+        "checking_calendar": "בדיקת היומן",
+        "booking_meeting": "קביעת פגישה",
+        "identifying_customer": "זיהוי הלקוח",
+        "saving_customer": "שמירת הלקוח",
+        "tagging_customer": "תיוג הלקוח",
+        "scheduling_followup": "תזמון מעקב",
+        "handing_to_team": "העברה לצוות",
+        "working": "צעד"
+      },
+      "status": {
+        "proposed": "ממתין לאישור",
+        "approved": "אושר",
+        "running": "…",
+        "completed": "בוצע",
+        "failed": "נכשל",
+        "denied": "נדחה"
+      }
     },
     "answers": {
       "title": "{count, plural, =0 {דרכים לענות} =1 {דרך אחת לענות} =2 {שתי דרכים לענות} =3 {שלוש דרכים לענות} other {# דרכים לענות}}",
@@ -299,7 +334,8 @@
         "person": "הוזן על ידי אדם",
         "crm": "מה-CRM שלכם",
         "worked_out": "הוסק"
-      }
+      },
+      "visitor": "מבקר שעדיין לא זוהה — היסטוריה, זיכרון והזמנות יופיעו כשיזוהה."
     },
     "history": {
       "title": "היסטוריה בכל הערוצים",

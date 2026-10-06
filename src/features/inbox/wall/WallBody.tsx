@@ -39,12 +39,15 @@ type Messages =
 export function WallBody({
   history,
   why,
+  showHistory = true,
   children,
 }: {
   /** `null`: we could not read it, or had no person to read it for. */
   readonly history: WallHistory | null;
   /** The title on a "—" row: which of those two it was. */
   readonly why: string;
+  /** No row at all — an unidentified visitor has no history to open yet. */
+  readonly showHistory?: boolean;
   readonly children: ReactNode;
 }) {
   const t = useTranslations('inbox.wall.history');
@@ -60,6 +63,8 @@ export function WallBody({
       setWholes((m) => new Map(m).set(conversation.id, read));
     });
   };
+
+  if (!showHistory) return <>{children}</>;
 
   if (level.at === 'wall') {
     const usable = history !== null && history.conversations.length > 0;

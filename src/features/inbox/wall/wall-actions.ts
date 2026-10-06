@@ -7,6 +7,7 @@ import { isApiError } from '@/api/client/api-error';
 import { featureRefusalFrom } from '@/api/client/tenant-gate';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
+import { activityResponseSchema, type ActivityStep } from '@/api/contracts/ai-activity';
 import { suggestionsResponseSchema } from '@/api/contracts/copilot';
 import { messageSchema, type InboxMessage } from '@/api/contracts/inbox';
 import { inboxEndpoints } from '@/api/endpoints/registry';
@@ -22,6 +23,30 @@ import { loadCopilot, type CopilotRead } from '../load-copilot';
  */
 export async function readSuggestions(conversationId: string): Promise<CopilotRead> {
   return loadCopilot(conversationId);
+}
+
+/**
+ * The AI's steps here — once when the wall opens; after that each
+ * `ai.activity.updated` changes its row in place. `null`: unread.
+ */
+export async function readActivity(
+  conversationId: string,
+): Promise<readonly ActivityStep[] | null> {
+  try {
+    const answer = await serverApi().get({
+      endpoint: inboxEndpoints.aiActivity(conversationId),
+      query: { limit: 20 },
+      payload: activityResponseSchema,
+      raw: true,
+    });
+    return answer.data;
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('inbox.wall_activity_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return null;
+  }
 }
 
 export type RefreshRead =

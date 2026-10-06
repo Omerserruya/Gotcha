@@ -87,9 +87,12 @@ export function useRealtimeEvent(type: RealtimeEventType, listener: RealtimeList
  * server snapshot is always `idle`.
  */
 /** Be in this conversation's room while mounted — where its own events are sent. */
-export function useConversationRoom(conversationId: string): void {
+export function useConversationRoom(conversationId: string | null): void {
   const transport = useContext(RealtimeContext);
-  useEffect(() => transport?.joinConversation(conversationId), [transport, conversationId]);
+  useEffect(
+    () => (conversationId === null ? undefined : transport?.joinConversation(conversationId)),
+    [transport, conversationId],
+  );
 }
 
 export function useRealtimeConnectionState(): ConnectionState {

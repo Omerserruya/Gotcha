@@ -235,9 +235,44 @@
     "nothingOpen": "Open a conversation to see what GOTCHA knows about the person in it.",
     "activity": {
       "title": "What it did",
-      "pending": "What GOTCHA is doing on this conversation, step by step, arrives with the AI-activity contract Backend is building.",
+      "unread": "Couldn’t read what the AI did here just now.",
+      "idle": "Nothing is running right now.",
+      "workingOn": "Working on this",
       "stop": "stop",
-      "stopPending": "Stopping a running step arrives with the AI-activity contract. To stop the AI on this conversation, use Stop AI above."
+      "stopTitle": "Stop the AI on this conversation — the same as Stop AI above. Nobody is assigned.",
+      "stopFailed": "Couldn’t stop the AI just now. Try Stop AI above.",
+      "none": "Nothing yet",
+      "steps": "{count, plural, =1 {1 step} other {# steps}}",
+      "ms": "{ms}ms",
+      "seconds": "{s}s",
+      "label": {
+        "looking_up_order": "Order lookup",
+        "checking_products": "Product check",
+        "processing_refund": "Refund",
+        "cancelling_order": "Order cancellation",
+        "handling_return": "Return",
+        "checking_delivery": "Delivery check",
+        "updating_order": "Order update",
+        "creating_discount": "Discount",
+        "sending_order_email": "Order email",
+        "adding_note": "Note",
+        "checking_calendar": "Calendar check",
+        "booking_meeting": "Meeting booking",
+        "identifying_customer": "Customer identification",
+        "saving_customer": "Customer record",
+        "tagging_customer": "Customer tag",
+        "scheduling_followup": "Follow-up",
+        "handing_to_team": "Handover to the team",
+        "working": "A step"
+      },
+      "status": {
+        "proposed": "waiting for approval",
+        "approved": "approved",
+        "running": "…",
+        "completed": "done",
+        "failed": "failed",
+        "denied": "declined"
+      }
     },
     "answers": {
       "title": "{count, plural, =0 {Ways to answer} =1 {One way to answer} =2 {Two ways to answer} =3 {Three ways to answer} other {# ways to answer}}",
@@ -299,7 +334,8 @@
         "person": "entered by a person",
         "crm": "from your CRM",
         "worked_out": "worked out"
-      }
+      },
+      "visitor": "An unidentified visitor — history, memory and orders appear once they’re identified."
     },
     "history": {
       "title": "History across all channels",

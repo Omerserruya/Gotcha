@@ -1,3 +1,5 @@
+import { ACTIVITY_STATUSES, type ActivityStatus } from '@/lib/ai-activity-status';
+
 /**
  * Normalised realtime events.
  *
@@ -41,7 +43,21 @@ export type RealtimeEvent =
     })
   | (RealtimeEventBase & { type: 'approval.requested'; approvalId: string })
   | (RealtimeEventBase & { type: 'approval.resolved'; approvalId: string })
-  | (RealtimeEventBase & { type: 'ai.activity'; conversationId: string })
+  /**
+   * One step of the AI's work changed (Backend ed0f1c9c), to `conv:{id}`
+   * only, without the tool's arguments or result. The wall updates that row
+   * in place rather than re-reading the list.
+   */
+  | (RealtimeEventBase & {
+      type: 'ai.activity.updated';
+      conversationId: string;
+      stepId: string;
+      tool: string;
+      labelKey: string;
+      status: ActivityStatus | null;
+      /** When the step changed, as the server stamped it. */
+      ts: string | null;
+    })
   /**
    * The conversation's stored ready replies changed (Backend: generated on an
    * inbound message, kept). The wall re-reads them — never on every render.
@@ -123,6 +139,29 @@ export const translators: readonly EventTranslator[] = [
    * only, as the bus's `data`: `{tenantId, conversationId, basedOnMessageId,
    * generatedAt, channel}` — never the text, so the screen re-reads.
    */
+  // One step of the AI's work, as the orchestrator emits it (`data` of the bus).
+  (wireEvent, payload) => {
+    if (wireEvent !== 'ai.activity.updated') return null;
+    const data = field(payload, 'data') ?? payload;
+    const tenantId = str(payload, 'tenantId') ?? str(data, 'tenantId');
+    const conversationId = str(data, 'conversationId');
+    const stepId = str(data, 'id');
+    if (!tenantId || !conversationId || !stepId) return null;
+    const status = str(data, 'status');
+    return {
+      type: 'ai.activity.updated',
+      tenantId,
+      at: Date.now(),
+      conversationId,
+      stepId,
+      tool: str(data, 'tool') ?? '',
+      labelKey: str(data, 'labelKey') ?? 'working',
+      status: (ACTIVITY_STATUSES as readonly string[]).includes(status ?? '')
+        ? (status as ActivityStatus)
+        : null,
+      ts: str(data, 'ts'),
+    };
+  },
   (wireEvent, payload) => {
     if (wireEvent !== 'copilot.suggestions.updated') return null;
     const data = field(payload, 'data') ?? payload;

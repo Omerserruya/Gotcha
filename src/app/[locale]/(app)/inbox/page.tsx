@@ -8,6 +8,7 @@ import { StreamLive } from '@/features/inbox/StreamLive';
 import { ClearQueueList, ClearQueuePane } from '@/features/inbox/ClearQueue';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
+import { ActivityProvider } from '@/features/inbox/wall/Activity';
 import { AskCopilot } from '@/features/inbox/wall/AskCopilot';
 import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import styles from '@/features/inbox/Inbox.module.css';
@@ -320,28 +321,53 @@ export default async function Page({
                   02's wall: a fixed 45px header, the scrolling body, and the
                   pinned "Ask Copilot anything…". Only the body waits for the
                   second round; the other two paint with the frame.
+
+                  ★ The provider draws nothing: it holds the AI's steps, read
+                    once and updated by event, for the header's "Working on
+                    this" and the body's "What it did" alike. Keyed, so the
+                    next conversation starts from its own read.
                 */}
-                <WallHeader />
-                <div className={styles.copilotBody}>
-                  {data.open && data.detail ? (
-                    <Suspense key={data.open.id} fallback={<ContextSkeleton />}>
-                      <CopilotWall
-                        detail={data.detail}
-                        conversation={{
-                          id: data.open.id,
-                          contactId: data.open.contactId,
-                          customerName: data.open.customerName,
-                        }}
-                      />
-                    </Suspense>
-                  ) : (
-                    <p className={styles.note} data-testid="wall-nothing-open">
-                      {t('wall.nothingOpen')}
-                    </p>
-                  )}
-                </div>
-                {/* Keyed: a question half-typed about one person is not asked about the next. */}
-                <AskCopilot key={data.open?.id ?? 'none'} conversationId={data.open?.id ?? null} />
+                <ActivityProvider
+                  key={data.open?.id ?? 'none'}
+                  conversationId={data.open?.id ?? null}
+                >
+                  <WallHeader
+                    conversationId={data.open?.id ?? null}
+                    /*
+                     * "stop" is Stop AI, so only where the AI answers: an AI
+                     * employee bound, and no person has taken over.
+                     */
+                    aiDriving={
+                      data.open !== null &&
+                      data.open.assignedAiAgentId !== null &&
+                      !data.open.isHandedOver
+                    }
+                  />
+                  <div className={styles.copilotBody}>
+                    {data.open && data.detail ? (
+                      <Suspense key={data.open.id} fallback={<ContextSkeleton />}>
+                        <CopilotWall
+                          detail={data.detail}
+                          conversation={{
+                            id: data.open.id,
+                            contactId: data.open.contactId,
+                            customerName: data.open.customerName,
+                            channel: data.open.channel,
+                          }}
+                        />
+                      </Suspense>
+                    ) : (
+                      <p className={styles.note} data-testid="wall-nothing-open">
+                        {t('wall.nothingOpen')}
+                      </p>
+                    )}
+                  </div>
+                  {/* Keyed: a question half-typed about one person is not asked about the next. */}
+                  <AskCopilot
+                    key={data.open?.id ?? 'none'}
+                    conversationId={data.open?.id ?? null}
+                  />
+                </ActivityProvider>
               </aside>
             )}
           </div>
