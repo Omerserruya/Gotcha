@@ -10,6 +10,7 @@ import {
   type PolicyResult,
 } from "@chatcenter/shared";
 import { CircuitBreakers, withRetry, pushToDlq } from "./runner";
+import { channels } from "../intelligence/events/channels";
 import { precheckAdapterAction } from "../connectors/integration-framework";
 import { withOrderCurrency } from "../approval-currency";
 import type {
@@ -372,19 +373,25 @@ export class ActionOrchestrator {
     executionId: string,
     approvedBy: string,
   ): Promise<ExecutionResult> {
+    let row: { tenantId?: string; conversationId?: string; tool?: string } | null = null;
     try {
-      await (prisma as any).toolExecutionRequest.update({
+      row = await (prisma as any).toolExecutionRequest.update({
         where: { id: executionId },
         data: {
           status: "approved",
           decidedAt: new Date(),
           actor: { agentId: approvedBy },
         },
+        select: { tenantId: true, conversationId: true, tool: true },
       });
     } catch (err: any) {
       console.warn("[orchestrator] approve persist failed:", err?.message);
     }
-    await this.emit("tool.execution.approved", executionId, { approvedBy });
+    // The tenant and conversation come from the row: this event used to carry
+    // neither, so it was published with tenantId "" and reached nobody.
+    await this.emit("tool.execution.approved", executionId, {
+      tenantId: row?.tenantId, conversationId: row?.conversationId, tool: row?.tool, approvedBy,
+    });
     return { status: "approved", attempts: 0 };
   }
 
@@ -393,8 +400,9 @@ export class ActionOrchestrator {
     deniedBy: string,
     reason: string,
   ): Promise<void> {
+    let row: { tenantId?: string; conversationId?: string; tool?: string } | null = null;
     try {
-      await (prisma as any).toolExecutionRequest.update({
+      row = await (prisma as any).toolExecutionRequest.update({
         where: { id: executionId },
         data: {
           status: "denied",
@@ -402,11 +410,14 @@ export class ActionOrchestrator {
           error: reason,
           actor: { agentId: deniedBy },
         },
+        select: { tenantId: true, conversationId: true, tool: true },
       });
     } catch (err: any) {
       console.warn("[orchestrator] deny persist failed:", err?.message);
     }
-    await this.emit("tool.execution.denied", executionId, { deniedBy, reason });
+    await this.emit("tool.execution.denied", executionId, {
+      tenantId: row?.tenantId, conversationId: row?.conversationId, tool: row?.tool, deniedBy, reason,
+    });
   }
 
   // ── Internal pipeline steps ────────────────────────────────
@@ -639,16 +650,40 @@ export class ActionOrchestrator {
     }
   }
 
+  /**
+   * Publish a tool lifecycle event - to ONE conversation's room, never to the
+   * tenant, and never with what the tool was given or returned.
+   *
+   * ★ THIS WAS A LEAK. Events were published with no `data.channel`, so the
+   * Socket.IO bridge sent them to `tenant:{id}` - every open tab in the
+   * workspace, past the `canViewConversation` check that guards a
+   * conversation's room. `tool.execution.completed` carried `result` (a
+   * Shopify order: the customer's name, address, phone) and `proposed`
+   * carried `args`. An agent restricted to one department received other
+   * departments' customers' orders in their socket.
+   *
+   * Now: the room is `conv:{conversationId}` (the bridge honours it, and
+   * joining it is gated per conversation), and `args`/`result` are dropped
+   * here - in the one emitter - so no caller can reintroduce them. The row in
+   * tool_execution_requests keeps both for the routes that check permission.
+   * An event with no conversation is not published at all: tenant-wide is
+   * exactly the failure being removed.
+   */
   private async emit(
     event: string,
     executionId: string,
-    payload: Record<string, unknown> & { tenantId?: string },
+    payload: Record<string, unknown> & { tenantId?: string; conversationId?: string },
   ): Promise<void> {
     try {
+      const { args: _args, result: _result, ...safe } = payload;
+      if (!safe.tenantId || !safe.conversationId) {
+        console.warn(`[orchestrator] emit ${event} skipped: no tenant/conversation to scope it to (execution ${executionId})`);
+        return;
+      }
       await publishEvent({
         event,
-        tenantId: String(payload.tenantId ?? ""),
-        data: { executionId, ...payload, ts: new Date().toISOString() },
+        tenantId: String(safe.tenantId),
+        data: { executionId, ...safe, channel: channels.conversation(String(safe.conversationId)), ts: new Date().toISOString() },
       });
     } catch (err: any) {
       console.warn(`[orchestrator] emit ${event} failed:`, err?.message);
