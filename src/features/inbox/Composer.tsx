@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { ArrowUp, Image as ImageIcon, Paperclip, X } from 'lucide-react';
 
@@ -70,6 +70,26 @@ export function Composer({
   const t = useTranslations('inbox.composer');
   const router = useRouter();
   const [text, setText] = useState('');
+  /*
+   * ★ A DRAFT IS KEPT PER CONVERSATION, so Esc can close one without losing
+   *   it and opening another does not carry it there. In this tab only.
+   */
+  const hydrated = useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
+  const [draftOf, setDraftOf] = useState<string | null>(null);
+  // State adjusted during render when the conversation changes - React's own
+  // pattern for it - and only once hydrated, so the server and the first
+  // client render agree on an empty box.
+  if (hydrated && draftOf !== conversationId) {
+    setDraftOf(conversationId);
+    setText(readDraft(conversationId));
+  }
+  useEffect(() => {
+    if (draftOf === conversationId) writeDraft(conversationId, text);
+  }, [conversationId, draftOf, text]);
   /*
    * A chosen file, HELD until Send. The media route sends on upload, so
    * choosing a file must not be the moment it leaves.
@@ -531,3 +551,25 @@ export function Composer({
     </form>
   );
 }
+
+const draftKey = (conversationId: string) => `gotcha:draft:${conversationId}`;
+
+/** Storage can be missing or refuse (a private window): then there is simply no draft. */
+function readDraft(conversationId: string): string {
+  try {
+    return window.sessionStorage.getItem(draftKey(conversationId)) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writeDraft(conversationId: string, text: string): void {
+  try {
+    if (text.trim()) window.sessionStorage.setItem(draftKey(conversationId), text);
+    else window.sessionStorage.removeItem(draftKey(conversationId));
+  } catch {
+    /* Nothing to keep it in; the box still holds it. */
+  }
+}
+
+const noSubscription = () => () => {};

@@ -12,6 +12,8 @@ import { ConversationStream, OrdersChip } from '@/features/inbox/ConversationDet
 import { AskCopilot } from '@/features/inbox/wall/AskCopilot';
 import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import { PendingPane } from '@/features/inbox/PendingPane';
+import { InboxEscape } from '@/features/inbox/InboxEscape';
+import { NothingOpen } from '@/features/inbox/NothingOpen';
 
 /**
  * Screen 02, assembled - tested on the tree rather than on the pixels.
@@ -619,6 +621,19 @@ describe('★★ 02b - the queue is clear, and only then', () => {
     const tree = await page({ rows: [], messages: null });
     expect(loadClearQueue).not.toHaveBeenCalled();
     expect(found(tree).panels).toContain(CopilotWall);
+  });
+
+  it('★★ nothing open on a busy queue: pick one (Omer: "much like WhatsApp") - and no Esc to close', async () => {
+    const tree = await page({ rows: [row()], open: null, messages: null });
+    expect(found(tree).panels).not.toContain(CopilotWall);
+    expect(propsOf(tree, NothingOpen)).not.toBeNull();
+    expect(propsOf(tree, InboxEscape)).toBeNull();
+  });
+
+  it('★ a conversation open: Esc can close it', async () => {
+    expect(propsOf<{ conversationId: string }>(await page(), InboxEscape)?.conversationId).toBe(
+      'conv1',
+    );
   });
 
   it('★ a link to a conversation that is not available says so', async () => {

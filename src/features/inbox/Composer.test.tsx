@@ -551,3 +551,25 @@ describe('★★ the Copilot wall fills the box - and sends nothing', () => {
     expect(sent).not.toHaveBeenCalled();
   });
 });
+
+describe('★★ a draft is kept per conversation - Esc closes without losing it', () => {
+  it('typed in one, back again after the box was gone', async () => {
+    const { unmount } = show();
+    fireEvent.change(screen.getByTestId('composer-body'), { target: { value: 'Half a reply' } });
+    unmount();
+    show();
+    expect(screen.getByTestId('composer-body')).toHaveValue('Half a reply');
+  });
+
+  it('★ and not carried into another conversation', () => {
+    const { unmount } = show();
+    fireEvent.change(screen.getByTestId('composer-body'), { target: { value: 'For c1 only' } });
+    unmount();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c2" channelName="WhatsApp" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('composer-body')).toHaveValue('');
+  });
+});

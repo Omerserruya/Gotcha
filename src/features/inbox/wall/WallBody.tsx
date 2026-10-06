@@ -1,7 +1,7 @@
 'use client';
 
 import { useFormatter, useTranslations } from 'next-intl';
-import { useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useState, useTransition, type ReactNode } from 'react';
 
 import { channelName, type InboxMessage } from '@/api/contracts/inbox';
 import { UserText } from '@/design-system/primitives/text/UserText';
@@ -64,6 +64,28 @@ export function WallBody({
       setWholes((m) => new Map(m).set(conversation.id, read));
     });
   };
+
+  /*
+   * In the drill, Esc is Back (Omer, 2026-10-06), one level at a time - and
+   * taken first, so the inbox's Esc does not also close the conversation.
+   * On `document`, which the event reaches before the inbox's `window`.
+   */
+  useEffect(() => {
+    if (level.at === 'wall') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      event.preventDefault();
+      setLevel((now) =>
+        now.at === 'whole'
+          ? { at: 'summary', conversation: now.conversation }
+          : now.at === 'summary'
+            ? { at: 'list' }
+            : { at: 'wall' },
+      );
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [level.at]);
 
   if (!showHistory) return <>{children}</>;
 

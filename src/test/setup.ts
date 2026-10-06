@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 
 import { toHaveTextContent } from '@testing-library/jest-dom/matchers';
-import { beforeAll, expect } from 'vitest';
+import { afterEach, beforeAll, expect } from 'vitest';
 
 /**
  * Text as a person reads it: without the four Unicode direction isolates
@@ -61,4 +61,13 @@ beforeAll(() => {
     disconnect() {}
   };
   Element.prototype.scrollIntoView ??= () => {};
+});
+
+/*
+ * Each test is a fresh page to the code under it. sessionStorage outlives a
+ * test in jsdom, so a composer draft kept by one test would be typed into the
+ * next one's box. In a node environment there is none to clear.
+ */
+afterEach(() => {
+  if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
 });

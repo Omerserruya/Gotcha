@@ -2040,3 +2040,39 @@
     outline-offset: 2px;
   }
 }
+
+@layer features {
+  /* Nothing open: the faint mark in the middle, a line to pick one, and the Esc note. */
+  .nothingOpen {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-8);
+    min-block-size: 0;
+    padding: var(--space-24);
+    text-align: center;
+    line-height: normal;
+  }
+
+  .nothingOpenMark {
+    inline-size: 88px;
+    aspect-ratio: 512 / 503;
+    margin-block-end: var(--space-8);
+    opacity: 0.08;
+  }
+
+  .nothingOpenTitle {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .nothingOpenHint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+}

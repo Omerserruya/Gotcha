@@ -123,7 +123,6 @@
   },
   "open": {
     "label": "This conversation",
-    "none": "Nothing is open. Pick a conversation from the list to see it here.",
     "unavailable": "We couldn't read the queue, so there's no conversation to show. This is our side, not yours.",
     "status": {
       "OPEN": "Open",
@@ -138,7 +137,9 @@
       "count": "{count, plural, one {# order} other {# orders}}"
     },
     "notAvailable": "This conversation isn’t available - it may have been deleted, or it isn’t yours to see.",
-    "openFailed": "We couldn’t open this conversation just now. This is our side, not yours."
+    "openFailed": "We couldn’t open this conversation just now. This is our side, not yours.",
+    "pick": "Pick a conversation to read",
+    "escHint": "Esc closes the one you’re reading"
   },
   "context": {
     "label": "About this customer"

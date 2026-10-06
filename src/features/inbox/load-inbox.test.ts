@@ -140,7 +140,7 @@ describe('★★ the page does not wait for the conversation - the second round 
      * Round one settles here; round two is left unanswered on purpose.
      */
     const { loadInbox } = await import('./load-inbox');
-    const result = loadInbox();
+    const result = loadInbox('c1');
     await settleMicrotasks();
     for (const key of requested()) {
       const answer = pending.get(key)!;

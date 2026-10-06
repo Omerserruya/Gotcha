@@ -297,7 +297,12 @@ export async function loadInbox(
    * the queue gave us - and NOT the first undated one, which has no claim to
    * being most recent.
    */
-  const listed = (conversationId ? rows?.find((r) => r.id === conversationId) : rows?.[0]) ?? null;
+  /*
+   * ★ NOTHING OPEN UNTIL ONE IS PICKED (Omer, 2026-10-06: "much like
+   *   WhatsApp"). No `?c=` is the pane that says to pick one - which is also
+   *   where Esc lands - not the first row opened on the reader's behalf.
+   */
+  const listed = (conversationId ? rows?.find((r) => r.id === conversationId) : null) ?? null;
 
   /*
    * ★★ A LINK OPENS ITS CONVERSATION, WHATEVER THE VIEW. Cmd-K, a

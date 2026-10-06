@@ -5,6 +5,8 @@ import { ConversationHeader } from '@/features/inbox/ConversationHeader';
 import { Composer } from '@/features/inbox/Composer';
 import { ConversationStream, OrdersChip } from '@/features/inbox/ConversationDetail';
 import { StreamLive } from '@/features/inbox/StreamLive';
+import { InboxEscape } from '@/features/inbox/InboxEscape';
+import { NothingOpen } from '@/features/inbox/NothingOpen';
 import { ClearQueueList, ClearQueuePane } from '@/features/inbox/ClearQueue';
 import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
@@ -267,15 +269,16 @@ export default async function Page({
             <div className={styles.conversationPane}>
               {data.open === null && clear ? (
                 <ClearQueuePane clear={clear} />
+              ) : data.open === null && data.missing === null && data.rows !== null ? (
+                /* Nothing picked yet, or Esc closed it: pick one, as WhatsApp asks. */
+                <NothingOpen />
               ) : data.open === null ? (
                 <p className={styles.note} data-testid="inbox-nothing-open">
                   {data.missing === 'unavailable'
                     ? t('open.notAvailable')
                     : data.missing === 'failed'
                       ? t('open.openFailed')
-                      : data.rows === null
-                        ? t('open.unavailable')
-                        : t('open.none')}
+                      : t('open.unavailable')}
                 </p>
               ) : (
                 <>
@@ -285,6 +288,8 @@ export default async function Page({
                     fails" true rather than a sentence we wrote.
                   */}
                   <StreamLive conversationId={data.open.id} />
+                  {/* Renders nothing: Esc closes this conversation (see `InboxEscape`). */}
+                  <InboxEscape conversationId={data.open.id} />
                   {/*
                     ════════════════════════════════════════════════════════
                     ★★ THE STREAM STREAMS. Omer: "I want it to feel instant."

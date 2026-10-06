@@ -69,9 +69,11 @@ describe('★★ a link opens its conversation, whatever the view', () => {
     expect((await loadInbox('x')).missing).toBe('failed');
   });
 
-  it('no `?c=`: the first row, and nothing read by id', async () => {
+  it('★★ no `?c=`: nothing open - pick one, as WhatsApp asks (Omer) - and nothing read by id', async () => {
     const data = await loadInbox();
-    expect(data.open?.id).toBe('listed');
+    expect(data.open).toBeNull();
+    expect(data.detail).toBeNull();
+    expect(data.missing).toBeNull();
     expect(asked().filter((p) => /^\/api\/conversations\/[^/]+$/.test(p))).toEqual([]);
   });
 });
