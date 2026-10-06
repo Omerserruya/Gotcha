@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { plainDashes } from '@/lib/plain-dashes';
+
 /**
  * Settings · Workspace - screen 11.
  *
@@ -219,7 +221,10 @@ export const workspaceVoiceSchema = z.looseObject({
 
 export type WorkspaceVoice = z.infer<typeof workspaceVoiceSchema>;
 
-export const voiceSampleSchema = z.looseObject({ reply: z.string() });
+/** A model's reply: plain hyphens (`plainDashes`). */
+export const voiceSampleSchema = z.looseObject({
+  reply: z.string().transform((s) => plainDashes(s)),
+});
 
 export const prohibitedClaimsSchema = z.looseObject({
   claims: z.array(z.string()).default([]),

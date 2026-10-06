@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { discoverySchema, siteFromEmail, siteHost } from '@/api/contracts/onboarding';
 import onboardingMessages from '@/i18n/messages/en/onboarding.json';
+import workspaceMessages from '@/i18n/messages/en/workspace.json';
 
 const push = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
@@ -20,7 +21,10 @@ import { WebsiteStep } from './WebsiteStep';
 
 const show = (props: Partial<Parameters<typeof WebsiteStep>[0]> = {}) =>
   render(
-    <NextIntlClientProvider locale="en" messages={{ onboarding: onboardingMessages }}>
+    <NextIntlClientProvider
+      locale="en"
+      messages={{ onboarding: onboardingMessages, workspace: workspaceMessages }}
+    >
       <WebsiteStep
         guess={{ host: 'avivco.il', from: 'email' }}
         email="maya@avivco.il"
@@ -52,6 +56,34 @@ describe('★ the guess', () => {
   });
 });
 
+describe('★ 00d, measured on dev', () => {
+  const read = (over: Record<string, unknown>) =>
+    discoverySchema.parse({ websiteDomain: 'https://avivco.il', status: 'COMPLETE', ...over });
+
+  it("the banner is the brand, cut at its tagline - as 13g's mark", () => {
+    show({ business: 'Urban Supply - GOTCHA demo' });
+    expect(screen.getByTestId('website-wordmark')).toHaveTextContent(/^URBAN SUPPLY$/);
+  });
+
+  it('a language code by its name; an industry code by its name, never the key', () => {
+    show({
+      discovery: read({ brand: { languages: ['he'] }, business: { industry: 'ecommerce' } }),
+    });
+    expect(screen.getByTestId('website-found')).toHaveTextContent('Hebrew');
+    expect(screen.getByTestId('website-found')).not.toHaveTextContent(/\bhe\b/);
+    expect(screen.getByTestId('website-kind')).toHaveTextContent('E-commerce');
+  });
+
+  it("the read's short description wins over the industry", () => {
+    show({
+      discovery: read({
+        business: { industry: 'ecommerce', summary: 'Home textiles and lighting' },
+      }),
+    });
+    expect(screen.getByTestId('website-kind')).toHaveTextContent('Home textiles and lighting');
+  });
+});
+
 describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
   it('says where the guess came from, and draws no finding before a scan', () => {
     show();
@@ -70,7 +102,7 @@ describe('★★ 00d - confirm, not type; nothing is read until yes', () => {
     });
     const one = show({ discovery: found });
     expect(screen.getByTestId('website-found')).toHaveTextContent('Shopify');
-    expect(screen.getByTestId('website-found')).toHaveTextContent('Hebrew, English');
+    expect(screen.getByTestId('website-found')).toHaveTextContent('Hebrew and English');
     one.unmount();
     show({ discovery: { ...found, websiteDomain: 'https://other.co.il' } });
     expect(screen.queryByTestId('website-found')).toBeNull();

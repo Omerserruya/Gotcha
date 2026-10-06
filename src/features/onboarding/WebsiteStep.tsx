@@ -4,12 +4,17 @@ import { Camera, FileText, Globe, Languages, MessageCircle, ShoppingBag } from '
 import { useLocale, useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
-import { siteHost, type Discovery } from '@/api/contracts/onboarding';
+import { languageNames, siteHost, type Discovery } from '@/api/contracts/onboarding';
+import { industryReading } from '@/api/contracts/workspace';
 import { useRouter } from '@/i18n/navigation';
+import { brandMark, brandName } from '@/lib/brand-mark';
 
 import type { GuessSource } from './load-onboarding';
 import { startReading } from './onboarding-actions';
 import styles from './Onboarding.module.css';
+
+/** A description longer than this is a paragraph, not the line beside a name. */
+const KIND_MAX = 60;
 
 /**
  * 00d - Your website (design 6). The guess is confirmed, not typed; nothing
@@ -32,6 +37,7 @@ export function WebsiteStep({
   readonly discovery: Discovery | null;
 }) {
   const t = useTranslations('onboarding.website');
+  const tIndustry = useTranslations('workspace.business.industryName');
   const locale = useLocale();
   const router = useRouter();
   const [typing, setTyping] = useState(guess === null);
@@ -51,8 +57,19 @@ export function WebsiteStep({
   // A scan's findings belong on the card only when they are about this site.
   const found = guess && discovery && siteHost(discovery.websiteDomain ?? '') === guess.host;
   const platform = found ? discovery.technology?.platform?.name || null : null;
-  const languages = found ? (discovery.brand?.languages ?? []) : [];
-  const industry = found ? discovery.business?.industry : null;
+  const languages = found ? languageNames(discovery.brand?.languages ?? [], locale) : null;
+  // What it is, in words: the read's own short description, else the industry by its name.
+  const summary = found ? discovery.business?.summary?.trim() : null;
+  const reading = found ? industryReading(discovery.business?.industry) : null;
+  const industry =
+    summary && summary.length <= KIND_MAX
+      ? summary
+      : reading === null
+        ? null
+        : 'code' in reading
+          ? tIndustry(reading.code)
+          : reading.text;
+  const name = business ? brandName(business) : null;
   const typed = siteHost(address);
 
   return (
@@ -81,8 +98,8 @@ export function WebsiteStep({
             </span>
             <span className={styles.siteBanner}>
               {business ? (
-                <span className={styles.wordmark}>
-                  <bdi dir="auto">{business}</bdi>
+                <span className={styles.wordmark} data-testid="website-wordmark">
+                  <bdi dir="auto">{brandMark(business).logo}</bdi>
                 </span>
               ) : (
                 <Globe size={22} aria-hidden="true" />
@@ -90,14 +107,14 @@ export function WebsiteStep({
             </span>
             <span className={styles.siteFoot}>
               <span className={styles.siteName}>
-                {business ? <bdi dir="auto">{business}</bdi> : <bdi dir="ltr">{guess.host}</bdi>}
+                {name ? <bdi dir="auto">{name}</bdi> : <bdi dir="ltr">{guess.host}</bdi>}
                 {industry ? (
-                  <span className={styles.siteKind}>
+                  <span className={styles.siteKind} data-testid="website-kind">
                     <bdi dir="auto">{industry}</bdi>
                   </span>
                 ) : null}
               </span>
-              {platform || languages.length > 0 ? (
+              {platform || languages ? (
                 <span className={styles.chips} data-testid="website-found">
                   {platform ? (
                     <span className={styles.chip}>
@@ -105,10 +122,10 @@ export function WebsiteStep({
                       <bdi dir="auto">{platform}</bdi>
                     </span>
                   ) : null}
-                  {languages.length > 0 ? (
+                  {languages ? (
                     <span className={styles.chip}>
                       <Languages size={12} aria-hidden="true" />
-                      {languages.join(', ')}
+                      {languages}
                     </span>
                   ) : null}
                 </span>

@@ -8,6 +8,7 @@ import type { Discovery, ScannedFact } from '@/api/contracts/onboarding';
 import { VOICE_MAX, VOICE_MIN, type WorkspaceVoice } from '@/api/contracts/workspace';
 import { previewVoiceSample, saveWorkspaceVoice } from '@/features/workspace/actions';
 import { Link } from '@/i18n/navigation';
+import { plainDashes } from '@/lib/plain-dashes';
 
 import styles from './Onboarding.module.css';
 
@@ -108,7 +109,9 @@ function Voice({
   readonly brand: Discovery['brand'];
 }) {
   const t = useTranslations('onboarding.learned.voice');
-  const stored = voice?.guidance?.trim() || '';
+  // A learned voice is the model's writing: plain hyphens. An edited one is the person's.
+  const raw = voice?.guidance?.trim() || '';
+  const stored = voice?.source === 'learned' ? plainDashes(raw) : raw;
   const [guidance, setGuidance] = useState(stored);
   const [editing, setEditing] = useState(stored === '');
   const [draft, setDraft] = useState(stored);

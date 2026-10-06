@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { plainDashes } from '@/lib/plain-dashes';
+
 /**
  * Onboarding after the workspace exists - 00d-00h (design 6), over the
  * routes that already exist (auth service, `/api/onboarding/*`, no status
@@ -16,7 +18,21 @@ export const ONBOARDING_STEPS = ['website', 'reading', 'learned', 'truth', 'try'
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 const text = z.string().nullable().catch(null).default(null);
-const texts = z.array(z.string()).catch([]).default([]);
+/*
+ * What the scan's model wrote (business, brand, gaps): shown with plain
+ * hyphens - Omer bans the em dash everywhere, model output included (dev:
+ * a stored gap carried one). Backend is fixing the source too.
+ */
+const modelText = z
+  .string()
+  .transform((s) => plainDashes(s))
+  .nullable()
+  .catch(null)
+  .default(null);
+const modelTexts = z
+  .array(z.string().transform((s) => plainDashes(s)))
+  .catch([])
+  .default([]);
 
 export const DISCOVERY_STATUSES = ['PENDING', 'SCANNING', 'COMPLETE', 'FAILED'] as const;
 export type DiscoveryStatus = (typeof DISCOVERY_STATUSES)[number];
@@ -33,18 +49,19 @@ export const discoverySchema = z.looseObject({
   updatedAt: text,
   scannedAt: text,
   business: z
-    .looseObject({ name: text, industry: text, summary: text, products: texts })
+    .looseObject({ name: modelText, industry: text, summary: modelText, products: modelTexts })
     .nullable()
     .catch(null)
     .default(null),
   brand: z
     .looseObject({
-      voice: text,
-      tone: text,
-      style: text,
-      vocabulary: texts,
-      forbiddenWords: texts,
-      languages: texts,
+      voice: modelText,
+      tone: modelText,
+      style: modelText,
+      vocabulary: modelTexts,
+      forbiddenWords: modelTexts,
+      /** Codes ("he", "en") or names - shown by name. */
+      languages: modelTexts,
     })
     .nullable()
     .catch(null)
@@ -70,7 +87,7 @@ export const discoverySchema = z.looseObject({
     .catch(null)
     .default(null),
   gaps: z
-    .array(z.looseObject({ label: z.string() }))
+    .array(z.looseObject({ label: z.string().transform((s) => plainDashes(s)) }))
     .catch([])
     .default([]),
 });
@@ -169,7 +186,7 @@ export function scannedFacts(
     .filter((d) => SCANNED_SOURCE_TYPES.has(d.sourceType) && d.title.trim() !== '')
     .map((d) => ({
       id: d.id,
-      title: d.title.trim(),
+      title: plainDashes(d.title.trim()),
       path: pathOf(d.sourceUrl),
       ready: d.status === 'ready',
       updatedAt: d.updatedAt,
@@ -206,4 +223,21 @@ export function readProgress(discovery: Discovery | null): number | null {
     default:
       return discovery.status === 'SCANNING' ? 0.1 : null;
   }
+}
+
+/**
+ * Languages as 00d's chip says them: "Hebrew and English", never "he". A
+ * code goes through `Intl.DisplayNames`; a name stays as written.
+ */
+export function languageNames(languages: readonly string[], locale: string): string | null {
+  const names = [...new Set(languages.map((l) => l.trim()).filter(Boolean))].map((l) => {
+    if (!/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i.test(l)) return l;
+    try {
+      return new Intl.DisplayNames([locale], { type: 'language' }).of(l) ?? l;
+    } catch {
+      return l;
+    }
+  });
+  if (names.length === 0) return null;
+  return new Intl.ListFormat(locale, { type: 'conjunction' }).format(names);
 }

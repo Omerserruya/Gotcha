@@ -140,13 +140,12 @@
     overflow-y: auto;
   }
 
+  /* Left-aligned, 56px in from the panel's edge (design: x=576 on a panel at 520). */
   .work {
     display: flex;
     flex-direction: column;
     justify-content: center;
     inline-size: 100%;
-    max-inline-size: 860px;
-    margin: auto;
     padding: 48px 56px;
   }
 
@@ -155,6 +154,11 @@
     font-size: 28px;
     font-weight: 600;
     letter-spacing: var(--letter-spacing-large);
+  }
+
+  .title[data-long] {
+    font-size: 22px;
+    letter-spacing: var(--letter-spacing-heading);
   }
 
   .subtitle {
@@ -229,7 +233,7 @@
   /* 00d and 00e are the design's narrower column; 00f's facts and voice use the width. */
   .website,
   .reading {
-    max-inline-size: 640px;
+    max-inline-size: 620px;
   }
 
   .website {
@@ -552,6 +556,7 @@
   .learned {
     display: grid;
     grid-template-columns: 1fr 330px;
+    max-inline-size: 800px;
     gap: 22px;
     align-items: start;
   }

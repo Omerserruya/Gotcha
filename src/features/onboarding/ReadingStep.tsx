@@ -17,6 +17,8 @@ export const POLL_MS = 3000;
 export const START_WAIT_MS = 60_000;
 
 const TRACKS = ['products', 'policies', 'places', 'voice'] as const;
+/** A host longer than this does not fit the headline at its size. */
+const LONG_HOST = 28;
 const FEED = 6;
 
 export type ReadingPhase = 'starting' | 'reading' | 'done' | 'failed';
@@ -86,7 +88,12 @@ export function ReadingStep({
 
   return (
     <div className={styles.reading} data-phase={state} data-testid="reading">
-      <h1 className={styles.title}>
+      {/* A long host (a *.myshopify.com) is set a step smaller rather than broken mid-word. */}
+      <h1
+        className={styles.title}
+        data-long={host && host.length > LONG_HOST ? '' : undefined}
+        data-testid="reading-title"
+      >
         {host ? t.rich('title', { host: () => <bdi dir="ltr">{host}</bdi> }) : t('titleNoHost')}
       </h1>
       <p className={styles.subtitle} data-testid="reading-lead" role="status">

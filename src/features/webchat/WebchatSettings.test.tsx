@@ -18,7 +18,9 @@ vi.mock('./webchat-actions', () => actions);
 
 import type { WebchatTab } from '@/api/contracts/webchat';
 
-import { SAVE_AFTER_MS, WebchatSettings, brandMark } from './WebchatSettings';
+import { brandMark } from '@/lib/brand-mark';
+
+import { SAVE_AFTER_MS, WebchatSettings } from './WebchatSettings';
 
 const config: WebchatConfig = webchatSettingsSchema.parse({
   data: {

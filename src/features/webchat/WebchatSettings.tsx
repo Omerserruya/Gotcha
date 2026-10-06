@@ -24,6 +24,8 @@ import {
 import { embedCode } from '@/features/channels/ConnectPanel';
 import { Link } from '@/i18n/navigation';
 
+import { brandMark } from '@/lib/brand-mark';
+
 import { hexToHsv, hsvToHex } from './colour';
 import { saveWebchat } from './webchat-actions';
 import styles from './Webchat.module.css';
@@ -864,23 +866,4 @@ function Preview({
       </div>
     </aside>
   );
-}
-
-/**
- * One source for both marks, as the design draws them from the business's
- * name: the logo "AVIV & CO.", the launcher its first word "AVIV". A name
- * with a tagline ("Urban Supply - GOTCHA demo") is cut at its first separator,
- * and never ends on a separator - a full stop is the name's ("CO.") (dev: "URBAN SUPPLY -").
- */
-export function brandMark(name: string): { readonly logo: string; readonly launcher: string } {
-  const head = name.split(/\s[-|·:\u2013\u2014]\s|\s*[|·]\s*/u)[0] ?? name;
-  const tidy = (text: string) => text.trim().replace(/[\s\-|·:,;\u2013\u2014]+$/u, '');
-  const upper = tidy(head).toUpperCase();
-  const words = upper.split(/\s+/);
-  let logo = '';
-  for (const word of words) {
-    if (logo && (logo + ' ' + word).length > 16) break;
-    logo = logo ? `${logo} ${word}` : word;
-  }
-  return { logo: tidy(logo), launcher: tidy(words[0] ?? '').slice(0, 5) };
 }

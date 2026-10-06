@@ -179,3 +179,33 @@ describe('★★ 00e - visible the whole time, never an invented count', () => {
     expect(screen.getByTestId('reading-feed')).not.toHaveTextContent('Old fact');
   });
 });
+
+describe('★ 00e, measured on dev', () => {
+  const EM = String.fromCharCode(0x2014);
+
+  it('a gap the model wrote with an em dash shows a plain hyphen', () => {
+    show({
+      discovery: row({
+        status: 'COMPLETE',
+        scanPhase: 'done',
+        gaps: [{ label: `Password protected ${EM} store pages blocked` }],
+      }),
+      facts: [],
+    });
+    expect(screen.getByTestId('reading-feed')).toHaveTextContent(
+      'Password protected - store pages blocked',
+    );
+    expect(screen.getByTestId('reading-feed').textContent).not.toContain(EM);
+  });
+
+  it('a long host is set a step smaller, a short one is not', () => {
+    const one = show({
+      discovery: row({ websiteDomain: 'https://urban-supply-gotcha-demo.myshopify.com' }),
+      facts: [],
+    });
+    expect(screen.getByTestId('reading-title')).toHaveAttribute('data-long');
+    one.unmount();
+    show({ discovery: row(), facts: [] });
+    expect(screen.getByTestId('reading-title')).not.toHaveAttribute('data-long');
+  });
+});
