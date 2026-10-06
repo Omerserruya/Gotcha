@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { visibilityClause } from "../lib/conversation-visibility";
+import { situationOf } from "../lib/situation";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -684,6 +686,108 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
  * ════════════════════════════════════════════════════════════════════════════
  */
 const INSIGHTS_CONVERSATION_CAP = 200;
+
+/** GET /:id/conversations page bounds. */
+const PERSON_CONVERSATIONS_DEFAULT_LIMIT = 20;
+const PERSON_CONVERSATIONS_MAX_LIMIT = 50;
+
+/**
+ * GET /:id/conversations - one person's conversations across every channel,
+ * newest first, each with a one-line summary. The inbox panel's "history
+ * across channels".
+ *
+ * Same person walk as /timeline (`resolvePersonScope`: personId siblings plus
+ * merged aliases), so the two cannot disagree about who this person is.
+ *
+ * ★ VISIBILITY. The list applies `visibilityClause` - the ONE rule the inbox
+ * list and the socket room join use - so a department-restricted agent is not
+ * shown other departments' conversations, or their summaries, through a
+ * customer's history. /timeline does not apply it; that is a known gap of its
+ * own and is not widened here.
+ *
+ * `summary` is ConversationIntelligence.summary through `situationOf`, the
+ * cleaning the contact list already uses: the first meaningful line, markdown
+ * stripped, null for a placeholder - never a raw "**Summary:** -".
+ *
+ * Query: `limit` (default 20, max 50), `current` (a conversation id to mark
+ * isCurrent), `includeImported` (default true, as /timeline).
+ */
+router.get("/:id/conversations", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const scope = await resolvePersonScope(tenantId, String(req.params.id), wantsImported(req));
+    if (!scope.ok) return res.status(scope.status).json({ error: scope.error });
+    const { orClauses, originClause } = scope;
+
+    const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(rawLimit, PERSON_CONVERSATIONS_MAX_LIMIT)
+      : PERSON_CONVERSATIONS_DEFAULT_LIMIT;
+    const current = typeof req.query.current === "string" ? req.query.current : null;
+
+    // An empty OR matches nothing in Prisma; a contact with no channel identity
+    // simply has no conversations.
+    if (orClauses.length === 0) return res.json({ data: [], total: 0, hasMore: false });
+
+    const visibility = visibilityClause({
+      userId: req.user!.userId,
+      role: req.user!.role,
+      departmentId: (req.user as any)?.departmentId,
+    });
+    const where = {
+      tenantId,
+      // AND, not a second OR key: the person's identities and the viewer's
+      // visibility are two separate conditions that must BOTH hold.
+      AND: [{ OR: orClauses }, ...(visibility ? [{ OR: visibility }] : [])],
+      ...originClause,
+    };
+
+    const [total, convos] = await Promise.all([
+      prisma.conversation.count({ where }),
+      prisma.conversation.findMany({
+        where,
+        orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
+        take: limit,
+        select: { id: true, channel: true, status: true, createdAt: true, lastMessageAt: true },
+      }),
+    ]);
+    if (convos.length === 0) return res.json({ data: [], total, hasMore: false });
+
+    const ids = convos.map((c) => c.id);
+    const [counts, intel] = await Promise.all([
+      prisma.message.groupBy({
+        by: ["conversationId"],
+        where: { tenantId, conversationId: { in: ids }, messageType: { not: "system" } },
+        _count: { _all: true },
+      }),
+      prisma.conversationIntelligence.findMany({
+        where: { tenantId, conversationId: { in: ids } },
+        select: { conversationId: true, summary: true },
+      }),
+    ]);
+    const countBy = new Map(counts.map((c: any) => [c.conversationId, c._count._all as number]));
+    const summaryBy = new Map(intel.map((i) => [i.conversationId, situationOf(i.summary)]));
+
+    res.json({
+      data: convos.map((c) => ({
+        conversationId: c.id,
+        channel: c.channel,
+        status: c.status,
+        startedAt: c.createdAt,
+        lastMessageAt: c.lastMessageAt,
+        messageCount: countBy.get(c.id) ?? 0,
+        // null = no summary yet (or only a placeholder), not "nothing happened".
+        summary: summaryBy.get(c.id) ?? null,
+        isCurrent: current !== null && c.id === current,
+      })),
+      total,
+      hasMore: total > convos.length,
+    });
+  } catch (err: any) {
+    console.error("[identity] person conversations failed:", err?.message);
+    res.status(500).json({ error: "conversations_failed" });
+  }
+});
 
 router.get("/:id/insights", async (req: Request, res: Response) => {
   try {

@@ -104,6 +104,9 @@ describe("moodOf / situationOf", () => {
     expect(moodOf(null)).toBeNull();
   });
   it("★ a structured summary becomes one plain line; placeholders are null", () => {
+    // A labelled placeholder is no summary (it came out as "-").
+    expect(situationOf("**Summary:** -")).toBeNull();
+    expect(situationOf("- **סיכום:** …")).toBeNull();
     expect(situationOf("• **למה פנה**: בקשה להחזר חלקי בסכום 50$ עבור הזמנה מס׳ 1011.  \n• **מה ביקש/ה**: \n  - האם ניתן")).toBe("בקשה להחזר חלקי בסכום 50$ עבור הזמנה מס׳ 1011.");
     expect(situationOf("• **Why they reached out**: asked about #1842. Then more.")).toBe("asked about #1842.");
     expect(situationOf("Failed to generate summary.")).toBeNull();
