@@ -1,4 +1,40 @@
 import { prisma, recordUnansweredQuestion, LOW_CONFIDENCE_SCORE } from "@chatcenter/shared";
+import { isSemanticallyRetrievable } from "./behavior-engine.service";
+
+/**
+ * Is a knowledge miss on this message a question the owner should be asked
+ * to teach? Not when it came from the test chat (an operator rehearsing, the
+ * same rule that keeps test runs out of skill stats: a sandbox turn, or a
+ * "sandbox:" conversation). Not when the message carries no question at all -
+ * "thanks", "ok", a greeting, an emoji, a bare number - by the SAME classifier
+ * that decides whether a message is worth a knowledge search; a strategy that
+ * always searches used to record "תודה רבה" as a gap.
+ */
+export function shouldRecordKnowledgeGap(t: { sandbox?: boolean; customerExternalId?: string | null; message: string }): boolean {
+  if (t.sandbox) return false;
+  if (String(t.customerExternalId ?? "").startsWith("sandbox:")) return false;
+  if (isOnlyCourtesy(t.message)) return false;
+  return isSemanticallyRetrievable(t.message);
+}
+
+/**
+ * Words that make up a message with nothing to answer. The WHOLE message must
+ * be made of them: "thanks, do you ship to Eilat?" is a question, "תודה רבה"
+ * is not. (The retrieval classifier's prefix patterns end in \b, which in JS
+ * only works for ASCII, so "תודה רבה" slipped past it.)
+ */
+const COURTESY_WORDS = new Set([
+  "thanks", "thank", "you", "thx", "ty", "so", "much", "very", "a", "lot", "ok", "okay", "k", "great", "perfect",
+  "cool", "nice", "good", "fine", "sure", "got", "it", "bye", "goodbye", "hi", "hello", "hey", "all", "set",
+  "תודה", "רבה", "רבות", "מאוד", "ממש", "מעולה", "סבבה", "אחלה", "בסדר", "גמור", "אוקי", "אוקיי", "יופי",
+  "נהדר", "מצוין", "שלום", "היי", "להתראות", "ביי", "לכם", "לך", "על", "הכל", "הכול", "טוב", "בטח", "מושלם",
+]);
+
+export function isOnlyCourtesy(message: string): boolean {
+  const words = String(message ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  // Nothing but emoji / punctuation, or only courtesy words.
+  return words.length === 0 || words.every((w) => COURTESY_WORDS.has(w));
+}
 import { generateEmbedding } from "./embedding.service";
 import { searchSimilar, SearchResult } from "./qdrant.service";
 

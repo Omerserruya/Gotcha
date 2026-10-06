@@ -129,7 +129,7 @@ import {
   BudgetExceededError,
   auditBudgetAbort,
 } from "./cost-budget.service";
-import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap } from "./knowledge.service";
 import { prefetchCrmContext, renderCrmContextBlock, invalidateCrmPrefetch } from "./crm-prefetch.service";
 import { getCrmAdapter } from "./connectors/crm-adapter-resolver";
 import type { CrmVendor } from "./connectors/crm-adapter.types";
@@ -1525,7 +1525,10 @@ async function generateAIBotReplyInner(
       // here is a real question this business could not answer.
       const chunks = await retrieveRelevantChunks(
         opts.tenantId, opts.incomingMessage, 5, opts.aiAgentId,
-        { record: true, askerKey: opts.conversationId ?? null },
+        {
+          record: shouldRecordKnowledgeGap({ sandbox: !!opts.sandbox?.enabled, customerExternalId: conversation.customerExternalId, message: opts.incomingMessage }),
+          askerKey: opts.conversationId ?? null,
+        },
       );
       kbBlock = buildKnowledgeContext(chunks) || undefined;
       for (const c of chunks as any[]) {
