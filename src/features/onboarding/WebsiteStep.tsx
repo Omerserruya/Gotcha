@@ -1,0 +1,231 @@
+'use client';
+
+import { Camera, FileText, Globe, Languages, MessageCircle, ShoppingBag } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import { useState, useTransition } from 'react';
+
+import { siteHost, type Discovery } from '@/api/contracts/onboarding';
+import { useRouter } from '@/i18n/navigation';
+
+import type { GuessSource } from './load-onboarding';
+import { startReading } from './onboarding-actions';
+import styles from './Onboarding.module.css';
+
+/**
+ * 00d - Your website (design 6). The guess is confirmed, not typed; nothing
+ * is read until "Yes, read it". A different address, or none guessed, opens
+ * the field. What the card says it found is only what a scan of THIS site
+ * already found - before any scan it names the site and nothing else.
+ *
+ * ★ "No website?" - Instagram, a catalogue file, five questions - has no
+ *   route yet: drawn, and it says so.
+ */
+export function WebsiteStep({
+  guess,
+  email,
+  business,
+  discovery,
+}: {
+  readonly guess: { readonly host: string; readonly from: GuessSource } | null;
+  readonly email: string | null;
+  readonly business: string | null;
+  readonly discovery: Discovery | null;
+}) {
+  const t = useTranslations('onboarding.website');
+  const locale = useLocale();
+  const router = useRouter();
+  const [typing, setTyping] = useState(guess === null);
+  const [address, setAddress] = useState('');
+  const [refused, setRefused] = useState(false);
+  const [isStarting, start] = useTransition();
+
+  const read = (host: string) =>
+    start(async () => {
+      setRefused(false);
+      const since = new Date().toISOString();
+      if (await startReading(host, locale)) {
+        router.push({ pathname: '/onboarding/reading', query: { since } });
+      } else setRefused(true);
+    });
+
+  // A scan's findings belong on the card only when they are about this site.
+  const found = guess && discovery && siteHost(discovery.websiteDomain ?? '') === guess.host;
+  const platform = found ? discovery.technology?.platform?.name || null : null;
+  const languages = found ? (discovery.brand?.languages ?? []) : [];
+  const industry = found ? discovery.business?.industry : null;
+  const typed = siteHost(address);
+
+  return (
+    <div className={styles.website}>
+      <h1 className={styles.title}>{guess && !typing ? t('title') : t('askTitle')}</h1>
+      <p className={styles.subtitle} data-testid="website-from">
+        {guess && !typing
+          ? guess.from === 'email' && email
+            ? t('fromEmail', { email })
+            : t(`from.${guess.from === 'email' ? 'profile' : guess.from}`)
+          : t('askLead')}
+      </p>
+
+      {guess && !typing ? (
+        <>
+          <div className={styles.site} data-testid="website-card">
+            <span className={styles.siteBar}>
+              <span className={styles.siteDots} aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              <bdi dir="ltr" className={styles.siteHost}>
+                {guess.host}
+              </bdi>
+            </span>
+            <span className={styles.siteBanner}>
+              {business ? (
+                <span className={styles.wordmark}>
+                  <bdi dir="auto">{business}</bdi>
+                </span>
+              ) : (
+                <Globe size={22} aria-hidden="true" />
+              )}
+            </span>
+            <span className={styles.siteFoot}>
+              <span className={styles.siteName}>
+                {business ? <bdi dir="auto">{business}</bdi> : <bdi dir="ltr">{guess.host}</bdi>}
+                {industry ? (
+                  <span className={styles.siteKind}>
+                    <bdi dir="auto">{industry}</bdi>
+                  </span>
+                ) : null}
+              </span>
+              {platform || languages.length > 0 ? (
+                <span className={styles.chips} data-testid="website-found">
+                  {platform ? (
+                    <span className={styles.chip}>
+                      <ShoppingBag size={12} aria-hidden="true" />
+                      <bdi dir="auto">{platform}</bdi>
+                    </span>
+                  ) : null}
+                  {languages.length > 0 ? (
+                    <span className={styles.chip}>
+                      <Languages size={12} aria-hidden="true" />
+                      {languages.join(', ')}
+                    </span>
+                  ) : null}
+                </span>
+              ) : (
+                <span className={styles.quiet}>{t('notReadYet')}</span>
+              )}
+            </span>
+          </div>
+          <span className={styles.actions}>
+            <button
+              type="button"
+              className={styles.primary}
+              onClick={() => read(guess.host)}
+              disabled={isStarting}
+              data-testid="website-yes"
+            >
+              {isStarting ? t('starting') : t('yes')}
+            </button>
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={() => setTyping(true)}
+              data-testid="website-different"
+            >
+              {t('different')}
+            </button>
+          </span>
+        </>
+      ) : (
+        <form
+          className={styles.addressForm}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (typed) read(typed);
+            else setRefused(true);
+          }}
+        >
+          <input
+            className={styles.addressField}
+            value={address}
+            onChange={(e) => {
+              setAddress(e.target.value);
+              setRefused(false);
+            }}
+            placeholder={t('placeholder')}
+            aria-label={t('askTitle')}
+            aria-invalid={refused}
+            inputMode="url"
+            dir="ltr"
+            data-testid="website-address"
+          />
+          <span className={styles.actions}>
+            <button
+              type="submit"
+              className={styles.primary}
+              disabled={isStarting || address.trim() === ''}
+              data-testid="website-read"
+            >
+              {isStarting ? t('starting') : t('readThis')}
+            </button>
+            {guess ? (
+              <button type="button" className={styles.secondary} onClick={() => setTyping(false)}>
+                {t('back', { host: guess.host })}
+              </button>
+            ) : null}
+          </span>
+        </form>
+      )}
+      <p className={styles.consent} data-testid="website-consent">
+        {t.rich('consent', {
+          // The old app's pages, at the site root - outside this app's base path on purpose.
+          terms: (chunks) => (
+            <a href="/legal/terms-of-service" target="_blank" rel="noreferrer">
+              {chunks}
+            </a>
+          ),
+          privacy: (chunks) => (
+            <a href="/legal/privacy-policy" target="_blank" rel="noreferrer">
+              {chunks}
+            </a>
+          ),
+        })}
+      </p>
+      {refused ? (
+        <p className={styles.problem} role="alert" data-testid="website-refused">
+          {t('notAnAddress')}
+        </p>
+      ) : null}
+
+      <div className={styles.elsewhere} data-testid="website-elsewhere">
+        <p className={styles.quiet}>{t('noWebsite')}</p>
+        <span className={styles.sources}>
+          {(
+            [
+              ['instagram', Camera],
+              ['catalogue', FileText],
+              ['yourself', MessageCircle],
+            ] as const
+          ).map(([key, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              className={styles.source}
+              disabled
+              title={t('elsewhereWhy')}
+              data-testid={`website-source-${key}`}
+            >
+              <Icon size={15} aria-hidden="true" />
+              <span className={styles.sourceText}>
+                <span>{t(`sources.${key}.title`)}</span>
+                <span className={styles.quiet}>{t(`sources.${key}.hint`)}</span>
+              </span>
+            </button>
+          ))}
+        </span>
+        <p className={styles.why}>{t('elsewhereWhy')}</p>
+      </div>
+    </div>
+  );
+}

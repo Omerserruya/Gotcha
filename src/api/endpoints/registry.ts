@@ -602,6 +602,22 @@ export const channelEndpoints = {
  * screen reads it as "do not offer a Phone calls row".
  */
 /**
+ * Onboarding after the workspace exists - 00d-00h (design 6). The auth
+ * service's `/api/onboarding/*`: no tenant-status gate, so they answer while
+ * the workspace is still being set up. Surveyed 2026-10-06.
+ *
+ *   status     GET   the tenant, its profile (websiteDomain), core system
+ *   discovery  GET   the scan's row: status, scanPhase, crawl, brand (ADMIN)
+ *   discover   POST  `{ domain, locale }` - crawls, synthesises and ingests
+ *              in ONE long request; 409 `scan_in_progress` within 3 minutes
+ */
+export const onboardingEndpoints = {
+  status: () => endpoint('/api/onboarding/status'),
+  discovery: () => endpoint('/api/onboarding/discovery'),
+  discover: () => endpoint('/api/onboarding/discover'),
+} as const;
+
+/**
  * 01c's Go live (Omer, decision 01): the workspace leaves setup mode and
  * GOTCHA answers real customers. `POST /api/onboarding/complete`, ADMIN.
  * `{ skipEmployee: true }` - Go live opens only once an employee is hired,

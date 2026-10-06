@@ -1,0 +1,69 @@
+{
+  "stepsLabel": "Setting up GOTCHA",
+  "steps": {
+    "website": "Your website",
+    "reading": "Reading it",
+    "learned": "What it learned",
+    "truth": "Source of truth",
+    "try": "Try it"
+  },
+  "mostImportant": "Most important",
+  "website": {
+    "headline": "It starts from what you already have.",
+    "lead": "Your website, your store, your past conversations. You confirm, GOTCHA reads.",
+    "foot": "Nothing reaches a customer until you say so",
+    "title": "Is this your website?",
+    "fromEmail": "We took it from {email}",
+    "from": {
+      "profile": "From your workspace's details",
+      "scan": "GOTCHA read it before. Reading it again brings it up to date"
+    },
+    "askTitle": "What's your website?",
+    "askLead": "GOTCHA reads it to learn how your business works. Nothing is read until you say so",
+    "placeholder": "yourbusiness.com",
+    "notReadYet": "Not read yet. What it finds shows on the next step",
+    "yes": "Yes, read it",
+    "starting": "Starting…",
+    "different": "It's a different address",
+    "readThis": "Read this one",
+    "back": "Back to {host}",
+    "notAnAddress": "That doesn't look like a website address. Try something like yourbusiness.com",
+    "noWebsite": "No website? Start from something else",
+    "sources": {
+      "instagram": {
+        "title": "Instagram profile",
+        "hint": "Your business's handle"
+      },
+      "catalogue": {
+        "title": "A catalogue or price list",
+        "hint": "PDF, Excel, CSV"
+      },
+      "yourself": {
+        "title": "Tell it yourself",
+        "hint": "Five short questions"
+      }
+    },
+    "elsewhereWhy": "Starting from these isn't available yet. For now GOTCHA starts from a website",
+    "consent": "By continuing you agree to the <terms>Terms of Service</terms> and the <privacy>Privacy Policy</privacy>"
+  },
+  "reading": {
+    "headline": "It reads your website so you don't have to explain it.",
+    "lead": "Every fact keeps a link to the page it came from. Change the page, and GOTCHA learns again.",
+    "foot": "You can close this tab, it keeps going"
+  },
+  "learned": {
+    "headline": "What it knows, and how it will sound.",
+    "lead": "Approve once. Everything here lands in Knowledge, where you can change it any time.",
+    "foot": "Nothing reaches a customer until you say so"
+  },
+  "truth": {
+    "headline": "The most important connection you'll make.",
+    "lead": "Your website explains how things work. Your store knows what's true right now. GOTCHA checks it before every answer about an order, a price or stock.",
+    "foot": "You decide what it may change. Reading is always safe"
+  },
+  "try": {
+    "headline": "Judge it on your own questions.",
+    "lead": "Things your customers really asked. If an answer is off, fix it once and it's fixed everywhere.",
+    "foot": "Setup mode: it only talks to your team until you go live"
+  }
+}

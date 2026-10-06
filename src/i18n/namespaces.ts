@@ -91,6 +91,8 @@ export const NAMESPACES = [
   'knowledge',
   /** Studio · skills - screens 09, 09b, 21 (design 6). */
   'skills',
+  /** Onboarding after the workspace exists - screens 00d-00h (design 6). */
+  'onboarding',
   /** Studio · automations - screen 09c (design 6; 09 before it). */
   'automations',
   /** Studio · capabilities - screen 10. */
