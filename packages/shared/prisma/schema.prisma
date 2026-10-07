@@ -1290,6 +1290,12 @@ model AIAgent {
   // { auto: bool, assist: bool }. Both default true.
   capabilities Json @default("{\"auto\":true,\"assist\":true}") @map("capabilities")
 
+  // Which business systems this employee may use (an allowlist): integration
+  // catalog slugs, and "custom:<id>" for custom API tools / DB queries. A system
+  // connected later stays off until it is added here. Per-tool rows still pick
+  // the tools within an allowed system. See lib/integration-access.ts.
+  integrationAccess String[] @default([]) @map("integration_access")
+
   // Behavioral anchors - guidance, NOT executable logic.
   // [{ id, condition, intent, guidance }] - rendered into the system prompt.
   behavioralAnchors Json @default("[]") @map("behavioral_anchors")
