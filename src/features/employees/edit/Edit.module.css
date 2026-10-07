@@ -173,6 +173,23 @@
   }
 
   /* 02's compact pills: 10.5px, `3px 8px`, on one line. */
+  /* A system's connection, in words, beside its name. */
+  .systemState {
+    margin-inline-start: var(--space-8);
+    color: var(--text-subtle);
+  }
+
+  .stance[data-current='yes']:not([data-stance]) {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .systemsLater {
+    margin: var(--space-8) 0 0;
+    font-size: var(--font-size-counter);
+    color: var(--text-subtle);
+  }
+
   .stance {
     padding: 3px var(--space-8);
     border: var(--border-width-thin) solid var(--border-subtle);

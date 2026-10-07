@@ -162,3 +162,44 @@ describe('★★ 07f - the profile’s sentences, editable; Save drawn, not live
     expect(screen.getByText('Cancel')).toHaveAttribute('href', '/studio/employees?employee=a');
   });
 });
+
+describe('★★ 07f - the business systems it may use (Backend 00c6c229; ruling (b))', () => {
+  const ACCESS = {
+    allowed: ['shopify'],
+    choices: [
+      { key: 'shopify', kind: 'integration', name: 'Shopify', status: 'ERROR' },
+      { key: 'woocommerce', kind: 'integration', name: 'WooCommerce', status: 'CONNECTED' },
+      { key: 'custom:t1', kind: 'custom_api', name: 'Stock lookup', status: 'INACTIVE' },
+    ],
+  };
+
+  it('each system the workspace has, On or Off for this employee, its connection in words', () => {
+    sheet({}, { access: ACCESS });
+    expect(screen.getByTestId('edit-system-shopify')).toHaveTextContent('Shopify');
+    expect(screen.getByTestId('edit-system-shopify')).toHaveTextContent('Connected, but failing');
+    expect(screen.getByTestId('edit-system-shopify-on')).toHaveTextContent(/^On$/);
+    expect(screen.getByTestId('edit-system-woocommerce')).toHaveTextContent('Connected');
+    expect(screen.getByTestId('edit-system-woocommerce-on')).toHaveTextContent(/^Off$/);
+    expect(screen.getByTestId('edit-system-custom:t1')).toHaveTextContent('Switched off');
+  });
+
+  it('★ a status, not a switch: nothing to press until saving a working employee is approved', () => {
+    sheet({}, { access: ACCESS });
+    const card = screen.getByTestId('edit-systems');
+    expect(card.querySelector('input, button')).toBeNull();
+    expect(screen.getByTestId('edit-system-shopify-on')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('★ the rule for systems connected later is said', () => {
+    sheet({}, { access: ACCESS });
+    expect(screen.getByTestId('edit-systems-later')).toHaveTextContent(
+      'A system you connect later is off for every employee until you turn it on here.',
+    );
+  });
+
+  it('unread: "-", never every system shown Off', () => {
+    sheet({}, { access: null });
+    expect(screen.getByTestId('edit-systems-unread')).toBeInTheDocument();
+    expect(screen.queryByTestId('edit-systems-rows')).toBeNull();
+  });
+});

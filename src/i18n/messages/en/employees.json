@@ -203,7 +203,9 @@
       "addAnother": "add another",
       "own": "GOTCHA's own actions",
       "mayUse": "This employee may use {name}",
-      "mayUseWhy": "Choosing integrations per employee is coming soon. Until then, every employee may use each connected integration, as set below."
+      "later": "A system you connect later is off for every employee until you turn it on for them.",
+      "failing": "{name} is connected but failing right now, so nothing here can use it until it's fixed in Studio · Integrations.",
+      "offForIt": "Off: this employee won't use {name} at all, whatever is set below."
     },
     "three": {
       "title": "See it answer eight real ones",
@@ -241,8 +243,7 @@
       "1": "Nothing goes live until you've tried it in step 3",
       "2": "Nothing is live until you have seen step 3",
       "3": "Nothing is created yet"
-    },
-    "comingSoon": "Coming soon"
+    }
   },
   "edit": {
     "title": "Edit {name}",
@@ -271,7 +272,21 @@
     "cancel": "Cancel",
     "changes": "{count, plural, one {# change} other {# changes}}",
     "noChanges": "No changes",
-    "responsiblePlaceholder": "What this employee is responsible for - e.g. questions after a purchase"
+    "responsiblePlaceholder": "What this employee is responsible for - e.g. questions after a purchase",
+    "systems": {
+      "title": "Business systems it may use",
+      "unread": "Couldn't read which systems it may use.",
+      "none": "No business system is set up in this workspace yet.",
+      "on": "On",
+      "off": "Off",
+      "later": "A system you connect later is off for every employee until you turn it on here.",
+      "state": {
+        "working": "Connected",
+        "failing": "Connected, but failing",
+        "off": "Switched off",
+        "waiting": "Not connected yet"
+      }
+    }
   },
   "hired": {
     "close": "Close",

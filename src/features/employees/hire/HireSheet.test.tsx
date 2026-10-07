@@ -142,14 +142,42 @@ describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
     );
   });
 
-  it('★ "This employee may use WooCommerce" is a status - Coming soon - never a switch that remembers nothing', () => {
-    sheet({ initialStep: 2 });
+  it('★★ "This employee may use Shopify" is the server’s allowlist: on for each system set up today', async () => {
+    sheet({ initialStep: 2, systems: [{ slug: 'shopify', failing: false }] });
     const mayUse = screen.getByTestId('hire-may-use-shopify');
-    expect(mayUse).toHaveTextContent('This employee may use Shopify');
-    expect(mayUse).toHaveTextContent('Coming soon');
-    expect(mayUse).toHaveAttribute('aria-disabled', 'true');
-    expect(mayUse.tagName).not.toBe('BUTTON');
-    expect(screen.queryByRole('switch')).toBeNull();
+    expect(mayUse).toHaveAttribute('role', 'switch');
+    expect(mayUse).toBeChecked();
+    expect(mayUse).toHaveAccessibleName('This employee may use Shopify');
+    expect(screen.queryByTestId('hire-off-shopify')).toBeNull();
+    // Off: said for the whole group, whatever its actions say.
+    await userEvent.click(mayUse);
+    expect(mayUse).not.toBeChecked();
+    expect(screen.getByTestId('hire-off-shopify')).toHaveTextContent(
+      "Off: this employee won't use Shopify at all",
+    );
+    await userEvent.click(mayUse);
+    expect(screen.queryByTestId('hire-off-shopify')).toBeNull();
+  });
+
+  it('★ the rule for later systems is said up front: off for everyone until turned on', () => {
+    sheet({ initialStep: 2 });
+    expect(screen.getByTestId('hire-later')).toHaveTextContent(
+      'A system you connect later is off for every employee until you turn it on for them.',
+    );
+  });
+
+  it('a system that is set up but failing says so - dev’s Shopify', () => {
+    sheet({ initialStep: 2, systems: [{ slug: 'shopify', failing: true }] });
+    expect(screen.getByTestId('hire-failing-shopify')).toHaveTextContent(
+      'Shopify is connected but failing right now',
+    );
+    // Still on by default: the server allows it; the failure is the connection's.
+    expect(screen.getByTestId('hire-may-use-shopify')).toBeChecked();
+  });
+
+  it('systems unread: a group with actions is a system set up, so it starts on', () => {
+    sheet({ initialStep: 2, systems: null });
+    expect(screen.getByTestId('hire-may-use-shopify')).toBeChecked();
   });
 
   it('what these limits cost: said honestly, never a dash before a unit', () => {

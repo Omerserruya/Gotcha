@@ -270,3 +270,48 @@ export function canResume(employee: Employee): boolean {
 export function openConversationsAtRisk(employee: Employee): number {
   return employee.openConversations;
 }
+
+/* ── Which business systems an employee may use (Backend 00c6c229 + 582acae2) ── */
+
+/**
+ * One system the workspace has set up, in any state: an integration by its
+ * catalog slug, or a custom API tool / DB query as `custom:<id>`. `status`
+ * is the connection's (`CONNECTED`, `ERROR`...) or a custom tool's
+ * (`ACTIVE` / `INACTIVE`) - read as text, said in words by the screen.
+ */
+export const accessChoiceSchema = z.object({
+  key: z.string(),
+  kind: z.enum(['integration', 'custom_api', 'custom_db']).catch('integration'),
+  name: z.string(),
+  status: z.string(),
+});
+export type AccessChoice = z.infer<typeof accessChoiceSchema>;
+
+export const integrationAccessSchema = z.object({
+  allowed: z.array(z.string()),
+  choices: z.array(accessChoiceSchema),
+});
+export type IntegrationAccess = z.infer<typeof integrationAccessSchema>;
+
+/**
+ * A choice's state in the screen's terms:
+ *
+ *   working   connected (or an active custom tool)
+ *   failing   connected and broken - ERROR, DISCONNECTED
+ *   off       a custom tool switched off
+ *   waiting   not finished connecting (PENDING, TESTING), or a state not known here
+ */
+export function accessState(choice: AccessChoice): 'working' | 'failing' | 'off' | 'waiting' {
+  switch (choice.status) {
+    case 'CONNECTED':
+    case 'ACTIVE':
+      return 'working';
+    case 'ERROR':
+    case 'DISCONNECTED':
+      return 'failing';
+    case 'INACTIVE':
+      return 'off';
+    default:
+      return 'waiting';
+  }
+}

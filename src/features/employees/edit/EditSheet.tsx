@@ -5,7 +5,12 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import { humaniseCode, type CapabilityStance } from '@/api/contracts/capabilities';
-import { EMPLOYEE_TONES, type Employee } from '@/api/contracts/employees';
+import {
+  accessState,
+  EMPLOYEE_TONES,
+  type Employee,
+  type IntegrationAccess,
+} from '@/api/contracts/employees';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
@@ -49,20 +54,23 @@ export function EditSheet({
   employee,
   tools,
   mayDo,
+  access = null,
 }: {
   readonly employee: Employee;
   /** Connected systems, named; `null` when the read failed. */
   readonly tools: readonly string[] | null;
   /** `null` when the read failed. */
   readonly mayDo: readonly EditMayDo[] | null;
+  /** The business systems it may use, and every one set up; `null` when unread. */
+  readonly access?: IntegrationAccess | null;
 }) {
   const t = useTranslations('employees.edit');
   const td = useTranslations('employees.detail');
   const te = useTranslations('employees');
   const format = useFormatter();
-  const [draft, setDraft] = useState<EditDraft>(() => draftOf(employee));
+  const [draft, setDraft] = useState<EditDraft>(() => draftOf(employee, access?.allowed ?? null));
   const set = (patch: Partial<EditDraft>) => setDraft((d) => ({ ...d, ...patch }));
-  const changes = changesIn(employee, draft);
+  const changes = changesIn(employee, draft, access?.allowed ?? null);
   const back = { pathname: '/studio/employees', query: { employee: employee.id } } as const;
 
   const toneName = (tone: string) =>
@@ -228,6 +236,61 @@ export function EditSheet({
                   ))}
                 </ul>
               )}
+            </section>
+
+            {/*
+              The business systems it may use (Backend 00c6c229). A status per
+              system until saving a working employee is approved (supervisor,
+              (b)): "On" / "Off", never a switch that remembers nothing. The
+              field is in the draft, so Save going live sends it.
+            */}
+            <section className={styles.card} data-testid="edit-systems">
+              <h3 className={styles.cardTitle}>{t('systems.title')}</h3>
+              {access === null ? (
+                <p
+                  className={styles.none}
+                  title={t('systems.unread')}
+                  data-testid="edit-systems-unread"
+                >
+                  -
+                </p>
+              ) : access.choices.length === 0 ? (
+                <p className={styles.none} title={t('systems.none')}>
+                  -
+                </p>
+              ) : (
+                <ul className={styles.rows} data-testid="edit-systems-rows">
+                  {access.choices.map((choice) => {
+                    const on = (draft.access ?? access.allowed).includes(choice.key);
+                    return (
+                      <li
+                        key={choice.key}
+                        className={styles.mayRow}
+                        data-testid={`edit-system-${choice.key}`}
+                      >
+                        <span className={styles.mayName}>
+                          <bdi dir="auto">{choice.name}</bdi>
+                          <span className={styles.systemState}>
+                            {t(`systems.state.${accessState(choice)}`)}
+                          </span>
+                        </span>
+                        <span
+                          className={styles.stance}
+                          data-current={on ? 'yes' : 'no'}
+                          aria-disabled="true"
+                          title={t('saveNotYet')}
+                          data-testid={`edit-system-${choice.key}-on`}
+                        >
+                          {t(on ? 'systems.on' : 'systems.off')}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <p className={styles.systemsLater} data-testid="edit-systems-later">
+                {t('systems.later')}
+              </p>
             </section>
 
             <section className={styles.card} data-testid="edit-handover">

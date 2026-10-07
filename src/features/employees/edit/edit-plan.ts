@@ -12,6 +12,8 @@ import type { Employee } from '@/api/contracts/employees';
  *   languages        `languages` - `{ english, hebrew, arabic }`
  *   handover         `escalationRules` - each rule as read (`type` and
  *                    `value` included), with `enabled` as the box says
+ *   access           `integrationAccess` - the business systems it may use,
+ *                    the WHOLE list (PATCH replaces it; Backend 00c6c229)
  *
  * Save is drawn, not live, until Omer approves editing a working employee.
  * Going live is calling `updateEmployee(id, editPatch(employee, draft))`.
@@ -25,12 +27,16 @@ export type EditDraft = {
   readonly languages: Readonly<Record<string, boolean>>;
   /** `enabled` per rule, in the stored order. */
   readonly handover: readonly boolean[];
+  /** The systems it may use; `null` when they could not be read (then never sent). */
+  readonly access: readonly string[] | null;
 };
 
-export type EditField = 'responsibility' | 'tone' | 'languages' | 'handover';
+export type EditField = 'responsibility' | 'tone' | 'languages' | 'handover' | 'access';
 
-export function draftOf(employee: Employee): EditDraft {
+/** `access`: the employee's allowlist as read (`GET /:id/integration-access`), or `null`. */
+export function draftOf(employee: Employee, access: readonly string[] | null = null): EditDraft {
   return {
+    access,
     responsibility: employee.identity?.responsibility ?? '',
     tone: employee.tone,
     languages: Object.fromEntries(
@@ -41,8 +47,12 @@ export function draftOf(employee: Employee): EditDraft {
 }
 
 /** The fields the draft changes, in the sheet's order. */
-export function changesIn(employee: Employee, draft: EditDraft): readonly EditField[] {
-  const stored = draftOf(employee);
+export function changesIn(
+  employee: Employee,
+  draft: EditDraft,
+  storedAccess: readonly string[] | null = null,
+): readonly EditField[] {
+  const stored = draftOf(employee, storedAccess);
   const changed: EditField[] = [];
   if (draft.responsibility.trim() !== stored.responsibility.trim()) changed.push('responsibility');
   if (draft.tone !== stored.tone) changed.push('tone');
@@ -50,17 +60,26 @@ export function changesIn(employee: Employee, draft: EditDraft): readonly EditFi
     changed.push('languages');
   }
   if (draft.handover.some((on, i) => on !== stored.handover[i])) changed.push('handover');
+  if (draft.access !== null && stored.access !== null && !sameSet(draft.access, stored.access)) {
+    changed.push('access');
+  }
   return changed;
 }
 
 /** The PATCH body: only what changed, each under the route's own name. */
-export function editPatch(employee: Employee, draft: EditDraft): Record<string, unknown> {
+export function editPatch(
+  employee: Employee,
+  draft: EditDraft,
+  storedAccess: readonly string[] | null = null,
+): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
-  for (const field of changesIn(employee, draft)) {
+  for (const field of changesIn(employee, draft, storedAccess)) {
     if (field === 'responsibility') {
       patch.identity = { ...employee.identity, responsibility: draft.responsibility.trim() };
     } else if (field === 'tone') {
       patch.tone = draft.tone;
+    } else if (field === 'access') {
+      patch.integrationAccess = [...(draft.access ?? [])].sort();
     } else if (field === 'languages') {
       // Keys the sheet does not draw keep their stored value.
       patch.languages = { ...employee.languages, ...draft.languages };
@@ -72,4 +91,8 @@ export function editPatch(employee: Employee, draft: EditDraft): Record<string, 
     }
   }
   return patch;
+}
+
+function sameSet(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((key) => b.includes(key));
 }

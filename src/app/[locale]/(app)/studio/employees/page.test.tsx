@@ -12,7 +12,8 @@ import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 
 const loadEmployees = vi.hoisted(() => vi.fn());
-vi.mock('@/features/employees/load-employees', () => ({ loadEmployees }));
+const loadIntegrationAccess = vi.hoisted(() => vi.fn(async () => null));
+vi.mock('@/features/employees/load-employees', () => ({ loadEmployees, loadIntegrationAccess }));
 const caps = vi.hoisted(() => ({ value: [] as unknown[] }));
 vi.mock('@/features/capabilities/load-capabilities', () => ({
   loadCapabilities: async () => ({ capabilities: caps.value, usage: null, integrations: [] }),
@@ -128,6 +129,8 @@ describe('★ 07e / 07f - the dialog and the sheet, by query', () => {
   it('?edit=1 edits the SELECTED employee', async () => {
     const tree = await page([employee('a'), employee('b')], { employee: 'b', edit: '1' });
     expect(find<{ employee: { id: string } }>(tree, EditSheet)?.employee.id).toBe('b');
+    // Its business systems are read for THAT employee, and only when editing.
+    expect(loadIntegrationAccess).toHaveBeenLastCalledWith('b');
   });
 
   it('?hired=<id> is that employee; an unknown id opens nothing', async () => {

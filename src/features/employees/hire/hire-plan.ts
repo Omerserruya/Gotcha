@@ -11,6 +11,7 @@ import type { AdminChoice } from '@/api/contracts/capabilities';
  *   job + goal     → POST /start { goal }            (creates the DRAFT)
  *   name           → POST /:id/refinements { name }
  *   choices        → the tool permissions, per tool, as 10 writes them
+ *   access         → POST create { integrationAccess } (Backend 00c6c229)
  *   handover       → POST /:id/refinements { customGuardrails }
  *   step 3         → POST /:id/readiness-test         (LLM, costs tokens)
  *   Hire it        → POST /:id/complete               (DRAFT → ACTIVE)
@@ -21,6 +22,12 @@ export interface HirePlan {
   readonly goal: string;
   readonly name: string;
   readonly choices: Readonly<Record<string, AdminChoice>>;
+  /**
+   * The business systems it may use, by key (an integration's slug, or
+   * `custom:<id>`). Starts where the server starts a new employee: every
+   * system the workspace has set up today, in any state.
+   */
+  readonly access: readonly string[];
   readonly handover: readonly string[];
 }
 
@@ -79,12 +86,20 @@ export function stepOneDone(plan: HirePlan): boolean {
  *   the playbook's and the automations' to decide, not a field on it - so the
  *   plan holds no channels and the builder is never sent any.
  */
-export function emptyPlan(tools: readonly HireTool[]): HirePlan {
+export function emptyPlan(tools: readonly HireTool[], setUp: readonly string[] = []): HirePlan {
+  const providers = tools.map((tool) => tool.provider).filter((p): p is string => p !== null);
   return {
     job: null,
     goal: '',
     name: '',
     choices: Object.fromEntries(tools.map((tool) => [tool.toolName, tool.current])),
+    access: [...new Set([...setUp, ...providers])].sort(),
     handover: ['askPerson'],
   };
+}
+
+/** The plan with one system allowed or not. */
+export function withAccess(plan: HirePlan, key: string, on: boolean): HirePlan {
+  const rest = plan.access.filter((k) => k !== key);
+  return { ...plan, access: on ? [...rest, key].sort() : rest };
 }

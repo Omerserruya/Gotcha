@@ -1207,6 +1207,12 @@ export const employeeEndpoints = {
   update: (id: string) => endpoint('/api/ai-agents/{id}', { id }),
   /** `{ hasCanvas, reachable }` - is this employee wired into the routing? */
   reachability: (id: string) => endpoint('/api/ai-agents/{id}/reachability', { id }),
+  /**
+   * `{ allowed, choices }` - the business systems this employee may use, and
+   * every one the workspace has set up (Backend 00c6c229). Written as
+   * `PATCH /:id { integrationAccess }`, which replaces the list.
+   */
+  integrationAccess: (id: string) => endpoint('/api/ai-agents/{id}/integration-access', { id }),
 } as const;
 
 /**

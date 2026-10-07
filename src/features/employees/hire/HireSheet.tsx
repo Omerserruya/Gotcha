@@ -6,12 +6,12 @@ import { useState } from 'react';
 
 import type { AdminChoice } from '@/api/contracts/capabilities';
 import drawer from '@/design-system/styles/drawer.module.css';
-import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import { Link } from '@/i18n/navigation';
 
 import {
   emptyPlan,
+  withAccess,
   HANDOVER_SUGGESTIONS,
   HIRE_JOBS,
   stepOneDone,
@@ -44,15 +44,21 @@ export function HireSheet({
   tools,
   knowledge,
   initialStep = 1,
+  systems = null,
 }: {
   readonly tools: readonly HireTool[];
   /** Knowledge source names, or null when they could not be read. */
   readonly knowledge: readonly string[] | null;
   readonly initialStep?: Step;
+  /** The systems the workspace has set up (any state); `null` when unread. */
+  readonly systems?: readonly { readonly slug: string; readonly failing: boolean }[] | null;
 }) {
   const t = useTranslations('employees.hireFlow');
   const [step, setStep] = useState<Step>(initialStep);
-  const [plan, setPlan] = useState<HirePlan>(() => emptyPlan(tools));
+  const [plan, setPlan] = useState<HirePlan>(() =>
+    emptyPlan(tools, systems?.map((system) => system.slug) ?? []),
+  );
+  const failing = new Set(systems?.filter((s) => s.failing).map((s) => s.slug) ?? []);
   /* From step 2, the head's line is the plan so far: the job. */
   const summary =
     plan.job === null
@@ -159,6 +165,10 @@ export function HireSheet({
                 <div>
                   <h3 className={styles.question}>{t('two.title')}</h3>
                   <p className={styles.sub}>{t('two.sub')}</p>
+                  {/* Backend's rule, said before it surprises anyone. */}
+                  <p className={styles.sub} data-testid="hire-later">
+                    {t('two.later')}
+                  </p>
                 </div>
                 {tools.length === 0 ? (
                   <p className={styles.none} title={t('two.noTools')} data-testid="hire-no-tools">
@@ -178,18 +188,38 @@ export function HireSheet({
                           <IntegrationLogo slug={group.provider} size="pill" />
                           <h4 className={styles.groupName}>{group.label ?? group.provider}</h4>
                           {/*
-                            Per-employee access to an integration (Omer, 2026-10-07)
-                            has no backend yet: a status, never a switch that
-                            remembers nothing.
+                            Per-employee access (Backend 00c6c229): the server's
+                            allowlist, held in the plan like every other choice
+                            here until hiring is live, then sent on create.
                           */}
-                          <UnavailableAction
-                            label={t('two.mayUse', { name: group.label ?? group.provider })}
-                            tag={t('comingSoon')}
-                            why={t('two.mayUseWhy')}
-                            testid={`hire-may-use-${group.provider}`}
-                          />
+                          <label className={styles.mayUse}>
+                            <span>{t('two.mayUse', { name: group.label ?? group.provider })}</span>
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              className={styles.switch}
+                              checked={plan.access.includes(group.provider)}
+                              onChange={(e) =>
+                                setPlan((p) => withAccess(p, group.provider!, e.target.checked))
+                              }
+                              data-testid={`hire-may-use-${group.provider}`}
+                            />
+                          </label>
                         </div>
                       )}
+                      {group.provider !== null && failing.has(group.provider) ? (
+                        <p
+                          className={styles.groupNote}
+                          data-testid={`hire-failing-${group.provider}`}
+                        >
+                          {t('two.failing', { name: group.label ?? group.provider })}
+                        </p>
+                      ) : null}
+                      {group.provider !== null && !plan.access.includes(group.provider) ? (
+                        <p className={styles.groupNote} data-testid={`hire-off-${group.provider}`}>
+                          {t('two.offForIt', { name: group.label ?? group.provider })}
+                        </p>
+                      ) : null}
                       <ul className={styles.rows}>
                         {group.tools.map((tool) => (
                           <li key={tool.toolName} className={styles.row}>

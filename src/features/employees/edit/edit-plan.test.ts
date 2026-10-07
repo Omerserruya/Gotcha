@@ -43,8 +43,25 @@ describe('★ 07f - the draft starts as stored; nothing is a change until it dif
         tone: 'formal',
         languages: { ...d.languages, hebrew: true },
         handover: [false, false],
+        access: null,
       }),
     ).toEqual(['responsibility', 'tone', 'languages', 'handover']);
+  });
+
+  it('★ the systems it may use: the WHOLE list when it changed, nothing when it did not or was unread', () => {
+    const e = employee();
+    const stored = ['shopify', 'woocommerce'];
+    // The same systems in another order are no change.
+    expect(changesIn(e, draftOf(e, ['woocommerce', 'shopify']), stored)).toEqual([]);
+    const off = { ...draftOf(e, stored), access: ['woocommerce'] };
+    expect(changesIn(e, off, stored)).toEqual(['access']);
+    // PATCH replaces the list: everything it may use is sent, not the difference.
+    expect(editPatch(e, { ...off, access: ['woocommerce', 'hubspot'] }, stored)).toEqual({
+      integrationAccess: ['hubspot', 'woocommerce'],
+    });
+    // Unread (null) on either side: never sent - a guess would replace the real list.
+    expect(changesIn(e, { ...off, access: null }, stored)).toEqual([]);
+    expect(changesIn(e, off, null)).toEqual([]);
   });
 });
 

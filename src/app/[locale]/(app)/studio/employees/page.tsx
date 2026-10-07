@@ -10,7 +10,7 @@ import {
   resolveAvailability,
 } from '@/api/contracts/capabilities';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
-import { isConnected } from '@/api/contracts/integrations';
+import { isConnected, isFailing } from '@/api/contracts/integrations';
 import { EditSheet } from '@/features/employees/edit/EditSheet';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
 import { HiredDialog } from '@/features/employees/hired/HiredDialog';
@@ -20,7 +20,7 @@ import { Link } from '@/i18n/navigation';
 import { EmployeeDetail } from '@/features/employees/EmployeeDetail';
 import { EmployeeRail } from '@/features/employees/EmployeeRail';
 import styles from '@/features/employees/Employees.module.css';
-import { loadEmployees } from '@/features/employees/load-employees';
+import { loadEmployees, loadIntegrationAccess } from '@/features/employees/load-employees';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 import { readTools } from '@/features/skills/skill-actions';
@@ -117,6 +117,8 @@ export default async function Page({
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
   const editing = params.edit === '1' && selected !== null ? selected : null;
   const hired = params.hired ? (employees?.find((e) => e.id === params.hired) ?? null) : null;
+  // 07f's business systems: this employee's allowlist and every system set up.
+  const access = editing ? await loadIntegrationAccess(editing.id) : null;
 
   /*
     07, measured: 02's screen header - the title, a line that counts them,
@@ -177,6 +179,7 @@ export default async function Page({
       {editing ? (
         <EditSheet
           employee={editing}
+          access={access}
           tools={integrations ? integrations.filter(isConnected).map((i) => i.name) : null}
           mayDo={
             capabilities
@@ -201,6 +204,15 @@ export default async function Page({
             knowledgeData?.sources ? knowledgeData.sources.map((k) => k.name).filter(Boolean) : null
           }
           initialStep={step}
+          // Every system the workspace has set up, in any state - a new
+          // employee may use each of them unless switched off here.
+          systems={
+            integrations
+              ? integrations
+                  .filter((i) => i.tenantConnection)
+                  .map((i) => ({ slug: i.slug, failing: isFailing(i.tenantConnection) }))
+              : null
+          }
         />
       ) : null}
     </PageContainer>
