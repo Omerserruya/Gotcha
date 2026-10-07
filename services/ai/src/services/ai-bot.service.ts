@@ -98,6 +98,7 @@ import {
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import { loadProfileFactsForPrompt } from "./customer-memory.service";
 import { humanizeReply } from "./reply-style";
+import { websiteHandoffContext } from "./website-handoff-context.service";
 import {
   loadSkillContext,
   selectionCandidates,
@@ -2551,6 +2552,14 @@ async function generateAIBotReplyInner(
   } catch { /* shadow must never break the turn */ }
 
   const chatMessages: any[] = [{ role: "system", content: systemPrompt }];
+
+  // "Continue on WhatsApp": the website chat this conversation continues.
+  try {
+    const handoff = await websiteHandoffContext(opts.tenantId, messages as any);
+    if (handoff) chatMessages.push({ role: "system", content: handoff });
+  } catch (err: any) {
+    console.warn("[ai-bot] website handoff context failed (non-fatal):", err?.message);
+  }
 
   // ── Discovery State (structured conversational memory) ──────────────────
   // Extract shopping facts into the authoritative per-conversation session,

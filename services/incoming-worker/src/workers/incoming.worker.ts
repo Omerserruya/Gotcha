@@ -546,6 +546,25 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     },
   });
 
+  // "Continue on WhatsApp" from the website widget: the first message carries
+  // a code; link the two conversations before anything answers, so the bot
+  // already has the website chat as context. Never costs the message.
+  if (channel === "WHATSAPP") {
+    try {
+      const { linkWebsiteHandoff } = await import("../services/whatsapp-handoff-link.service");
+      const linked = await linkWebsiteHandoff({
+        tenantId,
+        channelAccountId,
+        whatsappConversationId: conversation.id,
+        whatsappContact: savedContact ? { id: savedContact.id, personId: (savedContact as any).personId ?? null } : null,
+        body,
+      });
+      if (linked.linked) console.log(`[incoming] website chat ${linked.websiteConversationId} continued on WhatsApp ${conversation.id} (identity ${linked.identity})`);
+    } catch (err: any) {
+      console.warn("[incoming] website handoff link failed (message kept):", err?.message);
+    }
+  }
+
   // Contact.lastInteractionAt - the column the customer list sorts and filters
   // on, which until now had exactly ONE writer: the merge carry-forward at
   // identity.ts:172, computing max(existing, existing). Nothing ever
