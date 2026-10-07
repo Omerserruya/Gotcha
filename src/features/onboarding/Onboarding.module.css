@@ -940,7 +940,16 @@
   }
 
   /* ?preview=1 */
+  .previewFrame {
+    display: flex;
+    flex-direction: column;
+    inline-size: fit-content;
+    max-inline-size: 100%;
+  }
+
   .previewBanner {
+    /* As wide as the step under it, never wider (dev: it ran past the column). */
+    contain: inline-size;
     display: flex;
     flex-wrap: wrap;
     gap: 6px 14px;

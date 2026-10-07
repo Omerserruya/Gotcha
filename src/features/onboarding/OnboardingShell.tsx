@@ -80,18 +80,23 @@ export function OnboardingShell({
       <main className={styles.surface}>
         <div className={styles.work}>
           {preview ? (
-            <p className={styles.previewBanner} role="status" data-testid="onboarding-preview">
-              <span>{t('preview.banner')}</span>
-              <Link
-                href="/home"
-                className={styles.inlineLink}
-                data-testid="onboarding-preview-home"
-              >
-                {t('preview.home')}
-              </Link>
-            </p>
-          ) : null}
-          {children}
+            // One width with the step's column: the banner adds none of its own.
+            <div className={styles.previewFrame}>
+              <p className={styles.previewBanner} role="status" data-testid="onboarding-preview">
+                <span>{t('preview.banner')}</span>
+                <Link
+                  href="/home"
+                  className={styles.inlineLink}
+                  data-testid="onboarding-preview-home"
+                >
+                  {t('preview.home')}
+                </Link>
+              </p>
+              {children}
+            </div>
+          ) : (
+            children
+          )}
         </div>
       </main>
     </div>

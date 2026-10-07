@@ -37,7 +37,7 @@ export function UnavailableAction({
     >
       {label}
       <UnavailableTag label={tag} />
-      <span className={styles.srOnly}>{` - ${why}`}</span>
+      <span className={styles.srOnly}>{` ${why}`}</span>
     </span>
   );
 }

@@ -19,6 +19,8 @@ describe('★★ unavailable is a status, never an action (Omer, 2026-10-07)', (
     expect(action).toHaveAttribute('title', 'Coming with Phase 3');
     expect(action).toHaveTextContent('TestNot available yet');
     expect(action).toHaveTextContent('Coming with Phase 3');
+    // The reason follows the tag with no stray separator (dev: "Preview | - In preview…").
+    expect(action.textContent).not.toMatch(/-\s*Coming/);
     expect(action.querySelector('button, a, input')).toBeNull();
     fireEvent.click(action);
   });

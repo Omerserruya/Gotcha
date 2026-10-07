@@ -118,6 +118,10 @@ describe('★★ the shell in preview: says what it is, Home one click away, the
     );
     expect(screen.getByTestId('onboarding-preview')).toHaveTextContent('nothing here changes it');
     expect(screen.getByTestId('onboarding-preview-home')).toHaveAttribute('href', '/home');
+    // One frame with the step, so the banner is the column's width (dev: it ran past it).
+    expect(screen.getByTestId('onboarding-preview').parentElement).toBe(
+      screen.getByText('work').parentElement,
+    );
     // Every other step a link that stays a preview; this one is where you are.
     expect(stepLinks(container).sort()).toEqual(
       ['website', 'reading', 'truth', 'try'].map((s) => `/onboarding/${s}?preview=1`).sort(),
@@ -270,5 +274,24 @@ describe('★ sweep: every step link in the onboarding components goes through s
       .filter(({ line }) => /['"`]\/onboarding/.test(line) && !line.includes('stepHref('))
       .filter(({ line }) => !line.trim().startsWith('*') && !line.trim().startsWith('//'));
     expect(bare.map((b) => b.at)).toEqual([]);
+  });
+});
+
+describe('★ the banner adds no width of its own (dev: it reached x≈1371, the column ≈1235)', () => {
+  /*
+   * jsdom does no layout, so this reads the two values that make it so: the
+   * frame is as wide as the step, and the banner contributes nothing to that.
+   * A browser measurement is the real check.
+   */
+  it('frame fit-content; banner contain: inline-size', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const css = readFileSync(
+      join(process.cwd(), 'src/features/onboarding/Onboarding.module.css'),
+      'utf8',
+    );
+    const block = (name: string) => new RegExp(`\\.${name} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+    expect(block('previewFrame')).toMatch(/inline-size:\s*fit-content/);
+    expect(block('previewBanner')).toMatch(/contain:\s*inline-size/);
   });
 });
