@@ -91,6 +91,13 @@ describe("★ GET /:id/reachability says where", () => {
     ]);
   });
 
+  it("★ a playbook with only a start node (no channel entries) routes every channel from it", async () => {
+    H.canvas = { nodes: [n("s", "start"), n("toMaya", "route_target", { routeType: "agent", targetId: "maya" })], edges: [e("s", "toMaya")] };
+    expect((await request(app()).get("/api/ai-agents/maya/reachability")).body.data.channels).toEqual([
+      { channel: "INSTAGRAM", reach: "always" }, { channel: "WEBCHAT", reach: "always" }, { channel: "WHATSAPP", reach: "always" },
+    ]);
+  });
+
   it("no playbook: nowhere", async () => {
     H.canvas = null;
     expect((await request(app()).get("/api/ai-agents/maya/reachability")).body.data).toEqual({ hasCanvas: false, reachable: false, channels: [] });

@@ -203,6 +203,11 @@ describe("assignedEmployee: the playbook's single path from the web chat entry",
     expect((await get("/api/website-widget")).body.data.assignedEmployee).toEqual({ id: "ag_1", name: "Maya" });
   });
 
+  it("★ a playbook with only a start node: its route is the web chat's too (as the flow executor enters it)", async () => {
+    H.canvas = { nodes: [{ id: "s", type: "start", data: {} }, { id: "r", type: "route_target", data: { routeType: "agent", targetId: "ag_1" } }], edges: [{ source: "s", target: "r" }] };
+    expect((await get("/api/website-widget")).body.data.assignedEmployee).toEqual({ id: "ag_1", name: "Maya" });
+  });
+
   it("a branch before any employee → null (it depends)", async () => {
     H.canvas = { nodes: nodes(), edges: [{ source: "e", target: "hours" }, { source: "hours", target: "r1" }, { source: "hours", target: "r2" }] };
     expect((await get("/api/website-widget")).body.data.assignedEmployee).toBeNull();

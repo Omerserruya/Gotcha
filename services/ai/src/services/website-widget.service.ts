@@ -19,6 +19,7 @@ import {
 } from "@chatcenter/shared";
 import { listChannels, saveChannelConfig } from "./shopify-live-chat.service";
 import { activationSnapshot } from "./shopify-chat-install.service";
+import { entryFor } from "./employee-reach.service";
 
 export interface WidgetSettings {
   appearance: WebchatConfig["appearance"];
@@ -123,8 +124,8 @@ export async function assignedEmployeeOf(tenantId: string): Promise<{ id: string
   const canvas = await (prisma as any).flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true, edges: true } });
   const nodes: any[] = Array.isArray(canvas?.nodes) ? canvas.nodes : [];
   const edges: any[] = Array.isArray(canvas?.edges) ? canvas.edges : [];
-  const entry = nodes.find((n) => n?.type === "channel_entry" && String(n?.data?.channelType ?? "").toLowerCase() === "webchat")
-    ?? nodes.find((n) => n?.type === "channel_entry");
+  // The same entry the flow executor uses for a web chat inbound.
+  const entry = entryFor(nodes, "WEBCHAT");
   let cur = entry;
   for (let i = 0; cur && i < 30; i++) {
     const routeType = cur?.data?.routeType ?? (cur?.data?.targetId ? "agent" : null);

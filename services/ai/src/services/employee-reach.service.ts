@@ -4,7 +4,8 @@
  * this replaces it for the screens.
  *
  * Mirrors the flow executor's entry choice: an inbound on channel C starts at
- * the channel_entry whose channelType is C, else at the first channel_entry.
+ * the channel_entry whose channelType is C, else at the first channel_entry,
+ * else at a start node (a playbook with no channel entries at all).
  * From there:
  *   - "always": the single path (no branch) reaches a route to this employee
  *     before any other employee
@@ -16,6 +17,15 @@ export type Reach = "always" | "sometimes";
 
 const isRouteTo = (n: any, agentId: string) => (n?.data?.routeType ?? "agent") === "agent" && n?.data?.targetId === agentId;
 const isAnyAgentRoute = (n: any) => (n?.data?.routeType ?? "agent") === "agent" && !!n?.data?.targetId && n?.type !== "channel_entry";
+
+/** The node an inbound on `channel` enters the playbook at (flow-executor's rule, keyword triggers aside). */
+export function entryFor(nodes: any[], channel: string): any | null {
+  const entries = nodes.filter((n) => n?.type === "channel_entry");
+  return entries.find((n) => String(n?.data?.channelType ?? "").toLowerCase() === channel.toLowerCase())
+    ?? entries[0]
+    ?? nodes.find((n) => n?.type === "start")
+    ?? null;
+}
 
 export function reachFrom(entryId: string, nodes: any[], edges: any[], agentId: string): Reach | null {
   const byId = new Map(nodes.map((n) => [n?.id, n]));
@@ -55,12 +65,11 @@ export async function whereEmployeeAnswers(tenantId: string, agentId: string): P
   ]);
   const nodes: any[] = Array.isArray(canvas?.nodes) ? canvas.nodes : [];
   const edges: any[] = Array.isArray(canvas?.edges) ? canvas.edges : [];
-  const entries = nodes.filter((n) => n?.type === "channel_entry");
-  if (!entries.length) return [];
   const channels = [...new Set((accounts as any[]).map((a) => String(a.channel)))].sort();
   const out: Array<{ channel: string; reach: Reach }> = [];
   for (const ch of channels) {
-    const entry = entries.find((n) => String(n?.data?.channelType ?? "").toLowerCase() === ch.toLowerCase()) ?? entries[0];
+    const entry = entryFor(nodes, ch);
+    if (!entry) continue;
     const reach = reachFrom(entry.id, nodes, edges, agentId);
     if (reach) out.push({ channel: ch, reach });
   }
