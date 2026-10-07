@@ -11,7 +11,7 @@
  *
  * Plan: docs/product/ai-studio-skills-automations.md §3.1-3.2.
  */
-import { prisma, buildAgentTools, visibilityClause, type Viewer } from "@chatcenter/shared";
+import { prisma, buildAgentTools, visibilityClause, allowedIntegrationToolKeys, loadIntegrationAccess, type Viewer } from "@chatcenter/shared";
 import { getGovernableIntegrationTools } from "./tool-registry";
 import { labelTool, type Locale, type ToolLabel } from "./tool-labels.service";
 
@@ -423,12 +423,13 @@ function systemToolNames(): Array<{ name: string; description: string }> {
  * the same rule as the bot's surface (allowed + enabled + CONNECTED + AUTO).
  */
 export async function listToolChoices(tenantId: string, aiAgentId?: string | null, locale: Locale = "en"): Promise<ToolChoice[]> {
-  const [integration, calendarConnected, allowed, providerNames] = await Promise.all([
+  const [integration, calendarConnected, allowed, access, providerNames] = await Promise.all([
     getGovernableIntegrationTools(tenantId, { includeDisconnected: true }),
     prisma.tenantIntegration.count({
       where: { tenantId, status: "CONNECTED", integration: { category: "CALENDAR" as any } },
     }).then((n) => n > 0).catch(() => false),
     aiAgentId ? allowedIntegrationToolsFor(tenantId, aiAgentId) : Promise.resolve(null),
+    aiAgentId ? loadIntegrationAccess(tenantId, aiAgentId) : Promise.resolve(null),
     prisma.integrationCatalog.findMany({ select: { slug: true, name: true } })
       .then((rows: any[]) => new Map(rows.map((r) => [r.slug as string, r.name as string])))
       .catch(() => new Map<string, string>()),
@@ -454,29 +455,15 @@ export async function listToolChoices(tenantId: string, aiAgentId?: string | nul
     return {
       ...base,
       allowedForAgent: ok,
-      ...(ok ? {} : { reason: !connected ? "integration_not_connected" : !t.isEnabled ? "tool_disabled_for_workspace" : "not_allowed_for_employee" }),
+      ...(ok ? {} : { reason: !connected ? "integration_not_connected" : !t.isEnabled ? "tool_disabled_for_workspace" : !access?.has(t.integrationSlug) ? "integration_not_allowed_for_employee" : "not_allowed_for_employee" }),
     };
   });
   return [...sys, ...integ];
 }
 
-/** `${integrationSlug}:${catalogToolSlug}` the bot would offer this employee (ai-bot's own rule). */
-async function allowedIntegrationToolsFor(tenantId: string, aiAgentId: string): Promise<Set<string>> {
-  const perms = await prisma.agentToolPermission.findMany({
-    where: { tenantId, aiAgentId, isAllowed: true, tenantTool: { isEnabled: true, tenantIntegration: { status: "CONNECTED" } } },
-    select: { tenantTool: { select: { catalogTool: { select: { slug: true, allowedModes: true } }, tenantIntegration: { select: { integration: { select: { slug: true } } } } } } },
-  });
-  const out = new Set<string>();
-  for (const p of perms as any[]) {
-    const tt = p.tenantTool;
-    const integ = tt?.tenantIntegration?.integration?.slug;
-    const slug = tt?.catalogTool?.slug;
-    if (!integ || !slug) continue;
-    const am = tt?.catalogTool?.allowedModes;
-    if (Array.isArray(am) && !am.includes("AUTO")) continue;
-    out.add(`${integ}:${slug}`);
-  }
-  return out;
+/** `${integrationSlug}:${catalogToolSlug}` the bot would offer this employee: the bot's own shared query. */
+function allowedIntegrationToolsFor(tenantId: string, aiAgentId: string): Promise<Set<string>> {
+  return allowedIntegrationToolKeys(tenantId, aiAgentId, { mode: "AUTO" });
 }
 
 export interface FitResult {

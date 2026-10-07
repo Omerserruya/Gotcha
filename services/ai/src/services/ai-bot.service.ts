@@ -23,7 +23,7 @@ import {
   checkAiAllowed,
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
-import { capabilitiesFor, MAX_CAROUSEL_ITEMS } from "@chatcenter/shared";
+import { capabilitiesFor, MAX_CAROUSEL_ITEMS, loadIntegrationAccess, allowedIntegrationToolKeys, customAccessKey } from "@chatcenter/shared";
 import {
   readGrammaticalAddress,
   updateGrammaticalAddress,
@@ -2067,49 +2067,13 @@ async function generateAIBotReplyInner(
     allowedMode: "AUTO",
   });
 
-  // ── Custom API tools ── (tenant-defined HTTP calls as bot tools)
-  try {
-    const customTools = await listCustomApiTools(opts.tenantId);
-    for (const t of customTools) {
-      tools.push({
-        type: "function",
-        function: {
-          name: `custom.${t.slug}`,
-          description:
-            `${t.description}\n\nWHEN TO USE: ${t.whenToUse}` +
-            (t.whenNotToUse ? `\n\nDO NOT USE: ${t.whenNotToUse}` : ""),
-          parameters: t.parameters,
-        },
-      });
-    }
-  } catch (err: any) {
-    console.warn("[ai-bot] custom-api tool surface failed:", err?.message);
-  }
+  // Custom API tools and DB queries, only those on the employee's allowlist.
+  tools.push(...(await customToolDefinitions(opts.tenantId, config.id)));
 
   // Snapshot of what the model was actually offered, for diagnostics.
   const toolsOffered: string[] = (tools as any[])
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
-
-  // ── Custom DB query tools ── (tenant-defined SQL/Mongo as bot tools)
-  try {
-    const { listCustomDbQueryTools } = await import("./connectors/custom-db.service");
-    const customDbTools = await listCustomDbQueryTools(opts.tenantId);
-    for (const t of customDbTools) {
-      tools.push({
-        type: "function",
-        function: {
-          name: `custom_db.${t.slug}`,
-          description:
-            `${t.description}\n\nWHEN TO USE: ${t.whenToUse}` +
-            (t.whenNotToUse ? `\n\nDO NOT USE: ${t.whenNotToUse}` : ""),
-          parameters: t.parameters,
-        },
-      });
-    }
-  } catch (err: any) {
-    console.warn("[ai-bot] custom-db tool surface failed:", err?.message);
-  }
 
   // ── Adapter framework tools ── (only for tenants with the integration CONNECTED)
   try {
@@ -2131,35 +2095,11 @@ async function generateAIBotReplyInner(
     // allowedModes), so the autonomous bot never surfaces an adapter tool the
     // operator hasn't enabled for THIS agent. Without this, every tool of every
     // connected integration would leak in regardless of the marketplace toggle.
-    const allowedAdapterTools = new Set<string>();
+    // The one shared query (grants + enabled + CONNECTED + the employee's
+    // allowlist), AUTO surface only.
+    let allowedAdapterTools = new Set<string>();
     try {
-      const perms = await prisma.agentToolPermission.findMany({
-        where: {
-          tenantId: opts.tenantId,
-          aiAgentId: config.id,
-          isAllowed: true,
-          tenantTool: { isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
-        },
-        include: {
-          tenantTool: {
-            include: {
-              catalogTool: { select: { slug: true, allowedModes: true } },
-              tenantIntegration: { include: { integration: { select: { slug: true } } } },
-            },
-          },
-        },
-      });
-      for (const p of perms as any[]) {
-        const tt = p.tenantTool;
-        const integSlug = tt?.tenantIntegration?.integration?.slug;
-        const toolSlug = tt?.catalogTool?.slug;
-        if (!integSlug || !toolSlug) continue;
-        // AUTO surface: drop ASSIST-only tools. allowedModes default permits all,
-        // so a missing/malformed value is treated as "allowed".
-        const am = tt?.catalogTool?.allowedModes;
-        if (Array.isArray(am) && !am.includes("AUTO")) continue;
-        allowedAdapterTools.add(`${integSlug}:${toolSlug}`);
-      }
+      allowedAdapterTools = await allowedIntegrationToolKeys(opts.tenantId, config.id, { mode: "AUTO" });
     } catch (err: any) {
       console.warn("[ai-bot] adapter tool permission load failed:", err?.message);
     }
@@ -5198,4 +5138,37 @@ function billingPauseSummary(allowance: { reason?: string; balance: number }): s
     default:
       return `AI paused - AI Units exhausted. Remaining: ${allowance.balance}.`;
   }
+}
+
+/**
+ * The tenant's custom API tools (`custom.<slug>`) and custom DB queries
+ * (`custom_db.<slug>`) this employee may use. They have no per-tool grant
+ * rows, so the employee's allowlist ("custom:<id>") is their only
+ * per-employee gate; the dispatch gate checks the same key.
+ */
+export async function customToolDefinitions(tenantId: string, aiAgentId: string): Promise<any[]> {
+  const out: any[] = [];
+  const access = await loadIntegrationAccess(tenantId, aiAgentId).catch(() => new Set<string>());
+  const def = (prefix: string, t: any) => ({
+    type: "function",
+    function: {
+      name: `${prefix}.${t.slug}`,
+      description:
+        `${t.description}\n\nWHEN TO USE: ${t.whenToUse}` +
+        (t.whenNotToUse ? `\n\nDO NOT USE: ${t.whenNotToUse}` : ""),
+      parameters: t.parameters,
+    },
+  });
+  try {
+    for (const t of await listCustomApiTools(tenantId)) if (access.has(customAccessKey(t.id))) out.push(def("custom", t));
+  } catch (err: any) {
+    console.warn("[ai-bot] custom-api tool surface failed:", err?.message);
+  }
+  try {
+    const { listCustomDbQueryTools } = await import("./connectors/custom-db.service");
+    for (const t of await listCustomDbQueryTools(tenantId)) if (access.has(customAccessKey(t.id))) out.push(def("custom_db", t));
+  } catch (err: any) {
+    console.warn("[ai-bot] custom-db tool surface failed:", err?.message);
+  }
+  return out;
 }

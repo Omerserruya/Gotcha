@@ -16,7 +16,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, prisma } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, prisma, defaultIntegrationAccess } from "@chatcenter/shared";
 import {
   runBuilder,
   loadDraftSnapshot,
@@ -138,6 +138,8 @@ router.post("/start", async (req: Request, res: Response) => {
           status: "DRAFT",
           builderStep: "chat",
           departmentId: departmentId || null,
+          // Every system the workspace has today; one connected later stays off.
+          integrationAccess: await defaultIntegrationAccess(tenantId),
           ...(companyOverview ? { identity: { companyOverview } } : {}),
         },
       });

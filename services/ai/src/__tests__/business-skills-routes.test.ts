@@ -106,10 +106,18 @@ function table(name: keyof typeof H.db, tenantScoped = true) {
   };
 }
 
+// Shared helpers that import the package's own prisma (integration-access)
+// must see the same double as the routes.
+const P = vi.hoisted(() => ({ prisma: null as any }));
+vi.mock("../../../../packages/shared/src/lib/prisma", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { ...actual, get prisma() { return P.prisma ?? actual.prisma; } };
+});
+
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   const pass = (_q: any, _s: any, n: any) => n();
-  return {
+  const mocked = {
     ...actual,
     authenticate: (req: any, _r: any, n: any) => { req.user = { ...H.viewer }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = H.tenant; n(); },
@@ -122,7 +130,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       aIAgent: table("aIAgent"),
       conversation: table("conversation"),
       agentToolPermission: {
-        findMany: async (a: any) => H.db.agentToolPermission.filter((p) => p.tenantId === a.where.tenantId && p.aiAgentId === a.where.aiAgentId && p.isAllowed),
+        findMany: async (a: any) => H.db.agentToolPermission.filter((p) => p.tenantId === a.where.tenantId && p.aiAgentId === a.where.aiAgentId && p.isAllowed
+          // The employee's allowlist of systems (the shared grant filter).
+          && (!a.where.tenantTool?.tenantIntegration?.integration?.slug?.in || a.where.tenantTool.tenantIntegration.integration.slug.in.includes(p.tenantTool?.tenantIntegration?.integration?.slug))),
       },
       tenantIntegration: { count: async () => 0 },
       integrationCatalog: {
@@ -138,6 +148,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       $transaction: async (ops: any[]) => Promise.all(ops),
     },
   };
+  P.prisma = mocked.prisma;
+  return mocked;
 });
 vi.mock("../services/tool-registry", () => ({ getGovernableIntegrationTools: async () => H.governable }));
 
@@ -174,7 +186,7 @@ beforeEach(() => {
     agentSkill: [],
     skillRun: [],
     aIAgent: [
-      { id: "maya", tenantId: "T", name: "Maya", noSkillPolicy: "answer_from_knowledge" },
+      { id: "maya", tenantId: "T", name: "Maya", noSkillPolicy: "answer_from_knowledge", integrationAccess: ["shopify", "woocommerce"] },
       { id: "x_agent", tenantId: "X", name: "Other" },
     ],
     conversation: [
@@ -336,6 +348,17 @@ describe("★ the fit check uses the bot's own tool rule", () => {
     expect(r).toMatchObject({ fits: false, handsOverAtStep: "s2", reason: "not_allowed_for_employee" });
     expect(r.steps[0].tools[0]).toEqual({ name: "shopify.order_lookup", provider: "shopify", providerLabel: "Shopify", actionLabel: "Order lookup", allowed: true, connected: true });
     expect(r.steps[1].tools[0]).toMatchObject({ name: "shopify.track_shipment", allowed: false, connected: true });
+  });
+
+  it("★ a system off the employee's allowlist hands over with its own reason, even with the tool granted", async () => {
+    const id = (await request(app).post("/api/business-skills").send(skillBody({ steps: [{ kind: "find", title: "Find", tools: ["shopify.order_lookup"] }] }))).body.data.id;
+    H.db.agentToolPermission.push({
+      tenantId: "T", aiAgentId: "maya", isAllowed: true,
+      tenantTool: { catalogTool: { slug: "order_lookup", allowedModes: ["AUTO"] }, tenantIntegration: { integration: { slug: "shopify" } } },
+    });
+    H.db.aIAgent.find((a) => a.id === "maya").integrationAccess = ["woocommerce"];
+    const r = (await request(app).post("/api/ai-agents/maya/skills/fit").send({ skillId: id })).body.data;
+    expect(r).toMatchObject({ fits: false, reason: "integration_not_allowed_for_employee" });
   });
 
   it("all tools allowed → fits; an ASSIST-only tool is not allowed (the bot drops it)", async () => {

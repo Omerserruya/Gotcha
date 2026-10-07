@@ -1058,14 +1058,11 @@ export async function buildAgentToolsForAIAgent(
   let integrationTools: Array<Record<string, unknown>> = [];
   try {
     const { prisma } = await import("./prisma");
+    const { loadIntegrationAccess, agentGrantWhere } = await import("./integration-access");
+    // Granted + enabled + CONNECTED + on the employee's allowlist of systems.
+    const access = await loadIntegrationAccess(tenantId, aiAgentId);
     const rows = await prisma.agentToolPermission.findMany({
-      where: {
-        tenantId,
-        aiAgentId,
-        isAllowed: true,
-        tenantTool: {
-          isEnabled: true,
-          tenantIntegration: { status: "CONNECTED" },
+      where: agentGrantWhere(tenantId, aiAgentId, access, {
           // Calendar tools are NOT surfaced through this HTTP-catalog path, to
           // avoid double-surfacing the same tool under two names. Availability is
           // the first-class `check_availability` built-in (validated against the
@@ -1076,8 +1073,7 @@ export async function buildAgentToolsForAIAgent(
           // surfaced. This exclusion is purely routing (which path), not a
           // capability/authorization gate.
           catalogTool: { integration: { category: { not: "CALENDAR" } } },
-        },
-      },
+      }) as any,
       include: {
         tenantTool: {
           include: { catalogTool: true },

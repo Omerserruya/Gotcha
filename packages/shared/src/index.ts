@@ -1203,3 +1203,16 @@ export * from "./whatsapp";
 
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";
+
+// Per-employee allowlist of business systems (AIAgent.integrationAccess).
+export {
+  CUSTOM_ACCESS_PREFIX,
+  customAccessKey,
+  loadIntegrationAccess,
+  agentGrantWhere,
+  allowedIntegrationToolKeys,
+  defaultIntegrationAccess,
+  integrationAccessChoices,
+  validateIntegrationAccess,
+  type IntegrationAccessChoice,
+} from "./lib/integration-access";

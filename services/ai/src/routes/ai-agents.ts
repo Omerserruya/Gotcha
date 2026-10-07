@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices } from "@chatcenter/shared";
 import { runSandboxTurn } from "../services/sandbox-conversation.service";
 import { computeCalendarCapability } from "../services/calendar-capability.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
@@ -462,12 +462,26 @@ router.post(
       confidenceThreshold, escalationMessage, conversationFlow, customGuardrails,
       departmentId, funnelId,
       goal, successCriteria, salesContext,
-      knowledgeBaseIds, toolIds,
+      knowledgeBaseIds, toolIds, integrationAccess,
     } = req.body;
 
     if (!name) {
       res.status(400).json({ error: "Name is required" });
       return;
+    }
+
+    // The systems this employee may use: the creator's choice, checked, or
+    // every system the workspace has today (one connected later stays off).
+    let access: string[];
+    if (integrationAccess !== undefined) {
+      const v = await validateIntegrationAccess(req.tenantId! as string, integrationAccess);
+      if (!v.ok) {
+        res.status(422).json({ error: "Unknown system in integrationAccess", field: "integrationAccess", code: "INVALID_INTEGRATION_ACCESS", invalid: v.invalid });
+        return;
+      }
+      access = v.keys;
+    } else {
+      access = await defaultIntegrationAccess(req.tenantId! as string);
     }
 
     // Role-driven guardrails: funnel-required roles still need a funnel
@@ -517,6 +531,7 @@ router.post(
         languages: languages || { english: true },
         style: style || {},
         channels: channels || [],
+        integrationAccess: access,
         escalationRules: escalationRules || [],
         interactiveMessages: interactiveMessages || {},
         systemPrompt: systemPrompt || "",
@@ -621,6 +636,17 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     const updateData: Record<string, any> = {};
     for (const k of AGENT_EDITABLE_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(bodySrc, k)) updateData[k] = bodySrc[k];
+    }
+
+    // The systems this employee may use: a checked list of catalog slugs and
+    // "custom:<id>" keys. An unknown key is refused (stored, it would gate nothing).
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "integrationAccess")) {
+      const v = await validateIntegrationAccess(req.tenantId! as string, bodySrc.integrationAccess);
+      if (!v.ok) {
+        res.status(422).json({ error: "Unknown system in integrationAccess", field: "integrationAccess", code: "INVALID_INTEGRATION_ACCESS", invalid: v.invalid });
+        return;
+      }
+      updateData.integrationAccess = v.keys;
     }
 
     // What the employee does when no business skill fits. A closed list: an
@@ -914,6 +940,27 @@ router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant
 // capability is live (CONNECTED / bookable / KB attached) AND (for tool-governed
 // domains) an AgentToolPermission grants it. Reuses the exact permissions bridge
 // + capability world the kernel uses, so the UI never disagrees with the runtime.
+/**
+ * GET /api/ai-agents/:id/integration-access - the systems this employee may
+ * use (`allowed`) and every system and custom tool of the workspace it could
+ * be given (`choices`). Write it with PATCH /:id { integrationAccess }.
+ */
+router.get("/:id/integration-access", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: String(req.params.id), tenantId }, select: { integrationAccess: true } });
+    if (!agent) {
+      res.status(404).json({ error: "AI agent not found" });
+      return;
+    }
+    const choices = await integrationAccessChoices(tenantId);
+    res.json({ data: { allowed: agent.integrationAccess ?? [], choices } });
+  } catch (err) {
+    console.error("[ai-agents] integration-access failed:", (err as Error)?.message);
+    res.status(500).json({ error: "Could not load the employee's systems" });
+  }
+});
+
 router.get("/:id/effective-permissions", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:read", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;

@@ -11,7 +11,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../../../../packages/shared/src/lib/prisma", () => ({
-  prisma: { agentToolPermission: { findMany: vi.fn() } },
+  prisma: {
+    agentToolPermission: { findMany: vi.fn() },
+    aIAgent: { findFirst: vi.fn(async () => ({ integrationAccess: ["hubspot", "custom:ct1"] })) },
+  },
 }));
 
 import { buildAgentToolsForAIAgent, prisma } from "@chatcenter/shared";
@@ -52,6 +55,16 @@ describe("tool surface authority - connected AND allowed (single source of truth
     // Capability layer:
     expect(where?.tenantTool?.isEnabled).toBe(true);
     expect(where?.tenantTool?.tenantIntegration?.status).toBe("CONNECTED");
+    // ★ The employee's allowlist of systems: only those on it (custom keys are not slugs).
+    expect(where?.tenantTool?.tenantIntegration?.integration?.slug).toEqual({ in: ["hubspot"] });
+  });
+
+  it("★ an employee with no systems allowed gets no integration tool", async () => {
+    (prisma as any).aIAgent.findFirst.mockResolvedValueOnce({ integrationAccess: [] });
+    let where: any;
+    (prisma as any).agentToolPermission.findMany.mockImplementation((args: any) => { where = args?.where; return Promise.resolve([]); });
+    await buildAgentToolsForAIAgent("t1", "a1", { allowedMode: "AUTO" });
+    expect(where?.tenantTool?.tenantIntegration?.integration?.slug).toEqual({ in: [] });
   });
 
   it("AUTO surface drops ASSIST-only tools (allowedModes without AUTO)", async () => {

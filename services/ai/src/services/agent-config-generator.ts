@@ -9,7 +9,7 @@
  * pre-baked `systemPrompt` is stored.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, defaultIntegrationAccess } from "@chatcenter/shared";
 import { getDefaultModel } from "./ai.service";
 import { aiAgentCreationDefaults } from "./ai-agent-defaults";
 
@@ -428,6 +428,8 @@ export async function generateAgentConfig(
         tenantId,
         name: `${department.name} AI Employee`,
         role: "customer_support",
+        // Every system the workspace has today; one connected later stays off.
+        integrationAccess: await defaultIntegrationAccess(tenantId),
         // description column dropped per spec - identity is expressed via
         // structured fields (identity, persona, behavioralAnchors, etc).
         ...agentData,

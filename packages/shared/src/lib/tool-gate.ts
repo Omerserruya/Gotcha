@@ -21,6 +21,7 @@
  * should use `evaluatePolicies()`.
  */
 import { prisma } from "./prisma";
+import { loadIntegrationAccess, customAccessKey } from "./integration-access";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -135,6 +136,7 @@ export async function evaluatePolicies(opts: {
   let catalog: HitlPolicy;
   let tenantToolId: string | null = null;
   let tenantToolEnabled = true;
+  let toolIntegrationSlug: string | null = null;
 
   if (opts.toolName === "integration_create_lead" || opts.toolName === "integration_create_contact") {
     // Vendor-neutral semantic create. No CatalogTool row by design - resolve
@@ -159,6 +161,11 @@ export async function evaluatePolicies(opts: {
     }).catch(() => null);
     if (!row || !row.isActive) {
       return denyResult(`unknown or inactive custom tool "${opts.toolName}"`, {});
+    }
+    // Custom tools have no per-tool grant rows: the employee's allowlist is
+    // their only per-employee gate, so nothing slips past it.
+    if (opts.aiAgentId && !(await loadIntegrationAccess(opts.tenantId, opts.aiAgentId)).has(customAccessKey(row.id))) {
+      return denyResult(`custom tool not allowed for agent "${opts.aiAgentId}"`, {});
     }
     const cat = String(row.category || "").toUpperCase();
     const risk = String(row.riskLevel || "").toUpperCase();
@@ -193,7 +200,7 @@ export async function evaluatePolicies(opts: {
           ? { slug: toolSlugLookup, integration: { slug: integrationSlugLookup } }
           : { slug: toolSlugLookup },
       },
-      include: { catalogTool: true, tenantIntegration: { select: { status: true } } },
+      include: { catalogTool: true, tenantIntegration: { select: { status: true, integration: { select: { slug: true } } } } },
     });
 
     // A tool whose provider is no longer connected cannot run, whatever the
@@ -220,6 +227,7 @@ export async function evaluatePolicies(opts: {
     }
     tenantToolId = tenantTool.id;
     tenantToolEnabled = tenantTool.isEnabled;
+    toolIntegrationSlug = tenantTool.tenantIntegration?.integration?.slug ?? integrationSlugLookup ?? null;
 
     catalog = (tenantTool.catalogTool?.hitlPolicy as HitlPolicy) ?? { mode: "never" };
   } else {
@@ -280,6 +288,11 @@ export async function evaluatePolicies(opts: {
     });
     if (!grant || !grant.isAllowed) {
       return denyResult(`tool not granted to agent "${opts.aiAgentId}"`, snapshot);
+    }
+    // The system itself must be on the employee's allowlist (a per-tool grant
+    // survives a reconnect; the allowlist is the durable "never this system").
+    if (!toolIntegrationSlug || !(await loadIntegrationAccess(opts.tenantId, opts.aiAgentId)).has(toolIntegrationSlug)) {
+      return denyResult(`integration "${toolIntegrationSlug ?? "unknown"}" not allowed for agent "${opts.aiAgentId}"`, snapshot);
     }
   }
 

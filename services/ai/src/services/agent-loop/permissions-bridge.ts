@@ -21,7 +21,7 @@
  * the UI shows EXACTLY what the runtime enforces.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, allowedIntegrationToolKeys } from "@chatcenter/shared";
 
 export interface ToolGrants {
   /** True when the agent has ANY AgentToolPermission rows (RBAC configured). */
@@ -35,20 +35,13 @@ export async function loadToolGrants(tenantId: string, aiAgentId: string): Promi
   try {
     const [total, allowedRows] = await Promise.all([
       prisma.agentToolPermission.count({ where: { tenantId, aiAgentId } }),
-      prisma.agentToolPermission.findMany({
-        where: {
-          tenantId,
-          aiAgentId,
-          isAllowed: true,
-          tenantTool: { isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
-        },
-        select: { tenantTool: { select: { catalogTool: { select: { slug: true } } } } },
-      }),
+      // The one shared query: grants + enabled + CONNECTED + the allowlist.
+      allowedIntegrationToolKeys(tenantId, aiAgentId),
     ]);
     const slugs = new Set<string>();
-    for (const r of allowedRows as any[]) {
-      const slug = r.tenantTool?.catalogTool?.slug;
-      if (typeof slug === "string" && slug) slugs.add(slug);
+    for (const key of allowedRows) {
+      const slug = key.slice(key.indexOf(":") + 1);
+      if (slug) slugs.add(slug);
     }
     return { governed: total > 0, allowedToolSlugs: slugs };
   } catch (err: any) {
