@@ -194,4 +194,4 @@ export default async function Page({
   );
 }
 
-export const generateMetadata = pageMetadata('customers');
+export const generateMetadata = pageMetadata('primary.customers');

@@ -1,41 +1,11 @@
-import {
-  Bell,
-  FileText,
-  Moon,
-  PhoneMissed,
-  ShoppingCart,
-  Star,
-  UserPlus,
-  type LucideIcon,
-} from 'lucide-react';
-import { getTranslations } from 'next-intl/server';
 import { Suspense } from 'react';
 
-import { AutomationsList, AutomationsPending } from '@/features/automations/AutomationsList';
-import { NewAutomation } from '@/features/automations/NewAutomation';
-import styles from '@/features/automations/Automations.module.css';
-import { loadAutomations, loadCatalog } from '@/features/automations/load-automations';
-import {
-  TEMPLATES,
-  templateOf,
-  type Template,
-  type TemplateKey,
-} from '@/features/automations/templates';
-import { Link } from '@/i18n/navigation';
-import { CanSee } from '@/permissions/CanSee';
-import { PERMISSIONS } from '@/permissions/catalogue';
-import { PageContainer } from '@/shell/PageContainer';
+import { AutomationsPending } from '@/features/automations/AutomationsList';
+import { ListSection } from '@/features/automations/AutomationsPage';
+import { templateOf } from '@/features/automations/templates';
 import { pageMetadata } from '@/shell/page-metadata';
 
-const TEMPLATE_ICON: Readonly<Record<TemplateKey, LucideIcon>> = {
-  fileOnKeyword: FileText,
-  afterHours: Moon,
-  welcome: UserPlus,
-  tagNotify: Bell,
-  missedCall: PhoneMissed,
-  review: Star,
-  cart: ShoppingCart,
-};
+import { AutomationsFrame } from './frame';
 
 /**
  * 09c - Studio · Automations (design 6), over `/api/automations`.
@@ -61,138 +31,18 @@ export default async function Page({
     readonly template?: string;
   }>;
 } = {}) {
-  const t = await getTranslations('automations');
   const params = (await searchParams) ?? {};
   const creating = params.new === '1';
   const chosen = templateOf(params.template);
   const fromTemplate = chosen?.build ? chosen : null;
 
   return (
-    <PageContainer
-      layout="screen"
-      headerPadEnd={22}
-      title={t('title')}
-      description={t('description')}
-      actions={
-        // Static, and only for whoever may read automations - known before any read.
-        <CanSee permission={PERMISSIONS.ai.workflows.read}>
-          <span className={styles.headerActions}>
-            <a href="#templates" className={styles.secondary} data-testid="automations-templates">
-              {t('templates')}
-            </a>
-            <Link
-              href={{ pathname: '/studio/automations', query: { new: '1' } }}
-              className={styles.primary}
-              scroll={false}
-              data-testid="automations-new"
-            >
-              {t('create')}
-            </Link>
-          </span>
-        </CanSee>
-      }
-    >
-      <div className={styles.page}>
-        {params.deleted === '1' ? (
-          <p className={styles.deletedNote} role="status" data-testid="automations-deleted">
-            {t('delete.done')}
-          </p>
-        ) : null}
-        {/* The list streams behind its placeholder; everything around it is static. */}
-        <Suspense fallback={<AutomationsPending />}>
-          <ListSection creating={creating} fromTemplate={fromTemplate} />
-        </Suspense>
-
-        <CanSee permission={PERMISSIONS.ai.workflows.read}>
-          <section className={styles.templates} id="templates" aria-labelledby="templates-title">
-            <h2 className={styles.templatesTitle} id="templates-title">
-              {t('templateTitle')} <span className={styles.quiet}>{t('templateNote')}</span>
-            </h2>
-            <div className={styles.templateCards}>
-              {TEMPLATES.map((template) => {
-                const Icon = TEMPLATE_ICON[template.key];
-                return template.build ? (
-                  <Link
-                    key={template.key}
-                    href={{ pathname: '/studio/automations', query: { template: template.key } }}
-                    className={styles.template}
-                    scroll={false}
-                    data-testid={`automations-template-${template.key}`}
-                  >
-                    <Icon size={15} aria-hidden="true" />
-                    <span className={styles.templateName}>
-                      {t(`template.${template.key}.name`)}
-                    </span>
-                    <span className={styles.quiet}>{t(`template.${template.key}.line`)}</span>
-                  </Link>
-                ) : (
-                  <div
-                    key={template.key}
-                    className={styles.template}
-                    data-unavailable=""
-                    aria-disabled="true"
-                    data-testid={`automations-template-${template.key}`}
-                  >
-                    <span className={styles.templateTop}>
-                      <Icon size={15} aria-hidden="true" />
-                      <span className={styles.unavailableTag}>{t('comingSoon')}</span>
-                    </span>
-                    <span className={styles.templateName}>
-                      {t(`template.${template.key}.name`)}
-                    </span>
-                    <span className={styles.quiet}>{t(`template.${template.key}.why`)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        </CanSee>
-      </div>
-    </PageContainer>
-  );
-}
-
-/**
- * 09c's data: the list - or no access, unread, none - and, with the sheet
- * open, the first step's catalogue. Without access nothing is offered.
- */
-export async function ListSection({
-  creating,
-  fromTemplate,
-}: {
-  readonly creating: boolean;
-  readonly fromTemplate: Template | null;
-}) {
-  const t = await getTranslations('automations');
-  const [automations, catalog] = await Promise.all([
-    loadAutomations(),
-    creating ? loadCatalog() : Promise.resolve(null),
-  ]);
-  return (
-    <>
-      {automations === 'forbidden' ? (
-        <div className={styles.empty} data-testid="automations-forbidden">
-          <p className={styles.emptyLead}>{t('forbidden.title')}</p>
-          <p className={styles.quiet}>{t('forbidden.lead')}</p>
-        </div>
-      ) : automations === null ? (
-        <p className={styles.quiet} role="status" data-testid="automations-unread">
-          {t('unavailable')}
-        </p>
-      ) : automations.length === 0 ? (
-        <div className={styles.empty} data-testid="automations-empty">
-          <p className={styles.emptyLead}>{t('none')}</p>
-          <p className={styles.quiet}>{t('noneBody')}</p>
-        </div>
-      ) : (
-        <AutomationsList automations={automations} />
-      )}
-      {automations === 'forbidden' ? null : fromTemplate ? (
-        <NewAutomation catalog={null} template={fromTemplate} />
-      ) : creating ? (
-        <NewAutomation catalog={catalog} />
-      ) : null}
-    </>
+    <AutomationsFrame deleted={params.deleted === '1'}>
+      {/* The list streams behind its placeholder; everything around it is static. */}
+      <Suspense fallback={<AutomationsPending />}>
+        <ListSection creating={creating} fromTemplate={fromTemplate} />
+      </Suspense>
+    </AutomationsFrame>
   );
 }
 

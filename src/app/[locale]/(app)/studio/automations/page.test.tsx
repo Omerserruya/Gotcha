@@ -48,7 +48,8 @@ vi.mock('@/features/automations/NewAutomation', () => ({
   NewAutomation: () => <div data-testid="sheet" />,
 }));
 
-const { default: Page, ListSection } = await import('./page');
+const { default: Page } = await import('./page');
+const { ListSection } = await import('@/features/automations/AutomationsPage');
 
 const wrap = (node: ReactNode, permissions: string[] = ['ai:workflows:read']) =>
   render(
