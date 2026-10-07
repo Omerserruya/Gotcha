@@ -627,7 +627,8 @@
         "none": "Stock and orders aren't connected",
         "unread": "Couldn't check the stock and orders connection",
         "fix": "Fix the connection",
-        "connect": "Connect"
+        "connect": "Connect",
+        "title": "Stock and orders"
       },
       "themeEditor": "Open the theme editor",
       "liveOn": "Live. Last seen on {host}",

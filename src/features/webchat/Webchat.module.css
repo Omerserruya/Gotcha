@@ -610,28 +610,52 @@
     padding: 14px 18px;
   }
 
-  /* A shop: its line, then the data connection's under it, each with its own button. */
+  /*
+   * A shop: the name's row carries the buttons and the badge; the shop and its
+   * status run below it at full width, then the data connection the same way.
+   */
   .store[data-stack] {
     flex-direction: column;
     gap: 10px;
     align-items: stretch;
   }
 
-  .storeLine,
-  .storeSub {
+  .storeLine {
     display: flex;
-    gap: 14px;
+    gap: 10px;
     align-items: center;
   }
 
-  .storeSub > .rowHint {
+  .storeName {
     flex: 1;
     min-inline-size: 0;
+    font-size: 13px;
   }
 
-  /* Under the shop's name: the mark's width and the gap. */
-  .storeSub {
+  /* Under the name: the mark's width and the gap. */
+  .storeBody,
+  .storeSection {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
     padding-inline-start: 44px;
+  }
+
+  .storeSection {
+    gap: 4px;
+    padding-block-start: 10px;
+    border-block-start: var(--border-width-thin) solid var(--border-muted);
+  }
+
+  /* The store's address: one line, an ellipsis when long - never broken inside. */
+  .domain {
+    display: block;
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .storeMark {

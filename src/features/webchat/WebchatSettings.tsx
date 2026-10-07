@@ -905,12 +905,7 @@ function ShopRow({
         <span className={styles.storeMark} data-store="shopify" aria-hidden="true">
           <ShoppingBag size={15} />
         </span>
-        <span className={styles.toggleText}>
-          <span>{t('shopify')}</span>
-          <span className={styles.rowHint} data-testid="webchat-shop-line">
-            <bdi dir="ltr">{shop.shopDomain}</bdi> · {t(`shop.${state}`)}
-          </span>
-        </span>
+        <span className={styles.storeName}>{t('shopify')}</span>
         {(state === 'off' || state === 'quiet') && shop.themeEditorUrl ? (
           <a
             className={styles.secondary}
@@ -937,18 +932,39 @@ function ShopRow({
           </span>
         )}
       </div>
+      {/*
+        Under the name's row, at the card's full width: the shop on its own
+        line (an ellipsis when long, never broken inside), then what it is
+        doing. The buttons and the badge stay on the name's row.
+      */}
+      <div className={styles.storeBody}>
+        <bdi
+          dir="ltr"
+          className={styles.domain}
+          title={shop.shopDomain}
+          data-testid="webchat-shop-domain"
+        >
+          {shop.shopDomain}
+        </bdi>
+        <span className={styles.rowHint} data-testid="webchat-shop-line">
+          {t(`shop.${state}`)}
+        </span>
+      </div>
       {data ? (
-        <div className={styles.storeSub} data-testid="webchat-shop-data">
+        <div className={styles.storeSection} data-testid="webchat-shop-data">
+          <div className={styles.storeLine}>
+            <span className={styles.storeName}>{t('data.title')}</span>
+            {data.action ? (
+              <Link
+                href="/studio/capabilities"
+                className={styles.secondary}
+                data-testid="webchat-shop-data-action"
+              >
+                {data.action}
+              </Link>
+            ) : null}
+          </div>
           <span className={styles.rowHint}>{data.words}</span>
-          {data.action ? (
-            <Link
-              href="/studio/capabilities"
-              className={styles.secondary}
-              data-testid="webchat-shop-data-action"
-            >
-              {data.action}
-            </Link>
-          ) : null}
         </div>
       ) : null}
     </div>

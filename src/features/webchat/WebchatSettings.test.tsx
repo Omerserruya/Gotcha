@@ -350,9 +350,11 @@ describe('★★ install: Shopify by the existing install, WooCommerce coming, a
 describe('★★ a shop says which Shopify it means: the chat in the theme, then stock and orders', () => {
   it('active and loading, catalogue connected: Active, and connected to stock and orders', () => {
     show('install', { read: install({ shopify: [shop()] }) });
-    const row = screen.getByTestId('webchat-shop-sc1');
-    expect(row).toHaveTextContent(
-      'lumiere.myshopify.com · Installed, the chat shows in your theme',
+    expect(screen.getByTestId('webchat-shop-domain')).toHaveTextContent(
+      /^lumiere\.myshopify\.com$/,
+    );
+    expect(screen.getByTestId('webchat-shop-line')).toHaveTextContent(
+      /^Installed, the chat shows in your theme$/,
     );
     expect(screen.getByTestId('webchat-shop-status')).toHaveTextContent(/^Active$/);
     expect(screen.getByTestId('webchat-shop-data')).toHaveTextContent(
@@ -395,7 +397,7 @@ describe('★★ a shop says which Shopify it means: the chat in the theme, then
     show('install', { read: install({ shopify: [shop({ embedLive: false })] }) });
     expect(screen.getByTestId('webchat-shop-status')).toHaveTextContent('Not showing');
     expect(screen.getByTestId('webchat-shop-line')).toHaveTextContent(
-      "lumiere.myshopify.com · Installed, but the store's theme hasn't loaded the chat in the last week",
+      "Installed, but the store's theme hasn't loaded the chat in the last week",
     );
     const theme = screen.getByTestId('webchat-shop-theme');
     expect(theme).toHaveAttribute(
@@ -405,6 +407,12 @@ describe('★★ a shop says which Shopify it means: the chat in the theme, then
     // A quiet button beside the badge, not a link in the text.
     expect(theme.className).toMatch(/secondary/);
     expect(screen.getByTestId('webchat-shop-line')).not.toContainElement(theme);
+    // ★ The button and the badge share the name's row; the shop and its status
+    //   are below it, so neither squeezes them (dev: the domain cut in four lines).
+    const nameRow = theme.parentElement!;
+    expect(nameRow).toContainElement(screen.getByTestId('webchat-shop-status'));
+    expect(nameRow).not.toContainElement(screen.getByTestId('webchat-shop-domain'));
+    expect(nameRow).not.toContainElement(screen.getByTestId('webchat-shop-line'));
   });
 
   it('switched off in the theme: Off, with the theme editor, and no stock line', () => {
