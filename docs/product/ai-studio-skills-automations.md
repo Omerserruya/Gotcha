@@ -198,3 +198,31 @@ Status 2026-10-06: 1-3, 5, 7-10 passed; 4 blocked on a test store; 6 passed at t
 - (Knowledge, 2026-10-07) Onboarding preview: "What do you sell?" was not retrieval but the model refusing (the overview says the store is password-protected, "no product descriptions were found"). The prompt now says excerpts in another language count once translated, and a general answer they support (the kind of business or products) is covered.
 - (Knowledge, 2026-10-07, live on dev) Translation cost per mismatched message: $0.000026 on average (19 calls, gpt-5-nano, ~35 prompt + ~60 completion tokens), charged as AI usage under `knowledge_query_translation`. Live check: "What do you sell?" grounded on the overview; "How can I reach you?" grounded on what the documents hold (the store's website, and that no public contact details were found); "כרטיסי מתנה בירושלים?" not grounded; an answered question added no unanswered row.
 - (Test debt, 2026-10-07, OWNER NEEDED before main) services/ai: 19 test files fail at HEAD too, independent of the triggers / knowledge work (measured by swapping that work back to HEAD: 67 failures without it, 66 with): action-executor-http.test.ts, action-executor.test.ts, ai-bot-e2e.test.ts, ai.test.ts, behavior-engine.test.ts, chaos.test.ts, crm-adapter.smoke.test.ts, crm-panel-routes.smoke.test.ts, followup-generator.test.ts, historical-completion-email.test.ts, historical-reusability.test.ts, integration-verification.test.ts, knowledge-agent-scoping.test.ts, security/cost-budget.test.ts, security/output-validator.test.ts, shopify-chat-public.test.ts, shopify-webhooks.test.ts, smoke-fixes.test.ts, tool-surface-authority.test.ts. Not investigated; some may come from other sessions' uncommitted changes in services/ai.
+
+### Test triage: services/ai files failing at HEAD (2026-10-07)
+
+No production bug found, and nothing depends on a DB or network that is missing. 18 of the 19 files fail because the test fell behind the code: a mock that replaces all of `@chatcenter/shared` lacks a function the code now uses, or an expectation predates a deliberate change. The 19th fails because of another session's uncommitted edit. Every fix touches only the test.
+
+| file | failing | cause | since | recommendation |
+|---|---|---|---|---|
+| action-executor-http.test.ts | 7/7 | mock lacks `getPolicy` (policy.service now re-exports shared) | dc42b948 2026-09-14 | fix test (policy stub) |
+| action-executor.test.ts | 3/7 | mock lacks `getPolicy`/`setPolicy` | dc42b948 2026-09-14 | fix test (in-memory policy stub + real validateAgainstPolicy) |
+| ai-bot-e2e.test.ts | 9/14 | mock lacks `getPolicy` | dc42b948 2026-09-14 | fix test (same stub) |
+| chaos.test.ts | 3/3 | mock lacks `getPolicy`/`validateAgainstPolicy` | dc42b948 2026-09-14 | fix test (same stub) |
+| followup-generator.test.ts | 1/3 | mock lacks `getPolicyPrompt` | dc42b948 2026-09-14 | fix test |
+| ai.test.ts | whole file (0 run) | mock lacks `requireInternalKey` (+ ~5 more: resolveConversationLocale, resolveEffectiveLocale, requireEntitlement, getRedis, requireVisibleConversation) | 3a6d66ff 2026-07-18, then c1b57691, 9c5e96cc, fa4f1de3 | fix test (spread importActual; not quick) |
+| behavior-engine.test.ts | 3/91 | expectations predate deliberate rules: "demo" is now a transactional marker (no "funnel-overridden" tag); a deferral with no time asks when (ask_question), not schedule_followup | 3d0e06ff 2026-05-26; 002fe681 2026-05-17 | fix test (+ add a timed deferral case) |
+| smoke-fixes.test.ts | 2/13 | same deferral rule (no hour → ask_question); test and rule landed together, so likely never passed | 002fe681 2026-05-17 | fix test (product check: confirm "ask when" is wanted) |
+| crm-adapter.smoke.test.ts | 6/21 | resolver now asks for Shopify first (a mockResolvedValueOnce is consumed by it); sentiment now rendered "Positive" | aae3a981 2026-06-08 / fffd248d 2026-07-21; 5c6682c8 2026-06-15 | fix test |
+| crm-panel-routes.smoke.test.ts | 6/13 | mock lacks `assertPublicUrl` (Zoho fetch "blocked_host") and `resolveEffectiveLocale` (throws before .catch → timeout) | 3a6d66ff 2026-07-18; 3d0e06ff 2026-05-26 | fix test |
+| integration-verification.test.ts | 2/44 | real `assertPublicUrl` (SSRF guard) does DNS for shop.example.com → ENOTFOUND; the error is swallowed | 3a6d66ff 2026-07-18 | fix test (stub assertPublicUrl) |
+| historical-reusability.test.ts | 1/24 | expects "PRODUCT" → OTHER; normalization now maps it to PRODUCT_AND_SPECS on purpose (asserted elsewhere) | f63e878f 2026-08-26 | fix test |
+| knowledge-agent-scoping.test.ts | 1/9 | source-text regex expects a one-line call; the call now spans lines with a 5th argument (behaviour correct: agent id passed) | 0bc2f39c 2026-09-08 | fix test (whitespace-tolerant regex) |
+| security/cost-budget.test.ts | 2/11 | mock returns `_sum.tokensTotal`; code reads `_sum.tokensEquivalent` → usage 0, cap never trips | 5c6682c8 2026-06-15 | fix test |
+| security/output-validator.test.ts | 16/27 | mock lacks `reportOperationalFailure`/`ERROR_CODES` (called on every violation) | ac1b5bb8 2026-08-03 | fix test |
+| shopify-chat-public.test.ts | 1/29 | /handoff now calls recordHandover → needs `$transaction` + `conversationHandover.create` in the mock | cd9c5c88 2026-09-08 | fix test |
+| shopify-webhooks.test.ts | 2/25 (uninstall) | `notifyShopifyUninstalled` not mocked: a real fetch runs late and spills into the next test | e62d2c0f 2026-09-03 | fix test (mock the billing bridge) |
+| tool-surface-authority.test.ts | 1/3 | catalog tools without `endpoint` are now dropped; the fixture sets none | 3b3ed8ef 2026-08-02 | fix test (add endpoint) |
+| historical-completion-email.test.ts | 1/13 | UNCOMMITTED edit by another session (bulk em-dash scrub) turned `/[–—]/` into `/[–-]/`, so normal hyphens fail | uncommitted | the scrub's owner restores `/[–—]/` |
+
+Structural cause: these suites replace all of `@chatcenter/shared`, so every new shared function the code calls breaks them silently. A lasting fix is to spread `vi.importActual` and override only what each test needs.
