@@ -35,15 +35,7 @@ const TOOLS: readonly HireTool[] = [
 const sheet = (props: Partial<Parameters<typeof HireSheet>[0]> = {}) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ employees }}>
-      <HireSheet
-        channels={[
-          { type: 'WHATSAPP', name: 'WhatsApp' },
-          { type: 'SHOPIFY_LIVE_CHAT', name: 'Shopify live chat' },
-        ]}
-        tools={TOOLS}
-        knowledge={['Returns policy']}
-        {...props}
-      />
+      <HireSheet tools={TOOLS} knowledge={['Returns policy']} {...props} />
     </NextIntlClientProvider>,
   );
 
@@ -57,18 +49,15 @@ describe('★ 07b - the job, where it works, its name; nothing written', () => {
     expect(screen.getByTestId('hire-continue')).toBeEnabled();
   });
 
-  it('the connected channels start chosen; "It already knows" is the knowledge read', () => {
+  it('"It already knows" is the knowledge read', () => {
     sheet();
-    expect(screen.getByTestId('hire-channel-WHATSAPP')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('hire-knows')).toHaveTextContent('Returns policy');
   });
 
-  it('no channel connected is "-", with why', () => {
-    sheet({ channels: [] });
-    expect(screen.getByText('-', { selector: 'span' })).toHaveAttribute(
-      'title',
-      expect.stringMatching(/No channel is connected/),
-    );
+  it('★★ no "Where should it work?" - where it works is the playbook\'s and automations\' (Omer, 2026-10-07)', () => {
+    sheet();
+    expect(screen.queryByText('Where should it work?')).toBeNull();
+    expect(screen.queryAllByTestId(/^hire-channel-/)).toEqual([]);
   });
 });
 
@@ -115,21 +104,12 @@ describe('★ 07d - the report’s shape, and nothing created', () => {
 });
 
 describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
-  it('a channel by its name, never its enum', () => {
-    sheet();
-    expect(screen.getByTestId('hire-channel-SHOPIFY_LIVE_CHAT')).toHaveTextContent(
-      'Shopify live chat',
-    );
-  });
-
   it('from step 2, the head’s line is the plan so far', async () => {
     sheet();
     expect(screen.getByTestId('hire-line')).toHaveTextContent('You can change any of this later');
     await userEvent.click(screen.getByTestId('hire-job-sales'));
     await userEvent.click(screen.getByTestId('hire-continue'));
-    expect(screen.getByTestId('hire-line')).toHaveTextContent(
-      'Sales · WhatsApp and Shopify live chat',
-    );
+    expect(screen.getByTestId('hire-line')).toHaveTextContent(/^Sales$/);
   });
 
   it('an empty group is drawn with "-" and why, never left out', () => {

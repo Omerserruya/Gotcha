@@ -9,8 +9,6 @@
     "PAUSED": "Paused",
     "DRAFT": "Not started yet"
   },
-  "onChannels": "Answers on {channels}",
-  "noChannels": "Not connected to any channel, so nothing reaches it.",
   "count": {
     "open": "Open right now",
     "handled": "Handled in total",
@@ -85,8 +83,7 @@
       "rating": "Customer rating"
     },
     "answersOn": {
-      "title": "Answers on",
-      "meta": "set in Settings · Channels"
+      "title": "Answers on"
     },
     "how": {
       "title": "How it answers",
@@ -174,8 +171,6 @@
       "title": "What should it be responsible for?",
       "sub": "Pick the closest job. You can sharpen it later.",
       "goal": "The job, in your own words",
-      "where": "Where should it work?",
-      "noChannels": "No channel is connected yet - connect one in Settings · Channels.",
       "callIt": "Call it"
     },
     "channel": {
@@ -273,7 +268,6 @@
     "saysAiNone": "No disclosure rule is stored for an employee.",
     "handsTo": "Hands to:",
     "handsToNone": "No handover target is stored for an employee.",
-    "setInChannels": "Set in Settings · Channels",
     "setInCore": "Set in Settings · Business core",
     "preview": "Preview with these rules",
     "previewNone": "Nothing replays a conversation under new rules yet.",
@@ -310,5 +304,6 @@
     "notTested": "No readiness test yet",
     "resolve": "Resolve it",
     "see": "See it in Studio"
-  }
+  },
+  "whoAnswers": "Who it answers is set in <automations>Studio · Automations</automations> and the playbook, not on the employee."
 }

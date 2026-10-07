@@ -6,7 +6,6 @@ import { EmployeeSkills } from '@/features/skills/EmployeeSkills';
 import styles from '@/features/skills/EmployeeSkills.module.css';
 import { loadEmployeeSkillsTab } from '@/features/skills/load-skills';
 import { avatarTone, employeeInitials } from '@/features/skills/skill-words';
-import { channelMark } from '@/features/inbox/channel-marks';
 import { Link } from '@/i18n/navigation';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -65,18 +64,6 @@ export default async function Page({
                 {responsibilityOf(employee) ? (
                   <span className={styles.lineText} title={responsibilityOf(employee) ?? undefined}>
                     {responsibilityOf(employee)}
-                  </span>
-                ) : null}
-                {employee.channels.length > 0 ? (
-                  <span className={styles.channelIcons} aria-label={t('channelsLabel')}>
-                    {employee.channels.map((c) => {
-                      const { Icon } = channelMark(c.toUpperCase());
-                      return (
-                        <span key={c} title={c}>
-                          <Icon size={13} strokeWidth={2} />
-                        </span>
-                      );
-                    })}
                   </span>
                 ) : null}
               </span>

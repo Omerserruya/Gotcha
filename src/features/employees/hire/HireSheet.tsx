@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import type { AdminChoice } from '@/api/contracts/capabilities';
@@ -38,42 +38,25 @@ type Step = 1 | 2 | 3;
  * draft id, and a draft is a write.
  */
 export function HireSheet({
-  channels,
   tools,
   knowledge,
   initialStep = 1,
 }: {
-  /** The business's connected channels: their type and their name, as 13 names them. */
-  readonly channels: readonly { readonly type: string; readonly name: string }[];
   readonly tools: readonly HireTool[];
   /** Knowledge source names, or null when they could not be read. */
   readonly knowledge: readonly string[] | null;
   readonly initialStep?: Step;
 }) {
   const t = useTranslations('employees.hireFlow');
-  const locale = useLocale();
   const [step, setStep] = useState<Step>(initialStep);
-  const [plan, setPlan] = useState<HirePlan>(() =>
-    emptyPlan(
-      channels.map((c) => c.type),
-      tools,
-    ),
-  );
-  const nameOf = (type: string) => channels.find((c) => c.type === type)?.name ?? type;
-  /* From step 2, the head's line is the plan so far: "Sales · WhatsApp and Email". */
+  const [plan, setPlan] = useState<HirePlan>(() => emptyPlan(tools));
+  /* From step 2, the head's line is the plan so far: the job. */
   const summary =
     plan.job === null
       ? null
-      : [
-          plan.job === 'custom'
-            ? plan.goal.trim() || t('job.custom.name')
-            : t(`job.${plan.job}.name`),
-          plan.channels.length > 0
-            ? new Intl.ListFormat(locale, { type: 'conjunction' }).format(plan.channels.map(nameOf))
-            : null,
-        ]
-          .filter(Boolean)
-          .join(' · ');
+      : plan.job === 'custom'
+        ? plan.goal.trim() || t('job.custom.name')
+        : t(`job.${plan.job}.name`);
 
   const set = (patch: Partial<HirePlan>) => setPlan((p) => ({ ...p, ...patch }));
   const toggle = (list: readonly string[], value: string) =>
@@ -159,29 +142,6 @@ export function HireSheet({
                     />
                   </label>
                 ) : null}
-                <div className={styles.block}>
-                  <h4 className={styles.blockTitle}>{t('one.where')}</h4>
-                  <p className={styles.chips}>
-                    {channels.length === 0 ? (
-                      <span className={styles.none} title={t('one.noChannels')}>
-                        -
-                      </span>
-                    ) : (
-                      channels.map((channel) => (
-                        <button
-                          key={channel.type}
-                          type="button"
-                          aria-pressed={plan.channels.includes(channel.type)}
-                          className={styles.chip}
-                          data-testid={`hire-channel-${channel.type}`}
-                          onClick={() => set({ channels: toggle(plan.channels, channel.type) })}
-                        >
-                          {channel.name}
-                        </button>
-                      ))
-                    )}
-                  </p>
-                </div>
                 <label className={styles.block}>
                   <span className={styles.blockTitle}>{t('one.callIt')}</span>
                   <input

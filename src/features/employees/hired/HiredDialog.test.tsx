@@ -42,7 +42,7 @@ import { HiredDialog } from './HiredDialog';
 
 const REC = (type: string, title: string) => ({ type, title, detail: 'Upload the full list.' });
 
-const show = async (over: Record<string, unknown> = {}, channels = ['WhatsApp', 'Email']) =>
+const show = async (over: Record<string, unknown> = {}) =>
   render(
     await HiredDialog({
       employee: employeeSchema.parse({
@@ -53,7 +53,6 @@ const show = async (over: Record<string, unknown> = {}, channels = ['WhatsApp', 
         escalationRules: [{ label: 'Asks for a person', enabled: true }],
         ...over,
       }),
-      channels,
     }),
   );
 
@@ -82,7 +81,8 @@ describe('★★ 07e - what is true of the employee, and "-" where nothing backs
 
   it('where it answers, and its handover rules; Change and Adjust open 07f', async () => {
     await show();
-    expect(screen.getByTestId('hired-answers')).toHaveTextContent('WhatsApp · Email');
+    // Where it answers is decided in the playbook and automations, not on it.
+    expect(screen.getByTestId('hired-answers')).toHaveTextContent('set in Studio · Automations');
     expect(screen.getByTestId('hired-reach')).toHaveTextContent('1 handover rule');
     expect(screen.getByTestId('hired-reach')).toHaveTextContent('Asks for a person');
     for (const id of ['hired-change', 'hired-adjust']) {

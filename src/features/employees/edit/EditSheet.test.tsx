@@ -52,7 +52,6 @@ const sheet = (over: Record<string, unknown> = {}, props: Record<string, unknown
     <NextIntlClientProvider locale="en" messages={{ employees }} timeZone="UTC">
       <EditSheet
         employee={employee(over)}
-        channels={['WhatsApp']}
         tools={['Shopify']}
         mayDo={[
           { toolName: 'shopify.process_refund', label: 'Refund an order', stance: 'ask_first' },
@@ -131,8 +130,9 @@ describe('★★ 07f - the profile’s sentences, editable; Save drawn, not live
 
   it('where it answers and what is connected are read, and say where they are set', () => {
     sheet();
-    expect(screen.getByTestId('edit-channels')).toHaveTextContent('WhatsApp');
-    expect(screen.getByTestId('edit-channels')).toHaveTextContent('Set in Settings · Channels');
+    // Not a channel list: where it answers is the playbook's and automations'.
+    expect(screen.getByTestId('edit-channels')).not.toHaveTextContent('WhatsApp');
+    expect(screen.getByTestId('edit-channels')).toHaveTextContent('set in Studio · Automations');
     expect(screen.getByTestId('edit-tools')).toHaveTextContent('Shopify');
   });
 

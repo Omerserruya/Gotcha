@@ -46,8 +46,11 @@ export const employeeSchema = z.object({
   /** `customer_support`, `sales`, `booking`, `billing`, `custom`. */
   role: z.string().default(''),
   status: z.enum(EMPLOYEE_STATUSES).catch('DRAFT'),
-  /** `["whatsapp", "instagram", …]` - where this employee answers. */
-  channels: z.array(z.string()).default([]),
+  /*
+   * No `channels` (Backend, 2026-10-07): the field is read by nothing at
+   * runtime - where an employee answers is the playbook's and automations'
+   * (`route_target`, `hand_to_ai`). `object` strips it if the route sends it.
+   */
   departmentName: z.string().nullable().default(null),
   knowledgeSources: z
     .array(

@@ -106,16 +106,11 @@ describe('★ 07b - Hire opens the sheet; its reads only then', () => {
     expect(loadKnowledge).not.toHaveBeenCalled();
   });
 
-  it('?hire=1&step=2: the sheet at step 2, with the CONNECTED channels only', async () => {
+  it("?hire=1&step=2: the sheet at step 2, and no channels - where it works is not the hire flow's", async () => {
     const tree = await page([employee('a')], { hire: '1', step: '2' });
-    const props = find<{
-      initialStep: number;
-      channels: { type: string; name: string }[];
-      knowledge: string[];
-    }>(tree, HireSheet);
+    const props = find<{ initialStep: number; knowledge: string[] }>(tree, HireSheet);
     expect(props?.initialStep).toBe(2);
-    // Named as 13 names them (the mock translator returns the key).
-    expect(props?.channels).toEqual([{ type: 'WHATSAPP', name: 'name.WHATSAPP' }]);
+    expect(props).not.toHaveProperty('channels');
     expect(props?.knowledge).toEqual(['Returns policy']);
   });
 });

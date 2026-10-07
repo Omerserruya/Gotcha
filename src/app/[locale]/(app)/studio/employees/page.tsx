@@ -11,10 +11,7 @@ import {
   resolveAvailability,
 } from '@/api/contracts/capabilities';
 import { loadCapabilities } from '@/features/capabilities/load-capabilities';
-import type { Employee } from '@/api/contracts/employees';
-import { channelName, channelNameList } from '@/api/contracts/inbox';
 import { isConnected } from '@/api/contracts/integrations';
-import { loadChannels } from '@/features/channels/load-channels';
 import { EditSheet } from '@/features/employees/edit/EditSheet';
 import { HireSheet } from '@/features/employees/hire/HireSheet';
 import { HiredDialog } from '@/features/employees/hired/HiredDialog';
@@ -81,15 +78,12 @@ export default async function Page({
   const params = (await searchParams) ?? {};
   const hiring = params.hire === '1';
   // The detail's permissions and connected tools are the business's, read once.
-  const [employees, { capabilities, integrations }, channelData, knowledgeData] = await Promise.all(
-    [
-      loadEmployees(),
-      loadCapabilities(),
-      // The Hire sheet's reads, only when it is open.
-      hiring ? loadChannels() : Promise.resolve(null),
-      hiring ? loadKnowledge() : Promise.resolve(null),
-    ],
-  );
+  const [employees, { capabilities, integrations }, knowledgeData] = await Promise.all([
+    loadEmployees(),
+    loadCapabilities(),
+    // The Hire sheet's reads, only when it is open.
+    hiring ? loadKnowledge() : Promise.resolve(null),
+  ]);
   const wanted = params.employee;
   /* Step 2's rows: the business's own actions, as 10 reads and words them. */
   const hireTools: readonly HireTool[] = hiring
@@ -105,25 +99,10 @@ export default async function Page({
           current: currentChoice(c),
         }))
     : [];
-  // Named as 13 names them - never the enum ("SHOPIFY_LIVE_CHAT").
-  const tch = await getTranslations('channels');
-  const hireChannels = [
-    ...new Set(
-      (channelData?.channels ?? [])
-        .filter((c) => c.connectionStatus === 'CONNECTED')
-        .map((c) => c.channel),
-    ),
-  ].map((type) => ({ type, name: channelName(type, tch) ?? tch('name.other') }));
   const step = params.step === '2' ? 2 : params.step === '3' ? 3 : 1;
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
   const editing = params.edit === '1' && selected !== null ? selected : null;
   const hired = params.hired ? (employees?.find((e) => e.id === params.hired) ?? null) : null;
-  /* Named as 07's detail names them: stored lowercase, the enum upper. */
-  const namedChannels = (employee: Employee) =>
-    channelNameList(
-      employee.channels.map((channel) => channel.toUpperCase()),
-      tch,
-    );
 
   /*
     07, measured: 02's screen header - the title, a line that counts them,
@@ -184,7 +163,6 @@ export default async function Page({
       {editing ? (
         <EditSheet
           employee={editing}
-          channels={namedChannels(editing)}
           tools={integrations ? integrations.filter(isConnected).map((i) => i.name) : null}
           mayDo={
             capabilities
@@ -199,10 +177,9 @@ export default async function Page({
           }
         />
       ) : null}
-      {hired ? <HiredDialog employee={hired} channels={namedChannels(hired)} /> : null}
+      {hired ? <HiredDialog employee={hired} /> : null}
       {hiring ? (
         <HireSheet
-          channels={hireChannels}
           tools={hireTools}
           knowledge={
             knowledgeData?.sources ? knowledgeData.sources.map((k) => k.name).filter(Boolean) : null

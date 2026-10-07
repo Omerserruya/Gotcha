@@ -7,6 +7,7 @@ import { Link } from '@/i18n/navigation';
 
 import hire from '../hire/Hire.module.css';
 import { PauseEmployee } from '../PauseEmployee';
+import { automationsLink, WhoAnswers } from '../WhoAnswers';
 import styles from './Hired.module.css';
 
 /** Where each kind of readiness recommendation is resolved. */
@@ -25,7 +26,7 @@ const RESOLVE_AT: Record<string, '/studio/knowledge' | '/settings/systems'> = {
  *
  *   the head            its status and when it was created - nothing
  *                       records who hired it
- *   It answers …        its status and its channels; Change opens 07f
+ *   It answers …        its status, and where that is decided; Change opens 07f
  *   Handover rules      the rules that are on; Adjust opens 07f
  *   The readiness card  the last readiness test's first recommendation,
  *                       persisted by the platform - never a fresh run
@@ -37,13 +38,12 @@ const RESOLVE_AT: Record<string, '/studio/knowledge' | '/settings/systems'> = {
  */
 export async function HiredDialog({
   employee,
-  channels,
 }: {
   readonly employee: Employee;
   /** Where it answers, named. */
-  readonly channels: readonly string[];
 }) {
   const t = await getTranslations('employees.hired');
+  const te = await getTranslations('employees');
   const format = await getFormatter();
   const back = { pathname: '/studio/employees', query: { employee: employee.id } } as const;
   const edit = { pathname: '/studio/employees', query: { employee: employee.id, edit: '1' } };
@@ -104,9 +104,10 @@ export async function HiredDialog({
             <li className={styles.row} data-testid="hired-answers">
               <div className={styles.rowText}>
                 <span className={styles.rowTitle}>{t(`answers.${employee.status}`)}</span>
-                <span className={styles.rowSub}>
-                  {channels.length > 0 ? channels.join(' · ') : '-'}
-                </span>
+                <WhoAnswers
+                  className={styles.rowSub}
+                  text={te.rich('whoAnswers', { automations: automationsLink })}
+                />
               </div>
               <Link href={edit} className={styles.small} scroll={false} data-testid="hired-change">
                 {t('change')}

@@ -16,7 +16,6 @@ const employee = (over: Partial<Employee> = {}): Employee => ({
   name: 'Sales',
   role: 'sales',
   status: 'ACTIVE',
-  channels: ['whatsapp'],
   departmentName: null,
   knowledgeSources: [],
   lastTestedAt: null,

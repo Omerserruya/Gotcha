@@ -15,12 +15,12 @@ import {
   roleKeyOf,
   type Employee,
 } from '@/api/contracts/employees';
-import { channelNameList } from '@/api/contracts/inbox';
 import { isConnected, type Integration } from '@/api/contracts/integrations';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
 
 import { DeleteEmployee } from './DeleteEmployee';
+import { automationsLink, WhoAnswers } from './WhoAnswers';
 import styles from './EmployeeDetail.module.css';
 import { PauseEmployee } from './PauseEmployee';
 
@@ -35,7 +35,7 @@ const MAY_DO_ROWS = 6;
  *
  * ── LIVE ──
  *   the line under the name   `identity.responsibility`, else `goal`
- *   Answers on                `channels`
+ *   Answers on                where it is decided (the playbook, automations)
  *   How it answers            `tone` and `languages`
  *   What it may do            the tenant's capabilities - 10's own line says
  *                             they apply to every AI employee, and the card
@@ -64,21 +64,11 @@ export async function EmployeeDetail({
   readonly integrations: readonly Integration[] | null;
 }) {
   const t = await getTranslations('employees');
-  const channelNames = await getTranslations('channels');
   const format = await getFormatter();
 
   const roleKey = roleKeyOf(employee);
   const responsibility = responsibilityOf(employee);
   const rate = aloneRate(employee);
-  /*
-    ★ The agent's channels are stored as the builder sent them - documented
-    lowercase (`whatsapp`), where `channelName` knows the platform's enum
-    (`WHATSAPP`). Unnormalised, every channel read "Another channel".
-  */
-  const channels = channelNameList(
-    employee.channels.map((channel) => channel.toUpperCase()),
-    channelNames,
-  );
   const languages = employeeLanguages(employee);
   const tone = employee.tone.trim();
   const rules = handoverRules(employee);
@@ -159,21 +149,11 @@ export async function EmployeeDetail({
       <div className={styles.grid}>
         <div className={styles.column}>
           <section className={styles.card} data-testid="card-answers-on">
-            <h3 className={styles.cardHead}>
-              {t('detail.answersOn.title')}
-              <span className={styles.cardMeta}>{t('detail.answersOn.meta')}</span>
-            </h3>
-            {channels.length > 0 ? (
-              <ul className={styles.rows}>
-                {channels.map((channel) => (
-                  <li key={channel} className={styles.rowText}>
-                    {channel}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.none}>{t('noChannels')}</p>
-            )}
+            <h3 className={styles.cardHead}>{t('detail.answersOn.title')}</h3>
+            <WhoAnswers
+              className={styles.none}
+              text={t.rich('whoAnswers', { automations: automationsLink })}
+            />
           </section>
 
           <section className={styles.card} data-testid="card-how">

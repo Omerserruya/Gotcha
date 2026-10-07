@@ -264,8 +264,7 @@
       }
     },
     "unread": "This employee’s skills couldn’t be read just now.",
-    "noEmployee": "This employee isn’t here.",
-    "channelsLabel": "Channels"
+    "noEmployee": "This employee isn’t here."
   },
   "notRunYet": "Not run yet",
   "loading": "Loading skills",

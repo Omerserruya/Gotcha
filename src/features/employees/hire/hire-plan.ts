@@ -10,7 +10,6 @@ import type { AdminChoice } from '@/api/contracts/capabilities';
  *
  *   job + goal     → POST /start { goal }            (creates the DRAFT)
  *   name           → POST /:id/refinements { name }
- *   channels       → PATCH /api/ai-agents/:id { channels }
  *   choices        → the tool permissions, per tool, as 10 writes them
  *   handover       → POST /:id/refinements { customGuardrails }
  *   step 3         → POST /:id/readiness-test         (LLM, costs tokens)
@@ -21,7 +20,6 @@ export interface HirePlan {
   /** The job in their own words, when the job is "Something else". */
   readonly goal: string;
   readonly name: string;
-  readonly channels: readonly string[];
   readonly choices: Readonly<Record<string, AdminChoice>>;
   readonly handover: readonly string[];
 }
@@ -48,12 +46,16 @@ export function stepOneDone(plan: HirePlan): boolean {
   return plan.job !== 'custom' || plan.goal.trim().length > 0;
 }
 
-export function emptyPlan(channels: readonly string[], tools: readonly HireTool[]): HirePlan {
+/*
+ * ★ No "Where should it work?" (Omer, 2026-10-07): where an employee works is
+ *   the playbook's and the automations' to decide, not a field on it - so the
+ *   plan holds no channels and the builder is never sent any.
+ */
+export function emptyPlan(tools: readonly HireTool[]): HirePlan {
   return {
     job: null,
     goal: '',
     name: '',
-    channels: [...channels],
     choices: Object.fromEntries(tools.map((tool) => [tool.toolName, tool.current])),
     handover: ['askPerson'],
   };

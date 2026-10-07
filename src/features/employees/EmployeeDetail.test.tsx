@@ -20,11 +20,14 @@ vi.mock('@/i18n/navigation', () => ({
     scroll: _scroll,
     ...rest
   }: {
-    href: { pathname: string; query?: Record<string, string> };
+    href: string | { pathname: string; query?: Record<string, string> };
     children: React.ReactNode;
     scroll?: boolean;
   }) => (
-    <a href={`${href.pathname}?${new URLSearchParams(href.query)}`} {...rest}>
+    <a
+      href={typeof href === 'string' ? href : `${href.pathname}?${new URLSearchParams(href.query)}`}
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -84,19 +87,14 @@ describe('★★ 07’s detail - what it is, from what the route already sends',
     expect(screen.getByTestId('detail-strip')).toHaveTextContent('Resolved alone-');
   });
 
-  it('★★ answers on channels by name - whichever case they were stored in', async () => {
-    // Documented lowercase; the deleted list's test used the enum's case.
-    for (const stored of [
-      ['whatsapp', 'instagram'],
-      ['WHATSAPP', 'INSTAGRAM'],
-    ]) {
-      const { unmount } = await show({ channels: stored });
-      const card = screen.getByTestId('card-answers-on');
-      expect(card).toHaveTextContent('WhatsApp');
-      expect(card).toHaveTextContent('Instagram');
-      expect(card).not.toHaveTextContent('Another channel');
-      unmount();
-    }
+  it('★★ "Answers on" says where it is decided, with the way there - never "nothing reaches it"', async () => {
+    // The field the route still sends is read by nothing at runtime (Backend, 2026-10-07).
+    await show({ channels: ['whatsapp'] });
+    const card = screen.getByTestId('card-answers-on');
+    expect(card).not.toHaveTextContent('WhatsApp');
+    expect(card).not.toHaveTextContent(/nothing reaches it/i);
+    expect(card).toHaveTextContent('set in Studio · Automations and the playbook');
+    expect(card.querySelector('a')).toHaveAttribute('href', '/studio/automations');
   });
 
   it('how it answers: the tone and the languages it is switched on for', async () => {

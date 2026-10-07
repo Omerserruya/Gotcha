@@ -11,6 +11,7 @@ import { Link } from '@/i18n/navigation';
 
 import hire from '../hire/Hire.module.css';
 import { changesIn, draftOf, EDIT_LANGUAGES, type EditDraft } from './edit-plan';
+import { automationsLink, WhoAnswers } from '../WhoAnswers';
 import styles from './Edit.module.css';
 
 export type EditMayDo = {
@@ -46,13 +47,10 @@ const STANCES = ['on_its_own', 'ask_first', 'never'] as const;
  */
 export function EditSheet({
   employee,
-  channels,
   tools,
   mayDo,
 }: {
   readonly employee: Employee;
-  /** Where it answers, named. */
-  readonly channels: readonly string[];
   /** Connected systems, named; `null` when the read failed. */
   readonly tools: readonly string[] | null;
   /** `null` when the read failed. */
@@ -60,6 +58,7 @@ export function EditSheet({
 }) {
   const t = useTranslations('employees.edit');
   const td = useTranslations('employees.detail');
+  const te = useTranslations('employees');
   const format = useFormatter();
   const [draft, setDraft] = useState<EditDraft>(() => draftOf(employee));
   const set = (patch: Partial<EditDraft>) => setDraft((d) => ({ ...d, ...patch }));
@@ -267,21 +266,11 @@ export function EditSheet({
             </section>
 
             <section className={styles.muted} data-testid="edit-channels">
-              <h3 className={styles.mutedTitle}>
-                {td('answersOn.title')}
-                <span className={styles.meta}>{t('setInChannels')}</span>
-              </h3>
-              {channels.length > 0 ? (
-                <ul className={styles.rows}>
-                  {channels.map((channel) => (
-                    <li key={channel} className={styles.mutedRow}>
-                      {channel}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className={styles.none}>-</p>
-              )}
+              <h3 className={styles.mutedTitle}>{td('answersOn.title')}</h3>
+              <WhoAnswers
+                className={styles.none}
+                text={te.rich('whoAnswers', { automations: automationsLink })}
+              />
             </section>
 
             <section className={styles.muted} data-testid="edit-tools">
