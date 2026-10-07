@@ -58,6 +58,13 @@ describe('★★ every route has its own loading frame', () => {
 });
 
 vi.mock('server-only', () => ({}));
+// A loader's client parts (04's live search) ask the app router; none is mounted here.
+vi.mock('next/navigation', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }),
+  usePathname: () => '/en',
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock('next-intl/server', async () => {
   const messages = await loadMessages('en');
   return {

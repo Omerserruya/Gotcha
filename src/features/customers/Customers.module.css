@@ -370,6 +370,37 @@
     color: var(--text-primary);
   }
 
+  .searchField {
+    position: relative;
+    display: inline-flex;
+  }
+
+  /* A quiet mark at the field's end while the list is asked again. */
+  .searchBusy {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: 10px;
+    inline-size: 10px;
+    block-size: 10px;
+    margin-block-start: -5px;
+    border: 1.5px solid var(--border-default);
+    border-block-start-color: var(--text-subtle);
+    border-radius: 50%;
+    animation: search-busy 0.8s linear infinite;
+  }
+
+  @keyframes search-busy {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .searchBusy {
+      animation: none;
+    }
+  }
+
   .searchInput::placeholder {
     color: var(--text-faint);
   }

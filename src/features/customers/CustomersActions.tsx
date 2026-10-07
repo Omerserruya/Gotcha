@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 
 import { AddCustomer } from './AddCustomer';
+import { CustomerSearch } from './CustomerSearch';
 import styles from './Customers.module.css';
 
 /**
@@ -11,20 +12,12 @@ export function CustomersActions({ query }: { readonly query: string }) {
   const t = useTranslations('customers');
   return (
     <div className={styles.headActions}>
-      <form className={styles.search} action="" method="get" data-testid="customer-search">
-        <label className="srOnly" htmlFor="customer-q">
-          {t('search.label')}
-        </label>
-        <input
-          id="customer-q"
-          name="q"
-          type="search"
-          className={styles.searchInput}
-          defaultValue={query}
-          placeholder={t('search.placeholder')}
-          data-testid="customer-search-input"
-        />
-      </form>
+      <CustomerSearch
+        query={query}
+        label={t('search.label')}
+        placeholder={t('search.placeholder')}
+        busyLabel={t('search.busy')}
+      />
       {/* 02's "Add a customer" - live: name and phone, never a duplicate. Outside the search form, so Enter there never searches. */}
       <AddCustomer />
     </div>

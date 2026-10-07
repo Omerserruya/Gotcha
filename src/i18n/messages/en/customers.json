@@ -11,7 +11,8 @@
       "phone": "We looked at phone numbers.",
       "email": "We looked at email addresses.",
       "order": "We looked at phone numbers and the store’s order numbers."
-    }
+    },
+    "busy": "Searching…"
   },
   "list": {
     "count": "{count, plural, =0 {No one yet} =1 {One person} other {# people}}",
