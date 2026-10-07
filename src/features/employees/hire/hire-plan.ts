@@ -34,10 +34,33 @@ export const HANDOVER_SUGGESTIONS = ['askPerson', 'annoyed', 'vip', 'askedTwice'
 /** One of the business's actions, as step 2 draws it. */
 export interface HireTool {
   readonly toolName: string;
+  /** The action in words ("Get customer") - the tool catalogue's `actionLabel`. */
   readonly label: string;
-  readonly group: 'answering' | 'commitments';
+  /** Its integration's slug and name; `null`: one of GOTCHA's own actions. */
+  readonly provider: string | null;
+  readonly providerLabel: string | null;
   readonly choices: readonly AdminChoice[];
   readonly current: AdminChoice;
+}
+
+/** Step 2's groups (Omer, 2026-10-07): GOTCHA's own first, then one per integration, by name. */
+export function toolGroups(tools: readonly HireTool[]): readonly {
+  readonly provider: string | null;
+  readonly label: string | null;
+  readonly tools: readonly HireTool[];
+}[] {
+  const byProvider = new Map<string | null, HireTool[]>();
+  for (const tool of tools) {
+    const list = byProvider.get(tool.provider) ?? [];
+    list.push(tool);
+    byProvider.set(tool.provider, list);
+  }
+  const own = byProvider.get(null);
+  const integrations = [...byProvider.entries()]
+    .filter(([provider]) => provider !== null)
+    .map(([provider, list]) => ({ provider, label: list[0]!.providerLabel, tools: list }))
+    .sort((a, b) => (a.label ?? a.provider ?? '').localeCompare(b.label ?? b.provider ?? ''));
+  return [...(own ? [{ provider: null, label: null, tools: own }] : []), ...integrations];
 }
 
 /** Step 1 is complete when there is a job - and, for "Something else", words. */

@@ -1,7 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 
 import {
-  automationCeiling,
   capabilityStance,
   choicesFor,
   currentChoice,
@@ -24,6 +23,7 @@ import styles from '@/features/employees/Employees.module.css';
 import { loadEmployees } from '@/features/employees/load-employees';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
+import { readTools } from '@/features/skills/skill-actions';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
@@ -78,26 +78,40 @@ export default async function Page({
   const params = (await searchParams) ?? {};
   const hiring = params.hire === '1';
   // The detail's permissions and connected tools are the business's, read once.
-  const [employees, { capabilities, integrations }, knowledgeData] = await Promise.all([
+  const editingWanted = params.edit === '1';
+  const [employees, { capabilities, integrations }, knowledgeData, toolWords] = await Promise.all([
     loadEmployees(),
     loadCapabilities(),
     // The Hire sheet's reads, only when it is open.
     hiring ? loadKnowledge() : Promise.resolve(null),
+    // Each action's provider and words ("WooCommerce · Get customer"), for the
+    // hire flow's Limits and 07f - the tool catalogue, as Skills reads it.
+    hiring || editingWanted ? readTools() : Promise.resolve(null),
   ]);
+  const wordsOf = (toolName: string) => toolWords?.find((tool) => tool.name === toolName) ?? null;
+  /** "WooCommerce · Get customer"; our own words or the name made readable when the catalogue is silent. */
+  const actionLabel = (toolName: string) =>
+    wordsOf(toolName)?.actionLabel ??
+    (hasOwnWords(toolName)
+      ? tc(`tool.${toolName}` as 'tool.send_message')
+      : humaniseToolName(toolName));
   const wanted = params.employee;
   /* Step 2's rows: the business's own actions, as 10 reads and words them. */
   const hireTools: readonly HireTool[] = hiring
     ? (capabilities ?? [])
         .filter((c) => isTheAdminsChoice(resolveAvailability(c)))
-        .map((c) => ({
-          toolName: c.toolName,
-          label: hasOwnWords(c.toolName)
-            ? tc(`tool.${c.toolName}` as 'tool.send_message')
-            : humaniseToolName(c.toolName),
-          group: automationCeiling(c) === null ? ('answering' as const) : ('commitments' as const),
-          choices: choicesFor(c),
-          current: currentChoice(c),
-        }))
+        .map((c) => {
+          const words = wordsOf(c.toolName);
+          const provider = words?.provider ?? c.integration ?? null;
+          return {
+            toolName: c.toolName,
+            label: actionLabel(c.toolName),
+            provider,
+            providerLabel: words?.providerLabel ?? provider,
+            choices: choicesFor(c),
+            current: currentChoice(c),
+          };
+        })
     : [];
   const step = params.step === '2' ? 2 : params.step === '3' ? 3 : 1;
   const selected = employees?.find((e) => e.id === wanted) ?? employees?.[0] ?? null;
@@ -170,7 +184,9 @@ export default async function Page({
                   .filter((c) => c.kind === 'action')
                   .map((c) => ({
                     toolName: c.toolName,
-                    label: humaniseToolName(c.toolName),
+                    label: wordsOf(c.toolName)?.providerLabel
+                      ? `${wordsOf(c.toolName)!.providerLabel} · ${actionLabel(c.toolName)}`
+                      : actionLabel(c.toolName),
                     stance: capabilityStance(c),
                   }))
               : null

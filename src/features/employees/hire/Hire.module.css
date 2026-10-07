@@ -505,4 +505,23 @@
   .side .eyebrow {
     color: var(--frame-text-secondary);
   }
+
+  /* Step 2: an integration's head - its mark, its name, and whether this employee may use it. */
+  .groupHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    margin-block-end: var(--space-8);
+  }
+
+  .groupName {
+    margin: 0;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .groupHead > :last-child {
+    margin-inline-start: auto;
+  }
 }

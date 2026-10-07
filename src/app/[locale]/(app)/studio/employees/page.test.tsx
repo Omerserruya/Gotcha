@@ -13,9 +13,12 @@ import { PageContainer } from '@/shell/PageContainer';
 
 const loadEmployees = vi.hoisted(() => vi.fn());
 vi.mock('@/features/employees/load-employees', () => ({ loadEmployees }));
+const caps = vi.hoisted(() => ({ value: [] as unknown[] }));
 vi.mock('@/features/capabilities/load-capabilities', () => ({
-  loadCapabilities: async () => ({ capabilities: [], usage: null, integrations: [] }),
+  loadCapabilities: async () => ({ capabilities: caps.value, usage: null, integrations: [] }),
 }));
+const tools = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock('@/features/skills/skill-actions', () => ({ readTools: async () => tools.value }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
 }));
@@ -131,5 +134,42 @@ describe('★ 07e / 07f - the dialog and the sheet, by query', () => {
     const tree = await page([employee('a'), employee('b')], { hired: 'b' });
     expect(find<{ employee: { id: string } }>(tree, HiredDialog)?.employee.id).toBe('b');
     expect(find(await page([employee('a')], { hired: 'zz' }), HiredDialog)).toBeNull();
+  });
+});
+
+describe('★★ actions in words, by integration (Omer, 2026-10-07: "WooCommerce get customer")', () => {
+  const setUp = async () => {
+    const { capabilitySchema } = await import('@/api/contracts/capabilities');
+    caps.value = [
+      capabilitySchema.parse({
+        toolName: 'woocommerce.get_customer',
+        integration: 'woocommerce',
+        kind: 'action',
+      }),
+    ];
+    tools.value = [
+      {
+        name: 'woocommerce.get_customer',
+        provider: 'woocommerce',
+        providerLabel: 'WooCommerce',
+        actionLabel: 'Get customer',
+      },
+    ];
+  };
+
+  it('07f: "WooCommerce · Get customer" - the catalogue\'s words, never the tool\'s name', async () => {
+    await setUp();
+    const tree = await page([employee('a')], { employee: 'a', edit: '1' });
+    const sheet = find<{ mayDo: { label: string }[] }>(tree, EditSheet);
+    expect(sheet?.mayDo.map((m) => m.label)).toEqual(['WooCommerce · Get customer']);
+  });
+
+  it('the hire flow: each action with its provider, to group by', async () => {
+    await setUp();
+    const tree = await page([employee('a')], { hire: '1', step: '2' });
+    const props = find<{ tools: { label: string; provider: string | null }[] }>(tree, HireSheet);
+    expect(props?.tools.map((tool) => [tool.label, tool.provider])).toEqual([
+      ['Get customer', 'woocommerce'],
+    ]);
   });
 });

@@ -6,6 +6,8 @@ import { useState } from 'react';
 
 import type { AdminChoice } from '@/api/contracts/capabilities';
 import drawer from '@/design-system/styles/drawer.module.css';
+import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
+import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import { Link } from '@/i18n/navigation';
 
 import {
@@ -13,6 +15,7 @@ import {
   HANDOVER_SUGGESTIONS,
   HIRE_JOBS,
   stepOneDone,
+  toolGroups,
   type HirePlan,
   type HireTool,
 } from './hire-plan';
@@ -68,10 +71,7 @@ export function HireSheet({
     window.history.replaceState(null, '', `?hire=1&step=${next}`);
   };
 
-  const groups = [
-    ['answering', tools.filter((tool) => tool.group === 'answering')],
-    ['commitments', tools.filter((tool) => tool.group === 'commitments')],
-  ] as const;
+  const groups = toolGroups(tools);
 
   return (
     <div className={styles.layer} data-testid="hire-sheet" data-step={step}>
@@ -165,58 +165,75 @@ export function HireSheet({
                     -
                   </p>
                 ) : (
-                  groups.map(([key, list]) =>
-                    list.length === 0 ? (
-                      <section key={key} className={styles.group} data-testid={`hire-group-${key}`}>
-                        <h4 className={styles.eyebrow}>{t(`two.group.${key}`)}</h4>
-                        <p className={styles.groupNone} title={t(`two.groupNone.${key}`)}>
-                          -
-                        </p>
-                      </section>
-                    ) : (
-                      <section key={key} className={styles.group} data-testid={`hire-group-${key}`}>
-                        <h4 className={styles.eyebrow}>{t(`two.group.${key}`)}</h4>
-                        <ul className={styles.rows}>
-                          {list.map((tool) => (
-                            <li key={tool.toolName} className={styles.row}>
-                              <span className={styles.rowName}>{tool.label}</span>
-                              <span
-                                className={styles.segmented}
-                                role="radiogroup"
-                                aria-label={tool.label}
-                              >
-                                {(['do_it', 'ask_me', 'never'] as const).map((choice) => {
-                                  const offered = tool.choices.includes(choice);
-                                  return (
-                                    <button
-                                      key={choice}
-                                      type="button"
-                                      role="radio"
-                                      aria-checked={plan.choices[tool.toolName] === choice}
-                                      disabled={!offered}
-                                      title={offered ? undefined : t('two.ceiling')}
-                                      className={styles.segment}
-                                      data-testid={`hire-choice-${tool.toolName}-${choice}`}
-                                      onClick={() =>
-                                        set({
-                                          choices: {
-                                            ...plan.choices,
-                                            [tool.toolName]: choice as AdminChoice,
-                                          },
-                                        })
-                                      }
-                                    >
-                                      {t(`two.choice.${choice}`)}
-                                    </button>
-                                  );
-                                })}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    ),
-                  )
+                  groups.map((group) => (
+                    <section
+                      key={group.provider ?? 'gotcha'}
+                      className={styles.group}
+                      data-testid={`hire-group-${group.provider ?? 'gotcha'}`}
+                    >
+                      {group.provider === null ? (
+                        <h4 className={styles.eyebrow}>{t('two.own')}</h4>
+                      ) : (
+                        <div className={styles.groupHead}>
+                          <IntegrationLogo slug={group.provider} size="pill" />
+                          <h4 className={styles.groupName}>{group.label ?? group.provider}</h4>
+                          {/*
+                            Per-employee access to an integration (Omer, 2026-10-07)
+                            has no backend yet: a status, never a switch that
+                            remembers nothing.
+                          */}
+                          <UnavailableAction
+                            label={t('two.mayUse', { name: group.label ?? group.provider })}
+                            tag={t('comingSoon')}
+                            why={t('two.mayUseWhy')}
+                            testid={`hire-may-use-${group.provider}`}
+                          />
+                        </div>
+                      )}
+                      <ul className={styles.rows}>
+                        {group.tools.map((tool) => (
+                          <li key={tool.toolName} className={styles.row}>
+                            <span className={styles.rowName}>{tool.label}</span>
+                            <span
+                              className={styles.segmented}
+                              role="radiogroup"
+                              aria-label={
+                                tool.providerLabel
+                                  ? `${tool.providerLabel} · ${tool.label}`
+                                  : tool.label
+                              }
+                            >
+                              {(['do_it', 'ask_me', 'never'] as const).map((choice) => {
+                                const offered = tool.choices.includes(choice);
+                                return (
+                                  <button
+                                    key={choice}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={plan.choices[tool.toolName] === choice}
+                                    disabled={!offered}
+                                    title={offered ? undefined : t('two.ceiling')}
+                                    className={styles.segment}
+                                    data-testid={`hire-choice-${tool.toolName}-${choice}`}
+                                    onClick={() =>
+                                      set({
+                                        choices: {
+                                          ...plan.choices,
+                                          [tool.toolName]: choice as AdminChoice,
+                                        },
+                                      })
+                                    }
+                                  >
+                                    {t(`two.choice.${choice}`)}
+                                  </button>
+                                );
+                              })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))
                 )}
                 <section className={styles.handover}>
                   <h4 className={styles.blockTitle}>{t('two.handover')}</h4>
@@ -344,10 +361,10 @@ export function HireSheet({
             ) : step === 2 ? (
               <>
                 <h4 className={styles.eyebrow}>{t('side.cost')}</h4>
-                <p className={styles.sideFigure} title={t('side.costNone')}>
-                  -
+                {/* Nothing estimates it yet: said, never a dash before a unit. */}
+                <p className={styles.sideLead} data-testid="hire-cost">
+                  {t('side.costNone')}
                 </p>
-                <p className={styles.sideLabel}>{t('side.costLabel')}</p>
               </>
             ) : (
               <>

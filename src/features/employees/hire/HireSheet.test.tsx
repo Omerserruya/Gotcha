@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
@@ -19,14 +19,16 @@ const TOOLS: readonly HireTool[] = [
   {
     toolName: 'send_message',
     label: 'Send a message',
-    group: 'answering',
+    provider: null,
+    providerLabel: null,
     choices: ['do_it', 'ask_me', 'never'],
     current: 'do_it',
   },
   {
     toolName: 'shopify.process_refund',
     label: 'Refund an order',
-    group: 'commitments',
+    provider: 'shopify',
+    providerLabel: 'Shopify',
     choices: ['ask_me', 'never'],
     current: 'ask_me',
   },
@@ -112,16 +114,48 @@ describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
     expect(screen.getByTestId('hire-line')).toHaveTextContent(/^Sales$/);
   });
 
-  it('an empty group is drawn with "-" and why, never left out', () => {
+  it("★★ grouped by integration (Omer, 2026-10-07): GOTCHA's own first, then each integration by name", () => {
+    const woo = (toolName: string, label: string): HireTool => ({
+      toolName,
+      label,
+      provider: 'woocommerce',
+      providerLabel: 'WooCommerce',
+      choices: ['do_it', 'ask_me', 'never'],
+      current: 'ask_me',
+    });
     sheet({
       initialStep: 2,
-      tools: [TOOLS[1]!],
+      tools: [woo('woocommerce.get_customer', 'Get customer'), TOOLS[1]!, TOOLS[0]!],
     });
-    const group = screen.getByTestId('hire-group-answering');
-    expect(group).toHaveTextContent('-');
-    expect(group.querySelector('p')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/changes something/),
+    const groups = screen.getAllByTestId(/^hire-group-/).map((g) => g.dataset.testid);
+    expect(groups).toEqual(['hire-group-gotcha', 'hire-group-shopify', 'hire-group-woocommerce']);
+    const own = screen.getByTestId('hire-group-gotcha');
+    expect(own).toHaveTextContent("GOTCHA's own actions");
+    expect(own.querySelector('[aria-disabled]')).toBeNull();
+    const wooGroup = screen.getByTestId('hire-group-woocommerce');
+    expect(wooGroup).toHaveTextContent('WooCommerce');
+    // The action in words, never the tool's name.
+    expect(wooGroup).toHaveTextContent('Get customer');
+    expect(wooGroup).not.toHaveTextContent('get_customer');
+    expect(within(wooGroup).getByRole('radiogroup')).toHaveAccessibleName(
+      'WooCommerce · Get customer',
     );
+  });
+
+  it('★ "This employee may use WooCommerce" is a status - Coming soon - never a switch that remembers nothing', () => {
+    sheet({ initialStep: 2 });
+    const mayUse = screen.getByTestId('hire-may-use-shopify');
+    expect(mayUse).toHaveTextContent('This employee may use Shopify');
+    expect(mayUse).toHaveTextContent('Coming soon');
+    expect(mayUse).toHaveAttribute('aria-disabled', 'true');
+    expect(mayUse.tagName).not.toBe('BUTTON');
+    expect(screen.queryByRole('switch')).toBeNull();
+  });
+
+  it('what these limits cost: said honestly, never a dash before a unit', () => {
+    sheet({ initialStep: 2 });
+    const cost = screen.getByTestId('hire-cost');
+    expect(cost).toHaveTextContent('Not enough history to estimate yet');
+    expect(screen.queryByText('approvals a day')).toBeNull();
   });
 });

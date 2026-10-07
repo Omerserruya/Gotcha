@@ -187,10 +187,6 @@
       "title": "What may it settle on its own?",
       "sub": "Your business's actions, as they are set today. Change any of them for this employee.",
       "noTools": "No connected system offers actions yet.",
-      "group": {
-        "answering": "Answering questions",
-        "commitments": "Commitments and money"
-      },
       "choice": {
         "do_it": "Do it",
         "ask_me": "Ask me",
@@ -205,10 +201,9 @@
         "askedTwice": "someone asks twice about the same thing"
       },
       "addAnother": "add another",
-      "groupNone": {
-        "answering": "Everything this employee can do today changes something.",
-        "commitments": "Nothing this employee can do today changes orders or money."
-      }
+      "own": "GOTCHA's own actions",
+      "mayUse": "This employee may use {name}",
+      "mayUseWhy": "Choosing integrations per employee is coming soon. Until then, every employee may use each connected integration, as set below."
     },
     "three": {
       "title": "See it answer eight real ones",
@@ -230,8 +225,7 @@
       "knows": "It already knows",
       "knowsNone": "No knowledge source could be read.",
       "cost": "What these limits cost you",
-      "costNone": "Nothing estimates approvals per day yet.",
-      "costLabel": "approvals a day",
+      "costNone": "Not enough history to estimate yet.",
       "soFar": "So far",
       "next": {
         "1": "Next: how much it may decide alone, and when it should hand over.",
@@ -247,7 +241,8 @@
       "1": "Nothing goes live until you've tried it in step 3",
       "2": "Nothing is live until you have seen step 3",
       "3": "Nothing is created yet"
-    }
+    },
+    "comingSoon": "Coming soon"
   },
   "edit": {
     "title": "Edit {name}",
