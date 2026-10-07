@@ -108,6 +108,7 @@ vi.mock("@chatcenter/shared", async () => {
       contact: table("contact"),
       conversation: table("conversation"),
       channelAccount: table("channelAccount"),
+      communicationChannel: table("communicationChannel"),
     },
   };
 });
@@ -164,6 +165,7 @@ beforeEach(() => {
       { id: "c_support", tenantId: "T", departmentId: "support", assignedAgentId: null, automationRunId: null },
     ],
     channelAccount: [],
+    communicationChannel: [],
     automationRun: [],
     automationRunStep: [],
   };
@@ -295,9 +297,10 @@ describe("★ validation rules (pure)", () => {
 
   it("a trigger with no event source cannot go live; a call trigger needs a line", () => {
     expect(v({ type: "order_event", config: {} }).errors.map((e) => e.code)).toContain("trigger_no_event_source");
-    const g = goodGraph();
-    // Not wired to the dispatcher yet: unavailable even WITH a voice line.
-    expect(validateAutomation({ type: "call_missed", config: {} }, g.nodes as any, g.edges as any, { voiceConnected: true }).errors.map((e) => e.code)).toContain("trigger_no_event_source");
+    const tpl = { nodes: [{ id: "t", type: "automation_trigger", data: {} }, { id: "s", type: "send_message_template", data: { templateId: "tpl1" } }], edges: [{ id: "e", source: "t", target: "s" }] };
+    const codes = (ctx: any) => validateAutomation({ type: "call_missed", config: {} }, tpl.nodes as any, tpl.edges as any, ctx).errors.map((e) => e.code);
+    expect(codes({ voiceConnected: true })).toEqual([]);
+    expect(codes({ voiceConnected: false }).join(" ")).toMatch(/not_connected|voice/);
   });
 
   it("normalizeTrigger keeps only the fields its type reads", () => {
@@ -313,7 +316,7 @@ describe("the catalogue (09e)", () => {
     const it0 = items((await request(app).get("/api/automations/catalog")).body);
     expect(it0["trigger:message_received"]).toMatchObject({ available: true });
     expect(it0["trigger:order_event"]).toMatchObject({ available: false, reason: "no_event_source" });
-    expect(it0["trigger:call_missed"]).toMatchObject({ available: false, reason: "no_event_source" });
+    expect(it0["trigger:call_missed"]).toMatchObject({ available: false, reason: "not_connected" });
     expect(it0.send_buttons).toMatchObject({ available: false, reason: "first_step_only" });
   });
 
@@ -540,5 +543,37 @@ describe("★ comment on a post", () => {
     expect(errs(graph(["send_comment_reply", { mode: "text" }])).map((e) => e.message).join(" ")).toMatch(/Write the reply/);
     expect(errs(graph(["send_comment_reply", { mode: "ai" }])).map((e) => e.message).join(" ")).toMatch(/AI employee/);
     expect(errs(graph(["send_comment_reply", { mode: "ai", agentId: "maya" }]))).toEqual([]);
+  });
+});
+
+describe("★ call missed / call answered", () => {
+  const items = (d: any) => Object.fromEntries(d.groups.flatMap((x: any) => x.items.map((i: any) => [i.type, i])));
+  const tplGraph = (type = "send_message_template", data: any = { templateId: "tpl1" }) => ({
+    nodes: [{ id: "t", type: "automation_trigger", data: {} }, { id: "s", type, data }],
+    edges: [{ id: "e", source: "t", target: "s" }],
+  });
+
+  it("live once a voice line (an ACTIVE voice channel) exists; a pending line does not count", async () => {
+    H.db.communicationChannel = [{ id: "line1", tenantId: "T", channelType: "VOICE", status: "PENDING" }];
+    let it0 = items((await request(app).get("/api/automations/catalog")).body.data);
+    expect(it0["trigger:call_missed"]).toMatchObject({ available: false, reason: "not_connected" });
+    H.db.communicationChannel[0].status = "ACTIVE";
+    it0 = items((await request(app).get("/api/automations/catalog")).body.data);
+    expect(it0["trigger:call_missed"]).toMatchObject({ available: true, description: expect.stringMatching(/WhatsApp, with a template/) });
+    expect(it0["trigger:call_answered"]).toMatchObject({ available: true });
+  });
+
+  it("★ the reply goes to WhatsApp, template only: a plain message is refused and dimmed", async () => {
+    const plain = tplGraph("send_message_text", { text: "Sorry we missed you" });
+    for (const type of ["call_missed", "call_answered"]) {
+      expect(validateAutomation({ type, config: {} }, plain.nodes as any, plain.edges as any, { voiceConnected: true }).errors.map((e) => e.code)).toContain("needs_24h_window");
+    }
+    H.db.communicationChannel = [{ id: "line1", tenantId: "T", channelType: "VOICE", status: "ACTIVE" }];
+    const a = await create({ ...tplGraph(), trigger: { type: "call_missed", config: { lines: ["line1"] } } });
+    const d = (await request(app).get(`/api/automations/catalog?automationId=${a.id}&after=t`)).body.data;
+    expect(d.context.channel).toBe("WHATSAPP");
+    expect(items(d).send_message_text).toMatchObject({ available: false, reason: "needs_24h_window" });
+    expect(items(d).send_message_template).toMatchObject({ available: true });
+    expect(d.variables).toEqual(expect.arrayContaining(["caller_number", "line_name", "call_duration", "call_recording_url", "first_name"]));
   });
 });

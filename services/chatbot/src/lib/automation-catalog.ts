@@ -35,17 +35,16 @@ export const TRIGGER_TYPES = [
 export type TriggerType = (typeof TRIGGER_TYPES)[number];
 
 /** Triggers whose events reach the dispatcher today. */
-// call_missed / call_answered are NOT live: nothing feeds voice events to the
-// automation dispatcher yet (only the old voice_trigger nodes hear them).
-// Offering them made an automation that could never run.
-const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "schedule", "webhook"]);
+// call_missed / call_answered: the shared call-state transition queues them
+// (inbound calls only); the reply goes to the caller on WhatsApp.
+const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "message_from_ad", "button_tapped", "comment_received", "tag_added", "cart_abandoned", "call_missed", "call_answered", "schedule", "webhook"]);
 /**
  * Triggers that fire when the customer has not written to us: on WhatsApp the
  * 24 h service window is closed, so only an approved template can be sent.
  */
-const OUTSIDE_WINDOW_TRIGGERS = new Set<TriggerType>(["tag_added", "cart_abandoned"]);
+const OUTSIDE_WINDOW_TRIGGERS = new Set<TriggerType>(["tag_added", "cart_abandoned", "call_missed", "call_answered"]);
 /** Of those, the ones that NEVER follow a customer message: the validator refuses a free-form WhatsApp send. */
-const WINDOW_CLOSED_TRIGGERS = new Set<TriggerType>(["cart_abandoned"]);
+const WINDOW_CLOSED_TRIGGERS = new Set<TriggerType>(["cart_abandoned", "call_missed", "call_answered"]);
 /** Triggers that carry no customer: their path cannot send a message. */
 const CUSTOMERLESS_TRIGGERS = new Set<TriggerType>(["schedule", "webhook"]);
 const VOICE_TRIGGERS = new Set<TriggerType>(["call_missed", "call_answered"]);
@@ -53,8 +52,8 @@ const VOICE_TRIGGERS = new Set<TriggerType>(["call_missed", "call_answered"]);
 interface TriggerDef { type: TriggerType; label: string; description: string; channels: Channel[]; synonyms: string[] }
 const TRIGGERS: TriggerDef[] = [
   { type: "message_received", label: "Message received", description: "Any channel, or a keyword", channels: ["WHATSAPP", "INSTAGRAM", "EMAIL", "WEBCHAT"], synonyms: ["message", "keyword", "inbound", "text"] },
-  { type: "call_missed", label: "Call missed", description: "On any of your lines", channels: ["VOICE"], synonyms: ["call", "phone", "missed"] },
-  { type: "call_answered", label: "Call answered", description: "When it ends, with the recording", channels: ["VOICE"], synonyms: ["call", "phone", "recording"] },
+  { type: "call_missed", label: "Call missed", description: "An incoming call nobody answered, on any of your lines or chosen ones. Writes to the caller on WhatsApp, with a template", channels: ["VOICE"], synonyms: ["call", "phone", "missed"] },
+  { type: "call_answered", label: "Call answered", description: "When an answered incoming call ends. Writes to the caller on WhatsApp, with a template", channels: ["VOICE"], synonyms: ["call", "phone", "recording"] },
   { type: "new_customer", label: "New customer", description: "First message ever", channels: ["WHATSAPP", "INSTAGRAM", "EMAIL", "WEBCHAT"], synonyms: ["new", "first", "welcome"] },
   { type: "message_from_ad", label: "Message from an ad", description: "Click-to-WhatsApp and other ads, any ad or chosen ones", channels: ["WHATSAPP", "MESSENGER", "INSTAGRAM"], synonyms: ["ad", "campaign", "click to whatsapp", "ctwa", "referral", "facebook ad"] },
   { type: "comment_received", label: "Comment on a post", description: "Instagram or Facebook, any post or chosen ones, optional keywords", channels: ["INSTAGRAM", "MESSENGER"], synonyms: ["comment", "post", "instagram", "facebook", "dm", "comment to dm"] },
@@ -308,6 +307,7 @@ function variablesFor(ctx: CatalogContext, hasCustomer: boolean): string[] {
   const base = ["first_name", "business_name", "opening_hours"];
   if (ctx.triggerType === "comment_received") return [...base, ...COMMENT_VARIABLES];
   if (ctx.triggerType === "cart_abandoned") return [...base, "cart_url", "cart_total", "cart_items"];
+  if (ctx.triggerType && VOICE_TRIGGERS.has(ctx.triggerType)) return [...base, "caller_number", "line_name", "call_duration", "call_recording_url"];
   return base;
 }
 
@@ -319,7 +319,7 @@ export interface AEdge { id?: string; source: string; target: string; sourceHand
 /** The channel a single-channel trigger pins its path to (null = several or any). */
 export function pathChannelOf(trigger: { type: string; config?: any } | null): Channel | null {
   if (!trigger) return null;
-  if (VOICE_TRIGGERS.has(trigger.type as TriggerType)) return null; // the reply goes out on the customer's messaging channel
+  if (VOICE_TRIGGERS.has(trigger.type as TriggerType)) return "WHATSAPP"; // the reply goes to the caller on WhatsApp
   const ch = Array.isArray(trigger.config?.channels) ? trigger.config.channels : [];
   return ch.length === 1 ? ch[0] : null;
 }

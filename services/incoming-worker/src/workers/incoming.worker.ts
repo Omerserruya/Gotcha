@@ -900,6 +900,11 @@ async function processAutomationEvent(job: Job<AutomationEventJob>): Promise<voi
     const r = await runTagAdded({ tenantId: ev.tenantId, contactId: ev.contactId, tag: ev.tag, eventKey: ev.eventKey });
     console.log(`[incoming-worker] automation-event tag_added contact=${ev.contactId} runs=${r.runs.length}`);
   }
+  if ((ev.type === "call_missed" || ev.type === "call_answered") && typeof ev.payload?.sessionId === "string") {
+    const { onCallEvent } = await import("../services/call-automation.service");
+    const r = await onCallEvent({ tenantId: ev.tenantId, type: ev.type, sessionId: ev.payload.sessionId });
+    console.log(`[incoming-worker] automation-event ${ev.type} session=${ev.payload.sessionId} outcome=${r.outcome}`);
+  }
 }
 
 // Dispatcher: same queue, multiple job names. Keeps DM, comment-trigger, and

@@ -21,6 +21,7 @@ import {
 } from "./call-state-machine";
 import { markBusy } from "./agent-presence";
 import { publishEvent } from "./event-bus";
+import { incomingMessageQueue, type AutomationEventJob } from "./queue";
 
 const TERMINAL_STATES: ReadonlySet<CallState> = new Set(["ENDED", "FAILED", "MISSED"]);
 
@@ -139,7 +140,38 @@ export async function transitionVoiceCallSessionState(
     // Best-effort - DB write already succeeded; the next reconcile will repair.
   }
 
+  await queueCallAutomationEvent(session, toState);
+
   return { ok: true, session };
+}
+
+/**
+ * Automations "Call missed" / "Call answered" (Studio > Automations). Every
+ * terminal transition passes here, so this is the one producer: an inbound
+ * call that was missed, or an inbound call that was answered and has ended.
+ * Durable (the queue, not the event bus); one run per call per automation
+ * (the incoming worker keys runs on call:<sessionId>). A failure to queue
+ * never fails the call's own transition.
+ */
+export function callAutomationType(session: Pick<VoiceCallSession, "direction" | "answeredAt">, toState: CallState): AutomationEventJob["type"] | null {
+  if (session.direction !== "inbound") return null;
+  if (toState === "MISSED") return "call_missed";
+  if (toState === "ENDED" && session.answeredAt) return "call_answered";
+  return null;
+}
+
+async function queueCallAutomationEvent(session: VoiceCallSession, toState: CallState): Promise<void> {
+  const type = callAutomationType(session, toState);
+  if (!type) return;
+  try {
+    await incomingMessageQueue.add(
+      "automation-event",
+      { tenantId: session.tenantId, type, eventKey: `call:${session.id}`, payload: { sessionId: session.id } } satisfies AutomationEventJob,
+      { jobId: `callev_${type}_${session.id}`, attempts: 3, backoff: { type: "exponential", delay: 5_000 }, removeOnComplete: true, removeOnFail: 100 },
+    );
+  } catch (err) {
+    console.warn(`[voice-session] could not queue ${type} for ${session.id}:`, (err as { message?: string })?.message ?? err);
+  }
 }
 
 export async function claimIncomingCall(

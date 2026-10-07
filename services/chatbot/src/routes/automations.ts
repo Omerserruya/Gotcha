@@ -41,8 +41,9 @@ type FlowRow = {
 const statusOf = (f: FlowRow): "draft" | "live" | "paused" => (f.isActive ? "live" : f.pausedAt ? "paused" : "draft");
 const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
+/** A voice line is connected: an ACTIVE voice CommunicationChannel (where calls arrive). */
 async function voiceConnected(tenantId: string): Promise<boolean> {
-  const n = await prisma.channelAccount.count({ where: { tenantId, channel: "VOICE" as any, isActive: true } }).catch(() => 0);
+  const n = await prisma.communicationChannel.count({ where: { tenantId, channelType: "VOICE" as any, status: "ACTIVE" as any } }).catch(() => 0);
   return n > 0;
 }
 

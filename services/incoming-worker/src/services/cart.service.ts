@@ -79,8 +79,10 @@ const digits = (p: string | null | undefined) => String(p ?? "").replace(/\D/g, 
  * Who to write to: an existing conversation of a contact with this phone or
  * email (WhatsApp first), else - with a phone and a WhatsApp number on the
  * workspace - a new WhatsApp conversation. Null when nobody is reachable.
+ * A call's contact (VOICE) is never a target: nothing can be written there.
+ * `whatsappOnly`: only a WhatsApp conversation (a caller's number).
  */
-export async function resolveCartTarget(tenantId: string, customer: CartEventJob["customer"]) {
+export async function resolveCartTarget(tenantId: string, customer: CartEventJob["customer"], opts: { whatsappOnly?: boolean } = {}) {
   const phone = digits(customer?.phone);
   const email = String(customer?.email ?? "").trim().toLowerCase();
   const or: any[] = [];
@@ -88,7 +90,7 @@ export async function resolveCartTarget(tenantId: string, customer: CartEventJob
   if (email) or.push({ email: { equals: email, mode: "insensitive" } });
   if (or.length) {
     const contacts = await prisma.contact.findMany({
-      where: { tenantId, OR: or },
+      where: { tenantId, OR: or, channel: opts.whatsappOnly ? ("WHATSAPP" as any) : { not: "VOICE" as any } },
       select: { id: true, channel: true, externalId: true, optOutChannels: true },
       take: 10,
     });

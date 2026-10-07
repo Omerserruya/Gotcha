@@ -202,6 +202,15 @@ describe("★ cart left behind", () => {
     expect(H.db.conversation[0]).toMatchObject({ automationRunId: null, chatbotNodeId: null });
   });
 
+  it("★ a call's own conversation (VOICE) is never written to: a phone-only customer gets a WhatsApp conversation", async () => {
+    const { resolveCartTarget } = await import("../services/cart.service");
+    H.db.contact = [{ id: "kv", tenantId: T, channel: "VOICE", externalId: "+972501234567", phone: "+972501234567", optOutChannels: [] }];
+    H.db.conversation = [{ id: "cv", tenantId: T, channel: "VOICE", customerExternalId: "+972501234567", status: "OPEN", createdAt: new Date(1) }];
+    H.db.channelAccount = [{ id: "wa1", tenantId: T, channel: "WHATSAPP", isActive: true }];
+    const t = await resolveCartTarget(T, { phone: "+972501234567" });
+    expect(t!.conversation).toMatchObject({ channel: "WHATSAPP", customerExternalId: "972501234567" });
+  });
+
   it("variables: items with quantities, total with currency, first name only", () => {
     expect(cartVariables(event({ items: [{ title: "Coat", quantity: 2 }, { title: "Scarf", quantity: 1 }], total: 100, currency: "USD" })))
       .toEqual({ cart_url: "https://shop.test/cart/recover/abc", cart_total: "100.00 USD", cart_items: "Coat x2, Scarf", first_name: "Dana" });
