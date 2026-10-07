@@ -25,6 +25,7 @@ import {
   loadIntegrationAccess,
   loadReachability,
 } from '@/features/employees/load-employees';
+import { foldWidget } from '@/features/employees/reach';
 import type { ReachItem } from '@/features/employees/WhoAnswers';
 import { channelName } from '@/api/contracts/inbox';
 import { StudioSplit } from '@/features/studio/StudioSplit';
@@ -133,10 +134,13 @@ export default async function Page({
   const tch = await getTranslations('channels');
   const reachOf = async (id: string): Promise<readonly ReachItem[] | null> => {
     const channels = await loadReachability(id);
+    // The Website widget is one row, as the channel list draws it.
     return channels
-      ? channels.map((c) => ({
+      ? foldWidget(channels).map((c) => ({
           channel: c.channel,
-          name: channelName(c.channel, tch) ?? tch('name.other'),
+          name: c.widget
+            ? tch('widgetRow.name')
+            : (channelName(c.channel, tch) ?? tch('name.other')),
           when: t(`reach.${c.reach}`),
         }))
       : null;

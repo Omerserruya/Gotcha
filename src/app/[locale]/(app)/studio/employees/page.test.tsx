@@ -147,9 +147,10 @@ describe('★ 07e / 07f - the dialog and the sheet, by query', () => {
     ]);
     const tree = await page([employee('a'), employee('b')], { employee: 'b', edit: '1' });
     expect(loadReachability).toHaveBeenLastCalledWith('b');
+    // The web chat is the Website widget's row (the translator mock answers keys).
     const reach = [
       { channel: 'WHATSAPP', name: 'name.WHATSAPP', when: 'reach.always' },
-      { channel: 'WEBCHAT', name: 'name.WEBCHAT', when: 'reach.sometimes' },
+      { channel: 'WEBCHAT', name: 'widgetRow.name', when: 'reach.sometimes' },
     ];
     expect(find<{ reach: unknown }>(tree, EmployeeDetail)?.reach).toEqual(reach);
     expect(find<{ reach: unknown }>(tree, EditSheet)?.reach).toEqual(reach);
