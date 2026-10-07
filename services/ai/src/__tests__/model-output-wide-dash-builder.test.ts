@@ -8,8 +8,8 @@ import express from "express";
 import request from "supertest";
 
 const H = vi.hoisted(() => ({ content: "", stream: [] as any[], updates: [] as any[], briefWrites: [] as any[], briefRow: null as any }));
-const DASHED = "Fast—friendly – clear―done";
-const WIDE = /[–—―]/;
+const DASHED = "Fast\u2014friendly \u2013 clear\u2015done";
+const WIDE = /[\u2013\u2014\u2015]/;
 
 vi.mock("../services/ai.service", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -71,7 +71,7 @@ describe("★ the employee builder", () => {
   it("streams no wide dash, and writes none into the draft", async () => {
     H.stream = [
       { done: true, content: "", usage: {}, toolCalls: [{ id: "t1", type: "function", function: { name: "set_company_overview", arguments: JSON.stringify({ overview: DASHED }) } }] },
-      [{ contentDelta: "Great—" }, { contentDelta: "next – your goal?" }, { done: true, content: "Great—next – your goal?", toolCalls: [], usage: {} }],
+      [{ contentDelta: "Great\u2014" }, { contentDelta: "next \u2013 your goal?" }, { done: true, content: "Great\u2014next \u2013 your goal?", toolCalls: [], usage: {} }],
     ];
     const events: any[] = [];
     await runBuilder({ tenantId: "T", userId: "u1", agentId: "ag1", message: "we sell lamps", locale: "en" } as any, (e) => { events.push(e); });

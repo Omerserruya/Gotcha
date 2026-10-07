@@ -11,8 +11,8 @@ import express from "express";
 import request from "supertest";
 
 const H = vi.hoisted(() => ({ content: "" }));
-const DASHED = "Fast—friendly – clear―done";
-const WIDE = /[–—―]/;
+const DASHED = "Fast\u2014friendly \u2013 clear\u2015done";
+const WIDE = /[\u2013\u2014\u2015]/;
 
 vi.mock("../services/ai.service", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -119,13 +119,13 @@ describe("★ operator-facing model text: a regular hyphen", () => {
 
 describe("★ customer-style text: the customer reply rule", () => {
   it("the agent loop's reply joins with a comma, never a dash", async () => {
-    H.content = "Sure—I can help – tomorrow works";
+    H.content = "Sure\u2014I can help \u2013 tomorrow works";
     const r = await writeReply({ purpose: "help", keyPoints: ["help"] } as any, { tenantId: "T", conversationId: "c1", language: "en" } as any);
     expect(r).toBe("Sure, I can help, tomorrow works");
   });
 
   it("the voice sample", async () => {
-    H.content = "Sorry about that—let me check";
+    H.content = "Sorry about that\u2014let me check";
     const r = await request(app("/", voiceSample)).post("/internal/voice-sample").send({ tenantId: "T", guidance: "warm" });
     expect(r.status).toBe(200);
     expect(r.body.reply).toBe("Sorry about that, let me check");

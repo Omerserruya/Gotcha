@@ -42,7 +42,7 @@ vi.mock("../services/ai.service", async (importOriginal) => {
 
 import { runAgent } from "../services/agent-runtime.service";
 
-const WIDE = /[–—―]/;
+const WIDE = /[\u2013\u2014\u2015]/;
 
 async function run(locale: "he" | "en") {
   const events: any[] = [];
@@ -56,7 +56,7 @@ async function run(locale: "he" | "en") {
 beforeEach(() => {
   H.round = 0; H.memory = [];
   // A dash on its own, one inside a delta, and an en dash.
-  H.deltas = ["יש 3 שיחות ", "—", " נסגרו היום (9–10). רוצה—פירוט?"];
+  H.deltas = ["יש 3 שיחות ", "\u2014", " נסגרו היום (9\u201310). רוצה\u2014פירוט?"];
 });
 
 describe("★ no wide dash reaches the operator", () => {
