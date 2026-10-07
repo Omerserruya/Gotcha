@@ -9,6 +9,7 @@ import { AccountControl } from './AccountControl';
 import { CommandHint } from './CommandHint';
 import { CommandPalette } from './CommandPalette';
 import { PrimaryNavigation, SettingsNavigation } from './PrimaryNavigation';
+import { RecentThreads } from './RecentThreads';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { authEndpoints } from '@/api/endpoints/registry';
@@ -50,6 +51,8 @@ export async function AppShell({ children }: { children: ReactNode }) {
             GOTCHA
           </Link>
           <PrimaryNavigation />
+          {/* 01a: the person's conversations with GOTCHA, one click back to each. */}
+          <RecentThreads />
         </div>
 
         <div className={styles.railBottom}>

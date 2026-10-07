@@ -99,5 +99,7 @@
     "needsApproval": "Needs approval",
     "orderNoMatch": "No customer here matches order #{number} in {store}.",
     "orderNoStore": "No store is connected to search orders in."
-  }
+  },
+  "recent": "Recent",
+  "untitled": "New conversation"
 }

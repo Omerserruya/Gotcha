@@ -22,13 +22,17 @@ import { ApiError, kindFromStatus } from './api-error';
 export interface SseFrame {
   /** The `event:` line, when present. */
   readonly event?: string;
+  /** The `id:` line, when present - what a resume sends back as `Last-Event-ID`. */
+  readonly id?: string;
   /** The accumulated `data:` lines, newline-joined. */
   readonly data: string;
 }
 
 export interface StreamOptions {
   readonly url: string;
-  readonly body: unknown;
+  /** POST by default; GET to resume a stream (no body). */
+  readonly method?: 'GET' | 'POST';
+  readonly body?: unknown;
   readonly signal?: AbortSignal;
   readonly headers?: Readonly<Record<string, string>>;
 }
@@ -41,6 +45,7 @@ export interface StreamOptions {
  */
 export async function* streamServerSentEvents({
   url,
+  method = 'POST',
   body,
   signal,
   headers,
@@ -48,15 +53,15 @@ export async function* streamServerSentEvents({
   let response: Response;
   try {
     response = await fetch(url, {
-      method: 'POST',
+      method,
       signal,
       credentials: 'same-origin',
       headers: {
-        'content-type': 'application/json',
+        ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
         accept: 'text/event-stream',
         ...headers,
       },
-      body: JSON.stringify(body),
+      body: method === 'POST' ? JSON.stringify(body) : undefined,
     });
   } catch (cause) {
     if (signal?.aborted) throw new ApiError({ kind: 'cancelled', cause });
@@ -64,20 +69,31 @@ export async function* streamServerSentEvents({
   }
 
   if (!response.ok) {
-    // An error arrives as ordinary JSON, not as a stream.
+    // An error arrives as ordinary JSON, not as a stream - with its `code`
+    // (RUN_IN_PROGRESS, RATE_LIMITED...) and, for a rate limit, when to retry.
     let developerMessage: string | undefined;
+    let code: string | undefined;
+    let retryAfterSeconds: number | undefined;
     try {
       const parsed: unknown = await response.json();
-      if (parsed && typeof parsed === 'object' && 'error' in parsed) {
-        developerMessage = String((parsed as { error: unknown }).error);
+      if (parsed && typeof parsed === 'object') {
+        const fields = parsed as { error?: unknown; code?: unknown; retryAfterSeconds?: unknown };
+        if (fields.error !== undefined) developerMessage = String(fields.error);
+        if (typeof fields.code === 'string') code = fields.code;
+        if (typeof fields.retryAfterSeconds === 'number')
+          retryAfterSeconds = fields.retryAfterSeconds;
       }
     } catch {
       // Body was not JSON. The status is enough.
     }
+    const header = Number(response.headers.get('retry-after'));
     throw new ApiError({
       kind: kindFromStatus(response.status),
       status: response.status,
       developerMessage,
+      code,
+      retryAfterSeconds:
+        retryAfterSeconds ?? (Number.isFinite(header) && header > 0 ? header : undefined),
     });
   }
 
@@ -117,6 +133,7 @@ export async function* streamServerSentEvents({
 
 function parseFrame(raw: string): SseFrame | null {
   let event: string | undefined;
+  let id: string | undefined;
   const data: string[] = [];
 
   for (const line of raw.split('\n')) {
@@ -124,11 +141,13 @@ function parseFrame(raw: string): SseFrame | null {
     if (line.startsWith(':')) continue;
     if (line.startsWith('event:')) {
       event = line.slice(6).trim();
+    } else if (line.startsWith('id:')) {
+      id = line.slice(3).trim();
     } else if (line.startsWith('data:')) {
       data.push(line.slice(5).replace(/^ /, ''));
     }
   }
 
   if (data.length === 0 && event === undefined) return null;
-  return { event, data: data.join('\n') };
+  return { event, ...(id !== undefined ? { id } : {}), data: data.join('\n') };
 }

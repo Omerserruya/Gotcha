@@ -425,6 +425,26 @@ export const agentEndpoints = {
 } as const;
 
 /**
+ * Home's conversations (assistant-threads-v1, Backend aef95f69): threads that
+ * persist, one answer streamed at a time, resumable and cancellable. A thread
+ * is its owner's only - another user's id is a 404 on every route.
+ */
+export const assistantEndpoints = {
+  /** POST `{ scope? }` → 201; GET `?limit&cursor` → `{ data, nextCursor }`. */
+  threads: () => endpoint('/api/assistant/threads'),
+  /** GET the thread, its messages and `activeRun`; PATCH `{ title?, scope?, archived? }`; DELETE. */
+  thread: (id: string) => endpoint('/api/assistant/threads/{id}', { id }),
+  /** POST `{ text, locale? }` → the answer as an event stream. */
+  messages: (id: string) => endpoint('/api/assistant/threads/{id}/messages', { id }),
+  /** GET with `Last-Event-ID` → the rest of a run's events; 410 after 15 minutes. */
+  runEvents: (id: string, runId: string) =>
+    endpoint('/api/assistant/threads/{id}/runs/{runId}/events', { id, runId }),
+  /** POST → 202 cancelling; the stream then ends with `message.done` cancelled. */
+  cancel: (id: string, messageId: string) =>
+    endpoint('/api/assistant/threads/{id}/messages/{messageId}/cancel', { id, messageId }),
+} as const;
+
+/**
  * AI employees - the non-human half of Settings · People.
  *
  * `list` answers the entire `AIAgent` row, system prompts included; the

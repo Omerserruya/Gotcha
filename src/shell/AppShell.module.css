@@ -214,6 +214,14 @@
     color: var(--frame-text);
   }
 
+  /* A thread's title: one line, an ellipsis when long. */
+  .recentTitle {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .subNavCount {
     margin-inline-start: auto;
     font-family: var(--font-mono);

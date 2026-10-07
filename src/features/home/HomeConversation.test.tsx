@@ -1,67 +1,135 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ApiError } from '@/api/client/api-error';
+import { THREADS_CHANGED } from '@/api/contracts/assistant-threads';
 import home from '@/i18n/messages/en/home.json';
 
 /**
- * ★★ Home · in conversation (design 7, 01a). A controllable stream stands in
- * for `POST /api/agent/run`: each test pushes the frames it needs.
+ * ★★ Home · in conversation (design 7, 01a) on `/api/assistant/threads`.
+ *
+ * A controllable stream stands in for the routes' event streams - each test
+ * pushes the frames the server would, with their `<runId>:<seq>` ids - and
+ * `browserApi` for the JSON routes (create, open, rename, scope, delete,
+ * cancel). The address is `useSearchParams`, set by the test.
  */
 const sse = vi.hoisted(() => {
-  type Frame = { data: string };
-  const streams: { push: (f: Frame) => void; end: () => void; body: unknown }[] = [];
-  const stream = vi.fn((options: { body: unknown; signal: AbortSignal }) => {
-    const queue: Frame[] = [];
-    let wake: (() => void) | null = null;
-    let ended = false;
-    streams.push({
-      body: options.body,
-      push: (f) => {
-        queue.push(f);
-        wake?.();
-      },
-      end: () => {
-        ended = true;
-        wake?.();
-      },
-    });
-    return (async function* () {
-      for (;;) {
-        if (options.signal.aborted) throw new DOMException('aborted', 'AbortError');
-        if (queue.length > 0) {
-          yield queue.shift()!;
-          continue;
+  type Frame = { event?: string; id?: string; data: string };
+  type Stream = {
+    url: string;
+    method: string;
+    body: unknown;
+    headers: Record<string, string> | undefined;
+    push: (f: Frame) => void;
+    end: () => void;
+    drop: () => void;
+  };
+  const streams: Stream[] = [];
+  /** Refusals to throw, in order, before the next streams open (409, 429, 402...). */
+  const refusals: unknown[] = [];
+  const stream = vi.fn(
+    (options: {
+      url: string;
+      method?: string;
+      body?: unknown;
+      headers?: Record<string, string>;
+      signal: AbortSignal;
+    }) => {
+      const queue: Frame[] = [];
+      let wake: (() => void) | null = null;
+      let ended = false;
+      let dropped = false;
+      const refusal = refusals.shift();
+      streams.push({
+        url: options.url,
+        method: options.method ?? 'POST',
+        body: options.body,
+        headers: options.headers,
+        push: (f) => {
+          queue.push(f);
+          wake?.();
+        },
+        end: () => {
+          ended = true;
+          wake?.();
+        },
+        drop: () => {
+          dropped = true;
+          wake?.();
+        },
+      });
+      return (async function* () {
+        if (refusal) throw refusal;
+        for (;;) {
+          if (options.signal.aborted) throw new DOMException('aborted', 'AbortError');
+          if (queue.length > 0) {
+            yield queue.shift()!;
+            continue;
+          }
+          if (dropped) throw new TypeError('network connection lost');
+          if (ended) return;
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+            options.signal.addEventListener('abort', () => resolve(), { once: true });
+          });
         }
-        if (ended) return;
-        await new Promise<void>((resolve) => {
-          wake = resolve;
-          options.signal.addEventListener('abort', () => resolve(), { once: true });
-        });
-      }
-    })();
-  });
-  return { stream, streams };
+      })();
+    },
+  );
+  return { stream, streams, refusals };
 });
 vi.mock('@/api/client/sse-client', () => ({ streamServerSentEvents: sse.stream }));
+
+const api = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  patch: vi.fn(),
+  delete: vi.fn(),
+}));
+vi.mock('@/api/client/browser-api', () => ({ browserApi: api }));
+
+const nav = vi.hoisted(() => ({ params: new URLSearchParams() }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => nav.params }));
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 const { HomeConversation } = await import('./HomeConversation');
 const { CommandSurface } = await import('./CommandSurface');
 
-const show = () =>
-  render(
-    <NextIntlClientProvider locale="en" messages={{ home }}>
-      <HomeConversation>
-        <div data-testid="home-snapshot">
-          <p>Good morning, Maya</p>
-          <CommandSurface />
-        </div>
-      </HomeConversation>
-    </NextIntlClientProvider>,
-  );
+const THREAD = { id: 'th1', title: null, scope: { range: 'last_7', channels: 'all' } };
 
-const frame = (event: Record<string, unknown>) => ({ data: JSON.stringify(event) });
+const tree = () => (
+  <NextIntlClientProvider locale="en" messages={{ home }} timeZone="UTC">
+    <HomeConversation>
+      <div data-testid="home-snapshot">
+        <p>Good morning, Maya</p>
+        <CommandSurface />
+      </div>
+    </HomeConversation>
+  </NextIntlClientProvider>
+);
+const show = () => render(tree());
+
+/** A frame as the server sends it: its name, `<runId>:<seq>`, and its data. */
+const ev = (name: string, seq: number, data: Record<string, unknown>, run = 'run1') => ({
+  event: name,
+  id: `${run}:${seq}`,
+  data: JSON.stringify(data),
+});
+const START = ev('run.start', 1, { runId: 'run1', userMessageId: 'u1', messageId: 'm1' });
+const DONE = (seq: number, status = 'done') => ev('message.done', seq, { messageId: 'm1', status });
 const last = () => sse.streams.at(-1)!;
+const push = (...frames: ReturnType<typeof ev>[]) =>
+  act(async () => {
+    for (const frame of frames) last().push(frame);
+  });
 const flush = () => act(async () => {});
 
 const ask = async (text: string) => {
@@ -70,179 +138,452 @@ const ask = async (text: string) => {
     fireEvent.submit(screen.getByLabelText(home.command.label).closest('form')!);
   });
 };
+/** As the real client does: the answer is parsed by the request's own schema. */
+const answering =
+  (value: unknown) =>
+  async ({ payload }: { payload: { parse: (v: unknown) => unknown } }) =>
+    payload.parse(value);
+const called = (fn: typeof api.post, path: string) =>
+  fn.mock.calls.filter(
+    ([request]) => (request as { endpoint: { path: string } }).endpoint.path === path,
+  );
 
 beforeEach(() => {
   sse.stream.mockClear();
   sse.streams.length = 0;
+  sse.refusals.length = 0;
+  nav.params = new URLSearchParams();
+  window.history.replaceState(null, '', '/home');
+  api.get.mockReset();
+  api.patch.mockReset();
+  api.delete.mockReset();
+  api.post.mockReset();
+  api.post.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) =>
+    endpoint.path === '/api/assistant/threads' ? THREAD : { status: 'cancelling' },
+  );
+});
+afterEach(() => {
+  vi.useRealTimers();
 });
 
-describe('★★ the first question turns Home into the conversation, in place', () => {
-  it('the greeting and snapshot leave; the bar, the turn and the docked box come', async () => {
+describe('★★ the first question makes a thread, and Home becomes the conversation in place', () => {
+  it('the snapshot leaves; the thread is created with the scope, then the question streams on it', async () => {
+    const changed = vi.fn();
+    window.addEventListener(THREADS_CHANGED, changed);
     show();
     expect(screen.getByTestId('home-snapshot')).toBeInTheDocument();
     await ask('Why are returns up this week?');
     expect(screen.queryByTestId('home-snapshot')).toBeNull();
+    expect(called(api.post, '/api/assistant/threads')[0]![0]).toMatchObject({
+      body: { scope: { range: 'last_7', channels: 'all' } },
+    });
+    expect(last()).toMatchObject({
+      url: '/api/bff/api/assistant/threads/th1/messages',
+      method: 'POST',
+      body: { text: 'Why are returns up this week?', locale: 'en' },
+    });
+    // The thread is in the address (a reload comes back to it) and Recent reads again.
+    expect(new URL(window.location.href).searchParams.get('thread')).toBe('th1');
+    expect(changed).toHaveBeenCalled();
+    window.removeEventListener(THREADS_CHANGED, changed);
     expect(screen.getByTestId('conversation-title')).toHaveTextContent(
       'Why are returns up this week?',
     );
-    expect(screen.getByTestId('conversation-dock')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Working on it');
   });
 
-  it('steps first (running, then ✓ with the time it took), then the text as it streams', async () => {
+  it('steps in the run’s words with the time each took, then the answer as it streams, then the follow-ups', async () => {
     show();
-    await ask('Why are returns up this week?');
-    await act(async () => {
-      last().push(frame({ type: 'tool_start', toolCallId: 's1', name: 'query_returns' }));
-    });
+    await ask('How many are open?');
+    await push(START, ev('step.start', 2, { stepId: 's1', text: 'Counting open conversations' }));
     expect(screen.getByTestId('step-s1')).toHaveAttribute('data-status', 'running');
-    await act(async () => {
-      last().push(
-        frame({ type: 'tool_end', toolCallId: 's1', ok: true, resultSummary: '61 returns' }),
-      );
-      last().push(frame({ type: 'token', text: 'Returns are up ' }));
-      last().push(frame({ type: 'token', text: '38%.' }));
-    });
+    await push(
+      ev('step.done', 3, { stepId: 's1', status: 'done', durationMs: 6200 }),
+      ev('text.delta', 4, { text: 'You have ' }),
+      ev('text.delta', 5, { text: '**9** open.' }),
+    );
     const step = screen.getByTestId('step-s1');
-    expect(step).toHaveAttribute('data-status', 'succeeded');
-    expect(step).toHaveTextContent(/done.*·/);
-    // An unknown tool is "Checking your data"; never its name, never its raw output.
-    expect(step).toHaveTextContent('Checking your data');
-    expect(step).not.toHaveTextContent('query_returns');
-    expect(step).not.toHaveTextContent('61 returns');
-    expect(screen.getByTestId('turn-answer')).toHaveTextContent('Returns are up 38%.');
-    await act(async () => {
-      last().push(frame({ type: 'done' }));
-      last().end();
-    });
-    expect(screen.getByTestId('conversation-send')).toBeInTheDocument();
-  });
-
-  it('★ a follow-up is a second turn on the SAME session - the agent remembers', async () => {
-    show();
-    await ask('Why are returns up this week?');
-    await act(async () => {
-      last().push(frame({ type: 'done' }));
-      last().end();
-    });
-    fireEvent.change(screen.getByTestId('conversation-input'), {
-      target: { value: 'Show me the 23 returns' },
-    });
-    await act(async () => {
-      fireEvent.submit(screen.getByTestId('conversation-dock'));
-    });
-    expect(screen.getAllByRole('listitem').filter((li) => li.dataset.status)).toHaveLength(2);
-    const [first, second] = sse.streams.map((s) => s.body as { sessionId: string });
-    expect(second!.sessionId).toBe(first!.sessionId);
-  });
-
-  it('Stop while it runs: the turn says it stopped, and the box can ask again', async () => {
-    show();
-    await ask('Why are returns up this week?');
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('conversation-stop'));
-    });
-    await flush();
-    expect(screen.getByText('Stopped.')).toBeInTheDocument();
-    expect(screen.getByTestId('conversation-send')).toBeInTheDocument();
-  });
-
-  it('a failure says so, in the run’s own words when it gave them', async () => {
-    show();
-    await ask('Why?');
-    await act(async () => {
-      last().push(frame({ type: 'error', message: 'the analytics service is down' }));
-      last().end();
-    });
-    expect(screen.getByTestId('turn-failed')).toHaveTextContent('the analytics service is down');
-  });
-
-  it('← Home: the live Home is back, and the next question starts a new session', async () => {
-    show();
-    await ask('Why?');
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('conversation-home'));
-    });
-    expect(screen.getByTestId('home-snapshot')).toBeInTheDocument();
-    await ask('Something else');
-    const [first, second] = sse.streams.map((s) => s.body as { sessionId: string });
-    expect(second!.sessionId).not.toBe(first!.sessionId);
-  });
-});
-
-describe('★ stage 1 draws only what exists', () => {
-  it('Share is a status ("next stage"); no scope chip, no suggestion chips, no Recent', async () => {
-    show();
-    await ask('Why?');
-    const share = screen.getByTestId('conversation-share');
-    expect(share).toHaveAttribute('aria-disabled', 'true');
-    expect(share).toHaveTextContent('Next stage');
-    const chat = screen.getByTestId('home-conversation');
-    expect(chat).not.toHaveTextContent(/THIS WEEK|ALL CHANNELS|Recent/i);
+    expect(step).toHaveTextContent('Counting open conversations');
+    expect(step).toHaveTextContent('done');
+    expect(step).toHaveTextContent('· 6s');
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent('You have 9 open.');
+    expect(screen.getByTestId('turn-answer').querySelector('strong')).toHaveTextContent('9');
+    // Not yet: suggestions wait for the answer to finish.
+    await push(ev('suggestions', 6, { items: ['Which are oldest?', 'By channel'] }));
+    expect(screen.queryByTestId('suggestions')).toBeNull();
+    await push(DONE(7));
     expect(
-      within(chat)
-        .queryAllByRole('button')
+      within(screen.getByTestId('suggestions'))
+        .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['Home', '']);
+    ).toEqual(['Which are oldest?', 'By channel']);
+    expect(screen.getByTestId('conversation-send')).toBeInTheDocument();
   });
-});
 
-describe('★★ display (dev, 4efc9d8)', () => {
-  it('a known tool in words - "system_get_metric · done · value: 3" was on screen', async () => {
+  it('★ a follow-up, typed or a suggestion, goes to the SAME thread - no second thread', async () => {
     show();
-    await ask('How many are waiting?');
+    await ask('How many are open?');
+    await push(START, ev('suggestions', 2, { items: ['Which are oldest?'] }), DONE(3));
     await act(async () => {
-      last().push(frame({ type: 'tool_start', toolCallId: 'm', name: 'system_get_metric' }));
-      last().push(
-        frame({ type: 'tool_end', toolCallId: 'm', ok: true, resultSummary: 'value: 3' }),
-      );
+      fireEvent.click(within(screen.getByTestId('suggestions')).getByRole('button'));
     });
-    const step = screen.getByTestId('step-m');
-    expect(step).toHaveTextContent('Looking up the figures');
-    expect(step).not.toHaveTextContent(/system_get_metric|value: 3/);
+    expect(last()).toMatchObject({
+      url: '/api/bff/api/assistant/threads/th1/messages',
+      body: { text: 'Which are oldest?' },
+    });
+    expect(called(api.post, '/api/assistant/threads')).toHaveLength(1);
+    expect(screen.getAllByRole('listitem').filter((li) => li.dataset.status)).toHaveLength(2);
+  });
+
+  it('the server’s title replaces the question as the title, and Recent reads again', async () => {
+    show();
+    await ask('How many are open?');
+    const changed = vi.fn();
+    window.addEventListener(THREADS_CHANGED, changed);
+    await push(START, ev('thread.title', 2, { title: 'Open conversations' }));
+    expect(screen.getByTestId('conversation-title')).toHaveTextContent(/^Open conversations$/);
+    expect(changed).toHaveBeenCalled();
+    window.removeEventListener(THREADS_CHANGED, changed);
+  });
+
+  it('a step waiting for approval says so, and leads to Approvals', async () => {
+    show();
+    await ask('Refund Dana');
+    await push(
+      START,
+      ev('step.start', 2, { stepId: 's9', text: 'Preparing the refund' }),
+      ev('step.done', 3, {
+        stepId: 's9',
+        status: 'waiting_approval',
+        durationMs: 300,
+        approvalRequestId: 'ar1',
+      }),
+    );
+    expect(screen.getByTestId('step-s9')).toHaveTextContent('waiting for your approval');
+    expect(screen.getByTestId('step-s9-approvals')).toHaveAttribute('href', '/approvals');
   });
 
   it('★ the question and the answer read in their own direction - a Hebrew one right to left', async () => {
     show();
     await ask('מה קרה עם ההחזרות האחרונות?');
-    await act(async () => {
-      last().push(frame({ type: 'token', text: 'ההחזרות עלו ב־38%.' }));
-    });
+    await push(START, ev('text.delta', 2, { text: 'ההחזרות עלו ב־38%.' }));
     expect(screen.getByText('מה קרה עם ההחזרות האחרונות?', { selector: 'p' })).toHaveAttribute(
       'dir',
       'auto',
     );
-    expect(screen.getByTestId('turn-answer')).toHaveAttribute('dir', 'auto');
+    expect(screen.getByTestId('turn-answer').querySelector('p')).toHaveAttribute('dir', 'auto');
   });
 });
 
-describe('★★ the run speaks the interface language (Backend, 2026-10-07)', () => {
-  it("the step in the run's own words, with its summary; the locale goes with the question", async () => {
+describe('★★ resume: a dropped stream is picked up where it stopped, and no word is doubled', () => {
+  it('the drop: GET the run’s events after the last id seen; the replayed ones are not applied twice', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     show();
-    await ask('How many are waiting?');
-    expect(last().body).toMatchObject({ locale: 'en' });
+    await ask('How many are open?');
+    await push(
+      START,
+      ev('text.delta', 2, { text: 'You have ' }),
+      ev('text.delta', 3, { text: '9 ' }),
+    );
     await act(async () => {
-      last().push(
-        frame({
-          type: 'tool_start',
-          toolCallId: 'w',
-          name: 'system_count_conversations',
-          label: 'Counting the conversations waiting for your team',
-        }),
-      );
-      last().push(
-        frame({
-          type: 'tool_end',
-          toolCallId: 'w',
-          ok: true,
-          label: 'Counting the conversations waiting for your team',
-          resultSummary: '9 conversations waiting for someone on your team to answer',
-        }),
-      );
+      last().drop();
     });
-    const step = screen.getByTestId('step-w');
-    expect(step).toHaveTextContent('Counting the conversations waiting for your team');
-    expect(step).toHaveTextContent('9 conversations waiting');
-    expect(step).not.toHaveTextContent('system_count_conversations');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(last()).toMatchObject({
+      url: '/api/bff/api/assistant/threads/th1/runs/run1/events',
+      method: 'GET',
+      headers: { 'last-event-id': 'run1:3' },
+    });
+    // The server replays from where it thinks the client is: 3 again, then the rest.
+    await push(
+      ev('text.delta', 3, { text: '9 ' }),
+      ev('text.delta', 4, { text: 'open.' }),
+      DONE(5),
+    );
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent(/^You have 9 open\.$/);
+    expect(screen.queryByTestId('turn-failed')).toBeNull();
+  });
+
+  it('a drop before the run started is a failure, said - there is nothing to resume', async () => {
+    show();
+    await ask('How many are open?');
+    await act(async () => {
+      last().drop();
+    });
+    await flush();
+    expect(screen.getByTestId('turn-failed')).toHaveTextContent("It couldn't answer just now");
+    expect(sse.streams).toHaveLength(1);
+  });
+});
+
+describe('★★ Stop is the route’s cancel; leaving is not', () => {
+  it('Stop: POST cancel for THIS answer; the stream ends "cancelled" and the text so far stays', async () => {
+    show();
+    await ask('Why?');
+    await push(START, ev('text.delta', 2, { text: 'So far' }));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('conversation-stop'));
+    });
+    expect(called(api.post, '/api/assistant/threads/th1/messages/m1/cancel')).toHaveLength(1);
+    expect(screen.getByTestId('conversation-stop')).toBeDisabled();
+    await push(DONE(3, 'cancelled'));
+    expect(screen.getByTestId('turn-stopped')).toHaveTextContent('Stopped.');
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent('So far');
+    expect(screen.getByTestId('conversation-send')).toBeInTheDocument();
+  });
+
+  it('← Home: the live Home is back, nothing is cancelled, and the next question is a new thread', async () => {
+    show();
+    await ask('Why?');
+    await push(START);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('conversation-home'));
+    });
+    expect(screen.getByTestId('home-snapshot')).toBeInTheDocument();
+    expect(called(api.post, '/api/assistant/threads/th1/messages/m1/cancel')).toHaveLength(0);
+    expect(new URL(window.location.href).searchParams.get('thread')).toBeNull();
+    await ask('Something else');
+    expect(called(api.post, '/api/assistant/threads')).toHaveLength(2);
+  });
+});
+
+describe('★★ refusals, each in honest words (§6)', () => {
+  const refuse = async (error: ApiError) => {
+    show();
+    sse.refusals.push(error);
+    await ask('Why?');
+    await flush();
+    return screen.getByTestId('turn-failed');
+  };
+
+  it('409: an answer is still being written here', async () => {
+    const said = await refuse(
+      new ApiError({ kind: 'conflict', status: 409, code: 'RUN_IN_PROGRESS' }),
+    );
+    expect(said).toHaveTextContent('An answer is still being written in this conversation');
+  });
+
+  it('429: the rate limit, with when to try again', async () => {
+    const said = await refuse(
+      new ApiError({
+        kind: 'rate_limited',
+        status: 429,
+        code: 'RATE_LIMITED',
+        retryAfterSeconds: 12,
+      }),
+    );
+    expect(said).toHaveTextContent(
+      "That's more than 10 questions in a minute. Try again in 12 seconds.",
+    );
+  });
+
+  it('402: the workspace’s AI credits, and where to see them', async () => {
+    const said = await refuse(
+      new ApiError({ kind: 'tenant_inactive', status: 402, code: 'AI_UNITS_EXHAUSTED' }),
+    );
+    expect(said).toHaveTextContent('its credits have run out');
+    expect(said.querySelector('a')).toHaveAttribute('href', '/settings/billing');
+  });
+
+  it('in the stream: the budget, with the text so far kept', async () => {
+    show();
+    await ask('Everything about returns');
+    await push(
+      START,
+      ev('text.delta', 2, { text: 'Returns are' }),
+      ev('error', 3, { code: 'BUDGET_EXCEEDED', message: 'budget' }),
+      DONE(4, 'failed'),
+    );
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent('Returns are');
+    expect(screen.getByTestId('turn-failed')).toHaveTextContent('it reached the most it can write');
+  });
+});
+
+describe('★★ a thread by its address: Recent, and a reload', () => {
+  const detail = (over: Record<string, unknown> = {}) => ({
+    thread: { ...THREAD, title: 'Open conversations' },
+    messages: [
+      { id: 'u1', role: 'user', text: 'How many are open?', status: 'done' },
+      {
+        id: 'a1',
+        role: 'assistant',
+        text: 'You have 9 open.',
+        status: 'done',
+        suggestions: ['Which are oldest?'],
+      },
+    ],
+    activeRun: null,
+    ...over,
+  });
+
+  it('opens the stored thread: its title, its turns, its follow-ups', async () => {
+    api.get.mockImplementation(answering(detail()));
+    nav.params = new URLSearchParams('thread=th1');
+    show();
+    await flush();
+    expect(api.get.mock.calls[0]![0]).toMatchObject({
+      endpoint: { path: '/api/assistant/threads/th1' },
+    });
+    expect(screen.getByTestId('conversation-title')).toHaveTextContent(/^Open conversations$/);
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent('You have 9 open.');
+    expect(screen.getByTestId('suggestions')).toHaveTextContent('Which are oldest?');
+    expect(sse.streams).toHaveLength(0);
+  });
+
+  it('★★ someone else’s thread (or a deleted one) is a 404: said, never another thread', async () => {
+    api.get.mockRejectedValue(
+      new ApiError({ kind: 'not_found', status: 404, code: 'THREAD_NOT_FOUND' }),
+    );
+    nav.params = new URLSearchParams('thread=not-mine');
+    show();
+    await flush();
+    expect(screen.getByTestId('conversation-unopened')).toHaveTextContent(
+      "This conversation isn't here. It may have been deleted, or it belongs to someone else.",
+    );
+    expect(screen.queryByTestId('turn-answer')).toBeNull();
+    expect(screen.queryByTestId('conversation-delete')).toBeNull();
+  });
+
+  it('★★ a reload mid-answer replays the run from its start onto an empty turn: the stored partial is not shown twice', async () => {
+    api.get.mockImplementation(
+      answering(
+        detail({
+          messages: [
+            { id: 'u1', role: 'user', text: 'How many are open?', status: 'done' },
+            { id: 'm1', role: 'assistant', text: 'You have ', status: 'streaming' },
+          ],
+          activeRun: { runId: 'run1', messageId: 'm1', lastEventId: 'run1:2' },
+        }),
+      ),
+    );
+    nav.params = new URLSearchParams('thread=th1');
+    show();
+    await flush();
+    expect(last()).toMatchObject({
+      url: '/api/bff/api/assistant/threads/th1/runs/run1/events',
+      method: 'GET',
+      headers: { 'last-event-id': 'run1:0' },
+    });
+    await push(
+      START,
+      ev('text.delta', 2, { text: 'You have ' }),
+      ev('text.delta', 3, { text: '9 open.' }),
+      DONE(4),
+    );
+    expect(screen.getByTestId('turn-answer')).toHaveTextContent(/^You have 9 open\.$/);
+  });
+
+  it('a Recent link to another thread opens it; Home’s own link is the live Home again', async () => {
+    api.get.mockImplementation(answering(detail()));
+    const view = show();
+    await ask('First?');
+    await push(START, DONE(2));
+    nav.params = new URLSearchParams('thread=th2');
+    view.rerender(tree());
+    await flush();
+    expect(api.get.mock.calls.at(-1)![0]).toMatchObject({
+      endpoint: { path: '/api/assistant/threads/th2' },
+    });
+    nav.params = new URLSearchParams();
+    view.rerender(tree());
+    await flush();
+    expect(screen.getByTestId('home-snapshot')).toBeInTheDocument();
+  });
+});
+
+describe('★★ title, scope and delete - each through its route', () => {
+  it('rename: the person’s title, saved; a refusal is said and the field stays', async () => {
+    api.patch.mockImplementationOnce(answering({ ...THREAD, title: 'Weekly returns' }));
+    show();
+    await ask('Why are returns up?');
+    fireEvent.click(screen.getByTestId('conversation-rename'));
+    const input = screen.getByTestId('conversation-title-input');
+    fireEvent.change(input, { target: { value: '  Weekly returns ' } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    expect(api.patch.mock.calls[0]![0]).toMatchObject({
+      endpoint: { path: '/api/assistant/threads/th1' },
+      body: { title: 'Weekly returns' },
+    });
+    expect(screen.getByTestId('conversation-title')).toHaveTextContent(/^Weekly returns$/);
+    api.patch.mockRejectedValueOnce(new ApiError({ kind: 'validation', status: 400 }));
+    fireEvent.click(screen.getByTestId('conversation-rename'));
+    fireEvent.change(screen.getByTestId('conversation-title-input'), {
+      target: { value: 'Other' },
+    });
+    await act(async () => {
+      fireEvent.keyDown(screen.getByTestId('conversation-title-input'), { key: 'Enter' });
+    });
+    expect(screen.getByTestId('conversation-title-failed')).toHaveTextContent('Not renamed');
+    expect(screen.getByTestId('conversation-title-input')).toBeInTheDocument();
+  });
+
+  it('the scope chip says what the answers look at; a new range is PATCHed for the questions after it', async () => {
+    api.patch.mockImplementationOnce(
+      answering({
+        ...THREAD,
+        scope: { range: 'last_30', channels: 'all' },
+      }),
+    );
+    show();
+    await ask('Why?');
+    const chip = screen.getByTestId('conversation-scope');
+    expect(chip).toHaveTextContent('Last 7 days · All channels');
+    fireEvent.keyDown(chip, { key: 'Enter' });
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId('conversation-scope-last_30'));
+    });
+    expect(api.patch.mock.calls[0]![0]).toMatchObject({
+      endpoint: { path: '/api/assistant/threads/th1' },
+      body: { scope: { range: 'last_30', channels: 'all' } },
+    });
+    expect(screen.getByTestId('conversation-scope')).toHaveTextContent(
+      'Last 30 days · All channels',
+    );
+  });
+
+  it('delete, confirmed: DELETE, then the live Home; Recent reads again', async () => {
+    api.delete.mockResolvedValueOnce(undefined);
+    const changed = vi.fn();
+    show();
+    await ask('Why?');
+    await push(START, DONE(2));
+    window.addEventListener(THREADS_CHANGED, changed);
+    fireEvent.click(screen.getByTestId('conversation-delete'));
+    expect(screen.getByTestId('conversation-delete-dialog')).toHaveTextContent(
+      "This can't be undone.",
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('conversation-delete-yes'));
+    });
+    expect(api.delete.mock.calls[0]![0]).toMatchObject({
+      endpoint: { path: '/api/assistant/threads/th1' },
+    });
+    expect(screen.getByTestId('home-snapshot')).toBeInTheDocument();
+    expect(changed).toHaveBeenCalled();
+    window.removeEventListener(THREADS_CHANGED, changed);
+  });
+
+  it('a delete that failed is said, and the conversation stays', async () => {
+    api.delete.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
+    show();
+    await ask('Why?');
+    fireEvent.click(screen.getByTestId('conversation-delete'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('conversation-delete-yes'));
+    });
+    expect(screen.getByTestId('conversation-delete-failed')).toHaveTextContent("It wasn't deleted");
+    expect(screen.getByTestId('home-conversation')).toBeInTheDocument();
+  });
+
+  it('Share is still a status ("next stage")', async () => {
+    show();
+    await ask('Why?');
+    const share = screen.getByTestId('conversation-share');
+    expect(share).toHaveAttribute('aria-disabled', 'true');
+    expect(share).toHaveTextContent('Next stage');
   });
 });

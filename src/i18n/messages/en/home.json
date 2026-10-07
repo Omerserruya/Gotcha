@@ -423,23 +423,57 @@
     "stop": "Stop",
     "working": "Working on it…",
     "failed": "It couldn't answer just now. Try again in a moment.",
-    "failedWith": "It couldn't answer: {why}",
     "stopped": "Stopped.",
-    "awaitingApproval": "Waiting for your approval: {what}",
     "step": {
       "running": "working",
-      "succeeded": "done",
       "failed": "failed",
-      "denied": "not allowed",
-      "seconds": "{count, plural, =0 {· under 1s} other {· #s}}"
+      "seconds": "{count, plural, =0 {· under 1s} other {· #s}}",
+      "done": "done",
+      "waiting_approval": "waiting for your approval",
+      "openApprovals": "Open Approvals"
     },
-    "tool": {
-      "system_count_conversations": "Counting conversations",
-      "system_get_metric": "Looking up the figures",
-      "system_recent_activity": "Reading recent activity",
-      "system_search_customers": "Searching customers",
-      "system_summarize_conversation": "Summarising the conversation",
-      "other": "Checking your data"
+    "opening": "Opening the conversation…",
+    "missing": "This conversation isn't here. It may have been deleted, or it belongs to someone else.",
+    "openFailed": "Couldn't open this conversation. Try again in a moment.",
+    "stopping": "Stopping…",
+    "suggestions": "Follow-up questions",
+    "title": {
+      "label": "Conversation title",
+      "rename": "Rename",
+      "failed": "Not renamed. Try again."
+    },
+    "scope": {
+      "label": "What the answers look at: {scope}",
+      "range": {
+        "this_week": "This week",
+        "last_7": "Last 7 days",
+        "last_30": "Last 30 days",
+        "custom": "{from} to {to}"
+      },
+      "channels": {
+        "all": "All channels",
+        "some": "{count, plural, one {# channel} other {# channels}}"
+      },
+      "failed": "Not changed. Try again."
+    },
+    "delete": {
+      "button": "Delete conversation",
+      "title": "Delete this conversation?",
+      "what": "Its questions and answers are deleted with it. This can't be undone.",
+      "yes": "Delete",
+      "cancel": "Keep it",
+      "deleting": "Deleting…",
+      "failed": "It wasn't deleted. Try again."
+    },
+    "problem": {
+      "budget": "The answer stopped here: it reached the most it can write at once. Ask about a narrower part.",
+      "unavailable": "The AI service didn't answer. Try again in a moment.",
+      "busy": "An answer is still being written in this conversation. Wait for it, or stop it.",
+      "rate": "That's more than 10 questions in a minute. Try again in {seconds, plural, one {# second} other {# seconds}}.",
+      "rateSoon": "That's more than 10 questions in a minute. Try again in a minute.",
+      "credits": "Your workspace can't use AI right now: its credits have run out. See <billing>Settings · Billing</billing>.",
+      "missing": "This conversation isn't here any more. It may have been deleted.",
+      "failed": "It couldn't answer just now. Try again in a moment."
     }
   }
 }

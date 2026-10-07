@@ -7,7 +7,7 @@ import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Text } from '@/design-system/primitives/text/Text';
 
 import styles from './CommandSurface.module.css';
-import { useHomeAsk } from './HomeConversation';
+import { useHomeAsk } from './home-ask';
 import { useAgentRun, type AgentStep } from './use-agent-run';
 
 /**

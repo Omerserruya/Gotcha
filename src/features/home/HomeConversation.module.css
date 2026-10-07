@@ -57,7 +57,113 @@
   }
 
   .barEnd {
+    display: inline-flex;
+    gap: var(--space-10);
+    align-items: center;
     margin-inline-start: auto;
+  }
+
+  .titleRow,
+  .titleEdit {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    min-inline-size: 0;
+  }
+
+  .titleInput {
+    inline-size: min(420px, 40vw);
+    padding: 4px 8px;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 7px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .titleProblem {
+    font-size: 11.5px;
+    color: var(--intent-urgent-text);
+    white-space: nowrap;
+  }
+
+  .iconButton {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    inline-size: 26px;
+    block-size: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .iconButton:hover {
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+  }
+
+  /* 01a's "THIS WEEK · ALL CHANNELS", beside the title - and a menu to change it. */
+  .scope {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    flex: none;
+  }
+
+  .scopeChip {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    padding: 3px 7px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+    cursor: pointer;
+  }
+
+  .scopeChip:hover {
+    background-color: var(--panel-field);
+    color: var(--text-secondary);
+  }
+
+  .dialogActions {
+    display: flex;
+    gap: var(--space-10);
+    justify-content: flex-end;
+  }
+
+  .quiet,
+  .danger {
+    padding: 8px 14px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 9px;
+    background-color: var(--panel-field);
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .danger {
+    border-color: transparent;
+    background-color: var(--intent-urgent-text);
+    color: var(--frame-text);
+  }
+
+  .danger:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .scroll {
@@ -213,6 +319,25 @@
     text-wrap: pretty;
   }
 
+  /* The markdown subset's lists, in the answer's own direction. */
+  .answerList {
+    margin: 0;
+    padding-inline-start: 1.3em;
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+
+  .answer + .answer,
+  .answer + .answerList,
+  .answerList + .answer {
+    margin-block-start: 8px;
+  }
+
+  .stepLink {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
   .problem {
     margin: 0;
     font-size: 12.5px;
@@ -222,7 +347,7 @@
   .dock {
     flex: none;
     display: flex;
-    align-items: flex-end;
+    flex-direction: column;
     gap: var(--space-10);
     inline-size: min(780px, calc(100% - 80px));
     margin: 0 auto var(--space-24);
@@ -232,7 +357,6 @@
   }
 
   .input {
-    flex: 1;
     min-inline-size: 0;
     max-block-size: 160px;
     padding: 0;
@@ -244,6 +368,44 @@
     color: var(--frame-text);
     resize: none;
     field-sizing: content;
+  }
+
+  .dockRow {
+    display: flex;
+    gap: var(--space-10);
+    align-items: center;
+  }
+
+  /* The follow-ups: chips beside the arrow, pushing it to the end. */
+  .suggestions {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dockRow > .send {
+    margin-inline-start: auto;
+  }
+
+  .suggestion {
+    padding: 5px 11px;
+    border: var(--border-width-thin) solid var(--frame-line);
+    border-radius: 999px;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    color: var(--frame-text-muted);
+    cursor: pointer;
+  }
+
+  .suggestion:hover {
+    border-color: var(--frame-dot-idle);
+    color: var(--frame-text);
   }
 
   .input::placeholder {

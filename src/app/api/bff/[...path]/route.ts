@@ -121,19 +121,41 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
 
+  /*
+   * ★★ A STREAM'S TIMEOUT ENDS WHEN IT ANSWERS. The timeout's signal governs
+   * the BODY too, so `AbortSignal.timeout(20s)` cut every event stream at 20
+   * seconds - a Home answer longer than that stopped mid-sentence. For a
+   * stream, the timeout covers only the wait for the answer to begin; after
+   * that, the stream lives until it ends or the browser goes (`request.signal`
+   * - closing the connection here closes it upstream; it does not cancel the
+   * run, which has its own route).
+   */
+  const streaming = (request.headers.get('accept') ?? '').includes('text/event-stream');
+  const upstreamAbort = new AbortController();
+  const timer = setTimeout(
+    () =>
+      upstreamAbort.abort(new DOMException('The upstream did not answer in time.', 'TimeoutError')),
+    env.API_TIMEOUT_MS,
+  );
+  request.signal?.addEventListener('abort', () => upstreamAbort.abort(), { once: true });
+
   let upstream: Response;
   try {
     upstream = await fetch(target, {
       method: request.method,
       headers,
       body: hasBody ? await request.arrayBuffer() : undefined,
-      signal: AbortSignal.timeout(env.API_TIMEOUT_MS),
+      signal: upstreamAbort.signal,
       redirect: 'manual',
       cache: 'no-store',
     });
   } catch (cause) {
+    clearTimeout(timer);
     logger.error('bff.upstream_unreachable', { method: request.method, path, cause });
     return NextResponse.json({ error: 'Upstream request failed.' }, { status: 502 });
+  }
+  if (streaming && (upstream.headers.get('content-type') ?? '').includes('text/event-stream')) {
+    clearTimeout(timer);
   }
 
   const responseHeaders = new Headers();

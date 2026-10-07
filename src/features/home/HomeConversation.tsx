@@ -1,10 +1,9 @@
 'use client';
 
-import { ArrowLeft, ArrowUp, Square } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { ArrowLeft, ArrowUp, ChevronDown, Pencil, Square, Trash2 } from 'lucide-react';
+import { useFormatter, useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import {
-  createContext,
-  useContext,
   useEffect,
   useRef,
   useState,
@@ -13,85 +12,92 @@ import {
   type ReactNode,
 } from 'react';
 
+import { SCOPE_RANGES, type ThreadScope, type ThreadStep } from '@/api/contracts/assistant-threads';
+import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
 import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
+import { Link } from '@/i18n/navigation';
 
+import { AnswerText } from './AnswerText';
+import { AskContext } from './home-ask';
 import styles from './HomeConversation.module.css';
-import type { AgentStep } from './use-agent-run';
-import { useAgentThread, type Turn } from './use-agent-thread';
+import type { ThreadTurn, TurnProblem } from './thread-turns';
+import { useAssistantThread } from './use-assistant-thread';
 
-/** Home's command box asks through this: the first question turns Home into the chat. */
-const AskContext = createContext<((question: string) => void) | null>(null);
-
-/** `null` outside Home's conversation (the box then answers in place, as before). */
-export function useHomeAsk(): ((question: string) => void) | null {
-  return useContext(AskContext);
-}
+/** A title the route keeps: 1-120 characters (§2). */
+const TITLE_MAX = 120;
 
 /**
- * ★★ Home · in conversation (design 7, 01a; Omer, 2026-10-07).
+ * ★★ Home · in conversation (design 7, 01a; Omer, 2026-10-07), on
+ * `/api/assistant/threads` (Backend aef95f69 + 6a4fd095).
  *
  * Sending the first message transforms Home IN PLACE: the greeting and the
  * snapshot leave, the command box docks at the bottom - no modal, no new
- * page. "← Home" brings the live Home back.
+ * page. The thread is saved: its address is `?thread=`, Recent in the rail
+ * reopens it, and a reload mid-answer comes back to the same answer.
  *
- * Stage 1 is what the run that exists today can say, and nothing it cannot:
- * each answer's steps (running, done, failed, refused) with the time each
- * took as measured here, the text as it streams, and Stop. The title is the
- * first question in the person's own words. Share is a status ("in the next
- * stage"). Not drawn until `/api/assistant/threads` gives them: the scope
- * chip, Recent in the rail, follow-up suggestions, resuming after a reload,
- * and the blocks, sources and actions (stages 2-3).
+ * Drawn: the steps in the run's own words with the time each took, the
+ * answer in its markdown subset, follow-up suggestions, Stop (the route's
+ * cancel), the title (the server's, until the person renames it), the
+ * scope, and Delete. Share is a status ("next stage"); blocks, sources and
+ * actions are stages 2-3.
  */
 export function HomeConversation({ children }: { readonly children: ReactNode }) {
-  const { turns, ask, cancel, reset } = useAgentThread();
+  const chat = useAssistantThread();
+  const asked = useSearchParams()?.get('thread') ?? null;
+  const shown = chat.thread?.id ?? null;
 
+  /*
+    The address leads: a Recent link opens its thread; Home's own link (no
+    `?thread=`) is the live Home again. The hook writes the address itself
+    when it creates a thread, and then the two already agree.
+  */
+  useEffect(() => {
+    if (asked && asked !== shown) void chat.open(asked);
+    else if (!asked && shown) chat.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the address is the only trigger
+  }, [asked]);
+
+  const inConversation = chat.turns.length > 0 || chat.opening !== 'idle' || shown !== null;
   return (
-    <AskContext.Provider value={(question) => void ask(question)}>
-      {turns.length === 0 ? (
-        children
-      ) : (
-        <Conversation turns={turns} onAsk={(q) => void ask(q)} onStop={cancel} onHome={reset} />
-      )}
+    <AskContext.Provider value={(question) => void chat.ask(question)}>
+      {inConversation ? <Conversation chat={chat} /> : children}
     </AskContext.Provider>
   );
 }
 
-function Conversation({
-  turns,
-  onAsk,
-  onStop,
-  onHome,
-}: {
-  readonly turns: readonly Turn[];
-  readonly onAsk: (question: string) => void;
-  readonly onStop: () => void;
-  readonly onHome: () => void;
-}) {
+type Chat = ReturnType<typeof useAssistantThread>;
+
+function Conversation({ chat }: { readonly chat: Chat }) {
   const t = useTranslations('home.conversation');
   const [draft, setDraft] = useState('');
   const end = useRef<HTMLDivElement>(null);
-  const running = turns.at(-1)?.status === 'running';
-  const last = turns.at(-1);
+  const last = chat.turns.at(-1);
+  const running = last?.status === 'running';
 
   // The newest words in view as they arrive.
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: 'end' });
-  }, [last?.answer, last?.steps.length, turns.length]);
+  }, [last?.answer, last?.steps.length, chat.turns.length]);
 
-  const send = (event?: FormEvent) => {
-    event?.preventDefault();
-    const question = draft.trim();
-    if (!question || running) return;
+  const send = (question: string) => {
+    const text = question.trim();
+    if (!text || running || chat.opening !== 'idle') return;
     setDraft('');
-    onAsk(question);
+    void chat.ask(text);
   };
-
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    send(draft);
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      send();
+      send(draft);
     }
   };
+  // The last answer's follow-ups, once it is finished.
+  const suggestions = last && last.status === 'done' ? last.suggestions : [];
 
   return (
     <section className={styles.chat} aria-label={t('label')} data-testid="home-conversation">
@@ -99,17 +105,17 @@ function Conversation({
         <button
           type="button"
           className={styles.back}
-          onClick={onHome}
+          onClick={chat.reset}
           data-testid="conversation-home"
         >
           <ArrowLeft size={14} aria-hidden="true" />
           {t('home')}
         </button>
         <span className={styles.rule} aria-hidden="true" />
-        <h1 className={styles.title} data-testid="conversation-title">
-          <bdi dir="auto">{turns[0]!.question}</bdi>
-        </h1>
+        <Title chat={chat} />
+        {chat.opening === 'idle' ? <ScopeChip chat={chat} /> : null}
         <span className={styles.barEnd}>
+          {chat.thread ? <DeleteThread onDelete={chat.remove} /> : null}
           <UnavailableAction
             label={t('share')}
             tag={t('nextStage')}
@@ -120,15 +126,26 @@ function Conversation({
       </header>
 
       <div className={styles.scroll}>
-        <ol className={styles.turns}>
-          {turns.map((turn) => (
-            <TurnView key={turn.id} turn={turn} />
-          ))}
-        </ol>
+        {chat.opening === 'opening' ? (
+          <p className={styles.working} role="status" data-testid="conversation-opening">
+            {t('opening')}
+          </p>
+        ) : chat.opening === 'missing' || chat.opening === 'failed' ? (
+          <p className={styles.problem} role="alert" data-testid="conversation-unopened">
+            {t(chat.opening === 'missing' ? 'missing' : 'openFailed')}
+          </p>
+        ) : (
+          <ol className={styles.turns}>
+            {chat.turns.map((turn) => (
+              <TurnView key={turn.id} turn={turn} />
+            ))}
+          </ol>
+        )}
         <div ref={end} />
       </div>
 
-      <form className={styles.dock} onSubmit={send} data-testid="conversation-dock">
+      {/* 01a's box: what to say next, then the follow-ups beside the arrow. */}
+      <form className={styles.dock} onSubmit={onSubmit} data-testid="conversation-dock">
         <label className="srOnly" htmlFor="conversation-input">
           {t('placeholder')}
         </label>
@@ -138,38 +155,258 @@ function Conversation({
           value={draft}
           rows={1}
           dir="auto"
+          maxLength={4000}
           placeholder={t('placeholder')}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
           data-testid="conversation-input"
         />
-        {running ? (
-          <button
-            type="button"
-            className={styles.send}
-            onClick={onStop}
-            aria-label={t('stop')}
-            data-testid="conversation-stop"
-          >
-            <Square size={11} fill="currentColor" strokeWidth={0} />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className={styles.send}
-            disabled={draft.trim() === ''}
-            aria-label={t('send')}
-            data-testid="conversation-send"
-          >
-            <ArrowUp size={15} strokeWidth={2.4} />
-          </button>
-        )}
+        <span className={styles.dockRow}>
+          {suggestions.length > 0 ? (
+            <ul
+              className={styles.suggestions}
+              aria-label={t('suggestions')}
+              data-testid="suggestions"
+            >
+              {suggestions.map((suggestion) => (
+                <li key={suggestion}>
+                  <button
+                    type="button"
+                    className={styles.suggestion}
+                    onClick={() => send(suggestion)}
+                  >
+                    <bdi dir="auto">{suggestion}</bdi>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {running && last ? (
+            <button
+              type="button"
+              className={styles.send}
+              onClick={() => void chat.cancel(last.id)}
+              disabled={last.cancelling}
+              aria-label={last.cancelling ? t('stopping') : t('stop')}
+              data-testid="conversation-stop"
+            >
+              <Square size={11} fill="currentColor" strokeWidth={0} />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className={styles.send}
+              disabled={draft.trim() === '' || chat.opening !== 'idle'}
+              aria-label={t('send')}
+              data-testid="conversation-send"
+            >
+              <ArrowUp size={15} strokeWidth={2.4} />
+            </button>
+          )}
+        </span>
       </form>
     </section>
   );
 }
 
-function TurnView({ turn }: { readonly turn: Turn }) {
+/**
+ * The thread's title: the server's after the first answer, the first
+ * question until then - and the person's own once they rename it, which
+ * the server never writes over.
+ */
+function Title({ chat }: { readonly chat: Chat }) {
+  const t = useTranslations('home.conversation.title');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const shown = chat.thread?.title ?? chat.turns[0]?.question ?? '';
+
+  if (editing !== null) {
+    const save = async () => {
+      const title = editing.trim();
+      if (!title || title === chat.thread?.title) {
+        setEditing(null);
+        return;
+      }
+      const ok = await chat.rename(title);
+      setFailed(!ok);
+      if (ok) setEditing(null);
+    };
+    return (
+      <span className={styles.titleEdit}>
+        <input
+          className={styles.titleInput}
+          value={editing}
+          maxLength={TITLE_MAX}
+          dir="auto"
+          aria-label={t('label')}
+          aria-invalid={failed || undefined}
+          // The person just asked to edit it.
+          autoFocus
+          onChange={(e) => setEditing(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void save();
+            } else if (e.key === 'Escape') {
+              setFailed(false);
+              setEditing(null);
+            }
+          }}
+          onBlur={() => void save()}
+          data-testid="conversation-title-input"
+        />
+        {failed ? (
+          <span
+            className={styles.titleProblem}
+            role="alert"
+            data-testid="conversation-title-failed"
+          >
+            {t('failed')}
+          </span>
+        ) : null}
+      </span>
+    );
+  }
+  return (
+    <span className={styles.titleRow}>
+      <h1 className={styles.title} data-testid="conversation-title">
+        <bdi dir="auto">{shown}</bdi>
+      </h1>
+      {chat.thread ? (
+        <button
+          type="button"
+          className={styles.iconButton}
+          aria-label={t('rename')}
+          onClick={() => {
+            setFailed(false);
+            setEditing(shown);
+          }}
+          data-testid="conversation-rename"
+        >
+          <Pencil size={12} aria-hidden="true" />
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * What the answers look at: the range (and, read only, the channels). A
+ * change applies to the questions after it; each answer was given under its
+ * own scope (§1).
+ */
+function ScopeChip({ chat }: { readonly chat: Chat }) {
+  const t = useTranslations('home.conversation.scope');
+  const format = useFormatter();
+  const [failed, setFailed] = useState(false);
+  const range = chat.scope.range;
+  const rangeWords =
+    typeof range === 'string'
+      ? t(`range.${range}`)
+      : t('range.custom', {
+          from: format.dateTime(new Date(range.custom.from), { day: 'numeric', month: 'short' }),
+          to: format.dateTime(new Date(range.custom.to), { day: 'numeric', month: 'short' }),
+        });
+  const channelWords =
+    chat.scope.channels === 'all'
+      ? t('channels.all')
+      : t('channels.some', { count: chat.scope.channels.length });
+  const choose = async (next: ThreadScope['range']) => {
+    setFailed(!(await chat.setScope({ ...chat.scope, range: next })));
+  };
+  return (
+    <span className={styles.scope}>
+      <Menu>
+        <MenuTrigger asChild>
+          <button
+            type="button"
+            className={styles.scopeChip}
+            aria-label={t('label', { scope: `${rangeWords} · ${channelWords}` })}
+            data-testid="conversation-scope"
+          >
+            {rangeWords} · {channelWords}
+            <ChevronDown size={11} aria-hidden="true" />
+          </button>
+        </MenuTrigger>
+        <MenuContent align="end">
+          {SCOPE_RANGES.map((option) => (
+            <MenuItem
+              key={option}
+              onSelect={() => void choose(option)}
+              aria-checked={range === option}
+              role="menuitemradio"
+              data-testid={`conversation-scope-${option}`}
+            >
+              {t(`range.${option}`)}
+            </MenuItem>
+          ))}
+        </MenuContent>
+      </Menu>
+      {failed ? (
+        <span className={styles.titleProblem} role="alert" data-testid="conversation-scope-failed">
+          {t('failed')}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Delete, confirmed: the thread and every message in it, for good. */
+function DeleteThread({ onDelete }: { readonly onDelete: () => Promise<boolean> }) {
+  const t = useTranslations('home.conversation.delete');
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<'idle' | 'deleting' | 'failed'>('idle');
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.iconButton}
+        aria-label={t('button')}
+        onClick={() => {
+          setState('idle');
+          setOpen(true);
+        }}
+        data-testid="conversation-delete"
+      >
+        <Trash2 size={13} aria-hidden="true" />
+      </button>
+      {open ? (
+        <Dialog open onOpenChange={(next) => (next ? null : setOpen(false))}>
+          <DialogContent
+            title={t('title')}
+            description={t('what')}
+            data-testid="conversation-delete-dialog"
+          >
+            {state === 'failed' ? (
+              <p className={styles.problem} role="alert" data-testid="conversation-delete-failed">
+                {t('failed')}
+              </p>
+            ) : null}
+            <span className={styles.dialogActions}>
+              <button type="button" className={styles.quiet} onClick={() => setOpen(false)}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className={styles.danger}
+                disabled={state === 'deleting'}
+                onClick={async () => {
+                  setState('deleting');
+                  if (!(await onDelete())) setState('failed');
+                }}
+                data-testid="conversation-delete-yes"
+              >
+                {state === 'deleting' ? t('deleting') : t('yes')}
+              </button>
+            </span>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
+  );
+}
+
+function TurnView({ turn }: { readonly turn: ThreadTurn }) {
   const t = useTranslations('home.conversation');
   return (
     <li className={styles.turn} data-testid={`turn-${turn.id}`} data-status={turn.status}>
@@ -188,24 +425,21 @@ function TurnView({ turn }: { readonly turn: Turn }) {
                 <StepLine key={step.id} step={step} />
               ))}
             </ol>
-          ) : turn.status === 'running' ? (
+          ) : turn.status === 'running' && !turn.answer ? (
             <p className={styles.working} role="status">
               {t('working')}
             </p>
           ) : null}
           {turn.answer ? (
-            <p className={styles.answer} dir="auto" aria-live="polite" data-testid="turn-answer">
-              {turn.answer}
-            </p>
+            <div aria-live="polite" data-testid="turn-answer">
+              <AnswerText text={turn.answer} />
+            </div>
           ) : null}
-          {turn.awaitingApproval ? (
-            <p className={styles.note} data-testid="turn-approval">
-              {t('awaitingApproval', { what: turn.awaitingApproval.summary ?? '' })}
-            </p>
-          ) : null}
-          {turn.status === 'failed' ? (
+          {turn.problem ? (
+            <Problem problem={turn.problem} />
+          ) : turn.status === 'failed' ? (
             <p className={styles.problem} role="alert" data-testid="turn-failed">
-              {turn.error ? t('failedWith', { why: turn.error }) : t('failed')}
+              {t('failed')}
             </p>
           ) : turn.status === 'cancelled' ? (
             <p className={styles.note} data-testid="turn-stopped">
@@ -218,56 +452,60 @@ function TurnView({ turn }: { readonly turn: Turn }) {
   );
 }
 
-/**
- * A step in words: the run's `label` (Backend, 2026-10-07), in the interface
- * language. Without one, the agent's own tools by name are ours; any other -
- * an integration's read - is "Checking your data". A result summary is shown
- * only beside a label, where the run wrote it in words.
- */
-const KNOWN_TOOLS = [
-  'system_count_conversations',
-  'system_get_metric',
-  'system_recent_activity',
-  'system_search_customers',
-  'system_summarize_conversation',
-] as const;
-type KnownTool = (typeof KNOWN_TOOLS)[number];
+/** Why there is no (whole) answer, honestly: each refusal in its own words. */
+function Problem({ problem }: { readonly problem: TurnProblem }) {
+  const t = useTranslations('home.conversation.problem');
+  const billing = (chunks: ReactNode) => <Link href="/settings/billing">{chunks}</Link>;
+  return (
+    <p
+      className={styles.problem}
+      role="alert"
+      data-testid="turn-failed"
+      data-problem={problem.kind}
+    >
+      {problem.kind === 'rate'
+        ? problem.retryAfterSeconds
+          ? t('rate', { seconds: problem.retryAfterSeconds })
+          : t('rateSoon')
+        : problem.kind === 'credits'
+          ? t.rich('credits', { billing })
+          : t(problem.kind)}
+    </p>
+  );
+}
 
-/** "✓ Searching customers · done · 2s" - the step in words, its state, the time it took as seen from here. */
-function StepLine({ step }: { readonly step: AgentStep }) {
+/** "✓ Counting open WhatsApp conversations · done · 2s" - in the run's words and the interface language. */
+function StepLine({ step }: { readonly step: ThreadStep }) {
   const t = useTranslations('home.conversation.step');
-  const tt = useTranslations('home.conversation.tool');
-  const seconds =
-    step.startedAt !== undefined && step.endedAt !== undefined
-      ? Math.max(0, Math.round((step.endedAt - step.startedAt) / 1000))
-      : null;
   return (
     <li className={styles.step} data-status={step.status} data-testid={`step-${step.id}`}>
       <span className={styles.stepMark} aria-hidden="true">
         {step.status === 'running' ? (
           <span className={styles.spinner} />
-        ) : step.status === 'succeeded' ? (
+        ) : step.status === 'done' ? (
           '✓'
+        ) : step.status === 'waiting_approval' ? (
+          '•'
         ) : (
           '×'
         )}
       </span>
-      {/* In words, never the tool's name; one we do not know is "Checking your data". */}
-      <span>
-        {step.label ??
-          ((KNOWN_TOOLS as readonly string[]).includes(step.name)
-            ? tt(step.name as KnownTool)
-            : tt('other'))}
-      </span>
+      <span dir="auto">{step.text}</span>
       <span className={styles.stepState}>{t(step.status)}</span>
-      {seconds !== null ? (
-        <span className={styles.stepTime}>{t('seconds', { count: seconds })}</span>
-      ) : null}
-      {/* The run's own summary, in words now (Backend), and only when the step came with words. */}
-      {step.label && step.detail && step.status !== 'running' ? (
-        <span className={styles.stepDetail} dir="auto">
-          {step.detail}
+      {step.durationMs !== null ? (
+        <span className={styles.stepTime}>
+          {t('seconds', { count: Math.round(step.durationMs / 1000) })}
         </span>
+      ) : null}
+      {step.status === 'waiting_approval' ? (
+        // Stage 1 shows it; the decision is made in Approvals.
+        <Link
+          href="/approvals"
+          className={styles.stepLink}
+          data-testid={`step-${step.id}-approvals`}
+        >
+          {t('openApprovals')}
+        </Link>
       ) : null}
     </li>
   );

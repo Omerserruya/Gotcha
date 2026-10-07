@@ -75,4 +75,46 @@ describe('streamServerSentEvents', () => {
     });
     await expect(collect()).rejects.toMatchObject({ kind: 'network' });
   });
+
+  it('★ carries each frame’s id - what a resume sends back as Last-Event-ID', async () => {
+    vi.stubGlobal('fetch', async () =>
+      streamOf('id: run_1:1\nevent: run.start\ndata: {}\n\nevent: x\ndata: {}\n\n'),
+    );
+    const frames = await collect();
+    expect(frames[0]).toMatchObject({ id: 'run_1:1', event: 'run.start' });
+    expect(frames[1]).not.toHaveProperty('id');
+  });
+
+  it('★ a GET resume sends no body and its Last-Event-ID header', async () => {
+    const fetch = vi.fn(async () => streamOf('data: {}\n\n'));
+    vi.stubGlobal('fetch', fetch);
+    for await (const _ of streamServerSentEvents({
+      url: '/r',
+      method: 'GET',
+      headers: { 'last-event-id': 'run_1:4' },
+    })) {
+      // drain
+    }
+    const init = (fetch.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toMatchObject({ 'last-event-id': 'run_1:4', accept: 'text/event-stream' });
+    expect(init.headers).not.toHaveProperty('content-type');
+  });
+
+  it('★ a refusal before the stream carries its code and when to retry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(
+          JSON.stringify({ error: 'slow down', code: 'RATE_LIMITED', retryAfterSeconds: 12 }),
+          { status: 429 },
+        ),
+    );
+    await expect(collect()).rejects.toMatchObject({
+      status: 429,
+      code: 'RATE_LIMITED',
+      retryAfterSeconds: 12,
+    });
+  });
 });
