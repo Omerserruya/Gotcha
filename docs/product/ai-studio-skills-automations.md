@@ -226,3 +226,5 @@ No production bug found, and nothing depends on a DB or network that is missing.
 | historical-completion-email.test.ts | 1/13 | UNCOMMITTED edit by another session (bulk em-dash scrub) turned `/[–—]/` into `/[–-]/`, so normal hyphens fail | uncommitted | the scrub's owner restores `/[–—]/` |
 
 Structural cause: these suites replace all of `@chatcenter/shared`, so every new shared function the code calls breaks them silently. A lasting fix is to spread `vi.importActual` and override only what each test needs.
+
+Fixed 2026-10-07 (40a54757, test files only, real shared module + per-test overrides): 16 of the 19 files. ai suite: 19 failing files / 66 tests → 3 files / 6 tests. Still red, on purpose: behavior-engine (3) and smoke-fixes (2), waiting on Omer's product answer about vague deferrals ("call me tomorrow": ask when vs schedule a follow-up); historical-completion-email (1), Omer's uncommitted dash sweep (restore the regex as `/[–—]/` if asked).
