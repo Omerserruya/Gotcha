@@ -39,6 +39,7 @@ const H = vi.hoisted(() => {
     updateConnection: v.fn(async () => ({})),
     updateInstallations: v.fn(async () => ({ count: 1 })),
     createAudit: v.fn(async () => ({})),
+    enqueue: v.fn(async () => ({})),
   };
 });
 
@@ -47,6 +48,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   return {
     ...actual,
     withCrossTenantAccess: async (fn: any) => fn(),
+    incomingMessageQueue: { add: H.enqueue },
     getRedis: () => ({
       // Mirrors SET NX: first claim wins, later ones are replays.
       set: vi.fn(async (key: string, _v: string, _ex: string, _ttl: number, mode: string) => {
@@ -241,5 +243,58 @@ describe("mandatory compliance webhooks", () => {
     await post("/api/shopify-chat/webhooks/shop-redact", "core-app-secret", { shop_domain: SHOP });
     await new Promise((r) => setImmediate(r));
     expect(H.updateInstallations).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Commerce events → cart left behind ─────────────────────────────────────
+
+import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder } from "../services/shopify-cart-events";
+
+const CHECKOUT = {
+  token: "chk_tok_1", updated_at: "2026-10-07T10:00:00Z", completed_at: null,
+  email: "dana@example.com", phone: "+972501234567", currency: "ILS", total_price: "590.00",
+  abandoned_checkout_url: "https://my-store.myshopify.com/checkouts/recover",
+  buyer_accepts_marketing: true, buyer_accepts_sms: false,
+  customer: { first_name: "Dana" },
+  line_items: [{ title: "Cotton Trench Coat", quantity: 1, price: "590.00" }],
+};
+
+async function postTopic(path: string, topic: string, body: any, id = "d-1", secret = "core-app-secret") {
+  const raw = JSON.stringify(body);
+  return request(app()).post(path).set("Content-Type", "application/json")
+    .set("X-Shopify-Hmac-Sha256", sign(raw, secret)).set("X-Shopify-Shop-Domain", SHOP)
+    .set("X-Shopify-Topic", topic).set("X-Shopify-Webhook-Id", id).send(raw);
+}
+
+describe("★ checkouts and orders → cart events", () => {
+  it("a checkout becomes the shared cart event, with the store's consent", () => {
+    expect(cartEventFromShopifyCheckout("t1", CHECKOUT)).toEqual({
+      tenantId: "t1", source: "shopify", checkoutId: "chk_tok_1", completed: false, updatedAt: "2026-10-07T10:00:00Z",
+      customer: { email: "dana@example.com", phone: "+972501234567", firstName: "Dana" },
+      items: [{ title: "Cotton Trench Coat", quantity: 1, price: 590 }], total: 590, currency: "ILS",
+      cartUrl: "https://my-store.myshopify.com/checkouts/recover", marketingConsent: { email: true, sms: false },
+    });
+    expect(cartEventFromShopifyCheckout("t1", { ...CHECKOUT, completed_at: "2026-10-07T10:05:00Z" })!.completed).toBe(true);
+    expect(cartCompletionFromShopifyOrder("t1", { checkout_token: "chk_tok_1", created_at: "x" })).toMatchObject({ checkoutId: "chk_tok_1", completed: true });
+    expect(cartCompletionFromShopifyOrder("t1", {})).toBeNull();
+  });
+
+  it("★ a verified delivery for a connected shop is queued once; a replay is not", async () => {
+    expect((await postTopic("/api/connectors/shopify/webhooks/checkouts-update", "checkouts/update", CHECKOUT)).status).toBe(200);
+    await postTopic("/api/connectors/shopify/webhooks/checkouts-update", "checkouts/update", CHECKOUT); // same webhook id
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue).toHaveBeenCalledTimes(1);
+    expect(H.enqueue.mock.calls[0]).toEqual(["cart-event", expect.objectContaining({ tenantId: "t1", checkoutId: "chk_tok_1" }), expect.any(Object)]);
+    await postTopic("/api/connectors/shopify/webhooks/orders-create", "orders/create", { checkout_token: "chk_tok_1" }, "d-2");
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue.mock.calls[1][1]).toMatchObject({ checkoutId: "chk_tok_1", completed: true });
+  });
+
+  it("a bad signature is refused; a shop with no connection is acknowledged and ignored", async () => {
+    expect((await postTopic("/api/connectors/shopify/webhooks/checkouts-create", "checkouts/create", CHECKOUT, "d-3", "wrong")).status).toBe(401);
+    H.connections.current = [];
+    expect((await postTopic("/api/connectors/shopify/webhooks/checkouts-create", "checkouts/create", CHECKOUT, "d-4")).status).toBe(200);
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue).not.toHaveBeenCalled();
   });
 });

@@ -31,6 +31,7 @@ import {
   prisma,
   withCrossTenantAccess,
   getRedis,
+  incomingMessageQueue,
   verifyShopifyWebhookHmac,
   getShopifyAppIdentity,
   normalizeShopifyShopDomain,
@@ -41,11 +42,15 @@ import {
   disableChatForUninstalledShop,
 } from "../services/shopify-chat-install.service";
 import { notifyShopifyUninstalled } from "../services/shopify-billing-bridge.service";
+import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder } from "../services/shopify-cart-events";
 
 const router = Router();
 
 /** Shopify retries anything that is not 2xx, so idempotency is mandatory. */
 type Topic =
+  | "checkouts/create"
+  | "checkouts/update"
+  | "orders/create"
   | "app/uninstalled"
   | "customers/data_request"
   | "customers/redact"
@@ -403,6 +408,47 @@ core.post("/shop-redact", async (req: Request, res: Response) => {
   if (await alreadyProcessed("core", hook.webhookId)) return;
   await recordDelivery({ app: "core", hook, outcome: "recorded_for_erasure_pipeline" });
 });
+
+// ── Commerce events → automations (cart left behind) ──────────────────────
+//
+// checkouts/create|update and orders/create, subscribed in the production app
+// TOML. Verified like every core webhook, idempotent per webhook id, and
+// answered 200 at once; the work is a job for the incoming worker. A shop
+// with no CONNECTED Shopify connection is acknowledged and ignored.
+
+async function tenantForShop(shop: string | null): Promise<string | null> {
+  if (!shop) return null;
+  const connections = await withCrossTenantAccess(async () =>
+    prisma.tenantIntegration.findMany({
+      where: { integration: { slug: "shopify" }, status: "CONNECTED" },
+      select: { tenantId: true, config: true },
+    }),
+  );
+  const match = connections.find((c: any) => normalizeShopifyShopDomain((c.config as any)?.shopDomain) === shop);
+  return match?.tenantId ?? null;
+}
+
+function commerceRoute(topic: Topic, toEvent: (tenantId: string, body: any) => any) {
+  return async (req: Request, res: Response) => {
+    const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", topic);
+    if (!hook) return;
+    res.status(200).json({ ok: true });
+    if (await alreadyProcessed("core", hook.webhookId)) return;
+    try {
+      const tenantId = await tenantForShop(hook.shopDomain);
+      if (!tenantId) return;
+      const ev = toEvent(tenantId, hook.body);
+      if (!ev) return;
+      await incomingMessageQueue.add("cart-event", ev, { attempts: 3, backoff: { type: "exponential", delay: 2000 }, removeOnComplete: true, removeOnFail: 100 });
+    } catch (err: any) {
+      console.error(`[shopify-webhook] ${topic} handling failed:`, err?.message ?? err);
+    }
+  };
+}
+
+core.post("/checkouts-create", commerceRoute("checkouts/create", cartEventFromShopifyCheckout));
+core.post("/checkouts-update", commerceRoute("checkouts/update", cartEventFromShopifyCheckout));
+core.post("/orders-create", commerceRoute("orders/create", cartCompletionFromShopifyOrder));
 
 router.use("/shopify-chat/webhooks", chat);
 router.use("/connectors/shopify/webhooks", core);
