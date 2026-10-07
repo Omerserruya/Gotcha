@@ -123,7 +123,7 @@ describe('★★ missed call and comment (Backend 742bb030, 612ffb17)', () => {
     expect(graph.nodes.filter(needsFilling).map((x) => x.type)).toEqual(['send_message_template']);
   });
 
-  it('comment: a public reply, a DM with "Yes", then the price list or an employee', () => {
+  it('comment: a public reply, a DM with "Yes" → the price list; a typed reply → an employee', () => {
     const graph = templateOf('comment')!.build!(words, newId);
     expect(graph.nodes.map((x) => x.type)).toEqual([
       'automation_trigger',
@@ -138,13 +138,9 @@ describe('★★ missed call and comment (Backend 742bb030, 612ffb17)', () => {
       text: 'Want the price list?',
       buttons: [{ id: 'yes', title: 'Yes' }],
     });
-    expect(graph.edges.map((e) => e.sourceHandle)).toEqual([
-      null,
-      null,
-      null,
-      'btn:yes',
-      'timeout',
-    ]);
+    expect(graph.edges.map((e) => e.sourceHandle)).toEqual([null, null, null, 'btn:yes', 'reply']);
+    // No answer in time ends the run: nobody who did not answer is handed over.
+    expect(graph.edges.some((e) => e.sourceHandle === 'timeout')).toBe(false);
     // The price list and the employee are the author's; the rest is written.
     expect(graph.nodes.filter(needsFilling).map((x) => x.type)).toEqual([
       'send_message_text',

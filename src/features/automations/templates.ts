@@ -201,8 +201,9 @@ export const TEMPLATES: readonly Template[] = [
   },
   {
     // Comment on a post → a public reply, then a DM with a button (Backend
-    // 612ffb17): "Yes" → the price list (the author's to write); no answer
-    // in time → an employee (the author's to choose).
+    // 612ffb17): "Yes" → the price list (the author's to write); a typed
+    // reply - the most interested commenter - → an employee (the author's to
+    // choose); no answer in time → the run ends, nobody is handed over.
     key: 'comment',
     trigger: 'comment_received',
     build: (words, id) => {
@@ -229,7 +230,7 @@ export const TEMPLATES: readonly Template[] = [
           edge(id(), reply, ask),
           edge(id(), ask, wait),
           edge(id(), wait, prices, 'btn:yes'),
-          edge(id(), wait, hand, 'timeout'),
+          edge(id(), wait, hand, 'reply'),
         ],
       };
     },
