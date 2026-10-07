@@ -1,4 +1,5 @@
 import {
+  AtSign,
   Bell,
   FileText,
   Megaphone,
@@ -30,6 +31,7 @@ const TEMPLATE_ICON: Readonly<Record<TemplateKey, LucideIcon>> = {
   cart: ShoppingCart,
   fromAd: Megaphone,
   comment: MessagesSquare,
+  storyThanks: AtSign,
 };
 
 /**
@@ -85,7 +87,7 @@ export function AutomationsFrame({
             <div className={styles.templateCards}>
               {TEMPLATES.map((template) => {
                 const Icon = TEMPLATE_ICON[template.key];
-                return template.build ? (
+                return (
                   <Link
                     key={template.key}
                     href={{ pathname: '/studio/automations', query: { template: template.key } }}
@@ -99,23 +101,6 @@ export function AutomationsFrame({
                     </span>
                     <span className={styles.quiet}>{t(`template.${template.key}.line`)}</span>
                   </Link>
-                ) : (
-                  <div
-                    key={template.key}
-                    className={styles.template}
-                    data-unavailable=""
-                    aria-disabled="true"
-                    data-testid={`automations-template-${template.key}`}
-                  >
-                    <span className={styles.templateTop}>
-                      <Icon size={15} aria-hidden="true" />
-                      <span className={styles.unavailableTag}>{t('comingSoon')}</span>
-                    </span>
-                    <span className={styles.templateName}>
-                      {t(`template.${template.key}.name`)}
-                    </span>
-                    <span className={styles.quiet}>{t(`template.${template.key}.why`)}</span>
-                  </div>
                 );
               })}
             </div>

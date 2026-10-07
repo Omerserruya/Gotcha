@@ -31,8 +31,7 @@
     },
     "review": {
       "name": "Ask for a review",
-      "line": "Two days after delivery",
-      "why": "Needs order events from your store"
+      "line": "3 days after an order ships · needs Shopify or WooCommerce"
     },
     "cart": {
       "name": "Cart left behind",
@@ -45,6 +44,10 @@
     "comment": {
       "name": "Comment on a post → DM",
       "line": "A public reply, then a DM with a button"
+    },
+    "storyThanks": {
+      "name": "Story mention → thank you",
+      "line": "A thank-you when someone tags you in their story"
     }
   },
   "columns": {
@@ -162,7 +165,7 @@
       "call_missed": "On any of your lines",
       "call_answered": "When it ends, with the recording",
       "new_customer": "First message ever",
-      "order_event": "Created, paid, shipped, delivered",
+      "order_event": "Created, paid, shipped, cancelled",
       "cart_abandoned": "After a delay you set",
       "form_submitted": "Website or Instagram lead form",
       "story_mention": "Someone tags you",
@@ -429,7 +432,17 @@
     "postIdsHint": "Post ids, separated by commas. None: any post",
     "cartDelay": "Send after",
     "cartDelayRange": "15 minutes to 2 days",
-    "cartConsent": "Sends only to customers who agreed to marketing"
+    "cartConsent": "Sends only to customers who agreed to marketing",
+    "orderStatuses": "When the order is",
+    "orderStatus": {
+      "created": "Created",
+      "paid": "Paid",
+      "fulfilled": "Shipped",
+      "cancelled": "Cancelled"
+    },
+    "anyOrderStatus": "None chosen: every order event",
+    "orderTemplateOnly": "On WhatsApp only an approved template can go, since the customer hasn't written in the last 24 hours",
+    "storyMention": "Instagram only, every story that mentions you. The story link expires with the story, in about 24 hours"
   },
   "runLog": {
     "reading": "Reading…",
@@ -498,7 +511,8 @@
     "talk": "Talk to us",
     "commentReply": "Sent you a DM!",
     "priceAsk": "Want the price list?",
-    "yes": "Yes"
+    "yes": "Yes",
+    "storyThanks": "Thank you for the mention!"
   },
   "notYet": "Not available yet",
   "loading": "Loading automations"

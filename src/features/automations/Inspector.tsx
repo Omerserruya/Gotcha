@@ -28,7 +28,11 @@ const CHANNELS_OF: Readonly<Record<string, readonly string[]>> = {
   button_tapped: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
   comment_received: ['INSTAGRAM', 'MESSENGER'],
   cart_abandoned: ['WHATSAPP', 'EMAIL'],
+  // Where the message goes, as for a cart left behind.
+  order_event: ['WHATSAPP', 'EMAIL'],
 };
+/** The order events the route knows (`ORDER_STATUSES`); none chosen: all. */
+const ORDER_STATUSES = ['created', 'paid', 'fulfilled', 'cancelled'] as const;
 /** The cart's delay, as the route bounds it. */
 const CART_DELAY = { min: 15, max: 2880 } as const;
 const LANGUAGES = ['he', 'en', 'ar', 'ru', 'fr', 'es'] as const;
@@ -894,6 +898,45 @@ function TriggerFields({
         </>
       );
     }
+    case 'order_event': {
+      const statuses = strs(c.statuses);
+      return (
+        <>
+          {channelPicker}
+          <div className={styles.checks} role="group" aria-label={t('inspector.orderStatuses')}>
+            <span className={styles.fieldLabel}>{t('inspector.orderStatuses')}</span>
+            {ORDER_STATUSES.map((status) => (
+              <label key={status} className={styles.check}>
+                <input
+                  type="checkbox"
+                  checked={statuses.includes(status)}
+                  onChange={(e) =>
+                    set({
+                      statuses: e.target.checked
+                        ? [...statuses, status]
+                        : statuses.filter((x) => x !== status),
+                    })
+                  }
+                  data-testid={`inspector-order-${status}`}
+                />
+                {t(`inspector.orderStatus.${status}`)}
+              </label>
+            ))}
+            <span className={styles.quiet}>{t('inspector.anyOrderStatus')}</span>
+          </div>
+          {/* The route's own rule, said where the trigger is set. */}
+          <p className={styles.why} data-testid="inspector-order-template-only">
+            {t('inspector.orderTemplateOnly')}
+          </p>
+        </>
+      );
+    }
+    case 'story_mention':
+      return (
+        <p className={styles.quiet} data-testid="inspector-story-mention">
+          {t('inspector.storyMention')}
+        </p>
+      );
     case 'tag_added':
       return (
         <Field label={t('new.tags')}>

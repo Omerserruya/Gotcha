@@ -12,6 +12,7 @@ const words = {
   commentReply: 'Sent you a DM!',
   priceAsk: 'Want the price list?',
   yes: 'Yes',
+  storyThanks: 'Thank you for the mention!',
 };
 let n = 0;
 const newId = () => `id${++n}`;
@@ -32,9 +33,9 @@ function routeIssues(graph: Graph): readonly string[] {
 }
 
 describe('★★ a template that runs today makes a real draft (Omer, 2026-10-07)', () => {
-  const runnable = TEMPLATES.filter((t) => t.build !== null);
+  const runnable = TEMPLATES;
 
-  it('eight of them, each with its trigger', () => {
+  it('ten of them, each with its trigger', () => {
     expect(runnable.map((t) => [t.key, t.trigger])).toEqual([
       ['fileOnKeyword', 'message_received'],
       ['afterHours', 'message_received'],
@@ -44,6 +45,8 @@ describe('★★ a template that runs today makes a real draft (Omer, 2026-10-07
       ['fromAd', 'message_from_ad'],
       ['missedCall', 'call_missed'],
       ['comment', 'comment_received'],
+      ['review', 'order_event'],
+      ['storyThanks', 'story_mention'],
     ]);
   });
 
@@ -82,9 +85,31 @@ describe('★★ a template that runs today makes a real draft (Omer, 2026-10-07
   });
 });
 
-describe('★ no event source yet: nothing to build', () => {
-  it.each(['review'])('%s', (key) => {
-    expect(templateOf(key)?.build).toBeNull();
+describe('★★ review and story mention (Backend fa1da898)', () => {
+  it('every template runs today: none is drawn as Coming soon', () => {
+    expect(TEMPLATES.every((t) => typeof t.build === 'function')).toBe(true);
+  });
+
+  it("review: an order shipped → 3 days → a template, the template the author's", () => {
+    const graph = templateOf('review')!.build(words, newId);
+    expect(graph.config).toEqual({ statuses: ['fulfilled'] });
+    expect(graph.nodes.map((x) => x.type)).toEqual([
+      'automation_trigger',
+      'wait',
+      'send_message_template',
+    ]);
+    expect(graph.nodes[1]!.data).toEqual({ durationMs: 3 * 24 * 60 * 60 * 1000 });
+    expect(graph.nodes.filter(needsFilling).map((x) => x.type)).toEqual(['send_message_template']);
+  });
+
+  it('story mention: a thank-you, written, editable', () => {
+    const graph = templateOf('storyThanks')!.build(words, newId);
+    expect(graph.config).toEqual({});
+    expect(graph.nodes[1]).toMatchObject({
+      type: 'send_message_text',
+      data: { text: 'Thank you for the mention!' },
+    });
+    expect(graph.nodes.filter(needsFilling)).toEqual([]);
   });
 });
 

@@ -150,7 +150,7 @@ describe('★ without ai:workflows:read (Backend 5: 403 PERMISSION_DENIED)', () 
   });
 });
 
-describe('★★ templates: real ones open New automation; the rest are a status, not an action', () => {
+describe('★★ templates: each opens New automation, prefilled', () => {
   it('a real template is a link to New automation, prefilled', async () => {
     loadAutomations.mockReturnValue(new Promise(() => {}));
     wrap(await Page({ searchParams: Promise.resolve({}) }));
@@ -159,15 +159,14 @@ describe('★★ templates: real ones open New automation; the rest are a status
     expect(card.getAttribute('href')).toContain('"template":"welcome"');
   });
 
-  it('one with no event source: Coming soon, aria-disabled, not a link, says why', async () => {
+  it('every template is a link now - "Ask for a review" too, with its store line', async () => {
     loadAutomations.mockReturnValue(new Promise(() => {}));
     wrap(await Page({ searchParams: Promise.resolve({}) }));
-    const card = screen.getByTestId('automations-template-review');
-    expect(card.tagName).toBe('DIV');
-    expect(card).toHaveAttribute('aria-disabled', 'true');
-    expect(card).toHaveTextContent('Coming soon');
-    expect(card).toHaveTextContent('Needs order events from your store');
-    expect(card.querySelector('a, button')).toBeNull();
+    const review = screen.getByTestId('automations-template-review');
+    expect(review.tagName).toBe('A');
+    expect(review).toHaveTextContent('3 days after an order ships · needs Shopify or WooCommerce');
+    expect(screen.getByTestId('automations-template-storyThanks').tagName).toBe('A');
+    expect(screen.queryByText('Coming soon')).toBeNull();
   });
 
   it('a template chosen opens the sheet - only for one that can run', async () => {
@@ -187,7 +186,7 @@ describe('★★ ?template= reaches the client as data only (dev, 8df59dd: a fun
    * one. So this walks the route the way the server does - the page, then
    * its list section - and checks what the client sheet is handed.
    */
-  it.each(TEMPLATES.filter((t) => t.build).map((t) => t.key))(
+  it.each(TEMPLATES.map((t) => t.key))(
     '%s: the sheet opens, and nothing it is given is a function',
     async (key) => {
       loadAutomations.mockResolvedValue([]);

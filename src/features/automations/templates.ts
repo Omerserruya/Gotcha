@@ -3,10 +3,12 @@ import type { AutomationEdge, AutomationNode, TriggerType } from '@/api/contract
 import { TRIGGER_NODE } from './graph';
 
 /**
- * 09c's templates (Omer, 2026-10-07): the ones that run today create a real
- * draft with its graph filled in - never turned on; the author fills what is
- * theirs (the file, the message) and publishes. The ones whose trigger has
- * no event source yet are drawn as unavailable, unmistakably, and do nothing.
+ * 09c's templates (Omer, 2026-10-07): each creates a real draft with its
+ * graph filled in - never turned on; the author fills what is theirs (the
+ * file, the message) and publishes. Every trigger a template needs has an
+ * event source now (Backend fa1da898: order events, story mentions), so
+ * none is drawn as "Coming soon"; a new one without a source would bring
+ * that state back with its own test.
  */
 export const TEMPLATE_KEYS = [
   'fileOnKeyword',
@@ -18,14 +20,14 @@ export const TEMPLATE_KEYS = [
   'missedCall',
   'review',
   'comment',
+  'storyThanks',
 ] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
 export interface Template {
   readonly key: TemplateKey;
   readonly trigger: TriggerType;
-  /** `null`: no event source yet - drawn, unavailable. */
-  readonly build: ((words: TemplateWords, newId: () => string) => TemplateGraph) | null;
+  readonly build: (words: TemplateWords, newId: () => string) => TemplateGraph;
 }
 
 /** The template's words in the author's language - prefilled, theirs to change. */
@@ -42,6 +44,8 @@ export interface TemplateWords {
   readonly commentReply: string;
   readonly priceAsk: string;
   readonly yes: string;
+  /** Story mention: the thank-you. */
+  readonly storyThanks: string;
 }
 
 export interface TemplateGraph {
@@ -235,8 +239,43 @@ export const TEMPLATES: readonly Template[] = [
       };
     },
   },
-  // No event source yet: order events are being built.
-  { key: 'review', trigger: 'order_event', build: null },
+  {
+    // Ask for a review (Backend fa1da898): an order shipped → 3 days → a
+    // template. Outside a conversation only an approved template may go on
+    // WhatsApp (the route enforces it); which one is the author's.
+    key: 'review',
+    trigger: 'order_event',
+    build: (_words, id) => {
+      const wait = id();
+      const ask = id();
+      return {
+        config: { statuses: ['fulfilled'] },
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(wait, 'wait', { durationMs: 3 * 24 * 60 * 60 * 1000 }),
+          node(ask, 'send_message_template', { templateId: '', variables: {} }),
+        ],
+        edges: [edge(id(), 'trigger', wait), edge(id(), wait, ask)],
+      };
+    },
+  },
+  {
+    // Someone mentions you in their Instagram story → thank them. The DM
+    // window is open, so free text may go; the words are theirs to change.
+    key: 'storyThanks',
+    trigger: 'story_mention',
+    build: (words, id) => {
+      const thanks = id();
+      return {
+        config: {},
+        nodes: [
+          node('trigger', TRIGGER_NODE),
+          node(thanks, 'send_message_text', { text: words.storyThanks }),
+        ],
+        edges: [edge(id(), 'trigger', thanks)],
+      };
+    },
+  },
 ];
 
 export function templateOf(key: string | undefined): Template | null {

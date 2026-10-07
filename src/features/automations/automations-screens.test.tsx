@@ -526,6 +526,27 @@ describe('★★ the new triggers and steps (Backend 972ae66d), edited where the
     expect(screen.getByTestId('inspector-cart-consent')).toHaveTextContent('agreed to marketing');
   });
 
+  it('order event: where it sends, which events, and that WhatsApp takes a template only', () => {
+    showBuilder(draftOf({ type: 'order_event', config: {} }));
+    expect(screen.getByTestId('inspector-channel-WHATSAPP')).toBeInTheDocument();
+    expect(screen.getByTestId('inspector-channel-EMAIL')).toBeInTheDocument();
+    for (const status of ['created', 'paid', 'fulfilled', 'cancelled']) {
+      expect(screen.getByTestId(`inspector-order-${status}`)).not.toBeChecked();
+    }
+    fireEvent.click(screen.getByTestId('inspector-order-fulfilled'));
+    expect(screen.getByTestId('inspector-order-fulfilled')).toBeChecked();
+    expect(screen.getByTestId('builder-unsaved')).toBeInTheDocument();
+    expect(screen.getByTestId('inspector-order-template-only')).toHaveTextContent(
+      'only an approved template',
+    );
+  });
+
+  it('story mention: no settings, and it says what it covers', () => {
+    showBuilder(draftOf({ type: 'story_mention', config: {} }));
+    expect(screen.getByTestId('inspector-story-mention')).toHaveTextContent('Instagram only');
+    expect(screen.queryByText('This trigger has nothing to set.')).toBeNull();
+  });
+
   it('message from an ad: the ads as a list, saved as items', () => {
     showBuilder(draftOf({ type: 'message_from_ad', config: {} }));
     fireEvent.change(screen.getByTestId('inspector-ad-ids'), { target: { value: '123, 456' } });

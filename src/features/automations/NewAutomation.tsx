@@ -80,7 +80,7 @@ export function NewAutomation({
           : trigger === 'schedule'
             ? { at, ...(days.size > 0 ? { days: DAYS.filter((d) => days.has(d)) } : {}) }
             : {};
-      const graph = template?.build?.(
+      const graph = template?.build(
         {
           keyword: t('templateWords.keyword'),
           // The variable goes in as itself; the words around it are the author's language.
@@ -91,6 +91,7 @@ export function NewAutomation({
           commentReply: t('templateWords.commentReply'),
           priceAsk: t('templateWords.priceAsk'),
           yes: t('templateWords.yes'),
+          storyThanks: t('templateWords.storyThanks'),
         },
         () => crypto.randomUUID(),
       );
