@@ -574,7 +574,11 @@ model InboundExclusion {
 
   /// One rule per number per channel. A second attempt updates the note
   /// rather than creating a duplicate that the reader cannot tell apart.
-  @@unique([tenantId, channel, customerExternalId])
+  // One rule per number: the same contact can be private on one number and
+  // not on another. Legacy rows with no number ("every number") are kept
+  // unique by a partial index in migration 20261007210000 (Postgres treats
+  // NULLs as distinct, so this key alone would allow duplicates of those).
+  @@unique([tenantId, channel, channelAccountId, customerExternalId])
   @@index([tenantId, channel])
   @@map("inbound_exclusions")
 }
