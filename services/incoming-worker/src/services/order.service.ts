@@ -7,15 +7,40 @@
  * written to the customer where they can be reached: their existing
  * conversation (WhatsApp first), else a new WhatsApp conversation by phone.
  *
- * An order message is about the customer's own purchase, so it needs no
- * marketing consent; an opt-out on the channel always wins. On WhatsApp the
- * validator allows only a template (the customer usually has not written).
+ * Who may get an order message (Omer, 2026-10-07; every order message,
+ * status updates included): a customer who has WRITTEN to the business
+ * before (an inbound message on any of their channels), or who gave consent
+ * (the store's own record, else a granted marketing ConsentRecord). An
+ * opt-out on the channel always wins. On WhatsApp the validator allows only
+ * a template.
  *
- *   nobody reachable / opted out / a person owns the chat → a SKIPPED run with the reason
+ *   nobody reachable / opted out / no prior contact or consent / a person
+ *   owns the chat → a SKIPPED run with the reason
  */
 import { prisma, type OrderEventJob } from "@chatcenter/shared";
 import { runAutomationsForEvent } from "./automation-runner.service";
-import { resolveCartTarget, mayWriteWhatsApp } from "./cart.service";
+import { resolveCartTarget, mayWriteWhatsApp, hasMarketingConsent } from "./cart.service";
+
+const digits = (p: string | null | undefined) => String(p ?? "").replace(/\D/g, "");
+
+/** Has this customer ever written to the business, on any channel? (Read-only.) */
+export async function hasPriorInbound(tenantId: string, customer: OrderEventJob["customer"]): Promise<boolean> {
+  const phone = digits(customer?.phone);
+  const email = String(customer?.email ?? "").trim().toLowerCase();
+  const or: any[] = [];
+  if (phone.length >= 7) or.push({ phone: { contains: phone.slice(-9) } }, { externalId: phone });
+  if (email) or.push({ email: { equals: email, mode: "insensitive" } });
+  if (!or.length) return false;
+  const contacts = await prisma.contact.findMany({ where: { tenantId, OR: or }, select: { channel: true, externalId: true }, take: 20 });
+  if (!contacts.length) return false;
+  const n = await prisma.message.count({
+    where: {
+      tenantId, direction: "INBOUND",
+      conversation: { OR: (contacts as any[]).map((c) => ({ channel: c.channel, customerExternalId: c.externalId })) },
+    } as any,
+  });
+  return n > 0;
+}
 
 /** Variables an order automation can write. */
 export function orderVariables(ev: OrderEventJob): Record<string, string> {
@@ -51,11 +76,20 @@ export async function onOrderEvent(ev: OrderEventJob): Promise<{ outcome: string
   if (!ids.length) return { outcome: "no_automation" };
   const eventKey = `order:${ev.source}:${ev.orderId}:${ev.status}`;
 
-  const target = await resolveCartTarget(ev.tenantId, ev.customer, { create: mayWriteWhatsApp((flows as any[]).filter((f) => ids.includes(f.id))) });
+  // Prior contact first (read-only): a new WhatsApp conversation is opened
+  // only for a customer who may be written to anyway (prior contact, or the
+  // store's own consent for the phone), never for one about to be skipped.
+  const prior = await hasPriorInbound(ev.tenantId, ev.customer);
+  const storeSaysPhone = ev.marketingConsent?.sms === true;
+  const target = await resolveCartTarget(ev.tenantId, ev.customer, {
+    create: (prior || storeSaysPhone) && mayWriteWhatsApp((flows as any[]).filter((f) => ids.includes(f.id))),
+  });
   const channel = target ? String(target.conversation.channel).toUpperCase() : null;
   const optedOut = !!target && (Array.isArray(target.contact?.optOutChannels) ? target.contact.optOutChannels : []).map((x: any) => String(x).toUpperCase()).includes(channel);
+  const allowed = !!target && !optedOut && (prior || (await hasMarketingConsent(ev.tenantId, { marketingConsent: ev.marketingConsent ?? null } as any, target)).ok);
   const busy = !!target && !!(target.conversation.assignedAgentId || target.conversation.isHandedOver || target.conversation.automationRunId);
-  const skip = !target ? "no_reachable_customer" : optedOut ? "opted_out" : busy ? "conversation_busy" : null;
+  const skip = !target ? (prior || storeSaysPhone ? "no_reachable_customer" : "no_prior_contact_or_consent")
+    : optedOut ? "opted_out" : !allowed ? "no_prior_contact_or_consent" : busy ? "conversation_busy" : null;
   if (skip) {
     // Recorded, so the run log says why nobody was written to.
     for (const flowId of ids) {

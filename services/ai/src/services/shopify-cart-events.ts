@@ -84,6 +84,12 @@ export function orderEventFromShopifyOrder(tenantId: string, body: any, status: 
       title: String(l?.title ?? l?.name ?? ""), quantity: Number(l?.quantity ?? 1) || 1,
     })).filter((i: any) => i.title),
     orderUrl: body?.order_status_url ?? null,
+    // The store's own record, read the same way as on a checkout.
+    marketingConsent: {
+      email: typeof body?.buyer_accepts_marketing === "boolean" ? body.buyer_accepts_marketing
+        : subscribed(customer?.email_marketing_consent) ?? (typeof customer?.accepts_marketing === "boolean" ? customer.accepts_marketing : null),
+      sms: subscribed(customer?.sms_marketing_consent),
+    },
   };
 }
 

@@ -319,7 +319,11 @@ describe("★ orders → order events", () => {
       tenantId: "t1", source: "shopify", orderId: "5001", status: "fulfilled", orderNumber: "#1042", total: 590, currency: "ILS",
       customer: { email: "dana@example.com", phone: "+972501234567", firstName: "Dana" },
       items: [{ title: "Cotton Trench Coat", quantity: 1 }], orderUrl: "https://my-store.myshopify.com/orders/abc",
+      marketingConsent: { email: null, sms: null },
     });
+    // The store's own consent record travels with the order (read like a checkout's).
+    expect(orderEventFromShopifyOrder("t1", { ...ORDER, buyer_accepts_marketing: true, customer: { ...ORDER.customer, sms_marketing_consent: { state: "subscribed" } } }, "paid")!.marketingConsent)
+      .toEqual({ email: true, sms: true });
     expect(orderEventFromShopifyOrder("t1", {}, "paid")).toBeNull();
   });
 

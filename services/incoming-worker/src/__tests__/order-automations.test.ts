@@ -76,7 +76,21 @@ vi.mock("@chatcenter/shared", () => ({
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: {
     conversation: table("conversation"), chatbotFlow: table("chatbotFlow"), automationRun: table("automationRun"),
-    automationRunStep: table("automationRunStep"), message: table("message"), contact: table("contact"),
+    automationRunStep: table("automationRunStep"),
+    message: {
+      ...table("message"),
+      // The prior-contact check counts INBOUND messages in conversations of the
+      // customer's contacts: evaluate that relation filter for real.
+      count: async (a: any = {}) => (H.db.message ?? []).filter((msg) => {
+        if (a.where?.tenantId && msg.tenantId !== a.where.tenantId) return false;
+        if (a.where?.direction && msg.direction !== a.where.direction) return false;
+        const rel = a.where?.conversation?.OR;
+        if (!rel) return true;
+        const conv = (H.db.conversation ?? []).find((c) => c.id === msg.conversationId);
+        return !!conv && rel.some((r: any) => r.channel === conv.channel && r.customerExternalId === conv.customerExternalId);
+      }).length,
+    },
+    contact: table("contact"),
     channelAccount: table("channelAccount"), consentRecord: table("consentRecord"), tenant: table("tenant"),
     flowCanvas: table("flowCanvas"), messageTemplate: { findFirst: async () => null },
     voiceCallSession: {
@@ -130,7 +144,9 @@ beforeEach(() => {
     conversation: [{ id: "c_wa", tenantId: T, channel: "WHATSAPP", customerExternalId: "972501234567", status: "OPEN", assignedAgentId: null, isHandedOver: false, automationRunId: null, handledBy: null, flowVariables: null, createdAt: new Date(1) }],
     channelAccount: [{ id: "wa1", tenantId: T, channel: "WHATSAPP", isActive: true }],
     tenant: [{ id: T, name: "Urban Supply", status: "ACTIVE" }],
-    consentRecord: [], automationRun: [], automationRunStep: [], message: [], flowCanvas: [],
+    consentRecord: [], automationRun: [], automationRunStep: [], flowCanvas: [],
+    // Dana has written to the business before (the prior-contact rule).
+    message: [{ id: "in0", tenantId: T, conversationId: "c_wa", direction: "INBOUND", body: "hi" }],
   };
 });
 
@@ -159,7 +175,8 @@ describe("★ order event", () => {
     expect(H.sent).toEqual([]);
     H.db.automationRun = [];
     H.db.contact = []; H.db.conversation = []; H.db.channelAccount = [];
-    expect((await onOrderEvent(order({ orderId: "5002" }))).outcome).toBe("no_reachable_customer");
+    // With consent but no channel to reach them on: nobody reachable.
+    expect((await onOrderEvent(order({ orderId: "5002", marketingConsent: { email: null, sms: true } }))).outcome).toBe("no_reachable_customer");
     H.db.automationRun = [];
     H.db.tenant[0].status = "SUSPENDED";
     expect((await onOrderEvent(order({ orderId: "5003" }))).outcome).toBe("tenant_inactive");
@@ -167,15 +184,59 @@ describe("★ order event", () => {
   });
 
   it("★ no conversation is opened for a customer the automation may not write to (it would only be left empty)", async () => {
-    H.db.conversation = []; H.db.contact = [];
+    H.db.conversation = []; H.db.contact = []; H.db.message = [];
+    const consented = { marketingConsent: { email: null, sms: true } };
     H.db.chatbotFlow = [review({ triggerConfig: { statuses: ["fulfilled"], channels: ["EMAIL"] } })];
-    expect((await onOrderEvent(order())).outcome).toBe("no_reachable_customer");
+    expect((await onOrderEvent(order(consented))).outcome).toBe("no_reachable_customer");
     expect(H.db.conversation).toEqual([]);
-    // With WhatsApp allowed (or no channel limit), one is opened by phone.
+    // With WhatsApp allowed (or no channel limit) and the store's consent, one is opened by phone.
     H.db.automationRun = [];
     H.db.chatbotFlow = [review()];
-    await onOrderEvent(order({ orderId: "5009" }));
+    await onOrderEvent(order({ orderId: "5009", ...consented }));
     expect(H.db.conversation).toEqual([expect.objectContaining({ channel: "WHATSAPP", channelAccountId: "wa1" })]);
+  });
+
+  it("★ no prior contact and no consent → SKIPPED (no_prior_contact_or_consent), nothing sent, no conversation opened", async () => {
+    H.db.message = [];                       // Dana never wrote
+    expect((await onOrderEvent(order())).outcome).toBe("no_prior_contact_or_consent");
+    expect(runs()).toEqual([expect.objectContaining({ status: "skipped", error: "no_prior_contact_or_consent", eventKey: "order:shopify:5001:fulfilled" })]);
+    expect(H.sent).toEqual([]);
+    // A brand-new buyer (no contact at all) is not given a fresh conversation either.
+    H.db.automationRun = []; H.db.contact = []; H.db.conversation = [];
+    expect((await onOrderEvent(order({ orderId: "5002" }))).outcome).toBe("no_prior_contact_or_consent");
+    expect(H.db.conversation).toEqual([]);
+  });
+
+  it("★ applies to every order message: a status update too", async () => {
+    H.db.message = [];
+    H.db.chatbotFlow = [review({ triggerConfig: {} })];
+    for (const status of ["created", "paid", "fulfilled", "cancelled"] as const) {
+      expect((await onOrderEvent(order({ orderId: `s-${status}`, status }))).outcome).toBe("no_prior_contact_or_consent");
+    }
+    expect(H.sent).toEqual([]);
+  });
+
+  it("consent instead of prior contact: a granted ConsentRecord, or the store's own record", async () => {
+    H.db.message = [];
+    H.db.consentRecord = [{ id: "cr1", tenantId: T, subjectType: "contact", subjectId: "k_wa", purpose: "marketing_whatsapp", granted: true, createdAt: new Date(1) }];
+    expect((await onOrderEvent(order())).outcome).toBe("completed");
+    H.db.consentRecord = []; H.db.automationRun = []; H.sent = [];
+    expect((await onOrderEvent(order({ orderId: "5003", marketingConsent: { email: null, sms: true } }))).outcome).toBe("completed");
+    expect(H.sent).toHaveLength(1);
+  });
+
+  it("prior contact on ANOTHER channel counts (she wrote on the web chat with the same email)", async () => {
+    H.db.message = [{ id: "w0", tenantId: T, conversationId: "c_web", direction: "INBOUND", body: "hello" }];
+    H.db.contact.push({ id: "k_web", tenantId: T, channel: "WEBCHAT", externalId: "v-9", email: "dana@test.local", optOutChannels: [] });
+    H.db.conversation.push({ id: "c_web", tenantId: T, channel: "WEBCHAT", customerExternalId: "v-9", status: "OPEN", createdAt: new Date(0) });
+    expect((await onOrderEvent(order())).outcome).toBe("completed");
+  });
+
+  it("★ an opt-out wins over prior contact and over consent", async () => {
+    H.db.contact[0].optOutChannels = ["WHATSAPP"];
+    H.db.consentRecord = [{ id: "cr1", tenantId: T, subjectType: "contact", subjectId: "k_wa", purpose: "marketing_whatsapp", granted: true, createdAt: new Date(1) }];
+    expect((await onOrderEvent(order())).outcome).toBe("opted_out");
+    expect(H.sent).toEqual([]);
   });
 
   it("variables", () => {

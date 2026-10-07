@@ -406,6 +406,8 @@ export interface OrderEventJob {
   items: Array<{ title: string; quantity: number }>;
   /** The store's order status page for the customer, when it has one. */
   orderUrl?: string | null;
+  /** What the store recorded about marketing consent (null = the store has none, e.g. WooCommerce). */
+  marketingConsent?: { email?: boolean | null; sms?: boolean | null } | null;
 }
 
 /**
