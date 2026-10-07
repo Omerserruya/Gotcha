@@ -38,7 +38,7 @@ import type { ShopifyAvailability } from '@/features/capabilities/load-capabilit
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { automationsLink } from '@/features/employees/WhoAnswers';
-import { brandMark } from '@/lib/brand-mark';
+import { brandMark, initials, logoFit } from '@/lib/brand-mark';
 
 import { hexToHsv, hsvToHex } from './colour';
 import type { ShopifyData } from './load-website-widget';
@@ -596,7 +596,7 @@ function Conversation({
             {assigned ? (
               <>
                 <span className={styles.assignedMark} aria-hidden="true">
-                  {brandMark(assigned.name).logo}
+                  {initials(assigned.name)}
                 </span>
                 <bdi dir="auto">{assigned.name}</bdi>
               </>
@@ -883,31 +883,37 @@ function ShopRow({
         : shop.embedLive
           ? 'active'
           : 'quiet';
-  const integrationsLink = (chunks: ReactNode) => <Link href="/studio/capabilities">{chunks}</Link>;
+  // The data connection's line, with its one way forward as a button.
+  const data =
+    state === 'active' || state === 'quiet'
+      ? shopifyData === 'ok'
+        ? { words: t('data.ok'), action: null }
+        : shopifyData === 'failing'
+          ? { words: t('data.failing'), action: t('data.fix') }
+          : shopifyData === 'none'
+            ? { words: t('data.none'), action: t('data.connect') }
+            : { words: t('data.unread'), action: null }
+      : null;
   return (
-    <div className={styles.store} data-testid={`webchat-shop-${shop.channelId}`} data-state={state}>
-      <span className={styles.storeMark} data-store="shopify" aria-hidden="true">
-        <ShoppingBag size={15} />
-      </span>
-      <span className={styles.toggleText}>
-        <span>{t('shopify')}</span>
-        <span className={styles.rowHint} data-testid="webchat-shop-line">
-          <bdi dir="ltr">{shop.shopDomain}</bdi> · {t(`shop.${state}`)}
+    <div
+      className={styles.store}
+      data-stack=""
+      data-testid={`webchat-shop-${shop.channelId}`}
+      data-state={state}
+    >
+      <div className={styles.storeLine}>
+        <span className={styles.storeMark} data-store="shopify" aria-hidden="true">
+          <ShoppingBag size={15} />
         </span>
-        {state === 'active' || state === 'quiet' ? (
-          <span className={styles.rowHint} data-testid="webchat-shop-data">
-            {shopifyData === 'ok'
-              ? t('data.ok')
-              : shopifyData === 'failing'
-                ? t.rich('data.failing', { integrations: integrationsLink })
-                : shopifyData === 'none'
-                  ? t.rich('data.none', { integrations: integrationsLink })
-                  : t('data.unread')}
+        <span className={styles.toggleText}>
+          <span>{t('shopify')}</span>
+          <span className={styles.rowHint} data-testid="webchat-shop-line">
+            <bdi dir="ltr">{shop.shopDomain}</bdi> · {t(`shop.${state}`)}
           </span>
-        ) : null}
+        </span>
         {(state === 'off' || state === 'quiet') && shop.themeEditorUrl ? (
           <a
-            className={styles.textButton}
+            className={styles.secondary}
             href={shop.themeEditorUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -916,21 +922,35 @@ function ShopRow({
             {t('themeEditor')}
           </a>
         ) : null}
-      </span>
-      {state === 'removed' ? (
-        <ShopifyConnect
-          mode={shopifyAvailability?.mode ?? null}
-          helpUrl={shopifyAvailability?.helpUrl ?? null}
-        />
-      ) : (
-        <span
-          className={styles.status}
-          data-live={state === 'active' ? '' : undefined}
-          data-testid="webchat-shop-status"
-        >
-          {t(`shopTag.${state}`)}
-        </span>
-      )}
+        {state === 'removed' ? (
+          <ShopifyConnect
+            mode={shopifyAvailability?.mode ?? null}
+            helpUrl={shopifyAvailability?.helpUrl ?? null}
+          />
+        ) : (
+          <span
+            className={styles.status}
+            data-live={state === 'active' ? '' : undefined}
+            data-testid="webchat-shop-status"
+          >
+            {t(`shopTag.${state}`)}
+          </span>
+        )}
+      </div>
+      {data ? (
+        <div className={styles.storeSub} data-testid="webchat-shop-data">
+          <span className={styles.rowHint}>{data.words}</span>
+          {data.action ? (
+            <Link
+              href="/studio/capabilities"
+              className={styles.secondary}
+              data-testid="webchat-shop-data-action"
+            >
+              {data.action}
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1009,6 +1029,8 @@ function Preview({
   const colour = isHex(config.appearance.primaryColor) ? config.appearance.primaryColor : '#121212';
   const name = config.ux.welcome.assistantName.trim() || t('assistant');
   const mark = brandMark(business ?? name);
+  // Sized by its longest word, never broken inside one; initials when none fits.
+  const fit = logoFit(mark.logo);
   const questions = config.ux.welcome.suggestedQuestions.filter((q) => q.trim()).slice(0, 3);
   return (
     <aside className={styles.preview} aria-label={t('label')} data-testid="webchat-preview">
@@ -1030,10 +1052,16 @@ function Preview({
               <ImageIcon size={16} aria-hidden="true" />
             )}
           </div>
-          <span className={styles.logo}>
+          <span
+            className={styles.logo}
+            data-fit={config.appearance.logoUrl ? undefined : fit}
+            data-testid="webchat-preview-logo"
+          >
             {config.appearance.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={config.appearance.logoUrl} alt="" />
+            ) : fit === 'initials' ? (
+              initials(business ?? name)
             ) : (
               mark.logo
             )}

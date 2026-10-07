@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
@@ -37,7 +40,7 @@ vi.mock('@/features/capabilities/ShopifyConnect', () => ({
 
 import type { WebchatTab } from '@/api/contracts/webchat';
 
-import { brandMark } from '@/lib/brand-mark';
+import { brandMark, initials, logoFit } from '@/lib/brand-mark';
 
 import type { ShopifyData } from './load-website-widget';
 import { SAVE_AFTER_MS, WebchatSettings } from './WebchatSettings';
@@ -355,6 +358,9 @@ describe('★★ a shop says which Shopify it means: the chat in the theme, then
     expect(screen.getByTestId('webchat-shop-data')).toHaveTextContent(
       'Connected to stock and orders',
     );
+    // Nothing to do: no button on either line.
+    expect(screen.queryByTestId('webchat-shop-data-action')).toBeNull();
+    expect(screen.queryByTestId('webchat-shop-theme')).toBeNull();
     expect(screen.queryByTestId('shopify-connect')).toBeNull();
   });
 
@@ -363,28 +369,42 @@ describe('★★ a shop says which Shopify it means: the chat in the theme, then
     const data = screen.getByTestId('webchat-shop-data');
     expect(data).toHaveTextContent("Stock and orders aren't connected: the connection is failing");
     expect(data).not.toHaveTextContent('Connected to stock and orders');
-    expect(data.querySelector('a')).toHaveAttribute('href', '/studio/capabilities');
+    // Its way forward is a button on its own line, not a link inside the sentence.
+    const fix = screen.getByTestId('webchat-shop-data-action');
+    expect(fix).toHaveTextContent(/^Fix the connection$/);
+    expect(fix).toHaveAttribute('href', '/studio/capabilities');
+    expect(fix.className).toMatch(/secondary/);
+    expect(screen.getByTestId('webchat-shop-line')).not.toHaveTextContent(/stock|orders/i);
   });
 
   it('not connected / unread: each said as itself', () => {
     const { unmount } = show('install', { read: install({ shopify: [shop()] }), data: 'none' });
     expect(screen.getByTestId('webchat-shop-data')).toHaveTextContent(
-      "Stock and orders aren't connected. Connect them",
+      "Stock and orders aren't connected",
     );
+    expect(screen.getByTestId('webchat-shop-data-action')).toHaveTextContent(/^Connect$/);
     unmount();
     show('install', { read: install({ shopify: [shop()] }), data: null });
     expect(screen.getByTestId('webchat-shop-data')).toHaveTextContent(
       "Couldn't check the stock and orders connection",
     );
+    expect(screen.queryByTestId('webchat-shop-data-action')).toBeNull();
   });
 
   it('installed but the theme has not loaded it this week: Not showing, with the theme editor', () => {
     show('install', { read: install({ shopify: [shop({ embedLive: false })] }) });
     expect(screen.getByTestId('webchat-shop-status')).toHaveTextContent('Not showing');
-    expect(screen.getByTestId('webchat-shop-theme')).toHaveAttribute(
+    expect(screen.getByTestId('webchat-shop-line')).toHaveTextContent(
+      "lumiere.myshopify.com · Installed, but the store's theme hasn't loaded the chat in the last week",
+    );
+    const theme = screen.getByTestId('webchat-shop-theme');
+    expect(theme).toHaveAttribute(
       'href',
       'https://admin.shopify.com/store/lumiere/themes/current/editor',
     );
+    // A quiet button beside the badge, not a link in the text.
+    expect(theme.className).toMatch(/secondary/);
+    expect(screen.getByTestId('webchat-shop-line')).not.toContainElement(theme);
   });
 
   it('switched off in the theme: Off, with the theme editor, and no stock line', () => {
@@ -461,5 +481,53 @@ describe("★ the preview's marks come from one name - the business's", () => {
     show('appearance');
     expect(screen.getByTestId('webchat-preview-launcher')).toHaveTextContent(/^AVIV$/);
     expect(screen.getByTestId('webchat-preview')).toHaveTextContent('AVIV & CO.');
+  });
+
+  it('★★ the logo is sized by its longest word, never broken in one; initials when none fits', () => {
+    // dev: "URBAN SUPPL / Y" across three lines in the circle.
+    expect(logoFit('AVIV & CO.')).toBe('l');
+    expect(logoFit('URBAN SUPPLY')).toBe('m');
+    expect(logoFit('LUMIÈRE')).toBe('s');
+    expect(logoFit('LUMIÈREPARIS')).toBe('initials');
+    expect(initials('Urban Supply - GOTCHA demo store')).toBe('US');
+    expect(initials('Aviv & Co.')).toBe('AC');
+    expect(initials('Lumièreparis')).toBe('LU');
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={{ channels: channelsMessages }}>
+        <WebchatSettings
+          initial={config}
+          assigned={null}
+          install={install()}
+          shopifyData="ok"
+          shopifyAvailability={null}
+          business="Urban Supply - GOTCHA demo store"
+          tab="appearance"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('webchat-preview-logo')).toHaveAttribute('data-fit', 'm');
+    expect(screen.getByTestId('webchat-preview-logo')).toHaveTextContent('URBAN SUPPLY');
+    unmount();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ channels: channelsMessages }}>
+        <WebchatSettings
+          initial={config}
+          assigned={null}
+          install={install()}
+          shopifyData="ok"
+          shopifyAvailability={null}
+          business="Lumièreparis"
+          tab="appearance"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('webchat-preview-logo')).toHaveTextContent(/^LU$/);
+  });
+
+  it('★ the mark’s CSS lets no word break - the sizes above are what keep it inside', () => {
+    const css = readFileSync(join(__dirname, 'Webchat.module.css'), 'utf8');
+    const logo = /\n {2}\.logo \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(logo).toMatch(/word-break: keep-all/);
+    expect(logo).not.toMatch(/anywhere|break-all|break-word/);
   });
 });

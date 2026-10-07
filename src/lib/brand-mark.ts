@@ -25,3 +25,32 @@ export function brandMark(name: string): { readonly logo: string; readonly launc
   const tidy = (text: string) => text.trim().replace(TRAILING, '');
   return { logo: tidy(logo), launcher: tidy(words[0] ?? '').slice(0, 5) };
 }
+
+/**
+ * How a logo text sits in the preview's round mark (64px, 0.2em tracking):
+ * sized by its LONGEST WORD, because a word is never broken - "URBAN SUPPL /
+ * Y" across three lines was dev's (supervisor). A word too long for the
+ * smallest size gives way to the initials.
+ *
+ *   l ≤ 5 letters   m ≤ 6   s ≤ 7   initials beyond
+ */
+export type LogoFit = 'l' | 'm' | 's' | 'initials';
+
+export function logoFit(logo: string): LogoFit {
+  const longest = Math.max(0, ...logo.split(/\s+/).map((word) => [...word].length));
+  return longest <= 5 ? 'l' : longest <= 6 ? 'm' : longest <= 7 ? 's' : 'initials';
+}
+
+/** "URBAN SUPPLY" → "US"; one word → its first two letters; words without a letter are skipped. */
+export function initials(name: string): string {
+  const words = brandName(name)
+    .toUpperCase()
+    .split(/\s+/)
+    .filter((word) => /\p{L}/u.test(word));
+  if (words.length === 0) return '';
+  if (words.length === 1) return [...words[0]!].slice(0, 2).join('');
+  return words
+    .slice(0, 2)
+    .map((word) => [...word].find((ch) => /\p{L}/u.test(ch)) ?? '')
+    .join('');
+}

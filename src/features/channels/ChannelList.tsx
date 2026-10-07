@@ -242,9 +242,13 @@ function WidgetListRow({
   };
   const open = sum((part) => part.openConversations);
   const started = sum((part) => part.windowConversations);
-  // Where it runs: each shop, then the site the code was last seen on.
+  /*
+    Where it runs: each shop by its domain, then the site the code was last
+    seen on - both the installs' to say. Never the accounts' names: dev's
+    Shopify account is called "Shopify Live Chat", the product that is gone.
+  */
   const places = [
-    ...row.parts.filter((p) => p.channel === 'SHOPIFY_LIVE_CHAT').map((p) => p.identity),
+    ...(install?.shopify.map((shop) => shop.shopDomain) ?? []),
     install?.code?.lastHost ?? null,
   ].filter((place): place is string => Boolean(place));
   const detail =

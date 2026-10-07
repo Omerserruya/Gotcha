@@ -612,7 +612,7 @@
       "unread": "Couldn't read where the widget is installed. Try again in a moment.",
       "shop": {
         "active": "Installed, the chat shows in your theme",
-        "quiet": "Installed, but your theme hasn't loaded the chat in the last week",
+        "quiet": "Installed, but the store's theme hasn't loaded the chat in the last week",
         "off": "Installed, but the chat is switched off in your theme",
         "removed": "The GOTCHA app was removed from this store"
       },
@@ -623,9 +623,11 @@
       },
       "data": {
         "ok": "Connected to stock and orders",
-        "failing": "Stock and orders aren't connected: the connection is failing. Fix it in <integrations>Studio · Integrations</integrations>",
-        "none": "Stock and orders aren't connected. Connect them in <integrations>Studio · Integrations</integrations>",
-        "unread": "Couldn't check the stock and orders connection"
+        "failing": "Stock and orders aren't connected: the connection is failing",
+        "none": "Stock and orders aren't connected",
+        "unread": "Couldn't check the stock and orders connection",
+        "fix": "Fix the connection",
+        "connect": "Connect"
       },
       "themeEditor": "Open the theme editor",
       "liveOn": "Live. Last seen on {host}",

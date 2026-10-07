@@ -194,7 +194,8 @@ describe('★★ the Website widget is ONE row: the web chat and every Shopify c
       id: 'sc1',
       channel: 'SHOPIFY_LIVE_CHAT',
       connectionStatus: 'CONNECTED',
-      displayName: 'lumiere.myshopify.com',
+      // dev's account name: the old product's, never a place.
+      displayName: 'Shopify Live Chat',
       _count: { conversations: 3 },
       conversationsInWindow: 30,
     });
@@ -246,11 +247,20 @@ describe('★★ the Website widget is ONE row: the web chat and every Shopify c
       [webchat(), shopChat()],
       install({
         code: { widgetId: 'w', snippet: 's', status: 'live', lastHost: 'avivco.il' },
+        shopify: [
+          {
+            channelId: 'sc1',
+            shopDomain: 'lumiere.myshopify.com',
+            status: 'active',
+            embedLive: false,
+          },
+        ],
       }),
     );
     expect(screen.getByTestId('channel-detail-widget')).toHaveTextContent(
       'lumiere.myshopify.com · avivco.il · 5 open now · 40 started in the last 30 days',
     );
+    expect(screen.getByTestId('channel-detail-widget')).not.toHaveTextContent('Shopify Live Chat');
     // The widget id is not a place.
     expect(screen.getByTestId('channel-detail-widget')).not.toHaveTextContent('widget_');
   });

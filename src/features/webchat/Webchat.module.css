@@ -111,6 +111,8 @@
     font: inherit;
     font-size: 12px;
     white-space: nowrap;
+    /* A link in this dress too (the theme editor, the connection): never browser blue. */
+    text-decoration: none;
     cursor: pointer;
   }
 
@@ -608,6 +610,30 @@
     padding: 14px 18px;
   }
 
+  /* A shop: its line, then the data connection's under it, each with its own button. */
+  .store[data-stack] {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .storeLine,
+  .storeSub {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .storeSub > .rowHint {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  /* Under the shop's name: the mark's width and the gap. */
+  .storeSub {
+    padding-inline-start: 44px;
+  }
+
   .storeMark {
     display: grid;
     flex: none;
@@ -747,7 +773,9 @@
     place-items: center;
     padding: 6px;
     text-align: center;
-    overflow-wrap: anywhere;
+    /* A word is never broken: data-fit sizes the text by its longest word. */
+    overflow-wrap: normal;
+    word-break: keep-all;
     inline-size: 64px;
     block-size: 64px;
     margin-block-start: -32px;
@@ -758,6 +786,19 @@
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.2em;
+  }
+
+  .logo[data-fit='m'] {
+    font-size: 8.5px;
+  }
+
+  .logo[data-fit='s'] {
+    font-size: 7.5px;
+  }
+
+  .logo[data-fit='initials'] {
+    font-size: 15px;
+    letter-spacing: 0.08em;
   }
 
   .logo img {
