@@ -22,7 +22,7 @@ import path from "path";
 import { streamResponse } from "./ai.service";
 import {
   appendToMemory,
-  getAgentMemory,
+  getSessionMemory,
   memoryToChatMessages,
   sanitizeHistoryForLLM,
 } from "./agent-memory.service";
@@ -89,9 +89,14 @@ export async function runAgent(
   await onEvent({ type: "context_attached", resolved: ctxBuilt.resolved });
 
   // 2. Memory + new user turn.
-  const history = await getAgentMemory({
+  // Memory is per session (a Cmd-K opening, a Home chat thread), never the
+  // user's whole history: the global window mixed unrelated sessions, and the
+  // AI-Employee Builder's interview turns (same table) leaked into it.
+  const history = await getSessionMemory({
     tenantId: input.operator.tenantId,
     userId: input.operator.userId,
+    sessionId: input.sessionId,
+    limit: 30,
   });
 
   const chatMessages: any[] = [

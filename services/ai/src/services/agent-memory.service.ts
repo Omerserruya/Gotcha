@@ -207,12 +207,22 @@ export function sanitizeHistoryForLLM(messages: any[]): any[] {
 }
 
 /**
- * Wipe memory for a (tenantId, userId). Used when the operator hits "clear
- * conversation" in the Command Center modal.
+ * Wipe the operator's Command Center memory (tenantId, userId). Used when the
+ * operator hits "clear conversation" in the Command Center modal.
+ *
+ * The AI-Employee Builder keeps its interview transcripts in the same table,
+ * keyed by sessionId = the employee's id. Those are NOT the Command Center's
+ * and are never cleared here (they used to be).
  */
 export async function clearAgentMemory(opts: { tenantId: string; userId: string }): Promise<number> {
+  const employees = await prisma.aIAgent.findMany({ where: { tenantId: opts.tenantId }, select: { id: true } });
+  const builderSessions = employees.map((e) => e.id);
   const r = await (prisma as any).systemAgentMessage.deleteMany({
-    where: { tenantId: opts.tenantId, userId: opts.userId },
+    where: {
+      tenantId: opts.tenantId,
+      userId: opts.userId,
+      ...(builderSessions.length ? { sessionId: { notIn: builderSessions } } : {}),
+    },
   });
   return r.count ?? 0;
 }

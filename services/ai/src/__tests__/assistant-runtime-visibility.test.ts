@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const H = vi.hoisted(() => ({ counts: [] as any[], round: 0 }));
+const H = vi.hoisted(() => ({ counts: [] as any[], round: 0, memoryAsked: [] as any[] }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -17,7 +17,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 vi.mock("../services/agent-memory.service", () => ({
   appendToMemory: async () => undefined,
-  getAgentMemory: async () => [],
+  getSessionMemory: async (a: any) => { H.memoryAsked.push(a); return []; },
   memoryToChatMessages: () => [],
   sanitizeHistoryForLLM: (x: any) => x,
 }));
@@ -40,7 +40,7 @@ vi.mock("../services/ai.service", async (importOriginal) => {
 
 import { runAgent } from "../services/agent-runtime.service";
 
-beforeEach(() => { H.counts = []; H.round = 0; });
+beforeEach(() => { H.counts = []; H.round = 0; H.memoryAsked = []; });
 
 describe("★ runAgent → tools carry the user's visibility", () => {
   it("a restricted user's count query has the clause; an ADMIN's does not", async () => {
@@ -55,3 +55,11 @@ describe("★ runAgent → tools carry the user's visibility", () => {
     expect(H.counts[0].OR).toBeUndefined();
   });
 });
+
+describe("★ memory is the session's, not the user's whole history", () => {
+  it("runAgent reads the memory of its own session only", async () => {
+    await runAgent({ operator: { tenantId: "T", userId: "u1", viewer: { userId: "u1", role: "ADMIN" } }, client: null, message: "hi", sessionId: "thread_9", ephemeral: true, aiAgentId: null } as any, () => {});
+    expect(H.memoryAsked).toEqual([expect.objectContaining({ tenantId: "T", userId: "u1", sessionId: "thread_9" })]);
+  });
+});
+
