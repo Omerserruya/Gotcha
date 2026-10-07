@@ -89,6 +89,14 @@ describe('★★ the proxy renews the session before the render', () => {
     expect(location.pathname).toMatch(/\/sign-in$/);
     expect(location.searchParams.get('returnTo')).toBe('/en/approvals?x=1');
     expect(response.cookies.get(NAME)?.value).toBe('');
+    // ★ And the screen says why: "Your session ended".
+    expect(location.searchParams.get('error')).toBe('ended');
+  });
+
+  it('never signed in is not "ended": no reason on the way to sign-in', async () => {
+    const response = await proxy(new NextRequest('https://dev.gotcha.co.il/en/home'));
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get('location')!).searchParams.get('error')).toBeNull();
   });
 
   it('every page render is told where it is, for a sign-in from the layout', async () => {

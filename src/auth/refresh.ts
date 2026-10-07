@@ -17,9 +17,31 @@ import type { Session } from './session';
  * it can (`src/proxy.ts`); a render never spends the token.
  *
  * In-flight refreshes are keyed by the token being spent, so six parallel
- * reads at expiry spend it once. Per server instance - the self-inflicted race.
+ * reads at expiry spend it once.
+ *
+ * ★★ AND A REFRESH IS REMEMBERED FOR A SHORT WHILE AFTER IT SETTLES. A
+ *   request that left the browser with the old cookie and arrives a moment
+ *   after the refresh finished (prefetches, a poll, a second tab) used to find
+ *   no entry and spend the dead token: refused, so its response CLEARED the
+ *   cookie the previous response had just renewed - signed out, with a live
+ *   session at the identity provider. Within `SPENT_GRACE_MS` it gets the
+ *   same new tokens instead, and its response sets the same cookie.
+ * ★ One map per process, on `globalThis`: the proxy and the route handlers
+ *   are separate bundles, and a module-level map was one map EACH - the
+ *   proxy and a BFF read could each spend the same token.
  */
-const refreshesInFlight = new Map<string, Promise<Session | null>>();
+export const SPENT_GRACE_MS = 30_000;
+
+interface Refreshes {
+  readonly inFlight: Map<string, Promise<Session | null>>;
+  /** Spent token → what spending it gave, until `until`. */
+  readonly settled: Map<string, { readonly result: Session | null; readonly until: number }>;
+}
+const REFRESHES = Symbol.for('gotcha.auth.refreshes');
+const refreshes: Refreshes = ((globalThis as Record<symbol, Refreshes | undefined>)[REFRESHES] ??= {
+  inFlight: new Map(),
+  settled: new Map(),
+});
 
 async function performRefresh(session: Session): Promise<Session | null> {
   if (!session.rt) {
@@ -46,11 +68,23 @@ async function performRefresh(session: Session): Promise<Session | null> {
 /** A session with a fresh access token, or `null` when the session is over. */
 export function refreshSession(session: Session): Promise<Session | null> {
   const key = session.rt ?? session.sid;
-  const inFlight = refreshesInFlight.get(key);
+  const now = Date.now();
+  for (const [spent, { until }] of refreshes.settled) {
+    if (until <= now) refreshes.settled.delete(spent);
+  }
+  const settled = refreshes.settled.get(key);
+  if (settled) return Promise.resolve(settled.result);
+  const inFlight = refreshes.inFlight.get(key);
   if (inFlight) return inFlight;
-  const promise = performRefresh(session).finally(() => {
-    refreshesInFlight.delete(key);
-  });
-  refreshesInFlight.set(key, promise);
+  const promise = performRefresh(session)
+    .then((result) => {
+      // Only a success is kept: a refusal is not retried by anyone anyway.
+      if (result) refreshes.settled.set(key, { result, until: Date.now() + SPENT_GRACE_MS });
+      return result;
+    })
+    .finally(() => {
+      refreshes.inFlight.delete(key);
+    });
+  refreshes.inFlight.set(key, promise);
   return promise;
 }

@@ -13,7 +13,7 @@ import { FINISH_PARAM, HANDOVER_PARAM } from '@/app/api/auth/login/route';
 
 import styles from './SignIn.module.css';
 
-const KNOWN_ERRORS = ['expired', 'denied', 'exchange_failed'] as const;
+const KNOWN_ERRORS = ['expired', 'denied', 'exchange_failed', 'ended'] as const;
 
 /**
  * Sign-in - screen 00a.

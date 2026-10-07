@@ -36,7 +36,7 @@ vi.mock('./oidc', () => ({
   refreshTokenGrant: idp.grant,
 }));
 
-const { refreshSession } = await import('./refresh');
+const { refreshSession, SPENT_GRACE_MS } = await import('./refresh');
 
 const session = (rt: string): Session => ({
   sub: 's',
@@ -50,6 +50,11 @@ const session = (rt: string): Session => ({
 beforeEach(() => {
   idp.reset();
   idp.grant.mockClear();
+  // Past any grace a previous test left behind.
+  vi.useRealTimers();
+  (globalThis as Record<symbol, { settled: Map<unknown, unknown> } | undefined>)[
+    Symbol.for('gotcha.auth.refreshes')
+  ]?.settled.clear();
 });
 
 describe('★★ rotation - the session lives past the first refresh', () => {
@@ -63,8 +68,11 @@ describe('★★ rotation - the session lives past the first refresh', () => {
   });
 
   it('★ the failure that signed people out: refreshing with the SPENT token is refused', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
     await refreshSession(session('rt-1'));
-    // What a render left in the cookie when it could not write the new one.
+    // What a render left in the cookie when it could not write the new one -
+    // found long after, past the grace.
+    vi.setSystemTime(Date.now() + SPENT_GRACE_MS + 1);
     expect(await refreshSession(session('rt-1'))).toBeNull();
   });
 
@@ -72,5 +80,30 @@ describe('★★ rotation - the session lives past the first refresh', () => {
     const all = await Promise.all(Array.from({ length: 6 }, () => refreshSession(session('rt-1'))));
     expect(idp.grant).toHaveBeenCalledTimes(1);
     expect(new Set(all.map((s) => s?.rt))).toEqual(new Set(['rt-2']));
+  });
+
+  it('★★ a request that arrives with the old cookie just after: the same new session, not a sign-out', async () => {
+    const first = await refreshSession(session('rt-1'));
+    // Settled: the in-flight entry is gone. A prefetch sent before the
+    // browser kept the new cookie arrives now.
+    const late = await refreshSession(session('rt-1'));
+    expect(idp.grant).toHaveBeenCalledTimes(1);
+    expect(late).toEqual(first);
+  });
+
+  it('a refusal is not remembered as a session', async () => {
+    idp.reset();
+    const refused = await refreshSession(session('rt-dead'));
+    expect(refused).toBeNull();
+    expect(await refreshSession(session('rt-dead'))).toBeNull();
+    expect(idp.grant).toHaveBeenCalledTimes(2);
+  });
+
+  it('★ one map for the process: a second copy of the module shares it', async () => {
+    const first = await refreshSession(session('rt-1'));
+    vi.resetModules();
+    const other = await import('./refresh');
+    expect(await other.refreshSession(session('rt-1'))).toEqual(first);
+    expect(idp.grant).toHaveBeenCalledTimes(1);
   });
 });

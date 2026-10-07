@@ -275,6 +275,12 @@ describe('★ the error a person is sent back with', () => {
     );
     expect(within(unknown.container).queryAllByRole('alert')).toHaveLength(0);
   });
+
+  it('★ a session the proxy ended says so', async () => {
+    serverEnv.mockReturnValue({});
+    const ended = render(await SignInPage({ searchParams: Promise.resolve({ error: 'ended' }) }));
+    expect(within(ended.container).getByRole('alert')).toHaveTextContent('Your session ended');
+  });
 });
 
 describe('⚠⚠ the authorize URL handed back by our own login route', () => {

@@ -335,6 +335,9 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
        * not - checked, because the difference is the whole behaviour.)
        */
       loginUrl.searchParams.set('returnTo', `${pathname}${request.nextUrl.search}`);
+      // Ended here, at the identity provider: our screen says so - never a
+      // silent sign-in page, or a list that "couldn't read" behind it.
+      if (renewal.kind === 'ended' && !platformLogin) loginUrl.searchParams.set('error', 'ended');
 
       /*
        * ════════════════════════════════════════════════════════════════════
