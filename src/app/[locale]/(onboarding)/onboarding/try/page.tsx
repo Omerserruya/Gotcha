@@ -2,6 +2,7 @@ import { getLocale } from 'next-intl/server';
 
 import { loadTry } from '@/features/onboarding/load-onboarding';
 import { OnboardingShell } from '@/features/onboarding/OnboardingShell';
+import { isPreview } from '@/features/onboarding/preview';
 import { TryStep } from '@/features/onboarding/TryStep';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -9,13 +10,15 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly skipped?: string }>;
-}) {
-  const skippedCore = (await searchParams)?.skipped === '1';
+  readonly searchParams?: Promise<{ readonly skipped?: string; readonly preview?: string }>;
+} = {}) {
+  const params = await searchParams;
+  const preview = isPreview(params);
+  const skippedCore = params?.skipped === '1';
   const questions = await loadTry(await getLocale());
   return (
-    <OnboardingShell step="try">
-      <TryStep questions={questions} skippedCore={skippedCore} />
+    <OnboardingShell step="try" preview={preview}>
+      <TryStep questions={questions} skippedCore={skippedCore} preview={preview} />
     </OnboardingShell>
   );
 }

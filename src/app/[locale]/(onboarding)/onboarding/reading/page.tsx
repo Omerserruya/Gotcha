@@ -1,5 +1,6 @@
 import { loadReading } from '@/features/onboarding/load-onboarding';
 import { OnboardingShell } from '@/features/onboarding/OnboardingShell';
+import { isPreview } from '@/features/onboarding/preview';
 import { ReadingStep } from '@/features/onboarding/ReadingStep';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -10,14 +11,16 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly since?: string }>;
-}) {
-  const raw = (await searchParams)?.since ?? null;
+  readonly searchParams?: Promise<{ readonly since?: string; readonly preview?: string }>;
+} = {}) {
+  const params = await searchParams;
+  const preview = isPreview(params);
+  const raw = params?.since ?? null;
   const since = raw && !Number.isNaN(Date.parse(raw)) ? new Date(raw).toISOString() : null;
   const initial = await loadReading().catch(() => null);
   return (
-    <OnboardingShell step="reading">
-      <ReadingStep initial={initial} since={since} />
+    <OnboardingShell step="reading" preview={preview}>
+      <ReadingStep initial={initial} since={since} preview={preview} />
     </OnboardingShell>
   );
 }

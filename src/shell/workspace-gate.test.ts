@@ -44,3 +44,24 @@ describe('★ onboarding resumes where it really is', () => {
     expect(resumeStep({ discovery: { status: 'COMPLETE' }, coreConnected: true })).toBe('try');
   });
 });
+
+describe('★★ onboarding as a preview (Omer, 2026-10-07): a live workspace, an admin, and asked for', () => {
+  it('only ACTIVE and ADMIN may', async () => {
+    const { mayPreviewOnboarding } = await import('./workspace-gate');
+    expect(mayPreviewOnboarding({ tenantStatus: 'ACTIVE', role: 'ADMIN' })).toBe(true);
+    expect(mayPreviewOnboarding({ tenantStatus: 'ACTIVE', role: 'AGENT' })).toBe(false);
+    expect(mayPreviewOnboarding({ tenantStatus: 'SUSPENDED', role: 'ADMIN' })).toBe(false);
+    expect(mayPreviewOnboarding({ tenantStatus: 'PENDING_PAYMENT', role: 'ADMIN' })).toBe(false);
+    expect(mayPreviewOnboarding(null)).toBe(false);
+  });
+
+  it('asked for: `preview=1` in the query, and nowhere else', async () => {
+    const { asksForPreview } = await import('./workspace-gate');
+    expect(asksForPreview('/en/onboarding/try?preview=1')).toBe(true);
+    expect(asksForPreview('/en/onboarding/truth?system=wix&preview=1')).toBe(true);
+    expect(asksForPreview('/en/onboarding/try?preview=0')).toBe(false);
+    expect(asksForPreview('/en/onboarding/preview=1')).toBe(false);
+    expect(asksForPreview('/en/onboarding/try')).toBe(false);
+    expect(asksForPreview(null)).toBe(false);
+  });
+});

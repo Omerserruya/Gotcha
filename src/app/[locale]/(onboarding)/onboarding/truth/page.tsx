@@ -1,5 +1,6 @@
 import { loadTruth } from '@/features/onboarding/load-onboarding';
 import { OnboardingShell } from '@/features/onboarding/OnboardingShell';
+import { isPreview } from '@/features/onboarding/preview';
 import { TruthStep } from '@/features/onboarding/TruthStep';
 import { pageMetadata } from '@/shell/page-metadata';
 
@@ -7,18 +8,21 @@ import { pageMetadata } from '@/shell/page-metadata';
 export default async function Page({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ readonly system?: string }>;
-}) {
-  const system = (await searchParams)?.system ?? null;
+  readonly searchParams?: Promise<{ readonly system?: string; readonly preview?: string }>;
+} = {}) {
+  const params = await searchParams;
+  const preview = isPreview(params);
+  const system = params?.system ?? null;
   const read = await loadTruth();
   return (
-    <OnboardingShell step="truth">
+    <OnboardingShell step="truth" preview={preview}>
       <TruthStep
         integrations={read.integrations}
         shopify={read.shopify}
         detected={read.detected}
         system={system}
         coreSystem={read.coreSystem}
+        preview={preview}
       />
     </OnboardingShell>
   );

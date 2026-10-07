@@ -7,11 +7,15 @@ import { useState, useTransition } from 'react';
 import type { Discovery, ScannedFact } from '@/api/contracts/onboarding';
 import { VOICE_MAX, VOICE_MIN, type WorkspaceVoice } from '@/api/contracts/workspace';
 import { previewVoiceSample, saveWorkspaceVoice } from '@/features/workspace/actions';
-import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
+import {
+  UnavailableAction,
+  UnavailableItem,
+} from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 import { plainDashes } from '@/lib/plain-dashes';
 
 import styles from './Onboarding.module.css';
+import { stepHref } from './preview';
 
 const SHOWN = 8;
 /** A brand word longer than this is a sentence, not a chip. */
@@ -35,10 +39,13 @@ export function LearnedStep({
   discovery,
   facts,
   voice,
+  preview = false,
 }: {
   readonly discovery: Discovery | null;
   readonly facts: readonly ScannedFact[] | null;
   readonly voice: WorkspaceVoice | null;
+  /** Read-only: saving the voice is a write, drawn as a status. */
+  readonly preview?: boolean;
 }) {
   const t = useTranslations('onboarding.learned');
   const pages = discovery?.crawl?.pagesRead ?? null;
@@ -88,7 +95,7 @@ export function LearnedStep({
           </p>
         ) : facts !== null ? (
           <span className={styles.actions}>
-            <Link href="/onboarding/website" className={styles.secondary}>
+            <Link href={stepHref('/onboarding/website', preview)} className={styles.secondary}>
               {t('readAgain')}
             </Link>
           </span>
@@ -97,7 +104,7 @@ export function LearnedStep({
           {t('conflictsWhy')}
         </p>
       </div>
-      <Voice voice={voice} brand={discovery?.brand ?? null} />
+      <Voice voice={voice} brand={discovery?.brand ?? null} preview={preview} />
     </div>
   );
 }
@@ -105,9 +112,11 @@ export function LearnedStep({
 function Voice({
   voice,
   brand,
+  preview,
 }: {
   readonly voice: WorkspaceVoice | null;
   readonly brand: Discovery['brand'];
+  readonly preview: boolean;
 }) {
   const t = useTranslations('onboarding.learned.voice');
   const tn = useTranslations('onboarding');
@@ -260,15 +269,24 @@ function Voice({
       <span className={styles.actions}>
         {editing ? (
           <>
-            <button
-              type="button"
-              className={styles.primary}
-              onClick={save}
-              disabled={isSaving || draft.trim().length < VOICE_MIN}
-              data-testid="voice-save"
-            >
-              {isSaving ? t('saving') : t('save')}
-            </button>
+            {preview ? (
+              <UnavailableAction
+                label={t('save')}
+                tag={tn('preview.tag')}
+                why={tn('preview.why')}
+                testid="voice-save"
+              />
+            ) : (
+              <button
+                type="button"
+                className={styles.primary}
+                onClick={save}
+                disabled={isSaving || draft.trim().length < VOICE_MIN}
+                data-testid="voice-save"
+              >
+                {isSaving ? t('saving') : t('save')}
+              </button>
+            )}
             {guidance ? (
               <button
                 type="button"
@@ -281,14 +299,22 @@ function Voice({
                 {t('cancel')}
               </button>
             ) : (
-              <Link href="/onboarding/truth" className={styles.secondary} data-testid="voice-skip">
+              <Link
+                href={stepHref('/onboarding/truth', preview)}
+                className={styles.secondary}
+                data-testid="voice-skip"
+              >
                 {t('later')}
               </Link>
             )}
           </>
         ) : (
           <>
-            <Link href="/onboarding/truth" className={styles.primary} data-testid="voice-yes">
+            <Link
+              href={stepHref('/onboarding/truth', preview)}
+              className={styles.primary}
+              data-testid="voice-yes"
+            >
               {t('soundsLikeUs')}
             </Link>
             <button

@@ -9,6 +9,7 @@ import { Link } from '@/i18n/navigation';
 
 import type { ReadingRead } from './load-onboarding';
 import { readReading } from './onboarding-actions';
+import { stepHref } from './preview';
 import styles from './Onboarding.module.css';
 
 /** How often 00e looks again while the read runs. A read takes about two minutes. */
@@ -49,10 +50,13 @@ export function readingPhase(discovery: Discovery | null, since: string | null):
 export function ReadingStep({
   initial,
   since,
+  preview = false,
 }: {
   /** `null`: the first look failed. */
   readonly initial: ReadingRead | null;
   readonly since: string | null;
+  /** Read-only: the links keep `?preview=1`. */
+  readonly preview?: boolean;
 }) {
   const t = useTranslations('onboarding.reading');
   const [read, setRead] = useState(initial);
@@ -180,13 +184,21 @@ export function ReadingStep({
 
       {phase === 'done' ? (
         <span className={styles.actions}>
-          <Link href="/onboarding/learned" className={styles.primary} data-testid="reading-next">
+          <Link
+            href={stepHref('/onboarding/learned', preview)}
+            className={styles.primary}
+            data-testid="reading-next"
+          >
             {t('next')}
           </Link>
         </span>
       ) : phase === 'failed' || state === 'notStarted' ? (
         <span className={styles.actions}>
-          <Link href="/onboarding/website" className={styles.secondary} data-testid="reading-again">
+          <Link
+            href={stepHref('/onboarding/website', preview)}
+            className={styles.secondary}
+            data-testid="reading-again"
+          >
             {t('again')}
           </Link>
         </span>

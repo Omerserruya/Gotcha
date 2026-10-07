@@ -27,6 +27,24 @@ export function workspaceRoute(
   return 'product';
 }
 
+/**
+ * Onboarding as a preview (Omer, 2026-10-07): a LIVE workspace's admin may
+ * walk the onboarding screens with `?preview=1` - read-only, never
+ * finishing. Anyone else, and any other status, is gated as usual.
+ */
+export function mayPreviewOnboarding(
+  me: { readonly tenantStatus: string | null; readonly role: string | null } | null,
+): boolean {
+  return me?.tenantStatus === 'ACTIVE' && me.role === 'ADMIN';
+}
+
+/** `?preview=1` in a path-and-query (the proxy's return-to header). */
+export function asksForPreview(pathAndQuery: string | null): boolean {
+  if (!pathAndQuery) return false;
+  const at = pathAndQuery.indexOf('?');
+  return at >= 0 && new URLSearchParams(pathAndQuery.slice(at + 1)).get('preview') === '1';
+}
+
 /** The onboarding step to resume at, by what really exists on the server. */
 export function resumeStep(state: {
   /** The website read's row: `null` when it never ran. */

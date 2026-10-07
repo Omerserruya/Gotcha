@@ -9,6 +9,7 @@ import {
   type PreviewQuestions,
 } from '@/api/contracts/onboarding';
 import { CenteredLoader } from '@/design-system/primitives/loader/Loader';
+import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { Link, useRouter } from '@/i18n/navigation';
 import { safeLinkUrl } from '@/lib/safe-url';
 
@@ -20,6 +21,7 @@ import {
   type PreviewResult,
 } from './onboarding-actions';
 import styles from './Onboarding.module.css';
+import { stepHref } from './preview';
 
 /** The longest answer the teach route takes. */
 const ANSWER_MAX = 20_000;
@@ -41,14 +43,19 @@ type Refusal = Exclude<PreviewResult, { ok: true }>;
  *   the workspace goes live - or to payment, by `paymentRequired` - and the
  *   recommended employee is hired. Knowledge with nothing usable is said
  *   before the workspace opens, never a silent "all set".
+ * ★★ In preview (`?preview=1`, a live workspace): asking is allowed - it
+ *   writes nothing but usage - but Fix (a write to Knowledge) is a status,
+ *   and the finish is "Back to Home": `/complete` is never called.
  */
 export function TryStep({
   questions,
   skippedCore,
+  preview = false,
 }: {
   readonly questions: PreviewQuestions | null;
   /** 00g ended in "Skip for now": finish without a core system. */
   readonly skippedCore: boolean;
+  readonly preview?: boolean;
 }) {
   const t = useTranslations('onboarding.try');
   const locale = useLocale();
@@ -115,6 +122,7 @@ export function TryStep({
                 question={q.question}
                 askCount={q.askCount}
                 testid={`try-real-${i}`}
+                preview={preview}
               />
             ))}
           </ul>
@@ -129,31 +137,45 @@ export function TryStep({
                 key={`suggested-${i}`}
                 question={q.question}
                 testid={`try-suggested-${i}`}
+                preview={preview}
               />
             ))}
           </ul>
         </section>
       ) : null}
-      <AskYourOwn />
+      <AskYourOwn preview={preview} />
       {result && !result.ok ? (
         <p className={styles.problem} role="alert" data-testid="try-refused">
           {t(`refused.${result.reason}`)}{' '}
           {result.reason === 'core_system_required' ? (
-            <Link href="/onboarding/truth" className={styles.inlineLink}>
+            <Link href={stepHref('/onboarding/truth', preview)} className={styles.inlineLink}>
               {t('refused.toTruth')}
             </Link>
           ) : result.reason === 'needs_profile' ? (
-            <Link href="/onboarding/website" className={styles.inlineLink}>
+            <Link href={stepHref('/onboarding/website', preview)} className={styles.inlineLink}>
               {t('refused.toWebsite')}
             </Link>
           ) : null}
         </p>
       ) : null}
       <span className={styles.actions}>
-        <button type="button" className={styles.primary} onClick={finish} data-testid="try-open">
-          {t('open')}
-        </button>
-        <span className={styles.quiet}>{t('nextOnHome')}</span>
+        {preview ? (
+          <Link href="/home" className={styles.primary} data-testid="try-home">
+            {t('home')}
+          </Link>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={styles.primary}
+              onClick={finish}
+              data-testid="try-open"
+            >
+              {t('open')}
+            </button>
+            <span className={styles.quiet}>{t('nextOnHome')}</span>
+          </>
+        )}
       </span>
     </div>
   );
@@ -170,7 +192,7 @@ function RefusalLine({ refusal, testid }: { readonly refusal: Refusal; readonly 
 }
 
 /** "Ask your own question": always there, its problems next to it. */
-function AskYourOwn() {
+function AskYourOwn({ preview }: { readonly preview: boolean }) {
   const t = useTranslations('onboarding.try');
   const locale = useLocale();
   const [draft, setDraft] = useState('');
@@ -207,6 +229,7 @@ function AskYourOwn() {
               question={one.question}
               answered={one.answer}
               testid={`try-own-${i}`}
+              preview={preview}
             />
           ))}
         </ul>
@@ -252,6 +275,7 @@ function QuestionCard({
   askCount,
   answered,
   testid,
+  preview,
 }: {
   readonly question: string;
   /** A real question: how often customers asked it. */
@@ -259,8 +283,11 @@ function QuestionCard({
   /** Asked already (the question asked in the field). */
   readonly answered?: PreviewAnswer;
   readonly testid: string;
+  /** Fix writes to Knowledge: a status in preview. */
+  readonly preview: boolean;
 }) {
   const t = useTranslations('onboarding.try');
+  const tp = useTranslations('onboarding.preview');
   const locale = useLocale();
   const [state, setState] = useState<CardState>(
     answered ? { at: 'answered', answer: answered, relearned: false } : { at: 'idle' },
@@ -284,6 +311,26 @@ function QuestionCard({
     setTaughtFailed(false);
     setState({ at: 'fixing', answer });
   };
+
+  // Fix teaches Knowledge: in preview, a status in its place.
+  const fixAction = (answer: PreviewAnswer, look: string | undefined) =>
+    preview ? (
+      <UnavailableAction
+        label={t('fix')}
+        tag={tp('tag')}
+        why={tp('why')}
+        testid={`${testid}-fix`}
+      />
+    ) : (
+      <button
+        type="button"
+        className={look}
+        onClick={() => openFix(answer)}
+        data-testid={`${testid}-fix`}
+      >
+        {t('fix')}
+      </button>
+    );
 
   const teach = () =>
     start(async () => {
@@ -346,24 +393,10 @@ function QuestionCard({
               >
                 {t('good')}
               </button>
-              <button
-                type="button"
-                className={styles.secondary}
-                onClick={() => openFix(state.answer)}
-                data-testid={`${testid}-fix`}
-              >
-                {t('fix')}
-              </button>
+              {fixAction(state.answer, styles.secondary)}
             </>
           ) : (
-            <button
-              type="button"
-              className={styles.primary}
-              onClick={() => openFix(state.answer)}
-              data-testid={`${testid}-fix`}
-            >
-              {t('fix')}
-            </button>
+            fixAction(state.answer, styles.primary)
           )}
         </span>
       ) : null}

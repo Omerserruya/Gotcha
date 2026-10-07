@@ -4,8 +4,10 @@ import type { ReactNode } from 'react';
 
 import { ONBOARDING_STEPS, type OnboardingStep } from '@/api/contracts/onboarding';
 import { Logo } from '@/design-system/brand/Logo';
+import { Link } from '@/i18n/navigation';
 
 import styles from './Onboarding.module.css';
+import { stepHref } from './preview';
 
 /**
  * 00d-00h's frame (design 6): a dark column - the mark, five steps (done ✓,
@@ -13,12 +15,19 @@ import styles from './Onboarding.module.css';
  * the foot - beside the light surface the step works on.
  *
  * Source of truth carries "Most important" on every step, as the design does.
+ *
+ * ★ In preview (`?preview=1`) the steps are links - each step's own way on
+ *   is a write, drawn as a status there - and a line above the work says
+ *   what this is, with the way back Home.
  */
 export function OnboardingShell({
   step,
+  preview = false,
   children,
 }: {
   readonly step: OnboardingStep;
+  /** A live workspace's admin, walking it read-only. */
+  readonly preview?: boolean;
   readonly children: ReactNode;
 }) {
   const t = useTranslations('onboarding');
@@ -42,7 +51,17 @@ export function OnboardingShell({
               <span className={styles.stepMark} aria-hidden="true">
                 {i < here ? <Check size={11} strokeWidth={2.5} /> : i + 1}
               </span>
-              <span className={styles.stepName}>{t(`steps.${name}`)}</span>
+              {preview && i !== here ? (
+                <Link
+                  href={stepHref(`/onboarding/${name}`, true)}
+                  className={styles.stepName}
+                  data-testid={`onboarding-step-link-${name}`}
+                >
+                  {t(`steps.${name}`)}
+                </Link>
+              ) : (
+                <span className={styles.stepName}>{t(`steps.${name}`)}</span>
+              )}
               {name === 'truth' ? (
                 <span className={styles.important}>{t('mostImportant')}</span>
               ) : null}
@@ -59,7 +78,21 @@ export function OnboardingShell({
         </p>
       </aside>
       <main className={styles.surface}>
-        <div className={styles.work}>{children}</div>
+        <div className={styles.work}>
+          {preview ? (
+            <p className={styles.previewBanner} role="status" data-testid="onboarding-preview">
+              <span>{t('preview.banner')}</span>
+              <Link
+                href="/home"
+                className={styles.inlineLink}
+                data-testid="onboarding-preview-home"
+              >
+                {t('preview.home')}
+              </Link>
+            </p>
+          ) : null}
+          {children}
+        </div>
       </main>
     </div>
   );

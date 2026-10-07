@@ -6,7 +6,10 @@ import { useState, useTransition } from 'react';
 
 import { languageNames, siteHost, type Discovery } from '@/api/contracts/onboarding';
 import { industryReading } from '@/api/contracts/workspace';
-import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
+import {
+  UnavailableAction,
+  UnavailableItem,
+} from '@/design-system/primitives/unavailable/Unavailable';
 import { InstagramGlyph } from '@/features/inbox/channel-marks';
 import { useRouter } from '@/i18n/navigation';
 import { brandMark, brandName } from '@/lib/brand-mark';
@@ -14,6 +17,7 @@ import { brandMark, brandName } from '@/lib/brand-mark';
 import type { GuessSource } from './load-onboarding';
 import { startReading } from './onboarding-actions';
 import styles from './Onboarding.module.css';
+import { stepHref } from './preview';
 
 /** A description longer than this is a paragraph, not the line beside a name. */
 const KIND_MAX = 60;
@@ -32,11 +36,14 @@ export function WebsiteStep({
   email,
   business,
   discovery,
+  preview = false,
 }: {
   readonly guess: { readonly host: string; readonly from: GuessSource } | null;
   readonly email: string | null;
   readonly business: string | null;
   readonly discovery: Discovery | null;
+  /** Read-only: reading a site is a write, drawn as a status. */
+  readonly preview?: boolean;
 }) {
   const t = useTranslations('onboarding.website');
   const tn = useTranslations('onboarding');
@@ -53,7 +60,7 @@ export function WebsiteStep({
       setRefused(false);
       const since = new Date().toISOString();
       if (await startReading(host, locale)) {
-        router.push({ pathname: '/onboarding/reading', query: { since } });
+        router.push(stepHref('/onboarding/reading', preview, { since }));
       } else setRefused(true);
     });
 
@@ -138,15 +145,24 @@ export function WebsiteStep({
             </span>
           </div>
           <span className={styles.actions}>
-            <button
-              type="button"
-              className={styles.primary}
-              onClick={() => read(guess.host)}
-              disabled={isStarting}
-              data-testid="website-yes"
-            >
-              {isStarting ? t('starting') : t('yes')}
-            </button>
+            {preview ? (
+              <UnavailableAction
+                label={t('yes')}
+                tag={tn('preview.tag')}
+                why={tn('preview.why')}
+                testid="website-yes"
+              />
+            ) : (
+              <button
+                type="button"
+                className={styles.primary}
+                onClick={() => read(guess.host)}
+                disabled={isStarting}
+                data-testid="website-yes"
+              >
+                {isStarting ? t('starting') : t('yes')}
+              </button>
+            )}
             <button
               type="button"
               className={styles.secondary}
@@ -162,6 +178,7 @@ export function WebsiteStep({
           className={styles.addressForm}
           onSubmit={(e) => {
             e.preventDefault();
+            if (preview) return;
             if (typed) read(typed);
             else setRefused(true);
           }}
@@ -181,14 +198,23 @@ export function WebsiteStep({
             data-testid="website-address"
           />
           <span className={styles.actions}>
-            <button
-              type="submit"
-              className={styles.primary}
-              disabled={isStarting || address.trim() === ''}
-              data-testid="website-read"
-            >
-              {isStarting ? t('starting') : t('readThis')}
-            </button>
+            {preview ? (
+              <UnavailableAction
+                label={t('readThis')}
+                tag={tn('preview.tag')}
+                why={tn('preview.why')}
+                testid="website-read"
+              />
+            ) : (
+              <button
+                type="submit"
+                className={styles.primary}
+                disabled={isStarting || address.trim() === ''}
+                data-testid="website-read"
+              >
+                {isStarting ? t('starting') : t('readThis')}
+              </button>
+            )}
             {guess ? (
               <button type="button" className={styles.secondary} onClick={() => setTyping(false)}>
                 {t('back', { host: guess.host })}

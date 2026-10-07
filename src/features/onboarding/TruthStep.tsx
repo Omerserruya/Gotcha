@@ -8,10 +8,14 @@ import { oauthHere } from '@/features/capabilities/oauth';
 import { WooConnect } from '@/features/capabilities/WooConnect';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
-import { UnavailableTag } from '@/design-system/primitives/unavailable/Unavailable';
+import {
+  UnavailableAction,
+  UnavailableTag,
+} from '@/design-system/primitives/unavailable/Unavailable';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Onboarding.module.css';
+import { stepHref } from './preview';
 
 /** 00g's systems, the design's order: the store platforms, then the rest. */
 export const TRUTH_SYSTEMS = [
@@ -61,6 +65,7 @@ export function TruthStep({
   detected,
   system,
   coreSystem,
+  preview = false,
 }: {
   readonly integrations: readonly Integration[] | null;
   readonly shopify: ShopifyAvailability | null;
@@ -74,10 +79,13 @@ export function TruthStep({
    * skipped, which only waives the check.
    */
   readonly coreSystem: string | null;
+  /** Read-only: connecting is a write, drawn as a status. */
+  readonly preview?: boolean;
 }) {
   const t = useTranslations('onboarding.truth');
   const tn = useTranslations('onboarding');
   const tc = useTranslations('capabilities.available');
+  const to = useTranslations('capabilities.oauth');
   const known = (slug: string | null | undefined) =>
     slug ? TRUTH_SYSTEMS.find((s) => s === slug) : undefined;
   const selected = known(system) ?? known(detected?.slug) ?? 'shopify';
@@ -119,7 +127,17 @@ export function TruthStep({
             </span>
           ) : null}
         </span>
-        {standing === 'connected' ? null : standing === 'failing' && integration ? (
+        {standing === 'connected' ? null : preview && integration ? (
+          <div className={styles.connectHere} data-testid="truth-preview">
+            <UnavailableAction
+              label={
+                standing === 'failing' ? to('reconnect', { name: integration.name }) : tc('connect')
+              }
+              tag={tn('preview.tag')}
+              why={tn('preview.why')}
+            />
+          </div>
+        ) : standing === 'failing' && integration ? (
           // Never the stored error (dev: an HTML page) - one line, in our words.
           <div className={styles.connectHere} data-testid="truth-reconnect">
             <p className={styles.why}>{t('failingWhy', { name: integration.name })}</p>
@@ -169,7 +187,7 @@ export function TruthStep({
           return (
             <Link
               key={slug}
-              href={{ pathname: '/onboarding/truth', query: { system: slug } }}
+              href={stepHref('/onboarding/truth', preview, { system: slug })}
               className={styles.systemTile}
               scroll={false}
               data-testid={`truth-tile-${slug}`}
@@ -223,8 +241,8 @@ export function TruthStep({
           // Skipped: the finish says so to the route (`skipCoreSystem`), and only then.
           href={
             coreConnected
-              ? '/onboarding/try'
-              : { pathname: '/onboarding/try', query: { skipped: '1' } }
+              ? stepHref('/onboarding/try', preview)
+              : stepHref('/onboarding/try', preview, { skipped: '1' })
           }
           className={styles.primary}
           data-testid="truth-next"

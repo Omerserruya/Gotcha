@@ -224,7 +224,8 @@
       "forbidden": "Only an admin can try GOTCHA's answers",
       "failed": "It couldn't answer just now. Try again in a moment"
     },
-    "subtitle": "Answered from what GOTCHA just learned, with where each answer came from"
+    "subtitle": "Answered from what GOTCHA just learned, with where each answer came from",
+    "home": "Back to Home"
   },
   "gate": {
     "waiting": {
@@ -243,5 +244,11 @@
       "go": "Go to payment"
     }
   },
-  "notYet": "Not available yet"
+  "notYet": "Not available yet",
+  "preview": {
+    "tag": "Preview",
+    "why": "In preview nothing here changes your workspace",
+    "banner": "A preview of onboarding. Your workspace is live, and nothing here changes it",
+    "home": "Back to Home"
+  }
 }
