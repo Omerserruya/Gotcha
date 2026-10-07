@@ -1231,7 +1231,6 @@ model AIAgent {
   tone                String        @default("professional") // professional, friendly, casual, formal
   languages           Json          @default("{\"english\":true}") // { english: bool, hebrew: bool, arabic: bool }
   style               Json          @default("{}") // { useEmojis, concise, useFirstName, proactive }
-  channels            Json          @default("[]") // ["whatsapp", "instagram", "webchat"]
   escalationRules     Json          @default("[]") @map("escalation_rules") // [{ label, type, value, enabled }]
   interactiveMessages Json          @default("{}") @map("interactive_messages") // { allowQuickReply, allowListMenu, ... }
 
