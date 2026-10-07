@@ -32,7 +32,10 @@ export const TRIGGER_TYPES = [
 export type TriggerType = (typeof TRIGGER_TYPES)[number];
 
 /** Triggers whose events reach the dispatcher today. */
-const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "tag_added", "schedule", "webhook", "call_missed", "call_answered"]);
+// call_missed / call_answered are NOT live: nothing feeds voice events to the
+// automation dispatcher yet (only the old voice_trigger nodes hear them).
+// Offering them made an automation that could never run.
+const LIVE_TRIGGERS = new Set<TriggerType>(["message_received", "new_customer", "tag_added", "schedule", "webhook"]);
 /** Triggers that carry no customer: their path cannot send a message. */
 const CUSTOMERLESS_TRIGGERS = new Set<TriggerType>(["schedule", "webhook"]);
 const VOICE_TRIGGERS = new Set<TriggerType>(["call_missed", "call_answered"]);

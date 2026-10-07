@@ -296,7 +296,8 @@ describe("★ validation rules (pure)", () => {
   it("a trigger with no event source cannot go live; a call trigger needs a line", () => {
     expect(v({ type: "order_event", config: {} }).errors.map((e) => e.code)).toContain("trigger_no_event_source");
     const g = goodGraph();
-    expect(validateAutomation({ type: "call_missed", config: {} }, g.nodes as any, g.edges as any, { voiceConnected: false }).errors.map((e) => e.code)).toContain("trigger_not_connected");
+    // Not wired to the dispatcher yet: unavailable even WITH a voice line.
+    expect(validateAutomation({ type: "call_missed", config: {} }, g.nodes as any, g.edges as any, { voiceConnected: true }).errors.map((e) => e.code)).toContain("trigger_no_event_source");
   });
 
   it("normalizeTrigger keeps only the fields its type reads", () => {
@@ -312,7 +313,7 @@ describe("the catalogue (09e)", () => {
     const it0 = items((await request(app).get("/api/automations/catalog")).body);
     expect(it0["trigger:message_received"]).toMatchObject({ available: true });
     expect(it0["trigger:order_event"]).toMatchObject({ available: false, reason: "no_event_source" });
-    expect(it0["trigger:call_missed"]).toMatchObject({ available: false, reason: "not_connected" });
+    expect(it0["trigger:call_missed"]).toMatchObject({ available: false, reason: "no_event_source" });
     expect(it0.send_buttons).toMatchObject({ available: false, reason: "first_step_only" });
   });
 
