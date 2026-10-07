@@ -26,6 +26,7 @@ import {
   memoryToChatMessages,
   sanitizeHistoryForLLM,
 } from "./agent-memory.service";
+import { withoutWideDashes } from "./business-discovery.service";
 import { buildAgentContext } from "./agent-context.service";
 import type { ClientContext, OperatorContext } from "./agent-context.service";
 import {
@@ -79,8 +80,12 @@ export type AgentEventSink = (event: AgentRuntimeEvent) => void | Promise<void>;
 
 export async function runAgent(
   input: AgentRunInput,
-  onEvent: AgentEventSink,
+  sink: AgentEventSink,
 ): Promise<void> {
+  // Everything the operator sees passes here: no wide dash in any event
+  // (Omer's rule; the model writes them anyway). A dash is one character, so
+  // a per-delta replace never splits one.
+  const onEvent: AgentEventSink = (ev) => sink(withoutWideDashes(ev));
   await onEvent({ type: "ready", sessionId: input.sessionId });
 
   // 1. UI context - resolved IDs travel with the tool dispatcher so calls
@@ -168,7 +173,7 @@ export async function runAgent(
           userId: input.operator.userId,
           sessionId: input.sessionId,
           role: "assistant",
-          content: finalContent,
+          content: withoutWideDashes(finalContent),
         });
       }
       await onEvent({ type: "round_end", round, hadToolCalls: false });
@@ -190,7 +195,7 @@ export async function runAgent(
         userId: input.operator.userId,
         sessionId: input.sessionId,
         role: "assistant",
-        content: finalContent || "",
+        content: withoutWideDashes(finalContent || ""),
         toolCalls: finalToolCalls,
       });
     }
@@ -216,6 +221,7 @@ export async function runAgent(
         selectedContactId: ctxBuilt.resolved.contactId,
         authToken: input.authToken,
         viewer: input.operator.viewer,
+        locale: input.operator.locale ?? "en",
       });
 
       // Surface side-effects to the consumer for UI cues (toast, badge, etc).

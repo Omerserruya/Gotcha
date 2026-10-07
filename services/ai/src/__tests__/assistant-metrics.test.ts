@@ -38,7 +38,7 @@ beforeEach(() => {
 describe("★ the same numbers as the screens", () => {
   it("waiting_for_person is the analytics queue's total, read with the user's token", async () => {
     const r = JSON.parse((await dispatchSystemToolCall(call("system_get_metric", { metric: "waiting_for_person" }), ctx())).content);
-    expect(r).toEqual({ ok: true, value: 10, label: METRIC_LABELS.waiting_for_person });
+    expect(r).toEqual({ ok: true, value: 10, label: METRIC_LABELS.waiting_for_person!.en });
     expect(H.fetches).toEqual([{ url: expect.stringMatching(/\/api\/analytics\/queue\/items\?limit=1$/), auth: "Bearer user-token" }]);
     expect(H.wheres).toEqual([]); // never a local status count
   });

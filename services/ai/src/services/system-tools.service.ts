@@ -258,6 +258,8 @@ export interface SystemToolDispatchCtx {
   authToken?: string;
   /** Who is asking. Conversation data follows the inbox's visibility rule. */
   viewer?: Viewer;
+  /** The interface language: result labels are written in it. */
+  locale?: "he" | "en";
 }
 
 /** The visibility OR-clause for this caller, or null when unrestricted. */
@@ -355,7 +357,7 @@ async function dispatchSystemTool(
         const count = await prisma.conversation.count({ where });
         // Words, not the query: the model repeats what it is given, and the
         // owner must never read a status key ("WAITING") or a field name.
-        return { toolCallId, content: JSON.stringify({ ok: true, count, label: countLabel(args) }) };
+        return { toolCallId, content: JSON.stringify({ ok: true, count, label: countLabel(args, ctx.locale) }) };
       }
       case "system_get_metric": {
         const metric = METRIC_ALIASES[args.metric] ?? args.metric;
@@ -363,7 +365,7 @@ async function dispatchSystemTool(
         if (value === null) {
           return { toolCallId, content: JSON.stringify({ ok: false, error: "this figure is not available right now" }) };
         }
-        return { toolCallId, content: JSON.stringify({ ok: true, value, label: METRIC_LABELS[metric] ?? "figure" }) };
+        return { toolCallId, content: JSON.stringify({ ok: true, value, label: METRIC_LABELS[metric]?.[ctx.locale ?? "en"] ?? (ctx.locale === "he" ? "נתון" : "figure") }) };
       }
       case "system_search_customers": {
         const limit = Math.min(20, Math.max(1, Number(args.limit) || 10));
@@ -505,24 +507,31 @@ const REAL_CONVERSATION = { isTest: false, NOT: { customerExternalId: { startsWi
 /** An old metric key still accepted, mapped to the figure the screens show. */
 const METRIC_ALIASES: Record<string, string> = { waiting_conversations: "waiting_for_person" };
 
-/** What each figure is, in the words the screens use (the model localises). */
-export const METRIC_LABELS: Record<string, string> = {
-  waiting_for_person: "conversations waiting for someone on your team to answer",
-  pending_approvals: "actions waiting for your approval",
-  open_conversations: "open conversations, including the ones the AI is answering",
-  closed_today: "conversations closed today",
-  inbound_messages_24h: "customer messages in the last 24 hours",
+/**
+ * What each figure is, in the words the screens use, in the interface
+ * language: the model repeats what it is given, so an English label used to
+ * surface verbatim inside a Hebrew answer.
+ */
+export const METRIC_LABELS: Record<string, { en: string; he: string }> = {
+  waiting_for_person: { en: "conversations waiting for someone on your team to answer", he: "שיחות שמחכות למענה מהצוות" },
+  pending_approvals: { en: "actions waiting for your approval", he: "פעולות שמחכות לאישור שלך" },
+  open_conversations: { en: "open conversations, including the ones the AI is answering", he: "שיחות פתוחות, כולל אלה שה-AI עונה בהן" },
+  closed_today: { en: "conversations closed today", he: "שיחות שנסגרו היום" },
+  inbound_messages_24h: { en: "customer messages in the last 24 hours", he: "הודעות מלקוחות ב-24 השעות האחרונות" },
 };
 
-const STATUS_WORDS: Record<string, string> = {
-  OPEN: "open conversations",
-  WAITING: "conversations waiting for the customer to reply",
-  CLOSED: "closed conversations",
+const STATUS_WORDS: Record<string, { en: string; he: string }> = {
+  OPEN: { en: "open conversations", he: "שיחות פתוחות" },
+  WAITING: { en: "conversations waiting for the customer to reply", he: "שיחות שמחכות לתשובת הלקוח" },
+  CLOSED: { en: "closed conversations", he: "שיחות סגורות" },
 };
-function countLabel(args: any): string {
-  const parts = [args?.status && args.status !== "ANY" ? (STATUS_WORDS[String(args.status)] ?? "matching conversations") : "conversations"];
-  if (args?.channel) parts.push(`on ${String(args.channel).toLowerCase().replace(/_/g, " ")}`);
-  if (args?.sinceISO) parts.push(`since ${String(args.sinceISO).slice(0, 10)}`);
+function countLabel(args: any, locale: "he" | "en" = "en"): string {
+  const he = locale === "he";
+  const status = args?.status && args.status !== "ANY" ? STATUS_WORDS[String(args.status)]?.[locale] ?? (he ? "שיחות מתאימות" : "matching conversations") : he ? "שיחות" : "conversations";
+  const parts = [status];
+  const channel = args?.channel ? String(args.channel).toLowerCase().replace(/_/g, " ") : "";
+  if (channel) parts.push(he ? `בערוץ ${channel}` : `on ${channel}`);
+  if (args?.sinceISO) parts.push(`${he ? "מאז" : "since"} ${String(args.sinceISO).slice(0, 10)}`);
   return parts.join(" ");
 }
 
