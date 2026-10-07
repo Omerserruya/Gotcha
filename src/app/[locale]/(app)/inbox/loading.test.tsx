@@ -1,7 +1,18 @@
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import { NextIntlClientProvider } from 'next-intl';
+import type { ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
 
+import common from '@/i18n/messages/en/common.json';
+
 import Loading from './loading';
+
+const render = (node: ReactElement) =>
+  rtlRender(
+    <NextIntlClientProvider locale="en" messages={{ common }}>
+      {node}
+    </NextIntlClientProvider>,
+  );
 
 /*
  * ★★ OMER: "content placeholders". The frame and both panels at once, with
@@ -12,6 +23,8 @@ describe('★★ the inbox before its first read', () => {
     render(<Loading />);
     const screenEl = screen.getByTestId('inbox-loading');
     expect(screenEl).toHaveAttribute('aria-busy', 'true');
+    // Said, not only drawn: a screen reader hears that it is loading.
+    expect(screenEl).toHaveAttribute('aria-label', common.loading);
     expect(screen.getByTestId('queue-skeleton')).toBeInTheDocument();
     expect(screen.getAllByTestId('queue-row-skeleton').length).toBeGreaterThan(3);
     expect(screen.getByTestId('header-skeleton')).toBeInTheDocument();

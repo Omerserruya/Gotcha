@@ -1,3 +1,5 @@
+import { useTranslations } from 'next-intl';
+
 import styles from '@/features/inbox/Inbox.module.css';
 import { ConversationSkeleton, QueueSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
@@ -12,6 +14,7 @@ import { PageContainer } from '@/shell/PageContainer';
  *   because every placeholder is built to its content's measured box.
  */
 export default function Loading() {
+  const t = useTranslations('common');
   return (
     <PageContainer bleed>
       <div
@@ -19,6 +22,7 @@ export default function Loading() {
         data-testid="inbox-loading"
         data-owns-panels=""
         aria-busy="true"
+        aria-label={t('loading')}
       >
         <section className={styles.queueColumn}>
           <QueueSkeleton />

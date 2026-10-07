@@ -18,7 +18,13 @@ export default function Loading() {
   const common = useTranslations('common');
   const loading = common('loading');
   return (
-    <div className={styles.page} data-testid="home-loading">
+    // Home's own padding (each block on the page sets 34 / 40); busy, and said so.
+    <div
+      className={styles.loading}
+      data-testid="home-loading"
+      aria-busy="true"
+      aria-label={loading}
+    >
       <SkeletonRegion label={loading}>
         <Skeleton height="36px" />
         <header className={styles.greeting}>
