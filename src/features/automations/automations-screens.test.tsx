@@ -452,12 +452,11 @@ describe('★ measured on dev (e6785c4)', () => {
 
 describe('★★ a template creates a real draft - its graph sent, never turned on', () => {
   it('the welcome: the trigger, the graph with the greeting by name; then the builder', async () => {
-    const { templateOf } = await import('./templates');
     actions.createAutomation.mockResolvedValue({
       ok: true,
       automation: automation({ id: 'w1', status: 'draft' }),
     });
-    wrap(<NewAutomation catalog={null} template={templateOf('welcome')} />);
+    wrap(<NewAutomation catalog={null} templateKey="welcome" />);
     expect(screen.getByTestId('new-automation-name')).toHaveValue('Welcome a new customer');
     await act(async () => {
       fireEvent.click(screen.getByTestId('new-automation-create'));
@@ -477,8 +476,7 @@ describe('★★ a template creates a real draft - its graph sent, never turned 
   });
 
   it('tag added: still asks for the tags the route needs', async () => {
-    const { templateOf } = await import('./templates');
-    wrap(<NewAutomation catalog={null} template={templateOf('tagNotify')} />);
+    wrap(<NewAutomation catalog={null} templateKey="tagNotify" />);
     expect(screen.getByTestId('new-automation-create')).toBeDisabled();
     fireEvent.change(screen.getByTestId('new-automation-tags'), { target: { value: 'vip' } });
     expect(screen.getByTestId('new-automation-create')).toBeEnabled();

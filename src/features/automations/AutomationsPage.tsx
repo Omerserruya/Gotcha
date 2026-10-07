@@ -4,7 +4,7 @@ import { AutomationsList } from './AutomationsList';
 import styles from './Automations.module.css';
 import { loadAutomations, loadCatalog } from './load-automations';
 import { NewAutomation } from './NewAutomation';
-import type { Template } from './templates';
+import type { TemplateKey } from './templates';
 
 /**
  * 09c's data: the list - or no access, unread, none - and, with the sheet
@@ -15,7 +15,8 @@ export async function ListSection({
   fromTemplate,
 }: {
   readonly creating: boolean;
-  readonly fromTemplate: Template | null;
+  /** A template that can run: its key only - the client builds it. */
+  readonly fromTemplate: TemplateKey | null;
 }) {
   const t = await getTranslations('automations');
   const [automations, catalog] = await Promise.all([
@@ -42,7 +43,7 @@ export async function ListSection({
         <AutomationsList automations={automations} />
       )}
       {automations === 'forbidden' ? null : fromTemplate ? (
-        <NewAutomation catalog={null} template={fromTemplate} />
+        <NewAutomation catalog={null} templateKey={fromTemplate} />
       ) : creating ? (
         <NewAutomation catalog={catalog} />
       ) : null}

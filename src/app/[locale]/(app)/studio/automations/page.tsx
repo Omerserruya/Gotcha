@@ -34,7 +34,7 @@ export default async function Page({
   const params = (await searchParams) ?? {};
   const creating = params.new === '1';
   const chosen = templateOf(params.template);
-  const fromTemplate = chosen?.build ? chosen : null;
+  const fromTemplate = chosen?.build ? chosen.key : null;
 
   return (
     <AutomationsFrame deleted={params.deleted === '1'}>

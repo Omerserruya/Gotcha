@@ -8,7 +8,7 @@ import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog
 import { useRouter } from '@/i18n/navigation';
 
 import { createAutomation, type CreateResult } from './automation-actions';
-import type { Template } from './templates';
+import { templateOf, type TemplateKey } from './templates';
 import { StepSheet } from './StepSheet';
 import styles from './StepSheet.module.css';
 
@@ -23,13 +23,19 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
  */
 export function NewAutomation({
   catalog,
-  template = null,
+  templateKey = null,
 }: {
   readonly catalog: Catalog | null;
-  /** 09c's template chosen: its trigger and graph, prefilled. */
-  readonly template?: Template | null;
+  /**
+   * 09c's template chosen: its trigger and graph, prefilled. ★ The KEY, never
+   * the template: a server component hands this over, and a template carries
+   * its `build` function - which React cannot send to the client (dev,
+   * 8df59dd: every `?template=` crashed to the error page).
+   */
+  readonly templateKey?: TemplateKey | null;
 }) {
   const t = useTranslations('automations');
+  const template = templateOf(templateKey ?? undefined);
   const router = useRouter();
   const [trigger, setTrigger] = useState<TriggerType | null>(template?.trigger ?? null);
   const [name, setName] = useState(template ? t(`template.${template.key}.name`) : '');
