@@ -1,5 +1,16 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity, defaultIntegrationAccess, validateIntegrationAccess, integrationAccessChoices } from "@chatcenter/shared";
+import { whereEmployeeAnswers } from "../services/employee-reach.service";
+
+/**
+ * Columns that still exist but are no longer part of the API. `channels`
+ * ("Answers on") was display-only: who answers where is the playbook, which
+ * GET /:id/reachability reports per channel. The column is dropped separately.
+ */
+function withoutInertFields<T extends Record<string, any>>(agent: T): Omit<T, "channels"> {
+  const { channels: _channels, ...rest } = agent;
+  return rest;
+}
 import { runSandboxTurn } from "../services/sandbox-conversation.service";
 import { computeCalendarCapability } from "../services/calendar-capability.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
@@ -174,7 +185,7 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requirePermi
         orderBy: { updatedAt: "desc" },
       }).catch(() => null);
       return {
-        ...agent,
+        ...withoutInertFields(agent),
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         toolCount,
         departmentName: agent.departmentId ? deptById.get(agent.departmentId) ?? null : null,
@@ -258,13 +269,8 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
       if (genderLower.includes(key)) { detectedGender = val; break; }
     }
 
-    // Detect channels
-    const channelsRaw = (answers.channels || "").toLowerCase();
-    const channels: string[] = [];
-    if (channelsRaw.includes("whatsapp") || channelsRaw.includes("ווטסאפ")) channels.push("whatsapp");
-    if (channelsRaw.includes("instagram") || channelsRaw.includes("אינסטגרם")) channels.push("instagram");
-    if (channelsRaw.includes("web") || channelsRaw.includes("אתר") || channelsRaw.includes("צ'אט")) channels.push("webchat");
-    if (channelsRaw.includes("email") || channelsRaw.includes("אימייל") || channelsRaw.includes("מייל")) channels.push("email");
+    // Channels are not part of an employee: the playbook decides who answers
+    // where (GET /:id/reachability says it per channel).
 
     // Build the AI Employee name
     const name = agentName || (responsibility ? responsibility.substring(0, 50) : `AI Employee ${new Date().toLocaleDateString()}`);
@@ -326,7 +332,6 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
       role: detectedRole,
       description,
       tone: detectedTone,
-      channels,
       mode,
       persona: {
         gender: detectedGender,
@@ -410,7 +415,7 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePe
 
     res.json({
       data: {
-        ...agent,
+        ...withoutInertFields(agent),
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         tools,
         calendarCapability,
@@ -455,7 +460,7 @@ router.post(
   try {
     const {
       name, role, description, avatarColor, status,
-      tone, languages, style, channels, escalationRules,
+      tone, languages, style, escalationRules,
       interactiveMessages, systemPrompt, model, provider,
       temperature, maxTokens, identity, goals, toneConfig,
       behavioral, persona, maxAutonomousMessages, maxAutonomousMinutes,
@@ -530,7 +535,6 @@ router.post(
         tone: tone || "professional",
         languages: languages || { english: true },
         style: style || {},
-        channels: channels || [],
         integrationAccess: access,
         escalationRules: escalationRules || [],
         interactiveMessages: interactiveMessages || {},
@@ -585,7 +589,7 @@ router.post(
       });
     }
 
-    res.status(201).json({ data: agent });
+    res.status(201).json({ data: withoutInertFields(agent) });
   } catch (err) {
     console.error("Create AI agent error:", err);
     res.status(500).json({ error: "Failed to create AI agent" });
@@ -624,7 +628,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // again.
     const AGENT_EDITABLE_FIELDS = [
       "name", "role", "avatarColor", "status", "tone", "languages", "style",
-      "channels", "escalationRules", "interactiveMessages", "systemPrompt",
+      "escalationRules", "interactiveMessages", "systemPrompt",
       "model", "provider", "temperature",
       "maxTokens", "persona", "identity", "goals", "toneConfig", "behavioral",
       "salesContext", "goal", "successCriteria", "maxAutonomousMessages",
@@ -818,7 +822,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // Body: { tenantToolId, isAllowed, requireApproval? }
     // Handled via the dedicated route below.
 
-    res.json({ data: agent });
+    res.json({ data: withoutInertFields(agent) });
   } catch (err) {
     console.error("Update AI agent error:", err);
     res.status(500).json({ error: "Failed to update AI agent" });
@@ -927,7 +931,10 @@ router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant
       const routeType = n?.data?.routeType ?? "agent";
       return routeType === "agent" && n?.data?.targetId === agent.id;
     });
-    res.json({ data: { hasCanvas: !!canvas, reachable } });
+    // Where it answers, per channel the workspace has (the playbook decides;
+    // AIAgent.channels is display-only and does not).
+    const channels = await whereEmployeeAnswers(req.tenantId! as string, agent.id);
+    res.json({ data: { hasCanvas: !!canvas, reachable, channels } });
   } catch (err) {
     console.error("Reachability check error:", err);
     res.status(500).json({ error: "Failed to check reachability" });

@@ -109,7 +109,6 @@ export interface BuilderDraftSnapshot {
   escalationMessage: string;
   conversationFlow: unknown[];
   customGuardrails: unknown[];
-  channels: unknown[];
   funnel: { id: string; funnelId: string; stageCount: number } | null;
   knowledge: Array<{ id: string; name: string }>;
   tools: Array<{ tenantToolId: string; name: string; integration: string }>;
@@ -195,7 +194,6 @@ export async function loadDraftSnapshot(
     escalationMessage: a.escalationMessage,
     conversationFlow: Array.isArray(a.conversationFlow) ? (a.conversationFlow as any[]) : [],
     customGuardrails: Array.isArray(a.customGuardrails) ? (a.customGuardrails as any[]) : [],
-    channels: Array.isArray(a.channels) ? (a.channels as any[]) : [],
     funnel,
     knowledge: a.knowledgeBases.map((k: any) => ({ id: k.knowledgeBase.id, name: k.knowledgeBase.name })),
     knowledgeTopics,

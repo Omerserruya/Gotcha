@@ -34,7 +34,8 @@ const prismaDouble = vi.hoisted(() => {
   return {
     aIAgent: {
       findFirst: async (a: any) => H.agents.find((x) => x.id === a.where.id && x.tenantId === a.where.tenantId) ?? null,
-      create: async (a: any) => { const r = { id: "new_agent", ...a.data }; H.created.push(r); H.agents.push(r); return r; },
+      // The row as the database returns it: the column default included.
+      create: async (a: any) => { H.created.push(a.data); const r = { id: "new_agent", channels: [], ...a.data }; H.agents.push(r); return r; },
       update: async (a: any) => { H.updated.push(a.data); const r = H.agents.find((x) => x.id === a.where.id); Object.assign(r, a.data); return r; },
     },
     agentToolPermission: {
@@ -186,6 +187,17 @@ describe("★ routes", () => {
     const bad = await request(app()).post("/api/ai-agents").send({ name: "Bad", goal: "help", integrationAccess: ["zzz"] });
     expect(bad.status).toBe(422);
     expect(H.created).toHaveLength(2);
+  });
+
+  it("★ channels is no longer stored or returned (the playbook decides where an employee answers)", async () => {
+    H.agents[0].channels = ["whatsapp"];
+    const created = await request(app()).post("/api/ai-agents").send({ name: "Dan", goal: "help", channels: ["instagram"] });
+    expect(H.created[0]).not.toHaveProperty("channels");
+    expect(created.body.data).not.toHaveProperty("channels");
+    const patched = await request(app()).patch("/api/ai-agents/maya").send({ channels: ["webchat"], name: "Maya 2" });
+    expect(H.updated.at(-1)).not.toHaveProperty("channels");
+    expect(patched.body.data).not.toHaveProperty("channels");
+    expect(H.agents[0].channels).toEqual(["whatsapp"]);
   });
 
   it("GET /:id/integration-access: allowed + the workspace's choices; another tenant's employee is 404", async () => {

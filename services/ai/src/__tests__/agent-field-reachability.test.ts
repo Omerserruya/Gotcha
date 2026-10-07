@@ -54,6 +54,38 @@ function consumers(field: string, scope: "backend" | "all" = "all"): string[] {
   }
 }
 
+/**
+ * Fields named with a word too common for a grep to mean anything. "channels"
+ * matched automation triggers, notification preferences and conversation
+ * summaries, so the generic check always found "consumers" and hid that the
+ * employee's own channels field drives nothing. For these, only a read of the
+ * field ON AN EMPLOYEE counts.
+ */
+const GENERIC = new Set(["channels"]);
+function employeeReads(field: string): string[] {
+  try {
+    const out = execSync(
+      `grep -rlE --include=*.ts --include=*.tsx '(agent|aiAgent|employee)\\??\\.${field}\\b' services packages/shared/src 2>/dev/null || true`,
+      { cwd: REPO, encoding: "utf-8" },
+    );
+    return out.split("\n").filter(Boolean).filter((f) =>
+      !f.includes("routes/ai-agents.ts") &&
+      !f.includes("__tests__") &&
+      // The builder's live preview only carries the value back to the screen.
+      !f.includes("agent-builder.service.ts"),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Still accepted, known to drive nothing, removal under way. Each entry says
+ * why and what it waits for; a field leaves this list when it leaves the
+ * allowlist (the last test fails until both happen together).
+ */
+const INERT_PENDING_REMOVAL: Record<string, string> = {};
+
 describe("every settable agent field is read by something", () => {
   const fields = editableFields();
 
@@ -66,7 +98,9 @@ describe("every settable agent field is read by something", () => {
     // Deliberately generous: ANY consumer counts, frontend included. The bar is
     // "something reads it", not "the prompt uses it" - a field that only drives
     // the builder UI is still doing a job, even if a smaller one.
-    const inert = fields.filter((f) => consumers(f).length === 0);
+    const inert = fields
+      .filter((f) => (GENERIC.has(f) ? employeeReads(f).length === 0 : consumers(f).length === 0))
+      .filter((f) => !(f in INERT_PENDING_REMOVAL));
     expect(
       inert,
       `these fields are accepted by PUT /api/ai-agents/:id and read by nothing. ` +
@@ -92,9 +126,21 @@ describe("every settable agent field is read by something", () => {
     expect(uiOnly.length).toBeLessThanOrEqual(1);
   });
 
+  it("★ an employee's channels decide nothing at runtime (the generic word no longer hides it)", () => {
+    expect(employeeReads("channels"), "a backend read of an employee's channels appeared: wire it into routing deliberately and remove it from INERT_PENDING_REMOVAL").toEqual([]);
+  });
+
+  it("the pending-removal list holds only fields still accepted", () => {
+    for (const f of Object.keys(INERT_PENDING_REMOVAL)) {
+      expect(fields, `${f} left the allowlist: remove it from INERT_PENDING_REMOVAL and add it to "no longer accepts"`).toContain(f);
+    }
+  });
+
   it("no longer accepts the three that were settable and inert", () => {
     // Named individually so a regression says WHICH one came back.
-    for (const f of ["sharedPrompt", "autonomousPrompt", "escalationGates"]) {
+    // channels ("Answers on"): display only; who answers where is the playbook,
+    // reported per channel by GET /:id/reachability.
+    for (const f of ["sharedPrompt", "autonomousPrompt", "escalationGates", "channels"]) {
       expect(fields, `${f} was settable and read by nothing`).not.toContain(f);
     }
   });
