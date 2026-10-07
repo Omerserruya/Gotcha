@@ -43,7 +43,12 @@ export interface HireTool {
   readonly current: AdminChoice;
 }
 
-/** Step 2's groups (Omer, 2026-10-07): GOTCHA's own first, then one per integration, by name. */
+/**
+ * Step 2's groups (Omer, 2026-10-07): one per integration, by name, THEN
+ * GOTCHA's own. The integrations come first because they are what the
+ * question is about, and GOTCHA's own list is long (16 rows on dev): first,
+ * it put them below the fold (supervisor, 2026-10-07).
+ */
 export function toolGroups(tools: readonly HireTool[]): readonly {
   readonly provider: string | null;
   readonly label: string | null;
@@ -60,7 +65,7 @@ export function toolGroups(tools: readonly HireTool[]): readonly {
     .filter(([provider]) => provider !== null)
     .map(([provider, list]) => ({ provider, label: list[0]!.providerLabel, tools: list }))
     .sort((a, b) => (a.label ?? a.provider ?? '').localeCompare(b.label ?? b.provider ?? ''));
-  return [...(own ? [{ provider: null, label: null, tools: own }] : []), ...integrations];
+  return [...integrations, ...(own ? [{ provider: null, label: null, tools: own }] : [])];
 }
 
 /** Step 1 is complete when there is a job - and, for "Something else", words. */

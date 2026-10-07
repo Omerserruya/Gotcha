@@ -114,7 +114,7 @@ describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
     expect(screen.getByTestId('hire-line')).toHaveTextContent(/^Sales$/);
   });
 
-  it("★★ grouped by integration (Omer, 2026-10-07): GOTCHA's own first, then each integration by name", () => {
+  it("★★ grouped by integration (Omer, 2026-10-07): each integration by name, then GOTCHA's own - its long list below them", () => {
     const woo = (toolName: string, label: string): HireTool => ({
       toolName,
       label,
@@ -128,7 +128,7 @@ describe('★ 07b-07d corrections (measurement of aca09ea)', () => {
       tools: [woo('woocommerce.get_customer', 'Get customer'), TOOLS[1]!, TOOLS[0]!],
     });
     const groups = screen.getAllByTestId(/^hire-group-/).map((g) => g.dataset.testid);
-    expect(groups).toEqual(['hire-group-gotcha', 'hire-group-shopify', 'hire-group-woocommerce']);
+    expect(groups).toEqual(['hire-group-shopify', 'hire-group-woocommerce', 'hire-group-gotcha']);
     const own = screen.getByTestId('hire-group-gotcha');
     expect(own).toHaveTextContent("GOTCHA's own actions");
     expect(own.querySelector('[aria-disabled]')).toBeNull();
