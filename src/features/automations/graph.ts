@@ -181,6 +181,51 @@ export function removeStep(graph: Graph, id: string): Graph {
   };
 }
 
+/**
+ * Remove several steps (09d's selection, Delete): each by `removeStep`'s own
+ * rules, in turn - a step already gone with an earlier one is skipped, and
+ * the trigger is never removed.
+ */
+export function removeSteps(graph: Graph, ids: readonly string[]): Graph {
+  return ids.reduce(
+    (now, id) => (now.nodes.some((n) => n.id === id) ? removeStep(now, id) : now),
+    graph,
+  );
+}
+
+/**
+ * Duplicate a step that has one way on: the copy goes right after it, with
+ * the same settings, and leads where the original led. A branching step
+ * (which branch would the copy take?), a final one (nothing comes after it)
+ * and the trigger are not duplicated - `null`.
+ */
+export function duplicateStep(
+  graph: Graph,
+  id: string,
+  newId: () => string,
+): { readonly graph: Graph; readonly id: string } | null {
+  const node = graph.nodes.find((n) => n.id === id);
+  if (!node || node.type === TRIGGER_NODE) return null;
+  const outputs = outputsOf(node, graph);
+  if (outputs.length !== 1 || outputs[0] !== 'next') return null;
+  const copy: AutomationNode = {
+    ...node,
+    id: newId(),
+    data: structuredClone(node.data),
+  };
+  return {
+    id: copy.id,
+    graph: {
+      nodes: [...graph.nodes, copy],
+      edges: [
+        // What the original led to, the copy leads to now.
+        ...graph.edges.map((e) => (e.source === id ? { ...e, source: copy.id } : e)),
+        { id: newId(), source: id, target: copy.id, sourceHandle: null },
+      ],
+    },
+  };
+}
+
 /** The step and everything reachable only through it. */
 export function onlyThrough(graph: Graph, id: string): readonly string[] {
   const trigger = graph.nodes.find((n) => n.type === TRIGGER_NODE);

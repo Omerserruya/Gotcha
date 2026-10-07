@@ -307,6 +307,27 @@
       "title": "Turn it on?",
       "what": "From now on, every time {when}, this runs.",
       "cancel": "Not yet"
+    },
+    "keys": {
+      "menu": "Step actions",
+      "hint": "Shortcuts · ?",
+      "title": "Keyboard shortcuts",
+      "clickKey": "Click",
+      "click": "Open a step",
+      "add": "Add a step to the selection",
+      "selectAll": "Select all steps",
+      "remove": "Remove the selected steps",
+      "removeMany": "Remove {count} steps",
+      "clear": "Clear the selection",
+      "undo": "Undo the last change",
+      "publish": "Publish changes",
+      "edit": "Edit",
+      "duplicate": "Duplicate step",
+      "addHere": "Add a step here",
+      "removeTitle": "Remove {count} steps?",
+      "removeWhat": "The selected steps go, and so does anything only they lead to. You can undo until you publish.",
+      "removeYes": "Remove {count} steps",
+      "notInFields": "Shortcuts do nothing while you type in a field."
     }
   },
   "branches": {

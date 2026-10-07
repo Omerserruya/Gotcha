@@ -2,7 +2,7 @@
 
 import { ChevronRight, Maximize, Minus, MoreHorizontal, Plus, Search } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition, type MouseEvent } from 'react';
 
 import {
   ISSUE_CODES,
@@ -15,6 +15,13 @@ import {
   type Trigger,
   type WebhookTrigger,
 } from '@/api/contracts/automations';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/design-system/primitives/overlay/ContextMenu';
 import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/design-system/primitives/overlay/Menu';
 import {
@@ -27,8 +34,10 @@ import { checkGraph, publishAutomation, readCatalog } from './automation-actions
 import {
   NODE_W,
   TRIGGER_NODE,
+  duplicateStep,
   freeHandles,
   insertAfter,
+  removeSteps,
   isLabelled,
   layout,
   type Graph,
@@ -38,6 +47,7 @@ import { Inspector, type Choices } from './Inspector';
 import { nodeIcon } from './node-icons';
 import { NodeCard } from './NodeCard';
 import { RunLog } from './RunLog';
+import { modLabel, shortcutsAllowed, withMod } from './shortcuts';
 import { StepSheet, nodeKey } from './StepSheet';
 import styles from './Builder.module.css';
 
@@ -92,6 +102,17 @@ export function Builder({
     () => (initial.nodes ?? []).find((n) => n.type === TRIGGER_NODE)?.id ?? null,
   );
   const [panel, setPanel] = useState<'inspector' | 'runs'>('inspector');
+  /** Steps picked with Shift / ⌘ / Ctrl, or ⌘/Ctrl+A - what Delete removes. */
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  /** The canvas before each change since the last publish - ⌘/Ctrl+Z walks back. */
+  const [history, setHistory] = useState<readonly Graph[]>([]);
+  /** Removing more than one step is said first. */
+  const [removing, setRemoving] = useState<{ readonly next: Graph; readonly count: number } | null>(
+    null,
+  );
+  /** The step right-clicked, or `'canvas'` for the background. */
+  const [menuFor, setMenuFor] = useState<string | 'canvas' | null>(null);
+  const [showKeys, setShowKeys] = useState(false);
   const [sheet, setSheet] = useState<{
     readonly after: string;
     readonly handle: string;
@@ -155,9 +176,57 @@ export function Builder({
   const chosen = graph.nodes.find((n) => n.id === selected) ?? null;
   const chosenFree = chosen ? freeHandles(chosen, graph) : [];
 
+  /** A change to the canvas's shape (add, remove, duplicate): kept, so ⌘/Ctrl+Z can undo it. */
+  const commit = (next: Graph) => {
+    setHistory((past) => [...past.slice(-49), graph]);
+    setGraph(next);
+  };
+
+  const undo = () => {
+    const last = history[history.length - 1];
+    if (!last) return;
+    setHistory(history.slice(0, -1));
+    setGraph(last);
+    setPicked(new Set());
+    if (selected && !last.nodes.some((n) => n.id === selected)) setSelected(null);
+  };
+
+  const steps = graph.nodes.filter((n) => n.type !== TRIGGER_NODE);
+
+  /** Delete: the picked steps, else the open one - never the trigger; more than one is asked. */
+  const removeSelection = () => {
+    const ids = (picked.size > 0 ? [...picked] : selected ? [selected] : []).filter(
+      (id) => graph.nodes.find((n) => n.id === id)?.type !== TRIGGER_NODE,
+    );
+    if (ids.length === 0) return;
+    const next = removeSteps(graph, ids);
+    const count = graph.nodes.length - next.nodes.length;
+    if (count === 0) return;
+    if (count > 1) {
+      setRemoving({ next, count });
+      return;
+    }
+    applyRemoval(next);
+  };
+
+  const applyRemoval = (next: Graph) => {
+    commit(next);
+    setPicked(new Set());
+    if (selected && !next.nodes.some((n) => n.id === selected)) setSelected(null);
+  };
+
+  const duplicate = (id: string) => {
+    const made = duplicateStep(graph, id, () => crypto.randomUUID());
+    if (!made) return;
+    commit(made.graph);
+    setSelected(made.id);
+    setPicked(new Set([made.id]));
+    setPanel('inspector');
+  };
+
   const add = (after: string, handle: string, item: CatalogItem) => {
     const made = insertAfter(graph, after, handle, item.type, () => crypto.randomUUID());
-    setGraph(made.graph);
+    commit(made.graph);
     setSelected(made.id);
     setPanel('inspector');
     setSheet(null);
@@ -191,6 +260,8 @@ export function Builder({
       }
       setAutomation(result.automation);
       setGraph({ nodes: result.automation.nodes ?? [], edges: result.automation.edges ?? [] });
+      // Published: there is nothing before it to undo to.
+      setHistory([]);
       setName(result.automation.name);
       setTrigger(result.automation.trigger);
       setOutcome(
@@ -199,6 +270,79 @@ export function Builder({
           : { kind: 'saved', issues: result.blocked },
       );
     });
+
+  /** Publish, as its button does - a draft's is said first, and nothing to publish is nothing. */
+  const canPublish = !isPublishing && name.trim() !== '' && (dirty || automation.status !== 'live');
+  const publishAsButton = () => {
+    if (!canPublish) return;
+    if (automation.status === 'live') publish();
+    else setConfirming(true);
+  };
+
+  /** "Add a step here": after the open step if it has room, else the first step that does. */
+  const addHere = () => {
+    const open = graph.nodes.find((n) => n.id === selected);
+    const at =
+      (open && freeHandles(open, graph).length > 0 ? open : null) ??
+      graph.nodes.find((n) => freeHandles(n, graph).length > 0) ??
+      null;
+    if (at) openSheet(at.id, freeHandles(at, graph)[0]!);
+  };
+
+  // 09d's keys (Omer, 2026-10-07) - never while typing, never under a dialog or a menu.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!shortcutsAllowed(event)) return;
+      const k = event.key.toLowerCase();
+      if (withMod(event) && k === 'a') {
+        event.preventDefault();
+        setPicked(new Set(steps.map((n) => n.id)));
+      } else if (withMod(event) && k === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      } else if (withMod(event) && k === 's') {
+        event.preventDefault();
+        publishAsButton();
+      } else if (event.key === 'Escape' && (picked.size > 0 || selected !== null)) {
+        event.preventDefault();
+        setPicked(new Set());
+        setSelected(null);
+      } else if ((event.key === 'Delete' || event.key === 'Backspace') && !withMod(event)) {
+        event.preventDefault();
+        removeSelection();
+      } else if (event.key === '?') {
+        event.preventDefault();
+        setShowKeys(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  /** Shift / ⌘ / Ctrl on a step: add it to the pick (or take it out); a plain click opens it. */
+  const onStepClickCapture = (id: string) => (event: MouseEvent<HTMLDivElement>) => {
+    if (!(event.shiftKey || withMod(event))) return;
+    if ((event.target as Element).closest('[data-testid^="add-"]')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPicked((now) => {
+      const next = new Set(now.size === 0 && selected ? [selected] : now);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const onCanvasMenu = (event: MouseEvent<HTMLDivElement>) => {
+    const slot = (event.target as Element).closest<HTMLElement>('[data-node-id]');
+    const id = slot?.dataset.nodeId ?? null;
+    setMenuFor(id ?? 'canvas');
+    if (id) {
+      setSelected(id);
+      setPanel('inspector');
+      if (!picked.has(id)) setPicked(new Set([id]));
+    }
+  };
 
   const issueText = (issue: Issue) =>
     (ISSUE_CODES as readonly string[]).includes(issue.code)
@@ -417,120 +561,188 @@ export function Builder({
         </aside>
 
         <main className={styles.canvasWrap} aria-label={t('builder.canvas')}>
-          <div className={styles.canvasScroll}>
-            <div
-              className={styles.canvas}
-              style={{
-                inlineSize: (width + NODE_W) * zoom,
-                blockSize: (height + 80) * zoom,
-              }}
-            >
+          <ContextMenu onOpenChange={(open) => (open ? null : setMenuFor(null))}>
+            <ContextMenuTrigger asChild>
               <div
-                className={styles.stage}
-                style={{
-                  transform: `scale(${zoom})`,
-                  inlineSize: width + NODE_W,
-                  blockSize: height + 80,
-                }}
-                data-testid="builder-canvas"
+                className={styles.canvasScroll}
+                onContextMenu={onCanvasMenu}
+                data-testid="builder-canvas-area"
               >
-                <svg
-                  className={styles.lines}
-                  width={width + NODE_W}
-                  height={height + 80}
-                  aria-hidden="true"
+                <div
+                  className={styles.canvas}
+                  style={{
+                    inlineSize: (width + NODE_W) * zoom,
+                    blockSize: (height + 80) * zoom,
+                  }}
                 >
-                  {graph.edges.map((edge, i) => {
-                    const from = at.get(edge.source);
-                    const to = at.get(edge.target);
-                    if (!from || !to) return null;
-                    const x1 = from.x + NODE_W / 2 + NODE_W / 2;
-                    const y1 = from.y + CARD_H + 20;
-                    const x2 = to.x + NODE_W / 2 + NODE_W / 2;
-                    const y2 = to.y + 20;
-                    const mid = (y1 + y2) / 2;
-                    return (
-                      <path
-                        key={edge.id ?? `${edge.source}-${edge.target}-${i}`}
-                        d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}
-                      />
-                    );
-                  })}
-                </svg>
-                {graph.edges.map((edge, i) => {
-                  const from = at.get(edge.source);
-                  const to = at.get(edge.target);
-                  if (!from || !to || !isLabelled(edge.sourceHandle)) return null;
-                  const source = graph.nodes.find((n) => n.id === edge.source);
-                  return (
-                    <span
-                      key={`label-${edge.id ?? i}`}
-                      className={styles.branch}
-                      // Just above the step it leads to.
-                      style={{ insetInlineStart: to.x + NODE_W, insetBlockStart: to.y + 2 }}
+                  <div
+                    className={styles.stage}
+                    style={{
+                      transform: `scale(${zoom})`,
+                      inlineSize: width + NODE_W,
+                      blockSize: height + 80,
+                    }}
+                    data-testid="builder-canvas"
+                  >
+                    <svg
+                      className={styles.lines}
+                      width={width + NODE_W}
+                      height={height + 80}
+                      aria-hidden="true"
                     >
-                      {source
-                        ? branchName(source, edge.sourceHandle!, graph, t, locale)
-                        : edge.sourceHandle}
-                    </span>
-                  );
-                })}
-                {graph.nodes.map((node) => {
-                  const place = at.get(node.id);
-                  if (!place) return null;
-                  const free = freeHandles(node, graph);
-                  return (
-                    <div
-                      key={node.id}
-                      className={styles.slot}
-                      style={{
-                        insetInlineStart: place.x + NODE_W / 2,
-                        insetBlockStart: place.y + 20,
-                      }}
-                    >
-                      <NodeCard
-                        node={node}
-                        trigger={trigger}
-                        selected={node.id === selected}
-                        marked={marked.has(node.id) || checked.has(node.id)}
-                        issue={checked.has(node.id) ? issueText(checked.get(node.id)!) : null}
-                        onSelect={() => {
-                          setSelected(node.id);
-                          setPanel('inspector');
-                        }}
-                      />
-                      {free.length > 0 ? (
-                        <span className={styles.adds}>
-                          {free.map((handle) => (
-                            <button
-                              key={handle}
-                              type="button"
-                              className={styles.add}
-                              onClick={() => openSheet(node.id, handle)}
-                              aria-label={
-                                isLabelled(handle)
-                                  ? t('builder.addOn', {
-                                      step: stepName(node),
-                                      branch: branchName(node, handle, graph, t, locale),
-                                    })
-                                  : t('builder.addAfter', { step: stepName(node) })
-                              }
-                              data-testid={`add-${node.id}-${handle}`}
-                            >
-                              <Plus size={12} aria-hidden="true" />
-                              {isLabelled(handle) ? (
-                                <span>{branchName(node, handle, graph, t, locale)}</span>
-                              ) : null}
-                            </button>
-                          ))}
+                      {graph.edges.map((edge, i) => {
+                        const from = at.get(edge.source);
+                        const to = at.get(edge.target);
+                        if (!from || !to) return null;
+                        const x1 = from.x + NODE_W / 2 + NODE_W / 2;
+                        const y1 = from.y + CARD_H + 20;
+                        const x2 = to.x + NODE_W / 2 + NODE_W / 2;
+                        const y2 = to.y + 20;
+                        const mid = (y1 + y2) / 2;
+                        return (
+                          <path
+                            key={edge.id ?? `${edge.source}-${edge.target}-${i}`}
+                            d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}
+                          />
+                        );
+                      })}
+                    </svg>
+                    {graph.edges.map((edge, i) => {
+                      const from = at.get(edge.source);
+                      const to = at.get(edge.target);
+                      if (!from || !to || !isLabelled(edge.sourceHandle)) return null;
+                      const source = graph.nodes.find((n) => n.id === edge.source);
+                      return (
+                        <span
+                          key={`label-${edge.id ?? i}`}
+                          className={styles.branch}
+                          // Just above the step it leads to.
+                          style={{ insetInlineStart: to.x + NODE_W, insetBlockStart: to.y + 2 }}
+                        >
+                          {source
+                            ? branchName(source, edge.sourceHandle!, graph, t, locale)
+                            : edge.sourceHandle}
                         </span>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                    {graph.nodes.map((node) => {
+                      const place = at.get(node.id);
+                      if (!place) return null;
+                      const free = freeHandles(node, graph);
+                      return (
+                        <div
+                          key={node.id}
+                          className={styles.slot}
+                          data-node-id={node.id}
+                          onClickCapture={onStepClickCapture(node.id)}
+                          style={{
+                            insetInlineStart: place.x + NODE_W / 2,
+                            insetBlockStart: place.y + 20,
+                          }}
+                        >
+                          <NodeCard
+                            node={node}
+                            trigger={trigger}
+                            selected={node.id === selected || picked.has(node.id)}
+                            marked={marked.has(node.id) || checked.has(node.id)}
+                            issue={checked.has(node.id) ? issueText(checked.get(node.id)!) : null}
+                            onSelect={() => {
+                              setSelected(node.id);
+                              setPicked(new Set([node.id]));
+                              setPanel('inspector');
+                            }}
+                          />
+                          {free.length > 0 ? (
+                            <span className={styles.adds}>
+                              {free.map((handle) => (
+                                <button
+                                  key={handle}
+                                  type="button"
+                                  className={styles.add}
+                                  onClick={() => openSheet(node.id, handle)}
+                                  aria-label={
+                                    isLabelled(handle)
+                                      ? t('builder.addOn', {
+                                          step: stepName(node),
+                                          branch: branchName(node, handle, graph, t, locale),
+                                        })
+                                      : t('builder.addAfter', { step: stepName(node) })
+                                  }
+                                  data-testid={`add-${node.id}-${handle}`}
+                                >
+                                  <Plus size={12} aria-hidden="true" />
+                                  {isLabelled(handle) ? (
+                                    <span>{branchName(node, handle, graph, t, locale)}</span>
+                                  ) : null}
+                                </button>
+                              ))}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent aria-label={t('builder.keys.menu')} data-testid="builder-menu">
+              {menuFor === 'canvas' ? (
+                <>
+                  <ContextMenuItem onSelect={addHere} data-testid="menu-add-here">
+                    {t('builder.keys.addHere')}
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onSelect={() => setPicked(new Set(steps.map((n) => n.id)))}
+                    data-testid="menu-select-all"
+                  >
+                    {t('builder.keys.selectAll')}
+                  </ContextMenuItem>
+                </>
+              ) : menuFor ? (
+                <>
+                  <ContextMenuItem
+                    onSelect={() => {
+                      setSelected(menuFor);
+                      setPanel('inspector');
+                    }}
+                    data-testid="menu-edit"
+                  >
+                    {t('builder.keys.edit')}
+                  </ContextMenuItem>
+                  {duplicateStep(graph, menuFor, () => 'probe') ? (
+                    <ContextMenuItem
+                      onSelect={() => duplicate(menuFor)}
+                      data-testid="menu-duplicate"
+                    >
+                      {t('builder.keys.duplicate')}
+                    </ContextMenuItem>
+                  ) : null}
+                  {graph.nodes.find((n) => n.id === menuFor)?.type === TRIGGER_NODE ? null : (
+                    <>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        tone="danger"
+                        onSelect={removeSelection}
+                        data-testid="menu-remove"
+                      >
+                        {picked.size > 1
+                          ? t('builder.keys.removeMany', { count: picked.size })
+                          : t('inspector.remove')}
+                      </ContextMenuItem>
+                    </>
+                  )}
+                </>
+              ) : null}
+            </ContextMenuContent>
+          </ContextMenu>
+          <button
+            type="button"
+            className={styles.keysHint}
+            onClick={() => setShowKeys(true)}
+            data-testid="builder-keys"
+          >
+            {t('builder.keys.hint')}
+          </button>
           <span className={styles.zoom}>
             <button
               type="button"
@@ -579,7 +791,7 @@ export function Builder({
                 setGraph({ ...graph, nodes: graph.nodes.map((n) => (n.id === next.id ? next : n)) })
               }
               onGraph={(next: Graph) => {
-                setGraph(next);
+                commit(next);
                 if (!next.nodes.some((n) => n.id === chosen.id)) setSelected(null);
               }}
               onTrigger={setTrigger}
@@ -627,6 +839,62 @@ export function Builder({
                 {t('builder.publishOn')}
               </button>
             </span>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {removing ? (
+        <Dialog open onOpenChange={(open) => (open ? null : setRemoving(null))}>
+          <DialogContent
+            title={t('builder.keys.removeTitle', { count: removing.count })}
+            description={t('builder.keys.removeWhat')}
+            data-testid="builder-remove-many"
+          >
+            <span className={styles.confirmActions}>
+              <button type="button" className={styles.secondary} onClick={() => setRemoving(null)}>
+                {t('inspector.keep')}
+              </button>
+              <button
+                type="button"
+                className={styles.danger}
+                onClick={() => {
+                  applyRemoval(removing.next);
+                  setRemoving(null);
+                }}
+                data-testid="builder-remove-many-yes"
+              >
+                {t('builder.keys.removeYes', { count: removing.count })}
+              </button>
+            </span>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {showKeys ? (
+        <Dialog open onOpenChange={(open) => (open ? null : setShowKeys(false))}>
+          <DialogContent title={t('builder.keys.title')} data-testid="builder-keys-list">
+            <dl className={styles.keysList}>
+              {(
+                [
+                  ['click', t('builder.keys.click')],
+                  [`Shift / ${modLabel()}`, t('builder.keys.add')],
+                  [`${modLabel()} A`, t('builder.keys.selectAll')],
+                  ['Delete', t('builder.keys.remove')],
+                  ['Esc', t('builder.keys.clear')],
+                  [`${modLabel()} Z`, t('builder.keys.undo')],
+                  [`${modLabel()} S`, t('builder.keys.publish')],
+                  ['?', t('builder.keys.title')],
+                ] as const
+              ).map(([keys, what]) => (
+                <div key={keys}>
+                  <dt>
+                    <kbd>{keys === 'click' ? t('builder.keys.clickKey') : keys}</kbd>
+                  </dt>
+                  <dd>{what}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className={styles.quiet}>{t('builder.keys.notInFields')}</p>
           </DialogContent>
         </Dialog>
       ) : null}
