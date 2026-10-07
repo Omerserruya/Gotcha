@@ -81,6 +81,12 @@ settings screen + Install on the contract (sent before item 2 lands).
 handed-off conversation continues in the same thread (recommended) or opens a
 new one.
 
+**Rides the same auth rebuild (supervisor, 2026-10-07):** the grandfathered
+onboarding chat in `services/auth/src/routes/onboarding.ts` still shows model
+text with wide dashes. Strip them there (`withoutWideDashes`, as every
+operator-facing output in `services/ai` now does since 7706d94f) in the first
+auth batch this stage opens. No rebuild of its own.
+
 ## Stage C: WooCommerce plugin (a new product; plan)
 
 **What it is:** a WordPress plugin, "GOTCHA for WooCommerce".
