@@ -69,10 +69,15 @@ describe('★★ 13b · Templates', () => {
   });
 });
 
+/** Dev: one number. */
+const ONE = [{ id: 'ca1', label: '+972 54 000 0000' }];
+const TWO = [...ONE, { id: 'ca2', label: '+972 3 555 0000' }];
+
 describe('★★ 13b · Private contacts', () => {
   it('each as it was typed, with its note', async () => {
     render(
       await ContactsTab({
+        numbers: ONE,
         exclusions: [
           exclusionSchema.parse({
             id: 'x1',
@@ -89,7 +94,7 @@ describe('★★ 13b · Private contacts', () => {
   });
 
   it('none: says every number reaches GOTCHA', async () => {
-    render(await ContactsTab({ exclusions: [] }));
+    render(await ContactsTab({ exclusions: [], numbers: ONE }));
     expect(screen.getByTestId('tab-empty')).toHaveTextContent('Every number that writes in');
   });
 });
@@ -141,7 +146,7 @@ describe('★★ 13b · Private contacts, live', () => {
 
   it('add: a number and a note go to the route', async () => {
     actions.addPrivateContact.mockResolvedValue({ ok: true });
-    render(await ContactsTab({ exclusions: [] }));
+    render(await ContactsTab({ exclusions: [], numbers: ONE }));
     type('contact-number', '054-123-4567');
     type('contact-note', 'My mother');
     await act(async () => {
@@ -150,13 +155,14 @@ describe('★★ 13b · Private contacts, live', () => {
     expect(actions.addPrivateContact).toHaveBeenCalledWith({
       value: '054-123-4567',
       note: 'My mother',
-      channelAccountId: null,
+      // The one number is the one: sent without asking.
+      channelAccountId: 'ca1',
     });
     expect(screen.getByTestId('contact-number')).toHaveValue('');
   });
 
   it('★ not a phone number: said here, and never sent', async () => {
-    render(await ContactsTab({ exclusions: [] }));
+    render(await ContactsTab({ exclusions: [], numbers: ONE }));
     for (const bad of ['12345', 'mom', '054-12a-4567']) {
       type('contact-number', bad);
       await act(async () => {
@@ -169,7 +175,7 @@ describe('★★ 13b · Private contacts, live', () => {
 
   it('the route refusing the number: its reason, in the same words', async () => {
     actions.addPrivateContact.mockResolvedValue({ ok: false, reason: 'invalid_number' });
-    render(await ContactsTab({ exclusions: [] }));
+    render(await ContactsTab({ exclusions: [], numbers: ONE }));
     type('contact-number', '000000');
     await act(async () => {
       fireEvent.submit(screen.getByTestId('contact-add'));
@@ -181,6 +187,7 @@ describe('★★ 13b · Private contacts, live', () => {
     actions.removePrivateContact.mockResolvedValue({ ok: true });
     render(
       await ContactsTab({
+        numbers: ONE,
         exclusions: [exclusionSchema.parse({ id: 'x1', value: '054-123-4567', normalized: '1' })],
       }),
     );
@@ -191,5 +198,89 @@ describe('★★ 13b · Private contacts, live', () => {
       fireEvent.click(screen.getByTestId('contact-remove-yes-x1'));
     });
     expect(actions.removePrivateContact).toHaveBeenCalledWith('x1');
+  });
+});
+
+describe('★★ 13b · Private contacts are per WhatsApp number (Backend, 2026-10-07)', () => {
+  const type = (id: string, value: string) =>
+    fireEvent.change(screen.getByTestId(id), { target: { value } });
+  const submit = () =>
+    act(async () => {
+      fireEvent.submit(screen.getByTestId('contact-add'));
+    });
+
+  it('one number: no picker, it is said which, and every add goes to it', async () => {
+    render(await ContactsTab({ exclusions: [], numbers: ONE }));
+    expect(screen.queryByTestId('contact-on')).toBeNull();
+    expect(screen.getByTestId('contact-on-one')).toHaveTextContent('Private on +972 54 000 0000.');
+  });
+
+  it('★ several: a number is chosen, never guessed - unchosen is said and nothing is sent', async () => {
+    actions.addPrivateContact.mockResolvedValue({ ok: true });
+    render(await ContactsTab({ exclusions: [], numbers: TWO }));
+    type('contact-number', '054-123-4567');
+    await submit();
+    expect(screen.getByTestId('contact-add-problem')).toHaveTextContent(
+      "Choose which of your WhatsApp numbers it's private on.",
+    );
+    expect(actions.addPrivateContact).not.toHaveBeenCalled();
+    type('contact-on', 'ca2');
+    await submit();
+    expect(actions.addPrivateContact).toHaveBeenCalledWith({
+      value: '054-123-4567',
+      note: '',
+      channelAccountId: 'ca2',
+    });
+  });
+
+  it('★ each rule says which number; one from before is on every number and says "All numbers"', async () => {
+    render(
+      await ContactsTab({
+        numbers: TWO,
+        exclusions: [
+          exclusionSchema.parse({ id: 'x1', value: '050', channelAccountId: 'ca2' }),
+          exclusionSchema.parse({ id: 'x2', value: '052', channelAccountId: null }),
+          exclusionSchema.parse({ id: 'x3', value: '053', channelAccountId: 'gone' }),
+        ],
+      }),
+    );
+    expect(screen.getByTestId('tab-contact-on-x1')).toHaveTextContent('+972 3 555 0000');
+    expect(screen.getByTestId('tab-contact-on-x2')).toHaveTextContent(/^All numbers$/);
+    expect(screen.getByTestId('tab-contact-on-x3')).toHaveTextContent(
+      'A number no longer connected',
+    );
+  });
+
+  it('with one number, a rule on it needs no label - a rule from before still says "All numbers"', async () => {
+    render(
+      await ContactsTab({
+        numbers: ONE,
+        exclusions: [
+          exclusionSchema.parse({ id: 'x1', value: '050', channelAccountId: 'ca1' }),
+          exclusionSchema.parse({ id: 'x2', value: '052', channelAccountId: null }),
+        ],
+      }),
+    );
+    expect(screen.queryByTestId('tab-contact-on-x1')).toBeNull();
+    expect(screen.getByTestId('tab-contact-on-x2')).toHaveTextContent('All numbers');
+  });
+
+  it('no number connected: Add cannot be pressed, and why is said', async () => {
+    render(await ContactsTab({ exclusions: [], numbers: [] }));
+    type('contact-number', '054-123-4567');
+    expect(screen.getByTestId('contact-add-submit')).toBeDisabled();
+    expect(screen.getByTestId('contact-no-numbers')).toHaveTextContent(
+      'Connect a WhatsApp number first',
+    );
+  });
+
+  it('the number went away meanwhile: said in those words, not as a bad phone number', async () => {
+    actions.addPrivateContact.mockResolvedValue({ ok: false, reason: 'number_gone' });
+    render(await ContactsTab({ exclusions: [], numbers: ONE }));
+    type('contact-number', '054-123-4567');
+    await submit();
+    expect(screen.getByTestId('contact-add-problem')).toHaveTextContent(
+      "That WhatsApp number isn't connected here any more",
+    );
   });
 });

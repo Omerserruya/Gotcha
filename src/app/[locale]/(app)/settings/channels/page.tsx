@@ -189,7 +189,22 @@ export default async function Page({
           {panelTab === 'templates' ? (
             <TemplatesTab templates={(await loadTemplates()).templates} />
           ) : panelTab === 'contacts' ? (
-            <ContactsTab exclusions={await loadExclusions()} />
+            <ContactsTab
+              exclusions={await loadExclusions()}
+              // Every number a rule can be on: profiled ones with a channel account, and
+              // dev's unprofiled one (a channel account and nothing else).
+              numbers={[
+                ...(whatsapp[0]?.data ?? []).flatMap((n) =>
+                  n.channelAccountId
+                    ? [{ id: n.channelAccountId, label: n.phoneNumber ?? n.name ?? tw('aNumber') }]
+                    : [],
+                ),
+                ...(whatsapp[0]?.unprofiled ?? []).map((u) => ({
+                  id: u.channelAccountId,
+                  label: u.name ?? tw('aNumber'),
+                })),
+              ]}
+            />
           ) : panelTab === 'activity' ? (
             <ActivityTab events={await loadNumberEvents(whatsapp[0]?.data ?? [])} />
           ) : (

@@ -403,7 +403,7 @@
         "create": "Create one in Outreach · Templates"
       },
       "contacts": {
-        "lead": "GOTCHA doesn't take messages from these numbers on this account: they're yours to answer.",
+        "lead": "GOTCHA doesn't take messages from these numbers on the WhatsApp number each is set for: they're yours to answer.",
         "none": "No private contacts. Every number that writes in reaches GOTCHA.",
         "add": "Add",
         "adding": "Adding…",
@@ -421,8 +421,16 @@
           "invalid_number": "Enter a phone number with at least {min} digits.",
           "not_found": "That rule isn't here any more.",
           "forbidden": "You don't have permission to change private contacts.",
-          "failed": "It wasn't added. Try again in a moment."
-        }
+          "failed": "It wasn't added. Try again in a moment.",
+          "which": "Choose which of your WhatsApp numbers it's private on.",
+          "number_gone": "That WhatsApp number isn't connected here any more. Reload and choose another."
+        },
+        "allNumbers": "All numbers",
+        "otherNumber": "A number no longer connected",
+        "onLabel": "On",
+        "onChoose": "Choose a WhatsApp number",
+        "onOne": "Private on {number}.",
+        "noNumbers": "Connect a WhatsApp number first: a private contact is private on one of your numbers."
       },
       "activity": {
         "none": "Nothing recorded for these numbers yet.",
@@ -441,7 +449,8 @@
         }
       }
     },
-    "notYet": "Not available yet"
+    "notYet": "Not available yet",
+    "aNumber": "A WhatsApp number"
   },
   "rowSettings": "Settings",
   "rowSettingsNotYet": "Settings for this channel come next - WhatsApp's are ready.",

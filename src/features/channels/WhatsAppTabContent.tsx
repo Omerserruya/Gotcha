@@ -4,7 +4,7 @@ import { templateStance, type Template } from '@/api/contracts/templates';
 import type { Exclusion, NumberEvent } from '@/api/contracts/whatsapp-numbers';
 import { Link } from '@/i18n/navigation';
 
-import { PrivateContacts } from './PrivateContacts';
+import { PrivateContacts, type ContactNumber } from './PrivateContacts';
 import styles from './Channels.module.css';
 
 const CATEGORIES = ['MARKETING', 'UTILITY', 'AUTHENTICATION'] as const;
@@ -81,8 +81,11 @@ export async function TemplatesTab({
 /** 13b · Private contacts: the list, with add and remove (PrivateContacts); unread is said. */
 export async function ContactsTab({
   exclusions,
+  numbers,
 }: {
   readonly exclusions: readonly Exclusion[] | null;
+  /** The numbers a rule can be on (each by its channel account). */
+  readonly numbers: readonly ContactNumber[];
 }) {
   const t = await getTranslations('channels.whatsapp.tabs');
   if (exclusions === null) {
@@ -92,7 +95,7 @@ export async function ContactsTab({
       </p>
     );
   }
-  return <PrivateContacts exclusions={exclusions} />;
+  return <PrivateContacts exclusions={exclusions} numbers={numbers} />;
 }
 
 /** 13b · Activity: what happened to each number, newest first, in our words where we know the step. */

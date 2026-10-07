@@ -16,7 +16,9 @@ export type WriteResult =
 export type AddContactResult =
   | WriteResult
   /** The route's own check: a phone number with at least 6 digits. */
-  | { readonly ok: false; readonly reason: 'invalid_number' };
+  | { readonly ok: false; readonly reason: 'invalid_number' }
+  /** The WhatsApp number it was for is not one of this workspace's (any more). */
+  | { readonly ok: false; readonly reason: 'number_gone' };
 
 function reasonOf(cause: unknown): 'not_found' | 'forbidden' | 'failed' {
   if (isApiError(cause) && cause.status === 404) return 'not_found';
@@ -48,11 +50,15 @@ export async function refreshNumber(id: string): Promise<WriteResult> {
   }
 }
 
-/** 13b · Private contacts: add one (the route upserts by number, so re-adding updates the note). */
+/**
+ * 13b · Private contacts: add one ON ONE WhatsApp number (Backend, 2026-10-07:
+ * the route requires `channelAccountId`). Re-adding on the same number
+ * updates its note; on another number it is a separate rule.
+ */
 export async function addPrivateContact(input: {
   readonly value: string;
   readonly note: string;
-  readonly channelAccountId: string | null;
+  readonly channelAccountId: string;
 }): Promise<AddContactResult> {
   try {
     await serverApi().post({
@@ -60,7 +66,7 @@ export async function addPrivateContact(input: {
       body: {
         value: input.value.trim(),
         ...(input.note.trim() ? { note: input.note.trim() } : {}),
-        ...(input.channelAccountId ? { channelAccountId: input.channelAccountId } : {}),
+        channelAccountId: input.channelAccountId,
       },
       payload: z.unknown(),
       raw: true,
@@ -69,6 +75,14 @@ export async function addPrivateContact(input: {
     return { ok: true };
   } catch (cause) {
     await signInIfSignedOut(cause);
+    // Two 400s: no number given (never sent by this screen), and a bad phone number.
+    if (
+      isApiError(cause) &&
+      (cause.developerMessage === 'channel_account_required' ||
+        cause.developerMessage === 'channel_account_not_found')
+    ) {
+      return { ok: false, reason: 'number_gone' };
+    }
     if (isApiError(cause) && cause.status === 400) return { ok: false, reason: 'invalid_number' };
     logger.warn('whatsapp.exclusion_add_failed', {
       status: isApiError(cause) ? cause.status : undefined,
