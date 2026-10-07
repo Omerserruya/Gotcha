@@ -235,10 +235,15 @@ describe('★★ the rotating panel and its three ticks', () => {
     const ticks = within(container).getByTestId('editorial-ticks');
     const row = ticks.parentElement;
     expect(row, 'the ticks have no parent row').not.toBeNull();
-    expect(row?.textContent ?? '').toMatch(/systems operational/i);
-    // The rule and the dot are its siblings, in that order after the ticks.
-    expect(row?.children.length).toBeGreaterThanOrEqual(3);
     expect(row?.children[0]).toBe(ticks);
+  });
+
+  it('★★ no health claim nothing measured: no status line, no dot (Omer: no dummy data)', async () => {
+    serverEnv.mockReturnValue({});
+    const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
+    const row = within(container).getByTestId('editorial-ticks').parentElement;
+    expect(row?.textContent ?? '').not.toMatch(/operational/i);
+    expect(row?.querySelector('[class*="statusDot"]')).toBeNull();
   });
 
   it('★ the ticks are hidden from assistive technology, like the stage they mark', async () => {

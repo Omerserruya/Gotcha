@@ -45,10 +45,10 @@ const show = () =>
       brand={<div>GOTCHA</div>}
       ticks={<div data-testid="ticks" />}
       figures={{
-        signIn: <p>Three hundred and forty people</p>,
+        signIn: <p>Customers get answers while your team sleeps</p>,
         secondFactor: <p>A refund is real money</p>,
       }}
-      status={{ signIn: 'All systems operational', secondFactor: 'Two-step is required' }}
+      status={{ signIn: 'Sign-in status', secondFactor: 'Two-step is required' }}
       notice={<p role="alert">Your sign-in expired</p>}
       footnote={<p>New here? Ask your workspace admin</p>}
     />,
@@ -57,8 +57,8 @@ const show = () =>
 describe('⚠⚠ the editorial panel follows the screen', () => {
   it('★ starts on sign-in: its figures, its status, its footnote', async () => {
     show();
-    expect(screen.getByText(/three hundred and forty/i)).toBeInTheDocument();
-    expect(screen.getByText(/all systems operational/i)).toBeInTheDocument();
+    expect(screen.getByText(/while your team sleeps/i)).toBeInTheDocument();
+    expect(screen.getByText(/sign-in status/i)).toBeInTheDocument();
     expect(screen.getByText(/new here\?/i)).toBeInTheDocument();
   });
 
@@ -67,7 +67,7 @@ describe('⚠⚠ the editorial panel follows the screen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'advance' }));
 
     expect(screen.getByText(/a refund is real money/i)).toBeInTheDocument();
-    expect(screen.queryByText(/three hundred and forty/i)).toBeNull();
+    expect(screen.queryByText(/while your team sleeps/i)).toBeNull();
     expect(screen.getByText(/two-step is required/i)).toBeInTheDocument();
   });
 

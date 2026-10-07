@@ -266,7 +266,7 @@ export default async function SignInPage({
         </div>
       }
       status={{
-        signIn: t('editorial.status'),
+        signIn: null,
         secondFactor: t('editorial.secondFactor.status'),
       }}
       notice={

@@ -54,7 +54,12 @@ export function SignInScreen({
   readonly ticks: ReactNode;
   /** One per screen - the rotating figures and the line under the ticks. */
   readonly figures: Record<SignInScreenName, ReactNode>;
-  readonly status: Record<SignInScreenName, ReactNode>;
+  /**
+   * The line after the ticks. `null`: none, and no dot - sign-in had "All
+   * systems operational", fixed, with a green dot: a health claim nothing
+   * measured (Omer: no dummy data). It returns only from a real check.
+   */
+  readonly status: Record<SignInScreenName, ReactNode | null>;
   /**
    * Sign-in only, and deliberately absent on the second factor: "New here?"
    * is a question somebody mid-sign-in has already answered.
@@ -77,9 +82,13 @@ export function SignInScreen({
 
         <div className={styles.systemStatus}>
           {ticks}
-          <span className={styles.editorialRule} aria-hidden="true" />
-          <span className={styles.statusDot} aria-hidden="true" />
-          {status[screen]}
+          {status[screen] ? (
+            <>
+              <span className={styles.editorialRule} aria-hidden="true" />
+              <span className={styles.statusDot} aria-hidden="true" />
+              {status[screen]}
+            </>
+          ) : null}
         </div>
       </aside>
 
