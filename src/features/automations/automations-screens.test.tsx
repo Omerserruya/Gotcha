@@ -443,3 +443,38 @@ describe('★ measured on dev (e6785c4)', () => {
     expect(screen.getByTestId('library-send_buttons').querySelector('svg')).not.toBeNull();
   });
 });
+
+describe('★★ a template creates a real draft - its graph sent, never turned on', () => {
+  it('the welcome: the trigger, the graph with the greeting by name; then the builder', async () => {
+    const { templateOf } = await import('./templates');
+    actions.createAutomation.mockResolvedValue({
+      ok: true,
+      automation: automation({ id: 'w1', status: 'draft' }),
+    });
+    wrap(<NewAutomation catalog={null} template={templateOf('welcome')} />);
+    expect(screen.getByTestId('new-automation-name')).toHaveValue('Welcome a new customer');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('new-automation-create'));
+    });
+    const sent = actions.createAutomation.mock.calls[0]![0] as {
+      trigger: { type: string };
+      nodes: { type: string; data: Record<string, unknown> }[];
+      edges: unknown[];
+    };
+    expect(sent.trigger.type).toBe('new_customer');
+    expect(sent.nodes.map((x) => x.type)).toEqual(['automation_trigger', 'send_message_text']);
+    expect(sent.nodes[1]!.data.text).toBe(
+      'Hi {{first_name}}, thanks for writing to us. How can we help?',
+    );
+    expect(sent.edges).toHaveLength(1);
+    expect(push).toHaveBeenCalledWith('/studio/automations/w1');
+  });
+
+  it('tag added: still asks for the tags the route needs', async () => {
+    const { templateOf } = await import('./templates');
+    wrap(<NewAutomation catalog={null} template={templateOf('tagNotify')} />);
+    expect(screen.getByTestId('new-automation-create')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('new-automation-tags'), { target: { value: 'vip' } });
+    expect(screen.getByTestId('new-automation-create')).toBeEnabled();
+  });
+});

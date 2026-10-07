@@ -112,6 +112,9 @@ export type CreateResult =
 export async function createAutomation(body: {
   readonly name: string;
   readonly trigger: { readonly type: TriggerType; readonly config: Record<string, unknown> };
+  /** A template's graph; without one the route starts with the trigger step alone. */
+  readonly nodes?: readonly unknown[];
+  readonly edges?: readonly unknown[];
 }): Promise<CreateResult> {
   try {
     const answer = await serverApi().post({

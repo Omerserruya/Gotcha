@@ -308,8 +308,41 @@
     text-align: start;
   }
 
-  .template:disabled {
+  a.template {
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  a.template:hover {
+    border-color: var(--border-emphasis);
+    background-color: var(--panel-quiet);
+  }
+
+  /* Unavailable: a status, never an action - quiet, grey, no hover, default cursor. */
+  .template[data-unavailable] {
+    border-style: dashed;
+    background-color: var(--panel-base);
+    color: var(--text-faint);
     cursor: default;
+  }
+
+  .template[data-unavailable] .templateName {
+    color: var(--text-muted);
+  }
+
+  .templateTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    align-self: stretch;
+  }
+
+  .unavailableTag {
+    padding: 2px 7px;
+    border-radius: 5px;
+    background-color: var(--panel-inset);
+    font-size: 10.5px;
+    color: var(--text-muted);
   }
 
   .templateName {

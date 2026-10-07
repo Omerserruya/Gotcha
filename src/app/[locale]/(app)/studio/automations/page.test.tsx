@@ -20,7 +20,11 @@ vi.mock('next-intl/server', () => ({
     }),
 }));
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ children, ...rest }: { children: ReactNode }) => <a {...rest}>{children}</a>,
+  Link: ({ children, href, ...rest }: { children: ReactNode; href: unknown }) => (
+    <a href={typeof href === 'string' ? href : JSON.stringify(href)} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock('@/shell/PageContainer', () => ({
   PageContainer: ({ actions, children }: { actions: ReactNode; children: ReactNode }) => (
@@ -54,5 +58,35 @@ describe('★ without ai:workflows:read (Backend 5: 403 PERMISSION_DENIED)', () 
     render(await Page({ searchParams: Promise.resolve({}) }));
     expect(screen.getByTestId('automations-unread')).toBeInTheDocument();
     expect(screen.getByTestId('automations-new')).toBeInTheDocument();
+  });
+});
+
+describe('★★ templates: real ones open New automation; the rest are a status, not an action', () => {
+  it('a real template is a link to New automation, prefilled', async () => {
+    loadAutomations.mockResolvedValue([]);
+    render(await Page({ searchParams: Promise.resolve({}) }));
+    const card = screen.getByTestId('automations-template-welcome');
+    expect(card.tagName).toBe('A');
+    expect(card.getAttribute('href')).toContain('"template":"welcome"');
+  });
+
+  it('one with no event source: Coming soon, aria-disabled, not a link, says why', async () => {
+    loadAutomations.mockResolvedValue([]);
+    render(await Page({ searchParams: Promise.resolve({}) }));
+    const card = screen.getByTestId('automations-template-cart');
+    expect(card.tagName).toBe('DIV');
+    expect(card).toHaveAttribute('aria-disabled', 'true');
+    expect(card).toHaveTextContent('Coming soon');
+    expect(card).toHaveTextContent('Needs cart events from your store');
+    expect(card.querySelector('a, button')).toBeNull();
+  });
+
+  it('?template= opens the sheet for a real one - never for one that cannot run', async () => {
+    loadAutomations.mockResolvedValue([]);
+    const one = render(await Page({ searchParams: Promise.resolve({ template: 'welcome' }) }));
+    expect(screen.getByTestId('sheet')).toBeInTheDocument();
+    one.unmount();
+    render(await Page({ searchParams: Promise.resolve({ template: 'cart' }) }));
+    expect(screen.queryByTestId('sheet')).toBeNull();
   });
 });

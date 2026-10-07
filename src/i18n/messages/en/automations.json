@@ -6,25 +6,39 @@
   "noneBody": "An automation is one trigger and the steps that always follow it. Start one with New automation.",
   "templates": "Templates",
   "create": "New automation",
-  "templatesWhy": "Templates aren't available yet. Start from New automation",
   "templateTitle": "Start from a template",
   "templateNote": "opens in the builder",
   "template": {
     "missedCall": {
       "name": "Missed call → WhatsApp",
-      "line": "Answer within a minute, with buttons"
+      "line": "Answer within a minute, with buttons",
+      "why": "Needs call events from your phone line"
     },
     "fileOnKeyword": {
       "name": "Send a file on a keyword",
       "line": "Catalogue, price list, menu"
     },
+    "afterHours": {
+      "name": "Reply after hours",
+      "line": "Your hours, when a message comes in closed"
+    },
+    "welcome": {
+      "name": "Welcome a new customer",
+      "line": "By name, on their first message"
+    },
+    "tagNotify": {
+      "name": "Tag added → tell the team",
+      "line": "A notification when a customer is tagged"
+    },
     "review": {
       "name": "Ask for a review",
-      "line": "Two days after delivery"
+      "line": "Two days after delivery",
+      "why": "Needs order events from your store"
     },
     "cart": {
       "name": "Cart left behind",
-      "line": "A template message after 2 hours"
+      "line": "A template message after 2 hours",
+      "why": "Needs cart events from your store"
     }
   },
   "columns": {
@@ -207,7 +221,8 @@
       "limit": "Your plan has no room for another automation.",
       "forbidden": "You don't have permission to create automations.",
       "failed": "It wasn't created. Try again in a moment."
-    }
+    },
+    "fromTemplate": "From a template: its steps are ready, and the builder marks what you still need to fill in. It stays off until you turn it on."
   },
   "days": {
     "sun": "Sun",
@@ -259,7 +274,8 @@
       "empty": "Not set up yet",
       "wait": "{minutes, plural, =1 {1 minute} other {# minutes}}",
       "upTo": "Up to {minutes, plural, =1 {1 minute} other {# minutes}}",
-      "split": "{a}% / {b}%"
+      "split": "{a}% / {b}%",
+      "toFill": "To fill in"
     },
     "more": "More",
     "publishOn": "Publish and turn on",
@@ -423,5 +439,10 @@
   "forbidden": {
     "title": "You don't have access to automations",
     "lead": "Seeing and changing automations needs a permission your role doesn't have. An admin can give it to you in Settings · People & teams."
+  },
+  "comingSoon": "Coming soon",
+  "templateWords": {
+    "keyword": "catalogue",
+    "welcome": "Hi {name}, thanks for writing to us. How can we help?"
   }
 }

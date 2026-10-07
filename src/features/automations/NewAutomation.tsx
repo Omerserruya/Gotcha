@@ -8,6 +8,7 @@ import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog
 import { useRouter } from '@/i18n/navigation';
 
 import { createAutomation, type CreateResult } from './automation-actions';
+import type { Template } from './templates';
 import { StepSheet } from './StepSheet';
 import styles from './StepSheet.module.css';
 
@@ -20,11 +21,18 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
  * without - a name, the tags for "Tag added", the time for "On a schedule" -
  * then creates the draft and opens it in the builder. A draft runs nowhere.
  */
-export function NewAutomation({ catalog }: { readonly catalog: Catalog | null }) {
+export function NewAutomation({
+  catalog,
+  template = null,
+}: {
+  readonly catalog: Catalog | null;
+  /** 09c's template chosen: its trigger and graph, prefilled. */
+  readonly template?: Template | null;
+}) {
   const t = useTranslations('automations');
   const router = useRouter();
-  const [trigger, setTrigger] = useState<TriggerType | null>(null);
-  const [name, setName] = useState('');
+  const [trigger, setTrigger] = useState<TriggerType | null>(template?.trigger ?? null);
+  const [name, setName] = useState(template ? t(`template.${template.key}.name`) : '');
   const [tags, setTags] = useState('');
   const [at, setAt] = useState('09:00');
   const [days, setDays] = useState<ReadonlySet<string>>(new Set());
@@ -60,15 +68,24 @@ export function NewAutomation({ catalog }: { readonly catalog: Catalog | null })
   const create = () =>
     start(async () => {
       setFailed(null);
-      const config: Record<string, unknown> =
+      const asked: Record<string, unknown> =
         trigger === 'tag_added'
           ? { tags: tagList }
           : trigger === 'schedule'
             ? { at, ...(days.size > 0 ? { days: DAYS.filter((d) => days.has(d)) } : {}) }
             : {};
+      const graph = template?.build?.(
+        {
+          keyword: t('templateWords.keyword'),
+          // The variable goes in as itself; the words around it are the author's language.
+          welcome: t('templateWords.welcome', { name: '{{first_name}}' }),
+        },
+        () => crypto.randomUUID(),
+      );
       const result = await createAutomation({
         name: name.trim(),
-        trigger: { type: trigger, config },
+        trigger: { type: trigger, config: { ...(graph?.config ?? {}), ...asked } },
+        ...(graph ? { nodes: graph.nodes, edges: graph.edges } : {}),
       });
       if (result.ok) router.push(`/studio/automations/${result.automation.id}`);
       else setFailed(result);
@@ -85,6 +102,7 @@ export function NewAutomation({ catalog }: { readonly catalog: Catalog | null })
           <p className={styles.chosen}>
             {t('new.when', { trigger: t(`nodes.trigger.${trigger}` as 'nodes.trigger.webhook') })}
           </p>
+          {template ? <p className={styles.itemLine}>{t('new.fromTemplate')}</p> : null}
           <label className={styles.field}>
             <span>{t('new.name')}</span>
             <input
@@ -147,13 +165,15 @@ export function NewAutomation({ catalog }: { readonly catalog: Catalog | null })
             </p>
           ) : null}
           <span className={styles.setupActions}>
-            <button
-              type="button"
-              className={styles.secondaryButton}
-              onClick={() => setTrigger(null)}
-            >
-              {t('new.back')}
-            </button>
+            {template ? null : (
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => setTrigger(null)}
+              >
+                {t('new.back')}
+              </button>
+            )}
             <button
               type="button"
               className={styles.primaryButton}

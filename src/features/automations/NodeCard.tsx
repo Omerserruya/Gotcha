@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { AutomationNode, Trigger } from '@/api/contracts/automations';
 
 import { TRIGGER_NODE } from './graph';
+import { needsFilling } from './templates';
 import styles from './Builder.module.css';
 
 /** Which of 09e's four groups a step is in - its eyebrow's colour. */
@@ -74,6 +75,12 @@ export function NodeCard({
         {' · '}
         {kind}
       </span>
+      {needsFilling(node) ? (
+        // What the author still has to write - a to-do, not an error.
+        <span className={styles.toFill} data-testid={`to-fill-${node.id}`}>
+          {t('builder.card.toFill')}
+        </span>
+      ) : null}
       <span className={styles.cardTitle}>
         <bdi dir="auto">{own || kind}</bdi>
       </span>

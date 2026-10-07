@@ -439,6 +439,15 @@
     background-color: var(--intent-blocked-text);
   }
 
+  .toFill {
+    align-self: flex-start;
+    padding: 1px 7px;
+    border-radius: 5px;
+    background-color: var(--approval-chip-surface);
+    font-size: 10.5px;
+    color: var(--intent-blocked-text);
+  }
+
   .cardTitle {
     font-size: 13px;
     font-weight: 500;
