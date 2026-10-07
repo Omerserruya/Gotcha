@@ -39,7 +39,9 @@ const ROLE_TITLE: Record<string, string> = {
 // tool OUTSIDE this set must never become a "Connect X" recommendation - a
 // connect CTA the product can't honor is a broken promise. Those become
 // `tool_detected` acknowledgments instead.
-const CONNECTABLE_SYSTEMS = new Set(["hubspot", "salesforce", "zoho_crm", "shopify", "fireberry", "airtable"]);
+// Wix is a core system but not here: no Wix catalog row or app configuration
+// exists, so its connect flow cannot complete yet.
+const CONNECTABLE_SYSTEMS = new Set(["hubspot", "salesforce", "zoho_crm", "shopify", "woocommerce", "fireberry", "airtable"]);
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "item";

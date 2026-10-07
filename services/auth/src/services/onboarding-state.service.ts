@@ -12,9 +12,12 @@
 
 import { prisma } from "@chatcenter/shared";
 
-// Kept in sync with onboarding.ts CORE_SYSTEM_SLUGS (the systems that can be a
-// tenant's customer source-of-truth). Small, stable duplication - see note.
-export const CORE_SYSTEM_SLUGS = ["hubspot", "salesforce", "zoho_crm", "shopify", "fireberry", "airtable"] as const;
+// The systems that can be a tenant's customer source of truth: a CRM, or a
+// store with orders, products and customers (Shopify, WooCommerce, Wix). The
+// ONE list - routes/onboarding.ts imports it. A connected one is the
+// onboarding activation event; recommendations.service's CONNECTABLE_SYSTEMS
+// is the narrower "we can offer a Connect button" set.
+export const CORE_SYSTEM_SLUGS = ["hubspot", "salesforce", "zoho_crm", "shopify", "woocommerce", "wix", "fireberry", "airtable"] as const;
 
 /** Slug of the first CONNECTED + usable core system, or null. Airtable only
  *  counts once its column mapping is saved. */

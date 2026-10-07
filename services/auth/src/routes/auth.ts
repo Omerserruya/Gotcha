@@ -48,6 +48,26 @@ async function listMemberships(identityId: string) {
   }));
 }
 
+/** Tenant states in which the workspace is still being set up. */
+const SETTING_UP = new Set(["PENDING_ONBOARDING", "PENDING_ADMIN_SETUP"]);
+
+/**
+ * Who is setting the workspace up, for the waiting screen a non-admin sees
+ * ("being set up by {name}"): the first active ADMIN, by name only - no id,
+ * no email. Null once the workspace is ACTIVE (or in any other state), and
+ * null when no active admin has a name.
+ */
+export async function setupAdminFor(tenantId: string, tenantStatus: string | null | undefined): Promise<{ name: string } | null> {
+  if (!tenantStatus || !SETTING_UP.has(tenantStatus)) return null;
+  const admin = await prisma.user.findFirst({
+    where: { tenantId, role: "ADMIN", isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { name: true },
+  });
+  const name = admin?.name?.trim();
+  return name ? { name } : null;
+}
+
 router.get("/me", authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findUnique({
@@ -91,9 +111,13 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
       listMemberships(user.identityId),
     ]);
 
+    // Only while the workspace is still being set up (see setupAdminFor).
+    const setupAdmin = await setupAdminFor(user.tenantId, tenant?.status).catch(() => null);
+
     res.json({
       user: { ...user, ...deptInfo },
       tenantStatus: tenant?.status || "ACTIVE",
+      ...(setupAdmin ? { setupAdmin } : {}),
       tenantName: tenant?.name ?? null,
       // Every tenant this person can enter. length > 1 → the client shows the
       // tenant switcher / picker.

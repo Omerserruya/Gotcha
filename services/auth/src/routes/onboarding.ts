@@ -3,6 +3,7 @@ import { getInternalServiceKey, safeFetch,
   canvasHasRunnableProcess,
   requirePermission } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
+import { CORE_SYSTEM_SLUGS, connectedCoreSystem } from "../services/onboarding-state.service";
 import { z } from "zod";
 import * as crypto from "crypto";
 import {
@@ -1410,29 +1411,9 @@ router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response)
 // These slugs match the IntegrationCatalog rows + OAuth routes in the AI
 // service (note Zoho's catalog slug is `zoho_crm`).
 
-const CORE_SYSTEM_SLUGS = ["hubspot", "salesforce", "zoho_crm", "shopify", "fireberry", "airtable"] as const;
-
-/** Returns the slug of the first CONNECTED + usable core system, or null.
- *  Airtable is only "usable" once its column mapping is saved (a CONNECTED
- *  Airtable with no fieldMap is mid-setup, not a working source of truth). */
-async function connectedCoreSystem(tenantId: string): Promise<string | null> {
-  const rows = await prisma.tenantIntegration.findMany({
-    where: { tenantId, status: "CONNECTED", integration: { slug: { in: CORE_SYSTEM_SLUGS as unknown as string[] } } },
-    include: { integration: true },
-    orderBy: { createdAt: "asc" },
-  });
-  for (const ti of rows) {
-    const slug = ti?.integration?.slug as string | undefined;
-    if (!slug) continue;
-    if (slug === "airtable") {
-      const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as any;
-      const fm = cfg.fieldMap;
-      if (!fm || !(fm.email || fm.phone) || !fm.display_name) continue; // unmapped → not usable yet
-    }
-    return slug;
-  }
-  return null;
-}
+// The list and the "connected + usable" rule live in ONE place,
+// services/onboarding-state.service.ts (the onboarding snapshot, the nudge
+// engine and system views read the same list).
 
 // POST /core-system - record the chosen system of truth. For Shopify we flip
 // `config.useAsCrm` so the CRM resolver treats it as the source of truth
