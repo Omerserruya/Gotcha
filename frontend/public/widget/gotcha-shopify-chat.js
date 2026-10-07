@@ -179,6 +179,12 @@ window.__gotchaShopifyChatApp = function (boot) {
       online: "Online",
       offline: "Away",
       close: "Close chat",
+      continueWa: "Continue on WhatsApp",
+      waTitle: "Chat with us",
+      waSub: "Write here and we'll continue on WhatsApp.",
+      waPlaceholder: "Type a message",
+      waOpening: "Continuing on WhatsApp",
+      waOpenLink: "Open WhatsApp",
       mute: "Mute chat sounds",
       unmute: "Unmute chat sounds",
       placeholder: "Ask us anything",
@@ -228,6 +234,12 @@ window.__gotchaShopifyChatApp = function (boot) {
       online: "זמינים",
       offline: "לא זמינים",
       close: "סגירת הצ׳אט",
+      continueWa: "המשך בוואטסאפ",
+      waTitle: "דברו איתנו",
+      waSub: "כתבו כאן ונמשיך בוואטסאפ.",
+      waPlaceholder: "הקלידו הודעה",
+      waOpening: "ממשיכים בוואטסאפ",
+      waOpenLink: "פתיחת וואטסאפ",
       mute: "השתקת צלילי הצ׳אט",
       unmute: "ביטול השתקה",
       placeholder: "אפשר לשאול אותנו הכל",
@@ -280,6 +292,14 @@ window.__gotchaShopifyChatApp = function (boot) {
         ? "he"
         : "en";
   var T = STRINGS[lang] || STRINGS.en;
+
+  // ── Look and "Continue on WhatsApp" (website widget, stage B) ──
+  // The look is the merchant's choice; the handoff exists only when the
+  // server says its number can take it AND the host page gave us a way to
+  // ask for the link (the code snippet does; a host without it never shows
+  // the button rather than showing one that cannot work).
+  var LOOK = widget.ux && widget.ux.look === "whatsapp" ? "whatsapp" : "gotcha";
+  var WA_ON = !!(widget.features && widget.features.whatsappHandoff) && typeof boot.whatsappHandoff === "function";
   var BIDI = window.__gotchaBidi;
 
   // The merchant's explicit choice, or "auto". Passed to every per-message
@@ -328,6 +348,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     opened: false,
     lastCursor: null,
     unread: 0,
+    waLink: null, // the WhatsApp link after a handoff, kept in the chat
   };
 
   var socket = null;
@@ -834,6 +855,47 @@ window.__gotchaShopifyChatApp = function (boot) {
     "  .panel,.card,.bub{border:1px solid CanvasText;}",
     "  .btn-p,.snd{border:1px solid ButtonText;}",
     "}",
+
+    // ── "Continue on WhatsApp" in the GOTCHA look: a chip beside close ──
+    ".wa{position:absolute;top:var(--s2);" + (dir === "rtl" ? "left" : "right") + ":calc(var(--s2) + 40px);z-index:6;",
+    "  width:32px;height:32px;border-radius:50%;border:0;background:#25D366;color:#fff;cursor:pointer;",
+    "  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(15,23,42,.18);}",
+    ".wa svg{width:18px;height:18px;fill:currentColor;}",
+    ".wa:focus-visible{outline:2px solid #25D366;outline-offset:3px;}",
+    ".wa-note{align-self:center;margin:var(--s2) 0;font-size:12.5px;color:#475569;text-align:center;}",
+    ".wa-note a{color:#008069;font-weight:600;}",
+
+    // ── The WhatsApp look ──
+    // A green header in every view (no hero), the beige chat surface,
+    // WhatsApp's bubbles, a pill composer and a round green send.
+    ".panel[data-look='whatsapp'] .hero,.panel[data-look='whatsapp'] .wel-av,.panel[data-look='whatsapp'] .wel-lg,.panel[data-look='whatsapp'] .wa{display:none!important;}",
+    ".panel[data-look='whatsapp'] .hd{display:flex!important;background:#008069;color:#fff;border-bottom:0;}",
+    ".panel[data-look='whatsapp'] .hd-nm{color:#fff;}",
+    ".panel[data-look='whatsapp'] .hd-st{color:rgba(255,255,255,.88);}",
+    ".panel[data-look='whatsapp'] .hd-st .dot{display:none;}",
+    ".panel[data-look='whatsapp'] .hd-av{border-radius:50%;background:#fff;}",
+    ".panel[data-look='whatsapp'] .hd-mono{color:#008069;}",
+    // WhatsApp opens on the greeting alone; the visitor writes their own question.
+    ".panel[data-look='whatsapp'] .sug{display:none!important;}",
+    ".panel[data-look='whatsapp'] .x{color:#fff;}",
+    ".panel[data-look='whatsapp'] .x::before{background:transparent;}",
+    ".panel[data-look='whatsapp'] .bd{background:#EFEAE2;padding-top:var(--s4)!important;}",
+    ".panel[data-look='whatsapp'] .wel{padding-top:0!important;}",
+    ".panel[data-look='whatsapp'] .wel-h{display:inline-block;background:#fff;color:#111b21;font-size:14.5px;font-weight:400;",
+    "  padding:8px 12px;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);margin:0;}",
+    ".panel[data-look='whatsapp'] .bub{border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);}",
+    ".panel[data-look='whatsapp'] .row[data-me='0'] .bub{background:#fff;color:#111b21;}",
+    ".panel[data-look='whatsapp'] .row[data-me='1'] .bub{background:#D9FDD3;color:#111b21;}",
+    ".panel[data-look='whatsapp'] .ta{border-radius:22px;border-color:transparent;background:#fff;}",
+    ".panel[data-look='whatsapp'] .ft{background:#EFEAE2;}",
+    ".panel[data-look='whatsapp'] .snd{border-radius:50%;background:#00a884;color:#fff;}",
+    // On a desktop the WhatsApp panel hugs the conversation, as WhatsApp's own
+    // web widget does, and grows (then scrolls) with it.
+    "@media (min-width: 561px){.panel[data-look='whatsapp'],.panel[data-look='whatsapp'][data-view='welcome']{height:auto;min-height:0;max-height:min(640px, calc(100vh - 120px));}",
+    "  .panel[data-look='whatsapp'] .bd{min-height:96px;}}",
+    // The greeting is a bubble on the business's side, not a full-width title.
+    ".panel[data-look='whatsapp'] .wel,.panel[data-look='whatsapp'] .wel-cp{align-items:flex-start;}",
+    ".panel[data-look='whatsapp'] .wel-h{max-width:84%;}",
   ].join("\n");
 
   var styleNode = document.createElement("style");
@@ -858,6 +920,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     hidden: "",
   });
 
+  panel.setAttribute("data-look", LOOK);
   var header = el("div", "hd");
   var logo = safeUrl(appearance.logoUrl) || safeUrl(appearance.avatarUrl);
   var headerAvatar;
@@ -874,7 +937,9 @@ window.__gotchaShopifyChatApp = function (boot) {
   }
 
   var headerText = el("div", "hd-tx");
-  var headerName = el("div", "hd-nm", welcome.assistantName || "");
+  // In the WhatsApp look with a working handoff, the header says what the
+  // panel does ("Chat with us / write here and we continue on WhatsApp").
+  var headerName = el("div", "hd-nm", LOOK === "whatsapp" && WA_ON ? T.waTitle : welcome.assistantName || "");
   var headerStatus = el("div", "hd-st");
   var statusDot = el("span", "dot");
   var statusText = el("span", null, "");
@@ -923,6 +988,17 @@ window.__gotchaShopifyChatApp = function (boot) {
   // header to live in, and duplicating it would mean two handlers.
   panel.appendChild(closeBtn);
 
+  var WA_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.2.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>';
+  var waBtn = null;
+  if (WA_ON && LOOK === "gotcha") {
+    waBtn = el("button", "wa");
+    attr(waBtn, { type: "button", "aria-label": T.continueWa, title: T.continueWa, "data-act": "whatsapp" });
+    waBtn.innerHTML = WA_ICON;
+    on(waBtn, "click", function () { continueOnWhatsapp(""); });
+    panel.appendChild(waBtn);
+  }
+
   var banner = el("div", "banner");
   banner.hidden = true;
 
@@ -941,8 +1017,8 @@ window.__gotchaShopifyChatApp = function (boot) {
   attr(textarea, {
     rows: "1",
     dir: "auto",
-    placeholder: T.placeholder,
-    "aria-label": T.placeholder,
+    placeholder: LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder,
+    "aria-label": LOOK === "whatsapp" ? T.waPlaceholder : T.placeholder,
     maxlength: "2000",
   });
   var sendBtn = el("button", "snd");
@@ -1051,7 +1127,10 @@ window.__gotchaShopifyChatApp = function (boot) {
         socket = io(API, {
           path: "/socket.io",
           transports: ["websocket", "polling"],
-          auth: { visitorToken: token(), conversationId: S.conversationId },
+          // A host whose visitors prove themselves differently (the code
+          // snippet's session token) says how; the storefront's signed token
+          // otherwise.
+          auth: typeof boot.socketAuth === "function" ? boot.socketAuth() : { visitorToken: token(), conversationId: S.conversationId },
           reconnectionDelay: 800,
           reconnectionDelayMax: 8000,
           // Bounded on purpose. On a network that blocks websockets the
@@ -1072,7 +1151,7 @@ window.__gotchaShopifyChatApp = function (boot) {
           if (!payload || payload.conversationId !== S.conversationId) return;
           // The only genuinely live delivery path, and so the only one
           // allowed to make a sound.
-          ingest([payload.message], true);
+          ingest(typeof boot.normalize === "function" ? boot.normalize([payload.message]) : [payload.message], true);
         });
         socket.on("visitor:conversation", function (payload) {
           if (!payload || payload.conversationId !== S.conversationId) return;
@@ -1193,7 +1272,7 @@ window.__gotchaShopifyChatApp = function (boot) {
   function renderStatus() {
     var offline = boot.availability === "offline";
     statusDot.setAttribute("data-off", offline ? "1" : "0");
-    statusText.textContent = offline ? T.offline : T.online;
+    statusText.textContent = LOOK === "whatsapp" && WA_ON ? T.waSub : offline ? T.offline : T.online;
   }
 
   function renderBanner() {
@@ -1222,7 +1301,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     renderStatus();
     renderBanner();
 
-    var inWelcome = !S.messages.length && !S.pending.length && S.phase === "welcome";
+    // A handoff ends the welcome screen: the WhatsApp link belongs in the chat.
+    var inWelcome = !S.messages.length && !S.pending.length && S.phase === "welcome" && !S.waLink;
     setPanelView(inWelcome ? "welcome" : "conversation");
 
     if (S.phase === "offline_form") { setPanelView("conversation"); renderOfflineForm(); return; }
@@ -1453,6 +1533,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       previousAuthor = m.author;
     });
     S.pending.forEach(function (p) { list.appendChild(pendingRow(p)); });
+    // After a handoff: the link stays in the chat (a blocked window, or a
+    // visitor who closed WhatsApp and wants it back).
+    if (S.waLink) list.appendChild(waNote(S.waLink));
 
     if (S.awaitingReply && !S.ended) {
       var typing = el("div", "row");
@@ -2043,9 +2126,73 @@ window.__gotchaShopifyChatApp = function (boot) {
     });
   }
 
+  /**
+   * Opens WhatsApp with the message pre-filled (and the code that links the
+   * two conversations). The window is opened synchronously, inside the click,
+   * and pointed at the link once the server answers: a window opened after an
+   * await is what popup blockers block. If it is blocked anyway, the link is
+   * shown in the chat to tap.
+   */
+  function continueOnWhatsapp(text) {
+    var w = null;
+    try { w = window.open("", "_blank"); } catch (e) { w = null; }
+    if (text) {
+      var entry = { clientId: clientId(), body: text, failed: false };
+      S.pending.push(entry);
+      S.phase = "active";
+      render();
+    }
+    ensureConversation()
+      .then(function () { return boot.whatsappHandoff({ locale: lang, text: text || undefined }); })
+      .then(function (data) {
+        var url = data && data.url;
+        if (!url) throw new Error("unavailable");
+        if (w) {
+          try { w.opener = null; } catch (e) {}
+          w.location.href = url;
+        }
+        showWaNote(url, !w);
+        if (text) catchUp();
+        track("whatsapp_handoff");
+      })
+      .catch(function () {
+        if (w) { try { w.close(); } catch (e) {} }
+        if (text && S.pending.length) S.pending[S.pending.length - 1].failed = true;
+        render();
+      });
+  }
+
+  function showWaNote(url, blocked) {
+    S.waLink = url;
+    render();
+    if (blocked) {
+      var a = body.querySelector(".wa-note a");
+      if (a) a.focus();
+    }
+  }
+
+  function waNote(url) {
+    var note = el("div", "wa-note");
+    note.appendChild(document.createTextNode(T.waOpening + " "));
+    var a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = T.waOpenLink;
+    note.appendChild(a);
+    return note;
+  }
+
   function submit(text) {
     var body = String(text || "").trim();
     if (!body || S.ended) return;
+    // The WhatsApp look: "write here and we continue on WhatsApp".
+    if (LOOK === "whatsapp" && WA_ON) {
+      textarea.value = "";
+      autoGrow();
+      continueOnWhatsapp(body);
+      return;
+    }
     var entry = { clientId: clientId(), body: body, failed: false };
     S.pending.push(entry);
     S.phase = "active";

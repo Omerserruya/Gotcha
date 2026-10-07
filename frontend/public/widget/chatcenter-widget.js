@@ -183,6 +183,20 @@
   var host = null;
   var shadow = null;
   var app = null;
+  var launcherButton = null;
+  var launcherIcon = "";
+  var launcherOpen = false;
+
+  function setLauncherOpen(open) {
+    launcherOpen = open;
+    if (!launcherButton) return;
+    var phone = window.matchMedia("(max-width: 560px)").matches;
+    launcherButton.style.display = open && phone ? "none" : "";
+    launcherButton.innerHTML = open
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+      : launcherIcon;
+    launcherButton.setAttribute("aria-expanded", open ? "true" : "false");
+  }
 
   function loadBundle() {
     // The bundle's filename is content-hashed, so it is read from the
@@ -220,9 +234,29 @@
       get: adapterGet,
       shadow: shadow,
       setUnread: function () {},
-      onOpened: function () {},
-      onClosed: function () {},
+      // An open panel turns the launcher into its close (as in the design);
+      // on a phone the panel fills the screen and has its own close, so the
+      // launcher steps aside instead of sitting on the composer.
+      onOpened: function () { setLauncherOpen(true); },
+      onClosed: function () { setLauncherOpen(false); },
       widget: bootstrap.widget,
+      // The socket instead of polling: this channel's visitor proves itself
+      // with the session token from /init, and its pushed messages get the
+      // same shape as polled ones.
+      socketAuth: function () {
+        return { webchatToken: store.get("token") || "", conversationId: store.get("conversation") || "" };
+      },
+      normalize: normalizeMessages,
+      // "Continue on WhatsApp": the link (with the code) for this visitor's
+      // conversation; `text` is the WhatsApp look's message to carry over.
+      whatsappHandoff: function (opts) {
+        return post(API_PATH + "/whatsapp-handoff", {
+          sessionId: store.get("conversation"),
+          sessionToken: store.get("token"),
+          locale: opts && opts.locale,
+          text: opts && opts.text,
+        }).then(function (res) { return (res && res.data) || {}; });
+      },
     });
 
     paintLauncher(bootstrap.widget);
@@ -234,6 +268,9 @@
    */
   function paintLauncher(widget) {
     var L = (widget.ux && widget.ux.launcher) || {};
+    // The WhatsApp look: a round green launcher with the WhatsApp mark.
+    var wa = !!(widget.ux && widget.ux.look === "whatsapp");
+    if (wa) L = { size: 56, position: L.position, mobilePosition: L.mobilePosition, offsetSide: L.offsetSide, offsetBottom: L.offsetBottom, mobileOffsetBottom: L.mobileOffsetBottom, shape: "circle", backgroundColor: "#25D366", iconColor: "#fff", shadow: 2 };
     var appearance = widget.appearance || {};
     var mobile = window.matchMedia("(max-width: 560px)").matches;
     var size = mobile ? Math.max(40, (L.size || 48) - 4) : L.size || 48;
@@ -275,10 +312,17 @@
     button.type = "button";
     button.setAttribute("data-act", "launcher");
     button.setAttribute("aria-label", (widget.welcome && widget.welcome.assistantName) || "Chat");
-    button.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c5 0 9 3.36 9 7.5S17 18 12 18a10.7 10.7 0 0 1-3-.42L5 19l1.2-3.2A7.9 7.9 0 0 1 3 10.5C3 6.36 7 3 12 3z"/></svg>' +
-      (showLabel ? "<span>" + String(L.label).replace(/[<>]/g, "") + "</span>" : "");
-    button.addEventListener("click", function () { if (app) app.open(); });
+    button.innerHTML = wa
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke:none"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.2.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c5 0 9 3.36 9 7.5S17 18 12 18a10.7 10.7 0 0 1-3-.42L5 19l1.2-3.2A7.9 7.9 0 0 1 3 10.5C3 6.36 7 3 12 3z"/></svg>' +
+        (showLabel ? "<span>" + String(L.label).replace(/[<>]/g, "") + "</span>" : "");
+    button.addEventListener("click", function () {
+      if (!app) return;
+      if (launcherOpen && typeof app.close === "function") app.close();
+      else app.open();
+    });
+    launcherButton = button;
+    launcherIcon = button.innerHTML;
 
     shadow.appendChild(style);
     shadow.appendChild(button);
